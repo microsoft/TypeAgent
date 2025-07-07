@@ -239,7 +239,7 @@ export async function runBrowserAction(action: AppAction): Promise<any> {
                 type: "getActionsForUrl",
                 url: action.parameters.url,
                 includeGlobal: action.parameters.includeGlobal,
-                author: action.parameters.author
+                author: action.parameters.author,
             });
             break;
         }
@@ -248,7 +248,7 @@ export async function runBrowserAction(action: AppAction): Promise<any> {
             // Record action usage for analytics
             responseObject = await chrome.runtime.sendMessage({
                 type: "recordActionUsage",
-                actionId: action.parameters.actionId
+                actionId: action.parameters.actionId,
             });
             break;
         }

@@ -209,26 +209,6 @@
         height: 1rem;
       }
 
-      /* Create action button */
-      .create-action-btn {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border: none;
-        color: white;
-        padding: 0.75rem 1.5rem;
-        border-radius: 0.5rem;
-        font-weight: 600;
-        text-decoration: none;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-        transition: transform 0.2s ease;
-      }
-
-      .create-action-btn:hover {
-        color: white;
-        transform: translateY(-1px);
-      }
-
       /* Filter clear button */
       .filter-clear-btn {
         background: none;
@@ -371,12 +351,14 @@
         margin-left: 0.25rem;
       }
 
-      .usage-stats, .last-used {
+      .usage-stats,
+      .last-used {
         font-size: 0.75rem;
         color: #6c757d;
       }
 
-      .usage-stats i, .last-used i {
+      .usage-stats i,
+      .last-used i {
         margin-right: 0.25rem;
       }
 
@@ -447,15 +429,9 @@
     <div class="container-fluid">
       <!-- Header Section -->
       <div class="action-header rounded">
-        <div class="d-flex justify-content-between align-items-center">
-          <div>
-            <h4 class="mb-1">Action Index</h4>
-            <small>Manage your complete action library</small>
-          </div>
-          <a href="#" id="createActionBtn" class="create-action-btn">
-            <i class="bi bi-plus-circle"></i>
-            Create New Action
-          </a>
+        <div>
+          <h4 class="mb-1">Action Index</h4>
+          <small>Manage your complete action library</small>
         </div>
       </div>
 
@@ -486,17 +462,41 @@
 
         <!-- View Mode Controls -->
         <div class="view-mode-controls mb-3">
-          <div class="btn-group btn-group-sm" role="group" aria-label="View modes">
-            <button type="button" class="btn btn-outline-primary active" id="viewModeWebsite" title="Group by website">
+          <div
+            class="btn-group btn-group-sm"
+            role="group"
+            aria-label="View modes"
+          >
+            <button
+              type="button"
+              class="btn btn-outline-primary active"
+              id="viewModeWebsite"
+              title="Group by website"
+            >
               <i class="bi bi-globe"></i> By Website
             </button>
-            <button type="button" class="btn btn-outline-primary" id="viewModeCategory" title="Group by category">
+            <button
+              type="button"
+              class="btn btn-outline-primary"
+              id="viewModeCategory"
+              title="Group by category"
+            >
               <i class="bi bi-tags"></i> By Category
             </button>
-            <button type="button" class="btn btn-outline-primary" id="viewModeUsage" title="Group by usage">
+            <button
+              type="button"
+              class="btn btn-outline-primary"
+              id="viewModeUsage"
+              title="Group by usage"
+            >
               <i class="bi bi-bar-chart"></i> By Usage
             </button>
-            <button type="button" class="btn btn-outline-primary" id="viewModeTimeline" title="Group by timeline">
+            <button
+              type="button"
+              class="btn btn-outline-primary"
+              id="viewModeTimeline"
+              title="Group by timeline"
+            >
               <i class="bi bi-clock"></i> Timeline
             </button>
           </div>
@@ -551,22 +551,36 @@
       <div class="actions-container">
         <!-- Bulk Operations -->
         <div id="bulkOperationsContainer" class="bulk-operations d-none mb-3">
-          <div class="d-flex justify-content-between align-items-center p-2 bg-light rounded">
+          <div
+            class="d-flex justify-content-between align-items-center p-2 bg-light rounded"
+          >
             <div class="d-flex align-items-center">
               <span class="me-3">
                 <strong id="selectedActionsCount">0</strong> action(s) selected
               </span>
               <div class="btn-group btn-group-sm">
-                <button class="btn btn-outline-primary" id="selectAllBtn" title="Select all actions">
+                <button
+                  class="btn btn-outline-primary"
+                  id="selectAllBtn"
+                  title="Select all actions"
+                >
                   <i class="bi bi-check-all"></i> Select All
                 </button>
-                <button class="btn btn-outline-secondary" id="deselectAllBtn" title="Deselect all actions">
+                <button
+                  class="btn btn-outline-secondary"
+                  id="deselectAllBtn"
+                  title="Deselect all actions"
+                >
                   <i class="bi bi-square"></i> Deselect All
                 </button>
               </div>
             </div>
             <div class="btn-group btn-group-sm">
-              <button class="btn btn-outline-danger" id="bulkDeleteBtn" title="Delete selected actions">
+              <button
+                class="btn btn-outline-danger"
+                id="bulkDeleteBtn"
+                title="Delete selected actions"
+              >
                 <i class="bi bi-trash"></i> Delete Selected
               </button>
             </div>
@@ -575,12 +589,18 @@
 
         <div class="d-flex justify-content-between align-items-center mb-3">
           <h6 class="mb-0">
-            <i class="bi bi-collection"></i> 
+            <i class="bi bi-collection"></i>
             Actions Library
-            <span id="filteredActionsCount" class="badge bg-secondary ms-2">0</span>
+            <span id="filteredActionsCount" class="badge bg-secondary ms-2"
+              >0</span
+            >
           </h6>
           <div class="btn-group btn-group-sm">
-            <button class="btn btn-outline-secondary" id="refreshActionsBtn" title="Refresh actions">
+            <button
+              class="btn btn-outline-secondary"
+              id="refreshActionsBtn"
+              title="Refresh actions"
+            >
               <i class="bi bi-arrow-clockwise"></i>
             </button>
           </div>
@@ -601,14 +621,26 @@
       <div class="modal-dialog modal-lg">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title" id="actionDetailsModalTitle">Action Details</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            <h5 class="modal-title" id="actionDetailsModalTitle">
+              Action Details
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+            ></button>
           </div>
           <div class="modal-body" id="actionDetailsModalBody">
             <!-- Action details will be populated here -->
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Close
+            </button>
           </div>
         </div>
       </div>

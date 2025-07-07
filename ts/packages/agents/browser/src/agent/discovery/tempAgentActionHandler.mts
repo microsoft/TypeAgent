@@ -9,7 +9,10 @@ import {
 } from "./schema/userActionsPool.mjs";
 import { handleCommerceAction } from "../commerce/actionHandler.mjs";
 import { NavigationLink } from "./schema/pageComponents.mjs";
-import { PageActionsPlan, UserIntent as RecordedUserIntent } from "./schema/recordedActions.mjs";
+import {
+    PageActionsPlan,
+    UserIntent as RecordedUserIntent,
+} from "./schema/recordedActions.mjs";
 import { setupAuthoringActions } from "./authoringUtilities.mjs";
 import {
     BrowserActionContext,
@@ -84,15 +87,19 @@ export function createTempAgentForSchema(
     async function handleUserDefinedAction(action: any) {
         const url = await getSessionBrowserControl(context).getPageUrl();
         const agentContext = context.agentContext;
-        
+
         if (!agentContext.actionsStore) {
             throw new Error("ActionsStore not available for temp agent");
         }
 
-        const allActions = await agentContext.actionsStore.getActionsForUrl(url!);
-        
+        const allActions = await agentContext.actionsStore.getActionsForUrl(
+            url!,
+        );
+
         // Filter for user-authored actions only
-        const userActions = allActions.filter(action => action.author === "user");
+        const userActions = allActions.filter(
+            (action) => action.author === "user",
+        );
 
         const intentJson = new Map<string, RecordedUserIntent>();
         const actionsJson = new Map<string, PageActionsPlan>();
@@ -100,18 +107,19 @@ export function createTempAgentForSchema(
         for (const storedAction of userActions) {
             if (storedAction.definition.intentJson) {
                 // Convert from StoredUserIntent to RecordedUserIntent
-                const storedIntent = storedAction.definition.intentJson as StoredUserIntent;
+                const storedIntent = storedAction.definition
+                    .intentJson as StoredUserIntent;
                 const recordedIntent: RecordedUserIntent = {
                     actionName: storedIntent.actionName,
-                    parameters: storedIntent.parameters.map(param => ({
+                    parameters: storedIntent.parameters.map((param) => ({
                         shortName: param.shortName,
                         name: param.description, // Use description as name
                         type: param.type,
                         defaultValue: param.defaultValue,
                         valueOptions: [], // Not available in stored format
                         description: param.description,
-                        required: param.required
-                    }))
+                        required: param.required,
+                    })),
                 };
                 intentJson.set(storedAction.name, recordedIntent);
             }
@@ -121,7 +129,7 @@ export function createTempAgentForSchema(
                     planName: storedAction.name,
                     description: storedAction.description,
                     intentSchemaName: storedAction.name,
-                    steps: storedAction.definition.actionSteps as any // Type conversion needed here
+                    steps: storedAction.definition.actionSteps as any, // Type conversion needed here
                 };
                 actionsJson.set(storedAction.name, actionPlan);
             }
@@ -137,7 +145,9 @@ export function createTempAgentForSchema(
             return;
         }
 
-        const targetIntent = intentJson.get(action.actionName) as RecordedUserIntent;
+        const targetIntent = intentJson.get(
+            action.actionName,
+        ) as RecordedUserIntent;
         const targetPlan = actionsJson.get(
             action.actionName,
         ) as PageActionsPlan;

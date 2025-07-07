@@ -217,6 +217,4 @@ export class BrowserConnector {
         const timeoutPromise = new Promise((f) => setTimeout(f, timeout));
         return timeoutPromise;
     }
-
-
 }

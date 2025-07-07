@@ -1,17 +1,17 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { 
-    StoredAction, 
+import {
+    StoredAction,
     ActionSearchQuery,
     ActionSearchResult,
     SearchSuggestion,
-    ActionFilter
+    ActionFilter,
 } from "./types.mjs";
 
 /**
  * ActionSearchEngine - Advanced search and filtering for actions
- * 
+ *
  * Provides fast, comprehensive search capabilities including:
  * - Text search across action names, descriptions, and tags
  * - Multi-criteria filtering
@@ -28,7 +28,7 @@ export class ActionSearchEngine {
     private cacheStats = {
         searchCount: 0,
         cacheHits: 0,
-        averageSearchTime: 0
+        averageSearchTime: 0,
     };
 
     /**
@@ -36,7 +36,7 @@ export class ActionSearchEngine {
      */
     async searchActions(
         query: ActionSearchQuery,
-        getAllActions: () => Promise<StoredAction[]>
+        getAllActions: () => Promise<StoredAction[]>,
     ): Promise<ActionSearchResult> {
         const startTime = performance.now();
         this.cacheStats.searchCount++;
@@ -47,7 +47,10 @@ export class ActionSearchEngine {
             await this.ensureSearchIndex(allActions);
 
             // Build candidate set based on text search
-            let candidates = this.getTextSearchCandidates(query.text, allActions);
+            let candidates = this.getTextSearchCandidates(
+                query.text,
+                allActions,
+            );
 
             // Apply filters
             if (query.filters) {
@@ -55,12 +58,18 @@ export class ActionSearchEngine {
             }
 
             // Rank results
-            const rankedResults = this.rankResults(candidates, query.text || '');
+            const rankedResults = this.rankResults(
+                candidates,
+                query.text || "",
+            );
 
             // Apply pagination
             const offset = query.offset || 0;
             const limit = query.limit || 50;
-            const paginatedResults = rankedResults.slice(offset, offset + limit);
+            const paginatedResults = rankedResults.slice(
+                offset,
+                offset + limit,
+            );
 
             const searchTime = performance.now() - startTime;
             this.updatePerformanceStats(searchTime);
@@ -68,23 +77,23 @@ export class ActionSearchEngine {
             return {
                 actions: paginatedResults,
                 total: rankedResults.length,
-                hasMore: rankedResults.length > offset + paginatedResults.length,
+                hasMore:
+                    rankedResults.length > offset + paginatedResults.length,
                 searchStats: {
                     searchTime,
-                    cacheHit: false
-                }
+                    cacheHit: false,
+                },
             };
-
         } catch (error) {
-            console.error('Search failed:', error);
+            console.error("Search failed:", error);
             return {
                 actions: [],
                 total: 0,
                 hasMore: false,
                 searchStats: {
                     searchTime: performance.now() - startTime,
-                    cacheHit: false
-                }
+                    cacheHit: false,
+                },
             };
         }
     }
@@ -95,7 +104,7 @@ export class ActionSearchEngine {
     async getSearchSuggestions(
         partialQuery: string,
         getAllActions: () => Promise<StoredAction[]>,
-        limit: number = 10
+        limit: number = 10,
     ): Promise<SearchSuggestion[]> {
         if (!partialQuery || partialQuery.length < 2) {
             return [];
@@ -112,9 +121,13 @@ export class ActionSearchEngine {
             if (action.name.toLowerCase().includes(lowerQuery)) {
                 suggestions.push({
                     text: action.name,
-                    type: 'action',
-                    score: this.calculateSuggestionScore(action.name, lowerQuery, action.metadata.usageCount),
-                    context: action.category
+                    type: "action",
+                    score: this.calculateSuggestionScore(
+                        action.name,
+                        lowerQuery,
+                        action.metadata.usageCount,
+                    ),
+                    context: action.category,
                 });
             }
         }
@@ -125,47 +138,62 @@ export class ActionSearchEngine {
                 if (tag.toLowerCase().includes(lowerQuery)) {
                     suggestions.push({
                         text: tag,
-                        type: 'tag',
+                        type: "tag",
                         score: this.calculateTagScore(tag, lowerQuery),
-                        context: `${this.getTagUsageCount(tag, allActions)} actions`
+                        context: `${this.getTagUsageCount(tag, allActions)} actions`,
                     });
                 }
             }
         }
 
         // Domain suggestions
-        const domains = new Set(allActions.map(a => a.scope.domain).filter(Boolean));
+        const domains = new Set(
+            allActions.map((a) => a.scope.domain).filter(Boolean),
+        );
         for (const domain of domains) {
             if (domain!.toLowerCase().includes(lowerQuery)) {
                 suggestions.push({
                     text: domain!,
-                    type: 'domain',
-                    score: this.calculateDomainScore(domain!, lowerQuery, allActions),
-                    context: `${this.getDomainActionCount(domain!, allActions)} actions`
+                    type: "domain",
+                    score: this.calculateDomainScore(
+                        domain!,
+                        lowerQuery,
+                        allActions,
+                    ),
+                    context: `${this.getDomainActionCount(domain!, allActions)} actions`,
                 });
             }
         }
 
         // Category suggestions
         const categories = [
-            "navigation", "form", "commerce", "search", "content", 
-            "social", "media", "utility", "custom"
+            "navigation",
+            "form",
+            "commerce",
+            "search",
+            "content",
+            "social",
+            "media",
+            "utility",
+            "custom",
         ];
         for (const category of categories) {
             if (category.toLowerCase().includes(lowerQuery)) {
                 suggestions.push({
                     text: category,
-                    type: 'category',
-                    score: this.calculateCategoryScore(category, lowerQuery, allActions),
-                    context: `${this.getCategoryActionCount(category, allActions)} actions`
+                    type: "category",
+                    score: this.calculateCategoryScore(
+                        category,
+                        lowerQuery,
+                        allActions,
+                    ),
+                    context: `${this.getCategoryActionCount(category, allActions)} actions`,
                 });
             }
         }
 
         // Sort by score and return top suggestions
-        return suggestions
-            .sort((a, b) => b.score - a.score)
-            .slice(0, limit);
+        return suggestions.sort((a, b) => b.score - a.score).slice(0, limit);
     }
 
     /**
@@ -174,7 +202,8 @@ export class ActionSearchEngine {
     private async ensureSearchIndex(actions: StoredAction[]): Promise<void> {
         // Simple timestamp-based cache invalidation
         const currentTime = Date.now();
-        if (currentTime - this.lastIndexUpdate < 5000) { // 5 seconds cache
+        if (currentTime - this.lastIndexUpdate < 5000) {
+            // 5 seconds cache
             return;
         }
 
@@ -196,11 +225,13 @@ export class ActionSearchEngine {
             const searchableText = [
                 action.name,
                 action.description,
-                ...action.tags
-            ].join(' ').toLowerCase();
+                ...action.tags,
+            ]
+                .join(" ")
+                .toLowerCase();
 
             const terms = this.tokenize(searchableText);
-            
+
             for (const term of terms) {
                 if (!this.searchIndex.has(term)) {
                     this.searchIndex.set(term, new Set());
@@ -238,7 +269,10 @@ export class ActionSearchEngine {
     /**
      * Get candidate actions based on text search
      */
-    private getTextSearchCandidates(searchText: string | undefined, allActions: StoredAction[]): StoredAction[] {
+    private getTextSearchCandidates(
+        searchText: string | undefined,
+        allActions: StoredAction[],
+    ): StoredAction[] {
         if (!searchText || searchText.trim().length === 0) {
             return allActions;
         }
@@ -250,7 +284,7 @@ export class ActionSearchEngine {
 
         // Get actions that match any search term
         const matchingActionIds = new Set<string>();
-        
+
         for (const term of terms) {
             // Exact matches in search index
             if (this.searchIndex.has(term)) {
@@ -270,82 +304,90 @@ export class ActionSearchEngine {
         }
 
         // Convert action IDs back to action objects
-        const actionMap = new Map(allActions.map(a => [a.id, a]));
+        const actionMap = new Map(allActions.map((a) => [a.id, a]));
         return Array.from(matchingActionIds)
-            .map(id => actionMap.get(id)!)
+            .map((id) => actionMap.get(id)!)
             .filter(Boolean);
     }
 
     /**
      * Apply filters to candidate actions
      */
-    private applyFilters(actions: StoredAction[], filters: ActionFilter): StoredAction[] {
+    private applyFilters(
+        actions: StoredAction[],
+        filters: ActionFilter,
+    ): StoredAction[] {
         let filtered = actions;
 
         if (filters.categories && filters.categories.length > 0) {
-            filtered = filtered.filter(action => 
-                filters.categories!.includes(action.category)
+            filtered = filtered.filter((action) =>
+                filters.categories!.includes(action.category),
             );
         }
 
         if (filters.authors && filters.authors.length > 0) {
-            filtered = filtered.filter(action => 
-                filters.authors!.includes(action.author)
+            filtered = filtered.filter((action) =>
+                filters.authors!.includes(action.author),
             );
         }
 
         if (filters.domains && filters.domains.length > 0) {
-            filtered = filtered.filter(action => 
-                action.scope.domain && filters.domains!.includes(action.scope.domain)
+            filtered = filtered.filter(
+                (action) =>
+                    action.scope.domain &&
+                    filters.domains!.includes(action.scope.domain),
             );
         }
 
         if (filters.scopes && filters.scopes.length > 0) {
-            filtered = filtered.filter(action => 
-                filters.scopes!.includes(action.scope.type)
+            filtered = filtered.filter((action) =>
+                filters.scopes!.includes(action.scope.type),
             );
         }
 
         if (filters.tags && filters.tags.length > 0) {
-            filtered = filtered.filter(action => 
-                filters.tags!.some(tag => 
-                    action.tags.some(actionTag => 
-                        actionTag.toLowerCase() === tag.toLowerCase()
-                    )
-                )
+            filtered = filtered.filter((action) =>
+                filters.tags!.some((tag) =>
+                    action.tags.some(
+                        (actionTag) =>
+                            actionTag.toLowerCase() === tag.toLowerCase(),
+                    ),
+                ),
             );
         }
 
         if (filters.minUsage !== undefined) {
-            filtered = filtered.filter(action => 
-                action.metadata.usageCount >= filters.minUsage!
+            filtered = filtered.filter(
+                (action) => action.metadata.usageCount >= filters.minUsage!,
             );
         }
 
         if (filters.maxUsage !== undefined) {
-            filtered = filtered.filter(action => 
-                action.metadata.usageCount <= filters.maxUsage!
+            filtered = filtered.filter(
+                (action) => action.metadata.usageCount <= filters.maxUsage!,
             );
         }
 
         if (filters.createdAfter) {
             const afterDate = new Date(filters.createdAfter);
-            filtered = filtered.filter(action => 
-                new Date(action.metadata.createdAt) >= afterDate
+            filtered = filtered.filter(
+                (action) => new Date(action.metadata.createdAt) >= afterDate,
             );
         }
 
         if (filters.createdBefore) {
             const beforeDate = new Date(filters.createdBefore);
-            filtered = filtered.filter(action => 
-                new Date(action.metadata.createdAt) <= beforeDate
+            filtered = filtered.filter(
+                (action) => new Date(action.metadata.createdAt) <= beforeDate,
             );
         }
 
         if (filters.lastUsedAfter) {
             const afterDate = new Date(filters.lastUsedAfter);
-            filtered = filtered.filter(action => 
-                action.metadata.lastUsed && new Date(action.metadata.lastUsed) >= afterDate
+            filtered = filtered.filter(
+                (action) =>
+                    action.metadata.lastUsed &&
+                    new Date(action.metadata.lastUsed) >= afterDate,
             );
         }
 
@@ -355,33 +397,46 @@ export class ActionSearchEngine {
     /**
      * Rank search results by relevance
      */
-    private rankResults(actions: StoredAction[], searchText: string): StoredAction[] {
+    private rankResults(
+        actions: StoredAction[],
+        searchText: string,
+    ): StoredAction[] {
         if (!searchText || searchText.trim().length === 0) {
             // Sort by usage count when no search text
-            return actions.sort((a, b) => b.metadata.usageCount - a.metadata.usageCount);
+            return actions.sort(
+                (a, b) => b.metadata.usageCount - a.metadata.usageCount,
+            );
         }
 
         const lowerSearchText = searchText.toLowerCase();
         const searchTerms = this.tokenize(lowerSearchText);
 
         return actions
-            .map(action => ({
+            .map((action) => ({
                 action,
-                score: this.calculateRelevanceScore(action, lowerSearchText, searchTerms)
+                score: this.calculateRelevanceScore(
+                    action,
+                    lowerSearchText,
+                    searchTerms,
+                ),
             }))
             .sort((a, b) => b.score - a.score)
-            .map(item => item.action);
+            .map((item) => item.action);
     }
 
     /**
      * Calculate relevance score for an action
      */
-    private calculateRelevanceScore(action: StoredAction, searchText: string, searchTerms: string[]): number {
+    private calculateRelevanceScore(
+        action: StoredAction,
+        searchText: string,
+        searchTerms: string[],
+    ): number {
         let score = 0;
 
         const name = action.name.toLowerCase();
         const description = action.description.toLowerCase();
-        const tags = action.tags.map(t => t.toLowerCase());
+        const tags = action.tags.map((t) => t.toLowerCase());
 
         // Exact name match gets highest score
         if (name === searchText) {
@@ -433,17 +488,21 @@ export class ActionSearchEngine {
     private tokenize(text: string): string[] {
         return text
             .toLowerCase()
-            .replace(/[^\w\s]/g, ' ')
+            .replace(/[^\w\s]/g, " ")
             .split(/\s+/)
-            .filter(token => token.length > 2);
+            .filter((token) => token.length > 2);
     }
 
     /**
      * Calculate suggestion score for action names
      */
-    private calculateSuggestionScore(actionName: string, query: string, usageCount: number): number {
+    private calculateSuggestionScore(
+        actionName: string,
+        query: string,
+        usageCount: number,
+    ): number {
         let score = 0;
-        
+
         const name = actionName.toLowerCase();
         const lowerQuery = query.toLowerCase();
 
@@ -477,9 +536,13 @@ export class ActionSearchEngine {
     /**
      * Calculate domain suggestion score
      */
-    private calculateDomainScore(domain: string, query: string, allActions: StoredAction[]): number {
+    private calculateDomainScore(
+        domain: string,
+        query: string,
+        allActions: StoredAction[],
+    ): number {
         let score = 0;
-        
+
         if (domain.toLowerCase().includes(query.toLowerCase())) {
             score += 60;
         }
@@ -494,15 +557,22 @@ export class ActionSearchEngine {
     /**
      * Calculate category suggestion score
      */
-    private calculateCategoryScore(category: string, query: string, allActions: StoredAction[]): number {
+    private calculateCategoryScore(
+        category: string,
+        query: string,
+        allActions: StoredAction[],
+    ): number {
         let score = 0;
-        
+
         if (category.toLowerCase().includes(query.toLowerCase())) {
             score += 70;
         }
 
         // Boost based on number of actions in category
-        const categoryActionCount = this.getCategoryActionCount(category, allActions);
+        const categoryActionCount = this.getCategoryActionCount(
+            category,
+            allActions,
+        );
         score += Math.min(categoryActionCount * 2, 30);
 
         return score;
@@ -512,29 +582,33 @@ export class ActionSearchEngine {
      * Get number of times a tag is used
      */
     private getTagUsageCount(tag: string, allActions: StoredAction[]): number {
-        return allActions.filter(action => 
-            action.tags.some(actionTag => 
-                actionTag.toLowerCase() === tag.toLowerCase()
-            )
+        return allActions.filter((action) =>
+            action.tags.some(
+                (actionTag) => actionTag.toLowerCase() === tag.toLowerCase(),
+            ),
         ).length;
     }
 
     /**
      * Get number of actions in a domain
      */
-    private getDomainActionCount(domain: string, allActions: StoredAction[]): number {
-        return allActions.filter(action => 
-            action.scope.domain === domain
-        ).length;
+    private getDomainActionCount(
+        domain: string,
+        allActions: StoredAction[],
+    ): number {
+        return allActions.filter((action) => action.scope.domain === domain)
+            .length;
     }
 
     /**
      * Get number of actions in a category
      */
-    private getCategoryActionCount(category: string, allActions: StoredAction[]): number {
-        return allActions.filter(action => 
-            action.category === category
-        ).length;
+    private getCategoryActionCount(
+        category: string,
+        allActions: StoredAction[],
+    ): number {
+        return allActions.filter((action) => action.category === category)
+            .length;
     }
 
     /**
@@ -551,8 +625,12 @@ export class ActionSearchEngine {
      * Update performance statistics
      */
     private updatePerformanceStats(searchTime: number): void {
-        const totalTime = this.cacheStats.averageSearchTime * (this.cacheStats.searchCount - 1) + searchTime;
-        this.cacheStats.averageSearchTime = totalTime / this.cacheStats.searchCount;
+        const totalTime =
+            this.cacheStats.averageSearchTime *
+                (this.cacheStats.searchCount - 1) +
+            searchTime;
+        this.cacheStats.averageSearchTime =
+            totalTime / this.cacheStats.searchCount;
     }
 
     /**
@@ -574,7 +652,7 @@ export class ActionSearchEngine {
         this.cacheStats = {
             searchCount: 0,
             cacheHits: 0,
-            averageSearchTime: 0
+            averageSearchTime: 0,
         };
     }
 }

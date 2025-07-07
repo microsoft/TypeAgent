@@ -10,7 +10,7 @@ export interface MatchResult {
     pattern: UrlPattern;
     priority: number;
     specificity: number;
-    matchType: 'exact' | 'glob' | 'regex';
+    matchType: "exact" | "glob" | "regex";
 }
 
 /**
@@ -30,12 +30,12 @@ export class UrlMatcher {
             if (this.testPattern(url, pattern)) {
                 const priority = this.calculatePriority(pattern, url);
                 const specificity = this.calculateSpecificity(pattern);
-                
+
                 matches.push({
                     pattern,
                     priority,
                     specificity,
-                    matchType: pattern.type
+                    matchType: pattern.type,
                 });
             }
         }
@@ -58,18 +58,21 @@ export class UrlMatcher {
     testPattern(url: string, pattern: UrlPattern): boolean {
         try {
             switch (pattern.type) {
-                case 'exact':
+                case "exact":
                     return this.matchExact(url, pattern.pattern);
-                case 'glob':
+                case "glob":
                     return this.matchGlob(url, pattern.pattern);
-                case 'regex':
+                case "regex":
                     return this.matchRegex(url, pattern.pattern);
                 default:
                     console.warn(`Unknown pattern type: ${pattern.type}`);
                     return false;
             }
         } catch (error) {
-            console.error(`Pattern matching error for pattern "${pattern.pattern}":`, error);
+            console.error(
+                `Pattern matching error for pattern "${pattern.pattern}":`,
+                error,
+            );
             return false;
         }
     }
@@ -84,11 +87,11 @@ export class UrlMatcher {
         }
 
         switch (pattern.type) {
-            case 'exact':
+            case "exact":
                 return 100; // Highest priority for exact matches
-            case 'glob':
+            case "glob":
                 return this.calculateGlobPriority(pattern.pattern, url);
-            case 'regex':
+            case "regex":
                 return this.calculateRegexPriority(pattern.pattern);
             default:
                 return 1; // Lowest priority for unknown types
@@ -100,11 +103,11 @@ export class UrlMatcher {
      */
     private calculateSpecificity(pattern: UrlPattern): number {
         switch (pattern.type) {
-            case 'exact':
+            case "exact":
                 return pattern.pattern.length; // Longer exact patterns are more specific
-            case 'glob':
+            case "glob":
                 return this.calculateGlobSpecificity(pattern.pattern);
-            case 'regex':
+            case "regex":
                 return this.calculateRegexSpecificity(pattern.pattern);
             default:
                 return 0;
@@ -149,11 +152,11 @@ export class UrlMatcher {
     private convertGlobToRegex(pattern: string): string {
         // Escape special regex characters except glob wildcards
         let regexStr = pattern
-            .replace(/[.+^${}()|[\]\\]/g, '\\$&') // Escape regex special chars
-            .replace(/\*\*/g, '___DOUBLESTAR___') // Temp placeholder for **
-            .replace(/\*/g, '[^/]*')             // * matches within path segment
-            .replace(/___DOUBLESTAR___/g, '.*')   // ** matches across segments
-            .replace(/\?/g, '[^/]');             // ? matches single character
+            .replace(/[.+^${}()|[\]\\]/g, "\\$&") // Escape regex special chars
+            .replace(/\*\*/g, "___DOUBLESTAR___") // Temp placeholder for **
+            .replace(/\*/g, "[^/]*") // * matches within path segment
+            .replace(/___DOUBLESTAR___/g, ".*") // ** matches across segments
+            .replace(/\?/g, "[^/]"); // ? matches single character
 
         return regexStr;
     }
@@ -165,9 +168,11 @@ export class UrlMatcher {
         let priority = 70; // Base priority for glob patterns
 
         // More specific patterns get higher priority
-        const segments = pattern.split('/').filter(s => s.length > 0);
-        const literalSegments = segments.filter(s => !s.includes('*') && !s.includes('?'));
-        
+        const segments = pattern.split("/").filter((s) => s.length > 0);
+        const literalSegments = segments.filter(
+            (s) => !s.includes("*") && !s.includes("?"),
+        );
+
         // Boost priority for more literal segments
         priority += literalSegments.length * 5;
 
@@ -192,8 +197,8 @@ export class UrlMatcher {
         priority += Math.min(pattern.length / 15, 10);
 
         // Patterns with anchors are more specific
-        if (pattern.startsWith('^')) priority += 5;
-        if (pattern.endsWith('$')) priority += 5;
+        if (pattern.startsWith("^")) priority += 5;
+        if (pattern.endsWith("$")) priority += 5;
 
         return Math.max(priority, 40); // Minimum priority of 40
     }
@@ -205,11 +210,11 @@ export class UrlMatcher {
         let specificity = 0;
 
         // Count literal characters (non-wildcard)
-        const literalChars = pattern.replace(/[*?]/g, '').length;
+        const literalChars = pattern.replace(/[*?]/g, "").length;
         specificity += literalChars;
 
         // Count path segments
-        const segments = pattern.split('/').filter(s => s.length > 0);
+        const segments = pattern.split("/").filter((s) => s.length > 0);
         specificity += segments.length * 10;
 
         // Penalize wildcards
@@ -229,11 +234,11 @@ export class UrlMatcher {
         specificity += pattern.length / 2;
 
         // Patterns with anchors are more specific
-        if (pattern.startsWith('^')) specificity += 10;
-        if (pattern.endsWith('$')) specificity += 10;
+        if (pattern.startsWith("^")) specificity += 10;
+        if (pattern.endsWith("$")) specificity += 10;
 
         // Count literal characters (rough estimate)
-        const literalChars = pattern.replace(/[.*+?^${}()|[\]\\]/g, '').length;
+        const literalChars = pattern.replace(/[.*+?^${}()|[\]\\]/g, "").length;
         specificity += literalChars;
 
         return Math.max(specificity, 0);
@@ -253,7 +258,7 @@ export class UrlMatcher {
     getCacheStats(): { globCacheSize: number; regexCacheSize: number } {
         return {
             globCacheSize: this.globCache.size,
-            regexCacheSize: this.regexCache.size
+            regexCacheSize: this.regexCache.size,
         };
     }
 }

@@ -23,7 +23,7 @@ export class FileManager {
             `${this.basePath}/actions/domains`,
             `${this.basePath}/domains`,
             `${this.basePath}/registry`,
-            `${this.basePath}/cache`
+            `${this.basePath}/cache`,
         ];
 
         for (const dir of directories) {
@@ -36,7 +36,9 @@ export class FileManager {
                 }
             } catch (error) {
                 console.error(`Failed to create directory ${dir}:`, error);
-                throw new Error(`Failed to initialize storage directory: ${dir}`);
+                throw new Error(
+                    `Failed to initialize storage directory: ${dir}`,
+                );
             }
         }
     }
@@ -47,7 +49,7 @@ export class FileManager {
     async writeJson<T>(filePath: string, data: T): Promise<void> {
         const fullPath = this.getFullPath(filePath);
         const jsonData = JSON.stringify(data, null, 2);
-        
+
         try {
             await this.sessionStorage.write(fullPath, jsonData);
         } catch (error) {
@@ -61,7 +63,7 @@ export class FileManager {
      */
     async writeText(filePath: string, data: string): Promise<void> {
         const fullPath = this.getFullPath(filePath);
-        
+
         try {
             await this.sessionStorage.write(fullPath, data);
         } catch (error) {
@@ -75,7 +77,7 @@ export class FileManager {
      */
     async readJson<T>(filePath: string): Promise<T | null> {
         const fullPath = this.getFullPath(filePath);
-        
+
         try {
             const exists = await this.sessionStorage.exists(fullPath);
             if (!exists) {
@@ -95,7 +97,7 @@ export class FileManager {
      */
     async exists(filePath: string): Promise<boolean> {
         const fullPath = this.getFullPath(filePath);
-        
+
         try {
             return await this.sessionStorage.exists(fullPath);
         } catch (error) {
@@ -109,7 +111,7 @@ export class FileManager {
      */
     async delete(filePath: string): Promise<void> {
         const fullPath = this.getFullPath(filePath);
-        
+
         try {
             const exists = await this.sessionStorage.exists(fullPath);
             if (exists) {
@@ -126,10 +128,10 @@ export class FileManager {
      */
     async listFiles(directoryPath: string): Promise<string[]> {
         const fullPath = this.getFullPath(directoryPath);
-        
+
         try {
             const files = await this.sessionStorage.list(fullPath);
-            return files.filter((file: string) => !file.endsWith('/.keep'));
+            return files.filter((file: string) => !file.endsWith("/.keep"));
         } catch (error) {
             console.error(`Failed to list files in ${fullPath}:`, error);
             return [];
@@ -141,7 +143,7 @@ export class FileManager {
      */
     async createDirectory(directoryPath: string): Promise<void> {
         const fullPath = this.getFullPath(directoryPath);
-        
+
         try {
             const exists = await this.sessionStorage.exists(fullPath);
             if (!exists) {
@@ -158,7 +160,7 @@ export class FileManager {
      */
     async getFileSize(filePath: string): Promise<number> {
         const fullPath = this.getFullPath(filePath);
-        
+
         try {
             const exists = await this.sessionStorage.exists(fullPath);
             if (!exists) {
@@ -176,11 +178,11 @@ export class FileManager {
     /**
      * Get storage statistics
      */
-    async getStorageStats(): Promise<{totalSize: number, fileCount: number}> {
+    async getStorageStats(): Promise<{ totalSize: number; fileCount: number }> {
         try {
             const allFiles = await this.getAllFiles();
             let totalSize = 0;
-            
+
             for (const file of allFiles) {
                 const size = await this.getFileSize(file);
                 totalSize += size;
@@ -188,7 +190,7 @@ export class FileManager {
 
             return {
                 totalSize,
-                fileCount: allFiles.length
+                fileCount: allFiles.length,
             };
         } catch (error) {
             console.error("Failed to get storage stats:", error);
@@ -202,19 +204,21 @@ export class FileManager {
     private async getAllFiles(directory: string = ""): Promise<string[]> {
         const allFiles: string[] = [];
         const currentDir = directory || this.basePath;
-        
+
         try {
-            const items = await this.sessionStorage.list(currentDir, { fullPath: true });
-            
+            const items = await this.sessionStorage.list(currentDir, {
+                fullPath: true,
+            });
+
             for (const item of items) {
-                if (item.endsWith('/.keep')) {
+                if (item.endsWith("/.keep")) {
                     continue;
                 }
-                
+
                 const relativePath = item.replace(`${this.basePath}/`, "");
-                
+
                 // Check if it's a file (has extension) or directory
-                if (item.includes('.') && !item.endsWith('/')) {
+                if (item.includes(".") && !item.endsWith("/")) {
                     allFiles.push(relativePath);
                 } else {
                     // Recursively get files from subdirectory
@@ -244,11 +248,14 @@ export class FileManager {
      */
     generateUniqueId(): string {
         // Generate UUID v4 without hyphens for filename compatibility
-        return 'xxxxxxxxxxxx4xxxyxxxxxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-            const r = Math.random() * 16 | 0;
-            const v = c === 'x' ? r : (r & 0x3 | 0x8);
-            return v.toString(16);
-        });
+        return "xxxxxxxxxxxx4xxxyxxxxxxxxxxxxxxx".replace(
+            /[xy]/g,
+            function (c) {
+                const r = (Math.random() * 16) | 0;
+                const v = c === "x" ? r : (r & 0x3) | 0x8;
+                return v.toString(16);
+            },
+        );
     }
 
     /**
@@ -256,21 +263,24 @@ export class FileManager {
      */
     sanitizeFilename(filename: string): string {
         return filename
-            .replace(/[^a-zA-Z0-9.-]/g, '_')
-            .replace(/_{2,}/g, '_')
+            .replace(/[^a-zA-Z0-9.-]/g, "_")
+            .replace(/_{2,}/g, "_")
             .toLowerCase();
     }
 
     /**
      * Get action file path based on scope
      */
-    getActionFilePath(actionId: string, scope: { type: string; domain?: string }): string {
+    getActionFilePath(
+        actionId: string,
+        scope: { type: string; domain?: string },
+    ): string {
         const fileName = `${actionId}.json`;
-        
-        if (scope.type === 'global') {
+
+        if (scope.type === "global") {
             return `actions/global/${fileName}`;
         } else {
-            const domain = this.sanitizeFilename(scope.domain || 'unknown');
+            const domain = this.sanitizeFilename(scope.domain || "unknown");
             return `actions/domains/${domain}/${fileName}`;
         }
     }
@@ -296,10 +306,10 @@ export class FileManager {
     async saveDomainConfig(domain: string, config: any): Promise<void> {
         const configPath = this.getDomainConfigPath(domain);
         const domainDir = `domains/${this.sanitizeFilename(domain)}`;
-        
+
         // Ensure domain directory exists
         await this.createDirectory(domainDir);
-        
+
         // Save configuration
         await this.writeJson(configPath, config);
     }
@@ -319,11 +329,11 @@ export class FileManager {
         try {
             const domainsDir = `domains`;
             const domainDirs = await this.listFiles(domainsDir);
-            
+
             // Filter out .keep files and extract domain names
             const domains: string[] = [];
             for (const dir of domainDirs) {
-                if (!dir.includes('.keep')) {
+                if (!dir.includes(".keep")) {
                     // Check if config file exists
                     const configPath = `${domainsDir}/${dir}/config.json`;
                     const exists = await this.exists(configPath);
@@ -332,7 +342,7 @@ export class FileManager {
                     }
                 }
             }
-            
+
             return domains;
         } catch (error) {
             console.error("Failed to get all domains:", error);
@@ -346,20 +356,23 @@ export class FileManager {
     async deleteDomainConfig(domain: string): Promise<void> {
         const sanitizedDomain = this.sanitizeFilename(domain);
         const domainDir = `domains/${sanitizedDomain}`;
-        
+
         try {
             // List all files in domain directory
             const files = await this.listFiles(domainDir);
-            
+
             // Delete all files
             for (const file of files) {
                 await this.delete(`${domainDir}/${file}`);
             }
-            
+
             // Delete the directory marker
             await this.delete(`${domainDir}/.keep`);
         } catch (error) {
-            console.error(`Failed to delete domain config for ${domain}:`, error);
+            console.error(
+                `Failed to delete domain config for ${domain}:`,
+                error,
+            );
             throw new Error(`Failed to delete domain configuration: ${domain}`);
         }
     }
@@ -381,7 +394,7 @@ export class FileManager {
             const backup: Record<string, any> = {
                 version: "1.0.0",
                 timestamp: new Date().toISOString(),
-                files: {}
+                files: {},
             };
 
             for (const file of allFiles) {

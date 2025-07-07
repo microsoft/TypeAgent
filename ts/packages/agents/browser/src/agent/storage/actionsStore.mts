@@ -7,8 +7,8 @@ import { PatternResolver } from "./patternResolver.mjs";
 import { DomainManager } from "./domainManager.mjs";
 import { ActionSearchEngine } from "./searchEngine.mjs";
 import { AnalyticsManager } from "./analyticsManager.mjs";
-import { 
-    StoredAction, 
+import {
+    StoredAction,
     ActionIndex,
     StoreStatistics,
     SaveResult,
@@ -22,7 +22,7 @@ const debug = registerDebug("typeagent:browser:action:store");
 
 /**
  * ActionsStore - Advanced storage system with pattern matching, search, and analytics
- * 
+ *
  * This is the comprehensive storage system for actions, providing:
  * - File-based storage using agent sessionStorage
  * - Action validation and sanitization
@@ -52,8 +52,7 @@ export class ActionsStore {
         this.searchEngine = new ActionSearchEngine();
         this.analyticsManager = new AnalyticsManager(this.fileManager);
 
-
-        debug(this.searchEngine)
+        debug(this.searchEngine);
     }
 
     /**
@@ -75,7 +74,9 @@ export class ActionsStore {
             await this.analyticsManager.initialize();
 
             this.initialized = true;
-            debug("ActionsStore initialized successfully with enhanced features");
+            debug(
+                "ActionsStore initialized successfully with enhanced features",
+            );
         } catch (error) {
             debug("Failed to initialize ActionsStore:", error);
             console.error("Failed to initialize ActionsStore:", error);
@@ -102,7 +103,7 @@ export class ActionsStore {
             if (!validation.isValid) {
                 return {
                     success: false,
-                    error: `Validation failed: ${validation.errors.map(e => e.message).join(', ')}`
+                    error: `Validation failed: ${validation.errors.map((e) => e.message).join(", ")}`,
                 };
             }
 
@@ -110,13 +111,19 @@ export class ActionsStore {
             const sanitizedAction = this.validator.sanitizeAction(action);
 
             // Ensure domain directory exists for non-global actions
-            if (sanitizedAction.scope.type !== 'global' && sanitizedAction.scope.domain) {
+            if (
+                sanitizedAction.scope.type !== "global" &&
+                sanitizedAction.scope.domain
+            ) {
                 const domainDir = `actions/domains/${this.fileManager.sanitizeFilename(sanitizedAction.scope.domain)}`;
                 await this.fileManager.createDirectory(domainDir);
             }
 
             // Get file path
-            const filePath = this.fileManager.getActionFilePath(sanitizedAction.id, sanitizedAction.scope);
+            const filePath = this.fileManager.getActionFilePath(
+                sanitizedAction.id,
+                sanitizedAction.scope,
+            );
 
             // Save action to file
             await this.fileManager.writeJson(filePath, sanitizedAction);
@@ -125,18 +132,19 @@ export class ActionsStore {
             this.indexManager.addAction(sanitizedAction, filePath);
             await this.saveActionIndex();
 
-            debug(`Action saved: ${sanitizedAction.name} (${sanitizedAction.id})`);
+            debug(
+                `Action saved: ${sanitizedAction.name} (${sanitizedAction.id})`,
+            );
 
             return {
                 success: true,
-                actionId: sanitizedAction.id
+                actionId: sanitizedAction.id,
             };
-
         } catch (error) {
             console.error("Failed to save action:", error);
             return {
                 success: false,
-                error: `Failed to save action: ${error instanceof Error ? error.message : 'Unknown error'}`
+                error: `Failed to save action: ${error instanceof Error ? error.message : "Unknown error"}`,
             };
         }
     }
@@ -155,8 +163,10 @@ export class ActionsStore {
             }
 
             // Load action from file
-            const action = await this.fileManager.readJson<StoredAction>(indexEntry.filePath);
-            
+            const action = await this.fileManager.readJson<StoredAction>(
+                indexEntry.filePath,
+            );
+
             if (!action) {
                 // Action file missing but in index - remove from index
                 this.indexManager.removeAction(id);
@@ -165,7 +175,6 @@ export class ActionsStore {
             }
 
             return action;
-
         } catch (error) {
             console.error(`Failed to get action ${id}:`, error);
             return null;
@@ -175,7 +184,10 @@ export class ActionsStore {
     /**
      * Update an action
      */
-    async updateAction(id: string, updates: Partial<StoredAction>): Promise<SaveResult> {
+    async updateAction(
+        id: string,
+        updates: Partial<StoredAction>,
+    ): Promise<SaveResult> {
         this.ensureInitialized();
 
         try {
@@ -184,7 +196,7 @@ export class ActionsStore {
             if (!existingAction) {
                 return {
                     success: false,
-                    error: `Action not found: ${id}`
+                    error: `Action not found: ${id}`,
                 };
             }
 
@@ -196,18 +208,17 @@ export class ActionsStore {
                 metadata: {
                     ...existingAction.metadata,
                     ...updates.metadata,
-                    updatedAt: new Date().toISOString() // Always update timestamp
-                }
+                    updatedAt: new Date().toISOString(), // Always update timestamp
+                },
             };
 
             // Save updated action
             return await this.saveAction(updatedAction);
-
         } catch (error) {
             console.error(`Failed to update action ${id}:`, error);
             return {
                 success: false,
-                error: `Failed to update action: ${error instanceof Error ? error.message : 'Unknown error'}`
+                error: `Failed to update action: ${error instanceof Error ? error.message : "Unknown error"}`,
             };
         }
     }
@@ -224,7 +235,7 @@ export class ActionsStore {
             if (!indexEntry) {
                 return {
                     success: false,
-                    error: `Action not found: ${id}`
+                    error: `Action not found: ${id}`,
                 };
             }
 
@@ -239,14 +250,13 @@ export class ActionsStore {
 
             return {
                 success: true,
-                actionId: id
+                actionId: id,
             };
-
         } catch (error) {
             console.error(`Failed to delete action ${id}:`, error);
             return {
                 success: false,
-                error: `Failed to delete action: ${error instanceof Error ? error.message : 'Unknown error'}`
+                error: `Failed to delete action: ${error instanceof Error ? error.message : "Unknown error"}`,
             };
         }
     }
@@ -262,7 +272,9 @@ export class ActionsStore {
             const actions: StoredAction[] = [];
 
             for (const entry of indexEntries) {
-                const action = await this.fileManager.readJson<StoredAction>(entry.filePath);
+                const action = await this.fileManager.readJson<StoredAction>(
+                    entry.filePath,
+                );
                 if (action) {
                     actions.push(action);
                 } else {
@@ -277,7 +289,6 @@ export class ActionsStore {
             }
 
             return actions;
-
         } catch (error) {
             console.error("Failed to get all actions:", error);
             return [];
@@ -292,17 +303,18 @@ export class ActionsStore {
 
         try {
             // Use pattern resolver for enhanced URL matching
-            const resolvedActions = await this.patternResolver.resolveActionsForUrl(
-                url,
-                (id: string) => this.getAction(id),
-                () => this.getAllUrlPatterns(),
-                (domain: string) => this.indexManager.getActionsForDomain(domain),
-                () => this.indexManager.getActionsByScope('global')
-            );
+            const resolvedActions =
+                await this.patternResolver.resolveActionsForUrl(
+                    url,
+                    (id: string) => this.getAction(id),
+                    () => this.getAllUrlPatterns(),
+                    (domain: string) =>
+                        this.indexManager.getActionsForDomain(domain),
+                    () => this.indexManager.getActionsByScope("global"),
+                );
 
             // Extract just the actions from resolved results
-            return resolvedActions.map(resolved => resolved.action);
-
+            return resolvedActions.map((resolved) => resolved.action);
         } catch (error) {
             console.error(`Failed to get actions for URL ${url}:`, error);
             return [];
@@ -327,7 +339,6 @@ export class ActionsStore {
             }
 
             return actions;
-
         } catch (error) {
             console.error(`Failed to get actions for domain ${domain}:`, error);
             return [];
@@ -341,7 +352,7 @@ export class ActionsStore {
         this.ensureInitialized();
 
         try {
-            const globalEntries = this.indexManager.getActionsByScope('global');
+            const globalEntries = this.indexManager.getActionsByScope("global");
             const actions: StoredAction[] = [];
 
             for (const entry of globalEntries) {
@@ -352,7 +363,6 @@ export class ActionsStore {
             }
 
             return actions;
-
         } catch (error) {
             console.error("Failed to get global actions:", error);
             return [];
@@ -374,10 +384,9 @@ export class ActionsStore {
                 storage: {
                     ...baseStats.storage,
                     totalSize: storageStats.totalSize,
-                    actionFiles: storageStats.fileCount
-                }
+                    actionFiles: storageStats.fileCount,
+                },
             };
-
         } catch (error) {
             console.error("Failed to get statistics:", error);
             // Return empty stats on error
@@ -387,7 +396,7 @@ export class ActionsStore {
                     global: 0,
                     domain: 0,
                     pattern: 0,
-                    page: 0
+                    page: 0,
                 } as Record<"global" | "domain" | "pattern" | "page", number>,
                 actionsByCategory: {} as any,
                 actionsByAuthor: {} as any,
@@ -396,18 +405,18 @@ export class ActionsStore {
                 usage: {
                     totalUsage: 0,
                     averageUsage: 0,
-                    mostUsedActions: []
+                    mostUsedActions: [],
                 },
                 storage: {
                     totalSize: 0,
                     actionFiles: 0,
                     domainConfigs: 0,
-                    indexSize: 0
+                    indexSize: 0,
                 },
                 health: {
                     validActions: 0,
-                    invalidActions: 0
-                }
+                    invalidActions: 0,
+                },
             };
         }
     }
@@ -429,9 +438,11 @@ export class ActionsStore {
                 action.metadata.lastUsed = new Date().toISOString();
                 await this.saveAction(action);
             }
-
         } catch (error) {
-            console.error(`Failed to record usage for action ${actionId}:`, error);
+            console.error(
+                `Failed to record usage for action ${actionId}:`,
+                error,
+            );
         }
     }
 
@@ -492,7 +503,10 @@ export class ActionsStore {
     /**
      * Add URL pattern to domain
      */
-    async addDomainPattern(domain: string, pattern: UrlPatternDefinition): Promise<SaveResult> {
+    async addDomainPattern(
+        domain: string,
+        pattern: UrlPatternDefinition,
+    ): Promise<SaveResult> {
         this.ensureInitialized();
         return await this.domainManager.addUrlPattern(domain, pattern);
     }
@@ -500,7 +514,10 @@ export class ActionsStore {
     /**
      * Remove URL pattern from domain
      */
-    async removeDomainPattern(domain: string, patternName: string): Promise<SaveResult> {
+    async removeDomainPattern(
+        domain: string,
+        patternName: string,
+    ): Promise<SaveResult> {
         this.ensureInitialized();
         return await this.domainManager.removeUrlPattern(domain, patternName);
     }
@@ -516,7 +533,10 @@ export class ActionsStore {
     /**
      * Get actions for a specific pattern
      */
-    async getActionsForPattern(domain: string, pattern: string): Promise<StoredAction[]> {
+    async getActionsForPattern(
+        domain: string,
+        pattern: string,
+    ): Promise<StoredAction[]> {
         this.ensureInitialized();
 
         try {
@@ -524,7 +544,10 @@ export class ActionsStore {
             // This could be enhanced to match specific patterns
             return await this.getActionsForDomain(domain);
         } catch (error) {
-            console.error(`Failed to get actions for pattern ${pattern} in domain ${domain}:`, error);
+            console.error(
+                `Failed to get actions for pattern ${pattern} in domain ${domain}:`,
+                error,
+            );
             return [];
         }
     }
@@ -540,13 +563,17 @@ export class ActionsStore {
             const allPatterns: UrlPattern[] = [];
 
             for (const domain of allDomains) {
-                const domainPatterns = await this.domainManager.getUrlPatterns(domain);
-                const urlPatterns = domainPatterns.map((dp: UrlPatternDefinition) => ({
-                    pattern: dp.pattern,
-                    type: dp.type,
-                    priority: dp.priority,
-                    description: dp.description
-                } as UrlPattern));
+                const domainPatterns =
+                    await this.domainManager.getUrlPatterns(domain);
+                const urlPatterns = domainPatterns.map(
+                    (dp: UrlPatternDefinition) =>
+                        ({
+                            pattern: dp.pattern,
+                            type: dp.type,
+                            priority: dp.priority,
+                            description: dp.description,
+                        }) as UrlPattern,
+                );
                 allPatterns.push(...urlPatterns);
             }
 
@@ -564,7 +591,7 @@ export class ActionsStore {
         this.ensureInitialized();
         return await this.domainManager.initializeDomain(domain);
     }
-/*
+    /*
     private generateOptimizationRecommendations(actions: StoredAction[]): string[] {
         const recommendations: string[] = [];
         
@@ -606,12 +633,15 @@ export class ActionsStore {
      */
     private async loadActionIndex(): Promise<void> {
         try {
-            const indexPath = this.fileManager.getIndexPath('action');
-            const indexData = await this.fileManager.readJson<ActionIndex>(indexPath);
+            const indexPath = this.fileManager.getIndexPath("action");
+            const indexData =
+                await this.fileManager.readJson<ActionIndex>(indexPath);
             this.indexManager.loadIndex(indexData);
-            
+
             if (indexData) {
-                debug(`Loaded action index with ${Object.keys(indexData.actions).length} actions`);
+                debug(
+                    `Loaded action index with ${Object.keys(indexData.actions).length} actions`,
+                );
             } else {
                 debug("No existing action index found, starting fresh");
             }
@@ -627,7 +657,7 @@ export class ActionsStore {
      */
     private async saveActionIndex(): Promise<void> {
         try {
-            const indexPath = this.fileManager.getIndexPath('action');
+            const indexPath = this.fileManager.getIndexPath("action");
             const index = this.indexManager.getIndex();
             await this.fileManager.writeJson(indexPath, index);
         } catch (error) {
@@ -641,7 +671,9 @@ export class ActionsStore {
      */
     private ensureInitialized(): void {
         if (!this.initialized) {
-            throw new Error("ActionsStore not initialized. Call initialize() first.");
+            throw new Error(
+                "ActionsStore not initialized. Call initialize() first.",
+            );
         }
     }
 }

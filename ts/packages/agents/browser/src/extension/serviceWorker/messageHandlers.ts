@@ -3,10 +3,7 @@
 
 import { getActiveTab } from "./tabManager";
 import { getTabHTMLFragments, getTabAnnotatedScreenshot } from "./capture";
-import {
-    getRecordedActions,
-    saveRecordedActions,
-} from "./storage";
+import { getRecordedActions, saveRecordedActions } from "./storage";
 import {
     sendActionToAgent,
     ensureWebsocketConnected,
@@ -60,27 +57,38 @@ export async function handleMessage(
                         actionName: "getActionsForUrl",
                         parameters: {
                             url: currentTab.url,
-                            includeGlobal: true
-                        }
+                            includeGlobal: true,
+                        },
                     });
-                    
-                    if (actionsResult.actions && actionsResult.actions.length > 0) {
-                        console.log(`Found ${actionsResult.actions.length} actions for schema registration from ActionsStore`);
+
+                    if (
+                        actionsResult.actions &&
+                        actionsResult.actions.length > 0
+                    ) {
+                        console.log(
+                            `Found ${actionsResult.actions.length} actions for schema registration from ActionsStore`,
+                        );
                     }
                 }
             } catch (error) {
-                console.warn("Failed to get actions from ActionsStore for schema registration:", error);
+                console.warn(
+                    "Failed to get actions from ActionsStore for schema registration:",
+                    error,
+                );
             }
 
-            // Register the dynamic agent schema (this will use the hybrid approach in discovery handler)
+            // Register the dynamic agent schema
+            /*
             const schemaResult = await sendActionToAgent({
                 actionName: "registerPageDynamicAgent",
                 parameters: {
                     agentName: message.agentName,
                 },
             });
-
             return { schema: schemaResult };
+*/
+            return {};
+            // return { schema: schemaResult };
         }
         case "getIntentFromRecording": {
             // Authoring now auto-saves actions
@@ -110,8 +118,8 @@ export async function handleMessage(
                 parameters: {
                     url: message.url,
                     includeGlobal: message.includeGlobal ?? true,
-                    author: message.author
-                }
+                    author: message.author,
+                },
             });
             return result;
         }
@@ -576,7 +584,13 @@ export async function handleMessage(
                 return { success: true };
             } catch (error) {
                 console.warn("Failed to record action usage:", error);
-                return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error",
+                };
             }
         }
 
@@ -587,18 +601,24 @@ export async function handleMessage(
                     actionName: "getActionsForUrl",
                     parameters: {
                         url: message.url || (await getActiveTab())?.url,
-                        includeGlobal: true
-                    }
+                        includeGlobal: true,
+                    },
                 });
-                
+
                 return {
                     success: true,
                     totalActions: result.count || 0,
-                    actions: result.actions || []
+                    actions: result.actions || [],
                 };
             } catch (error) {
                 console.warn("Failed to get action statistics:", error);
-                return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error",
+                };
             }
         }
 
@@ -608,15 +628,18 @@ export async function handleMessage(
                 const result = await sendActionToAgent({
                     actionName: "deleteAction",
                     parameters: {
-                        actionId: message.actionId
-                    }
+                        actionId: message.actionId,
+                    },
                 });
                 return result;
             } catch (error) {
                 console.error("Failed to delete action:", error);
-                return { 
-                    success: false, 
-                    error: error instanceof Error ? error.message : "Unknown error" 
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error",
                 };
             }
         }
@@ -624,9 +647,9 @@ export async function handleMessage(
             try {
                 const result = await sendActionToAgent({
                     actionName: "getAllActions",
-                    parameters: {}
+                    parameters: {},
                 });
-                
+
                 return { actions: result.actions || [] };
             } catch (error) {
                 console.error("Error getting all actions:", error);
@@ -636,10 +659,10 @@ export async function handleMessage(
         case "getActionDomains": {
             try {
                 const result = await sendActionToAgent({
-                    actionName: "getActionDomains", 
-                    parameters: {}
+                    actionName: "getActionDomains",
+                    parameters: {},
                 });
-                
+
                 return { domains: result.domains || [] };
             } catch (error) {
                 console.error("Error getting action domains:", error);
@@ -651,14 +674,18 @@ export async function handleMessage(
                 const result = await sendActionToAgent({
                     actionName: "deleteAction",
                     parameters: {
-                        actionId: message.actionId
-                    }
+                        actionId: message.actionId,
+                    },
                 });
-                
+
                 return { success: result.success, error: result.error };
             } catch (error) {
                 console.error("Error deleting action:", error);
-                return { success: false, error: error instanceof Error ? error.message : String(error) };
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                };
             }
         }
 

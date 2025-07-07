@@ -3,11 +3,11 @@
 
 /**
  * ActionsStore - Complete storage infrastructure for browser actions
- * 
+ *
  * This module provides comprehensive storage capabilities including:
  * - File-based storage using agent sessionStorage
  * - Full CRUD operations for actions
- * - Action validation and sanitization  
+ * - Action validation and sanitization
  * - Fast lookup through indexing
  * - URL pattern matching and domain management
  * - Search and analytics capabilities

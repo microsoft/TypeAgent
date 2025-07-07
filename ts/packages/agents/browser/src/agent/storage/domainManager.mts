@@ -1,14 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { 
-    DomainConfig, 
-    UrlPatternDefinition, 
+import {
+    DomainConfig,
+    UrlPatternDefinition,
     DomainSettings,
     SiteType,
     ActionCategory,
     SaveResult,
-    ValidationResult
+    ValidationResult,
 } from "./types.mjs";
 
 /**
@@ -51,7 +51,6 @@ export class DomainManager {
             }
 
             return null;
-
         } catch (error) {
             console.error(`Failed to get domain config for ${domain}:`, error);
             return null;
@@ -68,7 +67,7 @@ export class DomainManager {
             if (!validation.isValid) {
                 return {
                     success: false,
-                    error: `Validation failed: ${validation.errors.map(e => e.message).join(', ')}`
+                    error: `Validation failed: ${validation.errors.map((e) => e.message).join(", ")}`,
                 };
             }
 
@@ -76,7 +75,10 @@ export class DomainManager {
             const sanitizedConfig = this.sanitizeDomainConfig(config);
 
             // Save to storage
-            await this.fileManager.saveDomainConfig(sanitizedConfig.domain, sanitizedConfig);
+            await this.fileManager.saveDomainConfig(
+                sanitizedConfig.domain,
+                sanitizedConfig,
+            );
 
             // Update cache
             this.domainConfigCache.set(sanitizedConfig.domain, sanitizedConfig);
@@ -84,14 +86,16 @@ export class DomainManager {
             console.log(`Domain config saved for ${sanitizedConfig.domain}`);
 
             return {
-                success: true
+                success: true,
             };
-
         } catch (error) {
-            console.error(`Failed to save domain config for ${config.domain}:`, error);
+            console.error(
+                `Failed to save domain config for ${config.domain}:`,
+                error,
+            );
             return {
                 success: false,
-                error: `Failed to save domain config: ${error instanceof Error ? error.message : 'Unknown error'}`
+                error: `Failed to save domain config: ${error instanceof Error ? error.message : "Unknown error"}`,
             };
         }
     }
@@ -110,14 +114,16 @@ export class DomainManager {
             console.log(`Domain config deleted for ${domain}`);
 
             return {
-                success: true
+                success: true,
             };
-
         } catch (error) {
-            console.error(`Failed to delete domain config for ${domain}:`, error);
+            console.error(
+                `Failed to delete domain config for ${domain}:`,
+                error,
+            );
             return {
                 success: false,
-                error: `Failed to delete domain config: ${error instanceof Error ? error.message : 'Unknown error'}`
+                error: `Failed to delete domain config: ${error instanceof Error ? error.message : "Unknown error"}`,
             };
         }
     }
@@ -125,7 +131,10 @@ export class DomainManager {
     /**
      * Add URL pattern to domain configuration
      */
-    async addUrlPattern(domain: string, pattern: UrlPatternDefinition): Promise<SaveResult> {
+    async addUrlPattern(
+        domain: string,
+        pattern: UrlPatternDefinition,
+    ): Promise<SaveResult> {
         try {
             // Get or create domain config
             let config = await this.getDomainConfig(domain);
@@ -138,16 +147,18 @@ export class DomainManager {
             if (!validation.isValid) {
                 return {
                     success: false,
-                    error: `Pattern validation failed: ${validation.errors.map(e => e.message).join(', ')}`
+                    error: `Pattern validation failed: ${validation.errors.map((e) => e.message).join(", ")}`,
                 };
             }
 
             // Check for duplicate pattern names
-            const existingPattern = config.patterns.find(p => p.name === pattern.name);
+            const existingPattern = config.patterns.find(
+                (p) => p.name === pattern.name,
+            );
             if (existingPattern) {
                 return {
                     success: false,
-                    error: `Pattern name "${pattern.name}" already exists for domain ${domain}`
+                    error: `Pattern name "${pattern.name}" already exists for domain ${domain}`,
                 };
             }
 
@@ -157,33 +168,40 @@ export class DomainManager {
 
             // Save updated config
             return await this.saveDomainConfig(config);
-
         } catch (error) {
-            console.error(`Failed to add URL pattern to domain ${domain}:`, error);
+            console.error(
+                `Failed to add URL pattern to domain ${domain}:`,
+                error,
+            );
             return {
                 success: false,
-                error: `Failed to add URL pattern: ${error instanceof Error ? error.message : 'Unknown error'}`
+                error: `Failed to add URL pattern: ${error instanceof Error ? error.message : "Unknown error"}`,
             };
         }
     }
     /**
      * Remove URL pattern from domain configuration
      */
-    async removeUrlPattern(domain: string, patternName: string): Promise<SaveResult> {
+    async removeUrlPattern(
+        domain: string,
+        patternName: string,
+    ): Promise<SaveResult> {
         try {
             const config = await this.getDomainConfig(domain);
             if (!config) {
                 return {
                     success: false,
-                    error: `Domain config not found: ${domain}`
+                    error: `Domain config not found: ${domain}`,
                 };
             }
 
-            const patternIndex = config.patterns.findIndex(p => p.name === patternName);
+            const patternIndex = config.patterns.findIndex(
+                (p) => p.name === patternName,
+            );
             if (patternIndex === -1) {
                 return {
                     success: false,
-                    error: `Pattern "${patternName}" not found in domain ${domain}`
+                    error: `Pattern "${patternName}" not found in domain ${domain}`,
                 };
             }
 
@@ -193,12 +211,14 @@ export class DomainManager {
 
             // Save updated config
             return await this.saveDomainConfig(config);
-
         } catch (error) {
-            console.error(`Failed to remove URL pattern from domain ${domain}:`, error);
+            console.error(
+                `Failed to remove URL pattern from domain ${domain}:`,
+                error,
+            );
             return {
                 success: false,
-                error: `Failed to remove URL pattern: ${error instanceof Error ? error.message : 'Unknown error'}`
+                error: `Failed to remove URL pattern: ${error instanceof Error ? error.message : "Unknown error"}`,
             };
         }
     }
@@ -211,7 +231,10 @@ export class DomainManager {
             const config = await this.getDomainConfig(domain);
             return config ? config.patterns : [];
         } catch (error) {
-            console.error(`Failed to get URL patterns for domain ${domain}:`, error);
+            console.error(
+                `Failed to get URL patterns for domain ${domain}:`,
+                error,
+            );
             return [];
         }
     }
@@ -237,15 +260,15 @@ export class DomainManager {
                 inheritGlobal: true,
                 defaultCategory: "utility" as ActionCategory,
                 maxActions: 100,
-                customSelectors: {}
+                customSelectors: {},
             },
             patterns: [],
             metadata: {
                 siteType: "unknown" as SiteType,
                 lastAnalyzed: new Date().toISOString(),
                 createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            }
+                updatedAt: new Date().toISOString(),
+            },
         };
     }
 
@@ -257,22 +280,22 @@ export class DomainManager {
         const commonPatterns: UrlPatternDefinition[] = [];
 
         // Add basic patterns based on domain structure
-        if (domain.includes('github.com')) {
+        if (domain.includes("github.com")) {
             commonPatterns.push(
                 {
                     name: "repository-pages",
                     pattern: `https://github.com/*/*`,
                     type: "glob",
                     description: "Repository pages",
-                    priority: 80
+                    priority: 80,
                 },
                 {
                     name: "pull-requests",
                     pattern: `https://github.com/*/*/pull/*`,
                     type: "glob",
                     description: "Pull request pages",
-                    priority: 90
-                }
+                    priority: 90,
+                },
             );
         } else {
             // Generic patterns for most websites
@@ -282,15 +305,15 @@ export class DomainManager {
                     pattern: `https://${domain}/*`,
                     type: "glob",
                     description: "All pages on this domain",
-                    priority: 60
+                    priority: 60,
                 },
                 {
                     name: "subdomain-pages",
                     pattern: `https://*.${domain}/*`,
                     type: "glob",
                     description: "All pages on subdomains",
-                    priority: 55
-                }
+                    priority: 55,
+                },
             );
         }
 
@@ -312,17 +335,25 @@ export class DomainManager {
             errors.push({ field: "version", message: "Version is required" });
         }
 
-        if (config.settings.maxActions < 1 || config.settings.maxActions > 1000) {
-            errors.push({ field: "settings.maxActions", message: "Max actions must be between 1 and 1000" });
+        if (
+            config.settings.maxActions < 1 ||
+            config.settings.maxActions > 1000
+        ) {
+            errors.push({
+                field: "settings.maxActions",
+                message: "Max actions must be between 1 and 1000",
+            });
         }
 
         // Validate patterns
         for (let i = 0; i < config.patterns.length; i++) {
-            const patternValidation = this.validateUrlPattern(config.patterns[i]);
+            const patternValidation = this.validateUrlPattern(
+                config.patterns[i],
+            );
             if (!patternValidation.isValid) {
                 errors.push({
                     field: `patterns[${i}]`,
-                    message: `Pattern validation failed: ${patternValidation.errors.map(e => e.message).join(', ')}`
+                    message: `Pattern validation failed: ${patternValidation.errors.map((e) => e.message).join(", ")}`,
                 });
             }
         }
@@ -330,53 +361,79 @@ export class DomainManager {
         return {
             isValid: errors.length === 0,
             errors,
-            warnings: []
+            warnings: [],
         };
     }
 
     /**
      * Validate URL pattern definition
      */
-    private validateUrlPattern(pattern: UrlPatternDefinition): ValidationResult {
+    private validateUrlPattern(
+        pattern: UrlPatternDefinition,
+    ): ValidationResult {
         const errors = [];
 
         if (!pattern.name) {
             errors.push({ field: "name", message: "Pattern name is required" });
         } else if (pattern.name.length > 50) {
-            errors.push({ field: "name", message: "Pattern name must be 50 characters or less" });
+            errors.push({
+                field: "name",
+                message: "Pattern name must be 50 characters or less",
+            });
         }
 
         if (!pattern.pattern) {
-            errors.push({ field: "pattern", message: "Pattern string is required" });
+            errors.push({
+                field: "pattern",
+                message: "Pattern string is required",
+            });
         } else if (pattern.pattern.length > 500) {
-            errors.push({ field: "pattern", message: "Pattern string must be 500 characters or less" });
+            errors.push({
+                field: "pattern",
+                message: "Pattern string must be 500 characters or less",
+            });
         }
 
-        if (!['glob', 'regex'].includes(pattern.type)) {
-            errors.push({ field: "type", message: "Pattern type must be 'glob' or 'regex'" });
+        if (!["glob", "regex"].includes(pattern.type)) {
+            errors.push({
+                field: "type",
+                message: "Pattern type must be 'glob' or 'regex'",
+            });
         }
 
-        if (pattern.priority !== undefined && (pattern.priority < 1 || pattern.priority > 100)) {
-            errors.push({ field: "priority", message: "Priority must be between 1 and 100" });
+        if (
+            pattern.priority !== undefined &&
+            (pattern.priority < 1 || pattern.priority > 100)
+        ) {
+            errors.push({
+                field: "priority",
+                message: "Priority must be between 1 and 100",
+            });
         }
 
         if (pattern.description && pattern.description.length > 200) {
-            errors.push({ field: "description", message: "Description must be 200 characters or less" });
+            errors.push({
+                field: "description",
+                message: "Description must be 200 characters or less",
+            });
         }
 
         // Validate pattern syntax
-        if (pattern.type === 'regex') {
+        if (pattern.type === "regex") {
             try {
                 new RegExp(pattern.pattern);
             } catch (error) {
-                errors.push({ field: "pattern", message: "Invalid regex pattern syntax" });
+                errors.push({
+                    field: "pattern",
+                    message: "Invalid regex pattern syntax",
+                });
             }
         }
 
         return {
             isValid: errors.length === 0,
             errors,
-            warnings: []
+            warnings: [],
         };
     }
     /**
@@ -389,19 +446,22 @@ export class DomainManager {
             version: config.version.trim(),
             settings: {
                 ...config.settings,
-                maxActions: Math.max(1, Math.min(1000, config.settings.maxActions))
+                maxActions: Math.max(
+                    1,
+                    Math.min(1000, config.settings.maxActions),
+                ),
             },
-            patterns: config.patterns.map(p => ({
+            patterns: config.patterns.map((p) => ({
                 ...p,
                 name: p.name.trim(),
                 pattern: p.pattern.trim(),
                 description: p.description?.trim() || "",
-                priority: Math.max(1, Math.min(100, p.priority || 60))
+                priority: Math.max(1, Math.min(100, p.priority || 60)),
             })),
             metadata: {
                 ...config.metadata,
-                updatedAt: new Date().toISOString()
-            }
+                updatedAt: new Date().toISOString(),
+            },
         };
     }
 
@@ -412,26 +472,26 @@ export class DomainManager {
         try {
             const parsedUrl = new URL(url);
             const domain = parsedUrl.hostname;
-            
+
             // Basic analysis based on domain and URL structure
             const siteType = this.detectSiteType(domain, url);
             const framework = this.detectFramework(url);
             const commonPatterns = this.generateCommonPatterns(domain, url);
-            const recommendedSettings = this.generateRecommendedSettings(siteType);
+            const recommendedSettings =
+                this.generateRecommendedSettings(siteType);
 
             return {
                 siteType,
                 ...(framework && { framework }),
                 commonPatterns,
-                recommendedSettings
+                recommendedSettings,
             };
-
         } catch (error) {
             console.error(`Failed to analyze website ${url}:`, error);
             return {
                 siteType: "unknown",
                 commonPatterns: [],
-                recommendedSettings: {}
+                recommendedSettings: {},
             };
         }
     }
@@ -443,48 +503,78 @@ export class DomainManager {
         const lowerUrl = url.toLowerCase();
 
         // E-commerce indicators
-        if (lowerDomain.includes('shop') || lowerDomain.includes('store') || 
-            lowerUrl.includes('/cart') || lowerUrl.includes('/checkout') || 
-            lowerUrl.includes('/product')) {
+        if (
+            lowerDomain.includes("shop") ||
+            lowerDomain.includes("store") ||
+            lowerUrl.includes("/cart") ||
+            lowerUrl.includes("/checkout") ||
+            lowerUrl.includes("/product")
+        ) {
             return "ecommerce";
         }
 
         // Social media indicators
-        if (lowerDomain.includes('social') || lowerDomain.includes('facebook') || 
-            lowerDomain.includes('twitter') || lowerDomain.includes('linkedin') ||
-            lowerUrl.includes('/profile') || lowerUrl.includes('/feed')) {
+        if (
+            lowerDomain.includes("social") ||
+            lowerDomain.includes("facebook") ||
+            lowerDomain.includes("twitter") ||
+            lowerDomain.includes("linkedin") ||
+            lowerUrl.includes("/profile") ||
+            lowerUrl.includes("/feed")
+        ) {
             return "social";
         }
 
         // Productivity tools
-        if (lowerDomain.includes('docs') || lowerDomain.includes('workspace') ||
-            lowerDomain.includes('office') || lowerDomain.includes('notion') ||
-            lowerDomain.includes('slack') || lowerDomain.includes('teams')) {
+        if (
+            lowerDomain.includes("docs") ||
+            lowerDomain.includes("workspace") ||
+            lowerDomain.includes("office") ||
+            lowerDomain.includes("notion") ||
+            lowerDomain.includes("slack") ||
+            lowerDomain.includes("teams")
+        ) {
             return "productivity";
         }
 
         // News sites
-        if (lowerDomain.includes('news') || lowerDomain.includes('times') ||
-            lowerDomain.includes('post') || lowerDomain.includes('herald') ||
-            lowerUrl.includes('/news') || lowerUrl.includes('/article')) {
+        if (
+            lowerDomain.includes("news") ||
+            lowerDomain.includes("times") ||
+            lowerDomain.includes("post") ||
+            lowerDomain.includes("herald") ||
+            lowerUrl.includes("/news") ||
+            lowerUrl.includes("/article")
+        ) {
             return "news";
         }
 
         // Government sites
-        if (lowerDomain.endsWith('.gov') || lowerDomain.endsWith('.gov.uk') ||
-            lowerDomain.includes('government')) {
+        if (
+            lowerDomain.endsWith(".gov") ||
+            lowerDomain.endsWith(".gov.uk") ||
+            lowerDomain.includes("government")
+        ) {
             return "government";
         }
 
         // Education sites
-        if (lowerDomain.endsWith('.edu') || lowerDomain.includes('university') ||
-            lowerDomain.includes('school') || lowerDomain.includes('learning')) {
+        if (
+            lowerDomain.endsWith(".edu") ||
+            lowerDomain.includes("university") ||
+            lowerDomain.includes("school") ||
+            lowerDomain.includes("learning")
+        ) {
             return "education";
         }
 
         // Blog indicators
-        if (lowerDomain.includes('blog') || lowerUrl.includes('/blog') ||
-            lowerUrl.includes('/post') || lowerUrl.includes('/article')) {
+        if (
+            lowerDomain.includes("blog") ||
+            lowerUrl.includes("/blog") ||
+            lowerUrl.includes("/post") ||
+            lowerUrl.includes("/article")
+        ) {
             return "blog";
         }
 
@@ -504,19 +594,21 @@ export class DomainManager {
      */
     private generateCommonPatterns(domain: string, url: string): string[] {
         const patterns: string[] = [];
-        
+
         // Basic domain patterns
         patterns.push(`https://${domain}/*`);
         patterns.push(`https://*.${domain}/*`);
 
         // Analyze URL structure for specific patterns
         const parsedUrl = new URL(url);
-        const pathSegments = parsedUrl.pathname.split('/').filter(s => s.length > 0);
+        const pathSegments = parsedUrl.pathname
+            .split("/")
+            .filter((s) => s.length > 0);
 
         if (pathSegments.length > 0) {
             // Generate patterns based on path structure
             for (let i = 1; i <= pathSegments.length; i++) {
-                const pathPattern = pathSegments.slice(0, i).join('/');
+                const pathPattern = pathSegments.slice(0, i).join("/");
                 patterns.push(`https://${domain}/${pathPattern}/*`);
             }
         }
@@ -527,11 +619,13 @@ export class DomainManager {
     /**
      * Generate recommended settings based on site type
      */
-    private generateRecommendedSettings(siteType: SiteType): Partial<DomainSettings> {
+    private generateRecommendedSettings(
+        siteType: SiteType,
+    ): Partial<DomainSettings> {
         const baseSettings: Partial<DomainSettings> = {
             autoDiscovery: true,
             inheritGlobal: true,
-            maxActions: 100
+            maxActions: 100,
         };
 
         switch (siteType) {
@@ -539,54 +633,62 @@ export class DomainManager {
                 return {
                     ...baseSettings,
                     defaultCategory: "commerce",
-                    maxActions: 150
+                    maxActions: 150,
                 };
             case "social":
                 return {
                     ...baseSettings,
                     defaultCategory: "social",
-                    maxActions: 80
+                    maxActions: 80,
                 };
             case "productivity":
                 return {
                     ...baseSettings,
                     defaultCategory: "utility",
-                    maxActions: 200
+                    maxActions: 200,
                 };
             case "news":
                 return {
                     ...baseSettings,
                     defaultCategory: "content",
-                    maxActions: 60
+                    maxActions: 60,
                 };
             default:
                 return {
                     ...baseSettings,
-                    defaultCategory: "utility"
+                    defaultCategory: "utility",
                 };
         }
     }
     /**
      * Auto-configure domain based on analysis
      */
-    async autoConfigureDomain(domain: string, analysis: SiteAnalysis): Promise<DomainConfig> {
+    async autoConfigureDomain(
+        domain: string,
+        analysis: SiteAnalysis,
+    ): Promise<DomainConfig> {
         const config = this.createDefaultDomainConfig(domain);
-        
+
         // Apply analysis results
         config.metadata.siteType = analysis.siteType;
         if (analysis.framework) {
             config.metadata.framework = analysis.framework;
         }
-        config.settings = { ...config.settings, ...analysis.recommendedSettings };
+        config.settings = {
+            ...config.settings,
+            ...analysis.recommendedSettings,
+        };
 
         // Add suggested patterns
-        const suggestedPatterns = analysis.commonPatterns.slice(0, 5).map((pattern, index) => ({
-            name: `auto-pattern-${index + 1}`,
-            pattern,
-            type: "glob" as const,
-            description: `Auto-generated pattern ${index + 1}`,
-            priority: 70 - index * 5
-        }));
+        const suggestedPatterns = analysis.commonPatterns
+            .slice(0, 5)
+            .map((pattern, index) => ({
+                name: `auto-pattern-${index + 1}`,
+                pattern,
+                type: "glob" as const,
+                description: `Auto-generated pattern ${index + 1}`,
+                priority: 70 - index * 5,
+            }));
 
         config.patterns.push(...suggestedPatterns);
 
@@ -618,7 +720,7 @@ export class DomainManager {
     getCacheStats(): { cacheSize: number; cachedDomains: string[] } {
         return {
             cacheSize: this.domainConfigCache.size,
-            cachedDomains: Array.from(this.domainConfigCache.keys())
+            cachedDomains: Array.from(this.domainConfigCache.keys()),
         };
     }
 }

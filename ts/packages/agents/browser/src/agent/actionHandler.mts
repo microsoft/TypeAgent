@@ -109,7 +109,7 @@ export type BrowserActionContext = {
     index: website.IndexData | undefined;
     viewProcess?: ChildProcess | undefined;
     localHostPort: number;
-    actionsStore?: ActionsStore | undefined;  // Add ActionsStore instance
+    actionsStore?: ActionsStore | undefined; // Add ActionsStore instance
 };
 
 export interface urlResolutionAction {
@@ -131,7 +131,7 @@ async function initializeBrowserContext(
     if (localHostPort === undefined) {
         throw new Error("Local view port not assigned.");
     }
-    
+
     return {
         clientBrowserControl,
         useExternalBrowserControl: clientBrowserControl === undefined,
@@ -160,7 +160,9 @@ async function updateBrowserContext(
         if (!context.agentContext.actionsStore && context.sessionStorage) {
             try {
                 const { ActionsStore } = await import("./storage/index.mjs");
-                context.agentContext.actionsStore = new ActionsStore(context.sessionStorage);
+                context.agentContext.actionsStore = new ActionsStore(
+                    context.sessionStorage,
+                );
                 await context.agentContext.actionsStore.initialize();
                 debug("ActionsStore initialized successfully");
             } catch (error) {
@@ -418,11 +420,12 @@ async function updateBrowserContext(
 
                         case "recordActionUsage":
                         case "getActionStatistics": {
-                            const actionsResult = await handleActionsStoreAction(
-                                data.method,
-                                data.params,
-                                context,
-                            );
+                            const actionsResult =
+                                await handleActionsStoreAction(
+                                    data.method,
+                                    data.params,
+                                    context,
+                                );
 
                             webSocket.send(
                                 JSON.stringify({
@@ -1126,11 +1129,11 @@ async function handleActionsStoreAction(
     context: SessionContext<BrowserActionContext>,
 ): Promise<any> {
     const actionsStore = context.agentContext.actionsStore;
-    
+
     if (!actionsStore) {
         return {
             success: false,
-            error: "ActionsStore not available"
+            error: "ActionsStore not available",
         };
     }
 
@@ -1141,16 +1144,16 @@ async function handleActionsStoreAction(
                 if (!actionId) {
                     return {
                         success: false,
-                        error: "Missing actionId parameter"
+                        error: "Missing actionId parameter",
                     };
                 }
 
                 await actionsStore.recordUsage(actionId);
                 console.log(`Recorded usage for action: ${actionId}`);
-                
+
                 return {
                     success: true,
-                    actionId: actionId
+                    actionId: actionId,
                 };
             }
 
@@ -1169,33 +1172,38 @@ async function handleActionsStoreAction(
                     totalActions = actions.length;
                 }
 
-                console.log(`Retrieved statistics: ${totalActions} total actions`);
-                
+                console.log(
+                    `Retrieved statistics: ${totalActions} total actions`,
+                );
+
                 return {
                     success: true,
                     totalActions: totalActions,
-                    actions: actions.map(action => ({
+                    actions: actions.map((action) => ({
                         id: action.id,
                         name: action.name,
                         author: action.author,
                         category: action.category,
                         usageCount: action.metadata.usageCount,
-                        lastUsed: action.metadata.lastUsed
-                    }))
+                        lastUsed: action.metadata.lastUsed,
+                    })),
                 };
             }
 
             default:
                 return {
                     success: false,
-                    error: `Unknown ActionsStore action: ${actionName}`
+                    error: `Unknown ActionsStore action: ${actionName}`,
                 };
         }
     } catch (error) {
-        console.error(`Failed to execute ActionsStore action ${actionName}:`, error);
+        console.error(
+            `Failed to execute ActionsStore action ${actionName}:`,
+            error,
+        );
         return {
             success: false,
-            error: error instanceof Error ? error.message : "Unknown error"
+            error: error instanceof Error ? error.message : "Unknown error",
         };
     }
 }

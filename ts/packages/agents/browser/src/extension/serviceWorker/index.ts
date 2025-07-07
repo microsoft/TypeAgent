@@ -204,7 +204,10 @@ function setupEventListeners(): void {
         if (command === "open_action_index") {
             // Open action index panel
             try {
-                const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+                const tabs = await chrome.tabs.query({
+                    active: true,
+                    currentWindow: true,
+                });
                 if (tabs.length > 0) {
                     await chrome.sidePanel.open({ windowId: tabs[0].windowId });
                     // The action index will be opened via URL navigation in the sidepanel

@@ -11,7 +11,7 @@ export interface ResolvedAction {
     action: StoredAction;
     matchedPattern?: UrlPattern;
     priority: number;
-    source: 'exact' | 'pattern' | 'domain' | 'global';
+    source: "exact" | "pattern" | "domain" | "global";
 }
 
 /**
@@ -40,13 +40,12 @@ export class PatternResolver {
      * Resolve all actions that should apply to a given URL
      */
     async resolveActionsForUrl(
-        url: string, 
+        url: string,
         getActionById: (id: string) => Promise<StoredAction | null>,
         getAllPatterns: () => Promise<UrlPattern[]>,
         getActionEntriesForDomain: (domain: string) => ActionIndexEntry[],
-        getGlobalActionEntries: () => ActionIndexEntry[]
+        getGlobalActionEntries: () => ActionIndexEntry[],
     ): Promise<ResolvedAction[]> {
-        
         // Check cache first
         const cached = this.getCachedResolution(url);
         if (cached) {
@@ -60,14 +59,13 @@ export class PatternResolver {
                 getActionById,
                 getAllPatterns,
                 getActionEntriesForDomain,
-                getGlobalActionEntries
+                getGlobalActionEntries,
             );
 
             // Cache the result
             this.setCachedResolution(url, resolved);
 
             return resolved;
-
         } catch (error) {
             console.error(`Failed to resolve actions for URL ${url}:`, error);
             return [];
@@ -77,12 +75,18 @@ export class PatternResolver {
     /**
      * Get all URL patterns that match a given URL
      */
-    async getApplicablePatterns(url: string, getAllPatterns: () => Promise<UrlPattern[]>): Promise<MatchResult[]> {
+    async getApplicablePatterns(
+        url: string,
+        getAllPatterns: () => Promise<UrlPattern[]>,
+    ): Promise<MatchResult[]> {
         try {
             const allPatterns = await getAllPatterns();
             return this.urlMatcher.findMatchingPatterns(url, allPatterns);
         } catch (error) {
-            console.error(`Failed to get applicable patterns for URL ${url}:`, error);
+            console.error(
+                `Failed to get applicable patterns for URL ${url}:`,
+                error,
+            );
             return [];
         }
     }
@@ -95,27 +99,41 @@ export class PatternResolver {
         getActionById: (id: string) => Promise<StoredAction | null>,
         getAllPatterns: () => Promise<UrlPattern[]>,
         getActionEntriesForDomain: (domain: string) => ActionIndexEntry[],
-        getGlobalActionEntries: () => ActionIndexEntry[]
+        getGlobalActionEntries: () => ActionIndexEntry[],
     ): Promise<ResolvedAction[]> {
-        
         const resolvedActions: ResolvedAction[] = [];
         const parsedUrl = new URL(url);
         const domain = parsedUrl.hostname;
 
         // 1. Check for exact URL matches in action patterns
-        const exactActions = await this.findExactUrlActions(url, getActionById, getAllPatterns);
+        const exactActions = await this.findExactUrlActions(
+            url,
+            getActionById,
+            getAllPatterns,
+        );
         resolvedActions.push(...exactActions);
 
         // 2. Find pattern-based matches
-        const patternActions = await this.findPatternActions(url, getActionById, getAllPatterns);
+        const patternActions = await this.findPatternActions(
+            url,
+            getActionById,
+            getAllPatterns,
+        );
         resolvedActions.push(...patternActions);
 
         // 3. Get domain-specific actions (non-pattern)
-        const domainActions = await this.findDomainActions(domain, getActionById, getActionEntriesForDomain);
+        const domainActions = await this.findDomainActions(
+            domain,
+            getActionById,
+            getActionEntriesForDomain,
+        );
         resolvedActions.push(...domainActions);
 
         // 4. Get global actions
-        const globalActions = await this.findGlobalActions(getActionById, getGlobalActionEntries);
+        const globalActions = await this.findGlobalActions(
+            getActionById,
+            getGlobalActionEntries,
+        );
         resolvedActions.push(...globalActions);
 
         // Remove duplicates and sort by priority
@@ -130,14 +148,15 @@ export class PatternResolver {
     private async findExactUrlActions(
         url: string,
         getActionById: (id: string) => Promise<StoredAction | null>,
-        getAllPatterns: () => Promise<UrlPattern[]>
+        getAllPatterns: () => Promise<UrlPattern[]>,
     ): Promise<ResolvedAction[]> {
-        
         const patterns = await getAllPatterns();
-        const exactPatterns = patterns.filter(p => p.type === 'exact' && p.pattern === url);
-        
+        const exactPatterns = patterns.filter(
+            (p) => p.type === "exact" && p.pattern === url,
+        );
+
         const actions: ResolvedAction[] = [];
-        
+
         for (const _pattern of exactPatterns) {
             // Find actions that use this exact pattern
             // This would need integration with action-pattern mapping
@@ -153,14 +172,16 @@ export class PatternResolver {
     private async findPatternActions(
         url: string,
         getActionById: (id: string) => Promise<StoredAction | null>,
-        getAllPatterns: () => Promise<UrlPattern[]>
+        getAllPatterns: () => Promise<UrlPattern[]>,
     ): Promise<ResolvedAction[]> {
-        
-        const matchingPatterns = await this.getApplicablePatterns(url, getAllPatterns);
+        const matchingPatterns = await this.getApplicablePatterns(
+            url,
+            getAllPatterns,
+        );
         const actions: ResolvedAction[] = [];
 
         for (const _matchResult of matchingPatterns) {
-            if (_matchResult.pattern.type !== 'exact') {
+            if (_matchResult.pattern.type !== "exact") {
                 // Find actions that use this pattern
                 // This would need integration with action-pattern mapping
                 // For now, this is a placeholder for future implementation
@@ -176,9 +197,8 @@ export class PatternResolver {
     private async findDomainActions(
         domain: string,
         getActionById: (id: string) => Promise<StoredAction | null>,
-        getActionEntriesForDomain: (domain: string) => ActionIndexEntry[]
+        getActionEntriesForDomain: (domain: string) => ActionIndexEntry[],
     ): Promise<ResolvedAction[]> {
-        
         const domainEntries = getActionEntriesForDomain(domain);
         const actions: ResolvedAction[] = [];
 
@@ -188,7 +208,7 @@ export class PatternResolver {
                 actions.push({
                     action,
                     priority: action.scope.priority || 60,
-                    source: 'domain'
+                    source: "domain",
                 });
             }
         }
@@ -201,9 +221,8 @@ export class PatternResolver {
      */
     private async findGlobalActions(
         getActionById: (id: string) => Promise<StoredAction | null>,
-        getGlobalActionEntries: () => ActionIndexEntry[]
+        getGlobalActionEntries: () => ActionIndexEntry[],
     ): Promise<ResolvedAction[]> {
-        
         const globalEntries = getGlobalActionEntries();
         const actions: ResolvedAction[] = [];
 
@@ -213,7 +232,7 @@ export class PatternResolver {
                 actions.push({
                     action,
                     priority: action.scope.priority || 50,
-                    source: 'global'
+                    source: "global",
                 });
             }
         }
@@ -227,7 +246,7 @@ export class PatternResolver {
     private deduplicateAndSort(actions: ResolvedAction[]): ResolvedAction[] {
         // Remove duplicates based on action ID
         const uniqueMap = new Map<string, ResolvedAction>();
-        
+
         for (const resolvedAction of actions) {
             const existing = uniqueMap.get(resolvedAction.action.id);
             if (!existing || resolvedAction.priority > existing.priority) {
@@ -241,7 +260,9 @@ export class PatternResolver {
                 return b.priority - a.priority;
             }
             if (a.action.metadata.usageCount !== b.action.metadata.usageCount) {
-                return b.action.metadata.usageCount - a.action.metadata.usageCount;
+                return (
+                    b.action.metadata.usageCount - a.action.metadata.usageCount
+                );
             }
             return a.action.name.localeCompare(b.action.name);
         });
@@ -255,12 +276,12 @@ export class PatternResolver {
         if (cached && Date.now() - cached.timestamp < cached.ttl) {
             return cached.actions;
         }
-        
+
         // Remove expired entry
         if (cached) {
             this.resolvedCache.delete(url);
         }
-        
+
         return null;
     }
 
@@ -276,7 +297,7 @@ export class PatternResolver {
         this.resolvedCache.set(url, {
             actions,
             timestamp: Date.now(),
-            ttl: this.DEFAULT_TTL
+            ttl: this.DEFAULT_TTL,
         });
     }
 
@@ -320,7 +341,7 @@ export class PatternResolver {
             cacheSize: this.resolvedCache.size,
             maxCacheSize: this.MAX_CACHE_SIZE,
             hitRate: 0, // Would need to track hits/misses to calculate
-            urlMatcherStats: this.urlMatcher.getCacheStats()
+            urlMatcherStats: this.urlMatcher.getCacheStats(),
         };
     }
 }

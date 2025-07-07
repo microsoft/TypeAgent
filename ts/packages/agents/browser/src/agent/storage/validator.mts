@@ -1,23 +1,22 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { 
-    StoredAction, 
-    ActionIndex, 
-    ActionIndexEntry, 
-    ValidationResult, 
-    ValidationError, 
+import {
+    StoredAction,
+    ActionIndex,
+    ActionIndexEntry,
+    ValidationResult,
+    ValidationError,
     ActionScope,
     ActionCategory,
     ActionAuthor,
-    StoreStatistics
+    StoreStatistics,
 } from "./types.mjs";
 
 /**
  * Action validator for ensuring data integrity
  */
 export class ActionValidator {
-    
     /**
      * Validate a complete StoredAction
      */
@@ -26,52 +25,90 @@ export class ActionValidator {
         const warnings: string[] = [];
 
         // Validate core identity
-        if (!action.id || typeof action.id !== 'string') {
-            errors.push({ field: 'id', message: 'ID is required and must be a string' });
+        if (!action.id || typeof action.id !== "string") {
+            errors.push({
+                field: "id",
+                message: "ID is required and must be a string",
+            });
         } else if (action.id.length !== 32) {
-            errors.push({ field: 'id', message: 'ID must be a 32-character UUID without hyphens' });
+            errors.push({
+                field: "id",
+                message: "ID must be a 32-character UUID without hyphens",
+            });
         }
 
-        if (!action.name || typeof action.name !== 'string') {
-            errors.push({ field: 'name', message: 'Name is required and must be a string' });
+        if (!action.name || typeof action.name !== "string") {
+            errors.push({
+                field: "name",
+                message: "Name is required and must be a string",
+            });
         } else if (action.name.length > 100) {
-            errors.push({ field: 'name', message: 'Name must be 100 characters or less' });
+            errors.push({
+                field: "name",
+                message: "Name must be 100 characters or less",
+            });
         }
 
-        if (!action.version || typeof action.version !== 'string') {
-            errors.push({ field: 'version', message: 'Version is required and must be a string' });
+        if (!action.version || typeof action.version !== "string") {
+            errors.push({
+                field: "version",
+                message: "Version is required and must be a string",
+            });
         } else if (!/^\d+\.\d+\.\d+$/.test(action.version)) {
-            warnings.push('Version should follow semantic versioning (e.g., "1.0.0")');
+            warnings.push(
+                'Version should follow semantic versioning (e.g., "1.0.0")',
+            );
         }
 
         // Validate metadata
-        if (!action.description || typeof action.description !== 'string') {
-            errors.push({ field: 'description', message: 'Description is required and must be a string' });
+        if (!action.description || typeof action.description !== "string") {
+            errors.push({
+                field: "description",
+                message: "Description is required and must be a string",
+            });
         } else if (action.description.length > 500) {
-            errors.push({ field: 'description', message: 'Description must be 500 characters or less' });
+            errors.push({
+                field: "description",
+                message: "Description must be 500 characters or less",
+            });
         }
 
         if (!this.isValidCategory(action.category)) {
-            errors.push({ field: 'category', message: 'Category must be a valid ActionCategory' });
+            errors.push({
+                field: "category",
+                message: "Category must be a valid ActionCategory",
+            });
         }
 
         if (!Array.isArray(action.tags)) {
-            errors.push({ field: 'tags', message: 'Tags must be an array' });
+            errors.push({ field: "tags", message: "Tags must be an array" });
         } else {
             if (action.tags.length > 10) {
-                errors.push({ field: 'tags', message: 'Maximum 10 tags allowed' });
+                errors.push({
+                    field: "tags",
+                    message: "Maximum 10 tags allowed",
+                });
             }
             action.tags.forEach((tag, index) => {
-                if (typeof tag !== 'string') {
-                    errors.push({ field: `tags[${index}]`, message: 'Each tag must be a string' });
+                if (typeof tag !== "string") {
+                    errors.push({
+                        field: `tags[${index}]`,
+                        message: "Each tag must be a string",
+                    });
                 } else if (tag.length > 30) {
-                    errors.push({ field: `tags[${index}]`, message: 'Each tag must be 30 characters or less' });
+                    errors.push({
+                        field: `tags[${index}]`,
+                        message: "Each tag must be 30 characters or less",
+                    });
                 }
             });
         }
 
         if (!this.isValidAuthor(action.author)) {
-            errors.push({ field: 'author', message: 'Author must be "discovered" or "user"' });
+            errors.push({
+                field: "author",
+                message: 'Author must be "discovered" or "user"',
+            });
         }
 
         // Validate scope
@@ -81,14 +118,17 @@ export class ActionValidator {
 
         // Validate URL patterns
         if (!Array.isArray(action.urlPatterns)) {
-            errors.push({ field: 'urlPatterns', message: 'urlPatterns must be an array' });
+            errors.push({
+                field: "urlPatterns",
+                message: "urlPatterns must be an array",
+            });
         } else {
             action.urlPatterns.forEach((pattern, index) => {
                 const patternValidation = this.validateUrlPattern(pattern);
-                patternValidation.errors.forEach(error => {
-                    errors.push({ 
-                        field: `urlPatterns[${index}].${error.field}`, 
-                        message: error.message 
+                patternValidation.errors.forEach((error) => {
+                    errors.push({
+                        field: `urlPatterns[${index}].${error.field}`,
+                        message: error.message,
                     });
                 });
             });
@@ -101,7 +141,9 @@ export class ActionValidator {
 
         // Validate definition
         if (action.definition) {
-            const definitionValidation = this.validateDefinition(action.definition);
+            const definitionValidation = this.validateDefinition(
+                action.definition,
+            );
             errors.push(...definitionValidation.errors);
             warnings.push(...definitionValidation.warnings);
         }
@@ -109,7 +151,7 @@ export class ActionValidator {
         return {
             isValid: errors.length === 0,
             errors,
-            warnings
+            warnings,
         };
     }
 
@@ -120,22 +162,38 @@ export class ActionValidator {
         const errors: ValidationError[] = [];
         const warnings: string[] = [];
 
-        if (!scope || typeof scope !== 'object') {
-            errors.push({ field: 'scope', message: 'Scope is required and must be an object' });
+        if (!scope || typeof scope !== "object") {
+            errors.push({
+                field: "scope",
+                message: "Scope is required and must be an object",
+            });
             return { isValid: false, errors, warnings };
         }
 
-        const validTypes = ['global', 'domain', 'pattern', 'page'];
+        const validTypes = ["global", "domain", "pattern", "page"];
         if (!validTypes.includes(scope.type)) {
-            errors.push({ field: 'scope.type', message: `Type must be one of: ${validTypes.join(', ')}` });
+            errors.push({
+                field: "scope.type",
+                message: `Type must be one of: ${validTypes.join(", ")}`,
+            });
         }
 
-        if (scope.type !== 'global' && !scope.domain) {
-            errors.push({ field: 'scope.domain', message: 'Domain is required for non-global scopes' });
+        if (scope.type !== "global" && !scope.domain) {
+            errors.push({
+                field: "scope.domain",
+                message: "Domain is required for non-global scopes",
+            });
         }
 
-        if (typeof scope.priority !== 'number' || scope.priority < 1 || scope.priority > 100) {
-            errors.push({ field: 'scope.priority', message: 'Priority must be a number between 1 and 100' });
+        if (
+            typeof scope.priority !== "number" ||
+            scope.priority < 1 ||
+            scope.priority > 100
+        ) {
+            errors.push({
+                field: "scope.priority",
+                message: "Priority must be a number between 1 and 100",
+            });
         }
 
         return { isValid: errors.length === 0, errors, warnings };
@@ -148,30 +206,49 @@ export class ActionValidator {
         const errors: ValidationError[] = [];
         const warnings: string[] = [];
 
-        if (!pattern || typeof pattern !== 'object') {
-            errors.push({ field: 'pattern', message: 'Pattern must be an object' });
+        if (!pattern || typeof pattern !== "object") {
+            errors.push({
+                field: "pattern",
+                message: "Pattern must be an object",
+            });
             return { isValid: false, errors, warnings };
         }
 
-        if (!pattern.pattern || typeof pattern.pattern !== 'string') {
-            errors.push({ field: 'pattern', message: 'Pattern string is required' });
+        if (!pattern.pattern || typeof pattern.pattern !== "string") {
+            errors.push({
+                field: "pattern",
+                message: "Pattern string is required",
+            });
         }
 
-        const validTypes = ['exact', 'glob', 'regex'];
+        const validTypes = ["exact", "glob", "regex"];
         if (!validTypes.includes(pattern.type)) {
-            errors.push({ field: 'type', message: `Type must be one of: ${validTypes.join(', ')}` });
+            errors.push({
+                field: "type",
+                message: `Type must be one of: ${validTypes.join(", ")}`,
+            });
         }
 
-        if (typeof pattern.priority !== 'number' || pattern.priority < 1 || pattern.priority > 100) {
-            errors.push({ field: 'priority', message: 'Priority must be a number between 1 and 100' });
+        if (
+            typeof pattern.priority !== "number" ||
+            pattern.priority < 1 ||
+            pattern.priority > 100
+        ) {
+            errors.push({
+                field: "priority",
+                message: "Priority must be a number between 1 and 100",
+            });
         }
 
         // Validate regex patterns
-        if (pattern.type === 'regex') {
+        if (pattern.type === "regex") {
             try {
                 new RegExp(pattern.pattern);
             } catch (error) {
-                errors.push({ field: 'pattern', message: 'Invalid regex pattern' });
+                errors.push({
+                    field: "pattern",
+                    message: "Invalid regex pattern",
+                });
             }
         }
 
@@ -185,30 +262,51 @@ export class ActionValidator {
         const errors: ValidationError[] = [];
         const warnings: string[] = [];
 
-        if (!metadata || typeof metadata !== 'object') {
-            errors.push({ field: 'metadata', message: 'Metadata is required and must be an object' });
+        if (!metadata || typeof metadata !== "object") {
+            errors.push({
+                field: "metadata",
+                message: "Metadata is required and must be an object",
+            });
             return { isValid: false, errors, warnings };
         }
 
         // Validate timestamps
         if (!metadata.createdAt || !this.isValidISOString(metadata.createdAt)) {
-            errors.push({ field: 'metadata.createdAt', message: 'createdAt must be a valid ISO 8601 timestamp' });
+            errors.push({
+                field: "metadata.createdAt",
+                message: "createdAt must be a valid ISO 8601 timestamp",
+            });
         }
 
         if (!metadata.updatedAt || !this.isValidISOString(metadata.updatedAt)) {
-            errors.push({ field: 'metadata.updatedAt', message: 'updatedAt must be a valid ISO 8601 timestamp' });
+            errors.push({
+                field: "metadata.updatedAt",
+                message: "updatedAt must be a valid ISO 8601 timestamp",
+            });
         }
 
-        if (typeof metadata.usageCount !== 'number' || metadata.usageCount < 0) {
-            errors.push({ field: 'metadata.usageCount', message: 'usageCount must be a non-negative number' });
+        if (
+            typeof metadata.usageCount !== "number" ||
+            metadata.usageCount < 0
+        ) {
+            errors.push({
+                field: "metadata.usageCount",
+                message: "usageCount must be a non-negative number",
+            });
         }
 
         if (metadata.lastUsed && !this.isValidISOString(metadata.lastUsed)) {
-            errors.push({ field: 'metadata.lastUsed', message: 'lastUsed must be a valid ISO 8601 timestamp' });
+            errors.push({
+                field: "metadata.lastUsed",
+                message: "lastUsed must be a valid ISO 8601 timestamp",
+            });
         }
 
-        if (typeof metadata.isValid !== 'boolean') {
-            errors.push({ field: 'metadata.isValid', message: 'isValid must be a boolean' });
+        if (typeof metadata.isValid !== "boolean") {
+            errors.push({
+                field: "metadata.isValid",
+                message: "isValid must be a boolean",
+            });
         }
 
         return { isValid: errors.length === 0, errors, warnings };
@@ -221,25 +319,39 @@ export class ActionValidator {
         const errors: ValidationError[] = [];
         const warnings: string[] = [];
 
-        if (!definition || typeof definition !== 'object') {
-            warnings.push('Action definition is recommended for proper functionality');
+        if (!definition || typeof definition !== "object") {
+            warnings.push(
+                "Action definition is recommended for proper functionality",
+            );
             return { isValid: true, errors, warnings };
         }
 
         // Validate intent JSON if present
         if (definition.intentJson) {
-            if (!definition.intentJson.actionName || typeof definition.intentJson.actionName !== 'string') {
-                errors.push({ field: 'definition.intentJson.actionName', message: 'Intent action name is required' });
+            if (
+                !definition.intentJson.actionName ||
+                typeof definition.intentJson.actionName !== "string"
+            ) {
+                errors.push({
+                    field: "definition.intentJson.actionName",
+                    message: "Intent action name is required",
+                });
             }
 
             if (!Array.isArray(definition.intentJson.parameters)) {
-                errors.push({ field: 'definition.intentJson.parameters', message: 'Intent parameters must be an array' });
+                errors.push({
+                    field: "definition.intentJson.parameters",
+                    message: "Intent parameters must be an array",
+                });
             }
         }
 
         // Validate action steps if present
         if (definition.actionSteps && !Array.isArray(definition.actionSteps)) {
-            errors.push({ field: 'definition.actionSteps', message: 'Action steps must be an array' });
+            errors.push({
+                field: "definition.actionSteps",
+                message: "Action steps must be an array",
+            });
         }
 
         return { isValid: errors.length === 0, errors, warnings };
@@ -250,17 +362,26 @@ export class ActionValidator {
      */
     private isValidCategory(category: any): category is ActionCategory {
         const validCategories = [
-            'navigation', 'form', 'commerce', 'search', 'content', 
-            'social', 'media', 'utility', 'custom'
+            "navigation",
+            "form",
+            "commerce",
+            "search",
+            "content",
+            "social",
+            "media",
+            "utility",
+            "custom",
         ];
-        return typeof category === 'string' && validCategories.includes(category);
+        return (
+            typeof category === "string" && validCategories.includes(category)
+        );
     }
 
     /**
      * Check if author is valid
      */
     private isValidAuthor(author: any): author is ActionAuthor {
-        return author === 'discovered' || author === 'user';
+        return author === "discovered" || author === "user";
     }
 
     /**
@@ -268,7 +389,11 @@ export class ActionValidator {
      */
     private isValidISOString(dateString: string): boolean {
         const date = new Date(dateString);
-        return date instanceof Date && !isNaN(date.getTime()) && date.toISOString() === dateString;
+        return (
+            date instanceof Date &&
+            !isNaN(date.getTime()) &&
+            date.toISOString() === dateString
+        );
     }
 
     /**
@@ -278,14 +403,15 @@ export class ActionValidator {
         const sanitized = { ...action };
 
         // Trim strings
-        sanitized.name = sanitized.name?.trim() || '';
-        sanitized.description = sanitized.description?.trim() || '';
-        
+        sanitized.name = sanitized.name?.trim() || "";
+        sanitized.description = sanitized.description?.trim() || "";
+
         // Sanitize tags
-        sanitized.tags = sanitized.tags
-            ?.map(tag => tag.trim().toLowerCase())
-            .filter(tag => tag.length > 0)
-            .slice(0, 10) || [];
+        sanitized.tags =
+            sanitized.tags
+                ?.map((tag) => tag.trim().toLowerCase())
+                .filter((tag) => tag.length > 0)
+                .slice(0, 10) || [];
 
         // Remove duplicates from tags
         sanitized.tags = [...new Set(sanitized.tags)];
@@ -298,7 +424,10 @@ export class ActionValidator {
         sanitized.metadata.updatedAt = now;
 
         // Ensure usage count is non-negative
-        sanitized.metadata.usageCount = Math.max(0, sanitized.metadata.usageCount || 0);
+        sanitized.metadata.usageCount = Math.max(
+            0,
+            sanitized.metadata.usageCount || 0,
+        );
 
         return sanitized;
     }
@@ -312,15 +441,15 @@ export class ActionValidator {
 
         const defaultAction: StoredAction = {
             id,
-            name: '',
-            version: '1.0.0',
-            description: '',
-            category: 'utility',
+            name: "",
+            version: "1.0.0",
+            description: "",
+            category: "utility",
             tags: [],
-            author: 'user',
+            author: "user",
             scope: {
-                type: 'page',
-                priority: 50
+                type: "page",
+                priority: 50,
             },
             urlPatterns: [],
             definition: {},
@@ -329,9 +458,9 @@ export class ActionValidator {
                 createdAt: now,
                 updatedAt: now,
                 usageCount: 0,
-                isValid: true
+                isValid: true,
             },
-            ...overrides
+            ...overrides,
         };
 
         return this.sanitizeAction(defaultAction);
@@ -341,11 +470,14 @@ export class ActionValidator {
      * Generate a unique action ID
      */
     private generateActionId(): string {
-        return 'xxxxxxxxxxxx4xxxyxxxxxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-            const r = Math.random() * 16 | 0;
-            const v = c === 'x' ? r : (r & 0x3 | 0x8);
-            return v.toString(16);
-        });
+        return "xxxxxxxxxxxx4xxxyxxxxxxxxxxxxxxx".replace(
+            /[xy]/g,
+            function (c) {
+                const r = (Math.random() * 16) | 0;
+                const v = c === "x" ? r : (r & 0x3) | 0x8;
+                return v.toString(16);
+            },
+        );
     }
 }
 
@@ -357,9 +489,9 @@ export class ActionIndexManager {
 
     constructor() {
         this.index = {
-            version: '1.0.0',
+            version: "1.0.0",
             lastUpdated: new Date().toISOString(),
-            actions: {}
+            actions: {},
         };
     }
 
@@ -393,7 +525,7 @@ export class ActionIndexManager {
             author: action.author,
             filePath,
             lastModified: action.metadata.updatedAt,
-            usageCount: action.metadata.usageCount
+            usageCount: action.metadata.usageCount,
         };
 
         this.index.actions[action.id] = entry;
@@ -434,31 +566,39 @@ export class ActionIndexManager {
     /**
      * Get actions by scope type
      */
-    getActionsByScope(scopeType: ActionScope['type']): ActionIndexEntry[] {
-        return this.getAllActionEntries().filter(entry => entry.scope.type === scopeType);
+    getActionsByScope(scopeType: ActionScope["type"]): ActionIndexEntry[] {
+        return this.getAllActionEntries().filter(
+            (entry) => entry.scope.type === scopeType,
+        );
     }
 
     /**
      * Get actions by category
      */
     getActionsByCategory(category: ActionCategory): ActionIndexEntry[] {
-        return this.getAllActionEntries().filter(entry => entry.category === category);
+        return this.getAllActionEntries().filter(
+            (entry) => entry.category === category,
+        );
     }
 
     /**
      * Get actions by author
      */
     getActionsByAuthor(author: ActionAuthor): ActionIndexEntry[] {
-        return this.getAllActionEntries().filter(entry => entry.author === author);
+        return this.getAllActionEntries().filter(
+            (entry) => entry.author === author,
+        );
     }
 
     /**
      * Get actions for domain
      */
     getActionsForDomain(domain: string): ActionIndexEntry[] {
-        return this.getAllActionEntries().filter(entry => 
-            entry.scope.type === 'global' || 
-            (entry.scope.domain === domain && ['domain', 'pattern', 'page'].includes(entry.scope.type))
+        return this.getAllActionEntries().filter(
+            (entry) =>
+                entry.scope.type === "global" ||
+                (entry.scope.domain === domain &&
+                    ["domain", "pattern", "page"].includes(entry.scope.type)),
         );
     }
 
@@ -467,8 +607,8 @@ export class ActionIndexManager {
      */
     searchByName(query: string): ActionIndexEntry[] {
         const lowerQuery = query.toLowerCase();
-        return this.getAllActionEntries().filter(entry => 
-            entry.name.toLowerCase().includes(lowerQuery)
+        return this.getAllActionEntries().filter((entry) =>
+            entry.name.toLowerCase().includes(lowerQuery),
         );
     }
 
@@ -477,38 +617,51 @@ export class ActionIndexManager {
      */
     getStatistics(): StoreStatistics {
         const entries = this.getAllActionEntries();
-        
-        const actionsByScope = entries.reduce((acc, entry) => {
-            acc[entry.scope.type] = (acc[entry.scope.type] || 0) + 1;
-            return acc;
-        }, {} as Record<ActionScope['type'], number>);
 
-        const actionsByCategory = entries.reduce((acc, entry) => {
-            acc[entry.category] = (acc[entry.category] || 0) + 1;
-            return acc;
-        }, {} as Record<ActionCategory, number>);
+        const actionsByScope = entries.reduce(
+            (acc, entry) => {
+                acc[entry.scope.type] = (acc[entry.scope.type] || 0) + 1;
+                return acc;
+            },
+            {} as Record<ActionScope["type"], number>,
+        );
 
-        const actionsByAuthor = entries.reduce((acc, entry) => {
-            acc[entry.author] = (acc[entry.author] || 0) + 1;
-            return acc;
-        }, {} as Record<ActionAuthor, number>);
+        const actionsByCategory = entries.reduce(
+            (acc, entry) => {
+                acc[entry.category] = (acc[entry.category] || 0) + 1;
+                return acc;
+            },
+            {} as Record<ActionCategory, number>,
+        );
 
-        const totalUsage = entries.reduce((sum, entry) => sum + entry.usageCount, 0);
-        const averageUsage = entries.length > 0 ? totalUsage / entries.length : 0;
+        const actionsByAuthor = entries.reduce(
+            (acc, entry) => {
+                acc[entry.author] = (acc[entry.author] || 0) + 1;
+                return acc;
+            },
+            {} as Record<ActionAuthor, number>,
+        );
+
+        const totalUsage = entries.reduce(
+            (sum, entry) => sum + entry.usageCount,
+            0,
+        );
+        const averageUsage =
+            entries.length > 0 ? totalUsage / entries.length : 0;
 
         const mostUsedActions = entries
             .sort((a, b) => b.usageCount - a.usageCount)
             .slice(0, 10)
-            .map(entry => ({
+            .map((entry) => ({
                 id: entry.id,
                 name: entry.name,
-                count: entry.usageCount
+                count: entry.usageCount,
             }));
 
         const domains = new Set(
             entries
-                .filter(entry => entry.scope.domain)
-                .map(entry => entry.scope.domain!)
+                .filter((entry) => entry.scope.domain)
+                .map((entry) => entry.scope.domain!),
         );
 
         return {
@@ -521,18 +674,18 @@ export class ActionIndexManager {
             usage: {
                 totalUsage,
                 averageUsage,
-                mostUsedActions
+                mostUsedActions,
             },
             storage: {
                 totalSize: 0, // Will be calculated by FileManager
                 actionFiles: entries.length,
                 domainConfigs: domains.size,
-                indexSize: 0 // Will be calculated by FileManager
+                indexSize: 0, // Will be calculated by FileManager
             },
             health: {
                 validActions: entries.length, // All indexed actions are considered valid
-                invalidActions: 0
-            }
+                invalidActions: 0,
+            },
         };
     }
 
@@ -541,9 +694,9 @@ export class ActionIndexManager {
      */
     resetIndex(): void {
         this.index = {
-            version: '1.0.0',
+            version: "1.0.0",
             lastUpdated: new Date().toISOString(),
-            actions: {}
+            actions: {},
         };
     }
 
@@ -553,10 +706,10 @@ export class ActionIndexManager {
     private isValidIndex(index: any): index is ActionIndex {
         return (
             index &&
-            typeof index === 'object' &&
-            typeof index.version === 'string' &&
-            typeof index.lastUpdated === 'string' &&
-            typeof index.actions === 'object'
+            typeof index === "object" &&
+            typeof index.version === "string" &&
+            typeof index.lastUpdated === "string" &&
+            typeof index.actions === "object"
         );
     }
 
@@ -577,8 +730,12 @@ export class ActionIndexManager {
      */
     getRecentlyUsed(limit: number = 10): ActionIndexEntry[] {
         return this.getAllActionEntries()
-            .filter(entry => entry.usageCount > 0)
-            .sort((a, b) => new Date(b.lastModified).getTime() - new Date(a.lastModified).getTime())
+            .filter((entry) => entry.usageCount > 0)
+            .sort(
+                (a, b) =>
+                    new Date(b.lastModified).getTime() -
+                    new Date(a.lastModified).getTime(),
+            )
             .slice(0, limit);
     }
 

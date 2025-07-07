@@ -125,13 +125,24 @@ export async function handleContextMenuClick(
             break;
         }
         case "manageActions": {
-            await chrome.sidePanel.open({ tabId: tab.id! });
-
-            await chrome.sidePanel.setOptions({
-                tabId: tab.id!,
-                path: "actionIndex.html",
-                enabled: true,
+            // Check if actionIndex tab already exists
+            const existingTabs = await chrome.tabs.query({
+                url: chrome.runtime.getURL("actionIndex.html"),
             });
+
+            if (existingTabs.length > 0) {
+                // Switch to existing tab
+                await chrome.tabs.update(existingTabs[0].id!, { active: true });
+                await chrome.windows.update(existingTabs[0].windowId!, {
+                    focused: true,
+                });
+            } else {
+                // Create new tab
+                await chrome.tabs.create({
+                    url: chrome.runtime.getURL("actionIndex.html"),
+                    active: true,
+                });
+            }
             break;
         }
         case "sidepanel-registerAgent": {

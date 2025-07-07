@@ -274,7 +274,7 @@
             class="btn btn-primary btn-sm"
             title="Refresh detected actions"
           >
-            <i class="bi bi-arrow-clockwise"></i> Scan
+            <i class="bi bi-arrow-clockwise"></i>
           </button>
         </div>
         <div class="card-body">
@@ -331,86 +331,9 @@
         </div>
       </div>
 
-      <!-- Action Form (Hidden by default) -->
+      <!-- Action Form moved to modal popup - keeping minimal structure for compatibility -->
       <div id="actionForm" class="d-none">
-        <div class="action-card card">
-          <div class="card-header">
-            <h6 class="mb-0">
-              <i class="bi bi-gear"></i>
-              <span id="formTitle">Create New Action</span>
-            </h6>
-          </div>
-          <div class="card-body action-form">
-            <div class="mb-3">
-              <label class="form-label fw-semibold">Action Name</label>
-              <input
-                type="text"
-                id="actionName"
-                class="form-control"
-                placeholder="Enter a descriptive name for this action"
-                required
-              />
-            </div>
-
-            <div class="mb-3">
-              <label class="form-label fw-semibold">Action Description</label>
-              <textarea
-                id="actionStepsDescription"
-                class="form-control"
-                rows="4"
-                placeholder="Describe how to complete this action step by step..."
-              ></textarea>
-            </div>
-
-            <div id="recordingSection" class="mb-3">
-              <label class="form-label fw-semibold">Record Steps</label>
-              <div class="d-flex action-controls align-items-center">
-                <button
-                  id="recordAction"
-                  class="btn btn-outline-danger"
-                  title="Start recording action steps"
-                >
-                  <i class="bi bi-record-circle"></i> Start Recording
-                </button>
-                <button
-                  id="stopRecording"
-                  class="btn btn-danger d-none"
-                  title="Stop recording"
-                >
-                  <i class="bi bi-stop-circle"></i> Stop Recording
-                </button>
-                <div id="recordingStatus" class="ms-3 text-muted d-none">
-                  <span class="status-indicator status-recording"></span>
-                  Recording in progress...
-                </div>
-              </div>
-            </div>
-
-            <div id="stepsTimelineContainer" class="mb-3 d-none">
-              <label class="form-label fw-semibold">Recorded Steps</label>
-              <div id="stepsTimeline" class="border rounded p-3 bg-white">
-                <!-- Timeline items will be populated here -->
-              </div>
-            </div>
-
-            <div class="d-flex action-controls justify-content-end">
-              <button
-                id="cancelAddingAction"
-                class="btn btn-outline-secondary"
-                title="Cancel and close form"
-              >
-                <i class="bi bi-x-circle"></i> Cancel
-              </button>
-              <button
-                id="saveAction"
-                class="btn btn-primary"
-                title="Create and save this action"
-              >
-                <i class="bi bi-floppy"></i> Save Action
-              </button>
-            </div>
-          </div>
-        </div>
+        <!-- Legacy form kept hidden for compatibility with existing code -->
       </div>
 
       <!-- Screenshot Container (Hidden by default) -->
