@@ -65,8 +65,7 @@ export type SearchFilter = {
     // - use empty searchTerms array when use asks for summaries
     searchTerms?: string[];
     // Use only if request explicitly asks for time range, particular year, month etc.
-    // in this time range
-    timeRange?: DateTimeRange | undefined;
+    timeRange?: DateTimeRange | undefined; // in this time range
 };
 
 export type SearchExpr = {
