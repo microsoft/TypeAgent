@@ -5,6 +5,9 @@ import fs from "fs/promises";
 import path from "path";
 import * as os from "os";
 import crypto from "crypto";
+import registerDebug from "debug";
+
+const debug = registerDebug("typeagent:views:server:pdf:urlMap");
 
 export interface UrlDocumentMapping {
     id: string;
@@ -33,7 +36,7 @@ export class UrlDocumentMappingService {
     constructor() {
         // Get storage path from environment variable or use default
         this.storePath =
-            process.env.TYPEAGENT_BROWSER_VIEWSTORE ||
+            process.env.TYPEAGENT_BROWSER_FILES ||
             path.join(os.homedir(), ".typeagent", "browser", "viewstore");
         this.storeFile = path.join(this.storePath, "url-mappings.json");
     }
@@ -49,9 +52,9 @@ export class UrlDocumentMappingService {
             // Load existing mappings if they exist
             await this.loadMappings();
 
-            console.log(`📄 URL Document Mapping Service initialized`);
-            console.log(`📄 Storage path: ${this.storePath}`);
-            console.log(
+            debug(`📄 URL Document Mapping Service initialized`);
+            debug(`📄 Storage path: ${this.storePath}`);
+            debug(
                 `📄 Loaded ${Object.keys(this.store.mappings).length} existing mappings`,
             );
         } catch (error) {
@@ -84,9 +87,7 @@ export class UrlDocumentMappingService {
         } catch (error) {
             if ((error as any).code === "ENOENT") {
                 // File doesn't exist, start with empty store
-                console.log(
-                    "📄 No existing mappings file found, starting fresh",
-                );
+                debug("📄 No existing mappings file found, starting fresh");
             } else {
                 console.error("Error loading mappings:", error);
                 throw error;
@@ -150,9 +151,7 @@ export class UrlDocumentMappingService {
 
         await this.saveMappings();
 
-        console.log(
-            `📄 Created new document mapping: ${newId} -> ${normalizedUrl}`,
-        );
+        debug(`📄 Created new document mapping: ${newId} -> ${normalizedUrl}`);
         return newId;
     }
 

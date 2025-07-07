@@ -1,0 +1,1085 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>TypeAgent Website Library</title>
+    <link rel="stylesheet" href="vendor/bootstrap/bootstrap.min.css" />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        font-size: 0.875rem;
+        background-color: #f8f9fa;
+      }
+      .library-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 1rem;
+        margin: -0.75rem -0.75rem 1rem -0.75rem;
+      }
+      .status-indicator {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 0.5rem;
+      }
+      .status-connected {
+        background-color: #28a745;
+      }
+      .status-disconnected {
+        background-color: #dc3545;
+      }
+      .status-importing {
+        background-color: #ffc107;
+        animation: pulse 1.5s infinite;
+      }
+      @keyframes pulse {
+        0% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+        100% {
+          opacity: 1;
+        }
+      }
+      .library-card {
+        border: none;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        margin-bottom: 1rem;
+      }
+      .import-option {
+        border: 1px solid #e9ecef;
+        border-radius: 0.375rem;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        transition: all 0.2s ease;
+        cursor: pointer;
+      }
+      .import-option:hover {
+        border-color: #667eea;
+        background-color: #f8f9ff;
+      }
+      .import-option.selected {
+        border-color: #667eea;
+        background-color: #f0f2ff;
+      }
+      .progress-container {
+        min-height: 120px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1rem;
+      }
+      .stat-card {
+        text-align: center;
+        padding: 1rem;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border-radius: 0.5rem;
+        border: 1px solid #e9ecef;
+      }
+      .stat-number {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #667eea;
+        margin-bottom: 0.25rem;
+      }
+      .stat-label {
+        font-size: 0.75rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        font-weight: 500;
+      }
+      .import-history-item {
+        padding: 0.75rem;
+        border-left: 3px solid #667eea;
+        background-color: #f8f9fa;
+        margin-bottom: 0.5rem;
+        border-radius: 0.25rem;
+      }
+      .import-status {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        font-weight: 500;
+      }
+      .status-success {
+        background-color: #d4edda;
+        color: #155724;
+      }
+      .status-error {
+        background-color: #f8d7da;
+        color: #721c24;
+      }
+      .status-importing {
+        background-color: #fff3cd;
+        color: #856404;
+      }
+      .form-check-input:checked {
+        background-color: #667eea;
+        border-color: #667eea;
+      }
+      .btn-primary {
+        background-color: #667eea;
+        border-color: #667eea;
+      }
+      .btn-primary:hover {
+        background-color: #5a6fd8;
+        border-color: #5a6fd8;
+      }
+      .empty-state {
+        text-align: center;
+        padding: 2rem;
+        color: #6c757d;
+      }
+      .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+      }
+      /* Search Interface Styling */
+      .search-container {
+        position: relative;
+      }
+      .search-suggestions {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: white;
+        border: 1px solid #e9ecef;
+        border-radius: 0.375rem;
+        max-height: 200px;
+        overflow-y: auto;
+        z-index: 1000;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+      .suggestion-item {
+        padding: 0.5rem 1rem;
+        cursor: pointer;
+        border-bottom: 1px solid #f8f9fa;
+      }
+      .suggestion-item:hover {
+        background-color: #f8f9fa;
+      }
+      .suggestion-item:last-child {
+        border-bottom: none;
+      }
+      .recent-search-tag {
+        display: inline-block;
+        background-color: #e9ecef;
+        color: #495057;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        margin-right: 0.5rem;
+        margin-bottom: 0.25rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+      .recent-search-tag:hover {
+        background-color: #667eea;
+        color: white;
+      }
+      /* Search Results Styling */
+      .search-result-item {
+        border: 1px solid #e9ecef;
+        border-radius: 0.375rem;
+        padding: 1rem;
+        margin-bottom: 0.75rem;
+        transition: all 0.2s ease;
+      }
+      .search-result-item:hover {
+        border-color: #667eea;
+        background-color: #f8f9ff;
+      }
+      .result-card {
+        height: 250px;
+        overflow: hidden;
+      }
+      .timeline-item {
+        position: relative;
+        padding-left: 2rem;
+        margin-bottom: 1rem;
+      }
+      .timeline-item::before {
+        content: "";
+        position: absolute;
+        left: 0.5rem;
+        top: 0.5rem;
+        width: 2px;
+        height: calc(100% - 1rem);
+        background-color: #667eea;
+      }
+      .timeline-item::after {
+        content: "";
+        position: absolute;
+        left: 0.25rem;
+        top: 0.5rem;
+        width: 0.5rem;
+        height: 0.5rem;
+        background-color: #667eea;
+        border-radius: 50%;
+      }
+      .domain-group {
+        border-left: 3px solid #667eea;
+        padding-left: 1rem;
+        margin-bottom: 1.5rem;
+      }
+      .domain-header {
+        background-color: #f8f9ff;
+        padding: 0.5rem;
+        border-radius: 0.25rem;
+        margin-bottom: 0.75rem;
+      }
+      .suggested-search-item {
+        background-color: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 0.375rem;
+        padding: 0.75rem;
+        margin-bottom: 0.5rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+      .suggested-search-item:hover {
+        border-color: #667eea;
+        background-color: #f0f2ff;
+      }
+      .ai-summary {
+        background: linear-gradient(135deg, #f8f9ff 0%, #e9ecff 100%);
+        border-left: 4px solid #667eea;
+        padding: 1rem;
+        border-radius: 0.375rem;
+        margin-bottom: 1rem;
+      }
+      .entity-badge {
+        display: inline-block;
+        background-color: #667eea;
+        color: white;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        margin-right: 0.5rem;
+        margin-bottom: 0.25rem;
+      }
+      .result-favicon {
+        width: 16px;
+        height: 16px;
+        margin-right: 0.5rem;
+      }
+      .result-domain {
+        color: #6c757d;
+        font-size: 0.8rem;
+      }
+      .result-score {
+        background-color: #28a745;
+        color: white;
+        padding: 0.125rem 0.25rem;
+        border-radius: 0.125rem;
+        font-size: 0.7rem;
+      }
+      /* Tab Navigation Styling */
+      .library-tabs {
+        border-bottom: 1px solid #e9ecef;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+      }
+      .library-tabs .nav-tabs-container {
+        flex: 1;
+      }
+      .library-tabs .nav-link {
+        border: none;
+        color: #6c757d;
+        font-weight: 500;
+        padding: 0.75rem 1.5rem;
+        border-radius: 0;
+        border-bottom: 3px solid transparent;
+        transition: all 0.2s ease;
+      }
+      .library-tabs .nav-link:hover {
+        color: #667eea;
+        background-color: #f8f9ff;
+        border-bottom-color: #667eea;
+      }
+      .library-tabs .nav-link.active {
+        color: #667eea;
+        background-color: #f8f9ff;
+        border-bottom-color: #667eea;
+      }
+      .settings-button {
+        margin-left: auto;
+        padding: 0.5rem;
+        border: 1px solid #e9ecef;
+        border-radius: 0.375rem;
+        background: white;
+        color: #6c757d;
+        transition: all 0.2s ease;
+      }
+      .settings-button:hover {
+        color: #667eea;
+        border-color: #667eea;
+        background-color: #f8f9ff;
+      }
+      .tab-content {
+        min-height: 400px;
+      }
+      /* Settings Modal Styling */
+      .settings-modal .modal-dialog {
+        max-width: 900px;
+      }
+      .settings-modal .modal-content {
+        border: none;
+        border-radius: 0.5rem;
+      }
+      .settings-modal .modal-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-bottom: none;
+      }
+      .settings-modal .btn-close {
+        filter: invert(1);
+      }
+      /* Ensure modal backdrop cleanup */
+      .modal-backdrop {
+        transition: opacity 0.15s linear;
+      }
+      .modal-backdrop.show {
+        opacity: 0.5;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container-fluid p-3">
+      <!-- Header Section -->
+      <div class="library-header rounded">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <h4 class="mb-1">
+              <i class="bi bi-collection"></i> Website Activity
+            </h4>
+            <small id="connectionStatus">
+              <span class="status-indicator status-connected"></span>
+              Connected to TypeAgent
+            </small>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab Navigation with Settings Button -->
+      <div class="library-tabs">
+        <div class="nav-tabs-container">
+          <ul class="nav nav-tabs" id="libraryTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+              <button
+                class="nav-link active"
+                id="search-tab"
+                data-bs-toggle="tab"
+                data-bs-target="#search-pane"
+                type="button"
+                role="tab"
+                aria-controls="search-pane"
+                aria-selected="true"
+              >
+                <i class="bi bi-search me-2"></i>Search
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button
+                class="nav-link"
+                id="discover-tab"
+                data-bs-toggle="tab"
+                data-bs-target="#discover-pane"
+                type="button"
+                role="tab"
+                aria-controls="discover-pane"
+                aria-selected="false"
+              >
+                <i class="bi bi-lightbulb me-2"></i>Discover
+              </button>
+            </li>
+          </ul>
+        </div>
+        <button
+          id="settingsButton"
+          class="settings-button btn"
+          type="button"
+          data-bs-toggle="modal"
+          data-bs-target="#settingsModal"
+          title="Settings"
+        >
+          <i class="bi bi-gear"></i>
+        </button>
+      </div>
+
+      <!-- Tab Content -->
+      <div class="tab-content" id="libraryTabContent">
+        <!-- Search Tab -->
+        <div
+          class="tab-pane fade show active"
+          id="search-pane"
+          role="tabpanel"
+          aria-labelledby="search-tab"
+        >
+          <!-- Smart Search Interface Card -->
+          <div class="library-card card" id="searchInterfaceCard">
+            <div class="card-header">
+              <h6 class="mb-0">
+                <i class="bi bi-search"></i> Search Your Library
+              </h6>
+            </div>
+            <div class="card-body">
+              <!-- Search Input with Auto-complete -->
+              <div class="search-container mb-3">
+                <div class="input-group">
+                  <input
+                    type="text"
+                    id="searchInput"
+                    class="form-control"
+                    placeholder="Search websites, bookmarks, and pages using AI..."
+                  />
+                  <button
+                    id="searchButton"
+                    class="btn btn-primary"
+                    type="button"
+                  >
+                    <i class="bi bi-search"></i>
+                  </button>
+                </div>
+                <div
+                  id="searchSuggestions"
+                  class="search-suggestions d-none"
+                ></div>
+              </div>
+
+              <!-- Advanced Filters (Collapsible) -->
+              <div class="mb-3">
+                <button
+                  class="btn btn-outline-secondary btn-sm"
+                  type="button"
+                  data-bs-toggle="collapse"
+                  data-bs-target="#searchFilters"
+                >
+                  <i class="bi bi-funnel"></i> Advanced Filters
+                </button>
+
+                <div class="collapse mt-3" id="searchFilters">
+                  <div class="card card-body bg-light">
+                    <div class="row">
+                      <div class="col-md-6">
+                        <!-- Date Range Filter -->
+                        <label class="form-label">Date Range</label>
+                        <div class="d-flex gap-2">
+                          <input
+                            type="date"
+                            id="dateFrom"
+                            class="form-control form-control-sm"
+                          />
+                          <input
+                            type="date"
+                            id="dateTo"
+                            class="form-control form-control-sm"
+                          />
+                        </div>
+                      </div>
+                      <div class="col-md-6">
+                        <!-- Source Filter -->
+                        <label class="form-label">Source Type</label>
+                        <select
+                          id="sourceFilter"
+                          class="form-select form-select-sm"
+                        >
+                          <option value="">All Sources</option>
+                          <option value="bookmarks">Bookmarks Only</option>
+                          <option value="history">History Only</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div class="row mt-3">
+                      <div class="col-md-6">
+                        <!-- Domain Filter -->
+                        <label class="form-label">Domain</label>
+                        <input
+                          type="text"
+                          id="domainFilter"
+                          class="form-control form-control-sm"
+                          placeholder="e.g., github.com"
+                        />
+                      </div>
+                      <div class="col-md-6">
+                        <!-- Relevance Score -->
+                        <label class="form-label"
+                          >Minimum Relevance:
+                          <span id="relevanceValue">0%</span></label
+                        >
+                        <input
+                          type="range"
+                          id="relevanceFilter"
+                          class="form-range"
+                          min="0"
+                          max="100"
+                          step="10"
+                          value="0"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Search History -->
+              <div id="recentSearches" class="recent-searches">
+                <small class="text-muted">Recent searches:</small>
+                <div id="recentSearchesList" class="mt-1">
+                  <span class="text-muted">No recent searches</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Search Results Card -->
+          <div id="searchResultsCard" class="library-card card d-none">
+            <div
+              class="card-header d-flex justify-content-between align-items-center"
+            >
+              <h6 class="mb-0">
+                <i class="bi bi-list-task"></i> Search Results
+              </h6>
+              <div class="view-mode-selector">
+                <div class="btn-group btn-group-sm" role="group">
+                  <input
+                    type="radio"
+                    class="btn-check"
+                    name="viewMode"
+                    id="listView"
+                    checked
+                  />
+                  <label class="btn btn-outline-secondary" for="listView">
+                    <i class="bi bi-list"></i>
+                  </label>
+                  <input
+                    type="radio"
+                    class="btn-check"
+                    name="viewMode"
+                    id="cardView"
+                  />
+                  <label class="btn btn-outline-secondary" for="cardView">
+                    <i class="bi bi-grid"></i>
+                  </label>
+                  <input
+                    type="radio"
+                    class="btn-check"
+                    name="viewMode"
+                    id="timelineView"
+                  />
+                  <label class="btn btn-outline-secondary" for="timelineView">
+                    <i class="bi bi-clock"></i>
+                  </label>
+                  <input
+                    type="radio"
+                    class="btn-check"
+                    name="viewMode"
+                    id="domainView"
+                  />
+                  <label class="btn btn-outline-secondary" for="domainView">
+                    <i class="bi bi-globe"></i>
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div class="card-body">
+              <!-- Results Summary -->
+              <div id="resultsSummary" class="mb-3"></div>
+
+              <!-- AI Summary Section -->
+              <div id="aiSummarySection" class="mb-4 d-none"></div>
+
+              <!-- Results Container -->
+              <div id="searchResultsContainer"></div>
+
+              <!-- Pagination -->
+              <div id="resultsPagination" class="mt-3"></div>
+            </div>
+          </div>
+
+          <!-- Statistics Dashboard -->
+          <div class="library-card card">
+            <div class="card-header">
+              <h6 class="mb-0">
+                <i class="bi bi-graph-up"></i> Library Overview
+              </h6>
+            </div>
+            <div class="card-body">
+              <div class="stats-grid">
+                <div class="stat-card">
+                  <div class="stat-number" id="totalWebsites">0</div>
+                  <div class="stat-label">Total Sites</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-number" id="totalBookmarks">0</div>
+                  <div class="stat-label">Bookmarks</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-number" id="totalHistory">0</div>
+                  <div class="stat-label">History</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-number" id="topDomains">0</div>
+                  <div class="stat-label">Domains</div>
+                </div>
+              </div>
+
+              <div id="emptyLibraryState" class="empty-state">
+                <i class="bi bi-collection"></i>
+                <h6>Your Website Library is Empty</h6>
+                <p class="mb-3">
+                  Import bookmarks or browsing history to get started exploring
+                  your web knowledge.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- End Search Tab -->
+        <!-- Discover Tab -->
+        <div
+          class="tab-pane fade"
+          id="discover-pane"
+          role="tabpanel"
+          aria-labelledby="discover-tab"
+        >
+          <!-- Suggested Searches Card -->
+          <div class="library-card card" id="suggestedSearchesCard">
+            <div class="card-header">
+              <h6 class="mb-0">
+                <i class="bi bi-lightbulb"></i> Discover Your Data
+              </h6>
+            </div>
+            <div class="card-body">
+              <div class="row">
+                <div class="col-md-4">
+                  <h6 class="text-muted">Recent Finds</h6>
+                  <div id="recentFindsContainer">
+                    <div class="text-muted small">
+                      Import data to see suggestions
+                    </div>
+                  </div>
+                </div>
+                <div class="col-md-4">
+                  <h6 class="text-muted">Popular Domains</h6>
+                  <div id="popularDomainsContainer">
+                    <div class="text-muted small">
+                      Import data to see suggestions
+                    </div>
+                  </div>
+                </div>
+                <div class="col-md-4">
+                  <h6 class="text-muted">Explore Topics</h6>
+                  <div id="exploreTopicsContainer">
+                    <div class="text-muted small">
+                      Import data to see suggestions
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Content Discovery Insights -->
+          <div class="library-card card">
+            <div class="card-header">
+              <h6 class="mb-0">
+                <i class="bi bi-graph-up"></i> Discovery Insights
+              </h6>
+            </div>
+            <div class="card-body">
+              <div class="row">
+                <div class="col-md-6">
+                  <h6 class="text-muted">Top Domains</h6>
+                  <div id="topDomainsInsights">
+                    <div class="text-muted small">No data available</div>
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <h6 class="text-muted">Content Patterns</h6>
+                  <div id="contentPatternsInsights">
+                    <div class="text-muted small">No data available</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Actions -->
+          <div class="library-card card">
+            <div class="card-header">
+              <h6 class="mb-0">
+                <i class="bi bi-lightning"></i> Quick Explore
+              </h6>
+            </div>
+            <div class="card-body">
+              <div class="d-grid gap-2">
+                <button
+                  class="btn btn-outline-primary"
+                  onclick="libraryPanel.exploreRecentBookmarks()"
+                >
+                  <i class="bi bi-bookmark-star me-2"></i>Recent Bookmarks
+                </button>
+                <button
+                  class="btn btn-outline-primary"
+                  onclick="libraryPanel.exploreMostVisited()"
+                >
+                  <i class="bi bi-graph-up me-2"></i>Most Visited Sites
+                </button>
+                <button
+                  class="btn btn-outline-primary"
+                  onclick="libraryPanel.exploreByDomain()"
+                >
+                  <i class="bi bi-globe me-2"></i>Browse by Domain
+                </button>
+                <button
+                  class="btn btn-outline-primary"
+                  onclick="libraryPanel.exploreUnexplored()"
+                >
+                  <i class="bi bi-eye me-2"></i>Rarely Visited Content
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- End Discover Tab -->
+      </div>
+      <!-- End Tab Content -->
+
+      <!-- Settings Modal -->
+      <div
+        class="modal fade settings-modal"
+        id="settingsModal"
+        tabindex="-1"
+        aria-labelledby="settingsModalLabel"
+        aria-hidden="true"
+        data-bs-backdrop="true"
+        data-bs-keyboard="true"
+      >
+        <div class="modal-dialog modal-lg">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="settingsModalLabel">
+                <i class="bi bi-gear me-2"></i>Settings & Import
+              </h5>
+              <button
+                type="button"
+                class="btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+              ></button>
+            </div>
+            <div class="modal-body">
+              <!-- Import Data Sources Card -->
+              <div id="importDataCard" class="library-card card">
+                <div class="card-header">
+                  <h6 class="mb-0">
+                    <i class="bi bi-download"></i> Import Data Sources
+                  </h6>
+                </div>
+                <div class="card-body">
+                  <div id="importForm">
+                    <!-- Browser Selection -->
+                    <div class="mb-3">
+                      <label class="form-label fw-semibold"
+                        >Select Browser</label
+                      >
+                      <div class="row">
+                        <div class="col-md-6">
+                          <div class="import-option" data-browser="chrome">
+                            <div class="d-flex align-items-center">
+                              <i
+                                class="bi bi-browser-chrome text-success me-3 fs-4"
+                              ></i>
+                              <div>
+                                <div class="fw-semibold">Google Chrome</div>
+                                <small class="text-muted"
+                                  >Import from Chrome browser</small
+                                >
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="col-md-6">
+                          <div class="import-option" data-browser="edge">
+                            <div class="d-flex align-items-center">
+                              <i
+                                class="bi bi-browser-edge text-primary me-3 fs-4"
+                              ></i>
+                              <div>
+                                <div class="fw-semibold">Microsoft Edge</div>
+                                <small class="text-muted"
+                                  >Import from Edge browser</small
+                                >
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <!-- Data Type Selection -->
+                    <div class="mb-3">
+                      <label class="form-label fw-semibold">Data Type</label>
+                      <div class="row">
+                        <div class="col-md-6">
+                          <div class="import-option" data-type="bookmarks">
+                            <div class="d-flex align-items-center">
+                              <i
+                                class="bi bi-bookmark-star text-warning me-3 fs-4"
+                              ></i>
+                              <div>
+                                <div class="fw-semibold">Bookmarks</div>
+                                <small class="text-muted"
+                                  >Saved bookmarks and favorites</small
+                                >
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="col-md-6">
+                          <div class="import-option" data-type="history">
+                            <div class="d-flex align-items-center">
+                              <i
+                                class="bi bi-clock-history text-info me-3 fs-4"
+                              ></i>
+                              <div>
+                                <div class="fw-semibold">Browser History</div>
+                                <small class="text-muted"
+                                  >Recently visited pages</small
+                                >
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Advanced Options -->
+                    <div class="mb-3">
+                      <button
+                        class="btn btn-outline-secondary btn-sm"
+                        type="button"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#advancedOptions"
+                      >
+                        <i class="bi bi-gear"></i> Advanced Options
+                      </button>
+
+                      <div class="collapse mt-3" id="advancedOptions">
+                        <div class="card card-body bg-light">
+                          <div class="row">
+                            <div class="col-md-6">
+                              <label class="form-label"
+                                >Limit (max items)</label
+                              >
+                              <input
+                                type="number"
+                                id="importLimit"
+                                class="form-control form-control-sm"
+                                placeholder="e.g., 1000"
+                                min="1"
+                                max="10000"
+                              />
+                            </div>
+                            <div
+                              class="col-md-6"
+                              id="daysBackContainer"
+                              style="display: none"
+                            >
+                              <label class="form-label"
+                                >Days back (history only)</label
+                              >
+                              <input
+                                type="number"
+                                id="daysBack"
+                                class="form-control form-control-sm"
+                                placeholder="e.g., 30"
+                                min="1"
+                                max="365"
+                              />
+                            </div>
+                          </div>
+
+                          <div
+                            class="mt-3"
+                            id="folderContainer"
+                            style="display: none"
+                          >
+                            <label class="form-label"
+                              >Bookmark Folder (optional)</label
+                            >
+                            <input
+                              type="text"
+                              id="bookmarkFolder"
+                              class="form-control form-control-sm"
+                              placeholder="e.g., Work, Personal"
+                            />
+                          </div>
+
+                          <div class="mt-3">
+                            <h6 class="mb-3">Enhancement Options</h6>
+
+                            <div class="form-check mb-2">
+                              <input
+                                class="form-check-input"
+                                type="checkbox"
+                                id="extractContent"
+                                checked
+                              />
+                              <label
+                                class="form-check-label"
+                                for="extractContent"
+                              >
+                                <i class="bi bi-download"></i> Extract page
+                                content
+                              </label>
+                              <small class="text-muted d-block ms-4">
+                                Fetch actual page content for semantic search
+                              </small>
+                            </div>
+
+                            <div class="form-check mb-2">
+                              <input
+                                class="form-check-input"
+                                type="checkbox"
+                                id="enableIntelligentAnalysis"
+                                checked
+                              />
+                              <label
+                                class="form-check-label"
+                                for="enableIntelligentAnalysis"
+                              >
+                                <i class="bi bi-robot"></i> AI knowledge
+                                extraction
+                              </label>
+                              <small class="text-muted d-block ms-4">
+                                Extract entities, topics, and insights using AI
+                              </small>
+                            </div>
+
+                            <div class="form-check mb-3">
+                              <input
+                                class="form-check-input"
+                                type="checkbox"
+                                id="enableActionDetection"
+                              />
+                              <label
+                                class="form-check-label"
+                                for="enableActionDetection"
+                              >
+                                <i class="bi bi-lightning"></i> Action detection
+                              </label>
+                              <small class="text-muted d-block ms-4">
+                                Identify actionable elements (buy, download,
+                                etc.)
+                              </small>
+                            </div>
+
+                            <div class="mb-3">
+                              <label for="extractionMode" class="form-label"
+                                >Extraction Quality</label
+                              >
+                              <select
+                                id="extractionMode"
+                                class="form-select form-select-sm"
+                              >
+                                <option value="fast">
+                                  Fast - Basic extraction
+                                </option>
+                                <option value="balanced" selected>
+                                  Balanced - Good quality
+                                </option>
+                                <option value="deep">
+                                  Deep - Maximum detail
+                                </option>
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <!-- Import Controls -->
+                    <div class="d-flex gap-2">
+                      <button id="startImport" class="btn btn-primary" disabled>
+                        <i class="bi bi-download"></i> Start Import
+                      </button>
+                      <button
+                        id="cancelImport"
+                        class="btn btn-outline-secondary d-none"
+                      >
+                        <i class="bi bi-x-circle"></i> Cancel
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Progress Display -->
+                  <div id="importProgress" class="d-none">
+                    <div class="progress-container">
+                      <div class="text-center">
+                        <div
+                          class="spinner-border text-primary mb-3"
+                          role="status"
+                        >
+                          <span class="visually-hidden">Importing...</span>
+                        </div>
+                        <div>
+                          <span class="fw-semibold">Importing Data...</span>
+                        </div>
+                        <small
+                          id="importStatusMessage"
+                          class="text-muted d-block mt-2"
+                        >
+                          Preparing import...
+                        </small>
+                      </div>
+
+                      <div class="mt-4 text-center">
+                        <button
+                          id="cancelImport"
+                          class="btn btn-outline-danger btn-sm"
+                        >
+                          <i class="bi bi-x-circle"></i> Cancel Import
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button
+                type="button"
+                class="btn btn-secondary"
+                data-bs-dismiss="modal"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- End Settings Modal -->
+    </div>
+
+    <script src="vendor/bootstrap/bootstrap.bundle.min.js"></script>
+    <script src="websiteLibraryPanel.js"></script>
+  </body>
+</html>
