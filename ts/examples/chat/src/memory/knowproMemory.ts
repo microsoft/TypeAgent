@@ -3,7 +3,6 @@
 
 import * as kp from "knowpro";
 import * as kpTest from "knowpro-test";
-import * as cm from "conversation-memory";
 import {
     arg,
     argBool,
@@ -89,7 +88,7 @@ export async function createKnowproCommands(
     const MessageCountLarge = 1000;
     const MessageCountMedium = 500;
 
-    const termParser = new cm.SearchTermParser();
+    const termParser = context.termParser;
 
     await ensureDir(context.basePath);
     /*

@@ -310,17 +310,23 @@ class HtmlImporter implements HtmlToMdConvertorEvents {
     }
 }
 
-function headingToEntity(text: string, level: number): kpLib.ConcreteEntity {
+export function headingToEntity(
+    headingText: string,
+    level: number,
+): kpLib.ConcreteEntity {
     return {
-        name: text,
-        type: ["heading"],
+        name: headingText,
+        type: ["heading", "section"],
         facets: [{ name: "level", value: level }],
     };
 }
 
-function linkToEntity(text: string, url: string): kpLib.ConcreteEntity {
+export function linkToEntity(
+    linkText: string,
+    url: string,
+): kpLib.ConcreteEntity {
     return {
-        name: text,
+        name: linkText,
         type: ["link", "url"],
         facets: [{ name: "url", value: url }],
     };

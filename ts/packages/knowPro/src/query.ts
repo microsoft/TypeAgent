@@ -422,9 +422,16 @@ export function lookupProperty(
 export function* lookupKnowledgeType(
     semanticRefs: ISemanticRefCollection,
     ktype: KnowledgeType,
+    textRangesInScope?: TextRangesInScope,
 ): IterableIterator<ScoredSemanticRefOrdinal> {
     for (const sr of semanticRefs) {
         if (sr.knowledgeType === ktype) {
+            if (
+                textRangesInScope !== undefined &&
+                !textRangesInScope.isRangeInScope(sr.range)
+            ) {
+                continue;
+            }
             yield { semanticRefOrdinal: sr.semanticRefOrdinal, score: 1.0 };
         }
     }
@@ -922,7 +929,13 @@ export class MatchTagExpr extends MatchSearchTermExpr {
         term: Term,
     ): ScoredSemanticRefOrdinal[] | undefined {
         if (isSearchTermWildcard(this.tagTerm)) {
-            return [...lookupKnowledgeType(context.semanticRefs, "tag")];
+            return [
+                ...lookupKnowledgeType(
+                    context.semanticRefs,
+                    "tag",
+                    context.textRangesInScope,
+                ),
+            ];
         }
 
         return lookupTerm(
@@ -945,7 +958,13 @@ export class MatchTopicExpr extends MatchSearchTermExpr {
         term: Term,
     ): ScoredSemanticRefOrdinal[] | undefined {
         if (isSearchTermWildcard(this.topic)) {
-            return [...lookupKnowledgeType(context.semanticRefs, "topic")];
+            return [
+                ...lookupKnowledgeType(
+                    context.semanticRefs,
+                    "topic",
+                    context.textRangesInScope,
+                ),
+            ];
         }
 
         return lookupTerm(

@@ -9,6 +9,7 @@ import {
     CommandMetadata,
     parseNamedArguments,
     parseTypedArguments,
+    ProgressBar,
 } from "interactive-app";
 import { KnowproContext } from "./knowproMemory.js";
 import { argDestFile, argSourceFile } from "../common.js";
@@ -18,6 +19,7 @@ import * as cm from "conversation-memory";
 import {
     changeFileExt,
     getAbsolutePath,
+    getFileName,
     htmlToMd,
     readAllText,
     simplifyHtml,
@@ -26,6 +28,11 @@ import {
 import chalk from "chalk";
 import { openai } from "aiclient";
 import * as fs from "fs";
+import {
+    createIndexingEventHandler,
+    sourcePathToMemoryIndexPath,
+} from "./knowproCommon.js";
+import path from "path";
 
 /**
  * Test related commands
@@ -92,6 +99,8 @@ export async function createKnowproTestCommands(
             },
             options: {
                 rootTag: arg("Root tag", "body"),
+                buildIndex: argBool("Build doc index", false),
+                maxParts: argNum("Max parts to index"),
             },
         };
     }
@@ -103,11 +112,41 @@ export async function createKnowproTestCommands(
             return;
         }
         let html = await readAllText(filePath);
-        let parts = cm.docPartsFromHtmlEx(html, namedArgs.rootTag);
-        for (const part of parts) {
+        let docParts = cm.docPartsFromHtmlEx(html, namedArgs.rootTag);
+        for (const part of docParts) {
             context.printer.writeLine("----------------");
             context.printer.writeDocPart(part);
         }
+        const maxParts = Math.min(
+            docParts.length,
+            namedArgs.maxParts ?? Number.MAX_SAFE_INTEGER,
+        );
+        if (maxParts < docParts.length) {
+            docParts = docParts.slice(0, maxParts);
+        }
+        if (!namedArgs.buildIndex) {
+            return;
+        }
+        context.printer.writeLine(`Indexing ${maxParts} document parts`);
+        const docMemory = new cm.DocMemory("", docParts);
+        docMemory.settings.conversationSettings.semanticRefIndexSettings.autoExtractKnowledge =
+            false;
+        const progress = new ProgressBar(context.printer, maxParts);
+        const eventHandler = createIndexingEventHandler(
+            context.printer,
+            progress,
+            maxParts,
+        );
+        const indexingResults = await docMemory.buildIndex(eventHandler);
+        context.printer.writeIndexingResults(indexingResults);
+        const savePath = sourcePathToMemoryIndexPath(namedArgs.filePath);
+        // Save the index
+        await docMemory.writeToFile(
+            path.dirname(savePath),
+            getFileName(savePath),
+        );
+
+        context.conversation = docMemory;
     }
 
     function searchBatchDef(): CommandMetadata {
@@ -409,14 +448,24 @@ export async function createKnowproTestCommands(
             );
             context.printer.writeInColor(chalk.red, `Error: ${error}`);
             if (verbose) {
+                context.printer.writeLine("===========");
+                context.printer.writeJsonInColor(
+                    chalk.red,
+                    result.actual.searchQueryExpr,
+                );
                 context.printer.writeJsonInColor(
                     chalk.red,
                     result.actual.results,
                 );
                 context.printer.writeJsonInColor(
                     chalk.green,
+                    result.expected.searchQueryExpr,
+                );
+                context.printer.writeJsonInColor(
+                    chalk.green,
                     result.expected.results,
                 );
+                context.printer.writeLine("===========");
             }
             return false;
         } else {
