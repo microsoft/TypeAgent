@@ -6,7 +6,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Action Index Panel</title>
+    <title>Action Index - TypeAgent</title>
     <link rel="stylesheet" href="vendor/bootstrap/bootstrap.min.css" />
     <link rel="stylesheet" href="vendor/prism/prism.css" />
     <link
@@ -14,126 +14,310 @@
       href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css"
     />
     <style>
+      :root {
+        --primary-color: #2563eb;
+        --secondary-color: #64748b;
+        --success-color: #059669;
+        --danger-color: #dc2626;
+        --warning-color: #d97706;
+        --info-color: #0891b2;
+        --light-color: #f8fafc;
+        --dark-color: #1e293b;
+        --border-color: #e2e8f0;
+        --sidebar-width: 280px;
+        --topnav-height: 64px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
       body {
-        font-size: 0.875rem;
-        background-color: #f8f9fa;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        font-size: 14px;
+        line-height: 1.5;
+        color: var(--dark-color);
+        background-color: var(--light-color);
         margin: 0;
         padding: 0;
+        overflow-x: hidden;
       }
 
-      .container-fluid {
-        padding: 0.75rem;
+      /* Application Shell Layout */
+      .app-shell {
+        display: grid;
+        grid-template-areas: 
+          "topnav topnav"
+          "sidebar main";
+        grid-template-columns: var(--sidebar-width) 1fr;
+        grid-template-rows: var(--topnav-height) 1fr;
+        min-height: 100vh;
       }
 
-      /* Header styling aligned with discovery panel */
-      .action-header {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 1rem;
-        margin: -0.75rem -0.75rem 1rem -0.75rem;
-        border-radius: 0;
-      }
-
-      /* Search and filter section */
-      .search-filter-section {
+      /* Top Navigation */
+      .top-navigation {
+        grid-area: topnav;
         background: white;
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        align-items: center;
+        padding: 0 2rem;
+        z-index: 1000;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      }
+
+      .top-navigation .brand {
+        font-weight: 600;
+        font-size: 1.125rem;
+        color: var(--primary-color);
+        margin-right: 2rem;
+      }
+
+      .top-navigation .search-container {
+        flex: 1;
+        max-width: 500px;
+        margin-right: 2rem;
+      }
+
+      .top-navigation .search-input {
+        width: 100%;
+        padding: 0.5rem 1rem;
+        border: 1px solid var(--border-color);
         border-radius: 0.5rem;
-        padding: 1rem;
-        margin-bottom: 1rem;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        font-size: 0.875rem;
+        background: var(--light-color);
+        transition: all 0.2s ease;
       }
 
-      .search-bar {
-        margin-bottom: 1rem;
+      .top-navigation .search-input:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        background: white;
       }
 
-      .filter-controls {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 0.5rem;
-      }
-
-      /* Stats overview */
-      .stats-overview {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
+      .top-navigation .controls {
+        display: flex;
+        align-items: center;
         gap: 1rem;
+      }
+
+      .view-mode-toggle {
+        display: flex;
+        background: var(--light-color);
+        border-radius: 0.5rem;
+        padding: 0.25rem;
+        border: 1px solid var(--border-color);
+      }
+
+      .view-mode-toggle button {
+        padding: 0.5rem 0.75rem;
+        border: none;
+        background: transparent;
+        color: var(--secondary-color);
+        border-radius: 0.25rem;
+        cursor: pointer;
+        font-size: 0.875rem;
+        transition: all 0.2s ease;
+      }
+
+      .view-mode-toggle button.active {
+        background: white;
+        color: var(--primary-color);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+      }
+
+      .view-mode-toggle button:hover:not(.active) {
+        background: rgba(37, 99, 235, 0.1);
+        color: var(--primary-color);
+      }
+
+      /* Sidebar */
+      .sidebar {
+        grid-area: sidebar;
+        background: white;
+        border-right: 1px solid var(--border-color);
+        padding: 1.5rem;
+        overflow-y: auto;
+        height: calc(100vh - var(--topnav-height));
+      }
+
+      .sidebar h6 {
+        font-weight: 600;
+        color: var(--dark-color);
         margin-bottom: 1rem;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.05em;
+      }
+
+      /* Statistics Cards */
+      .stats-grid {
+        display: grid;
+        gap: 1rem;
+        margin-bottom: 2rem;
       }
 
       .stat-card {
-        background: white;
+        background: var(--light-color);
         border-radius: 0.5rem;
         padding: 1rem;
         text-align: center;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        transition: transform 0.2s ease;
+        border: 1px solid var(--border-color);
+        transition: all 0.2s ease;
       }
 
       .stat-card:hover {
-        transform: translateY(-2px);
+        border-color: var(--primary-color);
+        box-shadow: 0 2px 4px rgba(37, 99, 235, 0.1);
       }
 
       .stat-number {
         display: block;
         font-size: 1.5rem;
-        font-weight: 600;
-        color: #667eea;
+        font-weight: 700;
+        color: var(--primary-color);
         margin-bottom: 0.25rem;
       }
 
       .stat-label {
         font-size: 0.75rem;
-        color: #6c757d;
+        color: var(--secondary-color);
+        font-weight: 500;
+      }
+
+      /* Filter Section */
+      .filter-section {
+        margin-bottom: 2rem;
+      }
+
+      .filter-group {
+        margin-bottom: 1rem;
+      }
+
+      .filter-group label {
+        display: block;
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--secondary-color);
+        margin-bottom: 0.5rem;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.05em;
       }
 
-      /* Action cards */
-      .actions-container {
-        background: white;
-        border-radius: 0.5rem;
-        padding: 1rem;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-      }
-
-      .action-card {
-        border: 1px solid #e9ecef;
+      .filter-select {
+        width: 100%;
+        padding: 0.5rem;
+        border: 1px solid var(--border-color);
         border-radius: 0.375rem;
-        margin-bottom: 0.75rem;
-        transition: all 0.2s ease;
+        font-size: 0.875rem;
         background: white;
+        color: var(--dark-color);
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .filter-select:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+      }
+
+      .clear-filters-btn {
+        width: 100%;
+        padding: 0.5rem;
+        border: 1px solid var(--border-color);
+        border-radius: 0.375rem;
+        background: white;
+        color: var(--secondary-color);
+        font-size: 0.875rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .clear-filters-btn:hover {
+        background: var(--light-color);
+        border-color: var(--secondary-color);
+      }
+
+      /* Main Content Area */
+      .main-content {
+        grid-area: main;
+        padding: 2rem;
+        overflow-y: auto;
+        height: calc(100vh - var(--topnav-height));
+        background: var(--light-color);
+      }
+
+      .content-header {
+        display: flex;
+        justify-content: between;
+        align-items: center;
+        margin-bottom: 2rem;
+      }
+
+      .content-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: var(--dark-color);
+        margin: 0;
+      }
+
+      .content-subtitle {
+        color: var(--secondary-color);
+        font-size: 0.875rem;
+        margin-top: 0.25rem;
+      }
+
+      /* Action Grid Layout */
+      .actions-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+      }
+
+      /* Action Cards */
+      .action-card {
+        background: white;
+        border: 1px solid var(--border-color);
+        border-radius: 0.75rem;
+        padding: 1.5rem;
+        transition: all 0.2s ease;
+        position: relative;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
       }
 
       .action-card:hover {
-        border-color: #667eea;
-        box-shadow: 0 4px 8px rgba(102, 126, 234, 0.15);
+        border-color: var(--primary-color);
+        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
+        transform: translateY(-2px);
       }
 
       .action-card-header {
-        padding: 1rem;
         display: flex;
         justify-content: space-between;
         align-items: flex-start;
+        margin-bottom: 1rem;
       }
 
-      .action-info {
-        flex: 1;
-        min-width: 0;
-      }
-
-      .action-name {
-        margin: 0 0 0.5rem 0;
-        font-weight: 600;
-        color: #212529;
+      .action-title {
         font-size: 1rem;
+        font-weight: 600;
+        color: var(--dark-color);
+        margin: 0 0 0.5rem 0;
+        line-height: 1.4;
       }
 
       .action-description {
-        margin: 0 0 0.75rem 0;
-        color: #6c757d;
+        color: var(--secondary-color);
         font-size: 0.875rem;
-        line-height: 1.4;
+        line-height: 1.5;
+        margin: 0 0 1rem 0;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
       }
 
       .action-meta {
@@ -141,261 +325,240 @@
         flex-wrap: wrap;
         gap: 0.5rem;
         align-items: center;
+        margin-bottom: 1rem;
       }
 
       .action-controls {
         display: flex;
-        gap: 0.25rem;
-        flex-shrink: 0;
-        margin-left: 1rem;
+        gap: 0.5rem;
+        align-items: flex-start;
       }
 
-      .action-details {
-        border-top: 1px solid #e9ecef;
-        padding: 0;
+      .action-controls button {
+        padding: 0.5rem;
+        border: 1px solid var(--border-color);
+        border-radius: 0.375rem;
+        background: white;
+        color: var(--secondary-color);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-size: 0.875rem;
       }
 
-      .action-details.show {
-        padding: 1rem;
+      .action-controls button:hover {
+        border-color: var(--primary-color);
+        color: var(--primary-color);
+        background: rgba(37, 99, 235, 0.05);
+      }
+
+      .favorite-btn.active {
+        color: var(--warning-color);
+        border-color: var(--warning-color);
+        background: rgba(217, 119, 6, 0.1);
       }
 
       /* Badges */
-      .badge-author {
-        background-color: #e7f3ff;
-        color: #0066cc;
-        font-size: 0.75rem;
+      .badge {
         padding: 0.25rem 0.5rem;
         border-radius: 0.25rem;
+        font-size: 0.75rem;
         font-weight: 500;
+        line-height: 1;
+      }
+
+      .badge-author {
+        background: #dbeafe;
+        color: #1e40af;
       }
 
       .badge-author.user {
-        background-color: #fff2e7;
-        color: #cc6600;
+        background: #fed7aa;
+        color: #c2410c;
       }
 
       .badge-domain {
-        background-color: #f0f9ff;
-        color: #0080cc;
-        font-size: 0.75rem;
-        padding: 0.25rem 0.5rem;
-        border-radius: 0.25rem;
-        font-weight: 500;
+        background: #f0f9ff;
+        color: #0369a1;
       }
 
-      /* Loading and empty states */
+      .badge-category {
+        background: #f0fdf4;
+        color: #166534;
+      }
+
+      .badge-usage {
+        background: #fef3c7;
+        color: #92400e;
+      }
+
+      /* Usage Stats */
+      .usage-stats {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.75rem;
+        background: var(--light-color);
+        border-radius: 0.5rem;
+        margin-top: 1rem;
+        font-size: 0.875rem;
+      }
+
+      .usage-stat {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        color: var(--secondary-color);
+      }
+
+      .usage-stat i {
+        font-size: 0.75rem;
+      }
+
+      /* Bulk Operations */
+      .bulk-operations {
+        background: white;
+        border: 1px solid var(--border-color);
+        border-radius: 0.75rem;
+        padding: 1rem;
+        margin-bottom: 2rem;
+        display: none;
+      }
+
+      .bulk-operations.active {
+        display: block;
+        border-color: var(--primary-color);
+        background: rgba(37, 99, 235, 0.05);
+      }
+
+      .bulk-operations-content {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+      }
+
+      .bulk-operations button {
+        padding: 0.5rem 1rem;
+        border: 1px solid var(--border-color);
+        border-radius: 0.375rem;
+        background: white;
+        color: var(--dark-color);
+        cursor: pointer;
+        font-size: 0.875rem;
+        transition: all 0.2s ease;
+      }
+
+      .bulk-operations button:hover {
+        border-color: var(--primary-color);
+        color: var(--primary-color);
+      }
+
+      .bulk-operations .btn-danger {
+        border-color: var(--danger-color);
+        color: var(--danger-color);
+      }
+
+      .bulk-operations .btn-danger:hover {
+        background: var(--danger-color);
+        color: white;
+      }
+
+      /* Loading & Empty States */
       .loading-state,
       .empty-state,
       .error-state {
         text-align: center;
-        padding: 3rem 1rem;
-        color: #6c757d;
+        padding: 4rem 2rem;
+        color: var(--secondary-color);
       }
 
       .loading-state i,
       .empty-state i,
       .error-state i {
-        font-size: 2rem;
+        font-size: 3rem;
         margin-bottom: 1rem;
         display: block;
+        color: var(--border-color);
       }
 
-      .error-state {
-        color: #dc3545;
-      }
-
-      .spinner-border-sm {
-        width: 1rem;
-        height: 1rem;
-      }
-
-      /* Filter clear button */
-      .filter-clear-btn {
-        background: none;
-        border: 1px solid #dee2e6;
-        color: #6c757d;
-        padding: 0.375rem 0.75rem;
-        border-radius: 0.25rem;
-        font-size: 0.875rem;
-        transition: all 0.2s ease;
-      }
-
-      .filter-clear-btn:hover {
-        background: #f8f9fa;
-        border-color: #adb5bd;
-      }
-
-      /* View mode controls */
-      .view-mode-controls {
-        display: flex;
-        justify-content: center;
-        margin-bottom: 1rem;
-      }
-
-      .view-mode-controls .btn-group .btn {
-        font-size: 0.875rem;
-        padding: 0.5rem 1rem;
-      }
-
-      .view-mode-controls .btn i {
-        margin-right: 0.25rem;
-      }
-
-      /* Bulk operations */
-      .bulk-operations {
-        border: 2px dashed #dee2e6;
-        border-radius: 0.5rem;
-        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-      }
-
-      .bulk-operations.active {
-        border-color: #667eea;
-        background: linear-gradient(135deg, #f0f4ff 0%, #e7f3ff 100%);
-      }
-
-      /* Group cards */
-      .group-card {
-        background: white;
-        border: 1px solid #e9ecef;
-        border-radius: 0.5rem;
-        overflow: hidden;
-        transition: all 0.2s ease;
-      }
-
-      .group-card:hover {
-        border-color: #667eea;
-        box-shadow: 0 4px 8px rgba(102, 126, 234, 0.15);
-      }
-
-      .group-header {
-        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-        padding: 1rem;
-        border-bottom: 1px solid #e9ecef;
-      }
-
-      .group-toggle {
-        color: #667eea;
-        text-decoration: none;
-        transition: transform 0.2s ease;
-      }
-
-      .group-toggle:hover {
-        color: #5a6fd8;
-        transform: scale(1.1);
-      }
-
-      .group-content {
-        padding: 0.5rem;
-      }
-
-      .action-card-compact {
-        background: white;
-        border: 1px solid #f0f0f0;
-        border-radius: 0.375rem;
+      .loading-state h6,
+      .empty-state h6,
+      .error-state h6 {
+        font-size: 1.25rem;
+        font-weight: 600;
         margin-bottom: 0.5rem;
-        transition: all 0.2s ease;
+        color: var(--dark-color);
       }
 
-      .action-card-compact:hover {
-        border-color: #667eea;
-        box-shadow: 0 2px 4px rgba(102, 126, 234, 0.1);
+      .loading-state .spinner {
+        width: 3rem;
+        height: 3rem;
+        border: 3px solid var(--border-color);
+        border-top: 3px solid var(--primary-color);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 1rem;
       }
 
-      .action-card-compact:last-child {
-        margin-bottom: 0;
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
       }
 
-      .action-controls-compact {
-        display: flex;
-        gap: 0.25rem;
+      /* Responsive Design */
+      @media (max-width: 1200px) {
+        .actions-grid {
+          grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+          gap: 1rem;
+        }
       }
 
-      .action-controls-compact .btn {
-        padding: 0.25rem 0.5rem;
-        font-size: 0.75rem;
+      @media (max-width: 992px) {
+        .app-shell {
+          grid-template-areas: 
+            "topnav"
+            "main";
+          grid-template-columns: 1fr;
+          grid-template-rows: var(--topnav-height) 1fr;
+        }
+
+        .sidebar {
+          display: none;
+        }
+
+        .main-content {
+          padding: 1rem;
+        }
+
+        .top-navigation {
+          padding: 0 1rem;
+        }
+
+        .top-navigation .search-container {
+          max-width: 300px;
+          margin-right: 1rem;
+        }
+
+        .actions-grid {
+          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        }
       }
 
-      /* Badge styles for compact view */
-      .badge-author-sm {
-        background-color: #e7f3ff;
-        color: #0066cc;
-        font-size: 0.65rem;
-        padding: 0.125rem 0.375rem;
-        border-radius: 0.2rem;
-        font-weight: 500;
-        margin-right: 0.25rem;
-      }
-
-      .badge-author-sm.user {
-        background-color: #fff2e7;
-        color: #cc6600;
-      }
-
-      .badge-domain-sm {
-        background-color: #f0f9ff;
-        color: #0080cc;
-        font-size: 0.65rem;
-        padding: 0.125rem 0.375rem;
-        border-radius: 0.2rem;
-        font-weight: 500;
-        margin-right: 0.25rem;
-      }
-
-      .usage-badge {
-        background-color: #f0fff4;
-        color: #00a651;
-        font-size: 0.65rem;
-        padding: 0.125rem 0.375rem;
-        border-radius: 0.2rem;
-        font-weight: 500;
-        margin-left: 0.25rem;
-      }
-
-      .usage-stats,
-      .last-used {
-        font-size: 0.75rem;
-        color: #6c757d;
-      }
-
-      .usage-stats i,
-      .last-used i {
-        margin-right: 0.25rem;
-      }
-
-      /* Checkboxes */
-      .form-check-input:checked {
-        background-color: #667eea;
-        border-color: #667eea;
-      }
-
-      .form-check-input:focus {
-        border-color: #667eea;
-        box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
-      }
-
-      /* Group select checkbox states */
-      .group-select-checkbox:indeterminate {
-        background-color: #6c757d;
-        border-color: #6c757d;
-        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%23fff' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='M6 10h8'/%3e%3c/svg%3e");
-      }
-
-      /* Responsive adjustments */
       @media (max-width: 768px) {
-        .container-fluid {
-          padding: 0.5rem;
+        .top-navigation .brand {
+          display: none;
         }
 
-        .action-header {
-          margin: -0.5rem -0.5rem 1rem -0.5rem;
+        .top-navigation .search-container {
+          max-width: 200px;
         }
 
-        .stats-overview {
+        .actions-grid {
           grid-template-columns: 1fr;
         }
 
-        .filter-controls {
-          grid-template-columns: 1fr;
+        .action-card {
+          padding: 1rem;
         }
 
         .action-card-header {
@@ -404,216 +567,181 @@
         }
 
         .action-controls {
-          margin-left: 0;
           align-self: flex-start;
         }
       }
 
-      /* Code blocks */
-      pre {
-        background: #f8f8f8;
-        padding: 10px;
-        border-radius: 5px;
-        overflow: auto;
-        font-size: 0.8rem;
-        margin: 0;
+      /* Utility Classes */
+      .text-primary { color: var(--primary-color) !important; }
+      .text-secondary { color: var(--secondary-color) !important; }
+      .text-success { color: var(--success-color) !important; }
+      .text-danger { color: var(--danger-color) !important; }
+      .text-warning { color: var(--warning-color) !important; }
+      .text-info { color: var(--info-color) !important; }
+
+      .d-none { display: none !important; }
+      .d-block { display: block !important; }
+      .d-flex { display: flex !important; }
+      .d-grid { display: grid !important; }
+
+      .fade-in {
+        animation: fadeIn 0.3s ease-out;
       }
 
-      :not(pre) > code[class*="language-"],
-      pre[class*="language-"] {
-        background: #f8f7f7;
+      @keyframes fadeIn {
+        from { 
+          opacity: 0; 
+          transform: translateY(8px); 
+        }
+        to { 
+          opacity: 1; 
+          transform: translateY(0); 
+        }
       }
     </style>
   </head>
   <body>
-    <div class="container-fluid">
-      <!-- Header Section -->
-      <div class="action-header rounded">
-        <div>
-          <h4 class="mb-1">Action Index</h4>
-          <small>Manage your complete action library</small>
+    <div class="app-shell">
+      <!-- Top Navigation -->
+      <nav class="top-navigation">
+        <div class="brand">
+          <i class="bi bi-collection-fill"></i>
+          Action Index
         </div>
-      </div>
+        
+        <div class="search-container">
+          <input
+            type="text"
+            id="globalSearchInput"
+            class="search-input"
+            placeholder="Search actions by name, description, or website..."
+            autocomplete="off"
+          />
+        </div>
 
-      <!-- Search and Filter Section -->
-      <div class="search-filter-section">
-        <div class="search-bar">
-          <div class="input-group">
-            <span class="input-group-text">
-              <i class="bi bi-search"></i>
-            </span>
-            <input
-              type="text"
-              id="searchInput"
-              class="form-control"
-              placeholder="Search actions by name or description..."
-              autocomplete="off"
-            />
-            <button
-              class="btn btn-outline-secondary"
-              type="button"
-              id="clearSearchBtn"
-              title="Clear search"
-            >
-              <i class="bi bi-x"></i>
+        <div class="controls">
+          <div class="view-mode-toggle">
+            <button id="viewModeGrid" class="active" title="Grid view">
+              <i class="bi bi-grid-3x3-gap"></i>
+            </button>
+            <button id="viewModeList" title="List view">
+              <i class="bi bi-list"></i>
             </button>
           </div>
-        </div>
-
-        <!-- View Mode Controls -->
-        <div class="view-mode-controls mb-3">
-          <div
-            class="btn-group btn-group-sm"
-            role="group"
-            aria-label="View modes"
-          >
-            <button
-              type="button"
-              class="btn btn-outline-primary active"
-              id="viewModeWebsite"
-              title="Group by website"
-            >
-              <i class="bi bi-globe"></i> By Website
-            </button>
-            <button
-              type="button"
-              class="btn btn-outline-primary"
-              id="viewModeCategory"
-              title="Group by category"
-            >
-              <i class="bi bi-tags"></i> By Category
-            </button>
-            <button
-              type="button"
-              class="btn btn-outline-primary"
-              id="viewModeUsage"
-              title="Group by usage"
-            >
-              <i class="bi bi-bar-chart"></i> By Usage
-            </button>
-            <button
-              type="button"
-              class="btn btn-outline-primary"
-              id="viewModeTimeline"
-              title="Group by timeline"
-            >
-              <i class="bi bi-clock"></i> Timeline
-            </button>
-          </div>
-        </div>
-
-        <div class="filter-controls">
-          <select id="authorFilter" class="form-select">
-            <option value="all">All Authors</option>
-            <option value="user">User Created</option>
-            <option value="discovered">Auto Discovered</option>
-          </select>
-
-          <select id="domainFilter" class="form-select">
-            <option value="all">All Websites</option>
-          </select>
-
-          <select id="categoryFilter" class="form-select">
-            <option value="all">All Categories</option>
-          </select>
-
-          <select id="dateRangeFilter" class="form-select">
-            <option value="all">All Time</option>
-          </select>
-
-          <select id="usageFrequencyFilter" class="form-select">
-            <option value="all">All Actions</option>
-          </select>
-
-          <button class="filter-clear-btn" id="clearFiltersBtn">
-            <i class="bi bi-funnel"></i> Clear Filters
+          
+          <button id="refreshActionsBtn" class="btn btn-outline-secondary btn-sm" title="Refresh actions">
+            <i class="bi bi-arrow-clockwise"></i>
           </button>
         </div>
-      </div>
+      </nav>
 
-      <!-- Stats Overview -->
-      <div class="stats-overview">
-        <div class="stat-card">
-          <span class="stat-number" id="totalActionsCount">0</span>
-          <span class="stat-label">Total Actions</span>
-        </div>
-        <div class="stat-card">
-          <span class="stat-number" id="domainsCount">0</span>
-          <span class="stat-label">Websites</span>
-        </div>
-        <div class="stat-card">
-          <span class="stat-number" id="userActionsCount">0</span>
-          <span class="stat-label">Custom Actions</span>
-        </div>
-      </div>
-
-      <!-- Actions Container -->
-      <div class="actions-container">
-        <!-- Bulk Operations -->
-        <div id="bulkOperationsContainer" class="bulk-operations d-none mb-3">
-          <div
-            class="d-flex justify-content-between align-items-center p-2 bg-light rounded"
-          >
-            <div class="d-flex align-items-center">
-              <span class="me-3">
-                <strong id="selectedActionsCount">0</strong> action(s) selected
-              </span>
-              <div class="btn-group btn-group-sm">
-                <button
-                  class="btn btn-outline-primary"
-                  id="selectAllBtn"
-                  title="Select all actions"
-                >
-                  <i class="bi bi-check-all"></i> Select All
-                </button>
-                <button
-                  class="btn btn-outline-secondary"
-                  id="deselectAllBtn"
-                  title="Deselect all actions"
-                >
-                  <i class="bi bi-square"></i> Deselect All
-                </button>
-              </div>
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <!-- Statistics -->
+        <div class="stats-section">
+          <h6>Statistics</h6>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <span class="stat-number" id="totalActionsCount">0</span>
+              <span class="stat-label">Total Actions</span>
             </div>
-            <div class="btn-group btn-group-sm">
-              <button
-                class="btn btn-outline-danger"
-                id="bulkDeleteBtn"
-                title="Delete selected actions"
-              >
+            <div class="stat-card">
+              <span class="stat-number" id="userActionsCount">0</span>
+              <span class="stat-label">Custom Actions</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-number" id="domainsCount">0</span>
+              <span class="stat-label">Websites</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="filter-section">
+          <h6>Filters</h6>
+          
+          <div class="filter-group">
+            <label for="authorFilter">Author</label>
+            <select id="authorFilter" class="filter-select">
+              <option value="all">All Authors</option>
+              <option value="user">User Created</option>
+              <option value="discovered">Auto Discovered</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label for="domainFilter">Website</label>
+            <select id="domainFilter" class="filter-select">
+              <option value="all">All Websites</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label for="categoryFilter">Category</label>
+            <select id="categoryFilter" class="filter-select">
+              <option value="all">All Categories</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label for="usageFilter">Usage</label>
+            <select id="usageFilter" class="filter-select">
+              <option value="all">All Actions</option>
+              <option value="frequent">Frequently Used</option>
+              <option value="occasional">Occasionally Used</option>
+              <option value="rarely">Rarely Used</option>
+              <option value="never">Never Used</option>
+            </select>
+          </div>
+
+          <button id="clearFiltersBtn" class="clear-filters-btn">
+            <i class="bi bi-funnel"></i> Clear All Filters
+          </button>
+        </div>
+      </aside>
+
+      <!-- Main Content -->
+      <main class="main-content">
+        <!-- Content Header -->
+        <div class="content-header">
+          <div>
+            <h1 class="content-title">Action Library</h1>
+            <p class="content-subtitle">
+              <span id="filteredActionsCount">0</span> actions available
+            </p>
+          </div>
+        </div>
+
+        <!-- Bulk Operations -->
+        <div id="bulkOperationsContainer" class="bulk-operations">
+          <div class="bulk-operations-content">
+            <div class="bulk-info">
+              <strong id="selectedActionsCount">0</strong> action(s) selected
+            </div>
+            <div class="bulk-controls">
+              <button id="selectAllBtn" title="Select all visible actions">
+                <i class="bi bi-check-all"></i> Select All
+              </button>
+              <button id="deselectAllBtn" title="Deselect all actions">
+                <i class="bi bi-square"></i> Deselect All
+              </button>
+              <button id="bulkDeleteBtn" class="btn-danger" title="Delete selected actions">
                 <i class="bi bi-trash"></i> Delete Selected
               </button>
             </div>
           </div>
         </div>
 
-        <div class="d-flex justify-content-between align-items-center mb-3">
-          <h6 class="mb-0">
-            <i class="bi bi-collection"></i>
-            Actions Library
-            <span id="filteredActionsCount" class="badge bg-secondary ms-2"
-              >0</span
-            >
-          </h6>
-          <div class="btn-group btn-group-sm">
-            <button
-              class="btn btn-outline-secondary"
-              id="refreshActionsBtn"
-              title="Refresh actions"
-            >
-              <i class="bi bi-arrow-clockwise"></i>
-            </button>
-          </div>
-        </div>
-
-        <div id="actionsListContainer">
-          <!-- Actions will be populated here -->
+        <!-- Actions Container -->
+        <div id="actionsContainer">
+          <!-- Loading state -->
           <div class="loading-state">
-            <i class="bi bi-hourglass-split"></i>
-            <p class="mb-0">Loading your action library...</p>
+            <div class="spinner"></div>
+            <h6>Loading Actions</h6>
+            <p>Please wait while we load your action library...</p>
           </div>
         </div>
-      </div>
+      </main>
     </div>
 
     <!-- Action Details Modal -->
@@ -621,26 +749,14 @@
       <div class="modal-dialog modal-lg">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title" id="actionDetailsModalTitle">
-              Action Details
-            </h5>
-            <button
-              type="button"
-              class="btn-close"
-              data-bs-dismiss="modal"
-            ></button>
+            <h5 class="modal-title" id="actionDetailsModalTitle">Action Details</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
           </div>
           <div class="modal-body" id="actionDetailsModalBody">
             <!-- Action details will be populated here -->
           </div>
           <div class="modal-footer">
-            <button
-              type="button"
-              class="btn btn-secondary"
-              data-bs-dismiss="modal"
-            >
-              Close
-            </button>
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
           </div>
         </div>
       </div>
