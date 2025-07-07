@@ -10,11 +10,28 @@ from colorama import Back, Fore, Style
 def main():
     files = sys.argv[1:] or glob.glob("evals/eval-*.txt")
     table = {}  # {file: {counter: score, ...}, ...}
+    questions = {}  # {counter: question, ...}
 
     # Fill table with scoring data from eval files
     for file in files:
         with open(file, "r") as f:
             lines = f.readlines()
+
+        for i, line in enumerate(lines):
+            m = re.match(r"^(?:-+|\*+)\s+(\d+)\s+", line)
+            if m:
+                counter = int(m.group(1))
+                nextline = lines[i + 1]
+                mm = re.match(r"^.*; Question:\s+(.*)$", nextline)
+                if mm:
+                    question = mm.group(1)
+                    if counter not in questions:
+                        questions[counter] = question
+                    elif questions[counter] != question:
+                        print(f"File {file} has a different question for {counter}:")
+                        print(f"< {questions[counter]}")
+                        print(f"> {question}")
+
         i = lines.index("==================================================\n")
         if i < 0:
             print(f"File {file} does not contain a separator line")
@@ -43,11 +60,11 @@ def main():
     # Print data
     all_counters = sorted(
         {counter for data in table.values() for counter in data.keys()},
-        key=lambda x: statistics.mean([table[file].get(x, 0.0) for file in all_files]),
+        key=lambda x: table[all_files[0]].get(x, 0.0),
         reverse=True,
     )
     for counter in all_counters:
-        print(f"{counter:>3}:", end="  ")
+        print(f"{counter:>3}:", end="")
         for file in all_files:
             score = table[file].get(counter, None)
             if score is None:
@@ -65,15 +82,15 @@ def main():
                     output = Fore.RED + output + Fore.RESET
                     if score == 0.0:
                         output = Style.BRIGHT + output + Style.RESET_ALL
-            print(output, end="  ")
-        print()
+            print(output, end="")
+        print(f" {questions.get(counter)}")
 
     # Print header again
     print_header(all_files)
 
 
 def print_header(all_files):
-    print("    ", end="  ")
+    print("    ", end="")
     for i, file in enumerate(all_files):
         base = os.path.basename(file)
         m = re.match(r"eval-(\d+\w*).*\.txt", base)
@@ -81,7 +98,7 @@ def print_header(all_files):
             label = m.group(1)
         else:
             label = "--"
-        print(f"{label:>6}", end="  ")
+        print(f"{label:>6}", end="")
     print()
 
 
