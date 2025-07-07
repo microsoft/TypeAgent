@@ -8,18 +8,20 @@ export type WikipediaApiSettings = {
     accessToken?: string;
     clientId?: string;
     clientSecret?: string;
-    getToken(): string;
+    getToken(): Promise<string>;
 };
 
 /**
  * The environment variables used by the Wikipedia API.
  */
 export enum EnvVars {
-    WIKIPEDIA_ACCESS_TOKEN = "WIKIPEDIA_ACCESS_TOKEN",
     WIKIPEDIA_ENDPOINT = "WIKIPEDIA_ENDPOINT",
     WIKIPEDIA_CLIENT_SECRET = "WIKIPEDIA_CLIENT_SECRET",
     WIKIPEDIA_CLIENT_ID = "WIKIPEDIA_CLIENT_ID"
 }
+
+let wikiToken: string | undefined;
+let wikiTokenExpiry: number | undefined;
 
 /**
  * Gets the API settings for the Wikipedia API from environment variables.
@@ -33,23 +35,34 @@ export function apiSettingsFromEnv(
     return {
         endpoint: getEnvSetting(env, EnvVars.WIKIPEDIA_ENDPOINT),
         // TODO: refresh token: https://api.wikimedia.org/wiki/Authentication
-        accessToken: getEnvSetting(env, EnvVars.WIKIPEDIA_ACCESS_TOKEN),
-        clientId: getEnvSetting(env, EnvVars.WIKIPEDIA_ACCESS_TOKEN),
-        clientSecret: getEnvSetting(env, EnvVars.WIKIPEDIA_ACCESS_TOKEN),
-        getToken: (): string => {
+        clientId: getEnvSetting(env, EnvVars.WIKIPEDIA_CLIENT_ID),
+        clientSecret: getEnvSetting(env, EnvVars.WIKIPEDIA_CLIENT_SECRET),
+        getToken: async (): Promise<string> => {
+
+            // If the token hasn't expired, just return it
+            if (wikiToken && wikiTokenExpiry && Date.now() < wikiTokenExpiry) {
+                return wikiToken;
+            }
+
+            const params = new URLSearchParams();
+            params.append('grant_type', 'client_credentials');
+            params.append('client_id', getEnvSetting(env, EnvVars.WIKIPEDIA_CLIENT_ID));
+            params.append('client_secret', getEnvSetting(env, EnvVars.WIKIPEDIA_CLIENT_SECRET));
+
+            const response = await fetch("https://meta.wikimedia.org/w/rest.php/oauth2/access_token", {
+                method: "POST",
+                body: params,
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to get token: ${response.status} ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            wikiToken = (data as any).access_token;
+            wikiTokenExpiry = Date.now() + (data as any).expires_in * 1000; // expires_in is in seconds
+
+            return wikiToken!;
         }
     };
-}
-
-export async function getToken(config: WikipediaApiSettings): Promise<string | undefined> {
-    const response = await fetch("https://meta.wikimedia.org/w/rest.php/oauth2/access_token", {
-        method: "POST",
-        body: JSON.stringify({
-            grant_type: "client_credentials",
-            client_id: config.clientId,
-            client_secret: config.clientSecret
-        })
-    });
-
-    return await response.text();
 }

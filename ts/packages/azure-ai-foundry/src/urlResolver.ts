@@ -398,12 +398,11 @@ export async function resolveURLWithWikipedia(
     // TODO: implement
     console.log(`${site} ${wikipediaConfig}`);
 
-    // TODO: refresh token
     const languageCode = Intl.DateTimeFormat().resolvedOptions().locale.split("-")[0];
     const searchQuery = `${site}`;
     const numberOfResults = 1;
     const headers = {
-        'Authorization': `Bearer ${wikipediaConfig.accessToken}`,
+        Authorization: `Bearer ${await wikipediaConfig.getToken()}`,
     };
 
     const baseUrl = `${wikipediaConfig.endpoint}`;
@@ -412,7 +411,7 @@ export async function resolveURLWithWikipedia(
     const parameters = new URLSearchParams({ q: searchQuery, limit: numberOfResults.toString() });
 
     let retVal = undefined
-    await fetch(`${url}?${parameters}`, { headers })
+    await fetch(`${url}?${parameters}`, { method: "GET", headers: headers })
     .then(response => response.json())
     .then(data => {
         retVal = data;
