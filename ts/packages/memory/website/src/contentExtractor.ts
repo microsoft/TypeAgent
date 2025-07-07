@@ -190,7 +190,7 @@ export class ContentExtractor {
         url: string,
         html: string,
         mode: ExtractionMode = "content",
-        knowledgeMode: KnowledgeExtractionMode = "hybrid"
+        knowledgeMode: KnowledgeExtractionMode = "hybrid",
     ): Promise<EnhancedContentWithKnowledge> {
         const startTime = Date.now();
 
@@ -199,9 +199,19 @@ export class ContentExtractor {
             const baseContent = await this.extractFromHtml(html, mode);
 
             // Add knowledge extraction if enabled
-            if (knowledgeMode !== "none" && this.config?.enableKnowledgeExtraction !== false) {
-                const knowledge = await this.extractKnowledge(html, baseContent, knowledgeMode);
-                const qualityMetrics = this.calculateKnowledgeQuality(knowledge, baseContent);
+            if (
+                knowledgeMode !== "none" &&
+                this.config?.enableKnowledgeExtraction !== false
+            ) {
+                const knowledge = await this.extractKnowledge(
+                    html,
+                    baseContent,
+                    knowledgeMode,
+                );
+                const qualityMetrics = this.calculateKnowledgeQuality(
+                    knowledge,
+                    baseContent,
+                );
 
                 return {
                     ...baseContent,
@@ -230,7 +240,7 @@ export class ContentExtractor {
     private async extractKnowledge(
         html: string,
         baseContent: Partial<EnhancedContent>,
-        mode: KnowledgeExtractionMode
+        mode: KnowledgeExtractionMode,
     ): Promise<kpLib.KnowledgeResponse> {
         try {
             switch (mode) {
@@ -250,7 +260,7 @@ export class ContentExtractor {
     }
 
     private async extractBasicKnowledge(
-        baseContent: Partial<EnhancedContent>
+        baseContent: Partial<EnhancedContent>,
     ): Promise<kpLib.KnowledgeResponse> {
         const knowledge = this.createEmptyKnowledge();
 
@@ -260,23 +270,29 @@ export class ContentExtractor {
         }
 
         if (baseContent.pageContent?.headings) {
-            knowledge.topics.push(...baseContent.pageContent.headings.slice(0, 5));
+            knowledge.topics.push(
+                ...baseContent.pageContent.headings.slice(0, 5),
+            );
         }
 
         // Basic entity extraction from meta tags
         if (baseContent.metaTags?.keywords) {
-            knowledge.topics.push(...baseContent.metaTags.keywords.slice(0, 10));
+            knowledge.topics.push(
+                ...baseContent.metaTags.keywords.slice(0, 10),
+            );
         }
 
         return knowledge;
     }
 
-    private async extractEnhancedKnowledge(html: string): Promise<kpLib.KnowledgeResponse> {
+    private async extractEnhancedKnowledge(
+        html: string,
+    ): Promise<kpLib.KnowledgeResponse> {
         try {
             // Use conversation package's knowledge extraction
             const maxCharsPerChunk = this.config?.maxCharsPerChunk || 1000;
             const docParts = docPartsFromHtml(html, maxCharsPerChunk);
-            
+
             // For now, extract knowledge from the first doc part
             // In a full implementation, this would integrate with the knowledge processor
             if (docParts.length > 0 && docParts[0].knowledge) {
@@ -292,15 +308,20 @@ export class ContentExtractor {
 
     private async extractHybridKnowledge(
         html: string,
-        baseContent: Partial<EnhancedContent>
+        baseContent: Partial<EnhancedContent>,
     ): Promise<kpLib.KnowledgeResponse> {
         try {
             // Combine basic extraction with enhanced processing
-            const basicKnowledge = await this.extractBasicKnowledge(baseContent);
+            const basicKnowledge =
+                await this.extractBasicKnowledge(baseContent);
             const enhancedKnowledge = await this.extractEnhancedKnowledge(html);
 
             // Merge knowledge results
-            return this.mergeKnowledgeResults(basicKnowledge, enhancedKnowledge, baseContent);
+            return this.mergeKnowledgeResults(
+                basicKnowledge,
+                enhancedKnowledge,
+                baseContent,
+            );
         } catch (error) {
             console.warn("Hybrid knowledge extraction failed:", error);
             return await this.extractBasicKnowledge(baseContent);
@@ -310,7 +331,7 @@ export class ContentExtractor {
     private mergeKnowledgeResults(
         basicKnowledge: kpLib.KnowledgeResponse,
         enhancedKnowledge: kpLib.KnowledgeResponse,
-        baseContent: Partial<EnhancedContent>
+        baseContent: Partial<EnhancedContent>,
     ): kpLib.KnowledgeResponse {
         const merged = this.createEmptyKnowledge();
 
@@ -327,7 +348,7 @@ export class ContentExtractor {
             ...enhancedKnowledge.entities,
         ];
         const entityMap = new Map<string, kpLib.ConcreteEntity>();
-        allEntities.forEach(entity => {
+        allEntities.forEach((entity) => {
             if (!entityMap.has(entity.name)) {
                 entityMap.set(entity.name, entity);
             }
@@ -350,9 +371,15 @@ export class ContentExtractor {
                     objectEntityName: detectedAction.target?.name || "page",
                     indirectObjectEntityName: "none",
                     params: [
-                        { name: "confidence", value: detectedAction.confidence },
-                        { name: "description", value: detectedAction.name || "" }
-                    ]
+                        {
+                            name: "confidence",
+                            value: detectedAction.confidence,
+                        },
+                        {
+                            name: "description",
+                            value: detectedAction.name || "",
+                        },
+                    ],
                 });
             }
         }
@@ -362,23 +389,26 @@ export class ContentExtractor {
 
     private calculateKnowledgeQuality(
         knowledge: kpLib.KnowledgeResponse,
-        baseContent: Partial<EnhancedContent>
+        baseContent: Partial<EnhancedContent>,
     ): KnowledgeQualityMetrics {
         const entityCount = knowledge.entities.length;
         const topicCount = knowledge.topics.length;
         const actionCount = knowledge.actions.length;
-        
+
         // Calculate confidence based on content richness
         let confidence = 0.5; // Base confidence
-        
-        if (baseContent.pageContent?.mainContent && baseContent.pageContent.mainContent.length > 500) {
+
+        if (
+            baseContent.pageContent?.mainContent &&
+            baseContent.pageContent.mainContent.length > 500
+        ) {
             confidence += 0.2;
         }
-        
+
         if (entityCount > 5) confidence += 0.1;
         if (topicCount > 3) confidence += 0.1;
         if (actionCount > 0) confidence += 0.1;
-        
+
         confidence = Math.min(confidence, 1.0);
 
         return {
@@ -386,7 +416,10 @@ export class ContentExtractor {
             topicCount,
             actionCount,
             confidence,
-            extractionMode: (this.config?.knowledgeMode === "none" ? "basic" : this.config?.knowledgeMode) || "hybrid"
+            extractionMode:
+                (this.config?.knowledgeMode === "none"
+                    ? "basic"
+                    : this.config?.knowledgeMode) || "hybrid",
         };
     }
 

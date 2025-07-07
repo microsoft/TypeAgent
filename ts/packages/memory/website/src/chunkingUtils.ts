@@ -20,15 +20,15 @@ export interface ChunkingOptions {
  */
 export function intelligentWebsiteChunking(
     content: string,
-    options: ChunkingOptions
+    options: ChunkingOptions,
 ): string[] {
     const { maxCharsPerChunk, preserveStructure } = options;
-    
+
     // Use conversation package's intelligent chunking
     const chunks = Array.from(
-        splitLargeTextIntoChunks(content, maxCharsPerChunk, preserveStructure)
+        splitLargeTextIntoChunks(content, maxCharsPerChunk, preserveStructure),
     );
-    
+
     return chunks;
 }
 
@@ -40,7 +40,7 @@ export function websiteToTextChunksEnhanced(
     pageContent: string | string[],
     title?: string,
     url?: string,
-    maxCharsPerChunk: number = 2000
+    maxCharsPerChunk: number = 2000,
 ): string[] {
     // Handle metadata addition
     const processContent = (content: string): string => {
@@ -49,24 +49,26 @@ export function websiteToTextChunksEnhanced(
 
     if (Array.isArray(pageContent)) {
         // Process the first chunk with metadata, keep others as-is
-        const processedContent = pageContent.map((chunk, index) => 
-            index === 0 ? processContent(chunk) : chunk
-        ).join('\n\n');
+        const processedContent = pageContent
+            .map((chunk, index) =>
+                index === 0 ? processContent(chunk) : chunk,
+            )
+            .join("\n\n");
 
         // Apply intelligent chunking to the combined content
         return intelligentWebsiteChunking(processedContent, {
             maxCharsPerChunk,
             preserveStructure: true,
-            includeMetadata: true
+            includeMetadata: true,
         });
     } else {
         const processedContent = processContent(pageContent);
-        
+
         // Apply intelligent chunking
         return intelligentWebsiteChunking(processedContent, {
             maxCharsPerChunk,
             preserveStructure: true,
-            includeMetadata: true
+            includeMetadata: true,
         });
     }
 }
@@ -105,24 +107,31 @@ export interface ChunkQualityMetrics {
 }
 
 export function analyzeChunkQuality(chunks: string[]): ChunkQualityMetrics {
-    const sizes = chunks.map(chunk => chunk.length);
+    const sizes = chunks.map((chunk) => chunk.length);
     const averageSize = sizes.reduce((a, b) => a + b, 0) / sizes.length;
-    
-    const variance = sizes.reduce((acc, size) => acc + Math.pow(size - averageSize, 2), 0) / sizes.length;
-    
+
+    const variance =
+        sizes.reduce((acc, size) => acc + Math.pow(size - averageSize, 2), 0) /
+        sizes.length;
+
     // Simple heuristics for boundary respect (can be enhanced)
-    const sentenceBoundaryRespected = chunks.filter(chunk => 
-        chunk.trim().match(/[.!?]$/)
-    ).length / chunks.length * 100;
-    
-    const paragraphBoundaryRespected = chunks.filter(chunk => 
-        chunk.trim().startsWith('\n') || chunk.trim().endsWith('\n\n')
-    ).length / chunks.length * 100;
-    
+    const sentenceBoundaryRespected =
+        (chunks.filter((chunk) => chunk.trim().match(/[.!?]$/)).length /
+            chunks.length) *
+        100;
+
+    const paragraphBoundaryRespected =
+        (chunks.filter(
+            (chunk) =>
+                chunk.trim().startsWith("\n") || chunk.trim().endsWith("\n\n"),
+        ).length /
+            chunks.length) *
+        100;
+
     return {
         averageChunkSize: averageSize,
         chunkSizeVariance: variance,
         sentenceBoundaryRespected,
-        paragraphBoundaryRespected
+        paragraphBoundaryRespected,
     };
 }

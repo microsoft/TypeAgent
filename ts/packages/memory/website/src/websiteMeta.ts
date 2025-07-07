@@ -127,9 +127,11 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
         return this.websiteToKnowledge();
     }
 
-    public getEnhancedKnowledge(extractedKnowledge?: kpLib.KnowledgeResponse): kpLib.KnowledgeResponse {
+    public getEnhancedKnowledge(
+        extractedKnowledge?: kpLib.KnowledgeResponse,
+    ): kpLib.KnowledgeResponse {
         const baseKnowledge = this.websiteToKnowledge();
-        
+
         if (!extractedKnowledge) {
             return baseKnowledge;
         }
@@ -140,38 +142,48 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
 
     private mergeKnowledgeResponses(
         baseKnowledge: kpLib.KnowledgeResponse,
-        extractedKnowledge: kpLib.KnowledgeResponse
+        extractedKnowledge: kpLib.KnowledgeResponse,
     ): kpLib.KnowledgeResponse {
         // Merge topics (removing duplicates)
-        const allTopics = [...baseKnowledge.topics, ...extractedKnowledge.topics];
+        const allTopics = [
+            ...baseKnowledge.topics,
+            ...extractedKnowledge.topics,
+        ];
         const mergedTopics = [...new Set(allTopics)].slice(0, 30);
 
         // Merge entities (removing duplicates by name, preserving website-specific facets)
         const entityMap = new Map<string, kpLib.ConcreteEntity>();
-        
+
         // Add base entities first (preserve website-specific facets)
-        baseKnowledge.entities.forEach(entity => {
+        baseKnowledge.entities.forEach((entity) => {
             entityMap.set(entity.name, entity);
         });
-        
+
         // Add extracted entities, merging with existing if same name
-        extractedKnowledge.entities.forEach(entity => {
+        extractedKnowledge.entities.forEach((entity) => {
             const existing = entityMap.get(entity.name);
             if (existing) {
                 // Merge facets, preserving website-specific ones
                 const mergedFacets = [...(existing.facets || [])];
-                const existingFacetNames = new Set(mergedFacets.map(f => f.name));
-                
-                entity.facets?.forEach(facet => {
+                const existingFacetNames = new Set(
+                    mergedFacets.map((f) => f.name),
+                );
+
+                entity.facets?.forEach((facet) => {
                     if (!existingFacetNames.has(facet.name)) {
                         mergedFacets.push(facet);
                     }
                 });
-                
+
                 entityMap.set(entity.name, {
                     ...entity,
-                    type: [...new Set([...(existing.type || []), ...(entity.type || [])])],
-                    facets: mergedFacets
+                    type: [
+                        ...new Set([
+                            ...(existing.type || []),
+                            ...(entity.type || []),
+                        ]),
+                    ],
+                    facets: mergedFacets,
                 });
             } else {
                 entityMap.set(entity.name, entity);
@@ -179,7 +191,10 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
         });
 
         // Merge actions
-        const mergedActions = [...baseKnowledge.actions, ...extractedKnowledge.actions];
+        const mergedActions = [
+            ...baseKnowledge.actions,
+            ...extractedKnowledge.actions,
+        ];
 
         return {
             entities: Array.from(entityMap.values()).slice(0, 40),
@@ -187,8 +202,8 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
             actions: mergedActions.slice(0, 50),
             inverseActions: [
                 ...baseKnowledge.inverseActions,
-                ...extractedKnowledge.inverseActions
-            ].slice(0, 20)
+                ...extractedKnowledge.inverseActions,
+            ].slice(0, 20),
         };
     }
 
@@ -732,7 +747,7 @@ export class Website implements kp.IMessage {
                 pageContent,
                 metadata.title,
                 metadata.url,
-                2000 // Default chunk size, can be made configurable
+                2000, // Default chunk size, can be made configurable
             );
             pageContent = chunks;
         }
@@ -778,5 +793,3 @@ export function importWebsiteVisit(
         knowledge,
     );
 }
-
-

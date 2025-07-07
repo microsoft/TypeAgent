@@ -79,9 +79,7 @@ export function verifyWebsitesByPageType(
     expectedCount: number,
 ): void {
     const websites = collection.messages.getAll() as WebsiteDocPart[];
-    const matchingWebsites = websites.filter(
-        (w) => w.pageType === pageType,
-    );
+    const matchingWebsites = websites.filter((w) => w.pageType === pageType);
     expect(matchingWebsites.length).toBe(expectedCount);
 }
 
@@ -92,9 +90,7 @@ export function verifyBookmarksByFolder(
 ): void {
     const websites = collection.messages.getAll() as WebsiteDocPart[];
     const bookmarksInFolder = websites.filter(
-        (w) =>
-            w.websiteSource === "bookmark" &&
-            w.folder?.includes(folder),
+        (w) => w.websiteSource === "bookmark" && w.folder?.includes(folder),
     );
     expect(bookmarksInFolder.length).toBe(expectedCount);
 }

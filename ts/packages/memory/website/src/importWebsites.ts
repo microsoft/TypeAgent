@@ -533,12 +533,14 @@ async function enhanceWithContent(
                 // Use knowledge extraction if enabled
                 if (options.enableKnowledgeExtraction) {
                     // First fetch the HTML content for knowledge processing
-                    const html = await extractor['fetchPage'](website.metadata.url);
+                    const html = await extractor["fetchPage"](
+                        website.metadata.url,
+                    );
                     contentData = await extractor.extractWithKnowledge(
                         website.metadata.url,
                         html,
                         options.extractionMode || "content",
-                        options.knowledgeMode || "hybrid"
+                        options.knowledgeMode || "hybrid",
                     );
                 } else {
                     contentData = await extractor.extractFromUrl(
@@ -549,7 +551,10 @@ async function enhanceWithContent(
 
                 if (contentData.success) {
                     // Create enhanced website with content and knowledge
-                    return createEnhancedWebsiteWithKnowledge(website, contentData);
+                    return createEnhancedWebsiteWithKnowledge(
+                        website,
+                        contentData,
+                    );
                 } else {
                     console.warn(
                         `Content extraction failed for ${website.metadata.url}: ${contentData.error}`,
@@ -651,10 +656,10 @@ function createEnhancedWebsiteWithKnowledge(
 
     // Create website with enhanced metadata
     const meta = new WebsiteMeta(enhancedVisitInfo);
-    
+
     // Get enhanced knowledge if available
     let finalKnowledge;
-    if ('knowledge' in contentData && contentData.knowledge) {
+    if ("knowledge" in contentData && contentData.knowledge) {
         finalKnowledge = meta.getEnhancedKnowledge(contentData.knowledge);
     } else {
         finalKnowledge = meta.getKnowledge();
@@ -667,7 +672,7 @@ function createEnhancedWebsiteWithKnowledge(
         [],
         finalKnowledge,
         undefined,
-        true
+        true,
     );
 
     return enhancedWebsite;

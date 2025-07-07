@@ -1,9 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { enhancedWebsiteImport, analyzeImportQuality } from "../src/enhancedImport.js";
+import {
+    enhancedWebsiteImport,
+    analyzeImportQuality,
+} from "../src/enhancedImport.js";
 import { WebsiteVisitInfo } from "../src/websiteMeta.js";
-import { intelligentWebsiteChunking, analyzeChunkQuality } from "../src/chunkingUtils.js";
+import {
+    intelligentWebsiteChunking,
+    analyzeChunkQuality,
+} from "../src/chunkingUtils.js";
 
 describe("Stage 2 Enhanced Import", () => {
     describe("Intelligent Chunking", () => {
@@ -15,17 +21,17 @@ describe("Stage 2 Enhanced Import", () => {
                 
                 This is a third paragraph with different content. It should be chunked appropriately based on the content structure.
             `;
-            
+
             // Test intelligent chunking
             const chunks = intelligentWebsiteChunking(content, {
                 maxCharsPerChunk: 150,
                 preserveStructure: true,
                 includeMetadata: true,
             });
-            
+
             expect(chunks.length).toBeGreaterThan(1);
-            expect(chunks.every(chunk => chunk.length <= 200)).toBe(true); // Allow some overhead
-            
+            expect(chunks.every((chunk) => chunk.length <= 200)).toBe(true); // Allow some overhead
+
             // Analyze chunk quality
             const quality = analyzeChunkQuality(chunks);
             expect(quality.averageChunkSize).toBeGreaterThan(50);
@@ -33,13 +39,13 @@ describe("Stage 2 Enhanced Import", () => {
 
         test("handles empty content gracefully", () => {
             const content = "";
-            
+
             const chunks = intelligentWebsiteChunking(content, {
                 maxCharsPerChunk: 1000,
                 preserveStructure: true,
                 includeMetadata: true,
             });
-            
+
             expect(chunks.length).toBeGreaterThanOrEqual(0);
         });
     });
@@ -52,8 +58,11 @@ describe("Stage 2 Enhanced Import", () => {
                 source: "history",
             };
 
-            const content = "This is test content that should be processed with intelligent chunking. ".repeat(50);
-            
+            const content =
+                "This is test content that should be processed with intelligent chunking. ".repeat(
+                    50,
+                );
+
             const docParts = await enhancedWebsiteImport(visitInfo, content, {
                 maxCharsPerChunk: 500,
                 preserveStructure: true,
@@ -94,12 +103,12 @@ describe("Stage 2 Enhanced Import", () => {
             };
 
             const content = "Test content for metadata preservation.";
-            
+
             const docParts = await enhancedWebsiteImport(visitInfo, content);
 
             expect(docParts.length).toBe(1);
             const docPart = docParts[0];
-            
+
             expect(docPart.url).toBe(visitInfo.url);
             expect(docPart.title).toBe(visitInfo.title);
             expect(docPart.domain).toBe(visitInfo.domain);
@@ -119,7 +128,7 @@ describe("Stage 2 Enhanced Import", () => {
 
             const content = "Test content for quality analysis. ".repeat(20);
             const startTime = Date.now();
-            
+
             const docParts = await enhancedWebsiteImport(visitInfo, content);
             const metrics = analyzeImportQuality(docParts, startTime);
 
@@ -138,11 +147,15 @@ describe("Stage 2 Enhanced Import", () => {
                 source: "history",
             };
 
-            const malformedHtml = "<html><body><div>Unclosed div<p>Unclosed paragraph";
-            
+            const malformedHtml =
+                "<html><body><div>Unclosed div<p>Unclosed paragraph";
+
             // Should not throw an error
-            const docParts = await enhancedWebsiteImport(visitInfo, malformedHtml);
-            
+            const docParts = await enhancedWebsiteImport(
+                visitInfo,
+                malformedHtml,
+            );
+
             expect(docParts.length).toBeGreaterThan(0);
             expect(docParts[0].url).toBe(visitInfo.url);
         });

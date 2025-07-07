@@ -12,7 +12,7 @@ import { WebsiteMeta } from "./websiteMeta.js";
  * Maintains compatibility with DocPart while providing website-specific functionality.
  */
 export class WebsiteDocPart extends DocPart {
-    public declare metadata: WebsiteDocPartMeta;
+    declare public metadata: WebsiteDocPartMeta;
 
     constructor(
         websiteMeta: WebsiteMeta,
@@ -23,8 +23,9 @@ export class WebsiteDocPart extends DocPart {
         deletionInfo?: kp.DeletionInfo | undefined,
     ) {
         const metadata = new WebsiteDocPartMeta(websiteMeta);
-        timestamp = timestamp || websiteMeta.visitDate || websiteMeta.bookmarkDate;
-        
+        timestamp =
+            timestamp || websiteMeta.visitDate || websiteMeta.bookmarkDate;
+
         super(textChunks, metadata, tags, timestamp, knowledge, deletionInfo);
     }
 

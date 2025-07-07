@@ -332,9 +332,9 @@ describe("Enhanced Website Query Integration", () => {
                     actionType: "ShareAction",
                     name: "Social media sharing",
                     confidence: 0.9,
-                    selectors: [".share-button"]
-                }
-            ]
+                    selectors: [".share-button"],
+                },
+            ],
         };
 
         const meta = new WebsiteMeta(visitInfo);
@@ -345,10 +345,8 @@ describe("Enhanced Website Query Integration", () => {
                 {
                     name: "artificial intelligence",
                     type: ["concept", "technology"],
-                    facets: [
-                        { name: "field", value: "computer science" }
-                    ]
-                }
+                    facets: [{ name: "field", value: "computer science" }],
+                },
             ],
             topics: ["machine learning", "neural networks"],
             actions: [
@@ -358,27 +356,39 @@ describe("Enhanced Website Query Integration", () => {
                     subjectEntityName: "article",
                     objectEntityName: "artificial intelligence",
                     indirectObjectEntityName: "none",
-                    params: []
-                }
+                    params: [],
+                },
             ],
-            inverseActions: []
+            inverseActions: [],
         };
 
         const mergedKnowledge = meta.getEnhancedKnowledge(enhancedKnowledge);
 
         // Should have entities from both base and enhanced knowledge
         expect(mergedKnowledge.entities.length).toBeGreaterThan(1);
-        expect(mergedKnowledge.entities.some(e => e.name === "example.com")).toBe(true);
-        expect(mergedKnowledge.entities.some(e => e.name === "artificial intelligence")).toBe(true);
+        expect(
+            mergedKnowledge.entities.some((e) => e.name === "example.com"),
+        ).toBe(true);
+        expect(
+            mergedKnowledge.entities.some(
+                (e) => e.name === "artificial intelligence",
+            ),
+        ).toBe(true);
 
         // Should have topics from both sources
         expect(mergedKnowledge.topics).toContain("machine learning");
         expect(mergedKnowledge.topics).toContain("neural networks");
-        expect(mergedKnowledge.topics.some(t => t.includes("bookmark"))).toBe(true);
+        expect(mergedKnowledge.topics.some((t) => t.includes("bookmark"))).toBe(
+            true,
+        );
 
         // Should preserve website-specific facets
-        const domainEntity = mergedKnowledge.entities.find(e => e.name === "example.com");
-        expect(domainEntity?.facets?.some(f => f.name === "source")).toBe(true);
+        const domainEntity = mergedKnowledge.entities.find(
+            (e) => e.name === "example.com",
+        );
+        expect(domainEntity?.facets?.some((f) => f.name === "source")).toBe(
+            true,
+        );
     });
 });
 
@@ -407,16 +417,18 @@ describe("Knowledge-Enhanced Search", () => {
                 getKnowledge: () => ({
                     entities: [{ name: "javascript", type: ["language"] }],
                     topics: [],
-                    actions: []
-                })
-            }
+                    actions: [],
+                }),
+            },
         ];
 
         collection.searchByEntities.mockResolvedValue(mockResults);
 
         const results = await collection.searchByEntities(["javascript"]);
         expect(results).toHaveLength(1);
-        expect(collection.searchByEntities).toHaveBeenCalledWith(["javascript"]);
+        expect(collection.searchByEntities).toHaveBeenCalledWith([
+            "javascript",
+        ]);
     });
 
     test("should search by knowledge topics", async () => {
@@ -427,9 +439,9 @@ describe("Knowledge-Enhanced Search", () => {
                 getKnowledge: () => ({
                     entities: [],
                     topics: ["programming", "tutorial"],
-                    actions: []
-                })
-            }
+                    actions: [],
+                }),
+            },
         ];
 
         collection.searchByTopics.mockResolvedValue(mockResults);
@@ -448,9 +460,9 @@ describe("Knowledge-Enhanced Search", () => {
                 knowledgeContext: {
                     entityCount: 5,
                     topicCount: 3,
-                    actionCount: 2
-                }
-            }
+                    actionCount: 2,
+                },
+            },
         ];
 
         collection.hybridSearch.mockResolvedValue(mockResults);
@@ -473,18 +485,16 @@ describe("Knowledge Analytics", () => {
             sitesWithKnowledge: 2,
             topEntities: new Map([
                 ["javascript", 2],
-                ["react", 1]
+                ["react", 1],
             ]),
             topTopics: new Map([
                 ["web development", 1],
                 ["frontend", 1],
-                ["programming", 1]
+                ["programming", 1],
             ]),
-            actionTypes: new Map([
-                ["uses", 1]
-            ]),
+            actionTypes: new Map([["uses", 1]]),
             averageKnowledgeRichness: 2.5,
-            timeframe: "all"
+            timeframe: "all",
         };
 
         expect(insights.totalSites).toBe(2);
@@ -498,18 +508,18 @@ describe("Knowledge Analytics", () => {
             entityGrowth: new Map([
                 ["javascript", 3],
                 ["react", 2],
-                ["node.js", 1]
+                ["node.js", 1],
             ]),
             topicGrowth: new Map([
                 ["web development", 4],
                 ["backend", 2],
-                ["frontend", 3]
+                ["frontend", 3],
             ]),
             knowledgeRichnessTrend: [
                 { date: "2024-01-15", richness: 5 },
                 { date: "2024-01-16", richness: 8 },
-                { date: "2024-01-17", richness: 12 }
-            ]
+                { date: "2024-01-17", richness: 12 },
+            ],
         };
 
         expect(mockGrowthInsights.entityGrowth.get("javascript")).toBe(3);
