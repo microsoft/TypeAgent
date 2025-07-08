@@ -251,14 +251,12 @@ export async function createKnowproWebsiteCommands(
                     10000,
                 ),
 
-                // NEW: Action detection options
                 enableActionDetection: argBool("Enable action detection", true),
                 actionConfidence: argNum(
                     "Minimum action confidence threshold",
                     0.7,
                 ),
 
-                // NEW: Knowledge extraction options
                 enableKnowledgeExtraction: argBool(
                     "Enable knowledge extraction",
                     false,
@@ -278,8 +276,8 @@ export async function createKnowproWebsiteCommands(
         }
         const namedArgs = parseNamedArguments(args, websiteAddBookmarksDef());
 
-        // For now, let's hardcode the path since namedArgs.path is a function
-        let bookmarksPath: string | undefined = undefined; // namedArgs.path would be a function call
+        
+        let bookmarksPath: string | undefined = undefined; 
 
         const defaultPaths = website.getDefaultBrowserPaths();
         if (namedArgs.source === "chrome") {

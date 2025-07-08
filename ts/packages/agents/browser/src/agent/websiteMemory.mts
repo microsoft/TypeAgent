@@ -9,6 +9,7 @@ import {
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import {
     ImportWebsiteData,
+    ImportHtmlFolder,
     SearchWebsites,
     GetWebsiteStats,
 } from "./actionsSchema.mjs";
@@ -16,6 +17,21 @@ import * as website from "website-memory";
 import * as kp from "knowpro";
 import { openai as ai } from "aiclient";
 import registerDebug from "debug";
+import * as path from "path";
+import {
+    processHtmlBatch,
+    ProcessingOptions,
+    WebsiteData,
+} from "./htmlProcessor.mjs";
+import {
+    enumerateHtmlFiles,
+    readHtmlFile,
+    validateHtmlFolder,
+    getFileMetadata,
+    createFileBatches,
+    FolderOptions,
+    DEFAULT_FOLDER_OPTIONS,
+} from "./folderUtils.mjs";
 
 export interface BrowserActionContext {
     browserControl?: any | undefined;
@@ -648,6 +664,283 @@ export async function importWebsiteData(
             true,
         );
     }
+}
+
+/**
+ * Import HTML files from local folder (SessionContext version for service worker calls)
+ */
+export async function importHtmlFolderFromSession(
+    parameters: any,
+    context: SessionContext<BrowserActionContext>,
+    displayProgress?: (message: string) => void,
+): Promise<any> {
+    const startTime = Date.now();
+
+    try {
+        if (displayProgress) {
+            displayProgress("Validating folder and enumerating HTML files...");
+        }
+
+        const { folderPath, options = {}, importId } = parameters;
+        const errors: any[] = [];
+        let successCount = 0;
+
+        // Validate folder path first
+        const validation = await validateHtmlFolder(folderPath, options);
+        if (!validation.valid) {
+            throw new Error(validation.error);
+        }
+
+        if (validation.warning && displayProgress) {
+            displayProgress(`Warning: ${validation.warning}`);
+        }
+
+        // Enumerate HTML files in the folder
+        const folderOptions: FolderOptions = {
+            ...DEFAULT_FOLDER_OPTIONS,
+            ...options,
+        };
+
+        const htmlFiles = await enumerateHtmlFiles(folderPath, folderOptions);
+
+        if (htmlFiles.length === 0) {
+            throw new Error(`No HTML files found in folder: ${folderPath}`);
+        }
+
+        if (displayProgress) {
+            displayProgress(
+                `Found ${htmlFiles.length} HTML files. Processing...`,
+            );
+        }
+
+        // Ensure we have a website collection
+        if (!context.agentContext.websiteCollection) {
+            context.agentContext.websiteCollection =
+                new website.WebsiteCollection();
+        }
+
+        // Process files in batches for better performance and progress reporting
+        const batches = createFileBatches(htmlFiles, 10);
+        const websiteDataResults: WebsiteData[] = [];
+
+        for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+            const batch = batches[batchIndex];
+
+            if (displayProgress) {
+                const progressPercent = Math.round(
+                    (batchIndex / batches.length) * 100,
+                );
+                displayProgress(
+                    `Processing batch ${batchIndex + 1}/${batches.length} (${progressPercent}%)`,
+                );
+            }
+
+            // Read and prepare batch data
+            const batchData = [];
+            for (const filePath of batch) {
+                try {
+                    const htmlContent = await readHtmlFile(filePath);
+                    const fileMetadata = await getFileMetadata(filePath);
+
+                    batchData.push({
+                        html: htmlContent,
+                        identifier: filePath,
+                        metadata: fileMetadata,
+                    });
+                } catch (error: any) {
+                    errors.push({
+                        type: "file_read",
+                        message: `Failed to read ${filePath}: ${error.message}`,
+                        timestamp: Date.now(),
+                    });
+                    debug(`Error reading file ${filePath}:`, error);
+                }
+            }
+
+            // Process the batch using shared HTML processing
+            try {
+                const processingOptions: ProcessingOptions = {
+                    extractContent: options.extractContent !== false,
+                    extractionMode: options.extractionMode || "content",
+                    enableIntelligentAnalysis:
+                        options.enableIntelligentAnalysis || false,
+                    enableActionDetection:
+                        options.enableActionDetection || false,
+                    maxConcurrent: 5,
+                };
+
+                const batchResults = await processHtmlBatch(
+                    batchData,
+                    processingOptions,
+                    (current, total, item) => {
+                        if (displayProgress && current % 2 === 0) {
+                            displayProgress(
+                                `Processing: ${path.basename(item)}`,
+                            );
+                        }
+                    },
+                );
+
+                websiteDataResults.push(...batchResults);
+                successCount += batchResults.length;
+            } catch (error: any) {
+                errors.push({
+                    type: "batch_processing",
+                    message: `Failed to process batch ${batchIndex + 1}: ${error.message}`,
+                    timestamp: Date.now(),
+                });
+                debug(`Error processing batch ${batchIndex + 1}:`, error);
+            }
+        }
+
+        // Add all processed websites to the collection
+        if (websiteDataResults.length > 0) {
+            const websites = websiteDataResults.map((data) =>
+                convertWebsiteDataToWebsite(data),
+            );
+            context.agentContext.websiteCollection.addWebsites(websites);
+
+            await context.agentContext.websiteCollection.buildIndex();
+
+            try {
+                if (context.agentContext.index?.path) {
+                    await context.agentContext.websiteCollection.writeToFile(
+                        context.agentContext.index.path,
+                        "index",
+                    );
+                    debug(
+                        `Saved website collection with ${successCount} new files to ${context.agentContext.index.path}`,
+                    );
+                } else {
+                    debug(
+                        "No index path available, HTML folder data not persisted",
+                    );
+                }
+            } catch (error) {
+                debug(`Failed to save website collection: ${error}`);
+                errors.push({
+                    type: "persistence",
+                    message: `Failed to save data: ${(error as Error).message}`,
+                    timestamp: Date.now(),
+                });
+            }
+        }
+
+        const duration = Date.now() - startTime;
+
+        if (displayProgress) {
+            displayProgress(
+                `Folder import complete: ${successCount}/${htmlFiles.length} files processed successfully`,
+            );
+        }
+
+        return {
+            success: errors.length === 0,
+            importId: importId,
+            itemCount: successCount,
+            duration,
+            errors,
+            summary: {
+                totalFiles: htmlFiles.length,
+                totalProcessed: htmlFiles.length,
+                successfullyImported: successCount,
+                knowledgeExtracted: options?.enableIntelligentAnalysis
+                    ? successCount
+                    : 0,
+                entitiesFound: 0, // Entities extraction would need different logic
+                topicsIdentified: 0, // Topics extraction would need different logic
+                actionsDetected: websiteDataResults.reduce(
+                    (sum, data) =>
+                        sum + (data.enhancedContent?.actions?.length || 0),
+                    0,
+                ),
+            },
+        };
+    } catch (error: any) {
+        return {
+            success: false,
+            importId: parameters.importId,
+            itemCount: 0,
+            duration: Date.now() - startTime,
+            errors: [
+                {
+                    type: "processing",
+                    message: error.message,
+                    timestamp: Date.now(),
+                },
+            ],
+            summary: {
+                totalFiles: 0,
+                totalProcessed: 0,
+                successfullyImported: 0,
+                knowledgeExtracted: 0,
+                entitiesFound: 0,
+                topicsIdentified: 0,
+                actionsDetected: 0,
+            },
+        };
+    }
+}
+
+/**
+ * Import HTML files from local folder (ActionContext version for regular actions)
+ */
+export async function importHtmlFolder(
+    context: ActionContext<BrowserActionContext>,
+    action: TypeAgentAction<ImportHtmlFolder>,
+) {
+    try {
+        context.actionIO.setDisplay("Importing HTML folder...");
+
+        // Use the session-based function and pass actionIO.setDisplay for progress reporting
+        const result = await importHtmlFolderFromSession(
+            action.parameters,
+            context.sessionContext,
+            context.actionIO.setDisplay,
+        );
+
+        if (result.success) {
+            return createActionResult(
+                `Successfully imported ${result.itemCount} HTML files from folder.`,
+            );
+        } else {
+            const errorCount = result.errors.length;
+            const message = `Folder import completed: ${result.itemCount} successful, ${errorCount} failed.`;
+            return createActionResult(message, errorCount > 0);
+        }
+    } catch (error: any) {
+        return createActionResult(
+            `Failed to import HTML folder: ${error.message}`,
+            true,
+        );
+    }
+}
+
+/**
+ * Import HTML files from local file system (ActionContext version for regular actions)
+ */
+/**
+ * Helper function to convert HTML file data to website data format
+ */
+/**
+ * Helper function to convert WebsiteData to Website format for collection storage
+ */
+function convertWebsiteDataToWebsite(data: WebsiteData): any {
+    return {
+        url: data.url,
+        title: data.title,
+        content: data.content,
+        domain: data.domain,
+        metadata: {
+            ...data.metadata,
+            url: data.url,
+            title: data.title,
+            domain: data.domain,
+        },
+        visitCount: data.visitCount,
+        lastVisited: data.lastVisited,
+        enhancedContent: data.enhancedContent,
+    };
 }
 
 /**
