@@ -582,8 +582,8 @@ export class WebsiteImportUI {
 
         // Since we can't directly access the file system from browser extension,
         // we'll validate the path format and provide helpful guidance
-        const windowsPathPattern = /^[A-Za-z]:\\(.+\\)*[^\\]*$/;
-        const unixPathPattern = /^\/(.+\/)*[^\/]*$/;
+        const windowsPathPattern = /^[A-Za-z]:\\([^\\]+\\)*[^\\]*$/;
+        const unixPathPattern = /^\/([^\/]+\/)*[^\/]*$/;
         const relativePathPattern = /^[^\/\\:*?"<>|]+([\/\\][^\/\\:*?"<>|]+)*$/;
 
         if (
