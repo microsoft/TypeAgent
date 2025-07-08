@@ -10,6 +10,7 @@ import {
     getCommandArgs,
     isJsonEqual,
     queryError,
+    stringifyReadable,
 } from "./common.js";
 import { getLangSearchResult } from "./knowproCommands.js";
 import { getBatchFileLines } from "interactive-app";
@@ -216,22 +217,68 @@ function getMatchedSemanticRefOrdinals(
         ?.semanticRefMatches.map((sr) => sr.semanticRefOrdinal);
 }
 
-function compareSearchExpr(
+function compareSearchQuery(
     s1: kp.querySchema.SearchQuery,
     s2: kp.querySchema.SearchQuery,
 ): string | undefined {
     if (s1.searchExpressions.length !== s2?.searchExpressions.length) {
-        return "searchQuery expressions Length";
+        return `searchQuery.searchExpressions.length: ${s1.searchExpressions.length} !== ${s2.searchExpressions.length}`;
     }
     for (let i = 0; i < s1.searchExpressions.length; ++i) {
-        if (
-            !isJsonEqual(
-                s1.searchExpressions[i].filters,
-                s2.searchExpressions[i].filters,
-            )
-        ) {
-            return `searchExpr.Filter #${i}`;
+        const error = compareSearchExpr(
+            s1.searchExpressions[i],
+            s2.searchExpressions[i],
+        );
+        if (error !== undefined) {
+            return error;
         }
+    }
+    return undefined;
+}
+
+function compareSearchExpr(
+    s1: kp.querySchema.SearchExpr,
+    s2: kp.querySchema.SearchExpr,
+): string | undefined {
+    if (s1.filters.length !== s2.filters.length) {
+        return `SearchExpr.filters.length: ${s1.filters.length} !== ${s2.filters.length}`;
+    }
+
+    for (let i = 0; i < s1.filters.length; ++i) {
+        const f1 = s1.filters[i];
+        const f2 = s2.filters[i];
+
+        let error = compareObject(
+            f1.entitySearchTerms,
+            f2.entitySearchTerms,
+            "entitySearchTerms",
+        );
+        if (error !== undefined) {
+            return error;
+        }
+        error = compareObject(
+            f1.actionSearchTerm,
+            f2.actionSearchTerm,
+            "actionSearchTerm",
+        );
+        if (error !== undefined) {
+            return error;
+        }
+        error = compareObject(f1.searchTerms, f2.searchTerms, "searchTerms");
+        if (error !== undefined) {
+            return error;
+        }
+        error = compareObject(f1.timeRange, f2.timeRange, "searchTerms");
+        if (error !== undefined) {
+            return error;
+        }
+    }
+    return undefined;
+}
+
+function compareObject(x: any, y: any, label: string): string | undefined {
+    if (!isJsonEqual(x, y)) {
+        return `${label}: ${stringifyReadable(x)}\n !== \n${stringifyReadable(y)}`;
     }
     return undefined;
 }
@@ -240,7 +287,7 @@ function compareLangSearchResults(
     lr1: LangSearchResults,
     lr2: LangSearchResults,
 ): string | undefined {
-    let error = compareSearchExpr(lr1.searchQueryExpr, lr2.searchQueryExpr);
+    let error = compareSearchQuery(lr1.searchQueryExpr, lr2.searchQueryExpr);
     if (error !== undefined && error.length > 0) {
         return error;
     }

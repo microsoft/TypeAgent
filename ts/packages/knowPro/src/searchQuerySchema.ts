@@ -51,8 +51,8 @@ export type ActionTerm = {
     isInformational: boolean;
 };
 
-// Search a search engine for:
-// entitySearchTerms cannot contain entities already in actionSearchTerms
+// Search a search engine using the following SearchFilter.
+// - entitySearchTerms cannot contain entities already in actionSearchTerms
 export type SearchFilter = {
     actionSearchTerm?: ActionTerm;
     entitySearchTerms?: EntityTerm[];

@@ -129,3 +129,7 @@ export function compareArray(
 export function queryError(query: string, result: Error): Error {
     return error(`${query}\n${result.message}`);
 }
+
+export function stringifyReadable(value: any): string {
+    return JSON.stringify(value, undefined, 2);
+}

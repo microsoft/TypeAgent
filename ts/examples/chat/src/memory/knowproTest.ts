@@ -442,11 +442,12 @@ export async function createKnowproTestCommands(
     ): boolean {
         const error = result.error;
         if (error !== undefined && error.length > 0) {
-            context.printer.writeInColor(
-                chalk.redBright,
-                `[${error}]: ${result.expected.cmd!}`,
+            context.printer.writeLineInColor(
+                chalk.gray,
+                result.actual.searchText,
             );
-            context.printer.writeInColor(chalk.red, `Error: ${error}`);
+            context.printer.writeInColor(chalk.red, `${result.expected.cmd!}`);
+            context.printer.writeInColor(chalk.red, `Error:\n ${error}`);
             if (verbose) {
                 context.printer.writeLine("===========");
                 context.printer.writeJsonInColor(
