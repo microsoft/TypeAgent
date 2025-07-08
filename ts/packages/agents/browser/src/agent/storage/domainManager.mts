@@ -279,8 +279,11 @@ export class DomainManager {
         const domain = config.domain;
         const commonPatterns: UrlPatternDefinition[] = [];
 
+        const allowedHosts = ["github.com", "www.github.com"];
+
         // Add basic patterns based on domain structure
-        if (domain.includes("github.com")) {
+        const isGitHubDomain = allowedHosts.includes(domain);
+        if (isGitHubDomain) {
             commonPatterns.push(
                 {
                     name: "repository-pages",

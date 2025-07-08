@@ -18,7 +18,7 @@ import {
     DEFAULT_MAX_FILE_SIZE,
     DEFAULT_MAX_CONCURRENT,
     DEFAULT_CONTENT_TIMEOUT,
-} from "./interfaces/websiteImport.types";
+} from "../interfaces/websiteImport.types";
 
 /**
  * Core import logic and data processing manager

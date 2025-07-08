@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { getActionsForUrl } from "./storage";
+import { getActionsForUrl } from "../storage";
 
 let recording = false;
 let recordedActions: any[] = [];
