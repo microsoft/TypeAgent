@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { setStoredPageProperty, getStoredPageProperty } from "./storage";
+import { getActionsForUrl } from "./storage";
 
 let recording = false;
 let recordedActions: any[] = [];
@@ -181,26 +181,23 @@ class ActionDiscoveryPanel {
         ) as HTMLButtonElement;
         const originalHtml = refreshButton.innerHTML;
 
-        this.showLoadingState(itemsList, "Scanning page for actions...");
+        this.showLoadingState(itemsList, "Scanning ...");
         refreshButton.innerHTML =
-            '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Scanning...';
+            '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
         refreshButton.disabled = true;
 
         try {
-            const currentSchema = await getStoredPageProperty(
-                launchUrl!,
-                "detectedActions",
-            );
-            const currentActionDefinitions = await getStoredPageProperty(
-                launchUrl!,
-                "detectedActionDefinitions",
-            );
+            // Get current discovered actions from ActionsStore
+            let currentActions: any[] = [];
+            if (!forceRefresh) {
+                currentActions = await getActionsForUrl(launchUrl!, {
+                    includeGlobal: false,
+                    author: "discovered",
+                });
+            }
 
-            if (
-                currentSchema === null ||
-                currentActionDefinitions === null ||
-                forceRefresh
-            ) {
+            if (currentActions.length === 0 || forceRefresh) {
+                // Discovery now auto-saves actions to ActionsStore
                 const response = await chrome.runtime.sendMessage({
                     type: "refreshSchema",
                 });
@@ -217,20 +214,23 @@ class ActionDiscoveryPanel {
                     return;
                 }
 
-                await setStoredPageProperty(
-                    launchUrl!,
-                    "detectedActions",
-                    response.schema,
-                );
-                await setStoredPageProperty(
-                    launchUrl!,
-                    "detectedActionDefinitions",
-                    response.actionDefinitions,
-                );
-
+                // Actions are now automatically saved
                 this.renderSchemaResults(response.schema);
+
+                if (response.schema && response.schema.length > 0) {
+                    console.log(
+                        `Discovered and saved ${response.schema.length} actions`,
+                    );
+                }
             } else {
-                this.renderSchemaResults(currentSchema);
+                // Convert ActionsStore format to legacy schema format for display
+                const legacySchema = currentActions.map((action) => ({
+                    actionName: action.name,
+                    description: action.description,
+                    parameters:
+                        action.definition?.detectedSchema?.parameters || {},
+                }));
+                this.renderSchemaResults(legacySchema);
             }
 
             await this.registerTempSchema();
@@ -238,7 +238,7 @@ class ActionDiscoveryPanel {
             console.error("Error updating schema:", error);
             this.showErrorState(itemsList, "Failed to scan page for actions");
         } finally {
-            refreshButton.innerHTML = originalHtml;
+            refreshButton.innerHTML = '<i class="bi bi-arrow-clockwise"></i>';
             refreshButton.disabled = false;
         }
     }
@@ -309,22 +309,364 @@ class ActionDiscoveryPanel {
     }
 
     private toggleActionForm() {
-        const form = document.getElementById("actionForm")!;
-        const formTitle = document.getElementById("formTitle")!;
+        // Show modal instead of inline form
+        this.showActionModal();
+    }
 
-        if (form.classList.contains("d-none")) {
-            form.classList.remove("d-none");
-            formTitle.textContent = "Create New Action";
-            this.clearFormFields();
-        } else {
-            form.classList.add("d-none");
+    private showActionModal() {
+        // Create modal HTML
+        const modalHtml = this.createActionModal();
+
+        // Remove existing modal if any
+        const existingModal = document.getElementById("actionModal");
+        if (existingModal) {
+            existingModal.remove();
+        }
+
+        // Add modal to body
+        document.body.insertAdjacentHTML("beforeend", modalHtml);
+
+        // Get modal element and initialize Bootstrap modal
+        const modalElement = document.getElementById("actionModal")!;
+        const modal = new (window as any).bootstrap.Modal(modalElement);
+
+        // Setup modal event listeners
+        this.setupModalEventListeners(modalElement, modal);
+
+        // Show modal
+        modal.show();
+
+        // Clear form fields
+        this.clearModalFormFields();
+    }
+
+    private createActionModal(): string {
+        return `
+            <div class="modal fade" id="actionModal" tabindex="-1" aria-labelledby="actionModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="actionModalLabel">
+                                <i class="bi bi-gear"></i> Create New Action
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">Action Name</label>
+                                <input
+                                    type="text"
+                                    id="modalActionName"
+                                    class="form-control"
+                                    placeholder="Enter a descriptive name for this action"
+                                    required
+                                />
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">Action Description</label>
+                                <textarea
+                                    id="modalActionStepsDescription"
+                                    class="form-control"
+                                    rows="4"
+                                    placeholder="Describe how to complete this action step by step..."
+                                ></textarea>
+                            </div>
+
+                            <div id="modalRecordingSection" class="mb-3">
+                                <label class="form-label fw-semibold">Record Steps</label>
+                                <div class="d-flex action-controls align-items-center">
+                                    <button
+                                        id="modalRecordAction"
+                                        class="btn btn-outline-danger"
+                                        title="Start recording action steps"
+                                    >
+                                        <i class="bi bi-record-circle"></i> Start Recording
+                                    </button>
+                                    <button
+                                        id="modalStopRecording"
+                                        class="btn btn-danger d-none"
+                                        title="Stop recording"
+                                    >
+                                        <i class="bi bi-stop-circle"></i> Stop Recording
+                                    </button>
+                                    <div id="modalRecordingStatus" class="ms-3 text-muted d-none">
+                                        <span class="status-indicator status-recording"></span>
+                                        Recording in progress...
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="modalStepsTimelineContainer" class="mb-3 d-none">
+                                <label class="form-label fw-semibold">Recorded Steps</label>
+                                <div id="modalStepsTimeline" class="border rounded p-3 bg-white">
+                                    <!-- Timeline items will be populated here -->
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                                <i class="bi bi-x-circle"></i> Cancel
+                            </button>
+                            <button type="button" id="modalSaveAction" class="btn btn-primary">
+                                <i class="bi bi-floppy"></i> Save Action
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    private setupModalEventListeners(modalElement: HTMLElement, modal: any) {
+        // Recording controls
+        modalElement
+            .querySelector("#modalRecordAction")!
+            .addEventListener("click", () => {
+                this.startModalRecording();
+            });
+
+        modalElement
+            .querySelector("#modalStopRecording")!
+            .addEventListener("click", () => {
+                this.stopModalRecording();
+            });
+
+        // Save action
+        modalElement
+            .querySelector("#modalSaveAction")!
+            .addEventListener("click", () => {
+                this.saveModalAction(modal);
+            });
+
+        // Handle modal close - stop recording if active
+        modalElement.addEventListener("hidden.bs.modal", () => {
+            if (recording) {
+                this.stopModalRecording();
+            }
+            // Remove modal from DOM
+            modalElement.remove();
+        });
+    }
+
+    private clearModalFormFields() {
+        const nameField = document.getElementById(
+            "modalActionName",
+        ) as HTMLInputElement;
+        const descField = document.getElementById(
+            "modalActionStepsDescription",
+        ) as HTMLTextAreaElement;
+
+        if (nameField) nameField.value = "";
+        if (descField) descField.value = "";
+
+        const stepsContainer = document.getElementById(
+            "modalStepsTimelineContainer",
+        )!;
+        if (stepsContainer) {
+            stepsContainer.classList.add("d-none");
+            stepsContainer.innerHTML = `<label class="form-label fw-semibold">Recorded Steps</label>
+                  <div id="modalStepsTimeline" class="border rounded p-3 bg-white">
+                  </div>
+            `;
+        }
+
+        this.resetModalRecordingUI();
+    }
+
+    private resetModalRecordingUI() {
+        const recordBtn = document.getElementById("modalRecordAction");
+        const stopBtn = document.getElementById("modalStopRecording");
+        const status = document.getElementById("modalRecordingStatus");
+
+        if (recordBtn) recordBtn.classList.remove("d-none");
+        if (stopBtn) stopBtn.classList.add("d-none");
+        if (status) status.classList.add("d-none");
+
+        recording = false;
+    }
+
+    private async startModalRecording() {
+        try {
+            await chrome.runtime.sendMessage({ type: "startRecording" });
+
+            recording = true;
+            const recordBtn = document.getElementById("modalRecordAction");
+            const stopBtn = document.getElementById("modalStopRecording");
+            const status = document.getElementById("modalRecordingStatus");
+
+            if (recordBtn) recordBtn.classList.add("d-none");
+            if (stopBtn) stopBtn.classList.remove("d-none");
+            if (status) status.classList.remove("d-none");
+
+            const stepsContainer = document.getElementById(
+                "modalStepsTimelineContainer",
+            )!;
+            if (stepsContainer) {
+                stepsContainer.dataset.steps = "";
+                stepsContainer.dataset.screenshot = "";
+                stepsContainer.dataset.html = "";
+            }
+        } catch (error) {
+            console.error("Error starting recording:", error);
+            this.showNotification("Failed to start recording", "error");
+        }
+    }
+
+    private async stopModalRecording() {
+        try {
+            const response = await chrome.runtime.sendMessage({
+                type: "stopRecording",
+            });
+
+            if (response && response.recordedActions) {
+                const stepsContainer = document.getElementById(
+                    "modalStepsTimelineContainer",
+                )!;
+                if (stepsContainer) {
+                    stepsContainer.classList.remove("d-none");
+                    stepsContainer.dataset.steps = JSON.stringify(
+                        response.recordedActions,
+                    );
+                    stepsContainer.dataset.screenshot = JSON.stringify(
+                        response.recordedActionScreenshot,
+                    );
+                    stepsContainer.dataset.html = JSON.stringify(
+                        response.recordedActionHtml,
+                    );
+
+                    const timeline =
+                        document.getElementById("modalStepsTimeline")!;
+                    this.renderTimelineSteps(
+                        response.recordedActions,
+                        timeline,
+                        response.recordedActionScreenshot,
+                        response.recordedActionHtml,
+                    );
+                }
+            }
+
+            this.resetModalRecordingUI();
+        } catch (error) {
+            console.error("Error stopping recording:", error);
+            this.showNotification("Failed to stop recording", "error");
+            this.resetModalRecordingUI();
+        }
+    }
+
+    private async saveModalAction(modal: any) {
+        const nameField = document.getElementById(
+            "modalActionName",
+        ) as HTMLInputElement;
+        const actionName = nameField?.value.trim();
+        const stepsDescription = (
+            document.getElementById(
+                "modalActionStepsDescription",
+            ) as HTMLTextAreaElement
+        )?.value.trim();
+
+        if (!actionName) {
+            this.showNotification("Please enter an action name", "error");
+            return;
+        }
+
+        const saveButton = document.getElementById(
+            "modalSaveAction",
+        ) as HTMLButtonElement;
+        const originalContent = saveButton?.innerHTML;
+
+        if (saveButton) {
+            saveButton.innerHTML =
+                '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Creating & Saving...';
+            saveButton.disabled = true;
+        }
+
+        try {
+            const stepsContainer = document.getElementById(
+                "modalStepsTimelineContainer",
+            )!;
+            const steps = JSON.parse(stepsContainer?.dataset?.steps || "[]");
+            const screenshot = JSON.parse(
+                stepsContainer?.dataset?.screenshot || "[]",
+            );
+            let html = JSON.parse(stepsContainer?.dataset?.html || '""');
+
+            if (!html || html === "[]") {
+                const htmlFragments = await chrome.runtime.sendMessage({
+                    type: "captureHtmlFragments",
+                });
+                if (htmlFragments && htmlFragments.length > 0) {
+                    html = [htmlFragments[0].content];
+                }
+            }
+
+            // Get existing action names from ActionsStore to avoid duplicates
+            const allActions = await getActionsForUrl(launchUrl!, {
+                includeGlobal: true,
+            });
+            const existingActionNames: string[] = allActions.map(
+                (action) => action.name,
+            );
+
+            // Create and auto-save action in one step
+            const response = await chrome.runtime.sendMessage({
+                type: "getIntentFromRecording",
+                html: html.map((str: string) => ({ content: str, frameId: 0 })),
+                screenshot,
+                actionName,
+                actionDescription: stepsDescription,
+                existingActionNames,
+                steps: JSON.stringify(steps),
+            });
+
+            if (chrome.runtime.lastError) {
+                throw new Error(chrome.runtime.lastError.message);
+            }
+
+            // Action is automatically saved during processing
+            if (response.actionId) {
+                this.showNotification(
+                    "Action created and saved successfully!",
+                    "success",
+                );
+                console.log(
+                    `Created and saved action: ${response.intentJson.actionName} (ID: ${response.actionId})`,
+                );
+            } else {
+                this.showNotification(
+                    "Action created but save status unknown",
+                    "info",
+                );
+                console.warn(
+                    "Action creation completed but no actionId returned",
+                );
+            }
+
+            // Close modal
+            modal.hide();
+
+            // Update UI
+            await this.updateUserActionsUI();
+            await this.registerTempSchema();
+        } catch (error) {
+            console.error("Error creating action:", error);
+            this.showNotification("Failed to create action", "error");
+        } finally {
+            if (saveButton && originalContent) {
+                saveButton.innerHTML = originalContent;
+                saveButton.disabled = false;
+            }
         }
     }
 
     private cancelActionForm() {
+        // This method is now handled by modal close events
+        // Kept for compatibility but functionality moved to modal handlers
         const form = document.getElementById("actionForm")!;
-        form.classList.add("d-none");
-        this.clearFormFields();
+        if (form && !form.classList.contains("d-none")) {
+            form.classList.add("d-none");
+            this.clearFormFields();
+        }
 
         if (recording) {
             this.stopRecording();
@@ -440,7 +782,7 @@ class ActionDiscoveryPanel {
         const originalContent = saveButton.innerHTML;
 
         saveButton.innerHTML =
-            '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...';
+            '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Creating & Saving...';
         saveButton.disabled = true;
 
         try {
@@ -462,28 +804,15 @@ class ActionDiscoveryPanel {
                 }
             }
 
-            const detectedActions = new Map(
-                Object.entries(
-                    (await getStoredPageProperty(
-                        launchUrl!,
-                        "detectedActionDefinitions",
-                    )) ?? {},
-                ),
-            );
-            const authoredActions = new Map(
-                Object.entries(
-                    (await getStoredPageProperty(
-                        launchUrl!,
-                        "authoredActionDefinitions",
-                    )) ?? {},
-                ),
+            // Get existing action names from ActionsStore to avoid duplicates
+            const allActions = await getActionsForUrl(launchUrl!, {
+                includeGlobal: true,
+            });
+            const existingActionNames: string[] = allActions.map(
+                (action) => action.name,
             );
 
-            const existingActionNames: string[] = [
-                ...detectedActions.keys(),
-                ...authoredActions.keys(),
-            ];
-
+            // Create and auto-save action in one step
             const response = await chrome.runtime.sendMessage({
                 type: "getIntentFromRecording",
                 html: html.map((str: string) => ({ content: str, frameId: 0 })),
@@ -498,85 +827,34 @@ class ActionDiscoveryPanel {
                 throw new Error(chrome.runtime.lastError.message);
             }
 
-            const processedActionName = response.intentJson.actionName;
+            // Action is automatically saved during processing
+            if (response.actionId) {
+                this.showNotification(
+                    "Action created and saved successfully!",
+                    "success",
+                );
+                console.log(
+                    `Created and saved action: ${response.intentJson.actionName} (ID: ${response.actionId})`,
+                );
+            } else {
+                this.showNotification(
+                    "Action created but save status unknown",
+                    "info",
+                );
+                console.warn(
+                    "Action creation completed but no actionId returned",
+                );
+            }
 
-            await this.addEntryToStoredPageProperties(
-                processedActionName,
-                "userActions",
-                {
-                    name: processedActionName,
-                    description: stepsDescription,
-                    steps,
-                    screenshot,
-                    html,
-                    intentSchema: response.intent,
-                    actionsJson: response.actions,
-                },
-            );
-
-            await this.addEntryToStoredPageProperties(
-                processedActionName,
-                "authoredActionDefinitions",
-                response.intentTypeDefinition,
-            );
-            await this.addEntryToStoredPageProperties(
-                processedActionName,
-                "authoredActionsJson",
-                response.actions,
-            );
-            await this.addEntryToStoredPageProperties(
-                processedActionName,
-                "authoredIntentJson",
-                response.intentJson,
-            );
-
-            this.showNotification("Action saved successfully!", "success");
             this.toggleActionForm();
             await this.updateUserActionsUI();
             await this.registerTempSchema();
         } catch (error) {
-            console.error("Error saving action:", error);
-            this.showNotification("Failed to save action", "error");
+            console.error("Error creating action:", error);
+            this.showNotification("Failed to create action", "error");
         } finally {
             saveButton.innerHTML = originalContent;
             saveButton.disabled = false;
-        }
-    }
-
-    private async addEntryToStoredPageProperties(
-        actionName: string,
-        key: string,
-        value: any,
-    ) {
-        let currentActionJson = new Map(
-            Object.entries(
-                (await getStoredPageProperty(launchUrl!, key)) ?? {},
-            ),
-        );
-        currentActionJson.set(actionName, value);
-        await setStoredPageProperty(
-            launchUrl!,
-            key,
-            Object.fromEntries(currentActionJson),
-        );
-    }
-
-    private async removeEntryFromStoredPageProperties(
-        actionName: string,
-        key: string,
-    ) {
-        let currentActionJson = new Map(
-            Object.entries(
-                (await getStoredPageProperty(launchUrl!, key)) ?? {},
-            ),
-        );
-        if (currentActionJson.has(actionName)) {
-            currentActionJson.delete(actionName);
-            await setStoredPageProperty(
-                launchUrl!,
-                key,
-                Object.fromEntries(currentActionJson),
-            );
         }
     }
 
@@ -590,24 +868,31 @@ class ActionDiscoveryPanel {
         }
 
         try {
-            await chrome.runtime.sendMessage({ type: "clearRecordedActions" });
-            await setStoredPageProperty(launchUrl!, "userActions", null);
-            await setStoredPageProperty(
-                launchUrl!,
-                "authoredActionDefinitions",
-                null,
-            );
-            await setStoredPageProperty(
-                launchUrl!,
-                "authoredActionsJson",
-                null,
-            );
-            await setStoredPageProperty(launchUrl!, "authoredIntentJson", null);
+            // Get all user actions and delete them individually from ActionsStore
+            const userActions = await getActionsForUrl(launchUrl!, {
+                includeGlobal: false,
+                author: "user",
+            });
+
+            // Delete each user action
+            let deletedCount = 0;
+            for (const action of userActions) {
+                const result = await chrome.runtime.sendMessage({
+                    type: "deleteAction",
+                    actionId: action.id,
+                });
+                if (result?.success) {
+                    deletedCount++;
+                }
+            }
 
             await this.updateUserActionsUI();
             await this.registerTempSchema();
 
-            this.showNotification("All custom actions cleared", "success");
+            this.showNotification(
+                `Cleared ${deletedCount} custom actions`,
+                "success",
+            );
         } catch (error) {
             console.error("Error clearing actions:", error);
             this.showNotification("Failed to clear actions", "error");
@@ -623,14 +908,12 @@ class ActionDiscoveryPanel {
         ) as HTMLElement;
 
         try {
-            const storedActions = new Map(
-                Object.entries(
-                    (await getStoredPageProperty(launchUrl!, "userActions")) ??
-                        {},
-                ),
-            );
+            // Get user-authored actions from the new ActionsStore
+            const actions = await getActionsForUrl(launchUrl!, {
+                includeGlobal: false,
+                author: "user",
+            });
 
-            const actions = Array.from(storedActions.values());
             countBadge.textContent = actions.length.toString();
 
             if (actions.length > 0) {
@@ -683,20 +966,27 @@ class ActionDiscoveryPanel {
         });
 
         deleteButton?.addEventListener("click", () => {
-            this.deleteAction(action.name);
+            // Use action ID, fallback to name for compatibility
+            const actionId = action.id || action.name;
+            this.deleteAction(actionId);
         });
 
         userActionsContainer.appendChild(actionElement);
 
-        if (action.steps) {
+        // Handle both old and new StoredAction formats
+        const steps = action.context?.recordedSteps || action.steps;
+        const screenshots = action.context?.screenshots || action.screenshot;
+        const htmlFragments = action.context?.htmlFragments || action.html;
+
+        if (steps) {
             const stepsContent = actionElement.querySelector(
                 `#stepsContent${index}`,
             ) as HTMLElement;
             this.renderTimelineSteps(
-                action.steps,
+                steps,
                 stepsContent,
-                action.screenshot,
-                action.html,
+                screenshots,
+                htmlFragments,
                 action.name,
             );
         }
@@ -761,40 +1051,32 @@ class ActionDiscoveryPanel {
         return filteredStep;
     }
 
-    private async deleteAction(actionName: string) {
-        if (
-            !confirm(
-                `Are you sure you want to delete the action "${actionName}"?`,
-            )
-        ) {
+    private async deleteAction(actionId: string) {
+        if (!confirm(`Are you sure you want to delete this action?`)) {
             return;
         }
 
         try {
-            await this.removeEntryFromStoredPageProperties(
-                actionName,
-                "userActions",
-            );
-            await this.removeEntryFromStoredPageProperties(
-                actionName,
-                "authoredActionDefinitions",
-            );
-            await this.removeEntryFromStoredPageProperties(
-                actionName,
-                "authoredActionsJson",
-            );
-            await this.removeEntryFromStoredPageProperties(
-                actionName,
-                "authoredIntentJson",
-            );
+            const response = await chrome.runtime.sendMessage({
+                type: "deleteAction",
+                actionId: actionId,
+            });
 
-            await this.updateUserActionsUI();
-            await this.registerTempSchema();
-
-            this.showNotification(`Action "${actionName}" deleted`, "success");
+            if (response?.success) {
+                console.log(`Action deleted: ${actionId}`);
+                // Refresh the UI to show updated action list
+                await this.updateUserActionsUI();
+                // Show success message
+                alert("Action deleted successfully!");
+            } else {
+                console.error(`Failed to delete action:`, response?.error);
+                alert(
+                    `Failed to delete action: ${response?.error || "Unknown error"}`,
+                );
+            }
         } catch (error) {
             console.error("Error deleting action:", error);
-            this.showNotification("Failed to delete action", "error");
+            alert("Failed to delete action. Please try again.");
         }
     }
 

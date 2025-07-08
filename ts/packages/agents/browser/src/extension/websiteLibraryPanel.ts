@@ -1248,15 +1248,15 @@ class WebsiteLibraryPanelFullPage {
             return;
         }
 
-        container.innerHTML = this.recentSearches
-            .map(
-                (query) => `
-            <span class="recent-search-tag" data-query="${query}">
-                ${query}
-            </span>
-        `,
-            )
-            .join("");
+        container.innerHTML = ""; // Clear the container first
+
+        this.recentSearches.forEach((query) => {
+            const span = document.createElement("span");
+            span.className = "recent-search-tag";
+            span.setAttribute("data-query", query);
+            span.textContent = query;
+            container.appendChild(span);
+        });
 
         // Add event listeners to recent search tags
         container.querySelectorAll(".recent-search-tag").forEach((tag) => {

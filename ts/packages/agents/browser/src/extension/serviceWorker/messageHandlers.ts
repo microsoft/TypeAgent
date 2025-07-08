@@ -3,11 +3,7 @@
 
 import { getActiveTab } from "./tabManager";
 import { getTabHTMLFragments, getTabAnnotatedScreenshot } from "./capture";
-import {
-    getRecordedActions,
-    clearRecordedActions,
-    saveRecordedActions,
-} from "./storage";
+import { getRecordedActions, saveRecordedActions } from "./storage";
 import {
     sendActionToAgent,
     ensureWebsocketConnected,
@@ -98,7 +94,8 @@ export async function handleMessage(
             return "Service worker initialize called";
         }
         case "refreshSchema": {
-            const schemaResult = await sendActionToAgent({
+            // Discovery now auto-saves actions
+            const discoveryResult = await sendActionToAgent({
                 actionName: "detectPageActions",
                 parameters: {
                     registerAgent: false,
@@ -106,21 +103,54 @@ export async function handleMessage(
             });
 
             return {
-                schema: schemaResult.schema,
-                actionDefinitions: schemaResult.typeDefinitions,
+                schema: discoveryResult.schema,
+                actionDefinitions: discoveryResult.typeDefinitions,
             };
         }
         case "registerTempSchema": {
+            // First try to get actions from ActionsStore for enhanced schema registration
+            try {
+                const currentTab = await getActiveTab();
+                if (currentTab?.url) {
+                    const actionsResult = await sendActionToAgent({
+                        actionName: "getActionsForUrl",
+                        parameters: {
+                            url: currentTab.url,
+                            includeGlobal: true,
+                        },
+                    });
+
+                    if (
+                        actionsResult.actions &&
+                        actionsResult.actions.length > 0
+                    ) {
+                        console.log(
+                            `Found ${actionsResult.actions.length} actions for schema registration from ActionsStore`,
+                        );
+                    }
+                }
+            } catch (error) {
+                console.warn(
+                    "Failed to get actions from ActionsStore for schema registration:",
+                    error,
+                );
+            }
+
+            // Register the dynamic agent schema
+            /*
             const schemaResult = await sendActionToAgent({
                 actionName: "registerPageDynamicAgent",
                 parameters: {
                     agentName: message.agentName,
                 },
             });
-
             return { schema: schemaResult };
+*/
+            return {};
+            // return { schema: schemaResult };
         }
         case "getIntentFromRecording": {
+            // Authoring now auto-saves actions
             const schemaResult = await sendActionToAgent({
                 actionName: "getIntentFromRecording",
                 parameters: {
@@ -138,7 +168,19 @@ export async function handleMessage(
                 intentJson: schemaResult.intentJson,
                 actions: schemaResult.actions,
                 intentTypeDefinition: schemaResult.intentTypeDefinition,
+                actionId: schemaResult.actionId, // For UI feedback
             };
+        }
+        case "getActionsForUrl": {
+            const result = await sendActionToAgent({
+                actionName: "getActionsForUrl",
+                parameters: {
+                    url: message.url,
+                    includeGlobal: message.includeGlobal ?? true,
+                    author: message.author,
+                },
+            });
+            return result;
         }
         case "startRecording": {
             const targetTab = await getActiveTab();
@@ -205,14 +247,6 @@ export async function handleMessage(
         case "getRecordedActions": {
             const result = await getRecordedActions();
             return result;
-        }
-        case "clearRecordedActions": {
-            try {
-                await clearRecordedActions();
-            } catch (error) {
-                console.error("Error clearing storage data:", error);
-            }
-            return {};
         }
         case "downloadData": {
             const jsonString = JSON.stringify(message.data, null, 2);
@@ -612,6 +646,119 @@ export async function handleMessage(
 
         case "deleteKnowledgeIndex": {
             return await handleDeleteKnowledgeIndex();
+        }
+
+        case "recordActionUsage": {
+            // New handler for tracking action usage
+            try {
+                // This would be implemented when we add usage tracking to the discovery agent
+                console.log(`Recording usage for action: ${message.actionId}`);
+                return { success: true };
+            } catch (error) {
+                console.warn("Failed to record action usage:", error);
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error",
+                };
+            }
+        }
+
+        case "getActionStatistics": {
+            // New handler for getting action statistics
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getActionsForUrl",
+                    parameters: {
+                        url: message.url || (await getActiveTab())?.url,
+                        includeGlobal: true,
+                    },
+                });
+
+                return {
+                    success: true,
+                    totalActions: result.count || 0,
+                    actions: result.actions || [],
+                };
+            } catch (error) {
+                console.warn("Failed to get action statistics:", error);
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error",
+                };
+            }
+        }
+
+        case "deleteAction": {
+            // Handler for deleting actions from the ActionsStore
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "deleteAction",
+                    parameters: {
+                        actionId: message.actionId,
+                    },
+                });
+                return result;
+            } catch (error) {
+                console.error("Failed to delete action:", error);
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error",
+                };
+            }
+        }
+        case "getAllActions": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getAllActions",
+                    parameters: {},
+                });
+
+                return { actions: result.actions || [] };
+            } catch (error) {
+                console.error("Error getting all actions:", error);
+                return { actions: [] };
+            }
+        }
+        case "getActionDomains": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getActionDomains",
+                    parameters: {},
+                });
+
+                return { domains: result.domains || [] };
+            } catch (error) {
+                console.error("Error getting action domains:", error);
+                return { domains: [] };
+            }
+        }
+        case "deleteAction": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "deleteAction",
+                    parameters: {
+                        actionId: message.actionId,
+                    },
+                });
+
+                return { success: result.success, error: result.error };
+            } catch (error) {
+                console.error("Error deleting action:", error);
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                };
+            }
         }
 
         default:

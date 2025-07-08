@@ -325,7 +325,9 @@ export function extractLinks($: cheerio.CheerioAPI): string[] {
             href &&
             href.length > 0 &&
             !href.startsWith("#") &&
-            !href.startsWith("javascript:")
+            !href.startsWith("javascript:") &&
+            !href.startsWith("data:") &&
+            !href.startsWith("vbscript:")
         ) {
             links.push(href);
         }

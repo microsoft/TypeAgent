@@ -14,6 +14,12 @@
       "suggested_key": {
         "default": "Alt+B"
       }
+    },
+    "open_action_index": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+A"
+      },
+      "description": "Open Action Index Panel"
     }
   },
   "content_scripts": [

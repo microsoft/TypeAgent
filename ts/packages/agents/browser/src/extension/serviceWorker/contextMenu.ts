@@ -33,6 +33,12 @@ export function initializeContextMenu(): void {
     });
 
     chrome.contextMenus.create({
+        title: "Manage Actions",
+        id: "manageActions",
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
+    });
+
+    chrome.contextMenus.create({
         id: "sidepanel-registerAgent",
         title: "Update Page Agent",
         contexts: ["all"],
@@ -116,6 +122,27 @@ export async function handleContextMenuClick(
                 path: "sidepanel.html",
                 enabled: true,
             });
+            break;
+        }
+        case "manageActions": {
+            // Check if actionIndex tab already exists
+            const existingTabs = await chrome.tabs.query({
+                url: chrome.runtime.getURL("actionIndex.html"),
+            });
+
+            if (existingTabs.length > 0) {
+                // Switch to existing tab
+                await chrome.tabs.update(existingTabs[0].id!, { active: true });
+                await chrome.windows.update(existingTabs[0].windowId!, {
+                    focused: true,
+                });
+            } else {
+                // Create new tab
+                await chrome.tabs.create({
+                    url: chrome.runtime.getURL("actionIndex.html"),
+                    active: true,
+                });
+            }
             break;
         }
         case "sidepanel-registerAgent": {
