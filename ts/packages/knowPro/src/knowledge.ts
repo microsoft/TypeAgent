@@ -6,10 +6,6 @@ import { async, asyncArray } from "typeagent";
 import { error, Result } from "typechat";
 import { ChatModel } from "aiclient";
 import { createKnowledgeModel } from "./conversationIndex.js";
-import {
-    concreteToMergedEntities,
-    mergedToConcreteEntity,
-} from "./knowledgeMerge.js";
 import { BatchTask, runInBatches } from "./taskQueue.js";
 import { SearchSelectExpr } from "./interfaces.js";
 import {
@@ -60,18 +56,6 @@ export function extractKnowledgeFromTextBatch(
     return asyncArray.mapAsync(textBatch, concurrency, (text) =>
         extractKnowledgeFromText(knowledgeExtractor, text, maxRetries),
     );
-}
-
-export function mergeConcreteEntities(
-    entities: kpLib.ConcreteEntity[],
-): kpLib.ConcreteEntity[] {
-    let mergedEntities = concreteToMergedEntities(entities);
-
-    const mergedConcreteEntities: kpLib.ConcreteEntity[] = [];
-    for (const mergedEntity of mergedEntities.values()) {
-        mergedConcreteEntities.push(mergedToConcreteEntity(mergedEntity));
-    }
-    return mergedConcreteEntities;
 }
 
 export function mergeTopics(topics: string[]): string[] {

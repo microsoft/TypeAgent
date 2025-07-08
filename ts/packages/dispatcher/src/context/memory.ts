@@ -82,7 +82,11 @@ function toConcreteEntity(
         if (e.uniqueId) {
             concreteEntity.facets = [
                 {
-                    name: `agent:${appAgentName}.uniqueId`,
+                    name: `typeagent.appAgentName`,
+                    value: appAgentName,
+                },
+                {
+                    name: `typeagent.uniqueId`,
                     value: e.uniqueId,
                 },
             ];

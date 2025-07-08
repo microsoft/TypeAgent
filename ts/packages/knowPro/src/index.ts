@@ -20,6 +20,11 @@ export * from "./queryCmp.js";
 
 export * from "./knowledge.js";
 
+// TODO: mergeConcreteEntitiesEx avoids forcing the data to be lower case.
+// Replace mergeConcreteEntities once it has switch over to the Ex version.
+export { mergeConcreteEntities } from "./knowledgeMerge.js";
+export { mergeConcreteEntities as mergeConcreteEntitiesEx } from "./knowledgeMergeEx.js";
+
 export * from "./dateTimeSchema.js";
 export * as querySchema from "./searchQuerySchema.js";
 export * from "./searchQueryTranslator.js";

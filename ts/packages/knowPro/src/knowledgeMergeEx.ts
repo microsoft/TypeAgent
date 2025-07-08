@@ -4,11 +4,11 @@
 /**
  * INTERNAL LIBRARY
  * Functions to merge/combine more granular knowledge
+ *
+ * A newer version of knowledgeMerge.ts, where the entity merge doesn't force the data to become lower case.
  */
 
 import { conversation as kpLib } from "knowledge-processor";
-import { collections } from "typeagent";
-import { unionArrays } from "./collections.js";
 import { Scored } from "./common.js";
 import {
     ISemanticRefCollection,
@@ -77,11 +77,9 @@ export interface MergedTopic extends MergedKnowledge {
 
 export interface MergedEntity extends MergedKnowledge {
     name: string;
-    type: string[];
+    type: Map<string, string>;
     facets?: MergedFacets | undefined;
 }
-
-type MergedFacets = collections.MultiMap<string, string>;
 
 export function mergeScoredTopics(
     scoredTopics: Iterable<Scored<SemanticRef>>,
@@ -109,18 +107,28 @@ export function mergeScoredTopics(
     return mergedTopics;
 }
 
+export type EntityMergeOptions = {
+    /* Case sensitive when merging for entity names, types and facets. */
+    caseSensitive?: boolean; // default to false
+};
+
 export function mergeScoredConcreteEntities(
     scoredEntities: Iterable<Scored<SemanticRef>>,
     mergeOrdinals: boolean,
+    options?: EntityMergeOptions,
 ): Map<string, Scored<MergedEntity>> {
     let mergedEntities = new Map<string, Scored<MergedEntity>>();
     for (let scoredEntity of scoredEntities) {
-        const mergedEntity = concreteToMergedEntity(
-            scoredEntity.item.knowledge as kpLib.ConcreteEntity,
-        );
-        let existing = mergedEntities.get(mergedEntity.name);
+        const concreteEntity = scoredEntity.item
+            .knowledge as kpLib.ConcreteEntity;
+
+        const caseSensitive = options?.caseSensitive === true;
+        const nameKey = caseSensitive
+            ? concreteEntity.name
+            : concreteEntity.name.toLowerCase();
+        let existing = mergedEntities.get(nameKey);
         if (existing) {
-            if (unionEntities(existing.item, mergedEntity)) {
+            if (unionEntities(existing.item, concreteEntity, options)) {
                 if (existing.score < scoredEntity.score) {
                     existing.score = scoredEntity.score;
                 }
@@ -129,10 +137,10 @@ export function mergeScoredConcreteEntities(
             }
         } else {
             existing = {
-                item: mergedEntity,
+                item: concreteToMergedEntity(concreteEntity, options),
                 score: scoredEntity.score,
             };
-            mergedEntities.set(mergedEntity.name, existing);
+            mergedEntities.set(nameKey, existing);
         }
         if (existing && mergeOrdinals) {
             mergeMessageOrdinals(existing.item, scoredEntity.item);
@@ -143,8 +151,9 @@ export function mergeScoredConcreteEntities(
 
 export function mergeConcreteEntities(
     entities: kpLib.ConcreteEntity[],
+    options?: EntityMergeOptions,
 ): kpLib.ConcreteEntity[] {
-    let mergedEntities = concreteToMergedEntities(entities);
+    let mergedEntities = concreteToMergedEntities(entities, options);
 
     const mergedConcreteEntities: kpLib.ConcreteEntity[] = [];
     for (const mergedEntity of mergedEntities.values()) {
@@ -158,29 +167,44 @@ function mergeMessageOrdinals(mergedEntity: MergedKnowledge, sr: SemanticRef) {
     mergedEntity.sourceMessageOrdinals.add(sr.range.start.messageOrdinal);
 }
 
-export function concreteToMergedEntities(
+function concreteToMergedEntities(
     entities: kpLib.ConcreteEntity[],
+    options?: EntityMergeOptions,
 ): Map<string, MergedEntity> {
     let mergedEntities = new Map<string, MergedEntity>();
     for (let entity of entities) {
-        const mergedEntity = concreteToMergedEntity(entity);
-        const existing = mergedEntities.get(mergedEntity.name);
+        const caseSensitive = options?.caseSensitive === true;
+        const nameKey = caseSensitive ? entity.name : entity.name.toLowerCase();
+        const existing = mergedEntities.get(nameKey);
         if (existing) {
-            unionEntities(existing, mergedEntity);
+            unionEntities(existing, entity, options);
         } else {
-            mergedEntities.set(mergedEntity.name, mergedEntity);
+            mergedEntities.set(
+                nameKey,
+                concreteToMergedEntity(entity, options),
+            );
         }
     }
     return mergedEntities;
 }
 
-function concreteToMergedEntity(entity: kpLib.ConcreteEntity): MergedEntity {
-    let type = [...entity.type];
-    collections.lowerAndSort(type);
+function concreteToMergedEntity(
+    entity: kpLib.ConcreteEntity,
+    options?: EntityMergeOptions,
+): MergedEntity {
+    const caseSensitive = options?.caseSensitive === true;
+    const name = entity.name;
+    const type = new Map<string, string>(
+        caseSensitive
+            ? entity.type.map((t) => [t, t])
+            : entity.type.map((t) => [t.toLowerCase(), t]),
+    );
     return {
-        name: entity.name.toLowerCase(),
-        type: type,
-        facets: entity.facets ? facetsToMergedFacets(entity.facets) : undefined,
+        name,
+        type,
+        facets: entity.facets
+            ? facetsToMergedFacets(entity.facets, options)
+            : undefined,
     };
 }
 
@@ -189,7 +213,7 @@ export function mergedToConcreteEntity(
 ): kpLib.ConcreteEntity {
     const entity: kpLib.ConcreteEntity = {
         name: mergedEntity.name,
-        type: mergedEntity.type,
+        type: [...mergedEntity.type.values()].sort(), // sort just for stability
     };
     if (mergedEntity.facets && mergedEntity.facets.size > 0) {
         entity.facets = mergedFacetsToFacets(mergedEntity.facets);
@@ -197,30 +221,54 @@ export function mergedToConcreteEntity(
     return entity;
 }
 
-function facetsToMergedFacets(facets: kpLib.Facet[]): MergedFacets {
-    const mergedFacets: MergedFacets = new collections.MultiMap<
-        string,
-        string
-    >();
-    for (const facet of facets) {
-        const name = facet.name.toLowerCase();
-        const value = facetValueToString(facet).toLowerCase();
-        mergedFacets.addUnique(name, value);
-    }
+type MergedFacets = Map<string, { name: string; values: Map<string, string> }>;
+
+function facetsToMergedFacets(
+    facets: kpLib.Facet[],
+    options?: EntityMergeOptions,
+): MergedFacets {
+    const mergedFacets: MergedFacets = new Map();
+    addMergeFacets(mergedFacets, facets, options);
     return mergedFacets;
+}
+
+function addMergeFacets(
+    mergedFacets: MergedFacets,
+    facets: kpLib.Facet[],
+    options?: EntityMergeOptions,
+) {
+    for (const facet of facets) {
+        const name = facet.name;
+        const value = facetValueToString(facet);
+        const caseSensitive = options?.caseSensitive === true;
+        const nameKey = caseSensitive ? name : name.toLowerCase();
+        const valueKey = caseSensitive ? value : value.toLowerCase();
+
+        const existing = mergedFacets.get(nameKey);
+        if (existing) {
+            // For case-sensitive, keep using existing name/value when merging.
+            const existingValues = existing.values.get(valueKey);
+            if (existingValues) {
+                continue;
+            }
+            existing.values.set(valueKey, value);
+        } else {
+            mergedFacets.set(nameKey, {
+                name,
+                values: new Map([[valueKey, value]]),
+            });
+        }
+    }
 }
 
 function mergedFacetsToFacets(mergedFacets: MergedFacets): kpLib.Facet[] {
     const facets: kpLib.Facet[] = [];
-    for (const facetName of mergedFacets.keys()) {
-        const facetValues = mergedFacets.get(facetName);
-        if (facetValues && facetValues.length > 0) {
-            const facet: kpLib.Facet = {
-                name: facetName,
-                value: facetValues.join("; "),
-            };
-            facets.push(facet);
-        }
+    for (const { name, values } of mergedFacets.values()) {
+        const facet: kpLib.Facet = {
+            name,
+            value: [...values.values()].join("; "),
+        };
+        facets.push(facet);
     }
     return facets;
 }
@@ -228,12 +276,30 @@ function mergedFacetsToFacets(mergedFacets: MergedFacets): kpLib.Facet[] {
 /**
  * In place union
  */
-function unionEntities(to: MergedEntity, other: MergedEntity): boolean {
-    if (to.name !== other.name) {
-        return false;
+function unionEntities(
+    to: MergedEntity,
+    other: kpLib.ConcreteEntity,
+    options: EntityMergeOptions | undefined,
+): boolean {
+    addTypes(to.type, other.type, options);
+    to.facets = unionFacets(to.facets, other.facets, options);
+    return true;
+}
+
+function addTypes(
+    to: Map<string, string>,
+    other: string[],
+    options: EntityMergeOptions | undefined,
+): boolean {
+    const caseSensitive = options?.caseSensitive === true;
+    for (const t of other) {
+        const key = caseSensitive ? t : t.toLowerCase();
+        if (to.has(key)) {
+            // Already exists, skip
+            continue;
+        }
+        to.set(key, t);
     }
-    to.type = unionArrays(to.type, other.type)!;
-    to.facets = unionFacets(to.facets, other.facets);
     return true;
 }
 
@@ -242,21 +308,15 @@ function unionEntities(to: MergedEntity, other: MergedEntity): boolean {
  */
 function unionFacets(
     to: MergedFacets | undefined,
-    other: MergedFacets | undefined,
+    other: kpLib.Facet[] | undefined,
+    options: EntityMergeOptions | undefined,
 ): MergedFacets | undefined {
-    if (to === undefined) {
-        return other;
-    }
     if (other === undefined) {
         return to;
     }
-    for (const facetName of other.keys()) {
-        const facetValues = other.get(facetName);
-        if (facetValues) {
-            for (let i = 0; i < facetValues.length; ++i) {
-                to.addUnique(facetName, facetValues[i]);
-            }
-        }
+    if (to === undefined) {
+        return facetsToMergedFacets(other, options);
     }
+    addMergeFacets(to, other, options);
     return to;
 }
