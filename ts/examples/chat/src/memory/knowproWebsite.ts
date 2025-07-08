@@ -276,8 +276,7 @@ export async function createKnowproWebsiteCommands(
         }
         const namedArgs = parseNamedArguments(args, websiteAddBookmarksDef());
 
-        
-        let bookmarksPath: string | undefined = undefined; 
+        let bookmarksPath: string | undefined = undefined;
 
         const defaultPaths = website.getDefaultBrowserPaths();
         if (namedArgs.source === "chrome") {
