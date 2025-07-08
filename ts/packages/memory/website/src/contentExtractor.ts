@@ -7,6 +7,8 @@ import {
     DetectedAction,
     ActionSummary,
 } from "./actionExtractor.js";
+import { docPartsFromHtml } from "conversation-memory";
+import { conversation as kpLib } from "knowledge-processor";
 
 export type ExtractionMode = "basic" | "content" | "actions" | "full";
 
@@ -59,6 +61,19 @@ export interface ActionInfo {
     text?: string;
 }
 
+export interface EnhancedContentWithKnowledge extends EnhancedContent {
+    knowledge?: kpLib.KnowledgeResponse;
+    knowledgeQuality?: KnowledgeQualityMetrics;
+}
+
+export interface KnowledgeQualityMetrics {
+    entityCount: number;
+    topicCount: number;
+    actionCount: number;
+    confidence: number;
+    extractionMode: "basic" | "enhanced" | "hybrid";
+}
+
 export interface EnhancedContent {
     pageContent?: PageContent;
     metaTags?: MetaTagCollection;
@@ -73,6 +88,8 @@ export interface EnhancedContent {
     actionSummary?: ActionSummary;
 }
 
+export type KnowledgeExtractionMode = "none" | "basic" | "enhanced" | "hybrid";
+
 export class ContentExtractor {
     private userAgent = "Mozilla/5.0 (compatible; TypeAgent-WebMemory/1.0)";
     private defaultTimeout = 10000;
@@ -84,6 +101,9 @@ export class ContentExtractor {
             userAgent?: string;
             maxContentLength?: number;
             enableActionDetection?: boolean;
+            enableKnowledgeExtraction?: boolean;
+            knowledgeMode?: KnowledgeExtractionMode;
+            maxCharsPerChunk?: number;
         },
     ) {
         if (config?.timeout) this.defaultTimeout = config.timeout;
@@ -164,6 +184,252 @@ export class ContentExtractor {
         }
 
         return result;
+    }
+
+    async extractWithKnowledge(
+        url: string,
+        html: string,
+        mode: ExtractionMode = "content",
+        knowledgeMode: KnowledgeExtractionMode = "hybrid",
+    ): Promise<EnhancedContentWithKnowledge> {
+        const startTime = Date.now();
+
+        try {
+            // Get base content extraction
+            const baseContent = await this.extractFromHtml(html, mode);
+
+            // Add knowledge extraction if enabled
+            if (
+                knowledgeMode !== "none" &&
+                this.config?.enableKnowledgeExtraction !== false
+            ) {
+                const knowledge = await this.extractKnowledge(
+                    html,
+                    baseContent,
+                    knowledgeMode,
+                );
+                const qualityMetrics = this.calculateKnowledgeQuality(
+                    knowledge,
+                    baseContent,
+                );
+
+                return {
+                    ...baseContent,
+                    knowledge,
+                    knowledgeQuality: qualityMetrics,
+                    extractionTime: Date.now() - startTime,
+                    success: true,
+                };
+            }
+
+            return {
+                ...baseContent,
+                extractionTime: Date.now() - startTime,
+                success: true,
+            };
+        } catch (error) {
+            return {
+                extractionTime: Date.now() - startTime,
+                success: false,
+                error: error instanceof Error ? error.message : String(error),
+                ...this.createEmptyResult(),
+            };
+        }
+    }
+
+    private async extractKnowledge(
+        html: string,
+        baseContent: Partial<EnhancedContent>,
+        mode: KnowledgeExtractionMode,
+    ): Promise<kpLib.KnowledgeResponse> {
+        try {
+            switch (mode) {
+                case "basic":
+                    return await this.extractBasicKnowledge(baseContent);
+                case "enhanced":
+                    return await this.extractEnhancedKnowledge(html);
+                case "hybrid":
+                    return await this.extractHybridKnowledge(html, baseContent);
+                default:
+                    return this.createEmptyKnowledge();
+            }
+        } catch (error) {
+            console.warn("Knowledge extraction failed:", error);
+            return this.createEmptyKnowledge();
+        }
+    }
+
+    private async extractBasicKnowledge(
+        baseContent: Partial<EnhancedContent>,
+    ): Promise<kpLib.KnowledgeResponse> {
+        const knowledge = this.createEmptyKnowledge();
+
+        // Extract entities from titles and headings
+        if (baseContent.pageContent?.title) {
+            knowledge.topics.push(baseContent.pageContent.title);
+        }
+
+        if (baseContent.pageContent?.headings) {
+            knowledge.topics.push(
+                ...baseContent.pageContent.headings.slice(0, 5),
+            );
+        }
+
+        // Basic entity extraction from meta tags
+        if (baseContent.metaTags?.keywords) {
+            knowledge.topics.push(
+                ...baseContent.metaTags.keywords.slice(0, 10),
+            );
+        }
+
+        return knowledge;
+    }
+
+    private async extractEnhancedKnowledge(
+        html: string,
+    ): Promise<kpLib.KnowledgeResponse> {
+        try {
+            // Use conversation package's knowledge extraction
+            const maxCharsPerChunk = this.config?.maxCharsPerChunk || 1000;
+            const docParts = docPartsFromHtml(html, maxCharsPerChunk);
+
+            // For now, extract knowledge from the first doc part
+            // In a full implementation, this would integrate with the knowledge processor
+            if (docParts.length > 0 && docParts[0].knowledge) {
+                return docParts[0].knowledge;
+            }
+
+            return this.createEmptyKnowledge();
+        } catch (error) {
+            console.warn("Enhanced knowledge extraction failed:", error);
+            return this.createEmptyKnowledge();
+        }
+    }
+
+    private async extractHybridKnowledge(
+        html: string,
+        baseContent: Partial<EnhancedContent>,
+    ): Promise<kpLib.KnowledgeResponse> {
+        try {
+            // Combine basic extraction with enhanced processing
+            const basicKnowledge =
+                await this.extractBasicKnowledge(baseContent);
+            const enhancedKnowledge = await this.extractEnhancedKnowledge(html);
+
+            // Merge knowledge results
+            return this.mergeKnowledgeResults(
+                basicKnowledge,
+                enhancedKnowledge,
+                baseContent,
+            );
+        } catch (error) {
+            console.warn("Hybrid knowledge extraction failed:", error);
+            return await this.extractBasicKnowledge(baseContent);
+        }
+    }
+
+    private mergeKnowledgeResults(
+        basicKnowledge: kpLib.KnowledgeResponse,
+        enhancedKnowledge: kpLib.KnowledgeResponse,
+        baseContent: Partial<EnhancedContent>,
+    ): kpLib.KnowledgeResponse {
+        const merged = this.createEmptyKnowledge();
+
+        // Merge topics (removing duplicates)
+        const allTopics = [
+            ...basicKnowledge.topics,
+            ...enhancedKnowledge.topics,
+        ];
+        merged.topics = [...new Set(allTopics)].slice(0, 20);
+
+        // Merge entities (removing duplicates by name)
+        const allEntities = [
+            ...basicKnowledge.entities,
+            ...enhancedKnowledge.entities,
+        ];
+        const entityMap = new Map<string, kpLib.ConcreteEntity>();
+        allEntities.forEach((entity) => {
+            if (!entityMap.has(entity.name)) {
+                entityMap.set(entity.name, entity);
+            }
+        });
+        merged.entities = Array.from(entityMap.values()).slice(0, 30);
+
+        // Merge actions, including detected actions from base content
+        merged.actions = [
+            ...basicKnowledge.actions,
+            ...enhancedKnowledge.actions,
+        ];
+
+        // Add action detection results as knowledge actions
+        if (baseContent.detectedActions) {
+            for (const detectedAction of baseContent.detectedActions) {
+                merged.actions.push({
+                    verbs: [detectedAction.actionType || "unknown"],
+                    verbTense: "present",
+                    subjectEntityName: "user",
+                    objectEntityName: detectedAction.target?.name || "page",
+                    indirectObjectEntityName: "none",
+                    params: [
+                        {
+                            name: "confidence",
+                            value: detectedAction.confidence,
+                        },
+                        {
+                            name: "description",
+                            value: detectedAction.name || "",
+                        },
+                    ],
+                });
+            }
+        }
+
+        return merged;
+    }
+
+    private calculateKnowledgeQuality(
+        knowledge: kpLib.KnowledgeResponse,
+        baseContent: Partial<EnhancedContent>,
+    ): KnowledgeQualityMetrics {
+        const entityCount = knowledge.entities.length;
+        const topicCount = knowledge.topics.length;
+        const actionCount = knowledge.actions.length;
+
+        // Calculate confidence based on content richness
+        let confidence = 0.5; // Base confidence
+
+        if (
+            baseContent.pageContent?.mainContent &&
+            baseContent.pageContent.mainContent.length > 500
+        ) {
+            confidence += 0.2;
+        }
+
+        if (entityCount > 5) confidence += 0.1;
+        if (topicCount > 3) confidence += 0.1;
+        if (actionCount > 0) confidence += 0.1;
+
+        confidence = Math.min(confidence, 1.0);
+
+        return {
+            entityCount,
+            topicCount,
+            actionCount,
+            confidence,
+            extractionMode:
+                (this.config?.knowledgeMode === "none"
+                    ? "basic"
+                    : this.config?.knowledgeMode) || "hybrid",
+        };
+    }
+
+    private createEmptyKnowledge(): kpLib.KnowledgeResponse {
+        return {
+            topics: [],
+            entities: [],
+            actions: [],
+            inverseActions: [],
+        };
     }
 
     private async fetchPage(url: string): Promise<string> {

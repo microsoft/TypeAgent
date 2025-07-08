@@ -257,8 +257,8 @@ export class TemporalQueryProcessor {
             const websites = websiteCollection.messages.getAll();
 
             for (const website of websites) {
-                const visitDate =
-                    website.metadata.visitDate || website.metadata.bookmarkDate;
+                const metadata = website.metadata as website.WebsiteDocPartMeta;
+                const visitDate = metadata.visitDate || metadata.bookmarkDate;
                 if (!visitDate) continue;
 
                 const siteDate = new Date(visitDate);
@@ -274,7 +274,7 @@ export class TemporalQueryProcessor {
 
                 // Apply query type filtering
                 if (this.matchesQueryType(website, temporalQuery.queryType)) {
-                    filteredUrls.push(website.metadata.url);
+                    filteredUrls.push(metadata.url);
                 }
             }
         } catch (error) {

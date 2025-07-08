@@ -1,7 +1,64 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-interface ImportOptions {
+// Full-page Website Library implementation
+// Extends the existing interfaces and functionality for full-page layout
+
+import { WebsiteImportManager } from "./websiteImportManager";
+import { WebsiteImportUI } from "./websiteImportUI";
+import {
+    ImportOptions,
+    FolderImportOptions,
+    ImportProgress,
+    ImportResult,
+} from "./interfaces/websiteImport.types";
+
+interface FullPageNavigation {
+    currentPage: "search" | "discover" | "analytics";
+    previousPage: string | null;
+}
+
+interface DiscoverInsights {
+    trendingTopics: Array<{
+        topic: string;
+        count: number;
+        trend: "up" | "down" | "stable";
+        percentage: number;
+    }>;
+    readingPatterns: Array<{
+        timeframe: string;
+        activity: number;
+        peak: boolean;
+    }>;
+    popularPages: Website[];
+    topDomains: Array<{
+        domain: string;
+        count: number;
+        favicon?: string;
+    }>;
+}
+
+interface AnalyticsData {
+    overview: {
+        totalSites: number;
+        totalBookmarks: number;
+        totalHistory: number;
+        knowledgeExtracted: number;
+    };
+    trends: Array<{
+        date: string;
+        visits: number;
+        bookmarks: number;
+    }>;
+    insights: Array<{
+        category: string;
+        value: number;
+        change: number;
+    }>;
+}
+
+// Import existing interfaces
+interface LocalImportOptions {
     source: "chrome" | "edge";
     type: "bookmarks" | "history";
     limit?: number;
@@ -37,7 +94,7 @@ interface KnowledgeStatus {
     entityCount?: number;
     topicCount?: number;
     suggestionCount?: number;
-    status: "extracted" | "pending" | "error" | "none";
+    status: "extracted" | "pending" | "error" | "none" | "extracting";
     confidence?: number;
 }
 
@@ -78,1296 +135,836 @@ interface EntityMatch {
     count: number;
 }
 
-interface SuggestedSearch {
-    query: string;
-    category: string;
-    description: string;
-    estimatedResults: number;
-}
-
-interface CategorySuggestions {
-    recentFinds: SuggestedSearch[];
-    popularDomains: SuggestedSearch[];
-    exploreTopics: SuggestedSearch[];
-}
-
-class WebsiteLibraryPanel {
+class WebsiteLibraryPanelFullPage {
     private isConnected: boolean = false;
-    private currentImport: {
-        id: string;
-        startTime: number;
-        cancelled: boolean;
-    } | null = null;
-    private selectedBrowser: string = "";
-    private selectedType: string = "";
+    private navigation: FullPageNavigation = {
+        currentPage: "search",
+        previousPage: null,
+    };
 
-    // Search-related properties
+    // Search functionality
     private currentResults: Website[] = [];
-    private currentViewMode: "list" | "card" | "timeline" | "domain" = "list";
+    private currentViewMode: "list" | "grid" | "timeline" | "domain" = "list";
     private searchDebounceTimer: number | null = null;
     private recentSearches: string[] = [];
     private currentQuery: string = "";
+    // Data storage
+    private libraryStats: LibraryStats = {
+        totalWebsites: 0,
+        totalBookmarks: 0,
+        totalHistory: 0,
+        topDomains: 0,
+    };
+    private discoverData: DiscoverInsights | null = null;
+    private analyticsData: AnalyticsData | null = null;
 
-    private settingsModal: any = null;
-    private knowledgeStatusCache: Map<string, KnowledgeStatus> = new Map();
+    // Enhanced services and managers
+    private notificationManager: NotificationManager;
+    private chromeExtensionService: ChromeExtensionService;
+    private userPreferences: UserPreferences;
+    private searchSuggestions: SearchSuggestion[] = [];
+    private suggestionDropdown: HTMLElement | null = null;
+    private knowledgeCache: Map<string, KnowledgeStatus> = new Map();
+    private searchCache: Map<string, SearchResult> = new Map();
+
+    // Import components
+    private importManager: WebsiteImportManager;
+    private importUI: WebsiteImportUI;
+
+    constructor() {
+        this.notificationManager = new NotificationManagerImpl();
+        this.chromeExtensionService = new ChromeExtensionServiceImpl();
+        this.userPreferences = this.loadUserPreferences();
+
+        // Initialize import components
+        this.importManager = new WebsiteImportManager();
+        this.importUI = new WebsiteImportUI();
+    }
 
     async initialize() {
-        console.log("Initializing Website Library Panel");
+        console.log("Initializing Enhanced Full-Page Website Library Panel");
 
-        this.setupEventListeners();
-        this.setupSearchEventListeners();
-        this.setupViewModeHandlers();
-        this.setupTabEventListeners();
-        await this.checkConnectionStatus();
-        await this.loadLibraryStats();
-        await this.loadRecentSearches();
-        await this.loadSuggestedSearches();
+        try {
+            this.setupNavigation();
+            this.setupSearchInterface();
+            this.setupEventListeners();
+            this.setupKnowledgeInteractions();
+            this.setupNotificationSystem();
+            this.setupImportFunctionality();
+
+            await this.checkConnectionStatus();
+            await this.loadLibraryStats();
+            await this.loadRecentSearches();
+            this.showPage("search");
+
+            this.notificationManager.showSuccess(
+                "Website Library loaded successfully with enhanced features!",
+            );
+        } catch (error) {
+            console.error("Failed to initialize Website Library:", error);
+            this.notificationManager.showError(
+                "Failed to load Website Library. Please refresh the page.",
+                () => window.location.reload(),
+            );
+        }
     }
 
-    private setupEventListeners() {
-        document.querySelectorAll("[data-browser]").forEach((option) => {
-            option.addEventListener("click", () => {
-                this.selectBrowser(option.getAttribute("data-browser")!);
+    private setupNavigation() {
+        const navItems = document.querySelectorAll(".nav-item");
+        navItems.forEach((item) => {
+            item.addEventListener("click", (e) => {
+                const target = e.currentTarget as HTMLElement;
+                const page = target.getAttribute("data-page") as
+                    | "search"
+                    | "discover"
+                    | "analytics";
+                if (page) {
+                    this.navigateToPage(page);
+                }
             });
         });
-
-        document.querySelectorAll("[data-type]").forEach((option) => {
-            option.addEventListener("click", () => {
-                this.selectDataType(option.getAttribute("data-type")!);
-            });
-        });
-
-        document
-            .getElementById("startImport")!
-            .addEventListener("click", () => {
-                this.startImport();
-            });
-
-        document
-            .getElementById("cancelImport")!
-            .addEventListener("click", () => {
-                this.cancelImport();
-            });
-
-        document
-            .getElementById("settingsButton")!
-            .addEventListener("click", () => {
-                this.showSettings();
-            });
     }
 
-    private setupSearchEventListeners() {
+    private setupSearchInterface() {
+        // Search input
         const searchInput = document.getElementById(
             "searchInput",
         ) as HTMLInputElement;
-        const searchButton = document.getElementById("searchButton")!;
-        const relevanceFilter = document.getElementById(
-            "relevanceFilter",
-        ) as HTMLInputElement;
+        const searchButton = document.getElementById("searchButton");
 
-        // Search input handlers
-        searchInput.addEventListener("input", (e) => {
-            const query = (e.target as HTMLInputElement).value;
-            this.handleSearchInput(query);
-        });
-
-        searchInput.addEventListener("keypress", (e) => {
-            if (e.key === "Enter") {
-                this.performSearch();
-            }
-        });
-
-        searchButton.addEventListener("click", () => {
-            this.performSearch();
-        });
-
-        // Relevance filter update
-        relevanceFilter.addEventListener("input", (e) => {
-            const value = (e.target as HTMLInputElement).value;
-            document.getElementById("relevanceValue")!.textContent =
-                `${value}%`;
-        });
-
-        // Filter change handlers
-        [
-            "dateFrom",
-            "dateTo",
-            "sourceFilter",
-            "domainFilter",
-            "relevanceFilter",
-        ].forEach((id) => {
-            const element = document.getElementById(id);
-            if (element) {
-                element.addEventListener("change", () => {
-                    if (this.currentQuery) {
-                        this.performSearch();
-                    }
-                });
-            }
-        });
-
-        // Hide suggestions when clicking outside
-        document.addEventListener("click", (e) => {
-            const suggestions = document.getElementById("searchSuggestions")!;
-            if (
-                !searchInput.contains(e.target as Node) &&
-                !suggestions.contains(e.target as Node)
-            ) {
-                suggestions.classList.add("d-none");
-            }
-        });
-    }
-
-    private setupViewModeHandlers() {
-        document.querySelectorAll('input[name="viewMode"]').forEach((radio) => {
-            radio.addEventListener("change", (e) => {
+        if (searchInput) {
+            searchInput.addEventListener("input", (e) => {
                 const target = e.target as HTMLInputElement;
-                if (target.checked) {
-                    this.currentViewMode = target.id.replace("View", "") as any;
-                    this.rerenderResults();
+                this.handleSearchInput(target.value);
+            });
+
+            searchInput.addEventListener("keypress", (e) => {
+                if (e.key === "Enter") {
+                    this.performSearch();
+                }
+            });
+        }
+
+        if (searchButton) {
+            searchButton.addEventListener("click", () => {
+                this.performSearch();
+            });
+        }
+
+        // View mode buttons
+        document.querySelectorAll(".view-btn").forEach((btn) => {
+            btn.addEventListener("click", (e) => {
+                const target = e.currentTarget as HTMLElement;
+                const view = target.getAttribute("data-view") as
+                    | "list"
+                    | "grid"
+                    | "timeline"
+                    | "domain";
+                if (view) {
+                    this.setViewMode(view);
                 }
             });
         });
+
+        this.setupFilterControls();
     }
 
-    private setupTabEventListeners() {
-        // Tab switching handlers are managed by Bootstrap, but we can add custom logic if needed
-        const tabs = document.querySelectorAll(
-            '#libraryTabs button[data-bs-toggle="tab"]',
+    private setupNotificationSystem() {
+        // Notification system is already set up in the NotificationManagerImpl
+        console.log("Notification system initialized");
+    }
+
+    private setupImportFunctionality() {
+        // Setup import navigation buttons
+        const importWebActivityBtn = document.getElementById(
+            "importWebActivityBtn",
         );
-        tabs.forEach((tab) => {
-            tab.addEventListener("shown.bs.tab", (e) => {
-                const targetTab = (e.target as HTMLElement).getAttribute(
-                    "data-bs-target",
-                );
-                this.onTabChanged(
-                    targetTab?.replace("#", "").replace("-pane", "") || "",
-                );
+        const importFromFileBtn = document.getElementById("importFromFileBtn");
+
+        if (importWebActivityBtn) {
+            importWebActivityBtn.addEventListener("click", () => {
+                this.showWebActivityImportModal();
             });
+        }
+
+        if (importFromFileBtn) {
+            importFromFileBtn.addEventListener("click", () => {
+                this.showFolderImportModal();
+            });
+        }
+
+        // Setup import event listeners
+        this.setupImportEventListeners();
+    }
+
+    private setupImportEventListeners() {
+        // Listen for import events from the UI
+        window.addEventListener(
+            "startWebActivityImport",
+            async (event: any) => {
+                const options = event.detail as ImportOptions;
+                await this.handleWebActivityImport(options);
+            },
+        );
+
+        window.addEventListener("startFolderImport", async (event: any) => {
+            const options = event.detail as FolderImportOptions;
+            await this.handleFolderImport(options);
+        });
+
+        window.addEventListener("cancelImport", () => {
+            this.handleCancelImport();
+        });
+
+        // Setup import UI callbacks
+        this.importUI.onProgressUpdate((progress: ImportProgress) => {
+            this.importUI.updateImportProgress(progress);
+        });
+
+        this.importUI.onImportComplete((result: ImportResult) => {
+            this.handleImportComplete(result);
+        });
+
+        this.importUI.onImportError((error: any) => {
+            this.importUI.showImportError(error);
         });
     }
 
-    private onTabChanged(tabName: string) {
-        console.log(`Switched to tab: ${tabName}`);
-
-        // Refresh content when switching to specific tabs
-        if (tabName === "discover") {
-            this.loadSuggestedSearches();
-        }
+    private setupKnowledgeInteractions() {
+        // Knowledge interactions are handled through the enhanced features
+        console.log("Knowledge interactions initialized");
     }
 
-    showSettings() {
-        if (!this.settingsModal) {
-            const settingsModalElement =
-                document.getElementById("settingsModal")!;
-            this.settingsModal = new (window as any).bootstrap.Modal(
-                settingsModalElement,
-            );
-
-            // Add event listeners for proper cleanup
-            settingsModalElement.addEventListener("hidden.bs.modal", () => {
-                // Remove any lingering backdrop
-                const backdrop = document.querySelector(".modal-backdrop");
-                if (backdrop) {
-                    backdrop.remove();
-                }
-                // Ensure body classes are cleaned up
-                document.body.classList.remove("modal-open");
-                document.body.style.removeProperty("overflow");
-                document.body.style.removeProperty("padding-right");
-            });
-        }
-
-        this.settingsModal.show();
-    }
-
-    private selectBrowser(browser: string) {
-        document.querySelectorAll("[data-browser]").forEach((option) => {
-            option.classList.remove("selected");
-        });
-        document
-            .querySelector(`[data-browser="${browser}"]`)!
-            .classList.add("selected");
-        this.selectedBrowser = browser;
-        this.updateImportButton();
-    }
-
-    private selectDataType(type: string) {
-        document.querySelectorAll("[data-type]").forEach((option) => {
-            option.classList.remove("selected");
-        });
-        document
-            .querySelector(`[data-type="${type}"]`)!
-            .classList.add("selected");
-        this.selectedType = type;
-
-        const daysContainer = document.getElementById("daysBackContainer")!;
-        const folderContainer = document.getElementById("folderContainer")!;
-
-        if (type === "history") {
-            daysContainer.style.display = "block";
-            folderContainer.style.display = "none";
-        } else {
-            daysContainer.style.display = "none";
-            folderContainer.style.display = "block";
-        }
-
-        this.updateImportButton();
-    }
-
-    private updateImportButton() {
-        const startButton = document.getElementById(
-            "startImport",
-        ) as HTMLButtonElement;
-        startButton.disabled = !this.selectedBrowser || !this.selectedType;
-    }
-
-    private async startImport() {
-        if (!this.selectedBrowser || !this.selectedType) {
-            this.showNotification(
-                "Please select both browser and data type",
-                "error",
-            );
-            return;
-        }
-
-        const options: ImportOptions = {
-            source: this.selectedBrowser as "chrome" | "edge",
-            type: this.selectedType as "bookmarks" | "history",
-        };
-
-        const limitInput = document.getElementById(
-            "importLimit",
-        ) as HTMLInputElement;
-        if (limitInput.value) {
-            options.limit = parseInt(limitInput.value);
-        }
-
-        const daysInput = document.getElementById(
-            "daysBack",
-        ) as HTMLInputElement;
-        if (daysInput.value && this.selectedType === "history") {
-            options.days = parseInt(daysInput.value);
-        }
-
-        const folderInput = document.getElementById(
-            "bookmarkFolder",
-        ) as HTMLInputElement;
-        if (folderInput.value && this.selectedType === "bookmarks") {
-            options.folder = folderInput.value;
-        }
-
-        // Get enhancement options
-        const extractContentCheckbox = document.getElementById(
-            "extractContent",
-        ) as HTMLInputElement;
-        options.extractContent = extractContentCheckbox.checked;
-
-        const intelligentAnalysisCheckbox = document.getElementById(
-            "enableIntelligentAnalysis",
-        ) as HTMLInputElement;
-        options.enableIntelligentAnalysis = intelligentAnalysisCheckbox.checked;
-
-        const actionDetectionCheckbox = document.getElementById(
-            "enableActionDetection",
-        ) as HTMLInputElement;
-        options.enableActionDetection = actionDetectionCheckbox.checked;
-
-        options.extractionMode = "basic";
-        if (options.enableIntelligentAnalysis) {
-            if (options.enableActionDetection) {
-                options.extractionMode = "full";
-            } else {
-                options.extractionMode = "content";
-            }
-        }
-
-        // Set performance defaults - increased timeout for debugging
-        options.maxConcurrent = 5; // Limit concurrent requests
-        options.contentTimeout = 30000; // 30 second timeout per page (increased for debugging)
-        // Set performance defaults - increased timeout for debugging
-        options.maxConcurrent = 5; // Limit concurrent requests
-        options.contentTimeout = 30000; // 30 second timeout per page (increased for debugging)
-
-        this.showImportProgress();
-
-        this.currentImport = {
-            id: this.generateImportId(),
-            startTime: Date.now(),
-            cancelled: false,
-        };
-
+    private async checkConnectionStatus(): Promise<boolean> {
         try {
+            if (typeof chrome === "undefined" || !chrome.runtime) {
+                this.isConnected = false;
+                return false;
+            }
+
             const response = await chrome.runtime.sendMessage({
-                type: "importWebsiteDataWithProgress",
-                parameters: options,
-                importId: this.currentImport.id,
+                action: "checkWebSocketConnection",
             });
 
-            if (response.success) {
-                await this.completeImport(response.itemCount);
-            } else {
-                await this.failImport(response.error);
-                this.showNotification(
-                    `Import failed: ${response.error}`,
-                    "error",
-                );
-            }
+            this.isConnected = response?.connected === true;
+            return this.isConnected;
         } catch (error) {
-            console.error("Import error:", error);
-            await this.failImport(
-                error instanceof Error ? error.message : "Unknown error",
-            );
-            this.showNotification(
-                "Import failed due to connection error",
-                "error",
-            );
-        }
-    }
-
-    private async cancelImport() {
-        if (this.currentImport) {
-            this.currentImport.cancelled = true;
-
-            try {
-                await chrome.runtime.sendMessage({
-                    type: "cancelImport",
-                    importId: this.currentImport.id,
-                });
-            } catch (error) {
-                console.error("Error cancelling import:", error);
-            }
-
-            await this.failImport("Cancelled by user");
-            this.showNotification("Import cancelled", "info");
-        }
-    }
-
-    private showImportProgress() {
-        document.getElementById("importForm")!.classList.add("d-none");
-        document.getElementById("importProgress")!.classList.remove("d-none");
-
-        const connectionStatus = document.getElementById("connectionStatus")!;
-        connectionStatus.innerHTML = this.createStatusIndicator(
-            "importing",
-            "Importing data...",
-        );
-
-        // Update the status message
-        const statusMessage = document.getElementById("importStatusMessage")!;
-        statusMessage.textContent = `Importing ${this.selectedType} from ${this.selectedBrowser}...`;
-    }
-
-    private hideImportProgress() {
-        document.getElementById("importForm")!.classList.remove("d-none");
-        document.getElementById("importProgress")!.classList.add("d-none");
-
-        this.currentImport = null;
-        this.updateConnectionStatus();
-    }
-
-    private async completeImport(itemCount: number) {
-        this.hideImportProgress();
-
-        // Show success notification
-        this.showNotification(
-            `Successfully imported ${itemCount} items from ${this.selectedBrowser} ${this.selectedType}!`,
-            "success",
-        );
-
-        // Update the UI with fresh data
-        await this.refreshUIAfterImport();
-    }
-
-    private async refreshUIAfterImport() {
-        try {
-            // Update library stats (for overview section)
-            await this.loadLibraryStats();
-
-            // Update suggested searches (for discover tab)
-            await this.loadSuggestedSearches();
-
-            console.log("UI refreshed after successful import");
-        } catch (error) {
-            console.error("Error refreshing UI after import:", error);
-        }
-    }
-
-    private async failImport(error: string) {
-        this.hideImportProgress();
-    }
-
-    private getImportOptions(): ImportOptions {
-        const limitInput = document.getElementById(
-            "importLimit",
-        ) as HTMLInputElement;
-        const daysInput = document.getElementById(
-            "daysBack",
-        ) as HTMLInputElement;
-        const folderInput = document.getElementById(
-            "bookmarkFolder",
-        ) as HTMLInputElement;
-
-        // Get enhancement option elements
-        const extractContentCheckbox = document.getElementById(
-            "extractContent",
-        ) as HTMLInputElement;
-        const intelligentAnalysisCheckbox = document.getElementById(
-            "enableIntelligentAnalysis",
-        ) as HTMLInputElement;
-        const actionDetectionCheckbox = document.getElementById(
-            "enableActionDetection",
-        ) as HTMLInputElement;
-        const extractionModeSelect = document.getElementById(
-            "extractionMode",
-        ) as HTMLSelectElement;
-
-        const options: ImportOptions = {
-            source: this.selectedBrowser as "chrome" | "edge",
-            type: this.selectedType as "bookmarks" | "history",
-        };
-
-        if (limitInput.value) options.limit = parseInt(limitInput.value);
-        if (daysInput.value && this.selectedType === "history")
-            options.days = parseInt(daysInput.value);
-        if (folderInput.value && this.selectedType === "bookmarks")
-            options.folder = folderInput.value;
-
-        // Add enhancement options
-        options.extractContent = extractContentCheckbox.checked;
-        options.enableIntelligentAnalysis = intelligentAnalysisCheckbox.checked;
-        options.enableActionDetection = actionDetectionCheckbox.checked;
-
-        options.extractionMode = "basic";
-        if (options.enableIntelligentAnalysis) {
-            if (options.enableActionDetection) {
-                options.extractionMode = "full";
-            } else {
-                options.extractionMode = "content";
-            }
-        }
-
-        return options;
-    }
-
-    private async loadLibraryStats() {
-        try {
-            const response = await chrome.runtime.sendMessage({
-                type: "getWebsiteLibraryStats",
-            });
-
-            if (response.success) {
-                this.renderLibraryStats(response.stats);
-            } else {
-                console.error("Failed to load library stats:", response.error);
-            }
-        } catch (error) {
-            console.error("Error loading library stats:", error);
-            this.renderLibraryStats({
-                totalWebsites: 0,
-                totalBookmarks: 0,
-                totalHistory: 0,
-                topDomains: 0,
-            });
-        }
-    }
-
-    private renderLibraryStats(stats: LibraryStats) {
-        document.getElementById("totalWebsites")!.textContent =
-            stats.totalWebsites.toString();
-        document.getElementById("totalBookmarks")!.textContent =
-            stats.totalBookmarks.toString();
-        document.getElementById("totalHistory")!.textContent =
-            stats.totalHistory.toString();
-        document.getElementById("topDomains")!.textContent =
-            stats.topDomains.toString();
-
-        const emptyState = document.getElementById("emptyLibraryState")!;
-        const libraryActions = document.getElementById("libraryActions")!;
-
-        if (stats.totalWebsites === 0) {
-            emptyState.classList.remove("d-none");
-        } else {
-            emptyState.classList.add("d-none");
-        }
-    }
-
-    private async checkConnectionStatus() {
-        try {
-            const response = await chrome.runtime.sendMessage({
-                type: "checkConnection",
-            });
-
-            this.isConnected = response.connected;
-            this.updateConnectionStatus();
-        } catch (error) {
+            console.error("Connection check failed:", error);
             this.isConnected = false;
+            return false;
+        } finally {
             this.updateConnectionStatus();
         }
     }
 
     private updateConnectionStatus() {
-        const statusElement = document.getElementById("connectionStatus")!;
+        const statusElement = document.getElementById("connectionStatus");
+        if (statusElement) {
+            const indicator = statusElement.querySelector(".status-indicator");
+            const text = statusElement.querySelector("span:last-child");
 
-        if (this.isConnected) {
-            statusElement.innerHTML = this.createStatusIndicator(
-                "connected",
-                "Connected to TypeAgent",
-            );
+            if (indicator && text) {
+                if (this.isConnected) {
+                    indicator.className = "status-indicator status-connected";
+                    text.textContent = "Connected";
+                } else {
+                    indicator.className =
+                        "status-indicator status-disconnected";
+                    text.textContent = "Disconnected";
+                }
+            }
+        }
+    }
+
+    private showConnectionRequired() {
+        const container = document.getElementById("searchResults");
+        if (container) {
+            container.innerHTML = `
+                <div class="connection-required">
+                    <i class="bi bi-wifi-off"></i>
+                    <h3>Connection Required</h3>
+                    <p>The Website Library requires an active connection to the TypeAgent service.</p>
+                    <button class="btn btn-primary" data-action="reconnect">
+                        <i class="bi bi-arrow-repeat"></i> Reconnect
+                    </button>
+                </div>
+            `;
+        }
+    }
+
+    private async reconnect() {
+        this.notificationManager.showInfo("Attempting to reconnect...");
+        const connected = await this.checkConnectionStatus();
+
+        if (connected) {
+            this.notificationManager.showSuccess("Reconnected successfully!");
+            await this.loadLibraryStats();
+            await this.performSearch();
         } else {
-            statusElement.innerHTML = this.createStatusIndicator(
-                "disconnected",
-                "Disconnected from TypeAgent",
+            this.notificationManager.showError(
+                "Failed to reconnect. Please check your connection.",
+                () => this.reconnect(),
             );
         }
     }
 
-    private generateImportId(): string {
-        return `import_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    private async loadLibraryStats() {
+        if (!this.isConnected) {
+            this.showConnectionRequired();
+            return;
+        }
+
+        try {
+            this.libraryStats =
+                await this.chromeExtensionService.getLibraryStats();
+            this.updateStatsDisplay();
+        } catch (error) {
+            console.error("Failed to load library stats:", error);
+            this.notificationManager.showError(
+                "Failed to load library statistics",
+                () => this.loadLibraryStats(),
+            );
+        }
     }
 
-    private showNotification(
-        message: string,
-        type: "success" | "error" | "info" = "info",
-    ) {
-        const alertClass = `alert-${type === "error" ? "danger" : type}`;
-        const iconClass =
-            type === "success"
-                ? "bi-check-circle"
-                : type === "error"
-                  ? "bi-exclamation-triangle"
-                  : "bi-info-circle";
+    private updateStatsDisplay() {
+        const updates: Array<[string, number]> = [
+            ["totalWebsites", this.libraryStats.totalWebsites],
+            ["totalBookmarks", this.libraryStats.totalBookmarks],
+            ["totalHistory", this.libraryStats.totalHistory],
+            ["topDomains", this.libraryStats.topDomains],
+        ];
 
-        const notification = document.createElement("div");
-        notification.className = `alert ${alertClass} alert-dismissible fade show position-fixed`;
-        notification.style.cssText =
-            "top: 1rem; right: 1rem; z-index: 1050; min-width: 300px;";
-        notification.innerHTML = `
-            <i class="${iconClass} me-2"></i>${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        `;
-
-        document.body.appendChild(notification);
-
-        setTimeout(() => {
-            if (notification.parentNode) {
-                notification.remove();
+        updates.forEach(([id, value]) => {
+            const element = document.getElementById(id);
+            if (element) {
+                element.textContent = value.toString();
             }
-        }, 5000);
+        });
     }
 
-    // Search-related methods
+    private navigateToPage(page: "search" | "discover" | "analytics") {
+        // Update navigation state
+        this.navigation.previousPage = this.navigation.currentPage;
+        this.navigation.currentPage = page;
+
+        // Update UI
+        this.updateNavigation();
+        this.showPage(page);
+
+        // Load page-specific data
+        switch (page) {
+            case "search":
+                this.initializeSearchPage();
+                break;
+            case "discover":
+                this.initializeDiscoverPage();
+                break;
+            case "analytics":
+                this.initializeAnalyticsPage();
+                break;
+        }
+    }
+
+    private updateNavigation() {
+        // Update active navigation item
+        document.querySelectorAll(".nav-item").forEach((item) => {
+            item.classList.remove("active");
+        });
+
+        const activeItem = document.querySelector(
+            `[data-page="${this.navigation.currentPage}"]`,
+        );
+        if (activeItem) {
+            activeItem.classList.add("active");
+        }
+    }
+
+    private showPage(page: string) {
+        // Hide all pages
+        document.querySelectorAll(".page-content").forEach((pageEl) => {
+            pageEl.classList.remove("active");
+        });
+
+        // Show current page
+        const currentPageEl = document.getElementById(`${page}-page`);
+        if (currentPageEl) {
+            currentPageEl.classList.add("active");
+        }
+    }
+
+    private setupFilterControls() {
+        const relevanceFilter = document.getElementById(
+            "relevanceFilter",
+        ) as HTMLInputElement;
+        if (relevanceFilter) {
+            relevanceFilter.addEventListener("input", (e) => {
+                const value = (e.target as HTMLInputElement).value;
+                const valueDisplay = document.getElementById("relevanceValue");
+                if (valueDisplay) {
+                    valueDisplay.textContent = `${value}%`;
+                }
+            });
+        }
+
+        // Setup date filters
+        const dateFrom = document.getElementById(
+            "dateFrom",
+        ) as HTMLInputElement;
+        const dateTo = document.getElementById("dateTo") as HTMLInputElement;
+
+        if (dateFrom) {
+            dateFrom.addEventListener("change", () =>
+                this.updateSearchFilters(),
+            );
+        }
+        if (dateTo) {
+            dateTo.addEventListener("change", () => this.updateSearchFilters());
+        }
+
+        // Setup other filters
+        const sourceFilter = document.getElementById(
+            "sourceFilter",
+        ) as HTMLSelectElement;
+        const domainFilter = document.getElementById(
+            "domainFilter",
+        ) as HTMLInputElement;
+
+        if (sourceFilter) {
+            sourceFilter.addEventListener("change", () =>
+                this.updateSearchFilters(),
+            );
+        }
+        if (domainFilter) {
+            domainFilter.addEventListener("input", () =>
+                this.updateSearchFilters(),
+            );
+        }
+
+        // Setup knowledge filters
+        const knowledgeFilters = [
+            "hasEntitiesFilter",
+            "hasTopicsFilter",
+            "hasActionsFilter",
+            "knowledgeExtractedFilter",
+        ];
+
+        knowledgeFilters.forEach((filterId) => {
+            const filter = document.getElementById(
+                filterId,
+            ) as HTMLInputElement;
+            if (filter) {
+                filter.addEventListener("change", () =>
+                    this.updateSearchFilters(),
+                );
+            }
+        });
+    }
+
+    private setupEventListeners() {
+        // Settings button
+        const settingsButton = document.getElementById("settingsButton");
+        if (settingsButton) {
+            settingsButton.addEventListener("click", () => {
+                this.showSettings();
+            });
+        }
+
+        // Event delegation for data-action buttons
+        document.addEventListener("click", (e) => {
+            const target = e.target as HTMLElement;
+            const actionButton = target.closest("[data-action]") as HTMLElement;
+
+            if (actionButton) {
+                e.preventDefault();
+                const action = actionButton.getAttribute("data-action");
+                this.handleAction(action, actionButton);
+            }
+        });
+    }
+
+    private handleAction(action: string | null, button: HTMLElement) {
+        if (!action) return;
+
+        switch (action) {
+            case "showImportModal":
+                this.showImportModal();
+                break;
+            case "exploreRecentBookmarks":
+                this.exploreRecentBookmarks();
+                break;
+            case "exploreMostVisited":
+                this.exploreMostVisited();
+                break;
+            case "exploreByDomain":
+                this.exploreByDomain();
+                break;
+            case "reconnect":
+                this.reconnect();
+                break;
+            default:
+                console.warn("Unknown action:", action);
+        }
+    }
+
+    private handleQuickAction(button: Element) {
+        const onclick = button.getAttribute("onclick");
+        if (onclick) {
+            if (onclick.includes("showImportModal")) {
+                this.showImportModal();
+            } else if (onclick.includes("exploreRecentBookmarks")) {
+                this.exploreRecentBookmarks();
+            } else if (onclick.includes("exploreMostVisited")) {
+                this.exploreMostVisited();
+            } else if (onclick.includes("exploreByDomain")) {
+                this.exploreByDomain();
+            }
+        }
+    }
+
+    private setViewMode(view: "list" | "grid" | "timeline" | "domain") {
+        if (this.currentViewMode === view) return;
+
+        this.currentViewMode = view;
+
+        // Update UI with smooth transition
+        this.updateViewModeButtons();
+
+        // Animate the transition if results are visible
+        if (this.currentResults.length > 0) {
+            this.animateViewModeTransition(view);
+        }
+    }
+
+    private updateViewModeButtons() {
+        document.querySelectorAll(".view-btn").forEach((btn) => {
+            btn.classList.remove("active");
+        });
+
+        const activeBtn = document.querySelector(
+            `[data-view="${this.currentViewMode}"]`,
+        );
+        if (activeBtn) {
+            activeBtn.classList.add("active");
+        }
+    }
+
+    private async animateViewModeTransition(
+        newView: "list" | "grid" | "timeline" | "domain",
+    ) {
+        const container = document.getElementById("resultsContainer");
+        if (!container) return;
+
+        // Add transitioning class to prevent interactions
+        container.classList.add("transitioning");
+
+        // Get current content
+        const currentContent = container.querySelector(".results-content");
+        if (currentContent) {
+            // Fade out current content
+            currentContent.classList.add("fade-out");
+
+            // Wait for fade out animation
+            await new Promise((resolve) => setTimeout(resolve, 200));
+        }
+
+        // Update view class on container
+        container.className = "results-container";
+        container.classList.add(`${newView}-view`, "transitioning");
+
+        // Render new content
+        this.renderSearchResults(this.currentResults);
+
+        // Get new content and animate in
+        const newContent = container.querySelector(".results-content");
+        if (newContent) {
+            newContent.classList.add("fade-out"); // Start hidden
+
+            // Force layout
+            (newContent as HTMLElement).offsetHeight;
+
+            // Fade in new content
+            newContent.classList.remove("fade-out");
+            newContent.classList.add("fade-in");
+
+            // Wait for fade in animation
+            await new Promise((resolve) => setTimeout(resolve, 200));
+
+            // Clean up classes
+            newContent.classList.remove("fade-in");
+        }
+
+        // Remove transitioning class
+        container.classList.remove("transitioning");
+    }
+
     private handleSearchInput(query: string) {
         this.currentQuery = query;
 
+        // Clear previous debounce timer
         if (this.searchDebounceTimer) {
             clearTimeout(this.searchDebounceTimer);
         }
 
-        if (query.length === 0) {
-            // Clear results when input is empty
-            this.clearSearchResults();
-            document
-                .getElementById("searchSuggestions")!
-                .classList.add("d-none");
-        } else if (query.length >= 2) {
-            this.searchDebounceTimer = window.setTimeout(() => {
-                this.getSearchSuggestions(query);
-            }, 300);
-        } else {
-            document
-                .getElementById("searchSuggestions")!
-                .classList.add("d-none");
-        }
-    }
-
-    private clearSearch() {
-        // Clear search input
-        const searchInput = document.getElementById(
-            "searchInput",
-        ) as HTMLInputElement;
-        searchInput.value = "";
-        this.currentQuery = "";
-
-        // Clear search results
-        this.clearSearchResults();
-
-        // Hide search suggestions
-        document.getElementById("searchSuggestions")!.classList.add("d-none");
-
-        console.log("Search cleared");
-    }
-
-    private clearSearchResults() {
-        // Clear results data
-        this.currentResults = [];
-        this.currentQuery = "";
-
-        // Hide results card
-        const resultsCard = document.getElementById("searchResultsCard")!;
-        resultsCard.classList.add("d-none");
-
-        // Clear results containers
-        const resultsContainer = document.getElementById(
-            "searchResultsContainer",
-        )!;
-        resultsContainer.innerHTML = "";
-
-        const summaryContainer = document.getElementById("resultsSummary")!;
-        summaryContainer.innerHTML = "";
-
-        const aiSummarySection = document.getElementById("aiSummarySection")!;
-        aiSummarySection.innerHTML = "";
-        aiSummarySection.classList.add("d-none");
-
-        // Clear pagination
-        const paginationContainer =
-            document.getElementById("resultsPagination")!;
-        paginationContainer.innerHTML = "";
-
-        console.log("Search results cleared");
-    }
-
-    private showSearchLoading() {
-        const resultsCard = document.getElementById("searchResultsCard")!;
-        const resultsContainer = document.getElementById(
-            "searchResultsContainer",
-        )!;
-
-        // Show results card with loading state
-        resultsCard.classList.remove("d-none");
-
-        // Show loading spinner
-        resultsContainer.innerHTML = `
-            <div class="text-center py-5">
-                <div class="spinner-border text-primary mb-3" role="status">
-                    <span class="visually-hidden">Searching...</span>
-                </div>
-                <div class="text-muted">Searching your library...</div>
-            </div>
-        `;
-
-        // Clear other sections
-        const summaryContainer = document.getElementById("resultsSummary")!;
-        summaryContainer.innerHTML = "";
-
-        const aiSummarySection = document.getElementById("aiSummarySection")!;
-        aiSummarySection.classList.add("d-none");
+        // Set new debounce timer with enhanced features
+        this.searchDebounceTimer = window.setTimeout(async () => {
+            if (query.length >= 2) {
+                await this.loadSearchSuggestions(query);
+                this.showSearchSuggestions(query);
+            } else {
+                this.hideSearchSuggestions();
+            }
+        }, 300);
     }
 
     private async performSearch() {
         const query = this.currentQuery.trim();
-        if (!query) {
-            this.showNotification("Please enter a search query", "info");
-            return;
-        }
+        if (!query) return;
 
-        // Clear previous results and show loading
-        this.clearSearchResults();
-        this.currentQuery = query;
+        this.hideSearchSuggestions();
+        this.addToRecentSearches(query);
         this.showSearchLoading();
 
-        const searchButton = document.getElementById(
-            "searchButton",
-        ) as HTMLButtonElement;
-        const originalContent = searchButton.innerHTML;
-
-        searchButton.innerHTML = '<i class="bi bi-hourglass-split"></i>';
-        searchButton.disabled = true;
-
         try {
-            const filters = this.getActiveFilters();
+            // Check cache first for improved performance
+            const filters = this.getSearchFilters();
+            const cacheKey = `${query}-${JSON.stringify(filters)}`;
 
-            const response = await chrome.runtime.sendMessage({
-                type: "queryKnowledge",
-                parameters: {
-                    query: query,
-                    searchScope: "all_indexed",
-                    maxResults: 50,
-                    minRelevance: filters.minRelevance || 0,
-                    includeSuggestedQuestions: false,
-                    filters: filters,
-                },
-            });
-
-            let searchResults: SearchResult;
-
-            if (
-                response.answer ||
-                (response.sources && response.sources.length > 0)
-            ) {
-                // Transform semantic search result to SearchResult format
-                searchResults = {
-                    websites:
-                        response.sources?.map((source: any) => ({
-                            url: source.url,
-                            title: source.title,
-                            domain: new URL(source.url).hostname,
-                            source: "bookmarks", // Default, will be updated by knowledge check
-                            score: source.relevanceScore,
-                            snippet: source.snippet || "",
-                        })) || [],
-                    summary: {
-                        text: response.answer || "",
-                        totalFound: response.sources?.length || 0,
-                        searchTime: 0, // Not provided in knowledge response
-                        sources: response.sources || [],
-                        entities:
-                            response.relatedEntities?.map((entity: any) => ({
-                                entity: entity.name,
-                                type: entity.type,
-                                count: 1,
-                            })) || [],
-                    },
-                    query: query,
-                    filters: filters,
-                };
-            } else {
-                // Fallback empty result
-                searchResults = {
-                    websites: [],
-                    summary: {
-                        text: "No results found.",
-                        totalFound: 0,
-                        searchTime: 0,
-                        sources: [],
-                        entities: [],
-                    },
-                    query: query,
-                    filters: filters,
-                };
+            if (this.searchCache.has(cacheKey)) {
+                const cachedResults = this.searchCache.get(cacheKey)!;
+                this.showSearchResults(cachedResults);
+                this.notificationManager.showSuccess(
+                    "Results loaded from cache",
+                );
+                return;
             }
 
-            await this.renderSearchResults(searchResults);
-            await this.saveSearchToHistory(query);
-            await this.loadRecentSearches();
+            // Perform search with enhanced error handling
+            let results: SearchResult;
+
+            if (this.isConnected) {
+                results = await this.chromeExtensionService.searchWebsites(
+                    query,
+                    filters,
+                );
+                await this.chromeExtensionService.saveSearch(query, results);
+            } else {
+                results = await this.searchWebsites(query, filters);
+            }
+
+            // Cache results for future use
+            this.searchCache.set(cacheKey, results);
+
+            // Enhance results with real-time knowledge status
+            await this.enhanceResultsWithKnowledge(results.websites);
+
+            this.showSearchResults(results);
         } catch (error) {
-            console.error("Search error:", error);
-            this.showNotification(
-                "Search failed due to connection error",
-                "error",
+            console.error("Search failed:", error);
+            this.showSearchError(
+                "Search failed. Please check your connection and try again.",
             );
-        } finally {
-            searchButton.innerHTML = originalContent;
-            searchButton.disabled = false;
+            this.notificationManager.showError("Search failed", () =>
+                this.performSearch(),
+            );
         }
     }
 
-    private async getSearchSuggestions(query: string) {
-        try {
-            const response = await chrome.runtime.sendMessage({
-                type: "getSearchSuggestions",
-                parameters: { query: query, limit: 5 },
-            });
+    // Enhanced knowledge integration
+    private async enhanceResultsWithKnowledge(websites: Website[]) {
+        const knowledgePromises = websites.map(async (website) => {
+            try {
+                // Check cache first
+                if (this.knowledgeCache.has(website.url)) {
+                    website.knowledge = this.knowledgeCache.get(website.url);
+                    return;
+                }
 
-            if (response.success && response.suggestions.length > 0) {
-                this.renderSearchSuggestions(response.suggestions);
-            } else {
-                document
-                    .getElementById("searchSuggestions")!
-                    .classList.add("d-none");
+                // Get fresh knowledge status
+                if (this.isConnected) {
+                    const knowledge =
+                        await this.chromeExtensionService.checkKnowledgeStatus(
+                            website.url,
+                        );
+                    website.knowledge = knowledge;
+                    this.knowledgeCache.set(website.url, knowledge);
+                } else {
+                    // No connection - skip knowledge check
+                    website.knowledge = {
+                        hasKnowledge: false,
+                        status: "none",
+                        confidence: 0,
+                    };
+                }
+            } catch (error) {
+                console.error(
+                    `Failed to check knowledge for ${website.url}:`,
+                    error,
+                );
             }
-        } catch (error) {
-            console.error("Error getting search suggestions:", error);
-        }
+        });
+
+        await Promise.allSettled(knowledgePromises);
     }
 
-    private renderSearchSuggestions(suggestions: string[]) {
-        const container = document.getElementById("searchSuggestions")!;
+    private getSearchFilters(): SearchFilters {
+        const filters: SearchFilters = {};
 
-        container.innerHTML = suggestions
-            .map(
-                (suggestion, index) => `
-             <div class="suggestion-item" data-action="select-suggestion" data-suggestion-index="${index}">
-                ${suggestion}
-            </div>
-        `,
-            )
-            .join("");
-
-        container.classList.remove("d-none");
-        this.attachSuggestionListeners(container, suggestions);
-    }
-
-    selectSuggestion(suggestion: string) {
-        const searchInput = document.getElementById(
-            "searchInput",
-        ) as HTMLInputElement;
-        searchInput.value = suggestion;
-        this.currentQuery = suggestion;
-        document.getElementById("searchSuggestions")!.classList.add("d-none");
-        this.performSearch();
-    }
-
-    private getActiveFilters(): SearchFilters {
         const dateFrom = (
             document.getElementById("dateFrom") as HTMLInputElement
-        ).value;
+        )?.value;
         const dateTo = (document.getElementById("dateTo") as HTMLInputElement)
-            .value;
+            ?.value;
         const sourceType = (
             document.getElementById("sourceFilter") as HTMLSelectElement
-        ).value;
+        )?.value;
         const domain = (
             document.getElementById("domainFilter") as HTMLInputElement
-        ).value;
-        const relevance = parseInt(
+        )?.value;
+        const minRelevance = parseInt(
             (document.getElementById("relevanceFilter") as HTMLInputElement)
-                .value,
+                ?.value || "0",
         );
 
-        const filters: SearchFilters = {};
         if (dateFrom) filters.dateFrom = dateFrom;
         if (dateTo) filters.dateTo = dateTo;
         if (sourceType)
             filters.sourceType = sourceType as "bookmarks" | "history";
         if (domain) filters.domain = domain;
-        if (relevance > 0) filters.minRelevance = relevance / 100;
+        if (minRelevance > 0) filters.minRelevance = minRelevance;
 
         return filters;
     }
 
-    // Template utility functions for common patterns
-    private createStatusIndicator(type: string, text: string): string {
-        return `<span class="status-indicator status-${type}"></span>${text}`;
+    private updateSearchFilters() {
+        // If there's an active search, re-run it with new filters
+        if (this.currentQuery && this.currentResults.length > 0) {
+            this.performSearch();
+        }
     }
 
-    private createButton(
-        text: string,
-        action: string,
-        data: Record<string, string>,
-        classes = "btn btn-outline-primary btn-sm",
-    ): string {
-        const dataAttrs = Object.entries(data)
-            .map(
-                ([key, value]) =>
-                    `data-${key}="${this.escapeDataAttribute(value)}"`,
-            )
-            .join(" ");
-        return `<button class="${classes}" data-action="${action}" ${dataAttrs}>${text}</button>`;
-    }
-
-    private createFaviconLink(
-        url: string,
-        title: string,
-        domain: string,
-    ): string {
-        return `
-            <img src="https://www.google.com/s2/favicons?domain=${domain}" 
-                 class="result-favicon" alt="favicon">
-            <a href="${url}" target="_blank" class="fw-semibold text-decoration-none">
-                ${title || url}
-            </a>
-        `;
-    }
-
-    private formatSourceInfo(site: Website): string {
-        const parts = [site.source === "bookmarks" ? "Bookmark" : "History"];
-
-        if (site.visitCount) {
-            parts.push(`${site.visitCount} visits`);
+    private async searchWebsites(
+        query: string,
+        filters: SearchFilters,
+    ): Promise<SearchResult> {
+        if (!this.isConnected) {
+            this.showConnectionRequired();
+            throw new Error("Connection required");
         }
 
-        if (site.lastVisited) {
-            parts.push(new Date(site.lastVisited).toLocaleDateString());
+        try {
+            return await this.chromeExtensionService.searchWebsites(
+                query,
+                filters,
+            );
+        } catch (error) {
+            console.error("Search failed:", error);
+            throw error;
         }
-
-        return parts.join(" • ");
     }
 
-    private escapeDataAttribute(value: string): string {
-        return value.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-    }
+    private showSearchLoading() {
+        const resultsContainer = document.getElementById("searchResults");
+        const emptyState = document.getElementById("searchEmptyState");
 
-    // Component-based rendering methods for list items
-    private renderListItem(site: Website): string {
-        return `
-            <div class="search-result-item">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div class="flex-grow-1">
-                        ${this.renderSiteHeader(site)}
-                        ${this.renderSiteDetails(site)}
-                        ${this.renderSiteMetadata(site)}
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-
-    private renderSiteHeader(site: Website): string {
-        const scoreDisplay = site.score
-            ? `<span class="result-score ms-2">${Math.round(site.score * 100)}%</span>`
-            : "";
-
-        return `
-            <div class="d-flex align-items-center mb-1">
-                ${this.createFaviconLink(site.url, site.title || site.url, site.domain)}
-                ${scoreDisplay}
-                ${this.getKnowledgeStatusBadge(site.knowledge)}
-            </div>
-        `;
-    }
-
-    private renderSiteDetails(site: Website): string {
-        const snippetDisplay = site.snippet
-            ? `<p class="small mb-1">${site.snippet}</p>`
-            : "";
-
-        return `
-            <div class="result-domain text-muted small mb-1">${site.domain}</div>
-            ${snippetDisplay}
-            ${this.getKnowledgeDetails(site.knowledge)}
-        `;
-    }
-
-    private renderSiteMetadata(site: Website): string {
-        return `
-            <div class="d-flex justify-content-between align-items-center">
-                <small class="text-muted">${this.formatSourceInfo(site)}</small>
-                ${this.renderSiteActions(site)}
-            </div>
-        `;
-    }
-
-    private renderSiteActions(site: Website): string {
-        const openButton = this.createButton(
-            '<i class="bi bi-box-arrow-up-right"></i> Open',
-            "open-url",
-            { url: site.url },
-        );
-
-        const extractButton =
-            site.knowledge?.status === "none"
-                ? this.createButton(
-                      '<i class="bi bi-lightbulb"></i> Extract',
-                      "extract-knowledge",
-                      { url: site.url, title: site.title || site.url },
-                      "btn btn-outline-secondary btn-sm",
-                  )
-                : "";
-
-        return `
-            <div class="btn-group btn-group-sm">
-                ${openButton}
-                ${extractButton}
-            </div>
-        `;
-    }
-
-    // Component methods for card view
-    private renderCardItem(site: Website): string {
-        return `
-            <div class="col-md-6 col-lg-4 mb-3">
-                <div class="card result-card h-100">
-                    <div class="card-body">
-                        ${this.renderCardHeader(site)}
-                        ${this.renderCardContent(site)}
-                        ${this.renderCardFooter(site)}
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-
-    private renderCardHeader(site: Website): string {
-        return `
-            <div class="d-flex align-items-center mb-2">
-                ${this.createFaviconLink(site.url, site.title || site.url, site.domain)}
-                <h6 class="card-title mb-0 text-truncate flex-grow-1">${site.title || site.url}</h6>
-                ${this.getKnowledgeStatusBadge(site.knowledge)}
-            </div>
-        `;
-    }
-
-    private renderCardContent(site: Website): string {
-        const snippetDisplay = site.snippet
-            ? `<p class="card-text small">${site.snippet.substring(0, 120)}...</p>`
-            : "";
-
-        return `
-            <p class="card-text small text-muted">${site.domain}</p>
-            ${snippetDisplay}
-            ${this.getKnowledgeDetails(site.knowledge)}
-        `;
-    }
-
-    private renderCardFooter(site: Website): string {
-        const scoreDisplay = site.score
-            ? `<span class="result-score">${Math.round(site.score * 100)}%</span>`
-            : "";
-
-        const openButton = this.createButton(
-            '<i class="bi bi-box-arrow-up-right"></i> Open',
-            "open-url",
-            { url: site.url },
-            "btn btn-primary btn-sm",
-        );
-
-        const extractButton =
-            site.knowledge?.status === "none"
-                ? this.createButton(
-                      '<i class="bi bi-lightbulb"></i>',
-                      "extract-knowledge",
-                      { url: site.url, title: site.title || site.url },
-                      "btn btn-outline-secondary btn-sm",
-                  )
-                : "";
-
-        return `
-            <div class="mt-auto">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <small class="text-muted">${site.source}</small>
-                    ${scoreDisplay}
-                </div>
-                <div class="btn-group w-100">
-                    ${openButton}
-                    ${extractButton}
-                </div>
-            </div>
-        `;
-    }
-
-    // Event listener attachment methods
-    private attachResultsEventListeners() {
-        const container = document.getElementById("searchResultsContainer")!;
-
-        // Remove existing listeners to prevent duplicates
-        container.removeEventListener("click", this.handleResultsClick);
-
-        // Add new listener
-        container.addEventListener("click", this.handleResultsClick.bind(this));
-    }
-
-    private handleResultsClick = (event: Event) => {
-        const target = event.target as HTMLElement;
-        const button = target.closest("[data-action]") as HTMLElement;
-
-        if (!button) return;
-
-        const action = button.dataset.action;
-        const url = button.dataset.url;
-        const title = button.dataset.title;
-
-        switch (action) {
-            case "open-url":
-                if (url) window.open(url, "_blank");
-                break;
-            case "extract-knowledge":
-                if (url && title) this.extractKnowledgeForWebsite(url, title);
-                break;
-        }
-    };
-
-    private attachSuggestionListeners(
-        container: HTMLElement,
-        suggestions: string[],
-    ) {
-        const items = container.querySelectorAll(
-            '[data-action="select-suggestion"]',
-        );
-        items.forEach((item, index) => {
-            item.addEventListener("click", () => {
-                this.selectSuggestion(suggestions[index]);
-            });
-        });
-    }
-
-    private attachRecentSearchListeners(container: HTMLElement) {
-        const items = container.querySelectorAll(
-            '[data-action="select-recent-search"]',
-        );
-        items.forEach((item, index) => {
-            item.addEventListener("click", () => {
-                if (index < this.recentSearches.length) {
-                    this.selectRecentSearch(this.recentSearches[index]);
-                }
-            });
-        });
-    }
-
-    private attachSuggestedSearchListeners(container: HTMLElement) {
-        const items = container.querySelectorAll(
-            '[data-action="select-suggested-search"]',
-        );
-        items.forEach((item) => {
-            item.addEventListener("click", () => {
-                const query = (item as HTMLElement).dataset.query;
-                if (query) this.selectSuggestedSearch(query);
-            });
-        });
-    }
-
-    private async renderSearchResults(results: SearchResult) {
-        // Enhance results with knowledge status
-        const enhancedWebsites = await this.checkKnowledgeStatus(
-            results.websites,
-        );
-
-        this.currentResults = enhancedWebsites;
-        results.websites = enhancedWebsites;
-
-        // Show results card
-        const resultsCard = document.getElementById("searchResultsCard")!;
-        resultsCard.classList.remove("d-none");
-        resultsCard.scrollIntoView({ behavior: "smooth" });
-
-        // Render summary
-        this.renderResultsSummary(results);
-
-        // Render AI summary if available
-        if (results.summary.text) {
-            this.renderAISummary(results.summary);
-        } else {
-            // Hide AI summary section if no summary available
-            const aiSummarySection =
-                document.getElementById("aiSummarySection")!;
-            aiSummarySection.classList.add("d-none");
-        }
-
-        // Clear any loading state and render results based on current view mode
-        const resultsContainer = document.getElementById(
-            "searchResultsContainer",
-        )!;
-        if (this.currentResults.length === 0) {
-            // Show "no results" message instead of loading spinner
+        if (resultsContainer) {
+            resultsContainer.style.display = "block";
             resultsContainer.innerHTML = `
-                <div class="text-center py-4">
-                    <i class="bi bi-search" style="font-size: 3rem; color: #6c757d; opacity: 0.5;"></i>
-                    <h6 class="mt-3 text-muted">No results found</h6>
-                    <p class="text-muted">Try adjusting your search terms or filters</p>
+                <div class="results-header">
+                    <h2 class="results-title">Searching...</h2>
+                </div>
+                <div class="results-container">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Searching...</span>
+                        </div>
+                        <p class="mt-3">Searching your library...</p>
+                    </div>
                 </div>
             `;
-        } else {
-            this.rerenderResults();
+        }
+
+        if (emptyState) {
+            emptyState.style.display = "none";
         }
     }
 
-    private escapeHTML(input: string): string {
-        const div = document.createElement("div");
-        div.textContent = input;
-        return div.innerHTML;
-    }
+    private showSearchResults(results: SearchResult) {
+        this.currentResults = results.websites;
 
-    private renderResultsSummary(results: SearchResult) {
-        const summaryContainer = document.getElementById("resultsSummary")!;
-        const escapedQuery = this.escapeHTML(results.query);
+        const resultsContainer = document.getElementById("searchResults");
+        const emptyState = document.getElementById("searchEmptyState");
 
-        summaryContainer.innerHTML = `
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <strong>${results.summary.totalFound}</strong> results found for 
-                    <em>"${escapedQuery}"</em>
-                </div>
-                <small class="text-muted">
-                    Search completed in ${results.summary.searchTime}ms
-                </small>
-            </div>
-        `;
-    }
-
-    private renderAISummary(summary: any) {
-        const summaryContainer = document.getElementById("aiSummarySection")!;
-
-        summaryContainer.innerHTML = `
-            <div class="ai-summary">
-                <h6><i class="bi bi-robot"></i> AI Summary</h6>
-                <p class="mb-3">${summary.text}</p>
-                ${
-                    summary.entities && summary.entities.length > 0
-                        ? `
-                    <div class="mb-2">
-                        <strong>Key Entities:</strong><br>
-                        ${summary.entities
-                            .map(
-                                (entity: EntityMatch) =>
-                                    `<span class="entity-badge">${entity.entity} (${entity.count})</span>`,
-                            )
-                            .join("")}
-                    </div>
-                `
-                        : ""
-                }
-            </div>
-        `;
-
-        summaryContainer.classList.remove("d-none");
-    }
-
-    private rerenderResults() {
-        if (this.currentResults.length === 0) {
-            // Don't re-render if there are no results - this is handled in renderSearchResults
-            return;
+        if (emptyState) {
+            emptyState.style.display = "none";
         }
 
-        const container = document.getElementById("searchResultsContainer")!;
+        if (resultsContainer) {
+            resultsContainer.style.display = "block";
+            this.renderSearchResults(results.websites);
+
+            // Show AI summary if available
+            if (results.summary.text) {
+                this.showAISummary(results.summary.text);
+            }
+        }
+    }
+
+    private renderSearchResults(websites: Website[]) {
+        const container = document.getElementById("resultsContainer");
+        if (!container) return;
+
+        // Add view-specific class to container
+        container.className = "results-container";
+        container.classList.add(`${this.currentViewMode}-view`);
+
+        let html = "";
 
         switch (this.currentViewMode) {
             case "list":
-                container.innerHTML = this.renderListView(this.currentResults);
+                html = this.renderListView(websites);
                 break;
-            case "card":
-                container.innerHTML = this.renderCardView(this.currentResults);
+            case "grid":
+                html = this.renderGridView(websites);
                 break;
             case "timeline":
-                container.innerHTML = this.renderTimelineView(
-                    this.currentResults,
-                );
+                html = this.renderTimelineView(websites);
                 break;
             case "domain":
-                container.innerHTML = this.renderDomainView(
-                    this.currentResults,
-                );
+                html = this.renderDomainView(websites);
                 break;
         }
 
-        // Attach event listeners after rendering
-        this.attachResultsEventListeners();
+        container.innerHTML = `<div class="results-content">${html}</div>`;
     }
 
     private renderListView(websites: Website[]): string {
-        return websites.map((site) => this.renderListItem(site)).join("");
-    }
-
-    private renderCardView(websites: Website[]): string {
-        return `
-            <div class="row">
-                ${websites.map((site) => this.renderCardItem(site)).join("")}
-            </div>
-        `;
-    }
-
-    private renderTimelineView(websites: Website[]): string {
-        const sortedSites = [...websites].sort((a, b) => {
-            const dateA = a.lastVisited ? new Date(a.lastVisited).getTime() : 0;
-            const dateB = b.lastVisited ? new Date(b.lastVisited).getTime() : 0;
-            return dateB - dateA;
-        });
-
-        return sortedSites
+        return websites
             .map(
-                (site) => `
-            <div class="timeline-item">
-                <div class="d-flex justify-content-between align-items-start">
+                (website) => `
+            <div class="search-result-item">
+                <div class="d-flex align-items-start">
+                    <img src="https://www.google.com/s2/favicons?domain=${website.domain}" 
+                         class="result-favicon me-2" alt="Favicon">
                     <div class="flex-grow-1">
-                        <div class="d-flex align-items-center mb-1">
-                            <img src="https://www.google.com/s2/favicons?domain=${site.domain}" 
-                                 class="result-favicon" alt="favicon">
-                            <a href="${site.url}" target="_blank" class="fw-semibold text-decoration-none">
-                                ${site.title || site.url}
+                        <h6 class="mb-1">
+                            <a href="${website.url}" target="_blank" class="text-decoration-none">
+                                ${website.title}
                             </a>
-                        </div>
-                        <div class="result-domain text-muted small">${site.domain}</div>
-                        ${
-                            site.lastVisited
-                                ? `
-                            <div class="text-muted small">
-                                <i class="bi bi-clock"></i> ${new Date(site.lastVisited).toLocaleString()}
+                        </h6>
+                        <div class="result-domain text-muted mb-1">${website.domain}</div>
+                        ${website.snippet ? `<p class="mb-2 text-muted small">${website.snippet}</p>` : ""}
+                        
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div class="knowledge-badges">
+                                ${this.renderKnowledgeBadges(website.knowledge)}
                             </div>
-                        `
-                                : ""
-                        }
+                            <div class="d-flex align-items-center gap-2">
+                                ${website.knowledge?.confidence ? this.renderConfidenceIndicator(website.knowledge.confidence) : ""}
+                                ${website.score ? `<span class="result-score">${Math.round(website.score * 100)}%</span>` : ""}
+                            </div>
+                        </div>
                     </div>
-                    ${site.score ? `<span class="result-score">${Math.round(site.score * 100)}%</span>` : ""}
                 </div>
             </div>
         `,
@@ -1375,46 +972,105 @@ class WebsiteLibraryPanel {
             .join("");
     }
 
-    private renderDomainView(websites: Website[]): string {
-        const domainGroups = websites.reduce(
-            (groups, site) => {
-                if (!groups[site.domain]) {
-                    groups[site.domain] = [];
-                }
-                groups[site.domain].push(site);
-                return groups;
+    private renderGridView(websites: Website[]): string {
+        const gridHtml = websites
+            .map(
+                (website) => `
+            <div class="card result-card">
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-2">
+                        <img src="https://www.google.com/s2/favicons?domain=${website.domain}" 
+                             class="result-favicon me-2" alt="Favicon">
+                        <h6 class="card-title mb-0 flex-grow-1">${website.title}</h6>
+                        ${website.score ? `<span class="result-score">${Math.round(website.score * 100)}%</span>` : ""}
+                    </div>
+                    
+                    <div class="result-domain text-muted mb-2">${website.domain}</div>
+                    ${website.snippet ? `<p class="card-text small mb-3">${website.snippet}</p>` : ""}
+                    
+                    ${
+                        website.knowledge?.confidence
+                            ? `
+                        <div class="mb-2">
+                            ${this.renderConfidenceIndicator(website.knowledge.confidence)}
+                        </div>
+                    `
+                            : ""
+                    }
+                    
+                    <div class="knowledge-badges">
+                        ${this.renderKnowledgeBadges(website.knowledge)}
+                    </div>
+                    
+                    <a href="${website.url}" target="_blank" class="stretched-link"></a>
+                </div>
+            </div>
+        `,
+            )
+            .join("");
+
+        return gridHtml;
+    }
+
+    private renderTimelineView(websites: Website[]): string {
+        // Group by date for timeline view
+        const grouped = websites.reduce(
+            (acc, website) => {
+                const date = website.lastVisited
+                    ? new Date(website.lastVisited).toDateString()
+                    : "Unknown Date";
+                if (!acc[date]) acc[date] = [];
+                acc[date].push(website);
+                return acc;
             },
             {} as Record<string, Website[]>,
         );
 
-        return Object.entries(domainGroups)
+        return Object.entries(grouped)
             .map(
-                ([domain, sites]) => `
-            <div class="domain-group">
-                <div class="domain-header">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <div class="d-flex align-items-center">
-                            <img src="https://www.google.com/s2/favicons?domain=${domain}" 
-                                 class="result-favicon" alt="favicon">
-                            <h6 class="mb-0">${domain}</h6>
-                        </div>
-                        <span class="badge bg-secondary">${sites.length} ${sites.length === 1 ? "page" : "pages"}</span>
-                    </div>
-                </div>
+                ([date, sites]) => `
+            <div class="timeline-item">
+                <div class="timeline-date">${date === "Unknown Date" ? "Recently Added" : date}</div>
+                
                 ${sites
                     .map(
-                        (site) => `
-                    <div class="search-result-item">
-                        <div class="d-flex justify-content-between align-items-center">
+                        (website) => `
+                    <div class="search-result-item mb-3 border-0 p-0">
+                        <div class="d-flex align-items-start">
+                            <img src="https://www.google.com/s2/favicons?domain=${website.domain}" 
+                                 class="result-favicon me-2" alt="Favicon">
                             <div class="flex-grow-1">
-                                <a href="${site.url}" target="_blank" class="fw-semibold text-decoration-none">
-                                    ${site.title || site.url}
-                                </a>
-                                <div class="small text-muted">
-                                    ${site.source} ${site.visitCount ? `• ${site.visitCount} visits` : ""}
+                                <h6 class="mb-1">
+                                    <a href="${website.url}" target="_blank" class="text-decoration-none">
+                                        ${website.title}
+                                    </a>
+                                </h6>
+                                <div class="result-domain text-muted mb-1">${website.domain}</div>
+                                ${website.snippet ? `<p class="mb-2 text-muted small">${website.snippet}</p>` : ""}
+                                
+                                <div class="d-flex align-items-center justify-content-between">
+                                    <div class="knowledge-badges">
+                                        ${this.renderKnowledgeBadges(website.knowledge)}
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2">
+                                        ${website.knowledge?.confidence ? this.renderConfidenceIndicator(website.knowledge.confidence) : ""}
+                                        ${website.score ? `<span class="result-score">${Math.round(website.score * 100)}%</span>` : ""}
+                                    </div>
                                 </div>
+                                
+                                ${
+                                    website.lastVisited
+                                        ? `
+                                    <div class="mt-1">
+                                        <small class="text-muted">
+                                            <i class="bi bi-clock me-1"></i>
+                                            ${new Date(website.lastVisited).toLocaleTimeString()}
+                                        </small>
+                                    </div>
+                                `
+                                        : ""
+                                }
                             </div>
-                            ${site.score ? `<span class="result-score">${Math.round(site.score * 100)}%</span>` : ""}
                         </div>
                     </div>
                 `,
@@ -1426,410 +1082,1691 @@ class WebsiteLibraryPanel {
             .join("");
     }
 
-    private async saveSearchToHistory(query: string) {
-        try {
-            await chrome.runtime.sendMessage({
-                type: "saveSearchHistory",
-                query: query,
-            });
-        } catch (error) {
-            console.error("Error saving search to history:", error);
+    private renderDomainView(websites: Website[]): string {
+        // Group by domain and calculate knowledge stats
+        const grouped = websites.reduce(
+            (acc, website) => {
+                if (!acc[website.domain]) {
+                    acc[website.domain] = {
+                        sites: [],
+                        totalEntities: 0,
+                        totalTopics: 0,
+                        totalActions: 0,
+                        extractedCount: 0,
+                    };
+                }
+                acc[website.domain].sites.push(website);
+
+                if (website.knowledge?.entityCount) {
+                    acc[website.domain].totalEntities +=
+                        website.knowledge.entityCount;
+                }
+                if (website.knowledge?.topicCount) {
+                    acc[website.domain].totalTopics +=
+                        website.knowledge.topicCount;
+                }
+                if (website.knowledge?.suggestionCount) {
+                    acc[website.domain].totalActions +=
+                        website.knowledge.suggestionCount;
+                }
+                if (website.knowledge?.status === "extracted") {
+                    acc[website.domain].extractedCount++;
+                }
+
+                return acc;
+            },
+            {} as Record<
+                string,
+                {
+                    sites: Website[];
+                    totalEntities: number;
+                    totalTopics: number;
+                    totalActions: number;
+                    extractedCount: number;
+                }
+            >,
+        );
+
+        return Object.entries(grouped)
+            .map(
+                ([domain, data]) => `
+            <div class="domain-group">
+                <div class="domain-header">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center">
+                            <img src="https://www.google.com/s2/favicons?domain=${domain}" 
+                                 class="result-favicon me-2" alt="Favicon">
+                            <div>
+                                <strong>${domain}</strong>
+                                <div class="small text-muted">${data.sites.length} pages</div>
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <span class="badge">${data.sites.length}</span>
+                            ${data.extractedCount > 0 ? `<span class="knowledge-badge extracted small">${data.extractedCount} extracted</span>` : ""}
+                        </div>
+                    </div>
+                    
+                    ${
+                        data.totalEntities > 0 ||
+                        data.totalTopics > 0 ||
+                        data.totalActions > 0
+                            ? `
+                        <div class="domain-knowledge-summary mt-2">
+                            <div class="knowledge-badges">
+                                ${data.totalEntities > 0 ? `<span class="knowledge-badge entity small">${data.totalEntities} Entities</span>` : ""}
+                                ${data.totalTopics > 0 ? `<span class="knowledge-badge topic small">${data.totalTopics} Topics</span>` : ""}
+                                ${data.totalActions > 0 ? `<span class="knowledge-badge action small">${data.totalActions} Actions</span>` : ""}
+                            </div>
+                        </div>
+                    `
+                            : ""
+                    }
+                </div>
+                
+                <div class="domain-content">
+                    ${data.sites
+                        .map(
+                            (website) => `
+                        <div class="search-result-item">
+                            <h6 class="mb-1">
+                                <a href="${website.url}" target="_blank" class="text-decoration-none">
+                                    ${website.title}
+                                </a>
+                            </h6>
+                            ${website.snippet ? `<p class="mb-2 text-muted small">${website.snippet}</p>` : ""}
+                            
+                            <div class="d-flex align-items-center justify-content-between">
+                                <div class="knowledge-badges">
+                                    ${this.renderKnowledgeBadges(website.knowledge)}
+                                </div>
+                                <div class="d-flex align-items-center gap-2">
+                                    ${website.knowledge?.confidence ? this.renderConfidenceIndicator(website.knowledge.confidence) : ""}
+                                    ${website.score ? `<span class="result-score">${Math.round(website.score * 100)}%</span>` : ""}
+                                </div>
+                            </div>
+                        </div>
+                    `,
+                        )
+                        .join("")}
+                </div>
+            </div>
+        `,
+            )
+            .join("");
+    }
+
+    private showAISummary(summary: string) {
+        const summarySection = document.getElementById("aiSummary");
+        const summaryContent = document.getElementById("summaryContent");
+
+        if (summarySection && summaryContent) {
+            summaryContent.textContent = summary;
+            summarySection.style.display = "block";
         }
     }
 
-    private async loadRecentSearches() {
-        try {
-            const response = await chrome.runtime.sendMessage({
-                type: "getSearchHistory",
-            });
-
-            if (response.success) {
-                this.recentSearches = response.searches || [];
-                this.renderRecentSearches();
-            }
-        } catch (error) {
-            console.error("Error loading recent searches:", error);
+    private showSearchError(message: string) {
+        const resultsContainer = document.getElementById("searchResults");
+        if (resultsContainer) {
+            resultsContainer.innerHTML = `
+                <div class="alert alert-danger" role="alert">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    ${message}
+                </div>
+            `;
         }
     }
 
-    private renderRecentSearches() {
-        const container = document.getElementById("recentSearchesList")!;
+    private addToRecentSearches(query: string) {
+        // Remove if already exists
+        const index = this.recentSearches.indexOf(query);
+        if (index > -1) {
+            this.recentSearches.splice(index, 1);
+        }
+
+        // Add to beginning
+        this.recentSearches.unshift(query);
+
+        // Keep only last 10
+        this.recentSearches = this.recentSearches.slice(0, 10);
+
+        // Update UI
+        this.updateRecentSearchesUI();
+
+        // Save to storage
+        this.saveRecentSearches();
+    }
+
+    private updateRecentSearchesUI() {
+        const container = document.getElementById("recentSearchesList");
+        if (!container) return;
 
         if (this.recentSearches.length === 0) {
             container.innerHTML =
-                '<span class="text-muted">No recent searches</span>';
+                '<span class="empty-message">No recent searches</span>';
             return;
         }
 
         container.innerHTML = this.recentSearches
-            .slice(0, 5)
             .map(
-                (search, index) => `
-            <span class="recent-search-tag" data-action="select-recent-search" data-search-index="${index}">
-                ${search}
+                (query) => `
+            <span class="recent-search-tag" data-query="${query}">
+                ${query}
             </span>
         `,
             )
             .join("");
 
-        this.attachRecentSearchListeners(container);
+        // Add event listeners to recent search tags
+        container.querySelectorAll(".recent-search-tag").forEach((tag) => {
+            tag.addEventListener("click", () => {
+                const query = tag.getAttribute("data-query");
+                if (query) {
+                    this.performSearchWithQuery(query);
+                }
+            });
+        });
     }
 
-    selectRecentSearch(query: string) {
+    public performSearchWithQuery(query: string) {
         const searchInput = document.getElementById(
             "searchInput",
         ) as HTMLInputElement;
-        searchInput.value = query;
-        this.currentQuery = query;
-        this.performSearch();
+        if (searchInput) {
+            searchInput.value = query;
+            this.currentQuery = query;
+            this.performSearch();
+        }
     }
 
-    private async checkKnowledgeStatus(
-        websites: Website[],
-    ): Promise<Website[]> {
-        const enhancedWebsites: Website[] = [];
+    // Page initialization methods
+    private async initializeSearchPage() {
+        // Already initialized in setupSearchInterface
+    }
 
-        for (const website of websites) {
-            const enhanced = { ...website };
+    private async initializeDiscoverPage() {
+        if (!this.discoverData) {
+            await this.loadDiscoverData();
+        }
+        this.renderDiscoverContent();
+    }
 
-            // Check cache first
-            if (this.knowledgeStatusCache.has(website.url)) {
-                enhanced.knowledge = this.knowledgeStatusCache.get(website.url);
-            } else {
-                // Query knowledge status from backend
-                try {
-                    const response = await chrome.runtime.sendMessage({
-                        type: "checkPageIndexStatus",
-                        parameters: { url: website.url },
-                    });
+    private async initializeAnalyticsPage() {
+        if (!this.analyticsData) {
+            await this.loadAnalyticsData();
+        }
+        this.renderAnalyticsContent();
+    }
 
-                    if (response.success && response.result) {
-                        const status: KnowledgeStatus = {
-                            hasKnowledge: response.result.isIndexed,
-                            status: response.result.isIndexed
-                                ? "extracted"
-                                : "none",
-                            extractionDate: response.result.lastExtracted,
-                            entityCount: response.result.entityCount,
-                            topicCount: response.result.topicCount,
-                            confidence: response.result.confidence,
-                        };
-                        enhanced.knowledge = status;
-                        this.knowledgeStatusCache.set(website.url, status);
-                    } else {
-                        enhanced.knowledge = {
-                            hasKnowledge: false,
-                            status: "none",
-                        };
-                    }
-                } catch (error) {
-                    console.error(
-                        "Error checking knowledge status for",
-                        website.url,
-                        error,
-                    );
-                    enhanced.knowledge = {
-                        hasKnowledge: false,
-                        status: "none",
-                    };
-                }
+    private async loadDiscoverData() {
+        if (!this.isConnected) {
+            const container = document.getElementById("discoverContent");
+            if (container) {
+                container.innerHTML = `
+                    <div class="connection-required">
+                        <i class="bi bi-wifi-off"></i>
+                        <h3>Connection Required</h3>
+                        <p>The Discover page requires an active connection to the TypeAgent service.</p>
+                        <button class="btn btn-primary" data-action="reconnect">
+                            <i class="bi bi-arrow-repeat"></i> Reconnect
+                        </button>
+                    </div>
+                `;
             }
-
-            enhancedWebsites.push(enhanced);
-        }
-
-        return enhancedWebsites;
-    }
-
-    private async extractKnowledgeForWebsite(
-        url: string,
-        title: string,
-    ): Promise<void> {
-        try {
-            // Update status to pending
-            const pendingStatus: KnowledgeStatus = {
-                hasKnowledge: false,
-                status: "pending",
-            };
-            this.knowledgeStatusCache.set(url, pendingStatus);
-            this.rerenderResults(); // Update UI to show pending state
-
-            const response = await chrome.runtime.sendMessage({
-                type: "extractKnowledgeFromPage",
-                parameters: {
-                    url: url,
-                    title: title,
-                    extractEntities: true,
-                    extractRelationships: true,
-                    suggestQuestions: true,
-                    quality: "balanced",
-                },
-            });
-
-            if (response.success) {
-                const status: KnowledgeStatus = {
-                    hasKnowledge: true,
-                    status: "extracted",
-                    extractionDate: new Date().toISOString(),
-                    entityCount: response.result?.entities?.length || 0,
-                    topicCount: response.result?.keyTopics?.length || 0,
-                    suggestionCount:
-                        response.result?.suggestedQuestions?.length || 0,
-                };
-                this.knowledgeStatusCache.set(url, status);
-                this.showNotification(
-                    `Knowledge extracted successfully for ${title}`,
-                    "success",
-                );
-            } else {
-                const status: KnowledgeStatus = {
-                    hasKnowledge: false,
-                    status: "error",
-                };
-                this.knowledgeStatusCache.set(url, status);
-                this.showNotification(
-                    `Failed to extract knowledge: ${response.error}`,
-                    "error",
-                );
-            }
-
-            this.rerenderResults(); // Update UI with final status
-        } catch (error) {
-            console.error("Error extracting knowledge:", error);
-            const status: KnowledgeStatus = {
-                hasKnowledge: false,
-                status: "error",
-            };
-            this.knowledgeStatusCache.set(url, status);
-            this.showNotification(
-                "Knowledge extraction failed due to connection error",
-                "error",
-            );
-            this.rerenderResults();
-        }
-    }
-
-    private getKnowledgeStatusBadge(knowledge?: KnowledgeStatus): string {
-        if (!knowledge) return "";
-
-        switch (knowledge.status) {
-            case "extracted":
-                return `<span class="badge bg-success ms-2" title="Knowledge extracted on ${knowledge.extractionDate ? new Date(knowledge.extractionDate).toLocaleDateString() : "Unknown"}">
-                    <i class="bi bi-check-circle"></i> Extracted
-                </span>`;
-            case "pending":
-                return `<span class="badge bg-warning ms-2" title="Knowledge extraction in progress">
-                    <i class="bi bi-clock"></i> Extracting...
-                </span>`;
-            case "error":
-                return `<span class="badge bg-danger ms-2" title="Knowledge extraction failed">
-                    <i class="bi bi-x-circle"></i> Error
-                </span>`;
-            default:
-                return `<span class="badge bg-secondary ms-2" title="No knowledge extracted">
-                    <i class="bi bi-circle"></i> None
-                </span>`;
-        }
-    }
-
-    private getKnowledgeDetails(knowledge?: KnowledgeStatus): string {
-        if (!knowledge || !knowledge.hasKnowledge) return "";
-
-        const details: string[] = [];
-        if (knowledge.entityCount)
-            details.push(`${knowledge.entityCount} entities`);
-        if (knowledge.topicCount)
-            details.push(`${knowledge.topicCount} topics`);
-        if (knowledge.suggestionCount)
-            details.push(`${knowledge.suggestionCount} questions`);
-
-        return details.length > 0
-            ? `<small class="text-muted d-block">${details.join(" • ")}</small>`
-            : "";
-    }
-
-    private async loadSuggestedSearches() {
-        try {
-            const response = await chrome.runtime.sendMessage({
-                type: "getSuggestedSearches",
-            });
-
-            if (response.success) {
-                this.renderSuggestedSearches(response.suggestions);
-            }
-        } catch (error) {
-            console.error("Error loading suggested searches:", error);
-        }
-    }
-
-    private renderSuggestedSearches(suggestions: CategorySuggestions) {
-        this.renderSuggestionCategory(
-            "recentFindsContainer",
-            suggestions.recentFinds,
-        );
-        this.renderSuggestionCategory(
-            "popularDomainsContainer",
-            suggestions.popularDomains,
-        );
-        this.renderSuggestionCategory(
-            "exploreTopicsContainer",
-            suggestions.exploreTopics,
-        );
-    }
-
-    private renderSuggestionCategory(
-        containerId: string,
-        suggestions: SuggestedSearch[],
-    ) {
-        const container = document.getElementById(containerId)!;
-
-        if (suggestions.length === 0) {
-            container.innerHTML =
-                '<div class="text-muted small">Import data to see suggestions</div>';
             return;
         }
 
-        container.innerHTML = suggestions
-            .slice(0, 3)
+        // TODO: Implement actual API call to get discover data
+        // For now, return empty data
+        this.discoverData = {
+            trendingTopics: [],
+            readingPatterns: [],
+            popularPages: [],
+            topDomains: [],
+        };
+    }
+
+    private renderDiscoverContent() {
+        if (!this.discoverData) return;
+
+        this.renderTrendingContent();
+        this.renderReadingPatterns();
+        this.renderPopularPages();
+    }
+
+    private renderTrendingContent() {
+        const container = document.getElementById("trendingContent");
+        if (!container || !this.discoverData) return;
+
+        container.innerHTML = this.discoverData.trendingTopics
+            .map(
+                (topic) => `
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-title">${topic.topic}</h6>
+                    <div class="d-flex align-items-center justify-content-between">
+                        <span class="text-muted">${topic.count} pages</span>
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-arrow-${topic.trend === "up" ? "up" : topic.trend === "down" ? "down" : "right"} 
+                               text-${topic.trend === "up" ? "success" : topic.trend === "down" ? "danger" : "secondary"}"></i>
+                            ${
+                                topic.percentage > 0
+                                    ? `<span class="text-${topic.trend === "up" ? "success" : "danger"} small ms-1">
+                                ${topic.percentage}%</span>`
+                                    : ""
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `,
+            )
+            .join("");
+    }
+
+    private renderReadingPatterns() {
+        const container = document.getElementById("readingPatterns");
+        if (!container || !this.discoverData) return;
+
+        container.innerHTML = `
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-title">Daily Activity Pattern</h6>
+                    <div class="reading-pattern-chart">
+                        ${this.discoverData.readingPatterns
+                            .map(
+                                (pattern) => `
+                            <div class="pattern-item ${pattern.peak ? "peak" : ""}">
+                                <div class="pattern-bar" style="height: ${pattern.activity}%"></div>
+                                <div class="pattern-time">${pattern.timeframe}</div>
+                            </div>
+                        `,
+                            )
+                            .join("")}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    private renderPopularPages() {
+        const container = document.getElementById("popularPages");
+        if (!container) return;
+
+        if (
+            !this.discoverData?.popularPages ||
+            this.discoverData.popularPages.length === 0
+        ) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="bi bi-fire"></i>
+                    <h6>No Popular Pages</h6>
+                    <p>Visit more pages to see trending content.</p>
+                </div>
+            `;
+            return;
+        }
+
+        // Render popular pages similar to search results
+        container.innerHTML = this.renderListView(
+            this.discoverData.popularPages,
+        );
+    }
+
+    private async loadAnalyticsData() {
+        if (!this.isConnected) {
+            const container = document.getElementById("analyticsContent");
+            if (container) {
+                container.innerHTML = `
+                    <div class="connection-required">
+                        <i class="bi bi-wifi-off"></i>
+                        <h3>Connection Required</h3>
+                        <p>The Analytics page requires an active connection to the TypeAgent service.</p>
+                        <button class="btn btn-primary" data-action="reconnect">
+                            <i class="bi bi-arrow-repeat"></i> Reconnect
+                        </button>
+                    </div>
+                `;
+            }
+            return;
+        }
+
+        // TODO: Implement actual API call to get analytics data
+        // For now, return basic data based on library stats
+        this.analyticsData = {
+            overview: {
+                totalSites: this.libraryStats.totalWebsites,
+                totalBookmarks: this.libraryStats.totalBookmarks,
+                totalHistory: this.libraryStats.totalHistory,
+                knowledgeExtracted: 0,
+            },
+            trends: [],
+            insights: [],
+        };
+    }
+
+    private renderAnalyticsContent() {
+        if (!this.analyticsData) return;
+
+        this.renderAnalyticsOverview();
+        this.renderActivityCharts();
+        this.renderKnowledgeInsights();
+    }
+
+    private renderKnowledgeInsights() {
+        const container = document.getElementById("knowledgeInsights");
+        if (!container || !this.analyticsData) return;
+
+        // Enhanced knowledge insights with visualizations
+        const knowledgeStats = this.calculateKnowledgeStats();
+
+        container.innerHTML = `
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-title">Knowledge Extraction Overview</h6>
+                    <div class="knowledge-progress-grid">
+                        <div class="progress-item">
+                            <div class="progress-label">
+                                <i class="bi bi-diagram-2 text-info"></i>
+                                <span>Entity Extraction</span>
+                            </div>
+                            <div class="progress-bar-container">
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width: ${knowledgeStats.entityProgress}%; background: linear-gradient(90deg, #17a2b8, #20c997);"></div>
+                                </div>
+                                <span class="progress-percentage">${knowledgeStats.entityProgress}%</span>
+                            </div>
+                        </div>
+                        
+                        <div class="progress-item">
+                            <div class="progress-label">
+                                <i class="bi bi-tags text-purple"></i>
+                                <span>Topic Analysis</span>
+                            </div>
+                            <div class="progress-bar-container">
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width: ${knowledgeStats.topicProgress}%; background: linear-gradient(90deg, #6f42c1, #e83e8c);"></div>
+                                </div>
+                                <span class="progress-percentage">${knowledgeStats.topicProgress}%</span>
+                            </div>
+                        </div>
+                        
+                        <div class="progress-item">
+                            <div class="progress-label">
+                                <i class="bi bi-lightning text-warning"></i>
+                                <span>Action Detection</span>
+                            </div>
+                            <div class="progress-bar-container">
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width: ${knowledgeStats.actionProgress}%; background: linear-gradient(90deg, #fd7e14, #ffc107);"></div>
+                                </div>
+                                <span class="progress-percentage">${knowledgeStats.actionProgress}%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-title">Knowledge Quality Distribution</h6>
+                    <div class="quality-distribution">
+                        <div class="quality-segment high" style="width: ${knowledgeStats.highQuality}%;" title="High Quality: ${knowledgeStats.highQuality}%">
+                            <span class="quality-label">High</span>
+                        </div>
+                        <div class="quality-segment medium" style="width: ${knowledgeStats.mediumQuality}%;" title="Medium Quality: ${knowledgeStats.mediumQuality}%">
+                            <span class="quality-label">Medium</span>
+                        </div>
+                        <div class="quality-segment low" style="width: ${knowledgeStats.lowQuality}%;" title="Low Quality: ${knowledgeStats.lowQuality}%">
+                            <span class="quality-label">Low</span>
+                        </div>
+                    </div>
+                    <div class="quality-legend">
+                        <div class="legend-item">
+                            <div class="legend-color high"></div>
+                            <span>High Confidence (≥80%)</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color medium"></div>
+                            <span>Medium Confidence (50-79%)</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color low"></div>
+                            <span>Low Confidence (<50%)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    private calculateKnowledgeStats() {
+        // Return default values when not connected
+        if (!this.isConnected) {
+            return {
+                entityProgress: 0,
+                topicProgress: 0,
+                actionProgress: 0,
+                highQuality: 0,
+                mediumQuality: 0,
+                lowQuality: 0,
+            };
+        }
+
+        // TODO: Implement actual calculation based on real data
+        return {
+            entityProgress: 0,
+            topicProgress: 0,
+            actionProgress: 0,
+            highQuality: 0,
+            mediumQuality: 0,
+            lowQuality: 0,
+        };
+    }
+
+    private handleKnowledgeBadgeClick(badge: HTMLElement) {
+        // Add visual feedback
+        badge.style.transform = "scale(0.95)";
+        setTimeout(() => {
+            badge.style.transform = "";
+        }, 150);
+
+        // Get badge type and show details
+        const badgeType = Array.from(badge.classList).find((cls) =>
+            ["entity", "topic", "action", "extracted"].includes(cls),
+        );
+
+        if (badgeType) {
+            this.showKnowledgeDetails(badgeType, badge);
+        }
+    }
+
+    private handleTopicTagClick(tag: HTMLElement) {
+        const topic = tag.textContent?.trim();
+        if (topic) {
+            // Simulate search for this topic
+            const searchInput = document.getElementById(
+                "searchInput",
+            ) as HTMLInputElement;
+            if (searchInput) {
+                searchInput.value = topic;
+                this.currentQuery = topic;
+                this.performSearch();
+                this.navigateToPage("search");
+            }
+        }
+    }
+
+    private showKnowledgeDetails(type: string, element: HTMLElement) {
+        // Create a temporary tooltip showing knowledge details
+        const tooltip = document.createElement("div");
+        tooltip.className = "knowledge-tooltip";
+        tooltip.innerHTML = this.getKnowledgeTooltipContent(type);
+
+        document.body.appendChild(tooltip);
+
+        // Position tooltip
+        const rect = element.getBoundingClientRect();
+        tooltip.style.position = "fixed";
+        tooltip.style.top = `${rect.bottom + 8}px`;
+        tooltip.style.left = `${rect.left}px`;
+        tooltip.style.zIndex = "9999";
+
+        // Remove tooltip after delay
+        setTimeout(() => {
+            tooltip.remove();
+        }, 3000);
+
+        // Remove on click outside
+        const removeTooltip = (e: Event) => {
+            if (!tooltip.contains(e.target as Node)) {
+                tooltip.remove();
+                document.removeEventListener("click", removeTooltip);
+            }
+        };
+
+        setTimeout(() => {
+            document.addEventListener("click", removeTooltip);
+        }, 100);
+    }
+
+    private getKnowledgeTooltipContent(type: string): string {
+        const tooltips = {
+            entity: `
+                <div class="tooltip-header">
+                    <i class="bi bi-diagram-2"></i>
+                    <strong>Entities Extracted</strong>
+                </div>
+                <div class="tooltip-content">
+                    <p>Companies, technologies, people, and organizations identified in this content.</p>
+                    <div class="tooltip-examples">
+                        <span class="example-tag">Microsoft</span>
+                        <span class="example-tag">TypeScript</span>
+                        <span class="example-tag">React</span>
+                    </div>
+                </div>
+            `,
+            topic: `
+                <div class="tooltip-header">
+                    <i class="bi bi-tags"></i>
+                    <strong>Topics Identified</strong>
+                </div>
+                <div class="tooltip-content">
+                    <p>Main themes and subjects covered in this content.</p>
+                    <div class="tooltip-examples">
+                        <span class="example-tag">Web Development</span>
+                        <span class="example-tag">Programming</span>
+                        <span class="example-tag">Documentation</span>
+                    </div>
+                </div>
+            `,
+            action: `
+                <div class="tooltip-header">
+                    <i class="bi bi-lightning"></i>
+                    <strong>Actions Detected</strong>
+                </div>
+                <div class="tooltip-content">
+                    <p>Actionable items and next steps found in this content.</p>
+                    <div class="tooltip-examples">
+                        <span class="example-tag">Download</span>
+                        <span class="example-tag">Install</span>
+                        <span class="example-tag">Configure</span>
+                    </div>
+                </div>
+            `,
+            extracted: `
+                <div class="tooltip-header">
+                    <i class="bi bi-check-circle"></i>
+                    <strong>Knowledge Extracted</strong>
+                </div>
+                <div class="tooltip-content">
+                    <p>This content has been successfully processed and knowledge has been extracted.</p>
+                    <div class="status-indicator success">
+                        <i class="bi bi-check"></i>
+                        Processing Complete
+                    </div>
+                </div>
+            `,
+        };
+
+        return tooltips[type as keyof typeof tooltips] || "";
+    }
+
+    private renderAnalyticsOverview() {
+        const container = document.getElementById("analyticsOverview");
+        if (!container || !this.analyticsData) return;
+
+        const { overview } = this.analyticsData;
+        container.innerHTML = `
+            <div class="stat-item">
+                <div class="stat-number">${overview.totalSites}</div>
+                <div class="stat-label">Total Sites</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">${overview.totalBookmarks}</div>
+                <div class="stat-label">Bookmarks</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">${overview.totalHistory}</div>
+                <div class="stat-label">History Items</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">${overview.knowledgeExtracted}</div>
+                <div class="stat-label">Knowledge Extracted</div>
+            </div>
+        `;
+    }
+
+    private renderActivityCharts() {
+        const container = document.getElementById("activityCharts");
+        if (!container || !this.analyticsData) return;
+
+        container.innerHTML = `
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-title">Activity Trends</h6>
+                    <div class="analytics-chart">
+                        <p class="text-muted">Activity trends chart would be displayed here</p>
+                        <div class="chart-placeholder" style="height: 200px; background: #f8f9fa; border-radius: 0.375rem; display: flex; align-items: center; justify-content: center;">
+                            <span class="text-muted">Chart visualization would appear here</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    private renderKnowledgeBadges(knowledge?: KnowledgeStatus): string {
+        if (!knowledge?.hasKnowledge) return "";
+
+        const badges = [];
+
+        if (knowledge.entityCount && knowledge.entityCount > 0) {
+            badges.push(`
+                <span class="knowledge-badge entity" title="${knowledge.entityCount} entities extracted">
+                    <i class="bi bi-diagram-2"></i>
+                    ${knowledge.entityCount} Entities
+                </span>
+            `);
+        }
+
+        if (knowledge.topicCount && knowledge.topicCount > 0) {
+            badges.push(`
+                <span class="knowledge-badge topic" title="${knowledge.topicCount} topics identified">
+                    <i class="bi bi-tags"></i>
+                    ${knowledge.topicCount} Topics
+                </span>
+            `);
+        }
+
+        if (knowledge.suggestionCount && knowledge.suggestionCount > 0) {
+            badges.push(`
+                <span class="knowledge-badge action" title="${knowledge.suggestionCount} actions detected">
+                    <i class="bi bi-lightning"></i>
+                    ${knowledge.suggestionCount} Actions
+                </span>
+            `);
+        }
+
+        if (knowledge.status === "extracted") {
+            badges.push(`
+                <span class="knowledge-badge extracted" title="Knowledge successfully extracted">
+                    <i class="bi bi-check-circle"></i>
+                    Extracted
+                </span>
+            `);
+        }
+
+        return badges.join("");
+    }
+
+    private renderConfidenceIndicator(confidence: number): string {
+        const percentage = Math.round(confidence * 100);
+        let color = "#dc3545"; // Red for low confidence
+
+        if (confidence >= 0.7) {
+            color = "#28a745"; // Green for high confidence
+        } else if (confidence >= 0.4) {
+            color = "#ffc107"; // Yellow for medium confidence
+        }
+
+        return `
+            <div class="confidence-indicator" title="Confidence: ${percentage}%">
+                <span class="text-muted small">Confidence:</span>
+                <div class="confidence-bar">
+                    <div class="confidence-fill" style="width: ${percentage}%; background-color: ${color}"></div>
+                </div>
+                <span class="small">${percentage}%</span>
+            </div>
+        `;
+    }
+
+    // Storage methods
+    private async loadRecentSearches() {
+        try {
+            const stored = localStorage.getItem(
+                "websiteLibrary_recentSearches",
+            );
+            if (stored) {
+                this.recentSearches = JSON.parse(stored);
+                this.updateRecentSearchesUI();
+            }
+        } catch (error) {
+            console.error("Failed to load recent searches:", error);
+        }
+    }
+
+    private saveRecentSearches() {
+        try {
+            localStorage.setItem(
+                "websiteLibrary_recentSearches",
+                JSON.stringify(this.recentSearches),
+            );
+        } catch (error) {
+            console.error("Failed to save recent searches:", error);
+        }
+    }
+
+    // Enhanced search with auto-suggestions
+    private async loadSearchSuggestions(query: string) {
+        try {
+            let suggestions: SearchSuggestion[] = [];
+
+            if (this.isConnected) {
+                const suggestionTexts =
+                    await this.chromeExtensionService.getSearchSuggestions(
+                        query,
+                    );
+                suggestions = suggestionTexts.map((text) => ({
+                    text,
+                    type: "auto" as const,
+                    metadata: {},
+                }));
+            } else {
+                // No connection - return empty suggestions array
+                suggestions = [];
+            }
+
+            // Add recent searches if they match
+            const recentMatches = this.recentSearches
+                .filter((search) =>
+                    search.toLowerCase().includes(query.toLowerCase()),
+                )
+                .slice(0, 3)
+                .map((text) => ({
+                    text,
+                    type: "recent" as const,
+                    metadata: { lastUsed: "Recently" },
+                }));
+
+            // Combine and deduplicate
+            this.searchSuggestions = [
+                ...recentMatches,
+                ...suggestions.filter(
+                    (s) => !recentMatches.some((r) => r.text === s.text),
+                ),
+            ].slice(0, 8);
+        } catch (error) {
+            console.error("Failed to load search suggestions:", error);
+            this.searchSuggestions = [];
+        }
+    }
+
+    private showSearchSuggestions(query: string) {
+        if (!this.suggestionDropdown || this.searchSuggestions.length === 0)
+            return;
+
+        const suggestionsHtml = this.searchSuggestions
             .map(
                 (suggestion) => `
-            <div class="suggested-search-item" data-action="select-suggested-search" data-query="${this.escapeDataAttribute(suggestion.query)}">
-                <div class="fw-semibold">${suggestion.query}</div>
-                <div class="small text-muted">${suggestion.description}</div>
-                <div class="small text-muted">${suggestion.estimatedResults} results</div>
+            <div class="suggestion-item dropdown-item d-flex align-items-center justify-content-between" 
+                 data-suggestion="${suggestion.text}">
+                <div class="d-flex align-items-center">
+                    <i class="bi ${this.getSuggestionIcon(suggestion.type)} me-2 text-muted"></i>
+                    <span>${this.highlightMatch(suggestion.text, query)}</span>
+                </div>
+                <div class="suggestion-metadata">
+                    ${this.renderSuggestionMetadata(suggestion)}
+                </div>
             </div>
         `,
             )
             .join("");
 
-        this.attachSuggestedSearchListeners(container);
+        this.suggestionDropdown.innerHTML = suggestionsHtml;
+        this.suggestionDropdown.style.display = "block";
+
+        // Add click handlers to suggestions
+        this.suggestionDropdown
+            .querySelectorAll(".suggestion-item")
+            .forEach((item) => {
+                item.addEventListener("click", () =>
+                    this.selectSuggestion(item as HTMLElement),
+                );
+            });
     }
 
-    selectSuggestedSearch(query: string) {
-        const searchInput = document.getElementById(
-            "searchInput",
-        ) as HTMLInputElement;
-        searchInput.value = query;
-        this.currentQuery = query;
-        this.performSearch();
-    }
-
-    // Discover tab methods
-    exploreRecentBookmarks() {
-        this.switchToSearchTab();
-        const sourceFilter = document.getElementById(
-            "sourceFilter",
-        ) as HTMLSelectElement;
-        sourceFilter.value = "bookmarks";
-
-        const dateTo = document.getElementById("dateTo") as HTMLInputElement;
-        const dateFrom = document.getElementById(
-            "dateFrom",
-        ) as HTMLInputElement;
-        const today = new Date();
-        const thirtyDaysAgo = new Date(
-            today.getTime() - 30 * 24 * 60 * 60 * 1000,
-        );
-
-        dateTo.value = today.toISOString().split("T")[0];
-        dateFrom.value = thirtyDaysAgo.toISOString().split("T")[0];
-
-        const searchInput = document.getElementById(
-            "searchInput",
-        ) as HTMLInputElement;
-        searchInput.value = "";
-        this.currentQuery = "";
-        this.performSearch();
-    }
-
-    exploreMostVisited() {
-        this.switchToSearchTab();
-        this.clearFilters();
-        const searchInput = document.getElementById(
-            "searchInput",
-        ) as HTMLInputElement;
-        searchInput.value = "most visited";
-        this.currentQuery = "most visited";
-        this.performSearch();
-    }
-
-    exploreByDomain() {
-        this.switchToSearchTab();
-        const domainViewRadio = document.getElementById(
-            "domainView",
-        ) as HTMLInputElement;
-        domainViewRadio.checked = true;
-        this.currentViewMode = "domain";
-
-        const searchInput = document.getElementById(
-            "searchInput",
-        ) as HTMLInputElement;
-        searchInput.value = "*";
-        this.currentQuery = "*";
-        this.performSearch();
-    }
-
-    exploreUnexplored() {
-        this.switchToSearchTab();
-        const searchInput = document.getElementById(
-            "searchInput",
-        ) as HTMLInputElement;
-        searchInput.value = "rarely visited";
-        this.currentQuery = "rarely visited";
-        this.performSearch();
-    }
-
-    private switchToSearchTab() {
-        const searchTab = document.getElementById(
-            "search-tab",
-        ) as HTMLButtonElement;
-        if (searchTab) {
-            searchTab.click();
+    private getSuggestionIcon(type: string): string {
+        switch (type) {
+            case "recent":
+                return "bi-clock-history";
+            case "entity":
+                return "bi-diagram-2";
+            case "topic":
+                return "bi-tags";
+            case "domain":
+                return "bi-globe";
+            default:
+                return "bi-search";
         }
     }
 
-    private clearFilters() {
-        const dateFrom = document.getElementById(
-            "dateFrom",
-        ) as HTMLInputElement;
-        const dateTo = document.getElementById("dateTo") as HTMLInputElement;
-        const sourceFilter = document.getElementById(
-            "sourceFilter",
+    private highlightMatch(text: string, query: string): string {
+        if (!query) return text;
+
+        const regex = new RegExp(`(${query})`, "gi");
+        return text.replace(regex, "<strong>$1</strong>");
+    }
+
+    private renderSuggestionMetadata(suggestion: SearchSuggestion): string {
+        if (!suggestion.metadata) return "";
+
+        const { count, lastUsed, source } = suggestion.metadata;
+
+        if (count) {
+            return `<small class="text-muted">${count} results</small>`;
+        }
+        if (lastUsed) {
+            return `<small class="text-muted">${lastUsed}</small>`;
+        }
+        if (source) {
+            return `<small class="text-muted">from ${source}</small>`;
+        }
+        return "";
+    }
+
+    private selectSuggestion(suggestionElement: HTMLElement) {
+        const text = suggestionElement.textContent?.trim();
+        if (text) {
+            const searchInput = document.getElementById(
+                "searchInput",
+            ) as HTMLInputElement;
+            if (searchInput) {
+                searchInput.value = text;
+                this.currentQuery = text;
+                this.hideSearchSuggestions();
+                this.performSearch();
+            }
+        }
+    }
+
+    private hideSearchSuggestions() {
+        if (this.suggestionDropdown) {
+            this.suggestionDropdown.style.display = "none";
+            this.suggestionDropdown.innerHTML = "";
+        }
+    }
+
+    // Enhanced knowledge extraction
+    private async extractKnowledgeForAllResults() {
+        if (this.currentResults.length === 0) {
+            this.notificationManager.showWarning(
+                "No search results to extract knowledge from",
+            );
+            return;
+        }
+
+        const unextractedSites = this.currentResults.filter(
+            (site) =>
+                !site.knowledge?.hasKnowledge ||
+                site.knowledge.status !== "extracted",
+        );
+
+        if (unextractedSites.length === 0) {
+            this.notificationManager.showSuccess(
+                "Knowledge already extracted for all results",
+            );
+            return;
+        }
+
+        this.notificationManager.showProgress(
+            `Extracting knowledge from ${unextractedSites.length} websites...`,
+            0,
+        );
+
+        try {
+            for (let i = 0; i < unextractedSites.length; i++) {
+                const site = unextractedSites[i];
+                const progress = Math.round(
+                    ((i + 1) / unextractedSites.length) * 100,
+                );
+
+                this.notificationManager.showProgress(
+                    `Processing ${site.domain}... (${i + 1}/${unextractedSites.length})`,
+                    progress,
+                );
+
+                await this.extractKnowledgeForSite(site);
+
+                // Small delay to prevent overwhelming the system
+                await new Promise((resolve) => setTimeout(resolve, 100));
+            }
+
+            this.notificationManager.showSuccess(
+                `Knowledge extracted from ${unextractedSites.length} websites`,
+            );
+
+            // Refresh the results display
+            this.renderSearchResults(this.currentResults);
+        } catch (error) {
+            console.error("Bulk knowledge extraction failed:", error);
+            this.notificationManager.showError(
+                "Failed to extract knowledge from some websites",
+            );
+        }
+    }
+
+    private async extractKnowledgeForSite(website: Website) {
+        try {
+            if (this.isConnected) {
+                const knowledge =
+                    await this.chromeExtensionService.extractKnowledge(
+                        website.url,
+                    );
+                website.knowledge = knowledge;
+                this.knowledgeCache.set(website.url, knowledge);
+            } else {
+                // No connection - cannot extract knowledge
+                website.knowledge = {
+                    hasKnowledge: false,
+                    status: "error",
+                    confidence: 0,
+                };
+                this.notificationManager.showError(
+                    "Connection required to extract knowledge",
+                );
+            }
+        } catch (error) {
+            console.error(
+                `Failed to extract knowledge for ${website.url}:`,
+                error,
+            );
+            if (website.knowledge) {
+                website.knowledge.status = "error";
+            } else {
+                website.knowledge = {
+                    hasKnowledge: false,
+                    status: "error",
+                    confidence: 0,
+                };
+            }
+        }
+    }
+
+    // User preferences management
+    private loadUserPreferences(): UserPreferences {
+        try {
+            const stored = localStorage.getItem(
+                "websiteLibrary_userPreferences",
+            );
+            if (stored) {
+                return JSON.parse(stored);
+            }
+        } catch (error) {
+            console.error("Failed to load user preferences:", error);
+        }
+
+        // Default preferences
+        return {
+            viewMode: "list",
+            autoExtractKnowledge: false,
+            showConfidenceScores: true,
+            enableNotifications: true,
+            theme: "light",
+        };
+    }
+
+    // Global notification action handlers
+    public handleNotificationAction(id: string, actionLabel: string): void {
+        this.notificationManager.handleNotificationAction(id, actionLabel);
+    }
+
+    public hideNotification(id: string): void {
+        this.notificationManager.hideNotification(id);
+    }
+
+    // Quick action methods
+    public showImportModal() {
+        console.log("Show import modal - using web activity modal as default");
+        this.showWebActivityImportModal();
+    }
+
+    public showWebActivityImportModal() {
+        this.importUI.showWebActivityImportModal();
+    }
+
+    public showFolderImportModal() {
+        this.importUI.showFolderImportModal();
+    }
+
+    // Import handling methods
+    private async handleWebActivityImport(
+        options: ImportOptions,
+    ): Promise<void> {
+        try {
+            this.importUI.showImportProgress({
+                importId: "web-activity-import",
+                phase: "initializing",
+                totalItems: 0,
+                processedItems: 0,
+                errors: [],
+            });
+
+            const result =
+                await this.importManager.startWebActivityImport(options);
+            this.importUI.showImportComplete(result);
+        } catch (error) {
+            this.importUI.showImportError({
+                type: "processing",
+                message:
+                    error instanceof Error
+                        ? error.message
+                        : "Unknown error occurred",
+                timestamp: Date.now(),
+            });
+        }
+    }
+
+    private async handleFolderImport(
+        options: FolderImportOptions,
+    ): Promise<void> {
+        try {
+            this.importUI.showImportProgress({
+                importId: "folder-import",
+                phase: "initializing",
+                totalItems: 0, // Will be updated when folder is enumerated
+                processedItems: 0,
+                errors: [],
+            });
+
+            const result = await this.importManager.startFolderImport(options);
+            this.importUI.showImportComplete(result);
+        } catch (error) {
+            this.importUI.showImportError({
+                type: "processing",
+                message:
+                    error instanceof Error
+                        ? error.message
+                        : "Unknown error occurred",
+                timestamp: Date.now(),
+            });
+        }
+    }
+
+    private async handleCancelImport(): Promise<void> {
+        try {
+            // Cancel any active import operations
+            await this.importManager.cancelImport("web-activity-import");
+            await this.importManager.cancelImport("file-import");
+        } catch (error) {
+            console.error("Failed to cancel import:", error);
+        }
+    }
+
+    private async handleImportComplete(result: ImportResult): Promise<void> {
+        // Refresh library stats after successful import
+        await this.loadLibraryStats();
+
+        // Update discover data if we're on the discover page
+        if (this.navigation.currentPage === "discover") {
+            await this.initializeDiscoverPage();
+        }
+
+        // Show success notification
+        this.notificationManager.showSuccess(
+            `Successfully imported ${result.itemCount} items!`,
+        );
+    }
+
+    public exploreRecentBookmarks() {
+        console.log("Explore recent bookmarks");
+        this.navigateToPage("search");
+        // Set search to show recent bookmarks
+    }
+
+    public exploreMostVisited() {
+        console.log("Explore most visited");
+        this.navigateToPage("search");
+        // Set search to show most visited sites
+    }
+
+    public exploreByDomain() {
+        console.log("Explore by domain");
+        this.navigateToPage("search");
+        // Set view mode to domain view
+        this.setViewMode("domain");
+    }
+
+    public showSettings() {
+        console.log("Show enhanced settings modal");
+
+        // Create and show enhanced settings modal
+        this.createEnhancedSettingsModal();
+    }
+
+    // Enhanced settings modal
+    private createEnhancedSettingsModal() {
+        // Remove existing modal if present
+        const existingModal = document.getElementById("settingsModal");
+        if (existingModal) {
+            existingModal.remove();
+        }
+
+        const modalHtml = `
+            <div class="modal fade" id="settingsModal" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Enhanced Settings</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h6>Search Preferences</h6>
+                                    <div class="mb-3">
+                                        <label class="form-label">Default View Mode</label>
+                                        <select class="form-select" id="defaultViewMode">
+                                            <option value="list">List</option>
+                                            <option value="grid">Grid</option>
+                                            <option value="timeline">Timeline</option>
+                                            <option value="domain">Domain</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6>Knowledge & Notifications</h6>
+                                    <div class="mb-3">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="autoExtractKnowledge">
+                                            <label class="form-check-label">Auto-extract knowledge</label>
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="showConfidenceScores">
+                                            <label class="form-check-label">Show confidence scores</label>
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="enableNotifications">
+                                            <label class="form-check-label">Enable notifications</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="button" class="btn btn-primary" id="saveSettingsBtn">Save Changes</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.insertAdjacentHTML("beforeend", modalHtml);
+
+        // Populate current settings
+        this.populateSettingsModal();
+
+        // Add save handler
+        const saveBtn = document.getElementById("saveSettingsBtn");
+        if (saveBtn) {
+            saveBtn.addEventListener("click", () => this.saveUserPreferences());
+        }
+
+        // Show modal using Bootstrap
+        const modal = document.getElementById("settingsModal");
+        if (modal && (window as any).bootstrap) {
+            const bsModal = new (window as any).bootstrap.Modal(modal);
+            bsModal.show();
+        }
+    }
+
+    private populateSettingsModal() {
+        const prefs = this.userPreferences;
+
+        const defaultViewMode = document.getElementById(
+            "defaultViewMode",
         ) as HTMLSelectElement;
-        const domainFilter = document.getElementById(
-            "domainFilter",
+        const autoExtractKnowledge = document.getElementById(
+            "autoExtractKnowledge",
         ) as HTMLInputElement;
-        const relevanceFilter = document.getElementById(
-            "relevanceFilter",
+        const showConfidenceScores = document.getElementById(
+            "showConfidenceScores",
+        ) as HTMLInputElement;
+        const enableNotifications = document.getElementById(
+            "enableNotifications",
         ) as HTMLInputElement;
 
-        dateFrom.value = "";
-        dateTo.value = "";
-        sourceFilter.value = "";
-        domainFilter.value = "";
-        relevanceFilter.value = "0";
-        document.getElementById("relevanceValue")!.textContent = "0%";
+        if (defaultViewMode) defaultViewMode.value = prefs.viewMode;
+        if (autoExtractKnowledge)
+            autoExtractKnowledge.checked = prefs.autoExtractKnowledge;
+        if (showConfidenceScores)
+            showConfidenceScores.checked = prefs.showConfidenceScores;
+        if (enableNotifications)
+            enableNotifications.checked = prefs.enableNotifications;
+    }
+
+    private saveUserPreferences() {
+        const defaultViewMode = document.getElementById(
+            "defaultViewMode",
+        ) as HTMLSelectElement;
+        const autoExtractKnowledge = document.getElementById(
+            "autoExtractKnowledge",
+        ) as HTMLInputElement;
+        const showConfidenceScores = document.getElementById(
+            "showConfidenceScores",
+        ) as HTMLInputElement;
+        const enableNotifications = document.getElementById(
+            "enableNotifications",
+        ) as HTMLInputElement;
+
+        this.userPreferences = {
+            viewMode: defaultViewMode?.value || "list",
+            autoExtractKnowledge: autoExtractKnowledge?.checked || false,
+            showConfidenceScores: showConfidenceScores?.checked || true,
+            enableNotifications: enableNotifications?.checked || true,
+            theme: this.userPreferences.theme,
+        };
+
+        // Save to localStorage
+        try {
+            localStorage.setItem(
+                "websiteLibrary_userPreferences",
+                JSON.stringify(this.userPreferences),
+            );
+            this.notificationManager.showSuccess("Settings saved successfully");
+
+            // Apply preferences immediately
+            this.setViewMode(this.userPreferences.viewMode as any);
+
+            // Hide modal
+            const modal = document.getElementById("settingsModal");
+            if (modal && (window as any).bootstrap) {
+                const bsModal = (window as any).bootstrap.Modal.getInstance(
+                    modal,
+                );
+                if (bsModal) bsModal.hide();
+            }
+        } catch (error) {
+            console.error("Failed to save user preferences:", error);
+            this.notificationManager.showError("Failed to save settings");
+        }
     }
 }
 
-// Global instance for HTML onclick handlers
-let libraryPanel: WebsiteLibraryPanel;
-
 // Initialize the panel when DOM is loaded
-document.addEventListener("DOMContentLoaded", async () => {
-    libraryPanel = new WebsiteLibraryPanel();
-    await libraryPanel.initialize();
+let libraryPanelFullPage: WebsiteLibraryPanelFullPage;
+
+document.addEventListener("DOMContentLoaded", () => {
+    libraryPanelFullPage = new WebsiteLibraryPanelFullPage();
+    libraryPanelFullPage.initialize();
+
+    // Make it globally available for onclick handlers
+    (window as any).libraryPanel = libraryPanelFullPage;
 });
 
-// Add CSS for spin animation
-const style = document.createElement("style");
-style.textContent = `
-    @keyframes spin {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
+// ===================================================================
+// ENHANCED FEATURES: Real-time Integration & Advanced Features
+// ===================================================================
+
+// Enhanced interfaces for advanced features
+interface NotificationManager {
+    showSuccess(message: string, actions?: NotificationAction[]): void;
+    showError(message: string, retry?: () => void): void;
+    showWarning(message: string): void;
+    showInfo(message: string): void;
+    showProgress(message: string, progress?: number): void;
+    hide(id: string): void;
+    clear(): void;
+    handleNotificationAction(id: string, actionLabel: string): void;
+    hideNotification(id: string): void;
+}
+
+interface NotificationAction {
+    label: string;
+    action: () => void;
+    style?: "primary" | "secondary" | "success" | "danger";
+}
+
+interface SearchSuggestion {
+    text: string;
+    type: "recent" | "entity" | "topic" | "domain" | "auto";
+    metadata?: {
+        count?: number;
+        lastUsed?: string;
+        source?: string;
+    };
+}
+
+interface UserPreferences {
+    viewMode: string;
+    autoExtractKnowledge: boolean;
+    showConfidenceScores: boolean;
+    enableNotifications: boolean;
+    theme: "light" | "dark" | "auto";
+}
+
+// Enhanced Chrome Extension Service for real-time data
+interface ChromeExtensionService {
+    getLibraryStats(): Promise<LibraryStats>;
+    searchWebsites(
+        query: string,
+        filters: SearchFilters,
+    ): Promise<SearchResult>;
+    extractKnowledge(url: string): Promise<KnowledgeStatus>;
+    checkKnowledgeStatus(url: string): Promise<KnowledgeStatus>;
+    getSearchSuggestions(query: string): Promise<string[]>;
+    getRecentSearches(): Promise<string[]>;
+    saveSearch(query: string, results: SearchResult): Promise<void>;
+}
+
+// NotificationManager Implementation
+class NotificationManagerImpl implements NotificationManager {
+    private notifications: Map<string, HTMLElement> = new Map();
+    private notificationCounter = 0;
+
+    showSuccess(message: string, actions?: NotificationAction[]): void {
+        this.showNotification("success", message, actions);
     }
-    .spin {
-        animation: spin 1s linear infinite;
+
+    showError(message: string, retry?: () => void): void {
+        const actions = retry
+            ? [{ label: "Retry", action: retry, style: "primary" as const }]
+            : undefined;
+        this.showNotification("danger", message, actions);
     }
-`;
-document.head.appendChild(style);
+
+    showWarning(message: string): void {
+        this.showNotification("warning", message);
+    }
+
+    showInfo(message: string): void {
+        this.showNotification("info", message);
+    }
+
+    showProgress(message: string, progress?: number): void {
+        const id = this.showNotification("info", message, undefined, progress);
+
+        // Auto-update progress if provided
+        if (progress !== undefined) {
+            const notification = this.notifications.get(id);
+            if (notification) {
+                const progressBar = notification.querySelector(
+                    ".progress-bar",
+                ) as HTMLElement;
+                if (progressBar) {
+                    progressBar.style.width = `${progress}%`;
+                    progressBar.textContent = `${progress}%`;
+                }
+            }
+        }
+    }
+
+    hide(id: string): void {
+        const notification = this.notifications.get(id);
+        if (notification) {
+            notification.classList.add("fade-out");
+            setTimeout(() => {
+                notification.remove();
+                this.notifications.delete(id);
+            }, 300);
+        }
+    }
+
+    clear(): void {
+        this.notifications.forEach((notification) => {
+            notification.remove();
+        });
+        this.notifications.clear();
+    }
+
+    private showNotification(
+        type: string,
+        message: string,
+        actions?: NotificationAction[],
+        progress?: number,
+    ): string {
+        const id = `notification-${++this.notificationCounter}`;
+
+        // Create notification container if it doesn't exist
+        let container = document.getElementById("notificationContainer");
+        if (!container) {
+            container = document.createElement("div");
+            container.id = "notificationContainer";
+            container.className = "notification-container";
+            container.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                z-index: 1050;
+                max-width: 350px;
+            `;
+            document.body.appendChild(container);
+        }
+
+        const actionsHtml = actions
+            ? actions
+                  .map(
+                      (action) =>
+                          `<button class="btn btn-sm btn-${action.style || "secondary"} me-2" 
+                     data-notification-id="${id}" data-action="${action.label}">${action.label}</button>`,
+                  )
+                  .join("")
+            : "";
+
+        const progressHtml =
+            progress !== undefined
+                ? `
+            <div class="progress mt-2" style="height: 4px;">
+                <div class="progress-bar" style="width: ${progress}%"></div>
+            </div>
+        `
+                : "";
+
+        const notificationHtml = `
+            <div class="alert alert-${type} alert-dismissible fade show notification-item" 
+                 data-id="${id}" style="margin-bottom: 10px;">
+                <div class="d-flex align-items-start">
+                    <div class="flex-grow-1">
+                        <div class="notification-message">${message}</div>
+                        ${progressHtml}
+                        ${actionsHtml ? `<div class="mt-2">${actionsHtml}</div>` : ""}
+                    </div>
+                    <button type="button" class="btn-close" data-notification-id="${id}" data-action="close"></button>
+                </div>
+            </div>
+        `;
+
+        container.insertAdjacentHTML("afterbegin", notificationHtml);
+
+        const notification = container.querySelector(
+            `[data-id="${id}"]`,
+        ) as HTMLElement;
+        if (notification) {
+            this.notifications.set(id, notification);
+
+            // Add event listeners for notification actions
+            notification.querySelectorAll("[data-action]").forEach((button) => {
+                button.addEventListener("click", (e) => {
+                    const target = e.target as HTMLElement;
+                    const action = target.getAttribute("data-action");
+                    const notificationId = target.getAttribute(
+                        "data-notification-id",
+                    );
+
+                    if (action === "close" && notificationId) {
+                        this.hide(notificationId);
+                    } else if (action && notificationId && actions) {
+                        const actionHandler = actions.find(
+                            (a) => a.label === action,
+                        );
+                        if (actionHandler) {
+                            actionHandler.action();
+                        }
+                    }
+                });
+            });
+
+            // Store action handlers for later use
+            if (actions) {
+                (notification as any)._actionHandlers = actions.reduce(
+                    (acc, action) => {
+                        acc[action.label] = action.action;
+                        return acc;
+                    },
+                    {} as Record<string, () => void>,
+                );
+            }
+
+            // Auto-hide success/warning notifications after 5 seconds
+            if (type === "success" || type === "warning") {
+                setTimeout(() => this.hide(id), 5000);
+            }
+        }
+
+        return id;
+    }
+
+    // Public methods for notification actions
+    public handleNotificationAction(id: string, actionLabel: string): void {
+        const notification = this.notifications.get(id);
+        if (notification && (notification as any)._actionHandlers) {
+            const handler = (notification as any)._actionHandlers[actionLabel];
+            if (handler) {
+                handler();
+                this.hide(id);
+            }
+        }
+    }
+
+    public hideNotification(id: string): void {
+        this.hide(id);
+    }
+}
+
+// Chrome Extension Service Implementation
+class ChromeExtensionServiceImpl implements ChromeExtensionService {
+    async getLibraryStats(): Promise<LibraryStats> {
+        if (typeof chrome !== "undefined" && chrome.runtime) {
+            try {
+                const response = await chrome.runtime.sendMessage({
+                    action: "getLibraryStats",
+                    includeKnowledge: true,
+                });
+
+                if (response.success) {
+                    return response.stats;
+                } else {
+                    throw new Error(
+                        response.error || "Failed to get library stats",
+                    );
+                }
+            } catch (error) {
+                console.error("Chrome extension not available:", error);
+                throw error;
+            }
+        }
+        throw new Error("Chrome extension not available");
+    }
+
+    async searchWebsites(
+        query: string,
+        filters: SearchFilters,
+    ): Promise<SearchResult> {
+        if (typeof chrome !== "undefined" && chrome.runtime) {
+            try {
+                const response = await chrome.runtime.sendMessage({
+                    action: "searchWebsites",
+                    parameters: {
+                        query,
+                        filters,
+                        includeSummary: true,
+                        limit: 50,
+                    },
+                });
+
+                if (response.success) {
+                    return response.results;
+                } else {
+                    throw new Error(response.error || "Search failed");
+                }
+            } catch (error) {
+                console.error("Search request failed:", error);
+                throw error;
+            }
+        }
+        throw new Error("Chrome extension not available");
+    }
+
+    async extractKnowledge(url: string): Promise<KnowledgeStatus> {
+        if (typeof chrome !== "undefined" && chrome.runtime) {
+            try {
+                const response = await chrome.runtime.sendMessage({
+                    action: "extractKnowledge",
+                    url,
+                });
+                return response;
+            } catch (error) {
+                console.error("Knowledge extraction failed:", error);
+                throw error;
+            }
+        }
+        throw new Error("Chrome extension not available");
+    }
+
+    async checkKnowledgeStatus(url: string): Promise<KnowledgeStatus> {
+        if (typeof chrome !== "undefined" && chrome.runtime) {
+            try {
+                const response = await chrome.runtime.sendMessage({
+                    action: "checkKnowledgeStatus",
+                    url,
+                });
+                return response;
+            } catch (error) {
+                console.error("Knowledge status check failed:", error);
+                throw error;
+            }
+        }
+        throw new Error("Chrome extension not available");
+    }
+
+    async getSearchSuggestions(query: string): Promise<string[]> {
+        if (typeof chrome !== "undefined" && chrome.runtime) {
+            try {
+                const response = await chrome.runtime.sendMessage({
+                    action: "getSearchSuggestions",
+                    query,
+                });
+                return response || [];
+            } catch (error) {
+                console.error("Failed to get search suggestions:", error);
+                return [];
+            }
+        }
+        throw new Error("Chrome extension not available");
+    }
+
+    async getRecentSearches(): Promise<string[]> {
+        if (typeof chrome !== "undefined" && chrome.runtime) {
+            try {
+                const response = await chrome.runtime.sendMessage({
+                    action: "getRecentSearches",
+                });
+                return response || [];
+            } catch (error) {
+                console.error("Failed to get recent searches:", error);
+                return [];
+            }
+        }
+        throw new Error("Chrome extension not available");
+    }
+
+    async saveSearch(query: string, results: SearchResult): Promise<void> {
+        if (typeof chrome !== "undefined" && chrome.runtime) {
+            try {
+                await chrome.runtime.sendMessage({
+                    action: "saveSearch",
+                    query,
+                    results,
+                });
+            } catch (error) {
+                console.error("Failed to save search:", error);
+            }
+        }
+    }
+}
+
+// Create global instance for compatibility
+let libraryPanel: WebsiteLibraryPanelFullPage;
+
+// Initialize when DOM is ready
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => {
+        libraryPanel = new WebsiteLibraryPanelFullPage();
+        libraryPanel.initialize();
+
+        // Make available globally for any remaining references
+        (window as any).libraryPanel = libraryPanel;
+    });
+} else {
+    libraryPanel = new WebsiteLibraryPanelFullPage();
+    libraryPanel.initialize();
+
+    // Make available globally for any remaining references
+    (window as any).libraryPanel = libraryPanel;
+}

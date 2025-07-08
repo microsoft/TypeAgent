@@ -579,6 +579,23 @@ class KnowledgePanel {
         // Create category objects with enhanced metadata
         const categories: QuestionCategory[] = [];
 
+        // Add relationship category for enhanced questions
+        if (categoryMap.has("relationship")) {
+            categories.push({
+                name: "Relationships",
+                icon: "bi-diagram-3",
+                color: "info",
+                questions: categoryMap
+                    .get("relationship")!
+                    .sort(
+                        (a, b) =>
+                            this.getQuestionScore(b) - this.getQuestionScore(a),
+                    ),
+                priority: 1.5, // High priority, between learning and technical
+                count: categoryMap.get("relationship")!.length,
+            });
+        }
+
         if (categoryMap.has("learning")) {
             categories.push({
                 name: "Learning Path",
@@ -663,6 +680,7 @@ class KnowledgePanel {
         for (const [categoryName, questions] of categoryMap.entries()) {
             if (
                 ![
+                    "relationship",
                     "learning",
                     "technical",
                     "discovery",
@@ -689,6 +707,7 @@ class KnowledgePanel {
         return categories.sort((a, b) => a.priority - b.priority);
     }
 
+    // Enhanced question categorization using knowledge context
     private categorizeAndScoreQuestion(question: string): CategorizedQuestion {
         const lowerQ = question.toLowerCase();
         let category = "other";
@@ -696,7 +715,21 @@ class KnowledgePanel {
         let confidence = 0.7;
         let recommended = false;
 
-        // Learning-related questions (highest priority)
+        // Enhanced categorization using knowledge context
+        const hasEntities =
+            this.knowledgeData?.entities &&
+            this.knowledgeData.entities.length > 0;
+        const hasRelationships =
+            this.knowledgeData?.relationships &&
+            this.knowledgeData.relationships.length > 0;
+        const hasActions =
+            this.knowledgeData?.detectedActions &&
+            this.knowledgeData.detectedActions.length > 0;
+        const hasTopics =
+            this.knowledgeData?.keyTopics &&
+            this.knowledgeData.keyTopics.length > 0;
+
+        // Learning-related questions (highest priority for enhanced features)
         if (
             lowerQ.includes("learn") ||
             lowerQ.includes("prerequisite") ||
@@ -711,8 +744,11 @@ class KnowledgePanel {
             priority = "high";
             confidence = 0.9;
             recommended = true;
+
+            // Boost confidence if we have rich knowledge context
+            if (hasEntities && hasRelationships) confidence = 0.95;
         }
-        // Technical questions
+        // Technical questions (enhanced with action detection)
         else if (
             lowerQ.includes("code") ||
             lowerQ.includes("api") ||
@@ -721,15 +757,28 @@ class KnowledgePanel {
             lowerQ.includes("documentation") ||
             lowerQ.includes("implementation") ||
             lowerQ.includes("library") ||
-            lowerQ.includes("framework")
+            lowerQ.includes("framework") ||
+            lowerQ.includes("how to use") ||
+            (hasActions &&
+                (lowerQ.includes("interact") ||
+                    lowerQ.includes("click") ||
+                    lowerQ.includes("action")))
         ) {
             category = "technical";
             priority = "high";
             confidence = 0.85;
             recommended =
-                lowerQ.includes("example") || lowerQ.includes("tutorial");
+                lowerQ.includes("example") ||
+                lowerQ.includes("tutorial") ||
+                (hasActions ?? false);
+
+            // Boost for pages with detected actions
+            if (hasActions) {
+                confidence += 0.1;
+                recommended = true;
+            }
         }
-        // Discovery questions
+        // Discovery questions (enhanced with entity/topic context)
         else if (
             lowerQ.includes("other") ||
             lowerQ.includes("similar") ||
@@ -737,13 +786,23 @@ class KnowledgePanel {
             lowerQ.includes("show me") ||
             lowerQ.includes("find") ||
             lowerQ.includes("resources") ||
-            lowerQ.includes("related")
+            lowerQ.includes("related") ||
+            (hasEntities && lowerQ.includes("more about")) ||
+            (hasTopics && lowerQ.includes("explore"))
         ) {
             category = "discovery";
             priority = "medium";
             confidence = 0.8;
             recommended =
-                lowerQ.includes("related") || lowerQ.includes("similar");
+                lowerQ.includes("related") ||
+                lowerQ.includes("similar") ||
+                (hasEntities ?? false);
+
+            // Boost for pages with rich entity/topic context
+            if (hasEntities && hasTopics) {
+                confidence += 0.15;
+                priority = "high";
+            }
         }
         // Content-specific questions
         else if (
@@ -757,6 +816,9 @@ class KnowledgePanel {
             category = "content";
             priority = "medium";
             confidence = 0.75;
+
+            // Boost if we have structured knowledge
+            if (hasRelationships) confidence += 0.1;
         }
         // Temporal questions
         else if (
@@ -770,6 +832,19 @@ class KnowledgePanel {
             category = "temporal";
             priority = "low";
             confidence = 0.8;
+        }
+        // Relationship questions (enhanced features specific)
+        else if (
+            (hasRelationships &&
+                (lowerQ.includes("connect") ||
+                    lowerQ.includes("relationship") ||
+                    lowerQ.includes("between"))) ||
+            (hasEntities && lowerQ.includes("how does"))
+        ) {
+            category = "relationship";
+            priority = "high";
+            confidence = 0.9;
+            recommended = true;
         }
 
         return {
@@ -1128,17 +1203,64 @@ class KnowledgePanel {
         }
     }
 
-    // NEW: Show extraction information
+    // Enhanced knowledge extraction status display with advanced integration
     private showExtractionInfo() {
         if (!this.knowledgeData) return;
 
         const infoDiv = document.createElement("div");
         infoDiv.className = "alert alert-info mt-2";
 
+        // Calculate knowledge quality metrics
+        const qualityMetrics = this.calculateKnowledgeQuality(
+            this.knowledgeData,
+        );
+
         let content = `<small>
-            <i class="bi bi-info-circle"></i>
-            Extracted using <strong>${this.extractionSettings.mode}</strong> mode 
-            (${this.extractionSettings.quality} quality)`;
+            <i class="bi bi-cpu me-1"></i>
+            <strong>Enhanced Extraction</strong> using <strong>${this.extractionSettings.mode}</strong> mode 
+            (${this.extractionSettings.quality} quality)
+            <div class="mt-2">
+                <div class="d-flex align-items-center justify-content-between">
+                    <span>Knowledge Quality:</span>
+                    <div class="d-flex align-items-center">
+                        <div class="progress me-2" style="width: 100px; height: 6px;">
+                            <div class="progress-bar bg-${qualityMetrics.color}" 
+                                 style="width: ${qualityMetrics.score}%" 
+                                 title="Overall quality: ${qualityMetrics.score}%">
+                            </div>
+                        </div>
+                        <span class="badge bg-${qualityMetrics.color}">${qualityMetrics.label}</span>
+                    </div>
+                </div>
+                <div class="row mt-2 g-2">
+                    <div class="col-4 text-center">
+                        <div class="fw-semibold text-${qualityMetrics.entities.color}">${this.knowledgeData.entities?.length || 0}</div>
+                        <small class="text-muted">Entities</small>
+                    </div>
+                    <div class="col-4 text-center">
+                        <div class="fw-semibold text-${qualityMetrics.relationships.color}">${this.knowledgeData.relationships?.length || 0}</div>
+                        <small class="text-muted">Relations</small>
+                    </div>
+                    <div class="col-4 text-center">
+                        <div class="fw-semibold text-${qualityMetrics.topics.color}">${this.knowledgeData.keyTopics?.length || 0}</div>
+                        <small class="text-muted">Topics</small>
+                    </div>
+                </div>
+            </div>`;
+
+        // Show enhanced capabilities if detected
+        if (
+            this.knowledgeData.detectedActions &&
+            this.knowledgeData.detectedActions.length > 0
+        ) {
+            content += `
+                <div class="mt-2 p-2 bg-light rounded">
+                    <small class="text-success">
+                        <i class="bi bi-lightning-fill me-1"></i>
+                        <strong>Action Detection:</strong> ${this.knowledgeData.detectedActions.length} interactive elements identified
+                    </small>
+                </div>`;
+        }
 
         if (this.pageSourceInfo?.isBookmarked) {
             content += " • Available in bookmarks";
@@ -1856,7 +1978,7 @@ class KnowledgePanel {
         return "cursor";
     }
 
-    // Render related content discovery using relationship discovery functionality
+    // Render related content discovery using enhanced search methods
     private async renderRelatedContent(knowledge: KnowledgeData) {
         const container = document.getElementById("relatedContentContainer")!;
         const countBadge = document.getElementById("relatedContentCount");
@@ -1865,37 +1987,66 @@ class KnowledgePanel {
         container.innerHTML = `
             <div class="text-center p-3">
                 <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
-                <small class="text-muted">Discovering relationships...</small>
+                <small class="text-muted">Discovering relationships using enhanced search...</small>
             </div>
         `;
 
         try {
-            // Use relationship discovery system
-            const response = await chrome.runtime.sendMessage({
-                type: "discoverRelationships",
-                url: this.currentUrl,
-                knowledge: knowledge,
-                maxResults: 10,
-            });
+            // Use enhanced search methods for relationship discovery
+            const relatedContent: RelatedContentItem[] = [];
 
-            if (response.success && response.relationships.length > 0) {
-                this.renderRelationshipResults(response.relationships);
+            // 1. Entity-based relationship discovery
+            if (knowledge.entities && knowledge.entities.length > 0) {
+                const entityResults = await this.discoverEntityRelationships(
+                    knowledge.entities,
+                );
+                relatedContent.push(...entityResults);
+            }
+
+            // 2. Topic-based relationship discovery
+            if (knowledge.keyTopics && knowledge.keyTopics.length > 0) {
+                const topicResults = await this.discoverTopicRelationships(
+                    knowledge.keyTopics,
+                );
+                relatedContent.push(...topicResults);
+            }
+
+            // 3. Hybrid search for content similarity
+            const hybridResults = await this.discoverHybridRelationships(
+                knowledge.summary,
+            );
+            relatedContent.push(...hybridResults);
+
+            // Update count badge
+            if (countBadge) {
+                countBadge.textContent = relatedContent.length.toString();
+            }
+
+            if (relatedContent.length > 0) {
+                container.innerHTML = `
+                    <div class="related-content-summary mb-3 p-2 bg-light rounded">
+                        <small class="text-muted">
+                            <i class="bi bi-cpu me-1"></i>
+                            Found ${relatedContent.length} connections using enhanced search methods
+                        </small>
+                    </div>
+                    ${this.renderRelatedContentSections(relatedContent)}
+                `;
+                this.setupRelatedContentInteractions();
             } else {
                 container.innerHTML = `
                     <div class="text-muted text-center">
                         <i class="bi bi-info-circle"></i>
-                        No related content found
+                        No related content discovered yet. Index more pages to see connections.
                     </div>
                 `;
             }
-
-            // Add relationship discovery specific interactions
         } catch (error) {
-            console.warn("Relationship discovery failed:", error);
+            console.warn("Enhanced relationship discovery failed:", error);
             container.innerHTML = `
                 <div class="text-muted text-center">
                     <i class="bi bi-exclamation-triangle"></i>
-                    Unable to discover relationships
+                    Unable to discover relationships using enhanced search
                 </div>
             `;
         }
@@ -2518,6 +2669,94 @@ class KnowledgePanel {
         return labels[type as keyof typeof labels] || "Related";
     }
 
+    // Enhanced search methods for relationship discovery
+    private async discoverEntityRelationships(
+        entities: Entity[],
+    ): Promise<RelatedContentItem[]> {
+        try {
+            const entityNames = entities.slice(0, 5).map((e) => e.name); // Limit to top 5 entities
+
+            const response = await chrome.runtime.sendMessage({
+                type: "searchByEntities",
+                entities: entityNames,
+                url: this.currentUrl, // Exclude current page
+                maxResults: 5,
+            });
+
+            if (response.success && response.results) {
+                return response.results.map((result: any) => ({
+                    url: result.url,
+                    title: result.title,
+                    similarity: result.relevanceScore || 0.7,
+                    relationshipType: "entity-match",
+                    excerpt: `Shares entities: ${result.sharedEntities?.join(", ") || entityNames.slice(0, 2).join(", ")}`,
+                }));
+            }
+        } catch (error) {
+            console.warn("Entity relationship discovery failed:", error);
+        }
+        return [];
+    }
+
+    private async discoverTopicRelationships(
+        topics: string[],
+    ): Promise<RelatedContentItem[]> {
+        try {
+            const topTopics = topics.slice(0, 3); // Limit to top 3 topics
+
+            const response = await chrome.runtime.sendMessage({
+                type: "searchByTopics",
+                topics: topTopics,
+                url: this.currentUrl, // Exclude current page
+                maxResults: 5,
+            });
+
+            if (response.success && response.results) {
+                return response.results.map((result: any) => ({
+                    url: result.url,
+                    title: result.title,
+                    similarity: result.relevanceScore || 0.6,
+                    relationshipType: "topic-match",
+                    excerpt: `Related topics: ${result.sharedTopics?.join(", ") || topTopics.slice(0, 2).join(", ")}`,
+                }));
+            }
+        } catch (error) {
+            console.warn("Topic relationship discovery failed:", error);
+        }
+        return [];
+    }
+
+    private async discoverHybridRelationships(
+        summary: string,
+    ): Promise<RelatedContentItem[]> {
+        try {
+            if (!summary || summary.length < 20) return [];
+
+            // Use first 200 characters of summary for hybrid search
+            const searchQuery = summary.substring(0, 200);
+
+            const response = await chrome.runtime.sendMessage({
+                type: "hybridSearch",
+                query: searchQuery,
+                url: this.currentUrl, // Exclude current page
+                maxResults: 3,
+            });
+
+            if (response.success && response.results) {
+                return response.results.map((result: any) => ({
+                    url: result.url,
+                    title: result.title,
+                    similarity: result.relevanceScore || 0.5,
+                    relationshipType: "content-similarity",
+                    excerpt: `Similar content: ${result.snippet || "Related page content"}`,
+                }));
+            }
+        } catch (error) {
+            console.warn("Hybrid relationship discovery failed:", error);
+        }
+        return [];
+    }
+
     private formatDate(dateString: string): string {
         try {
             const date = new Date(dateString);
@@ -2543,6 +2782,81 @@ class KnowledgePanel {
         } catch {
             return url;
         }
+    }
+
+    // Calculate knowledge quality metrics for enhanced display
+    private calculateKnowledgeQuality(knowledge: KnowledgeData) {
+        const entityCount = knowledge.entities?.length || 0;
+        const relationshipCount = knowledge.relationships?.length || 0;
+        const topicCount = knowledge.keyTopics?.length || 0;
+        const actionCount = knowledge.detectedActions?.length || 0;
+
+        // Calculate component scores
+        const entityScore = Math.min(entityCount * 10, 40); // Max 40 points for entities
+        const relationshipScore = Math.min(relationshipCount * 15, 30); // Max 30 points for relationships
+        const topicScore = Math.min(topicCount * 8, 20); // Max 20 points for topics
+        const actionScore = Math.min(actionCount * 2, 10); // Max 10 points for actions
+
+        const totalScore =
+            entityScore + relationshipScore + topicScore + actionScore;
+
+        // Determine quality level and color
+        let label: string, color: string;
+        if (totalScore >= 80) {
+            label = "Excellent";
+            color = "success";
+        } else if (totalScore >= 60) {
+            label = "Good";
+            color = "primary";
+        } else if (totalScore >= 40) {
+            label = "Fair";
+            color = "warning";
+        } else {
+            label = "Basic";
+            color = "secondary";
+        }
+
+        return {
+            score: totalScore,
+            label,
+            color,
+            entities: {
+                count: entityCount,
+                color:
+                    entityCount >= 5
+                        ? "success"
+                        : entityCount >= 2
+                          ? "primary"
+                          : "secondary",
+            },
+            relationships: {
+                count: relationshipCount,
+                color:
+                    relationshipCount >= 3
+                        ? "success"
+                        : relationshipCount >= 1
+                          ? "primary"
+                          : "secondary",
+            },
+            topics: {
+                count: topicCount,
+                color:
+                    topicCount >= 4
+                        ? "success"
+                        : topicCount >= 2
+                          ? "primary"
+                          : "secondary",
+            },
+            actions: {
+                count: actionCount,
+                color:
+                    actionCount >= 5
+                        ? "success"
+                        : actionCount >= 1
+                          ? "primary"
+                          : "secondary",
+            },
+        };
     }
 
     // === TASK 2: ADVANCED QUERY PROCESSING UI ===

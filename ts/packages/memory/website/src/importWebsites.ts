@@ -4,12 +4,15 @@
 import {
     WebsiteVisitInfo,
     Website,
+    WebsiteMeta,
     importWebsiteVisit,
 } from "./websiteMeta.js";
 import {
     ContentExtractor,
     ExtractionMode,
     EnhancedContent,
+    EnhancedContentWithKnowledge,
+    KnowledgeExtractionMode,
 } from "./contentExtractor.js";
 import path from "path";
 import fs from "fs";
@@ -30,6 +33,10 @@ export interface ImportOptions {
     enableActionDetection?: boolean;
     actionTimeout?: number;
     actionConfidence?: number;
+
+    // NEW: Knowledge extraction options
+    enableKnowledgeExtraction?: boolean;
+    knowledgeMode?: KnowledgeExtractionMode;
 }
 
 export interface ChromeBookmark {
@@ -472,6 +479,8 @@ export async function importWebsitesWithContent(
         extractionMode?: ExtractionMode;
         contentTimeout?: number;
         maxConcurrent?: number;
+        enableKnowledgeExtraction?: boolean;
+        knowledgeMode?: KnowledgeExtractionMode;
     },
     progressCallback?: ImportProgressCallback,
 ): Promise<Website[]> {
@@ -505,6 +514,8 @@ async function enhanceWithContent(
         timeout: options.contentTimeout || 10000,
         maxContentLength: 20000,
         enableActionDetection: options.enableActionDetection,
+        enableKnowledgeExtraction: options.enableKnowledgeExtraction || false,
+        knowledgeMode: options.knowledgeMode || "hybrid",
     });
 
     // TEMPORARY: Force batch size to 1 for debugging timeout issues
@@ -517,14 +528,33 @@ async function enhanceWithContent(
 
         const batchPromises = batch.map(async (website) => {
             try {
-                const contentData = await extractor.extractFromUrl(
-                    website.metadata.url,
-                    options.extractionMode || "content",
-                );
+                let contentData: EnhancedContent | EnhancedContentWithKnowledge;
+
+                // Use knowledge extraction if enabled
+                if (options.enableKnowledgeExtraction) {
+                    // First fetch the HTML content for knowledge processing
+                    const html = await extractor["fetchPage"](
+                        website.metadata.url,
+                    );
+                    contentData = await extractor.extractWithKnowledge(
+                        website.metadata.url,
+                        html,
+                        options.extractionMode || "content",
+                        options.knowledgeMode || "hybrid",
+                    );
+                } else {
+                    contentData = await extractor.extractFromUrl(
+                        website.metadata.url,
+                        options.extractionMode || "content",
+                    );
+                }
 
                 if (contentData.success) {
-                    // Create enhanced website with content
-                    return createEnhancedWebsite(website, contentData);
+                    // Create enhanced website with content and knowledge
+                    return createEnhancedWebsiteWithKnowledge(
+                        website,
+                        contentData,
+                    );
                 } else {
                     console.warn(
                         `Content extraction failed for ${website.metadata.url}: ${contentData.error}`,
@@ -566,9 +596,9 @@ async function enhanceWithContent(
     return enhanced;
 }
 
-function createEnhancedWebsite(
+function createEnhancedWebsiteWithKnowledge(
     originalWebsite: Website,
-    contentData: EnhancedContent,
+    contentData: EnhancedContent | EnhancedContentWithKnowledge,
 ): Website {
     // Create enhanced visit info with content
     const enhancedVisitInfo: WebsiteVisitInfo = {
@@ -615,7 +645,7 @@ function createEnhancedWebsite(
     if (contentData.actions)
         enhancedVisitInfo.extractedActions = contentData.actions;
 
-    // NEW: Action detection data
+    // Action detection data
     if (contentData.detectedActions)
         enhancedVisitInfo.detectedActions = contentData.detectedActions;
     if (contentData.actionSummary)
@@ -624,7 +654,28 @@ function createEnhancedWebsite(
     // Use page content as the main text if available, otherwise use existing text
     const mainText = contentData.pageContent?.mainContent || "";
 
-    return importWebsiteVisit(enhancedVisitInfo, mainText);
+    // Create website with enhanced metadata
+    const meta = new WebsiteMeta(enhancedVisitInfo);
+
+    // Get enhanced knowledge if available
+    let finalKnowledge;
+    if ("knowledge" in contentData && contentData.knowledge) {
+        finalKnowledge = meta.getEnhancedKnowledge(contentData.knowledge);
+    } else {
+        finalKnowledge = meta.getKnowledge();
+    }
+
+    // Create website with enhanced knowledge
+    const enhancedWebsite = new Website(
+        meta,
+        mainText,
+        [],
+        finalKnowledge,
+        undefined,
+        true,
+    );
+
+    return enhancedWebsite;
 }
 
 /**

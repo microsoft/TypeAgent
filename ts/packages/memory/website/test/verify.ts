@@ -3,6 +3,7 @@
 
 import { IndexingResults, MessageOrdinal } from "knowpro";
 import { WebsiteCollection } from "../src/websiteCollection.js";
+import { WebsiteDocPart } from "../src/websiteDocPart.js";
 
 export function verifyWebsiteCollection(
     collection: WebsiteCollection,
@@ -62,9 +63,9 @@ export function verifyWebsitesByDomain(
     collection: WebsiteCollection,
     expectedDomains: string[],
 ): void {
-    const websites = collection.messages.getAll();
+    const websites = collection.messages.getAll() as WebsiteDocPart[];
     const actualDomains = new Set(
-        websites.map((w) => w.metadata.domain).filter((d) => d !== undefined),
+        websites.map((w) => w.domain).filter((d) => d !== undefined),
     );
 
     for (const domain of expectedDomains) {
@@ -77,10 +78,8 @@ export function verifyWebsitesByPageType(
     pageType: string,
     expectedCount: number,
 ): void {
-    const websites = collection.messages.getAll();
-    const matchingWebsites = websites.filter(
-        (w) => w.metadata.pageType === pageType,
-    );
+    const websites = collection.messages.getAll() as WebsiteDocPart[];
+    const matchingWebsites = websites.filter((w) => w.pageType === pageType);
     expect(matchingWebsites.length).toBe(expectedCount);
 }
 
@@ -89,11 +88,9 @@ export function verifyBookmarksByFolder(
     folder: string,
     expectedCount: number,
 ): void {
-    const websites = collection.messages.getAll();
+    const websites = collection.messages.getAll() as WebsiteDocPart[];
     const bookmarksInFolder = websites.filter(
-        (w) =>
-            w.metadata.websiteSource === "bookmark" &&
-            w.metadata.folder?.includes(folder),
+        (w) => w.websiteSource === "bookmark" && w.folder?.includes(folder),
     );
     expect(bookmarksInFolder.length).toBe(expectedCount);
 }

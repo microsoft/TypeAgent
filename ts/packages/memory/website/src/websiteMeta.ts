@@ -10,6 +10,7 @@ import {
     ActionInfo,
 } from "./contentExtractor.js";
 import { DetectedAction, ActionSummary } from "./actionExtractor.js";
+import { websiteToTextChunksEnhanced } from "./chunkingUtils.js";
 
 export interface WebsiteVisitInfo {
     url: string;
@@ -124,6 +125,86 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
 
     public getKnowledge(): kpLib.KnowledgeResponse {
         return this.websiteToKnowledge();
+    }
+
+    public getEnhancedKnowledge(
+        extractedKnowledge?: kpLib.KnowledgeResponse,
+    ): kpLib.KnowledgeResponse {
+        const baseKnowledge = this.websiteToKnowledge();
+
+        if (!extractedKnowledge) {
+            return baseKnowledge;
+        }
+
+        // Merge base knowledge with advanced extracted knowledge
+        return this.mergeKnowledgeResponses(baseKnowledge, extractedKnowledge);
+    }
+
+    private mergeKnowledgeResponses(
+        baseKnowledge: kpLib.KnowledgeResponse,
+        extractedKnowledge: kpLib.KnowledgeResponse,
+    ): kpLib.KnowledgeResponse {
+        // Merge topics (removing duplicates)
+        const allTopics = [
+            ...baseKnowledge.topics,
+            ...extractedKnowledge.topics,
+        ];
+        const mergedTopics = [...new Set(allTopics)].slice(0, 30);
+
+        // Merge entities (removing duplicates by name, preserving website-specific facets)
+        const entityMap = new Map<string, kpLib.ConcreteEntity>();
+
+        // Add base entities first (preserve website-specific facets)
+        baseKnowledge.entities.forEach((entity) => {
+            entityMap.set(entity.name, entity);
+        });
+
+        // Add extracted entities, merging with existing if same name
+        extractedKnowledge.entities.forEach((entity) => {
+            const existing = entityMap.get(entity.name);
+            if (existing) {
+                // Merge facets, preserving website-specific ones
+                const mergedFacets = [...(existing.facets || [])];
+                const existingFacetNames = new Set(
+                    mergedFacets.map((f) => f.name),
+                );
+
+                entity.facets?.forEach((facet) => {
+                    if (!existingFacetNames.has(facet.name)) {
+                        mergedFacets.push(facet);
+                    }
+                });
+
+                entityMap.set(entity.name, {
+                    ...entity,
+                    type: [
+                        ...new Set([
+                            ...(existing.type || []),
+                            ...(entity.type || []),
+                        ]),
+                    ],
+                    facets: mergedFacets,
+                });
+            } else {
+                entityMap.set(entity.name, entity);
+            }
+        });
+
+        // Merge actions
+        const mergedActions = [
+            ...baseKnowledge.actions,
+            ...extractedKnowledge.actions,
+        ];
+
+        return {
+            entities: Array.from(entityMap.values()).slice(0, 40),
+            topics: mergedTopics,
+            actions: mergedActions.slice(0, 50),
+            inverseActions: [
+                ...baseKnowledge.inverseActions,
+                ...extractedKnowledge.inverseActions,
+            ].slice(0, 20),
+        };
     }
 
     private extractDomain(url: string): string {
@@ -662,11 +743,13 @@ export class Website implements kp.IMessage {
         this.timestamp = metadata.visitDate || metadata.bookmarkDate;
 
         if (isNew) {
-            pageContent = websiteToTextChunks(
+            const chunks = websiteToTextChunksEnhanced(
                 pageContent,
                 metadata.title,
                 metadata.url,
+                2000, // Default chunk size, can be made configurable
             );
+            pageContent = chunks;
         }
 
         if (Array.isArray(pageContent)) {
@@ -709,35 +792,4 @@ export function importWebsiteVisit(
         [],
         knowledge,
     );
-}
-
-function websiteToTextChunks(
-    pageContent: string | string[],
-    title?: string,
-    url?: string,
-): string | string[] {
-    if (Array.isArray(pageContent)) {
-        pageContent[0] = joinTitleUrlAndContent(pageContent[0], title, url);
-        return pageContent;
-    } else {
-        return joinTitleUrlAndContent(pageContent, title, url);
-    }
-}
-
-function joinTitleUrlAndContent(
-    pageContent: string,
-    title?: string,
-    url?: string,
-): string {
-    let result = "";
-    if (title) {
-        result += `Title: ${title}\n`;
-    }
-    if (url) {
-        result += `URL: ${url}\n`;
-    }
-    if (result) {
-        result += "\n";
-    }
-    return result + pageContent;
 }

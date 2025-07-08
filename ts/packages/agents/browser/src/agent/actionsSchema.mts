@@ -19,6 +19,7 @@ export type BrowserActions =
     | CaptureScreenshot
     | ReloadPage
     | ImportWebsiteData
+    | ImportHtmlFolder
     | SearchWebsites
     | GetWebsiteStats;
 
@@ -145,6 +146,31 @@ export type ImportWebsiteData = {
         extractionMode?: "basic" | "content" | "actions" | "full";
         maxConcurrent?: number;
         contentTimeout?: number;
+    };
+};
+
+// Import HTML files from local folder path
+export type ImportHtmlFolder = {
+    actionName: "importHtmlFolder";
+    parameters: {
+        // Folder path containing HTML files
+        folderPath: string;
+        // Import options
+        options?: {
+            extractContent?: boolean;
+            enableIntelligentAnalysis?: boolean;
+            enableActionDetection?: boolean;
+            extractionMode?: "basic" | "content" | "actions" | "full";
+            preserveStructure?: boolean;
+            // Folder-specific options
+            recursive?: boolean;
+            fileTypes?: string[];
+            limit?: number;
+            maxFileSize?: number;
+            skipHidden?: boolean;
+        };
+        // Import tracking ID
+        importId: string;
     };
 };
 
