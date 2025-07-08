@@ -11,7 +11,7 @@ import {
     FolderImportOptions,
     ImportProgress,
     ImportResult,
-} from "./interfaces/websiteImport.types";
+} from "../interfaces/websiteImport.types";
 
 interface FullPageNavigation {
     currentPage: "search" | "discover" | "analytics";

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { getActionsForUrl, getAllActions, getActionDomains } from "./storage";
+import { getActionsForUrl, getAllActions, getActionDomains } from "../storage";
 
 declare global {
     interface Window {

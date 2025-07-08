@@ -81,11 +81,11 @@
     "128": "images/icon-128.png"
   },
   "options_ui": {
-    "page": "options.html",
+    "page": "views/options.html",
     "open_in_tab": false
   },
   "side_panel": {
-    "default_path": "sidepanel.html"
+    "default_path": "views/sidepanel.html"
   },
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"

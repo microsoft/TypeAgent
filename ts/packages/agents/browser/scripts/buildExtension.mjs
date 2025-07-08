@@ -55,11 +55,11 @@ const sharedScripts = {
     contentScript: "contentScript/index.ts",
     webTypeAgentMain: "webTypeAgentMain.ts",
     webTypeAgentContentScript: "webTypeAgentContentScript.ts",
-    options: "options.ts",
-    sidepanel: "sidepanel.ts",
-    actionIndex: "actionIndex.ts",
-    knowledgePanel: "knowledgePanel.ts",
-    websiteLibraryPanel: "websiteLibraryPanel.ts",
+    options: "views/options.ts",
+    sidepanel: "views/sidepanel.ts",
+    actionIndex: "views/actionIndex.ts",
+    knowledgePanel: "views/knowledgePanel.ts",
+    websiteLibraryPanel: "views/websiteLibraryPanel.ts",
     uiEventsDispatcher: "uiEventsDispatcher.ts",
     "sites/paleobiodb": "sites/paleobiodb.ts",
 };
@@ -140,20 +140,21 @@ for (const [name, relPath] of Object.entries(sharedScripts)) {
 // Static file copy
 if (verbose) console.log(chalk.cyan("\n📁 Copying Chrome static files..."));
 copyFileSync(`${srcDir}/manifest.json`, `${chromeOutDir}/manifest.json`);
-copyFileSync(`${srcDir}/sidepanel.html`, `${chromeOutDir}/sidepanel.html`);
-copyFileSync(`${srcDir}/actionIndex.html`, `${chromeOutDir}/actionIndex.html`);
+mkdirSync(`${chromeOutDir}/views`, { recursive: true });
+copyFileSync(`${srcDir}/views/sidepanel.html`, `${chromeOutDir}/views/sidepanel.html`);
+copyFileSync(`${srcDir}/views/actionIndex.html`, `${chromeOutDir}/views/actionIndex.html`);
 copyFileSync(
-    `${srcDir}/knowledgePanel.html`,
-    `${chromeOutDir}/knowledgePanel.html`,
+    `${srcDir}/views/knowledgePanel.html`,
+    `${chromeOutDir}/views/knowledgePanel.html`,
 );
-copyFileSync(`${srcDir}/options.html`, `${chromeOutDir}/options.html`);
+copyFileSync(`${srcDir}/views/options.html`, `${chromeOutDir}/views/options.html`);
 copyFileSync(
-    `${srcDir}/websiteLibraryPanel.html`,
-    `${chromeOutDir}/websiteLibraryPanel.html`,
+    `${srcDir}/views/websiteLibraryPanel.html`,
+    `${chromeOutDir}/views/websiteLibraryPanel.html`,
 );
 copyFileSync(
-    `${srcDir}/websiteLibraryPanel.css`,
-    `${chromeOutDir}/websiteLibraryPanel.css`,
+    `${srcDir}/views/websiteLibraryPanel.css`,
+    `${chromeOutDir}/views/websiteLibraryPanel.css`,
 );
 mkdirSync(`${chromeOutDir}/sites`, { recursive: true });
 copyFileSync(

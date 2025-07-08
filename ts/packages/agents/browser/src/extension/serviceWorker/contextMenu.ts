@@ -42,7 +42,7 @@ export function initializeContextMenu(): void {
         id: "sidepanel-registerAgent",
         title: "Update Page Agent",
         contexts: ["all"],
-        documentUrlPatterns: ["chrome-extension://*/sidepanel.html"],
+        documentUrlPatterns: ["chrome-extension://*/views/sidepanel.html"],
     });
 
     chrome.contextMenus.create({
@@ -119,7 +119,7 @@ export async function handleContextMenuClick(
 
             await chrome.sidePanel.setOptions({
                 tabId: tab.id!,
-                path: "sidepanel.html",
+                path: "views/sidepanel.html",
                 enabled: true,
             });
             break;
@@ -127,7 +127,7 @@ export async function handleContextMenuClick(
         case "manageActions": {
             // Check if actionIndex tab already exists
             const existingTabs = await chrome.tabs.query({
-                url: chrome.runtime.getURL("actionIndex.html"),
+                url: chrome.runtime.getURL("views/actionIndex.html"),
             });
 
             if (existingTabs.length > 0) {
@@ -139,7 +139,7 @@ export async function handleContextMenuClick(
             } else {
                 // Create new tab
                 await chrome.tabs.create({
-                    url: chrome.runtime.getURL("actionIndex.html"),
+                    url: chrome.runtime.getURL("views/actionIndex.html"),
                     active: true,
                 });
             }
@@ -158,7 +158,7 @@ export async function handleContextMenuClick(
 
             await chrome.sidePanel.setOptions({
                 tabId: tab.id!,
-                path: "knowledgePanel.html",
+                path: "views/knowledgePanel.html",
                 enabled: true,
             });
 
@@ -167,7 +167,7 @@ export async function handleContextMenuClick(
 
         case "showWebsiteLibrary": {
             const websiteLibraryUrl = chrome.runtime.getURL(
-                "websiteLibraryPanel.html",
+                "views/websiteLibraryPanel.html",
             );
 
             // Check if website library tab is already open
