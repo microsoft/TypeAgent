@@ -97,14 +97,6 @@ export class ConversationMessage extends Message<ConversationMessageMeta> {
         timestamp = timestamp ?? new Date().toISOString();
         super(metadata, messageText, tags, timestamp, knowledge);
     }
-
-    protected override mergeEntities(
-        entities: kpLib.ConcreteEntity[],
-    ): kpLib.ConcreteEntity[] {
-        // TODO: using mergeConcreteEntitiesEx to avoid forcing the data to be lower case.
-        // Replace with mergeConcreteEntities once it has switch over to the Ex version.
-        return kp.mergeConcreteEntitiesEx(entities);
-    }
 }
 
 export type ConversationMemorySettings = MemorySettings;
@@ -161,7 +153,7 @@ export class ConversationMemory
     public async addMessage(
         message: ConversationMessage,
         extractKnowledge: boolean = true,
-        retainKnowledge: boolean = true,
+        retainKnowledge: boolean = false,
     ): Promise<Result<kpLib.KnowledgeResponse | undefined>> {
         //
         // Messages can contain prior knowledge extracted during chat responses for example
@@ -227,7 +219,7 @@ export class ConversationMemory
         message: ConversationMessage,
         completionCallback?: ConversationTaskCallback,
         extractKnowledge: boolean = true,
-        retainKnowledge: boolean = true,
+        retainKnowledge: boolean = false,
     ): void {
         this.updatesTaskQueue.push({
             type: "addMessage",

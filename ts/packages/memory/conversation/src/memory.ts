@@ -194,20 +194,14 @@ export class Message<TMeta extends MessageMetadata = MessageMetadata>
         return combinedKnowledge;
     }
 
-    protected mergeEntities(
+    private mergeEntities(
         entities: kpLib.ConcreteEntity[],
     ): kpLib.ConcreteEntity[] {
-        return kp.mergeConcreteEntities(entities);
+        // TODO: using mergeConcreteEntitiesEx to avoid forcing the data to be lower case.
+        // Replace with mergeConcreteEntities once it has switch over to the Ex version.
+        return kp.mergeConcreteEntitiesEx(entities);
     }
 }
-
-/**
- * A
- */
-export type MemoryFilter = {
-    knowledgeType?: kp.KnowledgeType | undefined;
-    tag?: string | string[];
-};
 
 /**
  * A memory containing a sequence of messages {@link Message}

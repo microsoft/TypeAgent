@@ -37,7 +37,7 @@ describeIf(
                     baseFileName: "endToEnd",
                 };
                 for (const message of messages) {
-                    const result = await cm.addMessage(message);
+                    const result = await cm.addMessage(message, true, true);
                     expect(result.success).toBeTruthy();
                 }
                 verifyMemory(cm, messages.length);
@@ -93,7 +93,7 @@ describeIf(
                 }
                 const cm = new ConversationMemory();
                 for (const message of messages) {
-                    const result = await cm.addMessage(message);
+                    const result = await cm.addMessage(message, true, true);
                     expect(result.success).toBeTruthy();
                 }
                 const refs = cm.semanticRefs;
@@ -124,9 +124,14 @@ describeIf(
                 const messages = loadTestMessages(maxMessages);
                 const cm = new ConversationMemory();
                 for (const message of messages) {
-                    cm.queueAddMessage(message, (error) => {
-                        expect(error).toBeUndefined();
-                    });
+                    cm.queueAddMessage(
+                        message,
+                        (error) => {
+                            expect(error).toBeUndefined();
+                        },
+                        true,
+                        true,
+                    );
                 }
                 await cm.waitForPendingTasks();
                 verifyMemory(cm, messages.length);
@@ -150,6 +155,7 @@ describeIf(
                             expect(error).toBeUndefined();
                         },
                         false,
+                        true,
                     );
                 }
                 await cm.waitForPendingTasks();
