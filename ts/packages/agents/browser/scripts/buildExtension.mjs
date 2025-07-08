@@ -56,10 +56,10 @@ const sharedScripts = {
     webTypeAgentMain: "webTypeAgentMain.ts",
     webTypeAgentContentScript: "webTypeAgentContentScript.ts",
     options: "views/options.ts",
-    sidepanel: "views/sidepanel.ts",
-    actionIndex: "views/actionIndex.ts",
-    knowledgePanel: "views/knowledgePanel.ts",
-    websiteLibraryPanel: "views/websiteLibraryPanel.ts",
+    pageActions: "views/pageActions.ts",
+    actionsLibrary: "views/actionsLibrary.ts",
+    pageKnowledge: "views/pageKnowledge.ts",
+    knowledgeLibrary: "views/knowledgeLibrary.ts",
     uiEventsDispatcher: "uiEventsDispatcher.ts",
     "sites/paleobiodb": "sites/paleobiodb.ts",
 };
@@ -141,20 +141,29 @@ for (const [name, relPath] of Object.entries(sharedScripts)) {
 if (verbose) console.log(chalk.cyan("\n📁 Copying Chrome static files..."));
 copyFileSync(`${srcDir}/manifest.json`, `${chromeOutDir}/manifest.json`);
 mkdirSync(`${chromeOutDir}/views`, { recursive: true });
-copyFileSync(`${srcDir}/views/sidepanel.html`, `${chromeOutDir}/views/sidepanel.html`);
-copyFileSync(`${srcDir}/views/actionIndex.html`, `${chromeOutDir}/views/actionIndex.html`);
 copyFileSync(
-    `${srcDir}/views/knowledgePanel.html`,
-    `${chromeOutDir}/views/knowledgePanel.html`,
-);
-copyFileSync(`${srcDir}/views/options.html`, `${chromeOutDir}/views/options.html`);
-copyFileSync(
-    `${srcDir}/views/websiteLibraryPanel.html`,
-    `${chromeOutDir}/views/websiteLibraryPanel.html`,
+    `${srcDir}/views/pageActions.html`,
+    `${chromeOutDir}/views/pageActions.html`,
 );
 copyFileSync(
-    `${srcDir}/views/websiteLibraryPanel.css`,
-    `${chromeOutDir}/views/websiteLibraryPanel.css`,
+    `${srcDir}/views/actionsLibrary.html`,
+    `${chromeOutDir}/views/actionsLibrary.html`,
+);
+copyFileSync(
+    `${srcDir}/views/pageKnowledge.html`,
+    `${chromeOutDir}/views/pageKnowledge.html`,
+);
+copyFileSync(
+    `${srcDir}/views/options.html`,
+    `${chromeOutDir}/views/options.html`,
+);
+copyFileSync(
+    `${srcDir}/views/knowledgeLibrary.html`,
+    `${chromeOutDir}/views/knowledgeLibrary.html`,
+);
+copyFileSync(
+    `${srcDir}/views/knowledgeLibrary.css`,
+    `${chromeOutDir}/views/knowledgeLibrary.css`,
 );
 mkdirSync(`${chromeOutDir}/sites`, { recursive: true });
 copyFileSync(

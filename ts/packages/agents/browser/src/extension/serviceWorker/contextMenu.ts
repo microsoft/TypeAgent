@@ -42,7 +42,7 @@ export function initializeContextMenu(): void {
         id: "sidepanel-registerAgent",
         title: "Update Page Agent",
         contexts: ["all"],
-        documentUrlPatterns: ["chrome-extension://*/views/sidepanel.html"],
+        documentUrlPatterns: ["chrome-extension://*/views/pageActions.html"],
     });
 
     chrome.contextMenus.create({
@@ -119,15 +119,15 @@ export async function handleContextMenuClick(
 
             await chrome.sidePanel.setOptions({
                 tabId: tab.id!,
-                path: "views/sidepanel.html",
+                path: "views/pageActions.html",
                 enabled: true,
             });
             break;
         }
         case "manageActions": {
-            // Check if actionIndex tab already exists
+            // Check if actionsLibrary tab already exists
             const existingTabs = await chrome.tabs.query({
-                url: chrome.runtime.getURL("views/actionIndex.html"),
+                url: chrome.runtime.getURL("views/actionsLibrary.html"),
             });
 
             if (existingTabs.length > 0) {
@@ -139,7 +139,7 @@ export async function handleContextMenuClick(
             } else {
                 // Create new tab
                 await chrome.tabs.create({
-                    url: chrome.runtime.getURL("views/actionIndex.html"),
+                    url: chrome.runtime.getURL("views/actionsLibrary.html"),
                     active: true,
                 });
             }
@@ -158,7 +158,7 @@ export async function handleContextMenuClick(
 
             await chrome.sidePanel.setOptions({
                 tabId: tab.id!,
-                path: "views/knowledgePanel.html",
+                path: "views/pageKnowledge.html",
                 enabled: true,
             });
 
@@ -166,13 +166,13 @@ export async function handleContextMenuClick(
         }
 
         case "showWebsiteLibrary": {
-            const websiteLibraryUrl = chrome.runtime.getURL(
-                "views/websiteLibraryPanel.html",
+            const knowledgeLibraryUrl = chrome.runtime.getURL(
+                "views/knowledgeLibrary.html",
             );
 
-            // Check if website library tab is already open
+            // Check if knowledge library tab is already open
             const existingTabs = await chrome.tabs.query({
-                url: websiteLibraryUrl,
+                url: knowledgeLibraryUrl,
             });
 
             if (existingTabs.length > 0) {
@@ -187,7 +187,7 @@ export async function handleContextMenuClick(
             } else {
                 // Create new tab
                 await chrome.tabs.create({
-                    url: websiteLibraryUrl,
+                    url: knowledgeLibraryUrl,
                     active: true,
                 });
             }

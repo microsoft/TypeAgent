@@ -526,14 +526,14 @@ export async function handleMessage(
                 if (panel === "schema") {
                     await chrome.sidePanel.setOptions({
                         tabId: tabId,
-                        path: "views/sidepanel.html",
+                        path: "views/pageActions.html",
                         enabled: true,
                     });
                     await chrome.sidePanel.open({ tabId });
                 } else if (panel === "knowledge") {
                     await chrome.sidePanel.setOptions({
                         tabId: tabId,
-                        path: "views/knowledgePanel.html",
+                        path: "views/pageKnowledge.html",
                         enabled: true,
                     });
                     await chrome.sidePanel.open({ tabId });
