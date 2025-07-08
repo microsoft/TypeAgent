@@ -151,6 +151,10 @@ copyFileSync(
     `${srcDir}/websiteLibraryPanel.html`,
     `${chromeOutDir}/websiteLibraryPanel.html`,
 );
+copyFileSync(
+    `${srcDir}/websiteLibraryPanel.css`,
+    `${chromeOutDir}/websiteLibraryPanel.css`,
+);
 mkdirSync(`${chromeOutDir}/sites`, { recursive: true });
 copyFileSync(
     `${srcDir}/sites/paleobiodbSchema.mts`,

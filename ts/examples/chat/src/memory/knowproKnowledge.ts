@@ -166,6 +166,9 @@ export async function createKnowproKnowledgeCommands(
     return;
 }
 
+/**
+ * Experimental: Turn knowledge into a query
+ */
 export class KnowledgeCompiler {
     constructor() {}
 

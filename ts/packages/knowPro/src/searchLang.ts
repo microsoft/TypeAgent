@@ -45,12 +45,13 @@ import {
 */
 
 /**
- * Type representing the filter options for language search.
+ * Filter options for language search.
  */
 export type LanguageSearchFilter = {
     knowledgeType?: KnowledgeType | undefined;
     threadDescription?: string | undefined;
     tags?: string[] | undefined;
+    scopeDefiningTerms?: SearchTermGroup | undefined;
 };
 
 /**
@@ -502,6 +503,17 @@ class SearchQueryCompiler {
                 when ??= {};
                 when.threadDescription =
                     this.langSearchFilter.threadDescription;
+            }
+            if (this.langSearchFilter.scopeDefiningTerms) {
+                when ??= {};
+                if (when.scopeDefiningTerms) {
+                    when.scopeDefiningTerms.terms.push(
+                        this.langSearchFilter.scopeDefiningTerms,
+                    );
+                } else {
+                    when.scopeDefiningTerms =
+                        this.langSearchFilter.scopeDefiningTerms;
+                }
             }
         }
         return when;

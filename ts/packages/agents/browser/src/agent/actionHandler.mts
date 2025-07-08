@@ -63,6 +63,8 @@ import {
     resolveURLWithHistory,
     importWebsiteData,
     importWebsiteDataFromSession,
+    importHtmlFolder,
+    importHtmlFolderFromSession,
     searchWebsites,
     getWebsiteStats,
 } from "./websiteMemory.mjs";
@@ -401,6 +403,7 @@ async function updateBrowserContext(
                         }
 
                         case "importWebsiteData":
+                        case "importHtmlFolder":
                         case "searchWebsites":
                         case "getWebsiteStats": {
                             const websiteResult = await handleWebsiteAction(
@@ -665,6 +668,8 @@ async function executeBrowserAction(
                     return closeWebPage(context);
                 case "importWebsiteData":
                     return importWebsiteData(context, action);
+                case "importHtmlFolder":
+                    return importHtmlFolder(context, action);
                 case "searchWebsites":
                     return searchWebsites(context, action);
                 case "getWebsiteStats":
@@ -1058,6 +1063,9 @@ async function handleWebsiteAction(
     switch (actionName) {
         case "importWebsiteData":
             return await importWebsiteDataFromSession(parameters, context);
+
+        case "importHtmlFolder":
+            return await importHtmlFolderFromSession(parameters, context);
 
         case "searchWebsites":
             // Convert to ActionContext format for existing function

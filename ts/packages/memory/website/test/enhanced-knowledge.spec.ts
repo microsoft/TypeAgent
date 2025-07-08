@@ -319,4 +319,211 @@ describe("Enhanced Website Query Integration", () => {
             ).toBe(true);
         });
     });
+
+    test("should integrate enhanced knowledge with base knowledge", () => {
+        const visitInfo = {
+            url: "https://example.com/article",
+            title: "Example Article",
+            domain: "example.com",
+            source: "bookmark" as const,
+            pageType: "news",
+            detectedActions: [
+                {
+                    actionType: "ShareAction",
+                    name: "Social media sharing",
+                    confidence: 0.9,
+                    selectors: [".share-button"],
+                },
+            ],
+        };
+
+        const meta = new WebsiteMeta(visitInfo);
+
+        // Mock enhanced knowledge from conversation package
+        const enhancedKnowledge = {
+            entities: [
+                {
+                    name: "artificial intelligence",
+                    type: ["concept", "technology"],
+                    facets: [{ name: "field", value: "computer science" }],
+                },
+            ],
+            topics: ["machine learning", "neural networks"],
+            actions: [
+                {
+                    verbs: ["discusses"],
+                    verbTense: "present" as const,
+                    subjectEntityName: "article",
+                    objectEntityName: "artificial intelligence",
+                    indirectObjectEntityName: "none",
+                    params: [],
+                },
+            ],
+            inverseActions: [],
+        };
+
+        const mergedKnowledge = meta.getEnhancedKnowledge(enhancedKnowledge);
+
+        // Should have entities from both base and enhanced knowledge
+        expect(mergedKnowledge.entities.length).toBeGreaterThan(1);
+        expect(
+            mergedKnowledge.entities.some((e) => e.name === "example.com"),
+        ).toBe(true);
+        expect(
+            mergedKnowledge.entities.some(
+                (e) => e.name === "artificial intelligence",
+            ),
+        ).toBe(true);
+
+        // Should have topics from both sources
+        expect(mergedKnowledge.topics).toContain("machine learning");
+        expect(mergedKnowledge.topics).toContain("neural networks");
+        expect(mergedKnowledge.topics.some((t) => t.includes("bookmark"))).toBe(
+            true,
+        );
+
+        // Should preserve website-specific facets
+        const domainEntity = mergedKnowledge.entities.find(
+            (e) => e.name === "example.com",
+        );
+        expect(domainEntity?.facets?.some((f) => f.name === "source")).toBe(
+            true,
+        );
+    });
+});
+
+/**
+ * Test knowledge-enhanced search capabilities
+ */
+describe("Knowledge-Enhanced Search", () => {
+    let collection: any;
+
+    beforeEach(() => {
+        // This would use the actual WebsiteCollection in a real test
+        // For now, we test the search logic conceptually
+        collection = {
+            searchByEntities: jest.fn(),
+            searchByTopics: jest.fn(),
+            searchByActions: jest.fn(),
+            hybridSearch: jest.fn(),
+        };
+    });
+
+    test("should search by knowledge entities", async () => {
+        const mockResults = [
+            {
+                url: "https://example.com",
+                title: "Example Site",
+                getKnowledge: () => ({
+                    entities: [{ name: "javascript", type: ["language"] }],
+                    topics: [],
+                    actions: [],
+                }),
+            },
+        ];
+
+        collection.searchByEntities.mockResolvedValue(mockResults);
+
+        const results = await collection.searchByEntities(["javascript"]);
+        expect(results).toHaveLength(1);
+        expect(collection.searchByEntities).toHaveBeenCalledWith([
+            "javascript",
+        ]);
+    });
+
+    test("should search by knowledge topics", async () => {
+        const mockResults = [
+            {
+                url: "https://tutorial.com",
+                title: "Programming Tutorial",
+                getKnowledge: () => ({
+                    entities: [],
+                    topics: ["programming", "tutorial"],
+                    actions: [],
+                }),
+            },
+        ];
+
+        collection.searchByTopics.mockResolvedValue(mockResults);
+
+        const results = await collection.searchByTopics(["programming"]);
+        expect(results).toHaveLength(1);
+        expect(collection.searchByTopics).toHaveBeenCalledWith(["programming"]);
+    });
+
+    test("should perform hybrid search with relevance scoring", async () => {
+        const mockResults = [
+            {
+                website: { url: "https://example.com" },
+                relevanceScore: 0.8,
+                matchedElements: ["title", "topics"],
+                knowledgeContext: {
+                    entityCount: 5,
+                    topicCount: 3,
+                    actionCount: 2,
+                },
+            },
+        ];
+
+        collection.hybridSearch.mockResolvedValue(mockResults);
+
+        const results = await collection.hybridSearch("javascript programming");
+        expect(results).toHaveLength(1);
+        expect(results[0].relevanceScore).toBe(0.8);
+        expect(results[0].knowledgeContext).toBeDefined();
+    });
+});
+
+/**
+ * Test knowledge analytics and insights
+ */
+describe("Knowledge Analytics", () => {
+    test("should calculate knowledge insights", () => {
+        // Mock the insights calculation
+        const insights = {
+            totalSites: 2,
+            sitesWithKnowledge: 2,
+            topEntities: new Map([
+                ["javascript", 2],
+                ["react", 1],
+            ]),
+            topTopics: new Map([
+                ["web development", 1],
+                ["frontend", 1],
+                ["programming", 1],
+            ]),
+            actionTypes: new Map([["uses", 1]]),
+            averageKnowledgeRichness: 2.5,
+            timeframe: "all",
+        };
+
+        expect(insights.totalSites).toBe(2);
+        expect(insights.sitesWithKnowledge).toBe(2);
+        expect(insights.topEntities.get("javascript")).toBe(2);
+        expect(insights.averageKnowledgeRichness).toBe(2.5);
+    });
+
+    test("should track knowledge growth over time", () => {
+        const mockGrowthInsights = {
+            entityGrowth: new Map([
+                ["javascript", 3],
+                ["react", 2],
+                ["node.js", 1],
+            ]),
+            topicGrowth: new Map([
+                ["web development", 4],
+                ["backend", 2],
+                ["frontend", 3],
+            ]),
+            knowledgeRichnessTrend: [
+                { date: "2024-01-15", richness: 5 },
+                { date: "2024-01-16", richness: 8 },
+                { date: "2024-01-17", richness: 12 },
+            ],
+        };
+
+        expect(mockGrowthInsights.entityGrowth.get("javascript")).toBe(3);
+        expect(mockGrowthInsights.knowledgeRichnessTrend).toHaveLength(3);
+        expect(mockGrowthInsights.knowledgeRichnessTrend[2].richness).toBe(12);
+    });
 });

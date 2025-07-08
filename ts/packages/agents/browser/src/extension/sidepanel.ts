@@ -1315,14 +1315,6 @@ class ActionDiscoveryPanel {
     }
 
     private createUserActionDetails(action: any, index: number): string {
-        // Adapt to new StoredAction format
-        const intentSchema =
-            action.definition?.intentSchema ||
-            action.intentSchema ||
-            "No intent schema available";
-        const actionSteps =
-            action.definition?.actionSteps || action.actionsJson || {};
-
         const tabs = [
             { id: `steps${index}`, label: "Steps", active: true },
             { id: `intent${index}`, label: "Intent" },
@@ -1337,11 +1329,11 @@ class ActionDiscoveryPanel {
             },
             {
                 id: `intent${index}`,
-                content: `<pre><code class="language-typescript">${intentSchema}</code></pre>`,
+                content: `<pre><code class="language-typescript">${action.intentSchema || "No intent schema available"}</code></pre>`,
             },
             {
                 id: `actions${index}`,
-                content: `<pre><code class="language-json">${JSON.stringify(actionSteps, null, 2)}</code></pre>`,
+                content: `<pre><code class="language-json">${JSON.stringify(action.actionsJson || {}, null, 2)}</code></pre>`,
             },
         ];
 

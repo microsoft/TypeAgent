@@ -440,12 +440,12 @@ export async function checkPageIndexStatus(
 
         if (foundWebsite) {
             const knowledge = foundWebsite.getKnowledge();
+            const metadata =
+                foundWebsite.metadata as website.WebsiteDocPartMeta;
             return {
                 isIndexed: true,
                 lastIndexed:
-                    foundWebsite.metadata.visitDate ||
-                    foundWebsite.metadata.bookmarkDate ||
-                    null,
+                    metadata.visitDate || metadata.bookmarkDate || null,
                 entityCount: knowledge?.entities?.length || 0,
             };
         } else {
@@ -492,8 +492,9 @@ export async function getKnowledgeIndexStats(
                 totalRelationships += knowledge.actions?.length || 0;
             }
 
-            const siteDate =
-                site.metadata.visitDate || site.metadata.bookmarkDate;
+            const metadata = site.metadata as website.WebsiteDocPartMeta;
+
+            const siteDate = metadata.visitDate || metadata.bookmarkDate;
             if (siteDate && (!lastIndexed || siteDate > lastIndexed)) {
                 lastIndexed = siteDate;
             }

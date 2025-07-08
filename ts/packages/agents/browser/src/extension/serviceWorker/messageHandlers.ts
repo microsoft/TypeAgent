@@ -20,6 +20,65 @@ export async function handleMessage(
     message: any,
     sender: chrome.runtime.MessageSender,
 ): Promise<any> {
+    // Handle action-based messages (from websiteLibraryPanel)
+    if (message.action) {
+        switch (message.action) {
+            case "checkWebSocketConnection": {
+                try {
+                    const websocket = getWebSocket();
+                    return {
+                        connected:
+                            websocket &&
+                            websocket.readyState === WebSocket.OPEN,
+                    };
+                } catch (error) {
+                    return { connected: false };
+                }
+            }
+
+            case "getLibraryStats": {
+                return await handleGetWebsiteLibraryStats();
+            }
+
+            case "searchWebsites": {
+                return await handleSearchWebsitesEnhanced(message);
+            }
+
+            case "extractKnowledge": {
+                // TODO: Implement knowledge extraction
+                return {
+                    hasKnowledge: false,
+                    status: "none",
+                    error: "Knowledge extraction not implemented",
+                };
+            }
+
+            case "checkKnowledgeStatus": {
+                // TODO: Implement knowledge status check
+                return {
+                    hasKnowledge: false,
+                    status: "none",
+                };
+            }
+
+            case "getSearchSuggestions": {
+                return await handleGetSearchSuggestions(message);
+            }
+
+            case "getRecentSearches": {
+                return await handleGetSearchHistory();
+            }
+
+            case "saveSearch": {
+                return await handleSaveSearchHistory({
+                    query: message.query,
+                    results: message.results,
+                });
+            }
+        }
+    }
+
+    // Handle type-based messages (existing code)
     switch (message.type) {
         case "initialize": {
             console.log("Browser Agent Service Worker started");
@@ -538,6 +597,19 @@ export async function handleMessage(
             return await handleCancelImport(message.importId);
         }
 
+        // HTML Folder Import message handlers
+        case "importHtmlFolder": {
+            return await handleImportHtmlFolder(message);
+        }
+
+        case "getFileImportProgress": {
+            return await handleGetFileImportProgress(message.importId);
+        }
+
+        case "cancelFileImport": {
+            return await handleCancelFileImport(message.importId);
+        }
+
         // Enhanced search message handlers
         case "searchWebsitesEnhanced": {
             return await handleSearchWebsitesEnhanced(message);
@@ -827,6 +899,111 @@ async function handleCancelImport(importId: string) {
         return { success: true };
     } catch (error) {
         console.error("Error cancelling import:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+// HTML Folder Import handlers
+async function handleImportHtmlFolder(message: any) {
+    try {
+        const { parameters } = message;
+        const { folderPath, options, importId } = parameters;
+
+        // Send action to backend agent using the new ImportHtmlFolder action
+        const result = await sendActionToAgent({
+            actionName: "importHtmlFolder",
+            parameters: {
+                folderPath,
+                options: {
+                    extractContent: options?.extractContent ?? true,
+                    enableIntelligentAnalysis:
+                        options?.enableIntelligentAnalysis ?? true,
+                    enableActionDetection:
+                        options?.enableActionDetection ?? false,
+                    extractionMode: options?.extractionMode ?? "content",
+                    preserveStructure: options?.preserveStructure ?? true,
+                    recursive: options?.recursive ?? true,
+                    fileTypes: options?.fileTypes ?? [
+                        ".html",
+                        ".htm",
+                        ".mhtml",
+                    ],
+                    limit: options?.limit,
+                    maxFileSize: options?.maxFileSize,
+                    skipHidden: options?.skipHidden ?? true,
+                },
+                importId,
+            },
+        });
+
+        return {
+            success: !result.error,
+            itemCount: result.websiteCount || 0,
+            importId: importId,
+            duration: result.duration || 0,
+            errors: result.errors || [],
+            summary: {
+                totalProcessed: result.websiteCount || 0,
+                successfullyImported: result.websiteCount || 0,
+                knowledgeExtracted: result.knowledgeCount || 0,
+                entitiesFound: result.entityCount || 0,
+                topicsIdentified: result.topicCount || 0,
+                actionsDetected: result.actionCount || 0,
+            },
+        };
+    } catch (error) {
+        console.error("Folder import error:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+            importId: message.parameters?.importId || "unknown",
+            itemCount: 0,
+            errors: [(error as Error).message],
+            summary: {
+                totalProcessed: 0,
+                successfullyImported: 0,
+                knowledgeExtracted: 0,
+                entitiesFound: 0,
+                topicsIdentified: 0,
+                actionsDetected: 0,
+            },
+        };
+    }
+}
+
+async function handleGetFileImportProgress(importId: string) {
+    try {
+        // For now, return a basic progress response
+        // In a full implementation, this would track actual import progress
+        return {
+            success: true,
+            progress: {
+                importId: importId,
+                phase: "complete",
+                totalItems: 0,
+                processedItems: 0,
+                errors: [],
+            },
+        };
+    } catch (error) {
+        console.error("Error getting file import progress:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+async function handleCancelFileImport(importId: string) {
+    try {
+        // Implementation would depend on how file imports are tracked
+        // For now, just return success
+        return { success: true };
+    } catch (error) {
+        console.error("Error cancelling file import:", error);
         return {
             success: false,
             error: error instanceof Error ? error.message : "Unknown error",

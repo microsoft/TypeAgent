@@ -55,8 +55,14 @@ export class SearchTermParser {
 
     public removeNoise(terms: string[]): string[] {
         let cleanTerms = terms.filter(
-            (t) => t.length >= this.minTermLength && !this.noiseTerms.has(t),
+            (t) =>
+                this.isNumeric(t) ||
+                (t.length >= this.minTermLength && !this.noiseTerms.has(t)),
         );
         return cleanTerms;
+    }
+
+    private isNumeric(text: string): boolean {
+        return !isNaN(Number(text));
     }
 }
