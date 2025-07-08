@@ -535,7 +535,7 @@ export interface SearchTerm {
     /**
      * Additional terms related to term.
      * These can be supplied from synonym tables and so on.
-     *  - Zero length array: no related matches for this term
+     *  - Zero length array: no related matches for this term. That will force an exact match
      *  - undefined array: the search processor may try to resolve related terms from any  {@link IConversationSecondaryIndexes}
      * related term {@link ITermToRelatedTermsIndex} indexes available to it
      */
