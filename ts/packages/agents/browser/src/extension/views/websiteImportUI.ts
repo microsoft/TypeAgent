@@ -12,7 +12,7 @@ import {
     ValidationResult,
     SUPPORTED_FILE_TYPES,
     DEFAULT_MAX_FILE_SIZE,
-} from "./interfaces/websiteImport.types";
+} from "../interfaces/websiteImport.types";
 
 /**
  * UI components and modal management for website import functionality

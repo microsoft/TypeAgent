@@ -1004,6 +1004,28 @@ class KnowledgePanel {
                 }
             }
 
+            // Handle source open button clicks
+            if (target.closest(".source-open-btn")) {
+                e.preventDefault();
+                const button = target.closest(
+                    ".source-open-btn",
+                ) as HTMLElement;
+                const url = button.getAttribute("data-url");
+
+                if (url) {
+                    // Add visual feedback
+                    button.classList.add("btn-primary");
+                    button.classList.remove("btn-outline-primary");
+                    setTimeout(() => {
+                        button.classList.remove("btn-primary");
+                        button.classList.add("btn-outline-primary");
+                    }, 300);
+
+                    // Open the source in a new tab
+                    chrome.tabs.create({ url: url, active: false });
+                }
+            }
+
             // Handle explore related content button clicks
             if (target.closest(".explore-related")) {
                 e.preventDefault();
@@ -3152,7 +3174,7 @@ class KnowledgePanel {
                                             Last indexed: ${this.formatDate(source.lastIndexed)}
                                         </small>
                                     </div>
-                                    <button class="btn btn-sm btn-outline-primary" onclick="chrome.tabs.create({url: '${source.url}'})">
+                                    <button class="btn btn-sm btn-outline-primary source-open-btn" data-url="${source.url}">
                                         <i class="bi bi-box-arrow-up-right"></i>
                                     </button>
                                 </div>
