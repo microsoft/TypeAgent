@@ -26,10 +26,10 @@ export interface ActionResult {
 
 export class EntityCollector {
     private entities: EntityInfo[] = [];
-    
+
     addEntity(name: string, types: string[], metadata?: any): void {
         // Simple deduplication by name
-        const existing = this.entities.find(e => e.name === name);
+        const existing = this.entities.find((e) => e.name === name);
         if (existing) {
             // Merge types and metadata
             existing.type = [...new Set([...existing.type, ...types])];
@@ -38,11 +38,11 @@ export class EntityCollector {
             this.entities.push({ name, type: types, metadata });
         }
     }
-    
+
     getEntities(): EntityInfo[] {
         return [...this.entities];
     }
-    
+
     clear(): void {
         this.entities = [];
     }
@@ -67,14 +67,14 @@ export async function handleInstacartAction(
     const browser: BrowserConnector = context.agentContext.browserConnector;
     const agent = await createInstacartPageTranslator("GPT_4_O_MINI");
     const ui = setupPageActions(browser, agent);
-    
+
     // Create entity collector and action context
     const entityCollector = new EntityCollector();
     const actionContext: ActionHandlerContext = {
         browser,
         agent,
         ui,
-        entities: entityCollector
+        entities: entityCollector,
     };
 
     let message = "OK";
@@ -114,13 +114,13 @@ export async function handleInstacartAction(
 
     return {
         displayText: message,
-        entities: entityCollector.getEntities()
+        entities: entityCollector.getEntities(),
     };
 }
 
 async function handleFindProduct(
     action: any,
-    ctx: ActionHandlerContext
+    ctx: ActionHandlerContext,
 ): Promise<string> {
     const targetProduct = await ctx.ui.searchOnWebsite(
         "ProductTile",
@@ -134,7 +134,7 @@ async function handleFindProduct(
             keyword: action.parameters.keyword,
             price: targetProduct.price,
             brand: targetProduct.brand,
-            availability: targetProduct.availability
+            availability: targetProduct.availability,
         });
     }
 
@@ -144,7 +144,7 @@ async function handleFindProduct(
 
 async function handleAddToCart(
     action: any,
-    ctx: ActionHandlerContext
+    ctx: ActionHandlerContext,
 ): Promise<string> {
     const targetProduct = await ctx.ui.getPageComponent(
         "ProductDetailsHeroTile",
@@ -157,7 +157,7 @@ async function handleAddToCart(
             price: targetProduct.price,
             rating: targetProduct.rating,
             storeName: targetProduct.storeName,
-            physicalLocation: targetProduct.physicalLocationInStore
+            physicalLocation: targetProduct.physicalLocationInStore,
         });
     }
 
@@ -165,19 +165,21 @@ async function handleAddToCart(
         await ctx.browser.clickOn(targetProduct.addToCartButton.cssSelector);
         return `Added ${targetProduct.productName || "product"} to cart`;
     }
-    
+
     return "Could not add product to cart";
 }
 
 // Add default cart support function
-async function selectDefaultStoreCart(ctx: ActionHandlerContext): Promise<void> {
+async function selectDefaultStoreCart(
+    ctx: ActionHandlerContext,
+): Promise<void> {
     const cartButton = await ctx.ui.getPageComponent("ShoppingCartButton");
     await ctx.ui.followLink(cartButton?.detailsLinkCssSelector);
 }
 
 async function selectStoreCart(
     action: any,
-    ctx: ActionHandlerContext
+    ctx: ActionHandlerContext,
 ): Promise<void> {
     const cartButton = await ctx.ui.getPageComponent("ShoppingCartButton");
     await ctx.ui.followLink(cartButton?.detailsLinkCssSelector);
@@ -185,7 +187,7 @@ async function selectStoreCart(
 
 async function handleGetCart(
     action: any,
-    ctx: ActionHandlerContext
+    ctx: ActionHandlerContext,
 ): Promise<string> {
     // Support both storeName and default cart (matches planHandler)
     if (action.parameters.storeName) {
@@ -200,10 +202,14 @@ async function handleGetCart(
 
     if (cartDetails) {
         // Add store entity
-        ctx.entities.addEntity(cartDetails.storeName, ["store", "shoppingCart"], {
-            totalAmount: cartDetails.totalAmount,
-            deliveryInfo: cartDetails.deliveryInformation
-        });
+        ctx.entities.addEntity(
+            cartDetails.storeName,
+            ["store", "shoppingCart"],
+            {
+                totalAmount: cartDetails.totalAmount,
+                deliveryInfo: cartDetails.deliveryInformation,
+            },
+        );
 
         // Add product entities
         if (cartDetails.productsInCart) {
@@ -212,7 +218,7 @@ async function handleGetCart(
                     source: "cart",
                     price: product.price,
                     quantity: product.quantity,
-                    store: cartDetails.storeName
+                    store: cartDetails.storeName,
                 });
             }
         }
@@ -221,10 +227,11 @@ async function handleGetCart(
             addedToCart: cartDetails.productsInCart || [],
             unavailable: [],
             storeName: cartDetails.storeName,
-            deliveryInformation: cartDetails.deliveryInformation
+            deliveryInformation: cartDetails.deliveryInformation,
         };
 
-        const friendlyMessage = await ctx.agent.getFriendlyPurchaseSummary(results);
+        const friendlyMessage =
+            await ctx.agent.getFriendlyPurchaseSummary(results);
         if (friendlyMessage.success) {
             return (friendlyMessage.data as PurchaseSummary).formattedMessage;
         }
@@ -235,7 +242,7 @@ async function handleGetCart(
 
 async function handleAddToList(
     action: any,
-    ctx: ActionHandlerContext
+    ctx: ActionHandlerContext,
 ): Promise<string> {
     const targetProduct = await ctx.ui.getPageComponent(
         "ProductDetailsHeroTile",
@@ -246,7 +253,7 @@ async function handleAddToList(
         ctx.entities.addEntity(targetProduct.productName, ["product"], {
             source: "product_page",
             price: targetProduct.price,
-            targetList: action.parameters.listName
+            targetList: action.parameters.listName,
         });
     }
 
@@ -262,16 +269,16 @@ async function handleAddToList(
         if (targetList?.lists) {
             // Add list entity
             ctx.entities.addEntity(action.parameters.listName, ["list"], {
-                source: "selection"
+                source: "selection",
             });
 
             await ctx.browser.clickOn(targetList.lists[0].cssSelector);
             await ctx.browser.clickOn(targetList.submitButtonCssSelector);
-            
+
             return `Added ${targetProduct.productName || "product"} to ${action.parameters.listName}`;
         }
     }
-    
+
     return "Could not add product to list";
 }
 
@@ -282,7 +289,7 @@ async function goToHomepage(ctx: ActionHandlerContext): Promise<void> {
 
 async function handleFindStores(
     action: any,
-    ctx: ActionHandlerContext
+    ctx: ActionHandlerContext,
 ): Promise<string> {
     await goToHomepage(ctx);
     const storesList = await ctx.ui.getPageComponent("NearbyStoresList");
@@ -292,7 +299,7 @@ async function handleFindStores(
         for (let store of storesList.stores) {
             ctx.entities.addEntity(store.name, ["store"], {
                 source: "nearby_search",
-                subtitle: store.subtitle
+                subtitle: store.subtitle,
             });
         }
         return `Found ${storesList.stores.length} nearby stores`;
@@ -303,7 +310,7 @@ async function handleFindStores(
 
 async function handleSetPreferredStore(
     action: any,
-    ctx: ActionHandlerContext
+    ctx: ActionHandlerContext,
 ): Promise<string> {
     const targetStore = await ctx.ui.searchOnWebsite(
         "StoreInfo",
@@ -314,7 +321,7 @@ async function handleSetPreferredStore(
     if (targetStore?.name) {
         ctx.entities.addEntity(targetStore.name, ["store"], {
             source: "preference_selection",
-            subtitle: targetStore.subtitle
+            subtitle: targetStore.subtitle,
         });
     }
 
@@ -324,7 +331,7 @@ async function handleSetPreferredStore(
 
 async function handleFindRecipe(
     action: any,
-    ctx: ActionHandlerContext
+    ctx: ActionHandlerContext,
 ): Promise<string> {
     const recipe = await ctx.ui.searchOnWebsite(
         "RecipeInfo",
@@ -336,7 +343,7 @@ async function handleFindRecipe(
         ctx.entities.addEntity(recipe.name, ["recipe"], {
             source: "search",
             keyword: action.parameters.keyword,
-            subtitle: recipe.subtitle
+            subtitle: recipe.subtitle,
         });
     }
 
@@ -350,7 +357,7 @@ async function handleFindRecipe(
 
 async function handleBuyRecipeIngredients(
     action: any,
-    ctx: ActionHandlerContext
+    ctx: ActionHandlerContext,
 ): Promise<string> {
     let results: PurchaseResults = {
         addedToCart: [],
@@ -368,7 +375,7 @@ async function handleBuyRecipeIngredients(
     if (recipe?.name) {
         ctx.entities.addEntity(recipe.name, ["recipe"], {
             source: "search",
-            subtitle: recipe.subtitle
+            subtitle: recipe.subtitle,
         });
     }
 
@@ -382,38 +389,42 @@ async function handleBuyRecipeIngredients(
             ctx.entities.addEntity(targetRecipe.recipeName, ["recipe"], {
                 source: "details",
                 summary: targetRecipe.summary,
-                ingredientCount: targetRecipe.ingredients?.length || 0
+                ingredientCount: targetRecipe.ingredients?.length || 0,
             });
         }
 
         if (targetRecipe?.addAllIngridientsCssSelector) {
-            await ctx.browser.clickOn(targetRecipe.addAllIngridientsCssSelector);
+            await ctx.browser.clickOn(
+                targetRecipe.addAllIngridientsCssSelector,
+            );
 
             // Add ingredient entities
             for (let product of targetRecipe.ingredients) {
                 results.addedToCart.push(product);
-                
+
                 ctx.entities.addEntity(product.name, ["product"], {
                     source: "recipe_ingredient",
                     parentRecipe: targetRecipe.recipeName,
                     price: product.price,
-                    brand: product.brand
+                    brand: product.brand,
                 });
             }
 
-            const friendlyMessage = await ctx.agent.getFriendlyPurchaseSummary(results);
+            const friendlyMessage =
+                await ctx.agent.getFriendlyPurchaseSummary(results);
             if (friendlyMessage.success) {
-                return (friendlyMessage.data as PurchaseSummary).formattedMessage;
+                return (friendlyMessage.data as PurchaseSummary)
+                    .formattedMessage;
             }
         }
     }
-    
+
     return "Added recipe ingredients to cart";
 }
 
 async function handleBuyListContents(
     action: any,
-    ctx: ActionHandlerContext
+    ctx: ActionHandlerContext,
 ): Promise<string> {
     let results: PurchaseResults = {
         addedToCart: [],
@@ -435,13 +446,14 @@ async function handleBuyListContents(
         // Add list entity
         if (targetList?.name) {
             ctx.entities.addEntity(targetList.name, ["list"], {
-                source: "selection"
+                source: "selection",
             });
         }
 
         if (targetList?.detailsLinkCssSelector) {
             await ctx.ui.followLink(targetList.detailsLinkCssSelector);
-            const listDetails = await ctx.ui.getPageComponent("ListDetailsInfo");
+            const listDetails =
+                await ctx.ui.getPageComponent("ListDetailsInfo");
 
             if (listDetails && listDetails.products) {
                 results = await ctx.ui.addAllProductsToCart(
@@ -450,28 +462,30 @@ async function handleBuyListContents(
                 );
 
                 // Add product entities
-                results.addedToCart.forEach(product => {
+                results.addedToCart.forEach((product) => {
                     ctx.entities.addEntity(product.name, ["product"], {
                         source: "list_item",
                         parentList: listDetails.name,
                         store: action.parameters.storeName,
-                        price: product.price
+                        price: product.price,
                     });
                 });
 
-                results.unavailable.forEach(product => {
+                results.unavailable.forEach((product) => {
                     ctx.entities.addEntity(product.name, ["product"], {
                         source: "list_item",
                         parentList: listDetails.name,
                         store: action.parameters.storeName,
-                        status: "unavailable"
+                        status: "unavailable",
                     });
                 });
             }
 
-            const friendlyMessage = await ctx.agent.getFriendlyPurchaseSummary(results);
+            const friendlyMessage =
+                await ctx.agent.getFriendlyPurchaseSummary(results);
             if (friendlyMessage.success) {
-                return (friendlyMessage.data as PurchaseSummary).formattedMessage;
+                return (friendlyMessage.data as PurchaseSummary)
+                    .formattedMessage;
             }
         }
     }
@@ -479,7 +493,10 @@ async function handleBuyListContents(
     return `Processed items from ${action.parameters.listName}`;
 }
 
-async function selectStore(storeName: string, ctx: ActionHandlerContext): Promise<void> {
+async function selectStore(
+    storeName: string,
+    ctx: ActionHandlerContext,
+): Promise<void> {
     await goToHomepage(ctx);
     const request = `Store name: ${storeName}`;
     const targetStore = await ctx.ui.getPageComponent("StoreInfo", request);
@@ -488,7 +505,7 @@ async function selectStore(storeName: string, ctx: ActionHandlerContext): Promis
     if (targetStore?.name) {
         ctx.entities.addEntity(targetStore.name, ["store"], {
             source: "selection",
-            subtitle: targetStore.subtitle
+            subtitle: targetStore.subtitle,
         });
     }
 
@@ -497,7 +514,7 @@ async function selectStore(storeName: string, ctx: ActionHandlerContext): Promis
 
 async function handleBuyItAgain(
     action: any,
-    ctx: ActionHandlerContext
+    ctx: ActionHandlerContext,
 ): Promise<string> {
     let results: PurchaseResults = {
         addedToCart: [],
@@ -527,21 +544,21 @@ async function handleBuyItAgain(
                 );
 
                 // Add product entities
-                results.addedToCart.forEach(product => {
+                results.addedToCart.forEach((product) => {
                     ctx.entities.addEntity(product.name, ["product"], {
                         source: "buy_it_again",
                         store: action.parameters.storeName,
                         price: product.price,
-                        previousPurchase: true
+                        previousPurchase: true,
                     });
                 });
 
-                results.unavailable.forEach(product => {
+                results.unavailable.forEach((product) => {
                     ctx.entities.addEntity(product.name, ["product"], {
                         source: "buy_it_again",
                         store: action.parameters.storeName,
                         status: "unavailable",
-                        previousPurchase: true
+                        previousPurchase: true,
                     });
                 });
             } else if (action.parameters.productName) {
@@ -551,7 +568,9 @@ async function handleBuyItAgain(
                     request,
                 );
                 if (targetProduct && targetProduct.addToCartButtonCssSelector) {
-                    await ctx.browser.clickOn(targetProduct.addToCartButtonCssSelector);
+                    await ctx.browser.clickOn(
+                        targetProduct.addToCartButtonCssSelector,
+                    );
                     await ctx.browser.awaitPageInteraction();
 
                     results.addedToCart.push(targetProduct);
@@ -560,13 +579,14 @@ async function handleBuyItAgain(
                         store: action.parameters.storeName,
                         price: targetProduct.price,
                         previousPurchase: true,
-                        userSelected: true
+                        userSelected: true,
                     });
                 }
             }
         }
 
-        const friendlyMessage = await ctx.agent.getFriendlyPurchaseSummary(results);
+        const friendlyMessage =
+            await ctx.agent.getFriendlyPurchaseSummary(results);
         if (friendlyMessage.success) {
             return (friendlyMessage.data as PurchaseSummary).formattedMessage;
         }
