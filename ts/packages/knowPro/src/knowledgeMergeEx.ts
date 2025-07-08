@@ -4,6 +4,8 @@
 /**
  * INTERNAL LIBRARY
  * Functions to merge/combine more granular knowledge
+ *
+ * A newer version of knowledgeMerge.ts, where the entity merge doesn't force the data to become lower case.
  */
 
 import { conversation as kpLib } from "knowledge-processor";
