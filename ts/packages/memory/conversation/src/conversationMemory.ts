@@ -145,12 +145,16 @@ export class ConversationMemory
 
     /**
      * Add a new conversation message to this conversation memory
-     * @param {ConversationMessage} message
-     * @returns
+     * @param {ConversationMessage} message message to add
+     * @param extractKnowledge Extract knowledge from message text
+     * @param retainKnowledge if false, any message.knowledge is cleared after indexing
+     * @returns Any extracted knowledge
      */
     public async addMessage(
         message: ConversationMessage,
-    ): Promise<Result<kpLib.KnowledgeResponse>> {
+        extractKnowledge: boolean = true,
+        retainKnowledge: boolean = false,
+    ): Promise<Result<kpLib.KnowledgeResponse | undefined>> {
         //
         // Messages can contain prior knowledge extracted during chat responses for example
         // To avoid knowledge duplication, we:
@@ -159,18 +163,20 @@ export class ConversationMemory
         // - (c) Surface the combined knowledge from the IMessage.getKnowledge implementation
         // - (d) configure the indexing engine not to automatically extract any other knowledge
         //
-        const knowledgeResult = await kp.extractKnowledgeFromText(
-            this.settings.conversationSettings.semanticRefIndexSettings
-                .knowledgeExtractor!,
-            message.textChunks[0].trim(),
-            3,
-        );
-        if (!knowledgeResult.success) {
-            return knowledgeResult;
+        let messageKnowledge: kpLib.KnowledgeResponse | undefined;
+        if (extractKnowledge) {
+            const knowledgeResult = await kp.extractKnowledgeFromText(
+                this.settings.conversationSettings.semanticRefIndexSettings
+                    .knowledgeExtractor!,
+                message.textChunks[0].trim(),
+                3,
+            );
+            if (!knowledgeResult.success) {
+                return knowledgeResult;
+            }
+            // This will merge the new knowledge with the prior knowledge
+            messageKnowledge = message.addKnowledge(knowledgeResult.data);
         }
-        // This will merge the new knowledge with the prior knowledge
-        let messageKnowledge = knowledgeResult.data;
-        messageKnowledge = message.addKnowledge(messageKnowledge);
 
         // Now, add the message to memory and index it
         let messageOrdinalStartAt = this.messages.length;
@@ -187,27 +193,40 @@ export class ConversationMemory
                 semanticRefOrdinalStartAt,
             );
 
+            if (retainKnowledge === false) {
+                // Clear knowledge, now that it was indexed
+                message.knowledge = undefined;
+            }
+
             const saveResult = await this.autoSaveFile();
             if (!saveResult.success) {
                 return saveResult;
             }
-
-            // Clear the knowledge, now that its been indexed
-            message.knowledge = undefined;
-            return success(messageKnowledge!);
+            return success(messageKnowledge);
         } finally {
             this.endIndexing();
         }
     }
 
+    /**
+     * Queue a message for adding to this conversation memory as a background task
+     * @param {ConversationMessage} message message to add
+     * @param extractKnowledge Extract knowledge from message text
+     * @param retainKnowledge if false, any message.knowledge is cleared after indexing
+     * @returns Any extracted knowledge
+     */
     public queueAddMessage(
         message: ConversationMessage,
         completionCallback?: ConversationTaskCallback,
+        extractKnowledge: boolean = true,
+        retainKnowledge: boolean = false,
     ): void {
         this.updatesTaskQueue.push({
             type: "addMessage",
             message,
             callback: completionCallback,
+            extractKnowledge,
+            retainKnowledge,
         });
     }
 
@@ -334,7 +353,11 @@ export class ConversationMemory
                     break;
                 case "addMessage":
                     callback = task.callback;
-                    const result = await this.addMessage(task.message);
+                    const result = await this.addMessage(
+                        task.message,
+                        task.extractKnowledge,
+                        task.retainKnowledge,
+                    );
                     if (callback) {
                         if (result.success) {
                             callback();
@@ -397,6 +420,8 @@ type AddMessageTask = {
     type: "addMessage";
     message: ConversationMessage;
     callback?: ConversationTaskCallback;
+    extractKnowledge: boolean;
+    retainKnowledge: boolean;
 };
 
 type ConversationMemoryTasks = AddMessageTask;

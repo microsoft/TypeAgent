@@ -155,9 +155,7 @@ export class Message<TMeta extends MessageMetadata = MessageMetadata>
         newKnowledge: kpLib.KnowledgeResponse,
     ): kpLib.KnowledgeResponse {
         if (this.knowledge !== undefined) {
-            // TODO: using mergeConcreteEntitiesEx to avoid forcing the data to be lower case.
-            // Replace with mergeConcreteEntities once it has switch over to the Ex version.
-            this.knowledge.entities = kp.mergeConcreteEntitiesEx([
+            this.knowledge.entities = this.mergeEntities([
                 ...this.knowledge.entities,
                 ...newKnowledge.entities,
             ]);
@@ -185,9 +183,7 @@ export class Message<TMeta extends MessageMetadata = MessageMetadata>
             ...this.knowledge,
         };
         combinedKnowledge.entities.push(...metaKnowledge.entities);
-        // TODO: using mergeConcreteEntitiesEx to avoid forcing the data to be lower case.
-        // Replace with mergeConcreteEntities once it has switch over to the Ex version.
-        combinedKnowledge.entities = kp.mergeConcreteEntitiesEx(
+        combinedKnowledge.entities = this.mergeEntities(
             combinedKnowledge.entities,
         );
         combinedKnowledge.topics.push(...metaKnowledge.topics);
@@ -197,15 +193,15 @@ export class Message<TMeta extends MessageMetadata = MessageMetadata>
         combinedKnowledge.inverseActions.push(...metaKnowledge.inverseActions);
         return combinedKnowledge;
     }
-}
 
-/**
- * A
- */
-export type MemoryFilter = {
-    knowledgeType?: kp.KnowledgeType | undefined;
-    tag?: string | string[];
-};
+    private mergeEntities(
+        entities: kpLib.ConcreteEntity[],
+    ): kpLib.ConcreteEntity[] {
+        // TODO: using mergeConcreteEntitiesEx to avoid forcing the data to be lower case.
+        // Replace with mergeConcreteEntities once it has switch over to the Ex version.
+        return kp.mergeConcreteEntitiesEx(entities);
+    }
+}
 
 /**
  * A memory containing a sequence of messages {@link Message}
