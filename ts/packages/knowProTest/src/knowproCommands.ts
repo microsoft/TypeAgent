@@ -82,19 +82,36 @@ export async function execSearchRequest(
         }
     }
 
-    //
-    // Run query
-    //
-    const searchResults = await async.getResultWithRetry(() =>
-        getLangSearchResult(
+    let searchResults: Result<kp.ConversationSearchResult[]>;
+    if (request.queryExpr) {
+        // Pre-existing query expr for request.query
+        const compiledQueries = kp.compileSearchQuery(
             conversation,
-            context.queryTranslator,
-            langQuery,
-            options,
+            request.queryExpr,
+            options.compileOptions,
             langFilter,
-            debugContext,
-        ),
-    );
+        );
+        const queryResults = await kp.runSearchQueries(
+            conversation,
+            compiledQueries,
+            options,
+        );
+        searchResults = success(queryResults.flat());
+    } else {
+        //
+        // Run raw NLP query
+        //
+        searchResults = await async.getResultWithRetry(() =>
+            getLangSearchResult(
+                conversation,
+                context.queryTranslator,
+                langQuery,
+                options,
+                langFilter,
+                debugContext,
+            ),
+        );
+    }
 
     return { searchResults, debugContext };
 }

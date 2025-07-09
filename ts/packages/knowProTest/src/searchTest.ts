@@ -82,7 +82,7 @@ async function getSearchResults(
     return success(results);
 }
 
-export function collectLangSearchResults(
+function collectLangSearchResults(
     searchText: string,
     searchResults: kp.ConversationSearchResult[],
     debugContext: kp.LanguageSearchDebugContext,
