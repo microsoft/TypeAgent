@@ -387,7 +387,7 @@ export async function createKnowproCommands(
         );
         getAnswerRequest.searchResponse = searchResponse;
         getAnswerRequest.knowledgeTopK = options.entitiesTopK;
-        await kpTest.execGetAnswerRequest(
+        const answerResponse = await kpTest.execGetAnswerRequest(
             context,
             getAnswerRequest,
             (i: number, q: string, answer) => {
@@ -395,6 +395,7 @@ export async function createKnowproCommands(
                 return;
             },
         );
+        context.log.writeFile("kpAnswer", answerResponse);
         context.printer.writeLine();
     }
 

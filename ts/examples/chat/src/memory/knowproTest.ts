@@ -515,7 +515,7 @@ export async function createKnowproTestCommands(
     }
 
     async function saveReport(srcPath: string, report: any) {
-        const outputDir = path.join(context.basePath, "testReports");
+        const outputDir = path.join(context.basePath, "logs/testReports");
         await ensureDir(outputDir);
         const outputPath = path.join(outputDir, getFileName(srcPath) + ".json");
         await writeJsonFile(outputPath, report);
