@@ -786,7 +786,12 @@ export async function handleSchemaDiscoveryAction(
         const { url, includeGlobal = true, author } = action.parameters;
 
         try {
-            let actions = await agentContext.actionsStore.getActionsForUrl(url);
+            let actions = [];
+            if (!url) {
+                actions = await agentContext.actionsStore.getAllActions();
+            } else {
+                actions = await agentContext.actionsStore.getActionsForUrl(url);
+            }
 
             if (author) {
                 actions = actions.filter((a) => a.author === author);

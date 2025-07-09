@@ -718,8 +718,11 @@ export async function handleMessage(
         case "getAllActions": {
             try {
                 const result = await sendActionToAgent({
-                    actionName: "getAllActions",
-                    parameters: {},
+                    actionName: "getActionsForUrl",
+                    parameters: {
+                        url: null,
+                        includeGlobal: true,
+                    },
                 });
 
                 return { actions: result.actions || [] };
