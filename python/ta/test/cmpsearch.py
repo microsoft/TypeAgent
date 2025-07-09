@@ -169,6 +169,7 @@ def main():
             continue
 
         # Wait for user input before continuing.
+        print("-" * 25, counter, "-" * 25)
         if context.interactive:
             try:
                 input("Press Enter to continue... ")
@@ -177,11 +178,9 @@ def main():
                 break
 
         # Compare the given answer with the actual answer for the question.
-        actual_answer, score = asyncio.run(compare(context, qa_pair))
+        actual_answer, score = asyncio.run(compare_actual_to_expected(context, qa_pair))
         all_scores.append((score, counter))
         good_enough = score >= 0.97
-        sep = "-" if good_enough else "*"
-        print(sep * 25, counter, sep * 25)
         print(f"Score: {score:.3f}; Question: {question}", flush=True)
         if context.interactive or not good_enough:
             cmd = qa_pair.get("cmd")
@@ -220,7 +219,7 @@ class RawSearchResult(TypedDict):
     actionMatches: list[int]
 
 
-async def compare(
+async def compare_actual_to_expected(
     context: Context, qa_pair: dict[str, str | None]
 ) -> tuple[str | None, float]:
     the_answer: str | None = None
@@ -234,17 +233,17 @@ async def compare(
         return None, score
 
     if not context.interactive:
-        print = lambda *args, **kwds: None  # Disable printing in non-interactive mode
+        log = lambda *args, **kwds: None  # Disable debug output in non-interactive mode
     else:
-        print = builtins.print
+        log = print
 
-    print()
-    print("=" * 40)
+    log()
+    log("=" * 40)
     if cmd:
-        print(f"Command: {cmd}")
-    print(f"Question: {question}")
-    print(f"Answer: {answer}")
-    print("-" * 40)
+        log(f"Command: {cmd}")
+    log(f"Question: {question}")
+    log(f"Answer: {answer}")
+    log("-" * 40)
 
     debug_context = searchlang.LanguageSearchDebugContext()
     result = await searchlang.search_conversation_with_language(
@@ -254,22 +253,18 @@ async def compare(
         context.lang_search_options,
         debug_context=debug_context,
     )
-    print("-" * 40)
+    log("-" * 40)
     if not isinstance(result, typechat.Success):
-        builtins.print("Error:", result.message)
+        print("Error:", result.message)
     else:
         record = context.sr_index.get(question)
         if record:
             qx = deserialize_object(SearchQuery, record["searchQueryExpr"])
             qr: list[RawSearchResult] = record["results"]
             if debug_context.search_query != qx:
-                builtins.print(
-                    "Warning: Search query from LLM does not match reference."
-                )
+                print("Warning: Search query from LLM does not match reference.")
             if not compare_results(result.value, qr):
-                builtins.print(
-                    "Warning: Search results from index do not match reference."
-                )
+                print("Warning: Search results from index do not match reference.")
         all_answers, combined_answer = await answers.generate_answers(
             context.answer_translator,
             result.value,
@@ -277,13 +272,14 @@ async def compare(
             question,
             options=context.answer_options,
         )
-        print("-" * 40)
+        log("-" * 40)
         if combined_answer.type == "NoAnswer":
+            # TODO: Compare failure messages.
             if failed:
                 score = 1.0
             the_answer = f"Failure: {combined_answer.whyNoAnswer}"
-            print(the_answer)
-            print("All answers:")
+            log(the_answer)
+            log("All answers:")
             if context.interactive:
                 utils.pretty_print(all_answers)
         else:
@@ -293,9 +289,9 @@ async def compare(
                 score = 0.0
             else:
                 score = await equality_score(context, answer, the_answer)
-            print(the_answer)
-            print("Correctness score:", score)
-    print("=" * 40)
+            log(the_answer)
+            log("Correctness score:", score)
+    log("=" * 40)
 
     return the_answer, score
 
@@ -310,19 +306,59 @@ def compare_results(
             result.message_matches, record["messageMatches"]
         ):
             return False
+        if not compare_semantic_ref_ordinals(
+            (
+                []
+                if "entity" not in result.knowledge_matches
+                else result.knowledge_matches["entity"].semantic_ref_matches
+            ),
+            record.get("entityMatches", []),
+            "entity",
+        ):
+            return False
+        if not compare_semantic_ref_ordinals(
+            (
+                []
+                if "action" not in result.knowledge_matches
+                else result.knowledge_matches["action"].semantic_ref_matches
+            ),
+            record.get("actionMatches", []),
+            "action",
+        ):
+            return False
+        if not compare_semantic_ref_ordinals(
+            (
+                []
+                if "topic" not in result.knowledge_matches
+                else result.knowledge_matches["topic"].semantic_ref_matches
+            ),
+            record.get("topicMatches", []),
+            "topic",
+        ):
+            return False
     return True
 
 
 def compare_message_ordinals(aa: list[ScoredMessageOrdinal], b: list[int]) -> bool:
     a = [aai.message_ordinal for aai in aa]
-    return sorted(a) == sorted(b)
+    if sorted(a) == sorted(b):
+        return True
+    print("Message ordinals do not match:")
+    print("  Actual:", sorted(a))
+    print("  Expected:", sorted(b))
+    return False
 
 
 def compare_semantic_ref_ordinals(
-    aa: list[ScoredSemanticRefOrdinal], b: list[int]
+    aa: list[ScoredSemanticRefOrdinal], b: list[int], label: str
 ) -> bool:
     a = [aai.semantic_ref_ordinal for aai in aa]
-    return sorted(a) == sorted(b)
+    if sorted(a) == sorted(b):
+        return True
+    print(f"{label.title()} SemanticRef ordinals do not match:")
+    print("  Actual:", sorted(a))
+    print("  Expected:", sorted(b))
+    return False
 
 
 async def equality_score(context: Context, a: str, b: str) -> float:
