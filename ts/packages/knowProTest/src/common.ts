@@ -102,6 +102,17 @@ export function isJsonEqual(x: any | undefined, y: any | undefined): boolean {
     return false;
 }
 
+export function compareObject(
+    x: any,
+    y: any,
+    label: string,
+): string | undefined {
+    if (!isJsonEqual(x, y)) {
+        return `${label}: ${stringifyReadable(x)}\n !== \n${stringifyReadable(y)}`;
+    }
+    return undefined;
+}
+
 export function compareArray(
     name: string,
     x: any[] | undefined,
@@ -128,4 +139,8 @@ export function compareArray(
 
 export function queryError(query: string, result: Error): Error {
     return error(`${query}\n${result.message}`);
+}
+
+export function stringifyReadable(value: any): string {
+    return JSON.stringify(value, undefined, 2);
 }
