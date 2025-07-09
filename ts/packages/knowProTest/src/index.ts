@@ -3,6 +3,7 @@
 
 export * from "./types.js";
 export * from "./models.js";
+export * from "./logging.js";
 export * from "./knowproContext.js";
 export * from "./searchTest.js";
 export * from "./answerTest.js";

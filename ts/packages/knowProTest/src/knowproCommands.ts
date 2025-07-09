@@ -39,7 +39,10 @@ export async function execSearchRequest(
             searchRequestDef(),
         );
     }
-    const langQuery = request.query; // Natural language query to run
+    const langQuery = request.query.trim(); // Natural language query to run
+    if (!langQuery) {
+        throw new Error("No query provided");
+    }
     const debugContext: AnswerDebugContext = { searchText: langQuery };
     //
     // Set up options  for the search API Call
@@ -98,6 +101,8 @@ export async function execSearchRequest(
             compiledQueries,
             options,
         );
+        debugContext.searchQuery = preTranslatedQuery;
+        debugContext.searchQueryExpr = compiledQueries;
         searchResults = success(queryResults.flat());
     } else {
         //

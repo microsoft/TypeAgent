@@ -23,7 +23,13 @@ import {
     parseFreeAndNamedArguments,
     keyValuesFromNamedArgs,
 } from "../common.js";
-import { collections, dateTime, ensureDir, readJsonFile } from "typeagent";
+import {
+    collections,
+    dateTime,
+    ensureDir,
+    isFilePath,
+    readJsonFile,
+} from "typeagent";
 import chalk from "chalk";
 import { KnowProPrinter } from "./knowproPrinter.js";
 import { createKnowproDataFrameCommands } from "./knowproDataFrame.js";
@@ -269,9 +275,6 @@ export async function createKnowproCommands(
         );
         def.options.showKnowledge = argBool("Show knowledge matches", true);
         def.options.showMessages = argBool("Show message matches", false);
-        def.options.queryPath = arg(
-            "Path to a file containing query expressions representing the query",
-        );
         return def;
     }
     commands.kpSearch.metadata = searchDef();
@@ -280,24 +283,37 @@ export async function createKnowproCommands(
             return;
         }
         const namedArgs = parseNamedArguments(args, searchDef());
-        let priorQueryExr: kp.querySchema.SearchQuery | undefined;
-        if (namedArgs.compiledQueryPath) {
-            priorQueryExr = await readJsonFile(namedArgs.compileQueryPath);
-            if (priorQueryExr) {
-                context.printer.writeSearchQuery(priorQueryExr);
+        let savedQuery: kp.querySchema.SearchQuery | undefined;
+        if (isFilePath(namedArgs.query)) {
+            const queryPath = namedArgs.query;
+            const savedContext = await loadSavedDebugContext(queryPath);
+            if (!savedContext) {
+                return;
+            }
+            namedArgs.query = savedContext.searchText;
+            savedQuery = savedContext.searchQuery;
+            if (savedQuery) {
+                context.printer.writeSearchQuery(savedQuery);
             }
         }
 
         const searchResponse = await kpTest.execSearchRequest(
             context,
             namedArgs,
-            priorQueryExr,
+            savedQuery,
         );
         const searchResults = searchResponse.searchResults;
         const debugContext = searchResponse.debugContext;
         if (!searchResults.success) {
             context.printer.writeError(searchResults.message);
             return;
+        }
+        // Log any new queries
+        if (!savedQuery) {
+            context.log.writeFile("kpSearch", {
+                searchText: debugContext.searchText,
+                searchQuery: debugContext.searchQuery,
+            });
         }
         if (namedArgs.debug) {
             context.printer.writeInColor(chalk.gray, () => {
@@ -766,7 +782,7 @@ export async function createKnowproCommands(
     function writeAnswer(
         queryIndex: number,
         answerResult: Result<kp.AnswerResponse>,
-        debugContext: AnswerDebugContext,
+        debugContext: kpTest.AnswerDebugContext,
     ) {
         context.printer.writeLine();
         if (answerResult.success) {
@@ -955,8 +971,21 @@ export async function createKnowproCommands(
         }
         return [undefined, ""];
     }
-}
 
-export interface AnswerDebugContext extends kp.LanguageSearchDebugContext {
-    searchText: string;
+    async function loadSavedDebugContext(
+        filePath: string,
+    ): Promise<kpTest.AnswerDebugContext | undefined> {
+        // Load a saved or logged query
+        const savedContext =
+            await loadObject<kpTest.AnswerDebugContext>(filePath);
+        return savedContext;
+    }
+
+    async function loadObject<T>(filePath: string) {
+        const obj = await readJsonFile<T>(filePath);
+        if (obj === undefined) {
+            context.printer.writeError(`${filePath} not found`);
+        }
+        return obj;
+    }
 }
