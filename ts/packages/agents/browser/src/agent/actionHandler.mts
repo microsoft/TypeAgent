@@ -46,8 +46,7 @@ import {
 
 import registerDebug from "debug";
 
-// import { handleInstacartAction } from "./instacart/actionHandler.mjs";
-import { handleInstacartAction } from "./instacart/planHandler.mjs";
+import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 import * as website from "website-memory";
 import { handleKnowledgeAction } from "./knowledge/knowledgeHandler.mjs";
 
