@@ -24,6 +24,7 @@ import {
     readAllText,
     simplifyHtml,
     simplifyText,
+    writeJsonFile,
 } from "typeagent";
 import chalk from "chalk";
 import { openai } from "aiclient";
@@ -206,6 +207,7 @@ export async function createKnowproTestCommands(
                 startAt: argNum("Start at this query", 0),
                 count: argNum("Number to run"),
                 verbose: argBool("Verbose error output", false),
+                outputPath: arg("Output path for error report"),
             },
         };
     }
@@ -219,16 +221,13 @@ export async function createKnowproTestCommands(
 
             const namedArgs = parseNamedArguments(args, verifySearchBatchDef());
             const srcPath = namedArgs.srcPath;
-            let errorCount = 0;
             const results = await kpTest.verifyLangSearchResultsBatch(
                 context,
                 srcPath,
                 (result, index, total) => {
                     context.printer.writeProgress(index + 1, total);
                     if (result.success) {
-                        if (!writeSearchScore(result.data, namedArgs.verbose)) {
-                            errorCount++;
-                        }
+                        writeSearchScore(result.data, namedArgs.verbose);
                     } else {
                         context.printer.writeError(result.message);
                     }
@@ -236,10 +235,12 @@ export async function createKnowproTestCommands(
             );
             if (!results.success) {
                 context.printer.writeError(results.message);
+                return;
             }
-            if (errorCount > 0) {
-                context.printer.writeLine(`${errorCount} errors`);
-            }
+            await writeSearchValidationReport(
+                results.data,
+                namedArgs.outputPath,
+            );
         } finally {
             endTestBatch();
         }
@@ -475,6 +476,25 @@ export async function createKnowproTestCommands(
                 result.actual.searchText,
             );
             return true;
+        }
+    }
+
+    async function writeSearchValidationReport(
+        results: kpTest.Comparison<kpTest.LangSearchResults>[],
+        outputPath?: string,
+    ) {
+        const errorResults = results.filter(
+            (c) => c.error !== undefined && c.error.length > 0,
+        );
+        if (errorResults.length === 0) {
+            context.printer.writeLineInColor(chalk.green, "No errors");
+            return;
+        }
+
+        context.printer.writeLine(`${errorResults.length} errors`);
+        context.printer.writeList(errorResults.map((e) => e.expected.cmd));
+        if (outputPath) {
+            await writeJsonFile(outputPath, errorResults);
         }
     }
 
