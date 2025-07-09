@@ -28,10 +28,23 @@ import { AppAgentManager } from "../context/appAgentManager.js";
 import registerDebug from "debug";
 import { filterEntitySelection } from "../translation/entityResolution.js";
 import { displayStatus } from "@typeagent/agent-sdk/helpers/display";
-const debugActionEntities = registerDebug(
-    "typeagent:dispatcher:actions:entities",
+import { ConversationMemory } from "conversation-memory";
+import { SearchSelectExpr } from "knowpro";
+import { conversation as kp } from "knowledge-processor";
+
+const debugEntities = registerDebug("typeagent:dispatcher:actions:entities");
+
+const debugAgentEntities = registerDebug(
+    "typeagent:dispatcher:actions:agent:entities",
 );
 
+const debugMemoryEntities = registerDebug(
+    "typeagent:dispatcher:actions:memory:entities",
+);
+
+const debugMemoryEntitiesError = registerDebug(
+    "typeagent:dispatcher:actions:memory:entities:error",
+);
 type EntityValue = PromptEntity | undefined;
 type EntityField = EntityValue | EntityObject | EntityField[];
 interface EntityObject {
@@ -214,16 +227,246 @@ function toPromptEntityNameMap(entities: PromptEntity[] | undefined) {
     return map;
 }
 
+function isEntityType(
+    agents: AppAgentManager,
+    schemaName: string,
+    type: string,
+) {
+    const actionSchemaFile = agents.getActionSchemaFileForConfig(
+        agents.getActionConfig(schemaName),
+    );
+
+    return actionSchemaFile.parsedActionSchema.entitySchemas?.has(type);
+}
+
+async function resolveEntityWithMemory(
+    conversationMemory: ConversationMemory,
+    appAgentName: string,
+    type: string,
+    name: string,
+): Promise<ResolveEntityResult | undefined> {
+    const searchSelectExpr: SearchSelectExpr = {
+        searchTermGroup: {
+            booleanOp: "and",
+            terms: [
+                {
+                    term: { text: name },
+                },
+            ],
+        },
+        when: {
+            knowledgeType: "entity",
+            scopeDefiningTerms: {
+                booleanOp: "and",
+                terms: [
+                    {
+                        propertyName: {
+                            term: { text: "typeagent.appAgentName" },
+                            relatedTerms: [], // REVIEW: for now empty relatedTerms disable fuzzy match
+                        },
+                        propertyValue: {
+                            term: { text: appAgentName },
+                            relatedTerms: [], // REVIEW: for now empty relatedTerms disable fuzzy match
+                        },
+                    },
+                    {
+                        propertyName: "type",
+                        propertyValue: {
+                            term: { text: type },
+                            relatedTerms: [], // REVIEW: for now empty relatedTerms disable fuzzy match
+                        },
+                    },
+                ],
+            },
+        },
+    };
+
+    const result = await conversationMemory.searchKnowledge(searchSelectExpr);
+    const entityResult = result?.get("entity");
+    if (entityResult === undefined) {
+        debugMemoryEntities("No entity found in memory");
+        return undefined;
+    }
+
+    const entities: PromptEntity[] = [];
+    for (const match of entityResult.semanticRefMatches) {
+        const semanticRef = conversationMemory.conversation.semanticRefs?.get(
+            match.semanticRefOrdinal,
+        );
+        if (semanticRef === undefined) {
+            throw new Error(
+                `Semantic ref not found for ordinal: ${match.semanticRefOrdinal}`,
+            );
+        }
+        if (semanticRef.knowledgeType !== "entity") {
+            // We asked for entity only, so this shouldn't happen
+            throw new Error(
+                `Unexpected semantic ref type: ${semanticRef} for entity search`,
+            );
+        }
+        const concreteEntity = semanticRef.knowledge as kp.ConcreteEntity;
+        if (concreteEntity.type.includes(type) === false) {
+            // Entity type mismatch, skip this entity.
+            // REVIEW: should we error?
+            debugMemoryEntitiesError(
+                `concreteEntity type missing expected type ${type}: ${JSON.stringify(concreteEntity)}`,
+            );
+            continue;
+        }
+        const entityAppAgentName = concreteEntity.facets?.find(
+            (f) => f.name === "typeagent.appAgentName",
+        )?.value as string;
+        if (
+            entityAppAgentName === undefined ||
+            entityAppAgentName !== appAgentName
+        ) {
+            // Our search specify app agent name to match, so we should expect the result to match.
+            throw new Error(
+                `Entity app agent name ${appAgentName} expected. Actual ${entityAppAgentName}`,
+            );
+        }
+        const uniqueId = concreteEntity.facets?.find(
+            (f) => f.name === "typeagent.uniqueId",
+        )?.value as string;
+        if (uniqueId === undefined) {
+            debugMemoryEntitiesError(
+                `Missing uniqueId: ${JSON.stringify(concreteEntity)}`,
+            );
+        }
+        const entity: PromptEntity = {
+            name: concreteEntity.name,
+            type: concreteEntity.type,
+            sourceAppAgentName: appAgentName,
+            uniqueId,
+        };
+        entities.push(entity);
+    }
+    if (entities.length === 0) {
+        debugMemoryEntities("No entity found in memory");
+        return undefined;
+    }
+    const exact = entities.filter((e) => e.name === name);
+    if (exact.length > 0) {
+        debugMemoryEntities(
+            `Exact entities found in memory: ${JSON.stringify(exact)}`,
+        );
+        return {
+            entities: exact,
+            match: "exact",
+        };
+    }
+
+    debugMemoryEntities(
+        `Fuzzy entities found in memory: ${JSON.stringify(entities)}`,
+    );
+    return {
+        entities,
+        match: "fuzzy",
+    };
+}
+
+async function resolveEntityWithAgent(
+    agents: AppAgentManager,
+    appAgentName: string,
+    type: string,
+    value: string,
+    context: ActionContext<CommandHandlerContext>,
+): Promise<ResolveEntityResult | undefined> {
+    if (!agents.isActionActive(appAgentName)) {
+        // Don't resolve entities with agent if action is not active.
+        return undefined;
+    }
+    const agent = agents.getAppAgent(appAgentName);
+    if (agent.resolveEntity === undefined) {
+        throw new Error(
+            `Agent ${appAgentName} declares entity types but does not implement resolveEntity`,
+        );
+    }
+    debugAgentEntities(
+        `Resolving ${type} entity with agent ${appAgentName}: ${value}`,
+    );
+    displayStatus(`Resolving ${type}: ${value}`, context);
+    const result = await agent.resolveEntity(
+        type,
+        value,
+        agents.getSessionContext(appAgentName),
+    );
+    if (result === undefined || result.entities.length === 0) {
+        // REVIEW: not need the error, let the agent deal with it for now during action execution.
+        return undefined;
+    }
+
+    for (const entity of result.entities) {
+        if (!entity.type.includes(type)) {
+            throw new Error(
+                `Entity type mismatch: expected '${type}' but got '${entity.type.join(",")}`,
+            );
+        }
+    }
+
+    debugAgentEntities(
+        `Resolved ${type} entity for '${value}': ${JSON.stringify(
+            result,
+            undefined,
+            2,
+        )}`,
+    );
+    return result;
+}
+
+async function processResolvedEntityResult(
+    appAgentName: string,
+    action: FullAction,
+    type: string,
+    value: string,
+    result: ResolveEntityResult,
+    clarifyEntities: ClarifyResolvedEntity[],
+    options?: ParameterEntityResolverOptions,
+) {
+    if (
+        options?.filter &&
+        result.match === "fuzzy" &&
+        result.entities.length > 1
+    ) {
+        // An extra pass to use LLM to narrow down the selection for fuzzy match.
+        await filterEntitySelection(action, type, value, result);
+    }
+    if (options?.clarify && result.entities.length > 1) {
+        clarifyEntities.push({
+            type: type,
+            name: value,
+            result,
+        });
+        return;
+    }
+    if (result.match === "exact") {
+        return {
+            sourceAppAgentName: appAgentName,
+            ...result.entities[0],
+        };
+    } else {
+        // TODO: we should have a heuristic to determine if we should
+        // clarify the fuzzy match or not.
+        return {
+            sourceAppAgentName: appAgentName,
+            ...result.entities[0],
+        };
+    }
+}
+
 function createParameterEntityResolver(
     context: ActionContext<CommandHandlerContext>,
     entities: PromptEntity[] | undefined,
     options?: ParameterEntityResolverOptions,
 ): ParameterEntityResolver {
-    const agents = context.sessionContext.agentContext.agents;
+    const agentContext = context.sessionContext.agentContext;
+    const agents = agentContext.agents;
+    const conversationMemory = agentContext.conversationMemory;
     const resultEntityMap = new Set<string>();
     const clarifyEntities: ClarifyResolvedEntity[] = [];
     const promptEntityMap = toPromptEntityMap(entities);
     const promptNameEntityMap = toPromptEntityNameMap(entities);
+
     return {
         get clarifyResolvedEntities() {
             return clarifyEntities;
@@ -275,90 +518,41 @@ function createParameterEntityResolver(
                 return entity;
             }
 
-            if (options?.resolve && fieldType.type === "type-reference") {
-                const actionSchemaFile = agents.getActionSchemaFileForConfig(
-                    agents.getActionConfig(action.schemaName),
-                );
-                const entitySchema =
-                    actionSchemaFile.parsedActionSchema.entitySchemas?.get(
+            if (
+                options?.resolve &&
+                fieldType.type === "type-reference" &&
+                isEntityType(agents, action.schemaName, fieldType.name)
+            ) {
+                let resolveEntityResult: ResolveEntityResult | undefined;
+                if (conversationMemory) {
+                    resolveEntityResult = await resolveEntityWithMemory(
+                        conversationMemory,
+                        appAgentName,
                         fieldType.name,
-                    );
-                if (entitySchema === undefined) {
-                    return;
-                }
-                if (!agents.isActionActive(appAgentName)) {
-                    // Don't resolve entities with agent if action is not active.
-                    return;
-                }
-                const agent = agents.getAppAgent(appAgentName);
-                if (agent.resolveEntity === undefined) {
-                    throw new Error(
-                        `Agent ${appAgentName} declares entity types but does not implement resolveEntity`,
+                        value,
                     );
                 }
-                debugActionEntities(
-                    `Resolving ${fieldType.name} entity with agent ${appAgentName}: ${value}`,
-                );
-                displayStatus(`Resolving ${fieldType.name}: ${value}`, context);
-                const result = await agent.resolveEntity(
-                    fieldType.name,
-                    value,
-                    agents.getSessionContext(appAgentName),
-                );
-                if (result === undefined || result.entities.length === 0) {
-                    // REVIEW: let the agent deal with it for now.
-                    return undefined;
+
+                if (resolveEntityResult === undefined) {
+                    resolveEntityResult = await resolveEntityWithAgent(
+                        agents,
+                        appAgentName,
+                        fieldType.name,
+                        value,
+                        context,
+                    );
                 }
 
-                for (const entity of result.entities) {
-                    if (!entity.type.includes(fieldType.name)) {
-                        throw new Error(
-                            `Entity type mismatch: expected '${fieldType.name}' but got '${entity.type.join(",")}`,
-                        );
-                    }
-                }
-
-                debugActionEntities(
-                    `Resolved ${fieldType.name} entity for '${value}': ${JSON.stringify(
-                        result,
-                        undefined,
-                        2,
-                    )}`,
-                );
-
-                if (
-                    options?.filter &&
-                    result.match === "fuzzy" &&
-                    result.entities.length > 1
-                ) {
-                    // An extra pass to use LLM to narrow down the selection for fuzzy match.
-                    await filterEntitySelection(
+                if (resolveEntityResult !== undefined) {
+                    return processResolvedEntityResult(
+                        appAgentName,
                         action,
                         fieldType.name,
                         value,
-                        result,
+                        resolveEntityResult,
+                        clarifyEntities,
+                        options,
                     );
-                }
-                if (options?.clarify && result.entities.length > 1) {
-                    clarifyEntities.push({
-                        type: fieldType.name,
-                        name: value,
-                        result,
-                    });
-                    return;
-                }
-                if (result.match === "exact") {
-                    return {
-                        sourceAppAgentName: appAgentName,
-                        ...result.entities[0],
-                    };
-                } else {
-                    // TODO: we should have a heuristic to determine if we should
-                    // clarify the fuzzy match or not.
-                    return {
-                        sourceAppAgentName: appAgentName,
-                        ...result.entities[0],
-                    };
                 }
             }
 
@@ -494,7 +688,7 @@ export async function resolveEntities(
         action.entities as EntityObject | undefined,
     );
     if (entities !== undefined) {
-        debugActionEntities(
+        debugEntities(
             `Resolved action entities: ${JSON.stringify(
                 entities,
                 undefined,
