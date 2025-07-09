@@ -18,6 +18,7 @@ import * as kpTest from "knowpro-test";
 import * as cm from "conversation-memory";
 import {
     changeFileExt,
+    ensureDir,
     getAbsolutePath,
     getFileName,
     htmlToMd,
@@ -204,10 +205,7 @@ export async function createKnowproTestCommands(
                 srcPath: argSourceFile(),
             },
             options: {
-                startAt: argNum("Start at this query", 0),
-                count: argNum("Number to run"),
                 verbose: argBool("Verbose error output", false),
-                outputPath: arg("Output path for error report"),
             },
         };
     }
@@ -237,10 +235,7 @@ export async function createKnowproTestCommands(
                 context.printer.writeError(results.message);
                 return;
             }
-            await writeSearchValidationReport(
-                results.data,
-                namedArgs.outputPath,
-            );
+            await writeSearchValidationReport(results.data, srcPath);
         } finally {
             endTestBatch();
         }
@@ -481,7 +476,7 @@ export async function createKnowproTestCommands(
 
     async function writeSearchValidationReport(
         results: kpTest.Comparison<kpTest.LangSearchResults>[],
-        outputPath?: string,
+        srcPath?: string,
     ) {
         const errorResults = results.filter(
             (c) => c.error !== undefined && c.error.length > 0,
@@ -493,8 +488,8 @@ export async function createKnowproTestCommands(
 
         context.printer.writeLine(`${errorResults.length} errors`);
         context.printer.writeList(errorResults.map((e) => e.expected.cmd));
-        if (outputPath) {
-            await writeJsonFile(outputPath, errorResults);
+        if (srcPath) {
+            await saveReport(srcPath, errorResults);
         }
     }
 
@@ -517,6 +512,13 @@ export async function createKnowproTestCommands(
             context.printer.writeJsonInColor(chalk.redBright, result.actual);
             context.printer.writeJsonInColor(chalk.green, result.expected);
         }
+    }
+
+    async function saveReport(srcPath: string, report: any) {
+        const outputDir = path.join(context.basePath, "testReports");
+        await ensureDir(outputDir);
+        const outputPath = path.join(outputDir, getFileName(srcPath) + ".json");
+        await writeJsonFile(outputPath, report);
     }
 
     function beginTestBatch() {
