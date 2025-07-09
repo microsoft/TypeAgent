@@ -259,12 +259,12 @@ def print_result[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
             msg = conversation.messages[msg_ord]
             text = " ".join(msg.text_chunks).strip()
             print(
-                f"({score:5.1f}){msg_ord:4d}: "
+                f"({score:5.1f}) M={msg_ord:d}: "
                 f"{msg.speaker:>15.15s}: "  # type: ignore  # It's a PodcastMessage
                 f"{repr(text)[1:-1]:<150.150s}  "
             )
     if result.knowledge_matches:
-        print(f"Knowledge matches ({', '.join(result.knowledge_matches.keys())}):")
+        print(f"Knowledge matches ({', '.join(sorted(result.knowledge_matches))}):")
         for key, value in sorted(result.knowledge_matches.items()):
             print(f"Type {key} -- {value.term_matches}:")
             for scored_sem_ref_ord in value.semantic_ref_matches:
@@ -278,10 +278,10 @@ def print_result[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
                     chunk_ord = sem_ref.range.start.chunk_ordinal
                     msg = conversation.messages[msg_ord]
                     print(
-                        f"({score:5.1f}){msg_ord:4d}: "
-                        f"{msg.speaker:>15.15s}: "  # type: ignore  # It's a PodcastMessage
-                        f"{repr(msg.text_chunks[chunk_ord].strip())[1:-1]:<50.50s}  "
-                        f"{summarize_knowledge(sem_ref)}"
+                        f"({score:5.1f}) M={msg_ord}: "
+                        # f"{msg.speaker:>15.15s}: "  # type: ignore  # It's a PodcastMessage
+                        # f"{repr(msg.text_chunks[chunk_ord].strip())[1:-1]:<50.50s}  "
+                        f"S={summarize_knowledge(sem_ref)}"
                     )
 
 
@@ -289,7 +289,7 @@ def summarize_knowledge(sem_ref: SemanticRef) -> str:
     """Summarize the knowledge in a SemanticRef."""
     knowledge = sem_ref.knowledge
     if knowledge is None:
-        return "<No knowledge>"
+        return f"{sem_ref.semantic_ref_ordinal}: <No knowledge>"
     match sem_ref.knowledge_type:
         case "entity":
             entity = knowledge
@@ -303,7 +303,7 @@ def summarize_knowledge(sem_ref: SemanticRef) -> str:
                     elif isinstance(value, float) and value.is_integer():
                         value = int(value)
                     res.append(f"<{facet.name}:{value}>")
-            return " ".join(res)
+            return f"{sem_ref.semantic_ref_ordinal}: {' '.join(res)}"
         case "action":
             action = knowledge
             assert isinstance(action, Action)
@@ -325,17 +325,17 @@ def summarize_knowledge(sem_ref: SemanticRef) -> str:
                         res.append(f"<{param}>")
             if action.subject_entity_facet is not None:
                 res.append(f"subj_facet={action.subject_entity_facet}")
-            return " ".join(res)
+            return f"{sem_ref.semantic_ref_ordinal}: {' '.join(res)}"
         case "topic":
             topic = knowledge
             assert isinstance(topic, Topic)
-            return repr(topic.text)
+            return f"{sem_ref.semantic_ref_ordinal}: {topic.text!r}]"
         case "tag":
             tag = knowledge
             assert isinstance(tag, str)
-            return f"#{tag}"
+            return f"{sem_ref.semantic_ref_ordinal}: #{tag!r}"
         case _:
-            return str(sem_ref.knowledge)
+            return f"{sem_ref.semantic_ref_ordinal}: {sem_ref.knowledge!r}"
 
 
 if __name__ == "__main__":
