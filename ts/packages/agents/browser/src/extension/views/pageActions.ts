@@ -294,7 +294,6 @@ class ActionDiscoveryPanel {
     }
 
     private toggleActionForm() {
-        // Show modal instead of inline form
         this.showActionModal();
     }
 
@@ -562,7 +561,7 @@ class ActionDiscoveryPanel {
 
         if (saveButton) {
             saveButton.innerHTML =
-                '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Creating & Saving...';
+                '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...';
             saveButton.disabled = true;
         }
 
@@ -694,11 +693,14 @@ class ActionDiscoveryPanel {
         ) as HTMLElement;
 
         try {
+            console.log("Getting actions after update. URL: ", launchUrl)
             // Get user-authored actions from the new ActionsStore
             const actions = await getActionsForUrl(launchUrl!, {
                 includeGlobal: false,
                 author: "user",
             });
+
+            console.log("Custom actions: ", actions)
 
             countBadge.textContent = actions.length.toString();
 
@@ -809,11 +811,10 @@ class ActionDiscoveryPanel {
         container.querySelectorAll(".screenshot-img").forEach((img) => {
             img.addEventListener("click", () => {
                 const src = img.getAttribute("data-src");
-                /*
-    if (src && typeof this.showScreenshotModal === 'function') {
-      this.showScreenshotModal(src);
-    }
-      */
+                if (src) {
+                    // Open image in new tab for viewing
+                    window.open(src, '_blank');
+                }
             });
         });
 

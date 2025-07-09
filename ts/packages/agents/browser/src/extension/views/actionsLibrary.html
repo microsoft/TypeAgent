@@ -6,7 +6,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Action Index - TypeAgent</title>
+    <title>Action Library - TypeAgent</title>
     <link rel="stylesheet" href="../vendor/bootstrap/bootstrap.min.css" />
     <link rel="stylesheet" href="../vendor/prism/prism.css" />
     <link
@@ -151,41 +151,6 @@
         text-transform: uppercase;
         font-size: 0.75rem;
         letter-spacing: 0.05em;
-      }
-
-      /* Statistics Cards */
-      .stats-grid {
-        display: grid;
-        gap: 1rem;
-        margin-bottom: 2rem;
-      }
-
-      .stat-card {
-        background: var(--light-color);
-        border-radius: 0.5rem;
-        padding: 1rem;
-        text-align: center;
-        border: 1px solid var(--border-color);
-        transition: all 0.2s ease;
-      }
-
-      .stat-card:hover {
-        border-color: var(--primary-color);
-        box-shadow: 0 2px 4px rgba(37, 99, 235, 0.1);
-      }
-
-      .stat-number {
-        display: block;
-        font-size: 1.5rem;
-        font-weight: 700;
-        color: var(--primary-color);
-        margin-bottom: 0.25rem;
-      }
-
-      .stat-label {
-        font-size: 0.75rem;
-        color: var(--secondary-color);
-        font-weight: 500;
       }
 
       /* Filter Section */
@@ -351,12 +316,6 @@
         border-color: var(--primary-color);
         color: var(--primary-color);
         background: rgba(37, 99, 235, 0.05);
-      }
-
-      .favorite-btn.active {
-        color: var(--warning-color);
-        border-color: var(--warning-color);
-        background: rgba(217, 119, 6, 0.1);
       }
 
       /* Badges */
@@ -632,7 +591,7 @@
       <nav class="top-navigation">
         <div class="brand">
           <i class="bi bi-collection-fill"></i>
-          Action Index
+          Action Library
         </div>
 
         <div class="search-container">
@@ -654,38 +613,11 @@
               <i class="bi bi-list"></i>
             </button>
           </div>
-
-          <button
-            id="refreshActionsBtn"
-            class="btn btn-outline-secondary btn-sm"
-            title="Refresh actions"
-          >
-            <i class="bi bi-arrow-clockwise"></i>
-          </button>
         </div>
       </nav>
 
       <!-- Sidebar -->
       <aside class="sidebar">
-        <!-- Statistics -->
-        <div class="stats-section">
-          <h6>Statistics</h6>
-          <div class="stats-grid">
-            <div class="stat-card">
-              <span class="stat-number" id="totalActionsCount">0</span>
-              <span class="stat-label">Total Actions</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-number" id="userActionsCount">0</span>
-              <span class="stat-label">Custom Actions</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-number" id="domainsCount">0</span>
-              <span class="stat-label">Websites</span>
-            </div>
-          </div>
-        </div>
-
         <!-- Filters -->
         <div class="filter-section">
           <h6>Filters</h6>
@@ -735,7 +667,6 @@
         <!-- Content Header -->
         <div class="content-header">
           <div>
-            <h1 class="content-title">Action Library</h1>
             <p class="content-subtitle">
               <span id="filteredActionsCount">0</span> actions available
             </p>
