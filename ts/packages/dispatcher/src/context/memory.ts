@@ -147,7 +147,8 @@ export function addResultToMemory(
             context.conversationManager.queueAddMessage(
                 {
                     text: message,
-                    knowledge: newEntities,
+                    // knowledge-processor might modify the entities. clone it so it doesn't impact other usage.
+                    knowledge: structuredClone(newEntities),
                     timestamp: new Date(),
                 },
                 false,
