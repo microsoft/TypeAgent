@@ -229,6 +229,27 @@ export async function runSearchQuery(
 }
 
 /**
+ * Run multiple queries
+ * @param conversation
+ * @param queries queries to run
+ * @param options
+ * @returns
+ */
+export async function runSearchQueries(
+    conversation: IConversation,
+    queries: SearchQueryExpr[],
+    options?: SearchOptions,
+): Promise<ConversationSearchResult[][]> {
+    // FUTURE: do these in parallel
+    const results: ConversationSearchResult[][] = [];
+    for (let i = 0; i < queries.length; ++i) {
+        const result = await runSearchQuery(conversation, queries[i], options);
+        results.push(result);
+    }
+    return results;
+}
+
+/**
  * Run the search query. For each selectExpr:
  * - only match messages using similarity to the rawQuery on each expression
  * - scope messages using the when filter

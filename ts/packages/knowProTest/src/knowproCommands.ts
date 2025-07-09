@@ -24,11 +24,13 @@ import { async } from "typeagent";
  * @see ../../knowPro/src/search.ts
  * @param context
  * @param {SearchRequest} request Structured request or Named Arguments
+ * @param {kp.querySchema.SearchQuery} preTranslatedQuery already have turned request.query into query expressions
  * @returns
  */
 export async function execSearchRequest(
     context: KnowproContext,
     request: SearchRequest | string[] | NamedArgs,
+    preTranslatedQuery?: kp.querySchema.SearchQuery | undefined,
 ): Promise<SearchResponse> {
     const conversation = context.ensureConversationLoaded();
     if (shouldParseRequest(request)) {
@@ -37,7 +39,10 @@ export async function execSearchRequest(
             searchRequestDef(),
         );
     }
-    const langQuery = request.query; // Natural language query to run
+    const langQuery = request.query.trim(); // Natural language query to run
+    if (!langQuery) {
+        throw new Error("No query provided");
+    }
     const debugContext: AnswerDebugContext = { searchText: langQuery };
     //
     // Set up options  for the search API Call
@@ -82,19 +87,38 @@ export async function execSearchRequest(
         }
     }
 
-    //
-    // Run query
-    //
-    const searchResults = await async.getResultWithRetry(() =>
-        getLangSearchResult(
+    let searchResults: Result<kp.ConversationSearchResult[]>;
+    if (preTranslatedQuery) {
+        // Pre-existing query expr for request.query
+        const compiledQueries = kp.compileSearchQuery(
             conversation,
-            context.queryTranslator,
-            langQuery,
-            options,
+            preTranslatedQuery,
+            options.compileOptions,
             langFilter,
-            debugContext,
-        ),
-    );
+        );
+        const queryResults = await kp.runSearchQueries(
+            conversation,
+            compiledQueries,
+            options,
+        );
+        debugContext.searchQuery = preTranslatedQuery;
+        debugContext.searchQueryExpr = compiledQueries;
+        searchResults = success(queryResults.flat());
+    } else {
+        //
+        // Run raw NLP query
+        //
+        searchResults = await async.getResultWithRetry(() =>
+            getLangSearchResult(
+                conversation,
+                context.queryTranslator,
+                langQuery,
+                options,
+                langFilter,
+                debugContext,
+            ),
+        );
+    }
 
     return { searchResults, debugContext };
 }

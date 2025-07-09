@@ -14,6 +14,26 @@ export function ensureDirSync(folderPath: string): string {
     return folderPath;
 }
 
+export function ensureUniqueFilePath(filePath: string): string {
+    if (!fs.existsSync(filePath)) {
+        return filePath;
+    }
+
+    for (let i = 1; i < 1000; ++i) {
+        const tempPath = addFileNameSuffixToPath(filePath, `_${i}`);
+        if (!fs.existsSync(tempPath)) {
+            return tempPath;
+        }
+    }
+
+    throw new Error(`Could not ensure unique ${filePath}`);
+}
+
+export function writeObjectToUniqueFile(filePath: string, obj: any): void {
+    filePath = ensureUniqueFilePath(filePath);
+    fs.writeFileSync(filePath, stringifyReadable(obj));
+}
+
 export function getCommandArgs(line: string | undefined): string[] {
     if (line !== undefined && line.length > 0) {
         const args = parseCommandLine(line);
@@ -102,6 +122,17 @@ export function isJsonEqual(x: any | undefined, y: any | undefined): boolean {
     return false;
 }
 
+export function compareObject(
+    x: any,
+    y: any,
+    label: string,
+): string | undefined {
+    if (!isJsonEqual(x, y)) {
+        return `${label}: ${stringifyReadable(x)}\n !== \n${stringifyReadable(y)}`;
+    }
+    return undefined;
+}
+
 export function compareArray(
     name: string,
     x: any[] | undefined,
@@ -128,4 +159,8 @@ export function compareArray(
 
 export function queryError(query: string, result: Error): Error {
     return error(`${query}\n${result.message}`);
+}
+
+export function stringifyReadable(value: any): string {
+    return JSON.stringify(value, undefined, 2);
 }

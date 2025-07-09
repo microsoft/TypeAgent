@@ -15,7 +15,7 @@ export interface SearchRequest {
     // Required args
     query: string;
 
-    // Optional
+    // Optional args
 
     // Search processing settings
     applyScope?: boolean | undefined; // If false, don't infer scopes. Useful for debugging
@@ -67,6 +67,10 @@ export interface GetAnswerRequest extends SearchRequest {
     fastStop?: boolean | undefined;
     knowledgeTopK?: number | undefined;
     choices?: string | undefined;
+    /**
+     * Use an existing searchResponse for this request to generate an answer
+     * If not provided, will run a search using the properties set for SearchRequest
+     */
     searchResponse?: SearchResponse | undefined;
     /**
      * If searchResponse.searchResults.length > 1, use answers for individual

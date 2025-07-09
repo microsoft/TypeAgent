@@ -56,6 +56,13 @@ export function timestampStringUtc(date: Date, sep: boolean = true): string {
         : `${year}${month}${day}${hour}${minute}${seconds}${ms}`;
 }
 
+export function timestampStringShort(date: Date, sep: boolean = true): string {
+    const year = date.getFullYear().toString();
+    const month = numberToString(date.getMonth() + 1, 2);
+    const day = numberToString(date.getDate(), 2);
+    return sep ? `${year}_${month}_${day}` : `${year}${month}${day}`;
+}
+
 export type TimestampRange = {
     startTimestamp: string;
     endTimestamp?: string | undefined;

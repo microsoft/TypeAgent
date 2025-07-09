@@ -569,6 +569,11 @@ export class KnowProPrinter extends MemoryConsoleWriter {
         return this;
     }
 
+    public writeSearchQuery(searchQuery: kp.querySchema.SearchQuery) {
+        this.writeHeading("Search Query");
+        this.writeJson(searchQuery);
+    }
+
     public writeDebugContext(context: kp.LanguageSearchDebugContext) {
         if (context.searchQuery) {
             this.writeHeading("Search Query");
