@@ -171,9 +171,9 @@ function concreteToMergedEntities(
     entities: kpLib.ConcreteEntity[],
     options?: EntityMergeOptions,
 ): Map<string, MergedEntity> {
-    let mergedEntities = new Map<string, MergedEntity>();
-    for (let entity of entities) {
-        const caseSensitive = options?.caseSensitive === true;
+    const mergedEntities = new Map<string, MergedEntity>();
+    const caseSensitive = options?.caseSensitive === true;
+    for (const entity of entities) {
         const nameKey = caseSensitive ? entity.name : entity.name.toLowerCase();
         const existing = mergedEntities.get(nameKey);
         if (existing) {
