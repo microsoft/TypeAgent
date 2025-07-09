@@ -24,11 +24,13 @@ import { async } from "typeagent";
  * @see ../../knowPro/src/search.ts
  * @param context
  * @param {SearchRequest} request Structured request or Named Arguments
+ * @param {kp.querySchema.SearchQuery} preTranslatedQuery already have turned request.query into query expressions
  * @returns
  */
 export async function execSearchRequest(
     context: KnowproContext,
     request: SearchRequest | string[] | NamedArgs,
+    preTranslatedQuery?: kp.querySchema.SearchQuery | undefined,
 ): Promise<SearchResponse> {
     const conversation = context.ensureConversationLoaded();
     if (shouldParseRequest(request)) {
@@ -83,11 +85,11 @@ export async function execSearchRequest(
     }
 
     let searchResults: Result<kp.ConversationSearchResult[]>;
-    if (request.queryExpr) {
+    if (preTranslatedQuery) {
         // Pre-existing query expr for request.query
         const compiledQueries = kp.compileSearchQuery(
             conversation,
-            request.queryExpr,
+            preTranslatedQuery,
             options.compileOptions,
             langFilter,
         );

@@ -15,14 +15,7 @@ export interface SearchRequest {
     // Required args
     query: string;
 
-    //
     // Optional args
-    //
-
-    /**
-     * query was already translated into a queryExpr.
-     */
-    queryExpr?: kp.querySchema.SearchQuery | undefined;
 
     // Search processing settings
     applyScope?: boolean | undefined; // If false, don't infer scopes. Useful for debugging

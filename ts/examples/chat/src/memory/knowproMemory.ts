@@ -23,7 +23,7 @@ import {
     parseFreeAndNamedArguments,
     keyValuesFromNamedArgs,
 } from "../common.js";
-import { collections, dateTime, ensureDir } from "typeagent";
+import { collections, dateTime, ensureDir, readJsonFile } from "typeagent";
 import chalk from "chalk";
 import { KnowProPrinter } from "./knowproPrinter.js";
 import { createKnowproDataFrameCommands } from "./knowproDataFrame.js";
@@ -269,6 +269,9 @@ export async function createKnowproCommands(
         );
         def.options.showKnowledge = argBool("Show knowledge matches", true);
         def.options.showMessages = argBool("Show message matches", false);
+        def.options.queryPath = arg(
+            "Path to a file containing query expressions representing the query",
+        );
         return def;
     }
     commands.kpSearch.metadata = searchDef();
@@ -277,9 +280,18 @@ export async function createKnowproCommands(
             return;
         }
         const namedArgs = parseNamedArguments(args, searchDef());
+        let priorQueryExr: kp.querySchema.SearchQuery | undefined;
+        if (namedArgs.compiledQueryPath) {
+            priorQueryExr = await readJsonFile(namedArgs.compileQueryPath);
+            if (priorQueryExr) {
+                context.printer.writeSearchQuery(priorQueryExr);
+            }
+        }
+
         const searchResponse = await kpTest.execSearchRequest(
             context,
             namedArgs,
+            priorQueryExr,
         );
         const searchResults = searchResponse.searchResults;
         const debugContext = searchResponse.debugContext;
