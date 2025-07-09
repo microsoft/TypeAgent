@@ -6,6 +6,7 @@ import asyncio
 import builtins
 from dataclasses import dataclass
 import json
+from typing import TypedDict
 
 import numpy as np
 import typechat
@@ -16,8 +17,14 @@ from typeagent.knowpro.answer_response_schema import AnswerResponse
 from typeagent.knowpro import answers
 from typeagent.knowpro.importing import ConversationSettings
 from typeagent.knowpro.convknowledge import create_typechat_model
-from typeagent.knowpro.interfaces import IConversation
+from typeagent.knowpro.interfaces import (
+    IConversation,
+    ScoredMessageOrdinal,
+    ScoredSemanticRefOrdinal,
+)
+from typeagent.knowpro.search import ConversationSearchResult
 from typeagent.knowpro.search_query_schema import SearchQuery
+from typeagent.knowpro.serialization import deserialize_object
 from typeagent.knowpro import searchlang
 from typeagent.podcasts.podcast import Podcast
 
@@ -31,21 +38,32 @@ class Context:
     lang_search_options: searchlang.LanguageSearchOptions
     answer_options: answers.AnswerContextOptions
     interactive: bool
+    sr_index: dict[str, dict]
 
 
 def main():
     # Parse arguments.
 
     default_qafile = "testdata/Episode_53_Answer_results.json"
+    default_srfile = "testdata/Episode_53_Search_results.json"
     default_podcast_file = "testdata/Episode_53_AdrianTchaikovsky_index"
 
     explanation = "a list of objects with 'question' and 'answer' keys"
+    explanation_sr = (
+        "a list of objects with 'searchText', 'searchQueryExpr' and 'results' keys"
+    )
     parser = argparse.ArgumentParser(description="Parse Q/A data file")
     parser.add_argument(
         "--qafile",
         type=str,
         default=default_qafile,
-        help=f"Path to the data file ({explanation})",
+        help=f"Path to the Answer_results.json file ({explanation})",
+    )
+    parser.add_argument(
+        "--srfile",
+        type=str,
+        default=default_srfile,
+        help=f"Path to the Search_results.json file ({explanation_sr})",
     )
     parser.add_argument(
         "--podcast",
@@ -78,6 +96,9 @@ def main():
 
     with open(args.qafile, "r") as file:
         data = json.load(file)
+    with open(args.srfile, "r") as file:
+        srdata = json.load(file)
+        sr_index = {item["searchText"]: item for item in srdata}
     assert isinstance(data, list), "Expected a list of Q/A pairs"
     assert len(data) > 0, "Expected non-empty Q/A data"
     assert all(
@@ -117,6 +138,7 @@ def main():
             entities_top_k=50, topics_top_k=50, messages_top_k=None, chunking=None
         ),
         interactive=args.interactive,
+        sr_index=sr_index,
     )
     utils.pretty_print(context.lang_search_options)
     utils.pretty_print(context.answer_options)
@@ -191,6 +213,13 @@ def main():
             )
 
 
+class RawSearchResult(TypedDict):
+    messageMatches: list[int]
+    entityMatches: list[int]
+    topicMatches: list[int]
+    actionMatches: list[int]
+
+
 async def compare(
     context: Context, qa_pair: dict[str, str | None]
 ) -> tuple[str | None, float]:
@@ -217,16 +246,30 @@ async def compare(
     print(f"Answer: {answer}")
     print("-" * 40)
 
+    debug_context = searchlang.LanguageSearchDebugContext()
     result = await searchlang.search_conversation_with_language(
         context.conversation,
         context.query_translator,
         question,
         context.lang_search_options,
+        debug_context=debug_context,
     )
     print("-" * 40)
     if not isinstance(result, typechat.Success):
-        print("Error:", result.message)
+        builtins.print("Error:", result.message)
     else:
+        record = context.sr_index.get(question)
+        if record:
+            qx = deserialize_object(SearchQuery, record["searchQueryExpr"])
+            qr: list[RawSearchResult] = record["results"]
+            if debug_context.search_query != qx:
+                builtins.print(
+                    "Warning: Search query from LLM does not match reference."
+                )
+            if not compare_results(result.value, qr):
+                builtins.print(
+                    "Warning: Search results from index do not match reference."
+                )
         all_answers, combined_answer = await answers.generate_answers(
             context.answer_translator,
             result.value,
@@ -255,6 +298,31 @@ async def compare(
     print("=" * 40)
 
     return the_answer, score
+
+
+def compare_results(
+    results: list[ConversationSearchResult], matches_records: list[RawSearchResult]
+) -> bool:
+    if len(results) != len(matches_records):
+        return False
+    for result, record in zip(results, matches_records):
+        if not compare_message_ordinals(
+            result.message_matches, record["messageMatches"]
+        ):
+            return False
+    return True
+
+
+def compare_message_ordinals(aa: list[ScoredMessageOrdinal], b: list[int]) -> bool:
+    a = [aai.message_ordinal for aai in aa]
+    return sorted(a) == sorted(b)
+
+
+def compare_semantic_ref_ordinals(
+    aa: list[ScoredSemanticRefOrdinal], b: list[int]
+) -> bool:
+    a = [aai.semantic_ref_ordinal for aai in aa]
+    return sorted(a) == sorted(b)
 
 
 async def equality_score(context: Context, a: str, b: str) -> float:
