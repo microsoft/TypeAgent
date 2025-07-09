@@ -48,5 +48,7 @@ export type WorkbenchActionOpenInIntegratedTerminal = {
         commandToExecute?: string;
         // Optional: risk of command
         commandRiskLevel?: "low" | "medium" | "high";
+        // Optional: reuse current terminal or open new one, default is true
+        reuseExistingTerminal?: boolean;
     };
 };

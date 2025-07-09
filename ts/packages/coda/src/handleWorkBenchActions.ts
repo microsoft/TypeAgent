@@ -5,6 +5,7 @@ import { ActionResult } from "./helpers";
 import * as path from "path";
 import * as vscode from "vscode";
 import * as fs from "fs/promises";
+import { aliasManager } from "./commandAliasMgr";
 
 export async function findMatchingFiles(
     fileName: string,
@@ -389,7 +390,7 @@ export async function handleFolderBuildRelatedTaskAction(
             if (selectedTask) {
                 await vscode.tasks.executeTask(selectedTask);
                 const msg = `✅ ${actionLabel} task '${selectedTask.name}' triggered successfully.`;
-                vscode.window.showInformationMessage(msg);
+                //vscode.window.showInformationMessage(msg);
                 return { handled: true, message: msg };
             }
         } catch (err) {
@@ -403,13 +404,152 @@ export async function handleFolderBuildRelatedTaskAction(
     try {
         await vscode.commands.executeCommand(taskCommand);
         const msg = `✅ ${actionLabel} triggered via VSCode Tasks (${folderName ?? "workspace"}).`;
-        vscode.window.showInformationMessage(msg);
+        //vscode.window.showInformationMessage(msg);
         return { handled: true, message: msg };
     } catch (err) {
         const msg = `❌ Failed to execute ${actionLabel}: ${err}`;
         vscode.window.showErrorMessage(msg);
         return { handled: false, message: msg };
     }
+}
+
+async function resolveCommandToExecute(
+    commandToExecute: string,
+    commandRiskLevel: "low" | "medium" | "high",
+    cwd: string | undefined,
+): Promise<{ resolvedCommand?: string; result?: ActionResult }> {
+    if (commandRiskLevel === "high") {
+        const msg = `⚠️ Command execution blocked due to high risk: '${commandToExecute}'.`;
+        vscode.window.showWarningMessage(msg);
+        return { result: { handled: false, message: msg } };
+    }
+
+    const contextFolder = cwd ? vscode.Uri.file(cwd) : undefined;
+    let resolvedCommand = await aliasManager.resolveCommandWithArgs(
+        commandToExecute,
+        contextFolder,
+    );
+
+    if (!resolvedCommand) {
+        const msg = `⚠️ No alias found for '${commandToExecute}', using raw input.`;
+        vscode.window.showWarningMessage(msg);
+        resolvedCommand = commandToExecute;
+    }
+
+    return { resolvedCommand };
+}
+
+export async function handleOpenInIntegratedTerminal(
+    action: any,
+): Promise<ActionResult> {
+    const parameters = action?.parameters ?? {};
+    const folderName = parameters.folderName;
+    const commandToExecute = parameters.commandToExecute;
+    const commandRiskLevel: "low" | "medium" | "high" =
+        parameters.commandRiskLevel ?? "low";
+    const reuseExistingTerminal = parameters.reuseExistingTerminal ?? true;
+
+    await aliasManager.ready;
+    let cwd: string | undefined;
+
+    if (folderName) {
+        const matches = await findMatchingFolders(path.basename(folderName));
+        if (matches.length === 0) {
+            const msg = `❌ No folders found matching '${folderName}'.`;
+            vscode.window.showErrorMessage(msg);
+            return { handled: false, message: msg };
+        }
+
+        const targetFolder =
+            matches.length === 1
+                ? matches[0]
+                : (
+                      await vscode.window.showQuickPick(
+                          matches.map((uri) => ({
+                              label: vscode.workspace.asRelativePath(uri),
+                              uri,
+                          })),
+                          {
+                              placeHolder: `Multiple folders found. Select where to open the terminal:`,
+                          },
+                      )
+                  )?.uri;
+
+        if (!targetFolder) {
+            const msg = "⚠️ Terminal opening cancelled by user.";
+            vscode.window.showInformationMessage(msg);
+            return { handled: false, message: msg };
+        }
+
+        cwd = targetFolder.fsPath;
+    } else {
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (workspaceFolders && workspaceFolders.length > 0) {
+            cwd = workspaceFolders[0].uri.fsPath;
+        }
+    }
+
+    let resolvedCommand: string | undefined;
+    if (commandToExecute) {
+        const { resolvedCommand: cmd, result } = await resolveCommandToExecute(
+            commandToExecute,
+            commandRiskLevel,
+            cwd,
+        );
+
+        if (result) {
+            return result;
+        }
+        resolvedCommand = cmd;
+    }
+
+    // If the resolved command is a VSCode command, execute it directly
+    if (
+        resolvedCommand &&
+        !resolvedCommand.includes(" ") &&
+        resolvedCommand.includes(".")
+    ) {
+        try {
+            await vscode.commands.executeCommand(resolvedCommand);
+            const msg = `✅ Executed VSCode command: ${resolvedCommand}.`;
+            vscode.window.showInformationMessage(msg);
+            return { handled: true, message: msg };
+        } catch (err) {
+            const msg = `❌ Failed to execute VSCode command: ${resolvedCommand}. ${err}`;
+            vscode.window.showErrorMessage(msg);
+            return { handled: false, message: msg };
+        }
+    }
+
+    // Otherwise, open the terminal and send the command
+    let terminal: vscode.Terminal;
+    try {
+        if (reuseExistingTerminal && vscode.window.activeTerminal) {
+            terminal = vscode.window.activeTerminal;
+        } else {
+            terminal = cwd
+                ? vscode.window.createTerminal({
+                      name: folderName ? `Terminal: ${folderName}` : `Terminal`,
+                      cwd: vscode.Uri.file(cwd),
+                  })
+                : vscode.window.createTerminal(
+                      folderName ? `Terminal: ${folderName}` : `Terminal`,
+                  );
+        }
+
+        terminal.show();
+        if (resolvedCommand) {
+            terminal.sendText(resolvedCommand);
+        }
+    } catch (error) {
+        console.error("❌ Failed to create or show terminal:", error);
+        const msg = `❌ Failed to open terminal: ${error instanceof Error ? error.message : String(error)}`;
+        vscode.window.showErrorMessage(msg);
+        return { handled: false, message: msg };
+    }
+
+    const msg = `✅ Opened integrated terminal${folderName ? ` in '${folderName}'` : ""}${resolvedCommand ? ` and executed '${resolvedCommand}'` : ""}.`;
+    return { handled: true, message: msg };
 }
 
 export async function handleWorkbenchActions(
@@ -432,6 +572,9 @@ export async function handleWorkbenchActions(
             break;
         case "workbenchBuildRelatedTask":
             actionResult = await handleFolderBuildRelatedTaskAction(action);
+            break;
+        case "openInIntegratedTerminal":
+            actionResult = await handleOpenInIntegratedTerminal(action);
             break;
         default: {
             actionResult.message = `Did not understand the request for action: "${actionName}"`;
