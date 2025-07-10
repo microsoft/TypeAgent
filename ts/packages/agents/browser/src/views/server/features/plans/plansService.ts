@@ -485,12 +485,10 @@ export class PlansService {
         return {
             nodes: [
                 { id: "start", label: "Home", type: "start" },
-                { id: "action", label: actionName, type: "action" },
-                { id: "end", label: "Complete", type: "end" }
+                { id: "action", label: actionName, type: "end" }
             ],
             links: [
-                { source: "start", target: "action", label: "Execute" },
-                { source: "action", target: "end", label: "Complete" }
+                { source: "start", target: "action", label: "Execute" }
             ],
             currentNode: "start",
             title: actionName
@@ -517,52 +515,37 @@ export class PlansService {
         if (pageActionsPlan.steps && Array.isArray(pageActionsPlan.steps)) {
             pageActionsPlan.steps.forEach((step: any, index: number) => {
                 const nodeId = `step-${index}`;
+                const isLastStep = index === pageActionsPlan.steps.length - 1;
                 
-                // Create node label from step description or fallback to actionName + parameter
-                let label = step.description;
-                if (!label && step.actionName) {
-                    if (step.parameters?.valueTextParameter) {
-                        label = `${step.actionName} (${step.parameters.valueTextParameter})`;
-                    } else {
-                        label = step.actionName;
-                    }
-                }
                 
                 nodes.push({
                     id: nodeId,
-                    label: label || 'Action',
-                    type: "action"
+                    label: isLastStep ? "Completed" : "",
+                    type: isLastStep ? "end" : "action"
                 });
+                
+                // Create edge label from step description or fallback to actionName + parameter
+                let edgeLabel = step.description;
+                if (!edgeLabel && step.actionName) {
+                    if (step.parameters?.valueTextParameter) {
+                        edgeLabel = `${step.actionName} (${step.parameters.valueTextParameter})`;
+                    } else {
+                        edgeLabel = step.actionName;
+                    }
+                }
                 
                 const sourceId = index === 0 ? "start" : `step-${index - 1}`;
                 links.push({
                     source: sourceId,
-                    target: nodeId
+                    target: nodeId,
+                    label: edgeLabel || 'Action'
                 });
             });
-            
-            if (pageActionsPlan.steps.length > 0) {
-                nodes.push({
-                    id: "end",
-                    label: "Complete",
-                    type: "end"
-                });
-                
-                links.push({
-                    source: `step-${pageActionsPlan.steps.length - 1}`,
-                    target: "end"
-                });
-            }
         } else {
+            // Fallback for actions without steps
             nodes.push({
                 id: "action",
                 label: pageActionsPlan.planName || actionName,
-                type: "action"
-            });
-            
-            nodes.push({
-                id: "end",
-                label: "Complete",
                 type: "end"
             });
             
@@ -570,11 +553,6 @@ export class PlansService {
                 source: "start",
                 target: "action",
                 label: "Execute"
-            });
-            
-            links.push({
-                source: "action",
-                target: "end"
             });
         }
         

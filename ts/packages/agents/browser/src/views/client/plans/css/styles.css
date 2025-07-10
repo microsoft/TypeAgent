@@ -293,6 +293,12 @@ input[type="text"] {
   overflow: hidden;
 }
 
+/* Ensure proper sizing when in iframe */
+body.iframe-mode #cy-container {
+  height: calc(100vh - 120px);
+  min-height: 400px;
+}
+
 /* Tooltip styles */
 .tooltip {
   background-color: rgba(0, 0, 0, 0.8);
