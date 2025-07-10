@@ -177,7 +177,15 @@ export class PartialCompletion {
                     return;
                 }
 
-                this.current = result.partial;
+                const partial =
+                    result.startIndex > 0
+                        ? input.substring(0, result.startIndex)
+                        : input;
+                const prefix =
+                    result.startIndex > 0
+                        ? input.substring(result.startIndex)
+                        : "";
+                this.current = partial;
                 this.space = result.space;
 
                 if (result.completions.length === 0) {
@@ -201,7 +209,7 @@ export class PartialCompletion {
 
                 const currentInput = this.getCurrentInputForCompletion();
                 if (currentInput === input) {
-                    this.updateSearchMenuPrefix(result.prefix);
+                    this.updateSearchMenuPrefix(prefix);
                 } else if (!this.reuseSearchMenu(currentInput)) {
                     this.updatePartialCompletion(currentInput);
                 }
