@@ -343,7 +343,7 @@ class WebsiteLibraryPanelFullPage {
             }
 
             const response = await chrome.runtime.sendMessage({
-                action: "checkWebSocketConnection",
+                type: "checkWebSocketConnection",
             });
 
             this.isConnected = response?.connected === true;
@@ -2625,7 +2625,7 @@ class ChromeExtensionServiceImpl implements ChromeExtensionService {
         if (typeof chrome !== "undefined" && chrome.runtime) {
             try {
                 const response = await chrome.runtime.sendMessage({
-                    action: "getLibraryStats",
+                    type: "getLibraryStats",
                     includeKnowledge: true,
                 });
 
@@ -2651,7 +2651,7 @@ class ChromeExtensionServiceImpl implements ChromeExtensionService {
         if (typeof chrome !== "undefined" && chrome.runtime) {
             try {
                 const response = await chrome.runtime.sendMessage({
-                    action: "searchWebsites",
+                    type: "searchWebsites",
                     parameters: {
                         query,
                         filters,
@@ -2677,7 +2677,7 @@ class ChromeExtensionServiceImpl implements ChromeExtensionService {
         if (typeof chrome !== "undefined" && chrome.runtime) {
             try {
                 const response = await chrome.runtime.sendMessage({
-                    action: "extractKnowledge",
+                    type: "extractKnowledge",
                     url,
                 });
                 return response;
@@ -2709,7 +2709,7 @@ class ChromeExtensionServiceImpl implements ChromeExtensionService {
         if (typeof chrome !== "undefined" && chrome.runtime) {
             try {
                 const response = await chrome.runtime.sendMessage({
-                    action: "getSearchSuggestions",
+                    type: "getSearchSuggestions",
                     query,
                 });
                 return response || [];
@@ -2740,7 +2740,7 @@ class ChromeExtensionServiceImpl implements ChromeExtensionService {
         if (typeof chrome !== "undefined" && chrome.runtime) {
             try {
                 await chrome.runtime.sendMessage({
-                    action: "saveSearch",
+                    type: "saveSearch",
                     query,
                     results,
                 });

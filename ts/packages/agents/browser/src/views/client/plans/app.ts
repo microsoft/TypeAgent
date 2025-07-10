@@ -8,19 +8,216 @@ import cytoscape from "cytoscape";
 import dagre from "dagre";
 import cytoscapeDagre from "cytoscape-dagre";
 
-import CONFIG from "./config.js";
 import ApiService from "./apiService.js";
 import Visualizer from "./visualizer.js";
-import { WebPlanData, SSEEvent } from "../../shared/types.js";
+import { WebPlanData } from "../../shared/types.js";
 
 declare global {
     interface Window {
         visualizer?: Visualizer;
         handleFileSelect?: (files: FileList | null) => void;
+        webPlanData?: any;
     }
 }
 
 document.addEventListener("DOMContentLoaded", function () {
+    // Check for action view mode
+    const urlParams = new URLSearchParams(window.location.search);
+    const actionId = urlParams.get("actionId");
+    const mode = urlParams.get("mode");
+
+    if (mode === "viewAction" && actionId) {
+        initializeActionView(actionId);
+        return;
+    }
+
+    // Original initialization for normal mode
+    initializeNormalMode();
+});
+
+async function initializeActionView(actionId: string): Promise<void> {
+    try {
+        // Configure UI for action view
+        hideUIControlsForActionView();
+        showCloseButtonForActionView();
+
+        // Add iframe mode class to body for CSS styling
+        document.body.classList.add("iframe-mode");
+
+        // Load action data
+        const actionData = await ApiService.getActionData(actionId);
+
+        // Set up the plan data
+        const webPlanData = actionData.planData;
+
+        // Update title and description
+        const titleElement = document.getElementById("plan-title");
+        if (titleElement) {
+            titleElement.textContent =
+                webPlanData.title || actionData.action.name;
+        }
+
+        const descriptionElement = document.getElementById("plan-description");
+        if (descriptionElement && webPlanData.description) {
+            descriptionElement.textContent = webPlanData.description;
+            descriptionElement.style.display = "block";
+        }
+
+        // Initialize visualization for action view
+        initializeActionVisualization(webPlanData);
+    } catch (error) {
+        console.error("Error loading action:", error);
+        showErrorMessage("Failed to load action: " + (error as Error).message);
+    }
+}
+
+function hideUIControlsForActionView(): void {
+    // Hide toggle container
+    const toggleContainer = document.querySelector(".toggle-container");
+    if (toggleContainer) {
+        (toggleContainer as HTMLElement).style.display = "none";
+    }
+
+    // Hide dynamic-only controls
+    const dynamicControls = document.querySelectorAll(".dynamic-only-control");
+    dynamicControls.forEach((control) => {
+        (control as HTMLElement).style.display = "none";
+    });
+
+    // Hide node selector
+    const nodeSelector = document.querySelector(".node-selector");
+    if (nodeSelector) {
+        (nodeSelector as HTMLElement).style.display = "none";
+    }
+
+    // Keep zoom fit and show path buttons visible as they're useful for action viewing
+    // These buttons should remain functional in action view mode
+}
+
+function initializeActionVisualization(webPlanData: WebPlanData): void {
+    // Set up cytoscape
+    if (typeof dagre === "undefined") {
+        console.error("Dagre library not loaded properly");
+        return;
+    }
+
+    if (typeof (cytoscape as any).layouts?.dagre === "undefined") {
+        try {
+            window.dagre = dagre;
+            cytoscape.use(cytoscapeDagre as any);
+        } catch (e) {
+            console.error("Failed to register cytoscape-dagre:", e);
+            return;
+        }
+    }
+
+    const cyContainer = document.getElementById("cy-container") as HTMLElement;
+    if (!cyContainer) {
+        console.error("Cytoscape container not found");
+        return;
+    }
+
+    // Check if we're in an iframe
+    const isInIframe = window.parent !== window;
+
+    // Create visualizer
+    const visualizer = new Visualizer(cyContainer, webPlanData);
+
+    if (isInIframe) {
+        // When in iframe, wait for container to be properly sized before initializing
+        setTimeout(() => {
+            visualizer.initialize();
+            // Add additional delay to ensure layout is complete before fitting
+            setTimeout(() => {
+                visualizer.fitToView();
+                // Send message to parent that visualization is ready (optional)
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage(
+                        { type: "visualizationReady" },
+                        "*",
+                    );
+                }
+            }, 300);
+        }, 100);
+    } else {
+        // Normal initialization for standalone mode
+        visualizer.initialize();
+    }
+
+    // Store globally
+    window.visualizer = visualizer;
+    window.webPlanData = webPlanData;
+
+    // Set up event listeners for action view controls
+    setupActionViewEventListeners(visualizer, webPlanData);
+}
+
+function setupActionViewEventListeners(
+    visualizer: Visualizer,
+    webPlanData: WebPlanData,
+): void {
+    // Zoom fit button handler
+    const zoomFitButton = document.getElementById(
+        "zoom-fit-button",
+    ) as HTMLButtonElement;
+    if (zoomFitButton) {
+        zoomFitButton.addEventListener("click", () => {
+            if (visualizer) {
+                visualizer.fitToView();
+            }
+        });
+    }
+
+    // Show path button handler
+    const showPathButton = document.getElementById(
+        "show-path-button",
+    ) as HTMLButtonElement;
+    if (showPathButton) {
+        showPathButton.addEventListener("click", () => {
+            if (!visualizer) return;
+
+            if (!visualizer.pathHighlighted) {
+                if (webPlanData.currentNode) {
+                    visualizer.highlightPath(webPlanData.currentNode);
+                }
+                // Update button state
+                showPathButton.classList.add("active");
+                showPathButton.title = "Reset Path View";
+            } else {
+                visualizer.resetEdgeStyles();
+                // Update button state
+                showPathButton.classList.remove("active");
+                showPathButton.title = "Show Current Path";
+            }
+        });
+    }
+}
+
+function showCloseButtonForActionView(): void {
+    const closeButton = document.getElementById("close-modal-button");
+    if (closeButton) {
+        closeButton.style.display = "block";
+        closeButton.addEventListener("click", closeActionViewModal);
+    }
+}
+
+function closeActionViewModal(): void {
+    // Send message to parent window to close the modal
+    if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: "closeModal" }, "*");
+    }
+}
+
+function showErrorMessage(message: string): void {
+    const statusMessage = document.getElementById("status-message");
+    if (statusMessage) {
+        statusMessage.textContent = message;
+        statusMessage.className = "status-message error";
+        statusMessage.style.display = "block";
+    }
+}
+
+function initializeNormalMode(): void {
     // Check if dagre and cytoscape-dagre are properly loaded
     if (typeof dagre === "undefined") {
         console.error("Dagre library not loaded properly");
@@ -45,7 +242,7 @@ document.addEventListener("DOMContentLoaded", function () {
     let previousPlanData: WebPlanData | null = null;
 
     // Application state
-    let currentViewMode: string = CONFIG.VIEW_MODES.DYNAMIC;
+    let currentViewMode: string = "dynamic";
     let webPlanData: WebPlanData = {
         nodes: [],
         links: [],
@@ -306,22 +503,10 @@ document.addEventListener("DOMContentLoaded", function () {
         }
 
         // Send the screenshot to the server
-        fetch("/api/screenshot", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                nodeId: currentUploadNodeId,
-                screenshot: currentBase64Screenshot,
-            }),
-        })
-            .then((response) => {
-                if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
-                }
-                return response.json();
-            })
+        ApiService.uploadScreenshot(
+            currentUploadNodeId,
+            currentBase64Screenshot,
+        )
             .then((data) => {
                 // Update the visualization if needed
                 if (window.webPlanData) {
@@ -472,156 +657,63 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     // Toggle view mode
-    viewModeToggle.addEventListener("change", function () {
-        updateDynamicControls();
+    if (viewModeToggle) {
+        viewModeToggle.addEventListener("change", function () {
+            updateDynamicControls();
 
-        currentViewMode = this.checked
-            ? CONFIG.VIEW_MODES.DYNAMIC
-            : CONFIG.VIEW_MODES.STATIC;
-        loadData();
+            currentViewMode = this.checked ? "dynamic" : "static";
+            loadData();
 
-        // Update show path button - using icon now
-        showPathButton.classList.remove("active");
-        showPathButton.innerHTML = '<i class="fas fa-route"></i>';
-        showPathButton.title = "Show Current Path";
-
-        // Show a status message
-        showStatus(`Switched to ${currentViewMode} plan view`);
-    });
-
-    // Handle node selection change via dropdown
-    nodeSelect.addEventListener("change", (e) => {
-        if (visualizer) {
-            visualizer.updateCurrentNode((e.target as HTMLSelectElement).value);
-        }
-    });
-
-    // Zoom fit button handler
-    zoomFitButton.addEventListener("click", () => {
-        if (visualizer) {
-            visualizer.fitToView();
-        }
-    });
-
-    // Show path button handler
-    showPathButton.addEventListener("click", () => {
-        if (!visualizer) return;
-
-        if (!visualizer.pathHighlighted) {
-            if (webPlanData.currentNode) {
-                visualizer.highlightPath(webPlanData.currentNode);
-            }
-            // Update only the icon instead of the text
-            showPathButton.classList.add("active");
-            showPathButton.innerHTML = '<i class="fas fa-route"></i>';
-            showPathButton.title = "Reset Path View";
-        } else {
-            visualizer.resetEdgeStyles();
-            // Update only the icon instead of the text
+            // Update show path button - using icon now
             showPathButton.classList.remove("active");
             showPathButton.innerHTML = '<i class="fas fa-route"></i>';
             showPathButton.title = "Show Current Path";
-        }
-    });
 
-    function addScreenshotAttachmentUI() {
-        // Add screenshot preview and control to state form
-        const stateFormControls = document.querySelector(
-            "#state-form .form-controls",
-        );
-        if (stateFormControls) {
-            const screenshotControl = document.createElement("div");
-            screenshotControl.className = "form-group screenshot-control";
-            screenshotControl.innerHTML = `
-                <label for="state-screenshot">Attach Screenshot:</label>
-                <input type="file" id="state-screenshot" accept="image/*" class="screenshot-input">
-                <div class="screenshot-preview" id="state-screenshot-preview" style="display: none;">
-                    <img id="state-preview-img" src="" alt="Preview">
-                    <button type="button" class="clear-screenshot">Clear</button>
-                </div>
-            `;
-            stateFormControls.appendChild(screenshotControl);
-        }
-
-        // Add screenshot preview and control to action form
-        const actionFormControls = document.querySelector(
-            "#action-form .form-controls",
-        );
-        if (actionFormControls) {
-            const screenshotControl = document.createElement("div");
-            screenshotControl.className = "form-group screenshot-control";
-            screenshotControl.innerHTML = `
-                <label for="action-screenshot">Attach Screenshot:</label>
-                <input type="file" id="action-screenshot" accept="image/*" class="screenshot-input">
-                <div class="screenshot-preview" id="action-screenshot-preview" style="display: none;">
-                    <img id="action-preview-img" src="" alt="Preview">
-                    <button type="button" class="clear-screenshot">Clear</button>
-                </div>
-            `;
-            actionFormControls.appendChild(screenshotControl);
-        }
-
-        // Set up event listeners for screenshot inputs
-        const screenshotInputs = document.querySelectorAll(".screenshot-input");
-        screenshotInputs.forEach((input) => {
-            input.addEventListener("change", function (e) {
-                const files = (e.target as HTMLInputElement).files;
-                if (!files || !files[0]) return;
-
-                const file = files[0];
-                const reader = new FileReader();
-
-                // Get the associated preview elements
-                const formId = (e.target as HTMLInputElement).id.includes(
-                    "state",
-                )
-                    ? "state"
-                    : "action";
-                const previewContainer = document.getElementById(
-                    `${formId}-screenshot-preview`,
-                );
-                const previewImg = document.getElementById(
-                    `${formId}-preview-img`,
-                ) as HTMLImageElement;
-
-                reader.onload = function (e) {
-                    if (!e.target || !e.target.result) return;
-
-                    const dataURL = e.target.result as string;
-                    if (previewImg) previewImg.src = dataURL;
-                    if (previewContainer)
-                        previewContainer.style.display = "block";
-
-                    // Store the base64 screenshot data
-                    currentBase64Screenshot = dataURL.split(",")[1]; // Remove the data URL prefix
-                };
-
-                reader.readAsDataURL(file);
-            });
+            // Show a status message
+            showStatus(`Switched to ${currentViewMode} plan view`);
         });
+    }
 
-        // Clear screenshot buttons
-        const clearButtons = document.querySelectorAll(".clear-screenshot");
-        clearButtons.forEach((button) => {
-            button.addEventListener("click", function (e) {
-                const formId = (e.target as HTMLElement)
-                    .closest(".screenshot-preview")
-                    ?.id.includes("state")
-                    ? "state"
-                    : "action";
-                const previewContainer = document.getElementById(
-                    `${formId}-screenshot-preview`,
+    // Handle node selection change via dropdown
+    if (nodeSelect) {
+        nodeSelect.addEventListener("change", (e) => {
+            if (visualizer) {
+                visualizer.updateCurrentNode(
+                    (e.target as HTMLSelectElement).value,
                 );
-                const fileInput = document.getElementById(
-                    `${formId}-screenshot`,
-                ) as HTMLInputElement;
+            }
+        });
+    }
 
-                if (previewContainer) previewContainer.style.display = "none";
-                if (fileInput) fileInput.value = "";
+    // Zoom fit button handler
+    if (zoomFitButton) {
+        zoomFitButton.addEventListener("click", () => {
+            if (visualizer) {
+                visualizer.fitToView();
+            }
+        });
+    }
 
-                // Clear the stored screenshot data
-                currentBase64Screenshot = null;
-            });
+    // Show path button handler
+    if (showPathButton) {
+        showPathButton.addEventListener("click", () => {
+            if (!visualizer) return;
+
+            if (!visualizer.pathHighlighted) {
+                if (webPlanData.currentNode) {
+                    visualizer.highlightPath(webPlanData.currentNode);
+                }
+                // Update only the icon instead of the text
+                showPathButton.classList.add("active");
+                showPathButton.innerHTML = '<i class="fas fa-route"></i>';
+                showPathButton.title = "Reset Path View";
+            } else {
+                visualizer.resetEdgeStyles();
+                // Update only the icon instead of the text
+                showPathButton.classList.remove("active");
+                showPathButton.innerHTML = '<i class="fas fa-route"></i>';
+                showPathButton.title = "Show Current Path";
+            }
         });
     }
 
@@ -696,7 +788,7 @@ document.addEventListener("DOMContentLoaded", function () {
         // Handle incoming messages
         eventSource.onmessage = (event) => {
             try {
-                const eventData = JSON.parse(event.data) as SSEEvent;
+                const eventData = JSON.parse(event.data);
                 handleSSEEvent(eventData);
             } catch (error) {
                 console.error("Error parsing SSE data:", error);
@@ -706,13 +798,13 @@ document.addEventListener("DOMContentLoaded", function () {
 
     /**
      * Handle SSE events
-     * @param {SSEEvent} eventData - The event data
+     * @param {any} eventData - The event data
      */
-    function handleSSEEvent(eventData: SSEEvent): void {
+    function handleSSEEvent(eventData: any): void {
         console.log("Received SSE event:", eventData.type);
 
         // Only process events for the current view mode (dynamic)
-        if (currentViewMode !== CONFIG.VIEW_MODES.DYNAMIC) {
+        if (currentViewMode !== "dynamic") {
             // Still update our local data so it's current when we switch modes
             if (eventData.data) {
                 webPlanData = eventData.data;
@@ -848,7 +940,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
             visualizer = new Visualizer(cyContainer, webPlanData);
             visualizer.initialize();
-            // stateForm;
 
             // Setup event listeners
             visualizer.setupEventListeners((nodeId: string) => {
@@ -907,12 +998,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // Setup screenshot functionality
     setupScreenshotEventListeners();
-    addScreenshotAttachmentUI();
 
     // Make the functions available globally
-    (window as any).showScreenshotUploadModal = showScreenshotUploadModal;
-    (window as any).uploadScreenshot = uploadScreenshot;
-    (window as any).handleFileSelect = handleFileSelect;
+    window.showScreenshotUploadModal = showScreenshotUploadModal;
+    window.uploadScreenshot = uploadScreenshot;
+    window.handleFileSelect = handleFileSelect;
 
     // Make sure to close the connection when the page unloads
     window.addEventListener("beforeunload", () => {
@@ -924,4 +1014,4 @@ document.addEventListener("DOMContentLoaded", function () {
     window.addEventListener("resize", function () {
         adjustCanvasHeight();
     });
-});
+}

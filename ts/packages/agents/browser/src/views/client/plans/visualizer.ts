@@ -144,10 +144,23 @@ class Visualizer {
     applyLayout(): void {
         if (!this.cy) return;
 
+        // Check if we're in an iframe and ensure container is properly sized
+        const isInIframe = window.parent !== window;
+        if (isInIframe) {
+            // Force a resize to ensure dimensions are correct
+            this.cy.resize();
+        }
+
         try {
-            const dagreLayout = this.cy.layout(
-                CytoscapeConfig.getDagreLayoutOptions(),
-            );
+            const layoutOptions = CytoscapeConfig.getDagreLayoutOptions();
+
+            // For iframe scenarios, ensure fit is enabled and add extra padding
+            if (isInIframe) {
+                layoutOptions.fit = true;
+                layoutOptions.padding = 50;
+            }
+
+            const dagreLayout = this.cy.layout(layoutOptions);
             dagreLayout.run();
         } catch (e) {
             console.error("Error running dagre layout:", e);
@@ -828,11 +841,23 @@ class Visualizer {
     fitToView(): void {
         if (!this.cy) return;
 
-        // First check if we need to fit - only do it if nodes are outside the viewport
-        this.cy.extent();
-        const nodes = this.cy.nodes();
+        // Force resize to ensure container dimensions are correct
+        this.cy.resize();
 
+        const nodes = this.cy.nodes();
         if (nodes.length === 0) return;
+
+        const isInIframe = window.parent !== window;
+
+        if (isInIframe) {
+            // In iframe mode, always fit and center the graph aggressively
+            this.cy.fit(undefined, 50);
+            this.cy.center();
+            return;
+        }
+
+        // Original logic for standalone mode
+        this.cy.extent();
 
         // Get the current viewport
         const viewport = {
