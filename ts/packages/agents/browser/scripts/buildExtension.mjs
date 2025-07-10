@@ -60,6 +60,7 @@ const sharedScripts = {
     "views/actionsLibrary": "views/actionsLibrary.ts",
     "views/pageKnowledge": "views/pageKnowledge.ts",
     "views/knowledgeLibrary": "views/knowledgeLibrary.ts",
+    "views/pdfView": "views/pdfView.ts",
     uiEventsDispatcher: "uiEventsDispatcher.ts",
     "sites/paleobiodb": "sites/paleobiodb.ts",
 };
@@ -160,6 +161,10 @@ copyFileSync(
 copyFileSync(
     `${srcDir}/views/knowledgeLibrary.html`,
     `${chromeOutDir}/views/knowledgeLibrary.html`,
+);
+copyFileSync(
+    `${srcDir}/views/pdfView.html`,
+    `${chromeOutDir}/views/pdfView.html`,
 );
 copyFileSync(
     `${srcDir}/views/knowledgeLibrary.css`,

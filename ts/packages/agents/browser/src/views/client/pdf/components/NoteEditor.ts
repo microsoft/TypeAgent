@@ -147,20 +147,6 @@ export class NoteEditor {
                             placeholder="Write your note here... You can use markdown formatting."
                             rows="8"
                         ></textarea>
-                        
-                        <div class="editor-help">
-                            <details>
-                                <summary>Markdown formatting help</summary>
-                                <div class="markdown-help-content">
-                                    <code>**bold**</code> → <strong>bold</strong><br>
-                                    <code>*italic*</code> → <em>italic</em><br>
-                                    <code>\`code\`</code> → <code>code</code><br>
-                                    <code># Heading</code> → Heading<br>
-                                    <code>- List item</code> → • List item<br>
-                                    <code>[link](url)</code> → link
-                                </div>
-                            </details>
-                        </div>
                     </div>
                     
                     <div class="note-preview-section" style="display: none;">

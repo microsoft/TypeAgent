@@ -57,6 +57,10 @@
     {
       "resources": ["uiEventsDispatcher.js"],
       "matches": ["https://*/*"]
+    },
+    {
+      "resources": ["views/pdfView.html", "views/pdfView.js"],
+      "matches": ["<all_urls>"]
     }
   ],
   "permissions": [
