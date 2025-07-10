@@ -18,14 +18,12 @@ import * as kpTest from "knowpro-test";
 import * as cm from "conversation-memory";
 import {
     changeFileExt,
-    ensureDir,
     getAbsolutePath,
     getFileName,
     htmlToMd,
     readAllText,
     simplifyHtml,
     simplifyText,
-    writeJsonFile,
 } from "typeagent";
 import chalk from "chalk";
 import { openai } from "aiclient";
@@ -192,6 +190,7 @@ export async function createKnowproTestCommands(
             );
             if (!results.success) {
                 context.printer.writeError(results.message);
+                return;
             }
         } finally {
             endTestBatch();
@@ -219,6 +218,8 @@ export async function createKnowproTestCommands(
 
             const namedArgs = parseNamedArguments(args, verifySearchBatchDef());
             const srcPath = namedArgs.srcPath;
+
+            const startTimestamp = new Date();
             const results = await kpTest.verifyLangSearchResultsBatch(
                 context,
                 srcPath,
@@ -235,7 +236,11 @@ export async function createKnowproTestCommands(
                 context.printer.writeError(results.message);
                 return;
             }
-            await writeSearchValidationReport(results.data, srcPath);
+            await writeSearchValidationReport(
+                results.data,
+                srcPath,
+                startTimestamp,
+            );
         } finally {
             endTestBatch();
         }
@@ -476,21 +481,18 @@ export async function createKnowproTestCommands(
 
     async function writeSearchValidationReport(
         results: kpTest.Comparison<kpTest.LangSearchResults>[],
-        srcPath?: string,
+        srcPath: string,
+        startDate: Date,
     ) {
-        const errorResults = results.filter(
-            (c) => c.error !== undefined && c.error.length > 0,
-        );
-        if (errorResults.length === 0) {
-            context.printer.writeLineInColor(chalk.green, "No errors");
-            return;
+        const report = kpTest.createSearchTestReport(results, srcPath, {
+            startDate,
+            stopDate: new Date(),
+        });
+        context.printer.writeLine(`${report.errors.length} errors`);
+        if (report.errors.length > 0) {
+            context.printer.writeList(report.errors.map((e) => e.expected.cmd));
         }
-
-        context.printer.writeLine(`${errorResults.length} errors`);
-        context.printer.writeList(errorResults.map((e) => e.expected.cmd));
-        if (srcPath) {
-            await saveReport(srcPath, errorResults);
-        }
+        await context.log.writeTestReport(report, getFileName(srcPath));
     }
 
     function writeAnswerScore(
@@ -514,17 +516,11 @@ export async function createKnowproTestCommands(
         }
     }
 
-    async function saveReport(srcPath: string, report: any) {
-        const outputDir = path.join(context.basePath, "logs/testReports");
-        await ensureDir(outputDir);
-        const outputPath = path.join(outputDir, getFileName(srcPath) + ".json");
-        await writeJsonFile(outputPath, report);
-    }
-
-    function beginTestBatch() {
+    function beginTestBatch(): void {
         context.retryNoAnswer = true;
     }
-    function endTestBatch() {
+
+    function endTestBatch(): void {
         context.retryNoAnswer = false;
     }
     return;

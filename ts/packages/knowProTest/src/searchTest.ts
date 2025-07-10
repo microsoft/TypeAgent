@@ -2,12 +2,13 @@
 // Licensed under the MIT License.
 
 import { KnowproContext } from "./knowproContext.js";
-import { readJsonFile, writeJsonFile } from "typeagent";
+import { dateTime, readJsonFile, writeJsonFile } from "typeagent";
 import { error, Result, success } from "typechat";
 import { BatchCallback, Comparison } from "./types.js";
 import {
     compareArray,
     compareObject,
+    dateRangeToTimeRange,
     getCommandArgs,
     queryError,
 } from "./common.js";
@@ -15,11 +16,13 @@ import { getLangSearchResult } from "./knowproCommands.js";
 import { getBatchFileLines } from "interactive-app";
 import { execSearchRequest } from "./knowproCommands.js";
 import * as kp from "knowpro";
+import { TestRunReport } from "./logging.js";
 
 export type LangSearchResults = {
     searchText: string;
     cmd?: string | undefined;
     searchQueryExpr: kp.querySchema.SearchQuery;
+    compiledQueryExpr?: kp.SearchQueryExpr[] | undefined;
     results: LangSearchResult[];
 };
 
@@ -65,7 +68,6 @@ export async function runSearchBatch(
     }
     return success(results);
 }
-
 async function getSearchResults(
     context: KnowproContext,
     args: string[],
@@ -90,6 +92,7 @@ function collectLangSearchResults(
     return {
         searchText,
         searchQueryExpr: debugContext.searchQuery!,
+        compiledQueryExpr: debugContext.searchQueryExpr,
         results: searchResults.map((cr) => {
             const lr: LangSearchResult = {
                 messageMatches: cr.messageMatches.map((m) => m.messageOrdinal),
@@ -196,6 +199,23 @@ export async function* runLangSearchBatch(
             .get(type)
             ?.semanticRefMatches.map((sr) => sr.semanticRefOrdinal);
     }
+}
+
+export function createSearchTestReport(
+    results: Comparison<LangSearchResults>[],
+    srcDataPath: string,
+    dateRange: dateTime.DateRange,
+): TestRunReport<Comparison<LangSearchResults>> {
+    const errors = results.filter(
+        (c) => c.error !== undefined && c.error.length > 0,
+    );
+    return {
+        name: "search",
+        timeRange: dateRangeToTimeRange(dateRange),
+        srcData: srcDataPath,
+        errors,
+        countRun: results.length,
+    };
 }
 
 function getKnowledgeResults(
