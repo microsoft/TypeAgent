@@ -178,6 +178,13 @@ export async function handleMessage(
             });
             return result;
         }
+        case "getViewHostUrl": {
+            const result = await sendActionToAgent({
+                actionName: "getViewHostUrl",
+                parameters: {},
+            });
+            return result;
+        }
         case "startRecording": {
             const targetTab = await getActiveTab();
             if (targetTab?.id) {

@@ -64,7 +64,7 @@ export class PDFInterceptor {
     private async performConnectionCheck(): Promise<boolean> {
         try {
             const response = await chrome.runtime.sendMessage({
-                type: "checkWebSocketConnection"
+                action: "checkWebSocketConnection",
             });
             this.isWebSocketConnected = response?.connected || false;
             debug(`WebSocket connection status: ${this.isWebSocketConnected}`);
@@ -80,7 +80,7 @@ export class PDFInterceptor {
      * Set up click event interceptor for PDF links
      */
     private setupClickInterceptor(): void {
-        document.addEventListener('click', this.handleClick.bind(this), true);
+        document.addEventListener("click", this.handleClick.bind(this), true);
         debug("Click interceptor set up");
     }
 
@@ -102,7 +102,9 @@ export class PDFInterceptor {
                     event.stopPropagation();
                     await this.redirectToPDFViewer(link.href);
                 } else {
-                    debug(`WebSocket not connected, allowing default PDF handling for: ${link.href}`);
+                    debug(
+                        `WebSocket not connected, allowing default PDF handling for: ${link.href}`,
+                    );
                 }
             }
         } catch (error) {
@@ -115,10 +117,10 @@ export class PDFInterceptor {
      */
     private findPDFLink(element: HTMLElement): HTMLAnchorElement | null {
         let current = element;
-        
+
         // Traverse up the DOM tree to find an anchor element
         while (current && current !== document.body) {
-            if (current.tagName.toLowerCase() === 'a') {
+            if (current.tagName.toLowerCase() === "a") {
                 return current as HTMLAnchorElement;
             }
             current = current.parentElement as HTMLElement;
@@ -134,14 +136,14 @@ export class PDFInterceptor {
         try {
             const urlObj = new URL(url);
             const pathname = urlObj.pathname.toLowerCase();
-            
+
             // Check file extension
-            if (pathname.endsWith('.pdf')) {
+            if (pathname.endsWith(".pdf")) {
                 return true;
             }
 
             // Check content-type parameter
-            if (urlObj.searchParams.get('content-type') === 'application/pdf') {
+            if (urlObj.searchParams.get("content-type") === "application/pdf") {
                 return true;
             }
 
@@ -149,10 +151,10 @@ export class PDFInterceptor {
             const pdfPatterns = [
                 /\.pdf(\?|#|$)/i,
                 /\/pdf\//i,
-                /content-type=application\/pdf/i
+                /content-type=application\/pdf/i,
             ];
 
-            return pdfPatterns.some(pattern => pattern.test(url));
+            return pdfPatterns.some((pattern) => pattern.test(url));
         } catch (error) {
             debugError("Error checking PDF URL:", error);
             return false;
@@ -165,14 +167,14 @@ export class PDFInterceptor {
     private async redirectToPDFViewer(pdfUrl: string): Promise<void> {
         try {
             const extensionUrl = chrome.runtime.getURL(
-                `views/pdfView.html?url=${encodeURIComponent(pdfUrl)}`
+                `views/pdfView.html?url=${encodeURIComponent(pdfUrl)}`,
             );
             debug(`Redirecting to PDF viewer: ${extensionUrl}`);
             window.location.href = extensionUrl;
         } catch (error) {
             debugError("Error redirecting to PDF viewer:", error);
             // Fallback: open in new tab
-            window.open(pdfUrl, '_blank');
+            window.open(pdfUrl, "_blank");
         }
     }
 
@@ -198,12 +200,14 @@ export class PDFInterceptor {
             if (await this.checkWebSocketConnection()) {
                 const currentUrl = window.location.href;
                 const extensionUrl = chrome.runtime.getURL(
-                    `views/pdfView.html?url=${encodeURIComponent(currentUrl)}`
+                    `views/pdfView.html?url=${encodeURIComponent(currentUrl)}`,
                 );
                 debug(`Redirecting direct PDF navigation: ${extensionUrl}`);
                 window.location.replace(extensionUrl);
             } else {
-                debug("WebSocket not connected, allowing default PDF handling for direct navigation");
+                debug(
+                    "WebSocket not connected, allowing default PDF handling for direct navigation",
+                );
             }
         } catch (error) {
             debugError("Error handling direct PDF navigation:", error);

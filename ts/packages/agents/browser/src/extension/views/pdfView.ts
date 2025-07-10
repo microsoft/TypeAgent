@@ -21,11 +21,12 @@ class PDFViewPage {
     private downloadBtn!: HTMLButtonElement;
     private retryBtn!: HTMLButtonElement;
     private openInNewTabBtn!: HTMLButtonElement;
-    
+
     private pdfUrl: string | null = null;
     private viewerUrl: string | null = null;
     private retryCount: number = 0;
     private maxRetries: number = 3;
+    private loadingTimeout: number | null = null;
 
     constructor() {
         this.initializeElements();
@@ -36,34 +37,56 @@ class PDFViewPage {
      * Initialize DOM elements
      */
     private initializeElements(): void {
-        this.pdfFrame = document.getElementById('pdfFrame') as HTMLIFrameElement;
-        this.loadingContainer = document.getElementById('loadingContainer') as HTMLElement;
-        this.errorContainer = document.getElementById('errorContainer') as HTMLElement;
-        this.errorMessage = document.getElementById('errorMessage') as HTMLElement;
-        this.pdfUrlDisplay = document.getElementById('pdfUrlDisplay') as HTMLElement;
-        this.urlInfo = document.getElementById('urlInfo') as HTMLElement;
-        this.openOriginalBtn = document.getElementById('openOriginalBtn') as HTMLButtonElement;
-        this.downloadBtn = document.getElementById('downloadBtn') as HTMLButtonElement;
-        this.retryBtn = document.getElementById('retryBtn') as HTMLButtonElement;
-        this.openInNewTabBtn = document.getElementById('openInNewTabBtn') as HTMLButtonElement;
+        this.pdfFrame = document.getElementById(
+            "pdfFrame",
+        ) as HTMLIFrameElement;
+        this.loadingContainer = document.getElementById(
+            "loadingContainer",
+        ) as HTMLElement;
+        this.errorContainer = document.getElementById(
+            "errorContainer",
+        ) as HTMLElement;
+        this.errorMessage = document.getElementById(
+            "errorMessage",
+        ) as HTMLElement;
+        this.pdfUrlDisplay = document.getElementById(
+            "pdfUrlDisplay",
+        ) as HTMLElement;
+        this.urlInfo = document.getElementById("urlInfo") as HTMLElement;
+        this.openOriginalBtn = document.getElementById(
+            "openOriginalBtn",
+        ) as HTMLButtonElement;
+        this.downloadBtn = document.getElementById(
+            "downloadBtn",
+        ) as HTMLButtonElement;
+        this.retryBtn = document.getElementById(
+            "retryBtn",
+        ) as HTMLButtonElement;
+        this.openInNewTabBtn = document.getElementById(
+            "openInNewTabBtn",
+        ) as HTMLButtonElement;
     }
 
     /**
      * Set up event listeners
      */
     private setupEventListeners(): void {
-        this.retryBtn.addEventListener('click', () => this.retry());
-        this.openInNewTabBtn.addEventListener('click', () => this.openInNewTab());
-        this.openOriginalBtn.addEventListener('click', () => this.openInNewTab());
-        this.downloadBtn.addEventListener('click', () => this.downloadPDF());
+        this.retryBtn.addEventListener("click", () => this.retry());
+        this.openInNewTabBtn.addEventListener("click", () =>
+            this.openInNewTab(),
+        );
+        this.openOriginalBtn.addEventListener("click", () =>
+            this.openInNewTab(),
+        );
+        this.downloadBtn.addEventListener("click", () => this.downloadPDF());
 
         // Set up iframe error handling
-        this.pdfFrame.addEventListener('error', () => {
-            this.showError('Failed to load PDF viewer', 'IFRAME_ERROR');
+        this.pdfFrame.addEventListener("error", () => {
+            this.showError("Failed to load PDF viewer", "IFRAME_ERROR");
         });
 
         // Set up iframe load success
-        this.pdfFrame.addEventListener('load', () => {
+        this.pdfFrame.addEventListener("load", () => {
             this.onIframeLoad();
         });
     }
@@ -81,7 +104,7 @@ class PDFViewPage {
             // Extract PDF URL from query parameters
             this.pdfUrl = this.extractPDFUrl();
             if (!this.pdfUrl) {
-                throw new Error('No PDF URL provided in query parameters');
+                throw new Error("No PDF URL provided in query parameters");
             }
 
             // Update URL info in header
@@ -90,12 +113,13 @@ class PDFViewPage {
 
             // Get view host URL and load PDF
             await this.loadPDFViewer();
-
         } catch (error) {
             debugError("Failed to initialize PDF view page:", error);
             this.showError(
-                error instanceof Error ? error.message : 'Unknown initialization error',
-                'INIT_ERROR'
+                error instanceof Error
+                    ? error.message
+                    : "Unknown initialization error",
+                "INIT_ERROR",
             );
         }
     }
@@ -105,8 +129,8 @@ class PDFViewPage {
      */
     private extractPDFUrl(): string | null {
         const urlParams = new URLSearchParams(window.location.search);
-        const url = urlParams.get('url');
-        
+        const url = urlParams.get("url");
+
         if (!url) {
             return null;
         }
@@ -142,8 +166,8 @@ class PDFViewPage {
      */
     private updateActionButtons(): void {
         if (this.pdfUrl) {
-            this.openOriginalBtn.style.display = 'flex';
-            this.downloadBtn.style.display = 'flex';
+            this.openOriginalBtn.style.display = "flex";
+            this.downloadBtn.style.display = "flex";
         }
     }
 
@@ -154,7 +178,7 @@ class PDFViewPage {
         debug("Loading PDF viewer for URL:", this.pdfUrl);
 
         if (!this.pdfUrl) {
-            throw new Error('No PDF URL available');
+            throw new Error("No PDF URL available");
         }
 
         this.showLoading("Connecting to TypeAgent PDF reader...");
@@ -162,9 +186,11 @@ class PDFViewPage {
         try {
             // Get view host URL from service worker
             const response = await this.getViewHostUrl();
-            
+
             if (!response || !response.url) {
-                throw new Error('Unable to get view host URL from TypeAgent service');
+                throw new Error(
+                    "Unable to get view host URL from TypeAgent service",
+                );
             }
 
             // Construct PDF reader URL
@@ -173,26 +199,28 @@ class PDFViewPage {
 
             // Load in iframe with timeout
             await this.loadIframeWithTimeout(this.viewerUrl, 30000);
-
         } catch (error) {
             debugError("Error loading PDF viewer:", error);
-            
+
             if (error instanceof Error) {
-                if (error.message.includes('timeout')) {
+                if (error.message.includes("timeout")) {
                     this.showError(
-                        'The PDF viewer is taking too long to load. This might be due to a large file or slow connection.',
-                        'TIMEOUT_ERROR'
+                        "The PDF viewer is taking too long to load. This might be due to a large file or slow connection.",
+                        "TIMEOUT_ERROR",
                     );
-                } else if (error.message.includes('view host')) {
+                } else if (error.message.includes("view host")) {
                     this.showError(
-                        'Unable to connect to the TypeAgent PDF service. Please ensure TypeAgent is running.',
-                        'SERVICE_ERROR'
+                        "Unable to connect to the TypeAgent PDF service. Please ensure TypeAgent is running.",
+                        "SERVICE_ERROR",
                     );
                 } else {
-                    this.showError(error.message, 'LOAD_ERROR');
+                    this.showError(error.message, "LOAD_ERROR");
                 }
             } else {
-                this.showError('Unknown error occurred while loading PDF viewer', 'UNKNOWN_ERROR');
+                this.showError(
+                    "Unknown error occurred while loading PDF viewer",
+                    "UNKNOWN_ERROR",
+                );
             }
         }
     }
@@ -203,7 +231,7 @@ class PDFViewPage {
     private async getViewHostUrl(): Promise<{ url: string } | null> {
         try {
             const response = await chrome.runtime.sendMessage({
-                type: "getViewHostUrl"
+                type: "getViewHostUrl",
             });
 
             if (response && response.url) {
@@ -215,36 +243,41 @@ class PDFViewPage {
             }
         } catch (error) {
             debugError("Error getting view host URL:", error);
-            throw new Error('Failed to communicate with TypeAgent service worker');
+            throw new Error(
+                "Failed to communicate with TypeAgent service worker",
+            );
         }
     }
 
     /**
      * Load iframe with timeout
      */
-    private loadIframeWithTimeout(url: string, timeoutMs: number): Promise<void> {
+    private loadIframeWithTimeout(
+        url: string,
+        timeoutMs: number,
+    ): Promise<void> {
         return new Promise((resolve, reject) => {
             const timeout = setTimeout(() => {
-                reject(new Error('PDF viewer load timeout'));
+                reject(new Error("PDF viewer load timeout"));
             }, timeoutMs);
 
             const onLoad = () => {
                 clearTimeout(timeout);
-                this.pdfFrame.removeEventListener('load', onLoad);
-                this.pdfFrame.removeEventListener('error', onError);
+                this.pdfFrame.removeEventListener("load", onLoad);
+                this.pdfFrame.removeEventListener("error", onError);
                 resolve();
             };
 
             const onError = () => {
                 clearTimeout(timeout);
-                this.pdfFrame.removeEventListener('load', onLoad);
-                this.pdfFrame.removeEventListener('error', onError);
-                reject(new Error('PDF viewer failed to load'));
+                this.pdfFrame.removeEventListener("load", onLoad);
+                this.pdfFrame.removeEventListener("error", onError);
+                reject(new Error("PDF viewer failed to load"));
             };
 
-            this.pdfFrame.addEventListener('load', onLoad);
-            this.pdfFrame.addEventListener('error', onError);
-            
+            this.pdfFrame.addEventListener("load", onLoad);
+            this.pdfFrame.addEventListener("error", onError);
+
             // Start loading
             this.pdfFrame.src = url;
         });
@@ -257,7 +290,7 @@ class PDFViewPage {
         // Check if iframe actually loaded content (not an error page)
         try {
             const iframeSrc = this.pdfFrame.src;
-            if (iframeSrc && iframeSrc !== 'about:blank') {
+            if (iframeSrc && iframeSrc !== "about:blank") {
                 debug("PDF viewer loaded successfully");
                 this.showPDFViewer();
                 this.retryCount = 0; // Reset retry count on success
@@ -271,45 +304,74 @@ class PDFViewPage {
      * Show loading state
      */
     private showLoading(message: string = "Loading PDF viewer..."): void {
-        const loadingText = document.querySelector('.loading-text') as HTMLElement;
-        if (loadingText) {
-            loadingText.textContent = message;
+        // Clear any existing loading timeout
+        if (this.loadingTimeout) {
+            clearTimeout(this.loadingTimeout);
+            this.loadingTimeout = null;
         }
 
         // Keep header hidden during loading - only show for errors
-        // Use full viewport height for loading container
-        this.loadingContainer.style.height = '100vh';
-        this.loadingContainer.style.display = 'flex';
-        this.errorContainer.style.display = 'none';
-        this.pdfFrame.style.display = 'none';
+        // Use full viewport height but initially hide loading content
+        this.loadingContainer.style.height = "100vh";
+        this.loadingContainer.style.display = "flex";
+        this.loadingContainer.style.opacity = "0"; // Start hidden
+        this.errorContainer.style.display = "none";
+        this.pdfFrame.style.display = "none";
+
+        // Delay showing loading indicator by 1 second
+        this.loadingTimeout = window.setTimeout(() => {
+            // Only show loading if we're still in loading state
+            if (
+                this.loadingContainer.style.display === "flex" &&
+                this.pdfFrame.style.display === "none"
+            ) {
+                const loadingText = document.querySelector(
+                    ".loading-text",
+                ) as HTMLElement;
+                if (loadingText) {
+                    loadingText.textContent = message;
+                }
+                this.loadingContainer.style.opacity = "1"; // Show loading indicator
+            }
+            this.loadingTimeout = null;
+        }, 1000);
     }
 
     /**
      * Show error state
      */
-    private showError(message: string, errorType: string = 'UNKNOWN'): void {
+    private showError(message: string, errorType: string = "UNKNOWN"): void {
         debugError(`PDF viewer error [${errorType}]:`, message);
-        
-        // Show extension header for error state
-        const header = document.querySelector('.header') as HTMLElement;
-        if (header) {
-            header.style.display = 'flex';
+
+        // Clear loading timeout since we're showing an error
+        if (this.loadingTimeout) {
+            clearTimeout(this.loadingTimeout);
+            this.loadingTimeout = null;
         }
-        
+
+        // Show extension header for error state
+        const header = document.querySelector(".header") as HTMLElement;
+        if (header) {
+            header.style.display = "flex";
+        }
+
         // Adjust container height for header
-        this.errorContainer.style.height = 'calc(100vh - 60px)';
-        this.pdfFrame.style.height = 'calc(100vh - 60px)';
-        
+        this.errorContainer.style.height = "calc(100vh - 60px)";
+        this.pdfFrame.style.height = "calc(100vh - 60px)";
+
         this.errorMessage.textContent = message;
-        this.errorContainer.style.display = 'flex';
-        this.loadingContainer.style.display = 'none';
-        this.pdfFrame.style.display = 'none';
+        this.errorContainer.style.display = "flex";
+        this.loadingContainer.style.display = "none";
+        this.pdfFrame.style.display = "none";
 
         // Show retry button only for certain error types and if retries available
-        if (this.retryCount < this.maxRetries && ['TIMEOUT_ERROR', 'LOAD_ERROR', 'IFRAME_ERROR'].includes(errorType)) {
-            this.retryBtn.style.display = 'flex';
+        if (
+            this.retryCount < this.maxRetries &&
+            ["TIMEOUT_ERROR", "LOAD_ERROR", "IFRAME_ERROR"].includes(errorType)
+        ) {
+            this.retryBtn.style.display = "flex";
         } else {
-            this.retryBtn.style.display = 'none';
+            this.retryBtn.style.display = "none";
         }
     }
 
@@ -317,17 +379,23 @@ class PDFViewPage {
      * Show PDF viewer (hide loading/error states)
      */
     private showPDFViewer(): void {
-        // Hide extension header to give full height to iframe
-        const header = document.querySelector('.header') as HTMLElement;
-        if (header) {
-            header.style.display = 'none';
+        // Clear loading timeout since content loaded successfully
+        if (this.loadingTimeout) {
+            clearTimeout(this.loadingTimeout);
+            this.loadingTimeout = null;
         }
-        
+
+        // Hide extension header to give full height to iframe
+        const header = document.querySelector(".header") as HTMLElement;
+        if (header) {
+            header.style.display = "none";
+        }
+
         // Give iframe full viewport height
-        this.pdfFrame.style.height = '100vh';
-        this.pdfFrame.style.display = 'block';
-        this.loadingContainer.style.display = 'none';
-        this.errorContainer.style.display = 'none';
+        this.pdfFrame.style.height = "100vh";
+        this.pdfFrame.style.display = "block";
+        this.loadingContainer.style.display = "none";
+        this.errorContainer.style.display = "none";
     }
 
     /**
@@ -335,16 +403,18 @@ class PDFViewPage {
      */
     private async retry(): Promise<void> {
         if (this.retryCount >= this.maxRetries) {
-            this.showError('Maximum retry attempts reached', 'MAX_RETRIES');
+            this.showError("Maximum retry attempts reached", "MAX_RETRIES");
             return;
         }
 
         this.retryCount++;
-        debug(`Retrying PDF viewer load (attempt ${this.retryCount}/${this.maxRetries})`);
-        
+        debug(
+            `Retrying PDF viewer load (attempt ${this.retryCount}/${this.maxRetries})`,
+        );
+
         // Reset iframe
-        this.pdfFrame.src = 'about:blank';
-        
+        this.pdfFrame.src = "about:blank";
+
         // Wait a moment before retrying
         setTimeout(() => {
             this.loadPDFViewer();
@@ -357,7 +427,7 @@ class PDFViewPage {
     private openInNewTab(): void {
         if (this.pdfUrl) {
             debug("Opening PDF in new tab:", this.pdfUrl);
-            window.open(this.pdfUrl, '_blank');
+            window.open(this.pdfUrl, "_blank");
         }
     }
 
@@ -367,7 +437,7 @@ class PDFViewPage {
     private downloadPDF(): void {
         if (this.pdfUrl) {
             debug("Downloading PDF:", this.pdfUrl);
-            const link = document.createElement('a');
+            const link = document.createElement("a");
             link.href = this.pdfUrl;
             link.download = this.extractFilenameFromUrl(this.pdfUrl);
             document.body.appendChild(link);
@@ -383,15 +453,15 @@ class PDFViewPage {
         try {
             const urlObj = new URL(url);
             const pathname = urlObj.pathname;
-            const filename = pathname.split('/').pop();
-            
-            if (filename && filename.includes('.')) {
+            const filename = pathname.split("/").pop();
+
+            if (filename && filename.includes(".")) {
                 return filename;
             } else {
-                return 'document.pdf';
+                return "document.pdf";
             }
         } catch (error) {
-            return 'document.pdf';
+            return "document.pdf";
         }
     }
 
@@ -403,7 +473,7 @@ class PDFViewPage {
             pdfUrl: this.pdfUrl,
             viewerUrl: this.viewerUrl,
             retryCount: this.retryCount,
-            currentState: this.getCurrentState()
+            currentState: this.getCurrentState(),
         };
     }
 
@@ -411,25 +481,25 @@ class PDFViewPage {
      * Get current display state
      */
     private getCurrentState(): string {
-        if (this.loadingContainer.style.display !== 'none') return 'loading';
-        if (this.errorContainer.style.display !== 'none') return 'error';
-        if (this.pdfFrame.style.display !== 'none') return 'viewing';
-        return 'unknown';
+        if (this.loadingContainer.style.display !== "none") return "loading";
+        if (this.errorContainer.style.display !== "none") return "error";
+        if (this.pdfFrame.style.display !== "none") return "viewing";
+        return "unknown";
     }
 }
 
 // Global error handler for uncaught errors
-window.addEventListener('error', (event) => {
-    debugError('Uncaught error in PDF view page:', event.error);
+window.addEventListener("error", (event) => {
+    debugError("Uncaught error in PDF view page:", event.error);
 });
 
 // Global handler for unhandled promise rejections
-window.addEventListener('unhandledrejection', (event) => {
-    debugError('Unhandled promise rejection in PDF view page:', event.reason);
+window.addEventListener("unhandledrejection", (event) => {
+    debugError("Unhandled promise rejection in PDF view page:", event.reason);
 });
 
 // Initialize when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener("DOMContentLoaded", () => {
     debug("DOM loaded, initializing PDF view page");
     const pdfViewPage = new PDFViewPage();
     pdfViewPage.initialize();
@@ -439,6 +509,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Handle beforeunload to cleanup if needed
-window.addEventListener('beforeunload', () => {
+window.addEventListener("beforeunload", () => {
     debug("PDF view page unloading");
 });

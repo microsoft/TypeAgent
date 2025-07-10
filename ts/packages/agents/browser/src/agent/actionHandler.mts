@@ -437,6 +437,19 @@ async function updateBrowserContext(
                             );
                             break;
                         }
+
+                        case "getViewHostUrl": {
+                            const actionsResult = {
+                                url: `http://localhost:${context.agentContext.localHostPort}`,
+                            };
+                            webSocket.send(
+                                JSON.stringify({
+                                    id: data.id,
+                                    result: actionsResult,
+                                }),
+                            );
+                            break;
+                        }
                     }
                 }
             });
