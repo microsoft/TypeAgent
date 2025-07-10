@@ -31,6 +31,7 @@ interface ActionIndexState {
 }
 
 class ActionIndexApp {
+    private viewHostUrl: string | null = null;
     private state: ActionIndexState = {
         allActions: [],
         filteredActions: [],
@@ -52,9 +53,23 @@ class ActionIndexApp {
     async initialize() {
         console.log("Initializing Action Index App");
 
+        this.viewHostUrl = await this.getViewHostUrl();
+
         this.setupEventListeners();
         await this.loadAllActions();
         this.renderUI();
+    }
+
+    private async getViewHostUrl(): Promise<string | null> {
+        try {
+            const response = await chrome.runtime.sendMessage({
+                type: "getViewHostUrl",
+            });
+            return response?.url || null;
+        } catch (error) {
+            console.error("Failed to get view host URL:", error);
+            return null;
+        }
     }
 
     private setupEventListeners() {
@@ -770,10 +785,80 @@ class ActionIndexApp {
         this.updateBulkOperationsUI();
     }
 
-    private viewActionDetails(action: any) {
-        // TODO: Implement action details modal
-        console.log("View action details:", action);
-        this.showNotification("Action details modal coming soon!", "info");
+    private async viewActionDetails(action: any) {
+        try {
+            if (!this.viewHostUrl) {
+                this.showNotification("Loading view service...", "info");
+                this.viewHostUrl = await this.getViewHostUrl();
+
+                if (!this.viewHostUrl) {
+                    this.showNotification(
+                        "View service is not available",
+                        "error",
+                    );
+                    return;
+                }
+            }
+
+            if (action.author !== "user") {
+                this.showNotification(
+                    "Viewing is only available for user-defined actions",
+                    "info",
+                );
+                return;
+            }
+
+            const actionId = action.id || action.name;
+            if (!actionId) {
+                this.showNotification("Invalid action ID", "error");
+                return;
+            }
+
+            const viewUrl = `${this.viewHostUrl}/plans/?actionId=${encodeURIComponent(actionId)}&mode=viewAction`;
+            this.showActionViewModal(action.name, viewUrl);
+        } catch (error) {
+            console.error("Error opening action view:", error);
+            this.showNotification("Failed to open action view", "error");
+        }
+    }
+
+    private showActionViewModal(actionTitle: string, iframeUrl: string) {
+        const modal = document.getElementById(
+            "actionDetailsModal",
+        ) as HTMLElement;
+        const modalTitle = document.getElementById(
+            "actionDetailsModalTitle",
+        ) as HTMLElement;
+        const modalBody = document.getElementById(
+            "actionDetailsModalBody",
+        ) as HTMLElement;
+
+        if (!modal || !modalTitle || !modalBody) {
+            console.error("Modal elements not found");
+            this.showNotification("Error opening action view", "error");
+            return;
+        }
+
+        modalTitle.textContent = actionTitle;
+
+        const iframe = document.createElement("iframe");
+        iframe.className = "action-view-iframe";
+        iframe.src = iframeUrl;
+        iframe.title = `View ${actionTitle}`;
+
+        modalBody.innerHTML = "";
+        modalBody.appendChild(iframe);
+
+        const bsModal = new (window as any).bootstrap.Modal(modal);
+        bsModal.show();
+
+        modal.addEventListener(
+            "hidden.bs.modal",
+            () => {
+                modalBody.innerHTML = "";
+            },
+            { once: true },
+        );
     }
 
     private editAction(action: any) {
