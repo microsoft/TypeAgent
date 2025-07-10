@@ -44,14 +44,6 @@ from ..podcasts.podcast import Podcast
 
 
 def main() -> None:
-    if sys.stdin.isatty():
-        print(f"TypeAgent demo UI {__version__} (type 'q' to exit)")
-        if readline:
-            try:
-                readline.read_history_file(".ui_history")
-            except FileNotFoundError:
-                pass  # Ignore if history file does not exist.
-
     colorama.init(autoreset=True)
     load_dotenv()
     model = create_typechat_model()
@@ -68,20 +60,27 @@ def main() -> None:
             exact_scope=False, apply_scope=True
         ),
     )
-    pretty_print(lang_search_options)
+    pretty_print(lang_search_options, colorama.Fore.CYAN)
     answer_context_options = AnswerContextOptions(
         entities_top_k=50,
         topics_top_k=50,
     )
-    pretty_print(answer_context_options)
+    pretty_print(answer_context_options, colorama.Fore.CYAN)
 
     file = "testdata/Episode_53_AdrianTchaikovsky_index"
-    with timelog("create conversation settings"):
-        settings = ConversationSettings()
+    settings = ConversationSettings()
     with timelog("load podcast"):
         pod = Podcast.read_from_file(file, settings)
     assert pod is not None, f"Failed to load podcast from {file!r}"
     context = QueryEvalContext(pod)
+
+    if sys.stdin.isatty():
+        print(f"TypeAgent demo UI {__version__} (type 'q' to exit)")
+        if readline:
+            try:
+                readline.read_history_file(".ui_history")
+            except FileNotFoundError:
+                pass  # Ignore if history file does not exist.
 
     try:
         process_inputs(
@@ -92,8 +91,10 @@ def main() -> None:
             context,
             cast(io.TextIOWrapper, sys.stdin),
         )
+
     except KeyboardInterrupt:
         print()
+
     finally:
         if readline and sys.stdin.isatty():
             readline.write_history_file(".ui_history")
