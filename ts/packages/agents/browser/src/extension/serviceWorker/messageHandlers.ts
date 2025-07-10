@@ -603,8 +603,6 @@ export async function handleMessage(
             return await handleDeleteKnowledgeIndex();
         }
 
-
-
         case "deleteAction": {
             // Handler for deleting actions from the ActionsStore
             try {

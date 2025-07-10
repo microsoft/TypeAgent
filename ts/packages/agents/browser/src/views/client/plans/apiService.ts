@@ -261,10 +261,12 @@ class ApiService {
             if (!actionId) {
                 throw new Error("Action ID is required");
             }
-            
+
             const encodedActionId = encodeURIComponent(actionId);
-            const response = await fetch(`/api/plans/action/${encodedActionId}`);
-            
+            const response = await fetch(
+                `/api/plans/action/${encodedActionId}`,
+            );
+
             if (!response.ok) {
                 if (response.status === 404) {
                     throw new Error("Action not found");
@@ -273,16 +275,18 @@ class ApiService {
                 } else if (response.status >= 500) {
                     throw new Error("Server error");
                 } else {
-                    throw new Error(`Failed to fetch action data: ${response.statusText}`);
+                    throw new Error(
+                        `Failed to fetch action data: ${response.statusText}`,
+                    );
                 }
             }
-            
+
             const data = await response.json();
-            
+
             if (!data.action || !data.planData) {
                 throw new Error("Invalid response format");
             }
-            
+
             return data;
         } catch (parseError) {
             console.error("Error fetching action data:", parseError);

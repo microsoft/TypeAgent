@@ -78,7 +78,14 @@ export interface ActionStats {
     actions: StoredAction[];
 }
 
-export type ActionCategory = "Search" | "Authentication" | "Form Interaction" | "Navigation" | "E-commerce" | "File Operations" | "Other";
+export type ActionCategory =
+    | "Search"
+    | "Authentication"
+    | "Form Interaction"
+    | "Navigation"
+    | "E-commerce"
+    | "File Operations"
+    | "Other";
 export type NotificationType = "success" | "error" | "warning" | "info";
 
 export async function getActionsForUrl(
@@ -99,8 +106,6 @@ export async function getActionsForUrl(
         return [];
     }
 }
-
-
 
 export async function getAllActions(): Promise<StoredAction[]> {
     try {
@@ -127,7 +132,9 @@ export async function getActionDomains(): Promise<string[]> {
         return [];
     }
 }
-export async function deleteAction(actionId: string): Promise<DeleteActionResult> {
+export async function deleteAction(
+    actionId: string,
+): Promise<DeleteActionResult> {
     try {
         const response = await chrome.runtime.sendMessage({
             type: "deleteAction",
@@ -149,7 +156,9 @@ export async function deleteAction(actionId: string): Promise<DeleteActionResult
     }
 }
 
-export async function deleteMultipleActions(actionIds: string[]): Promise<BulkDeleteResult> {
+export async function deleteMultipleActions(
+    actionIds: string[],
+): Promise<BulkDeleteResult> {
     const result: BulkDeleteResult = {
         successCount: 0,
         errorCount: 0,
@@ -172,20 +181,30 @@ export async function deleteMultipleActions(actionIds: string[]): Promise<BulkDe
     return result;
 }
 
-export function filterActions(actions: StoredAction[], options: FilterOptions): StoredAction[] {
+export function filterActions(
+    actions: StoredAction[],
+    options: FilterOptions,
+): StoredAction[] {
     let filtered = [...actions];
 
     if (options.searchQuery) {
         const query = options.searchQuery.toLowerCase();
-        filtered = filtered.filter(
-            (action) =>
-                action.name.toLowerCase().includes(query) ||
-                (action.description && action.description.toLowerCase().includes(query))
-        );
+        filtered = filtered.filter((action) => {
+            const nameMatch = action.name.toLowerCase().includes(query);
+            const descMatch =
+                action.description &&
+                action.description.toLowerCase().includes(query);
+            const domain = extractDomain(action);
+            const domainMatch = domain && domain.toLowerCase().includes(query);
+
+            return nameMatch || descMatch || domainMatch;
+        });
     }
 
     if (options.author && options.author !== "all") {
-        filtered = filtered.filter((action) => action.author === options.author);
+        filtered = filtered.filter(
+            (action) => action.author === options.author,
+        );
     }
 
     if (options.domain && options.domain !== "all") {
@@ -208,12 +227,13 @@ export function filterActions(actions: StoredAction[], options: FilterOptions): 
 export function showNotification(
     message: string,
     type: NotificationType = "info",
-    duration: number = 3000
+    duration: number = 3000,
 ): void {
     const toast = document.createElement("div");
     const alertClass = type === "error" ? "danger" : type;
     toast.className = `alert alert-${alertClass} alert-dismissible position-fixed`;
-    toast.style.cssText = "top: 20px; right: 20px; z-index: 1050; min-width: 300px;";
+    toast.style.cssText =
+        "top: 20px; right: 20px; z-index: 1050; min-width: 300px;";
 
     const messageSpan = document.createElement("span");
     messageSpan.textContent = message;
@@ -236,7 +256,7 @@ export function showNotification(
 
 export async function showConfirmationDialog(
     message: string,
-    title: string = "Confirm Action"
+    title: string = "Confirm Action",
 ): Promise<boolean> {
     return new Promise((resolve) => {
         const confirmed = confirm(message);
@@ -244,7 +264,10 @@ export async function showConfirmationDialog(
     });
 }
 
-export function showLoadingState(container: HTMLElement, message: string = "Loading..."): void {
+export function showLoadingState(
+    container: HTMLElement,
+    message: string = "Loading...",
+): void {
     container.innerHTML = `
         <div class="text-center text-muted p-3">
             <div class="spinner-border spinner-border-sm mb-2" role="status" aria-hidden="true"></div>
@@ -256,7 +279,7 @@ export function showLoadingState(container: HTMLElement, message: string = "Load
 export function showEmptyState(
     container: HTMLElement,
     message: string,
-    icon: string = "bi-info-circle"
+    icon: string = "bi-info-circle",
 ): void {
     container.innerHTML = `
         <div class="text-center text-muted p-3">
@@ -300,9 +323,9 @@ export function matchesUrlPattern(url: string, pattern: string): boolean {
     try {
         const normalizedUrl = normalizeUrl(url);
         const normalizedPattern = normalizeUrl(pattern);
-        
+
         const regex = new RegExp(
-            normalizedPattern.replace(/\*/g, ".*").replace(/\?/g, "\\?")
+            normalizedPattern.replace(/\*/g, ".*").replace(/\?/g, "\\?"),
         );
         return regex.test(normalizedUrl);
     } catch {
@@ -323,36 +346,56 @@ export function categorizeAction(action: StoredAction): ActionCategory {
     const text = `${action.name} ${action.description || ""}`.toLowerCase();
 
     if (text.includes("search") || text.includes("find")) return "Search";
-    if (text.includes("login") || text.includes("sign in") || text.includes("auth"))
+    if (
+        text.includes("login") ||
+        text.includes("sign in") ||
+        text.includes("auth")
+    )
         return "Authentication";
-    if (text.includes("form") || text.includes("submit") || text.includes("input"))
+    if (
+        text.includes("form") ||
+        text.includes("submit") ||
+        text.includes("input")
+    )
         return "Form Interaction";
-    if (text.includes("click") || text.includes("button") || text.includes("link"))
+    if (
+        text.includes("click") ||
+        text.includes("button") ||
+        text.includes("link")
+    )
         return "Navigation";
-    if (text.includes("cart") || text.includes("buy") || text.includes("purchase") || text.includes("order"))
+    if (
+        text.includes("cart") ||
+        text.includes("buy") ||
+        text.includes("purchase") ||
+        text.includes("order")
+    )
         return "E-commerce";
-    if (text.includes("download") || text.includes("upload") || text.includes("file"))
+    if (
+        text.includes("download") ||
+        text.includes("upload") ||
+        text.includes("file")
+    )
         return "File Operations";
 
     return "Other";
 }
 
-
-
-export function groupActionsByDomain(actions: StoredAction[]): Map<string, StoredAction[]> {
+export function groupActionsByDomain(
+    actions: StoredAction[],
+): Map<string, StoredAction[]> {
     const grouped = new Map<string, StoredAction[]>();
-    
-    actions.forEach(action => {
+
+    actions.forEach((action) => {
         const domain = extractDomain(action) || "unknown";
         if (!grouped.has(domain)) {
             grouped.set(domain, []);
         }
         grouped.get(domain)!.push(action);
     });
-    
+
     return grouped;
 }
-
 
 export function formatRelativeDate(date: Date): string {
     const now = new Date();
@@ -376,8 +419,6 @@ export function formatRelativeDate(date: Date): string {
     }
 }
 
-
-
 export function escapeHtml(text: string): string {
     const div = document.createElement("div");
     div.textContent = text;
@@ -399,7 +440,7 @@ export function truncateText(text: string, maxLength: number): string {
 export function createButton(
     text: string,
     classes: string,
-    attributes: Record<string, string> = {}
+    attributes: Record<string, string> = {},
 ): string {
     const attrs = Object.entries(attributes)
         .map(([key, value]) => `${key}="${escapeHtml(value)}"`)
@@ -409,11 +450,10 @@ export function createButton(
 
 export function extractCategories(actions: StoredAction[]): string[] {
     const categories = new Set<string>();
-    
-    actions.forEach(action => {
+
+    actions.forEach((action) => {
         categories.add(categorizeAction(action));
     });
-    
+
     return Array.from(categories).sort();
 }
-

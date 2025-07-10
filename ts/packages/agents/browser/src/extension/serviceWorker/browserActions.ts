@@ -244,7 +244,6 @@ export async function runBrowserAction(action: AppAction): Promise<any> {
             break;
         }
 
-
         default:
             throw new Error(`Unknown action: ${actionName}. `);
     }

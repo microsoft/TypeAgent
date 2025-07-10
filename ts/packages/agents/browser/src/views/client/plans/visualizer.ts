@@ -153,13 +153,13 @@ class Visualizer {
 
         try {
             const layoutOptions = CytoscapeConfig.getDagreLayoutOptions();
-            
+
             // For iframe scenarios, ensure fit is enabled and add extra padding
             if (isInIframe) {
                 layoutOptions.fit = true;
                 layoutOptions.padding = 50;
             }
-            
+
             const dagreLayout = this.cy.layout(layoutOptions);
             dagreLayout.run();
         } catch (e) {
@@ -843,12 +843,12 @@ class Visualizer {
 
         // Force resize to ensure container dimensions are correct
         this.cy.resize();
-        
+
         const nodes = this.cy.nodes();
         if (nodes.length === 0) return;
 
         const isInIframe = window.parent !== window;
-        
+
         if (isInIframe) {
             // In iframe mode, always fit and center the graph aggressively
             this.cy.fit(undefined, 50);

@@ -588,12 +588,12 @@
       .action-view-modal .modal-header {
         display: none !important;
       }
-      
+
       .action-view-modal .modal-body {
         height: 100vh !important;
         max-height: 100vh !important;
       }
-      
+
       .action-view-modal .modal-content {
         height: 100vh !important;
         max-height: 100vh !important;
@@ -671,9 +671,7 @@
         <!-- Content Header -->
         <div class="content-header">
           <div>
-            <p class="content-subtitle">
-              <span id="filteredActionsCount">0</span> actions available
-            </p>
+            <!-- Removed the "actions available" label as requested -->
           </div>
         </div>
 
@@ -687,13 +685,18 @@
               <button id="selectAllBtn" title="Select all visible actions">
                 <i class="bi bi-check-all"></i> Select All
               </button>
-              <button id="deselectAllBtn" title="Deselect all actions">
+              <button
+                id="deselectAllBtn"
+                title="Deselect all actions"
+                style="display: none"
+              >
                 <i class="bi bi-square"></i> Deselect All
               </button>
               <button
                 id="bulkDeleteBtn"
                 class="btn-danger"
                 title="Delete selected actions"
+                style="display: none"
               >
                 <i class="bi bi-trash"></i> Delete Selected
               </button>

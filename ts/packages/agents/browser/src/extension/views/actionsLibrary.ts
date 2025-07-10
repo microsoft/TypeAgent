@@ -1,9 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { 
-    getActionsForUrl, 
-    getAllActions, 
+import {
+    getActionsForUrl,
+    getAllActions,
     getActionDomains,
     deleteAction,
     deleteMultipleActions,
@@ -17,7 +17,7 @@ import {
     formatRelativeDate,
     escapeHtml,
     extractCategories,
-    filterActions
+    filterActions,
 } from "./actionUtilities";
 
 declare global {
@@ -138,8 +138,6 @@ class ActionIndexApp {
                 this.applyFilters();
             });
 
-
-
         // Clear filters
         document
             .getElementById("clearFiltersBtn")!
@@ -230,20 +228,9 @@ class ActionIndexApp {
         const domains = new Set<string>();
 
         this.state.allActions.forEach((action) => {
-            if (action.scope?.pattern || action.urlPattern) {
-                try {
-                    const url = action.scope?.pattern || action.urlPattern;
-                    const domain = new URL(url).hostname;
-                    domains.add(domain);
-                } catch {
-                    const pattern = action.scope?.pattern || action.urlPattern;
-                    const domainMatch = pattern.match(
-                        /(?:https?:\/\/)?([^\/\*]+)/,
-                    );
-                    if (domainMatch) {
-                        domains.add(domainMatch[1]);
-                    }
-                }
+            const domain = extractDomain(action);
+            if (domain) {
+                domains.add(domain);
             }
         });
 
@@ -281,8 +268,6 @@ class ActionIndexApp {
         });
     }
 
-
-
     private applyFilters() {
         this.state.filteredActions = filterActions(this.state.allActions, {
             searchQuery: this.state.searchQuery,
@@ -292,14 +277,7 @@ class ActionIndexApp {
         });
 
         this.renderActions();
-        this.updateFilteredCount();
     }
-
-
-
-
-
-
 
     private clearFilters() {
         this.state.filters = {
@@ -344,14 +322,28 @@ class ActionIndexApp {
             "bulkOperationsContainer",
         );
         const selectedCountEl = document.getElementById("selectedActionsCount");
+        const deselectBtn = document.getElementById(
+            "deselectAllBtn",
+        ) as HTMLButtonElement;
+        const deleteBtn = document.getElementById(
+            "bulkDeleteBtn",
+        ) as HTMLButtonElement;
 
         if (bulkOpsContainer && selectedCountEl) {
             if (this.state.selectedActions.length > 0) {
                 bulkOpsContainer.classList.add("active");
                 selectedCountEl.textContent =
                     this.state.selectedActions.length.toString();
+
+                // Show deselect and delete buttons when items are selected
+                if (deselectBtn) deselectBtn.style.display = "inline-block";
+                if (deleteBtn) deleteBtn.style.display = "inline-block";
             } else {
                 bulkOpsContainer.classList.remove("active");
+
+                // Hide deselect and delete buttons when no items are selected
+                if (deselectBtn) deselectBtn.style.display = "none";
+                if (deleteBtn) deleteBtn.style.display = "none";
             }
         }
     }
@@ -377,7 +369,7 @@ class ActionIndexApp {
         }
 
         const confirmed = await showConfirmationDialog(
-            `Are you sure you want to delete ${this.state.selectedActions.length} selected action(s)? This cannot be undone.`
+            `Are you sure you want to delete ${this.state.selectedActions.length} selected action(s)? This cannot be undone.`,
         );
         if (!confirmed) return;
 
@@ -390,8 +382,10 @@ class ActionIndexApp {
         deleteButton.disabled = true;
 
         try {
-            const result = await deleteMultipleActions(this.state.selectedActions);
-            
+            const result = await deleteMultipleActions(
+                this.state.selectedActions,
+            );
+
             if (result.successCount > 0) {
                 showNotification(
                     `Successfully deleted ${result.successCount} action(s)${result.errorCount > 0 ? `, ${result.errorCount} failed` : ""}`,
@@ -409,14 +403,6 @@ class ActionIndexApp {
             deleteButton.innerHTML = originalContent;
             deleteButton.disabled = false;
             this.updateBulkOperationsUI();
-        }
-    }
-
-    private updateFilteredCount() {
-        const filteredCountEl = document.getElementById("filteredActionsCount");
-        if (filteredCountEl) {
-            filteredCountEl.textContent =
-                this.state.filteredActions.length.toString();
         }
     }
 
@@ -446,7 +432,7 @@ class ActionIndexApp {
                 showEmptyState(
                     container,
                     "You haven't created any actions yet. Use the browser sidepanel to discover and create actions for web pages.",
-                    "bi-collection"
+                    "bi-collection",
                 );
             } else {
                 container.innerHTML = `
@@ -459,7 +445,9 @@ class ActionIndexApp {
                         </button>
                     </div>
                 `;
-                const clearBtn = container.querySelector("#clearFiltersFromEmpty");
+                const clearBtn = container.querySelector(
+                    "#clearFiltersFromEmpty",
+                );
                 clearBtn?.addEventListener("click", () => {
                     this.clearFilters();
                 });
@@ -488,8 +476,6 @@ class ActionIndexApp {
         if (window.Prism) {
             window.Prism.highlightAll();
         }
-
-        this.updateFilteredCount();
     }
     private createActionCard(action: any, index: number): HTMLElement {
         const card = document.createElement("div");
@@ -537,8 +523,6 @@ class ActionIndexApp {
 
         return card;
     }
-
-
 
     private attachCardEventListeners(
         card: HTMLElement,
@@ -595,10 +579,7 @@ class ActionIndexApp {
                 this.viewHostUrl = await this.getViewHostUrl();
 
                 if (!this.viewHostUrl) {
-                    showNotification(
-                        "View service is not available",
-                        "error",
-                    );
+                    showNotification("View service is not available", "error");
                     return;
                 }
             }
@@ -643,7 +624,7 @@ class ActionIndexApp {
         }
 
         // Add action-view-modal class to hide header
-        modal.classList.add('action-view-modal');
+        modal.classList.add("action-view-modal");
 
         modalTitle.textContent = actionTitle;
 
@@ -665,30 +646,35 @@ class ActionIndexApp {
             "hidden.bs.modal",
             () => {
                 modalBody.innerHTML = "";
-                modal.classList.remove('action-view-modal');
+                modal.classList.remove("action-view-modal");
                 // Remove message listener
-                window.removeEventListener('message', this.handleIframeMessage);
+                window.removeEventListener("message", this.handleIframeMessage);
             },
             { once: true },
         );
     }
 
-    private setupIframeMessageListener(modal: HTMLElement, iframe: HTMLIFrameElement) {
+    private setupIframeMessageListener(
+        modal: HTMLElement,
+        iframe: HTMLIFrameElement,
+    ) {
         this.handleIframeMessage = (event: MessageEvent) => {
             // Verify origin for security (optional but recommended)
             if (event.source !== iframe.contentWindow) {
                 return;
             }
 
-            if (event.data.type === 'closeModal') {
-                const bsModal = (window as any).bootstrap.Modal.getInstance(modal);
+            if (event.data.type === "closeModal") {
+                const bsModal = (window as any).bootstrap.Modal.getInstance(
+                    modal,
+                );
                 if (bsModal) {
                     bsModal.hide();
                 }
             }
         };
 
-        window.addEventListener('message', this.handleIframeMessage);
+        window.addEventListener("message", this.handleIframeMessage);
     }
 
     private handleIframeMessage: (event: MessageEvent) => void = () => {};
@@ -701,7 +687,7 @@ class ActionIndexApp {
 
     private async deleteAction(actionId: string, actionName: string) {
         const confirmed = await showConfirmationDialog(
-            `Are you sure you want to delete the action "${actionName}"? This cannot be undone.`
+            `Are you sure you want to delete the action "${actionName}"? This cannot be undone.`,
         );
         if (!confirmed) return;
 

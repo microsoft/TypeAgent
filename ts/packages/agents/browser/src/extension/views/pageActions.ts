@@ -1,16 +1,16 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { 
-    getActionsForUrl, 
-    deleteAction, 
-    showNotification, 
-    showLoadingState, 
-    showEmptyState, 
+import {
+    getActionsForUrl,
+    deleteAction,
+    showNotification,
+    showLoadingState,
+    showEmptyState,
     showErrorState,
     showConfirmationDialog,
     escapeHtml,
-    createButton
+    createButton,
 } from "./actionUtilities";
 
 let recording = false;
@@ -215,8 +215,6 @@ class ActionDiscoveryPanel {
             refreshButton.disabled = false;
         }
     }
-
-
 
     private showActionDetails(action: any) {
         const modal = document.createElement("div");
@@ -808,7 +806,7 @@ class ActionDiscoveryPanel {
 
     private async deleteAction(actionId: string) {
         const confirmed = await showConfirmationDialog(
-            "Are you sure you want to delete this action?"
+            "Are you sure you want to delete this action?",
         );
         if (!confirmed) return;
 
@@ -822,16 +820,17 @@ class ActionDiscoveryPanel {
                 console.error(`Failed to delete action:`, result.error);
                 showNotification(
                     `Failed to delete action: ${result.error || "Unknown error"}`,
-                    "error"
+                    "error",
                 );
             }
         } catch (error) {
             console.error("Error deleting action:", error);
-            showNotification("Failed to delete action. Please try again.", "error");
+            showNotification(
+                "Failed to delete action. Please try again.",
+                "error",
+            );
         }
     }
-
-
 
     private renderSchemaResults(schemaActions: any) {
         const itemsList = document.getElementById(
@@ -877,8 +876,6 @@ class ActionDiscoveryPanel {
             </div>
         `;
     }
-
-
 
     private createTabNav(
         tabs: Array<{ id: string; label: string; active?: boolean }>,

@@ -23,10 +23,10 @@ declare global {
 document.addEventListener("DOMContentLoaded", function () {
     // Check for action view mode
     const urlParams = new URLSearchParams(window.location.search);
-    const actionId = urlParams.get('actionId');
-    const mode = urlParams.get('mode');
-    
-    if (mode === 'viewAction' && actionId) {
+    const actionId = urlParams.get("actionId");
+    const mode = urlParams.get("mode");
+
+    if (mode === "viewAction" && actionId) {
         initializeActionView(actionId);
         return;
     }
@@ -40,31 +40,31 @@ async function initializeActionView(actionId: string): Promise<void> {
         // Configure UI for action view
         hideUIControlsForActionView();
         showCloseButtonForActionView();
-        
+
         // Add iframe mode class to body for CSS styling
-        document.body.classList.add('iframe-mode');
-        
+        document.body.classList.add("iframe-mode");
+
         // Load action data
         const actionData = await ApiService.getActionData(actionId);
-        
+
         // Set up the plan data
         const webPlanData = actionData.planData;
-        
+
         // Update title and description
         const titleElement = document.getElementById("plan-title");
         if (titleElement) {
-            titleElement.textContent = webPlanData.title || actionData.action.name;
+            titleElement.textContent =
+                webPlanData.title || actionData.action.name;
         }
-        
+
         const descriptionElement = document.getElementById("plan-description");
         if (descriptionElement && webPlanData.description) {
             descriptionElement.textContent = webPlanData.description;
             descriptionElement.style.display = "block";
         }
-        
+
         // Initialize visualization for action view
         initializeActionVisualization(webPlanData);
-        
     } catch (error) {
         console.error("Error loading action:", error);
         showErrorMessage("Failed to load action: " + (error as Error).message);
@@ -73,23 +73,23 @@ async function initializeActionView(actionId: string): Promise<void> {
 
 function hideUIControlsForActionView(): void {
     // Hide toggle container
-    const toggleContainer = document.querySelector('.toggle-container');
+    const toggleContainer = document.querySelector(".toggle-container");
     if (toggleContainer) {
-        (toggleContainer as HTMLElement).style.display = 'none';
+        (toggleContainer as HTMLElement).style.display = "none";
     }
-    
+
     // Hide dynamic-only controls
-    const dynamicControls = document.querySelectorAll('.dynamic-only-control');
-    dynamicControls.forEach(control => {
-        (control as HTMLElement).style.display = 'none';
+    const dynamicControls = document.querySelectorAll(".dynamic-only-control");
+    dynamicControls.forEach((control) => {
+        (control as HTMLElement).style.display = "none";
     });
-    
+
     // Hide node selector
-    const nodeSelector = document.querySelector('.node-selector');
+    const nodeSelector = document.querySelector(".node-selector");
     if (nodeSelector) {
-        (nodeSelector as HTMLElement).style.display = 'none';
+        (nodeSelector as HTMLElement).style.display = "none";
     }
-    
+
     // Keep zoom fit and show path buttons visible as they're useful for action viewing
     // These buttons should remain functional in action view mode
 }
@@ -110,19 +110,19 @@ function initializeActionVisualization(webPlanData: WebPlanData): void {
             return;
         }
     }
-    
+
     const cyContainer = document.getElementById("cy-container") as HTMLElement;
     if (!cyContainer) {
         console.error("Cytoscape container not found");
         return;
     }
-    
+
     // Check if we're in an iframe
     const isInIframe = window.parent !== window;
-    
+
     // Create visualizer
     const visualizer = new Visualizer(cyContainer, webPlanData);
-    
+
     if (isInIframe) {
         // When in iframe, wait for container to be properly sized before initializing
         setTimeout(() => {
@@ -132,7 +132,10 @@ function initializeActionVisualization(webPlanData: WebPlanData): void {
                 visualizer.fitToView();
                 // Send message to parent that visualization is ready (optional)
                 if (window.parent && window.parent !== window) {
-                    window.parent.postMessage({ type: 'visualizationReady' }, '*');
+                    window.parent.postMessage(
+                        { type: "visualizationReady" },
+                        "*",
+                    );
                 }
             }, 300);
         }, 100);
@@ -140,18 +143,23 @@ function initializeActionVisualization(webPlanData: WebPlanData): void {
         // Normal initialization for standalone mode
         visualizer.initialize();
     }
-    
+
     // Store globally
     window.visualizer = visualizer;
     window.webPlanData = webPlanData;
-    
+
     // Set up event listeners for action view controls
     setupActionViewEventListeners(visualizer, webPlanData);
 }
 
-function setupActionViewEventListeners(visualizer: Visualizer, webPlanData: WebPlanData): void {
+function setupActionViewEventListeners(
+    visualizer: Visualizer,
+    webPlanData: WebPlanData,
+): void {
     // Zoom fit button handler
-    const zoomFitButton = document.getElementById("zoom-fit-button") as HTMLButtonElement;
+    const zoomFitButton = document.getElementById(
+        "zoom-fit-button",
+    ) as HTMLButtonElement;
     if (zoomFitButton) {
         zoomFitButton.addEventListener("click", () => {
             if (visualizer) {
@@ -161,7 +169,9 @@ function setupActionViewEventListeners(visualizer: Visualizer, webPlanData: WebP
     }
 
     // Show path button handler
-    const showPathButton = document.getElementById("show-path-button") as HTMLButtonElement;
+    const showPathButton = document.getElementById(
+        "show-path-button",
+    ) as HTMLButtonElement;
     if (showPathButton) {
         showPathButton.addEventListener("click", () => {
             if (!visualizer) return;
@@ -184,22 +194,22 @@ function setupActionViewEventListeners(visualizer: Visualizer, webPlanData: WebP
 }
 
 function showCloseButtonForActionView(): void {
-    const closeButton = document.getElementById('close-modal-button');
+    const closeButton = document.getElementById("close-modal-button");
     if (closeButton) {
-        closeButton.style.display = 'block';
-        closeButton.addEventListener('click', closeActionViewModal);
+        closeButton.style.display = "block";
+        closeButton.addEventListener("click", closeActionViewModal);
     }
 }
 
 function closeActionViewModal(): void {
     // Send message to parent window to close the modal
     if (window.parent && window.parent !== window) {
-        window.parent.postMessage({ type: 'closeModal' }, '*');
+        window.parent.postMessage({ type: "closeModal" }, "*");
     }
 }
 
 function showErrorMessage(message: string): void {
-    const statusMessage = document.getElementById('status-message');
+    const statusMessage = document.getElementById("status-message");
     if (statusMessage) {
         statusMessage.textContent = message;
         statusMessage.className = "status-message error";
@@ -493,7 +503,10 @@ function initializeNormalMode(): void {
         }
 
         // Send the screenshot to the server
-        ApiService.uploadScreenshot(currentUploadNodeId, currentBase64Screenshot)
+        ApiService.uploadScreenshot(
+            currentUploadNodeId,
+            currentBase64Screenshot,
+        )
             .then((data) => {
                 // Update the visualization if needed
                 if (window.webPlanData) {
@@ -665,7 +678,9 @@ function initializeNormalMode(): void {
     if (nodeSelect) {
         nodeSelect.addEventListener("change", (e) => {
             if (visualizer) {
-                visualizer.updateCurrentNode((e.target as HTMLSelectElement).value);
+                visualizer.updateCurrentNode(
+                    (e.target as HTMLSelectElement).value,
+                );
             }
         });
     }

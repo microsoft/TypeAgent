@@ -10,11 +10,14 @@ export class PlansService {
     private dynamicPlanData!: WebPlanData;
     private staticPlanData!: WebPlanData;
     private requestCounter: number = 0;
-    private pendingRequests: Map<string, {
-        resolve: Function;
-        reject: Function;
-        timeout: NodeJS.Timeout;
-    }> = new Map();
+    private pendingRequests: Map<
+        string,
+        {
+            resolve: Function;
+            reject: Function;
+            timeout: NodeJS.Timeout;
+        }
+    > = new Map();
 
     constructor() {
         this.initializePlanData();
@@ -25,7 +28,7 @@ export class PlansService {
      * Setup IPC connection with agent service
      */
     private setupIPCConnection(): void {
-        process.on('message', (message: any) => {
+        process.on("message", (message: any) => {
             this.handleIPCMessage(message);
         });
     }
@@ -34,16 +37,16 @@ export class PlansService {
      * Handle IPC messages from agent service
      */
     private handleIPCMessage(message: any): void {
-        if (message.type === 'getActionResponse') {
+        if (message.type === "getActionResponse") {
             const pending = this.pendingRequests.get(message.requestId);
             if (pending) {
                 clearTimeout(pending.timeout);
                 this.pendingRequests.delete(message.requestId);
-                
+
                 if (message.success) {
                     pending.resolve(message.action);
                 } else {
-                    pending.reject(new Error(message.error || 'Unknown error'));
+                    pending.reject(new Error(message.error || "Unknown error"));
                 }
             }
         }
@@ -52,27 +55,31 @@ export class PlansService {
     /**
      * Send IPC request to agent service
      */
-    private async sendIPCRequest(type: string, data: any, timeoutMs: number = 5000): Promise<any> {
+    private async sendIPCRequest(
+        type: string,
+        data: any,
+        timeoutMs: number = 5000,
+    ): Promise<any> {
         const requestId = `req-${++this.requestCounter}-${Date.now()}`;
-        
+
         return new Promise((resolve, reject) => {
             const timeout = setTimeout(() => {
                 this.pendingRequests.delete(requestId);
-                reject(new Error('IPC request timeout'));
+                reject(new Error("IPC request timeout"));
             }, timeoutMs);
-            
+
             this.pendingRequests.set(requestId, { resolve, reject, timeout });
-            
+
             if (process.send) {
                 process.send({
                     type,
                     requestId,
-                    ...data
+                    ...data,
                 });
             } else {
                 clearTimeout(timeout);
                 this.pendingRequests.delete(requestId);
-                reject(new Error('IPC not available'));
+                reject(new Error("IPC not available"));
             }
         });
     }
@@ -453,27 +460,27 @@ export class PlansService {
         planData: WebPlanData;
     } | null> {
         try {
-            const action = await this.sendIPCRequest('getAction', { actionId });
-            
+            const action = await this.sendIPCRequest("getAction", { actionId });
+
             if (!action) {
                 return null;
             }
-            
+
             if (!action.definition?.actionsJson) {
                 return {
                     action,
-                    planData: this.createEmptyPlan(action.name)
+                    planData: this.createEmptyPlan(action.name),
                 };
             }
-            
+
             const planData = this.convertPageActionsPlanToWebPlan(
                 action.definition.actionsJson,
-                action.name
+                action.name,
             );
-            
+
             return { action, planData };
         } catch (error) {
-            console.error('Error retrieving action data:', error);
+            console.error("Error retrieving action data:", error);
             throw error;
         }
     }
@@ -485,13 +492,11 @@ export class PlansService {
         return {
             nodes: [
                 { id: "start", label: "Home", type: "start" },
-                { id: "action", label: actionName, type: "end" }
+                { id: "action", label: actionName, type: "end" },
             ],
-            links: [
-                { source: "start", target: "action", label: "Execute" }
-            ],
+            links: [{ source: "start", target: "action", label: "Execute" }],
             currentNode: "start",
-            title: actionName
+            title: actionName,
         };
     }
 
@@ -500,30 +505,29 @@ export class PlansService {
      */
     private convertPageActionsPlanToWebPlan(
         pageActionsPlan: any,
-        actionName: string
+        actionName: string,
     ): WebPlanData {
         const nodes: any[] = [];
         const links: any[] = [];
-        
+
         // Create start node with label "Home"
         nodes.push({
             id: "start",
             label: "Home",
-            type: "start"
+            type: "start",
         });
-        
+
         if (pageActionsPlan.steps && Array.isArray(pageActionsPlan.steps)) {
             pageActionsPlan.steps.forEach((step: any, index: number) => {
                 const nodeId = `step-${index}`;
                 const isLastStep = index === pageActionsPlan.steps.length - 1;
-                
-                
+
                 nodes.push({
                     id: nodeId,
                     label: isLastStep ? "Completed" : "",
-                    type: isLastStep ? "end" : "action"
+                    type: isLastStep ? "end" : "action",
                 });
-                
+
                 // Create edge label from step description or fallback to actionName + parameter
                 let edgeLabel = step.description;
                 if (!edgeLabel && step.actionName) {
@@ -533,12 +537,12 @@ export class PlansService {
                         edgeLabel = step.actionName;
                     }
                 }
-                
+
                 const sourceId = index === 0 ? "start" : `step-${index - 1}`;
                 links.push({
                     source: sourceId,
                     target: nodeId,
-                    label: edgeLabel || 'Action'
+                    label: edgeLabel || "Action",
                 });
             });
         } else {
@@ -546,22 +550,22 @@ export class PlansService {
             nodes.push({
                 id: "action",
                 label: pageActionsPlan.planName || actionName,
-                type: "end"
+                type: "end",
             });
-            
+
             links.push({
                 source: "start",
                 target: "action",
-                label: "Execute"
+                label: "Execute",
             });
         }
-        
+
         return {
             nodes,
             links,
             currentNode: "start",
             title: pageActionsPlan.planName || actionName,
-            description: pageActionsPlan.description
+            description: pageActionsPlan.description,
         };
     }
 

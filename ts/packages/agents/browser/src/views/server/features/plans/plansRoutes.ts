@@ -101,11 +101,11 @@ export class PlansRoutes {
      */
     private serveIndex(req: Request, res: Response): void {
         const { actionId, mode } = req.query;
-        
-        if (actionId && mode === 'viewAction') {
+
+        if (actionId && mode === "viewAction") {
             debug(`Serving action view for actionId: ${actionId}`);
         }
-        
+
         res.sendFile(
             path.join(
                 __dirname,
@@ -232,27 +232,27 @@ export class PlansRoutes {
     private async getActionById(req: Request, res: Response): Promise<void> {
         try {
             const { actionId } = req.params;
-            
-            if (!actionId || typeof actionId !== 'string') {
+
+            if (!actionId || typeof actionId !== "string") {
                 res.status(400).json({ error: "Invalid action ID" });
                 return;
             }
-            
+
             debug(`Retrieving action data for ID: ${actionId}`);
-            
+
             const actionData = await this.plansService.getActionData(actionId);
-            
+
             if (!actionData) {
                 res.status(404).json({ error: "Action not found" });
                 return;
             }
-            
+
             res.json(actionData);
         } catch (error) {
             debug("Error retrieving action:", error);
-            res.status(500).json({ 
+            res.status(500).json({
                 error: "Failed to retrieve action",
-                details: (error as Error).message 
+                details: (error as Error).message,
             });
         }
     }
