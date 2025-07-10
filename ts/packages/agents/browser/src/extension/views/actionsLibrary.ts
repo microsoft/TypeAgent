@@ -1,7 +1,26 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { getActionsForUrl, getAllActions, getActionDomains } from "../storage";
+import { 
+    getActionsForUrl, 
+    getAllActions, 
+    getActionDomains,
+    deleteAction,
+    deleteMultipleActions,
+    showNotification,
+    showLoadingState,
+    showEmptyState,
+    showErrorState,
+    showConfirmationDialog,
+    extractDomain,
+    categorizeAction,
+    getActionUsageFrequency,
+    matchesUsageFrequency,
+    formatRelativeDate,
+    escapeHtml,
+    extractCategories,
+    filterActions
+} from "./actionUtilities";
 
 declare global {
     interface Window {
@@ -191,7 +210,8 @@ class ActionIndexApp {
     private async loadAllActions() {
         this.state.loading = true;
         this.state.error = null;
-        this.showLoadingState();
+        const container = document.getElementById("actionsContainer")!;
+        showLoadingState(container, "Loading Actions");
 
         try {
             // Get all actions across all URLs
@@ -206,7 +226,8 @@ class ActionIndexApp {
         } catch (error) {
             console.error("Error loading actions:", error);
             this.state.error = "Failed to load actions. Please try again.";
-            this.showErrorState();
+            const container = document.getElementById("actionsContainer")!;
+            showErrorState(container, this.state.error);
         } finally {
             this.state.loading = false;
         }
@@ -256,7 +277,7 @@ class ActionIndexApp {
         const categoryFilter = document.getElementById(
             "categoryFilter",
         ) as HTMLSelectElement;
-        const categories = this.extractCategories();
+        const categories = extractCategories(this.state.allActions);
 
         // Clear existing options except "All Categories"
         while (categoryFilter.children.length > 1) {
@@ -271,158 +292,28 @@ class ActionIndexApp {
         });
     }
 
-    private extractCategories(): string[] {
-        const categories = new Set<string>();
 
-        this.state.allActions.forEach((action) => {
-            // Basic categorization based on action names and descriptions
-            const text =
-                `${action.name} ${action.description || ""}`.toLowerCase();
-
-            if (text.includes("search") || text.includes("find")) {
-                categories.add("Search");
-            } else if (
-                text.includes("login") ||
-                text.includes("sign in") ||
-                text.includes("auth")
-            ) {
-                categories.add("Authentication");
-            } else if (
-                text.includes("form") ||
-                text.includes("submit") ||
-                text.includes("input")
-            ) {
-                categories.add("Form Interaction");
-            } else if (
-                text.includes("click") ||
-                text.includes("button") ||
-                text.includes("link")
-            ) {
-                categories.add("Navigation");
-            } else if (
-                text.includes("cart") ||
-                text.includes("buy") ||
-                text.includes("purchase") ||
-                text.includes("order")
-            ) {
-                categories.add("E-commerce");
-            } else if (
-                text.includes("download") ||
-                text.includes("upload") ||
-                text.includes("file")
-            ) {
-                categories.add("File Operations");
-            } else {
-                categories.add("Other");
-            }
-        });
-
-        return Array.from(categories).sort();
-    }
 
     private applyFilters() {
-        let filtered = [...this.state.allActions];
+        this.state.filteredActions = filterActions(this.state.allActions, {
+            searchQuery: this.state.searchQuery,
+            author: this.state.filters.author,
+            domain: this.state.filters.domain,
+            category: this.state.filters.category,
+        });
 
-        // Apply search filter
-        if (this.state.searchQuery) {
-            filtered = filtered.filter(
-                (action) =>
-                    action.name
-                        .toLowerCase()
-                        .includes(this.state.searchQuery) ||
-                    (action.description &&
-                        action.description
-                            .toLowerCase()
-                            .includes(this.state.searchQuery)),
-            );
-        }
-
-        // Apply author filter
-        if (this.state.filters.author !== "all") {
-            filtered = filtered.filter(
-                (action) => action.author === this.state.filters.author,
-            );
-        }
-
-        // Apply domain filter
-        if (this.state.filters.domain !== "all") {
-            filtered = filtered.filter((action) => {
-                if (action.scope?.pattern || action.urlPattern) {
-                    try {
-                        const url = action.scope?.pattern || action.urlPattern;
-                        const domain = new URL(url).hostname;
-                        return domain === this.state.filters.domain;
-                    } catch {
-                        const pattern =
-                            action.scope?.pattern || action.urlPattern;
-                        return pattern.includes(this.state.filters.domain);
-                    }
-                }
-                return false;
-            });
-        }
-
-        // Apply category filter
-        if (this.state.filters.category !== "all") {
-            filtered = filtered.filter((action) => {
-                const category = this.getActionCategory(action);
-                return category === this.state.filters.category;
-            });
-        }
-
-        // Apply usage filter
         if (this.state.filters.usage !== "all") {
-            filtered = filtered.filter((action) => {
+            this.state.filteredActions = this.state.filteredActions.filter((action) => {
                 const stats = this.getActionUsageStats(action);
-                return this.matchesUsageFrequency(
-                    stats,
-                    this.state.filters.usage,
-                );
+                return matchesUsageFrequency(stats, this.state.filters.usage);
             });
         }
 
-        this.state.filteredActions = filtered;
         this.renderActions();
         this.updateFilteredCount();
     }
 
-    private getActionCategory(action: any): string {
-        const text = `${action.name} ${action.description || ""}`.toLowerCase();
 
-        if (text.includes("search") || text.includes("find")) return "Search";
-        if (
-            text.includes("login") ||
-            text.includes("sign in") ||
-            text.includes("auth")
-        )
-            return "Authentication";
-        if (
-            text.includes("form") ||
-            text.includes("submit") ||
-            text.includes("input")
-        )
-            return "Form Interaction";
-        if (
-            text.includes("click") ||
-            text.includes("button") ||
-            text.includes("link")
-        )
-            return "Navigation";
-        if (
-            text.includes("cart") ||
-            text.includes("buy") ||
-            text.includes("purchase")
-        )
-            return "E-commerce";
-        if (
-            text.includes("download") ||
-            text.includes("upload") ||
-            text.includes("file")
-        )
-            return "File Operations";
-
-        return "Other";
-    }
 
     private getActionUsageStats(action: any): {
         count: number;
@@ -435,31 +326,7 @@ class ActionIndexApp {
         };
     }
 
-    private matchesUsageFrequency(
-        stats: { count: number; lastUsed: Date | null },
-        frequency: string,
-    ): boolean {
-        const { count, lastUsed } = stats;
-        const now = new Date();
-        const daysSinceLastUse = lastUsed
-            ? Math.floor(
-                  (now.getTime() - lastUsed.getTime()) / (1000 * 60 * 60 * 24),
-              )
-            : 999;
 
-        switch (frequency) {
-            case "frequent":
-                return count >= 10 || (count > 0 && daysSinceLastUse <= 7);
-            case "occasional":
-                return count >= 3 && count < 10 && daysSinceLastUse <= 30;
-            case "rarely":
-                return count > 0 && count < 3 && daysSinceLastUse > 30;
-            case "never":
-                return count === 0;
-            default:
-                return true;
-        }
-    }
 
     private clearFilters() {
         this.state.filters = {
@@ -535,14 +402,13 @@ class ActionIndexApp {
 
     private async bulkDeleteActions() {
         if (this.state.selectedActions.length === 0) {
-            this.showNotification("No actions selected for deletion", "error");
+            showNotification("No actions selected for deletion", "error");
             return;
         }
 
-        const confirmed = confirm(
-            `Are you sure you want to delete ${this.state.selectedActions.length} selected action(s)? This cannot be undone.`,
+        const confirmed = await showConfirmationDialog(
+            `Are you sure you want to delete ${this.state.selectedActions.length} selected action(s)? This cannot be undone.`
         );
-
         if (!confirmed) return;
 
         const deleteButton = document.getElementById(
@@ -554,44 +420,21 @@ class ActionIndexApp {
         deleteButton.disabled = true;
 
         try {
-            let successCount = 0;
-            let errorCount = 0;
-
-            for (const actionId of this.state.selectedActions) {
-                try {
-                    const response = await chrome.runtime.sendMessage({
-                        type: "deleteAction",
-                        actionId: actionId,
-                    });
-
-                    if (response?.success) {
-                        successCount++;
-                    } else {
-                        errorCount++;
-                        console.error(
-                            `Failed to delete action ${actionId}:`,
-                            response?.error,
-                        );
-                    }
-                } catch (error) {
-                    errorCount++;
-                    console.error(`Error deleting action ${actionId}:`, error);
-                }
-            }
-
-            if (successCount > 0) {
-                this.showNotification(
-                    `Successfully deleted ${successCount} action(s)${errorCount > 0 ? `, ${errorCount} failed` : ""}`,
-                    errorCount > 0 ? "warning" : "success",
+            const result = await deleteMultipleActions(this.state.selectedActions);
+            
+            if (result.successCount > 0) {
+                showNotification(
+                    `Successfully deleted ${result.successCount} action(s)${result.errorCount > 0 ? `, ${result.errorCount} failed` : ""}`,
+                    result.errorCount > 0 ? "warning" : "success",
                 );
                 this.state.selectedActions = [];
-                await this.loadAllActions(); // Refresh the list
+                await this.loadAllActions();
             } else {
-                this.showNotification("Failed to delete any actions", "error");
+                showNotification("Failed to delete any actions", "error");
             }
         } catch (error) {
             console.error("Error in bulk delete:", error);
-            this.showNotification("Failed to delete actions", "error");
+            showNotification("Failed to delete actions", "error");
         } finally {
             deleteButton.innerHTML = originalContent;
             deleteButton.disabled = false;
@@ -616,20 +459,40 @@ class ActionIndexApp {
         const container = document.getElementById("actionsContainer")!;
 
         if (this.state.loading) {
-            this.showLoadingState();
+            const container = document.getElementById("actionsContainer")!;
+            showLoadingState(container, "Loading Actions");
             return;
         }
 
         if (this.state.error) {
-            this.showErrorState();
+            const container = document.getElementById("actionsContainer")!;
+            showErrorState(container, this.state.error);
             return;
         }
 
         if (this.state.filteredActions.length === 0) {
+            const container = document.getElementById("actionsContainer")!;
             if (this.state.allActions.length === 0) {
-                this.showEmptyState();
+                showEmptyState(
+                    container,
+                    "You haven't created any actions yet. Use the browser sidepanel to discover and create actions for web pages.",
+                    "bi-collection"
+                );
             } else {
-                this.showNoResultsState();
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="bi bi-search"></i>
+                        <h6>No Actions Found</h6>
+                        <p>No actions match your current search and filter criteria.</p>
+                        <button id="clearFiltersFromEmpty" class="btn btn-primary">
+                            <i class="bi bi-funnel"></i> Clear Filters
+                        </button>
+                    </div>
+                `;
+                const clearBtn = container.querySelector("#clearFiltersFromEmpty");
+                clearBtn?.addEventListener("click", () => {
+                    this.clearFilters();
+                });
             }
             return;
         }
@@ -663,8 +526,8 @@ class ActionIndexApp {
         card.className = "action-card";
         card.setAttribute("data-action-id", action.id || action.name);
 
-        const domain = this.extractDomain(action);
-        const category = this.getActionCategory(action);
+        const domain = extractDomain(action);
+        const category = categorizeAction(action);
         const stats = this.getActionUsageStats(action);
         const isSelected = this.state.selectedActions.includes(
             action.id || action.name,
@@ -678,11 +541,11 @@ class ActionIndexApp {
                                data-action-checkbox="${action.id || action.name}" 
                                ${isSelected ? "checked" : ""}>
                     </div>
-                    <h3 class="action-title">${this.escapeHtml(action.name)}</h3>
-                    <p class="action-description">${this.escapeHtml(action.description || "No description available")}</p>
+                    <h3 class="action-title">${escapeHtml(action.name)}</h3>
+                    <p class="action-description">${escapeHtml(action.description || "No description available")}</p>
                     <div class="action-meta">
                         <span class="badge badge-author ${action.author}">${action.author === "user" ? "Custom" : "Discovered"}</span>
-                        ${domain ? `<span class="badge badge-domain">${this.escapeHtml(domain)}</span>` : ""}
+                        ${domain ? `<span class="badge badge-domain">${escapeHtml(domain)}</span>` : ""}
                         <span class="badge badge-category">${category}</span>
                     </div>
                 </div>
@@ -728,7 +591,7 @@ class ActionIndexApp {
                         ? `
                     <div class="usage-stat">
                         <i class="bi bi-clock"></i>
-                        <span>Last used ${this.formatRelativeDate(stats.lastUsed)}</span>
+                        <span>Last used ${formatRelativeDate(stats.lastUsed)}</span>
                     </div>
                 `
                         : ""
@@ -788,11 +651,11 @@ class ActionIndexApp {
     private async viewActionDetails(action: any) {
         try {
             if (!this.viewHostUrl) {
-                this.showNotification("Loading view service...", "info");
+                showNotification("Loading view service...", "info");
                 this.viewHostUrl = await this.getViewHostUrl();
 
                 if (!this.viewHostUrl) {
-                    this.showNotification(
+                    showNotification(
                         "View service is not available",
                         "error",
                     );
@@ -801,7 +664,7 @@ class ActionIndexApp {
             }
 
             if (action.author !== "user") {
-                this.showNotification(
+                showNotification(
                     "Viewing is only available for user-defined actions",
                     "info",
                 );
@@ -810,7 +673,7 @@ class ActionIndexApp {
 
             const actionId = action.id || action.name;
             if (!actionId) {
-                this.showNotification("Invalid action ID", "error");
+                showNotification("Invalid action ID", "error");
                 return;
             }
 
@@ -818,7 +681,7 @@ class ActionIndexApp {
             this.showActionViewModal(action.name, viewUrl);
         } catch (error) {
             console.error("Error opening action view:", error);
-            this.showNotification("Failed to open action view", "error");
+            showNotification("Failed to open action view", "error");
         }
     }
 
@@ -835,7 +698,7 @@ class ActionIndexApp {
 
         if (!modal || !modalTitle || !modalBody) {
             console.error("Modal elements not found");
-            this.showNotification("Error opening action view", "error");
+            showNotification("Error opening action view", "error");
             return;
         }
 
@@ -893,171 +756,48 @@ class ActionIndexApp {
     private editAction(action: any) {
         // TODO: Implement action editing
         console.log("Edit action:", action);
-        this.showNotification("Action editing coming soon!", "info");
+        showNotification("Action editing coming soon!", "info");
     }
 
     private async deleteAction(actionId: string, actionName: string) {
-        if (
-            !confirm(
-                `Are you sure you want to delete the action "${actionName}"? This cannot be undone.`,
-            )
-        ) {
-            return;
-        }
+        const confirmed = await showConfirmationDialog(
+            `Are you sure you want to delete the action "${actionName}"? This cannot be undone.`
+        );
+        if (!confirmed) return;
 
         try {
-            const response = await chrome.runtime.sendMessage({
-                type: "deleteAction",
-                actionId: actionId,
-            });
-
-            if (response?.success) {
-                this.showNotification(
+            const result = await deleteAction(actionId);
+            if (result.success) {
+                showNotification(
                     `Action "${actionName}" deleted successfully!`,
                     "success",
                 );
-                await this.loadAllActions(); // Refresh the list
+                await this.loadAllActions();
             } else {
-                throw new Error(response?.error || "Failed to delete action");
+                throw new Error(result.error || "Failed to delete action");
             }
         } catch (error) {
             console.error("Error deleting action:", error);
-            this.showNotification(`Failed to delete action: ${error}`, "error");
+            showNotification(`Failed to delete action: ${error}`, "error");
         }
     }
 
-    private extractDomain(action: any): string | null {
-        if (action.scope?.pattern || action.urlPattern) {
-            try {
-                const url = action.scope?.pattern || action.urlPattern;
-                return new URL(url).hostname;
-            } catch {
-                const pattern = action.scope?.pattern || action.urlPattern;
-                const domainMatch = pattern.match(/(?:https?:\/\/)?([^\/\*]+)/);
-                return domainMatch ? domainMatch[1] : null;
-            }
-        }
-        return null;
-    }
 
-    private formatRelativeDate(date: Date): string {
-        const now = new Date();
-        const diffMs = now.getTime() - date.getTime();
-        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-        const diffMinutes = Math.floor(diffMs / (1000 * 60));
 
-        if (diffMinutes < 60) {
-            return `${diffMinutes}m ago`;
-        } else if (diffHours < 24) {
-            return `${diffHours}h ago`;
-        } else if (diffDays === 1) {
-            return "yesterday";
-        } else if (diffDays < 7) {
-            return `${diffDays}d ago`;
-        } else if (diffDays < 30) {
-            return `${Math.floor(diffDays / 7)}w ago`;
-        } else {
-            return date.toLocaleDateString();
-        }
-    }
 
-    private showLoadingState() {
-        const container = document.getElementById("actionsContainer")!;
-        container.innerHTML = `
-            <div class="loading-state">
-                <div class="spinner"></div>
-                <h6>Loading Actions</h6>
-                <p>Please wait while we load your action library...</p>
-            </div>
-        `;
-    }
 
-    private showEmptyState() {
-        const container = document.getElementById("actionsContainer")!;
-        container.innerHTML = `
-            <div class="empty-state">
-                <i class="bi bi-collection"></i>
-                <h6>No Actions Yet</h6>
-                <p>You haven't created any actions yet. Use the browser sidepanel to discover and create actions for web pages.</p>
-            </div>
-        `;
-    }
 
-    private showNoResultsState() {
-        const container = document.getElementById("actionsContainer")!;
-        container.innerHTML = `
-            <div class="empty-state">
-                <i class="bi bi-search"></i>
-                <h6>No Actions Found</h6>
-                <p>No actions match your current search and filter criteria.</p>
-                <button id="clearFiltersFromEmpty" class="btn btn-primary">
-                    <i class="bi bi-funnel"></i> Clear Filters
-                </button>
-            </div>
-        `;
 
-        // Add event listener for the clear filters button
-        const clearBtn = container.querySelector("#clearFiltersFromEmpty");
-        clearBtn?.addEventListener("click", () => {
-            this.clearFilters();
-        });
-    }
 
-    private showErrorState() {
-        const container = document.getElementById("actionsContainer")!;
-        container.innerHTML = `
-            <div class="error-state">
-                <i class="bi bi-exclamation-triangle"></i>
-                <h6>Error Loading Actions</h6>
-                <p>${this.state.error}</p>
-                <button id="retryFromError" class="btn btn-primary">
-                    <i class="bi bi-arrow-clockwise"></i> Try Again
-                </button>
-            </div>
-        `;
 
-        // Add event listener for the try again button
-        const retryBtn = container.querySelector("#retryFromError");
-        retryBtn?.addEventListener("click", () => {
-            this.loadAllActions();
-        });
-    }
 
-    private showNotification(
-        message: string,
-        type: "success" | "error" | "warning" | "info" = "info",
-    ) {
-        const toast = document.createElement("div");
-        toast.className = `alert alert-${type === "error" ? "danger" : type} alert-dismissible position-fixed`;
-        toast.style.cssText =
-            "top: 20px; right: 20px; z-index: 1050; min-width: 300px;";
 
-        const messageSpan = document.createElement("span");
-        messageSpan.textContent = message;
 
-        const closeButton = document.createElement("button");
-        closeButton.type = "button";
-        closeButton.className = "btn-close";
-        closeButton.setAttribute("data-bs-dismiss", "alert");
 
-        toast.appendChild(messageSpan);
-        toast.appendChild(closeButton);
 
-        document.body.appendChild(toast);
 
-        setTimeout(() => {
-            if (toast.parentNode) {
-                toast.parentNode.removeChild(toast);
-            }
-        }, 5000);
-    }
 
-    private escapeHtml(text: string): string {
-        const div = document.createElement("div");
-        div.textContent = text;
-        return div.innerHTML;
-    }
+
 }
 
 // Initialize the app when DOM is loaded

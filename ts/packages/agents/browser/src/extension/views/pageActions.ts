@@ -1,7 +1,17 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { getActionsForUrl } from "../storage";
+import { 
+    getActionsForUrl, 
+    deleteAction, 
+    showNotification, 
+    showLoadingState, 
+    showEmptyState, 
+    showErrorState,
+    showConfirmationDialog,
+    escapeHtml,
+    createButton
+} from "./actionUtilities";
 
 let recording = false;
 let recordedActions: any[] = [];
@@ -145,7 +155,7 @@ class ActionDiscoveryPanel {
         ) as HTMLButtonElement;
         const originalHtml = refreshButton.innerHTML;
 
-        this.showLoadingState(itemsList, "Scanning ...");
+        showLoadingState(itemsList, "Scanning ...");
         refreshButton.innerHTML =
             '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
         refreshButton.disabled = true;
@@ -171,7 +181,7 @@ class ActionDiscoveryPanel {
                         "Error fetching schema:",
                         chrome.runtime.lastError,
                     );
-                    this.showErrorState(
+                    showErrorState(
                         itemsList,
                         "Failed to scan page for actions",
                     );
@@ -199,43 +209,14 @@ class ActionDiscoveryPanel {
             await this.registerTempSchema();
         } catch (error) {
             console.error("Error updating schema:", error);
-            this.showErrorState(itemsList, "Failed to scan page for actions");
+            showErrorState(itemsList, "Failed to scan page for actions");
         } finally {
             refreshButton.innerHTML = '<i class="bi bi-arrow-clockwise"></i>';
             refreshButton.disabled = false;
         }
     }
 
-    private showLoadingState(container: HTMLElement, message: string) {
-        container.innerHTML = `
-            <div class="text-center text-muted p-3">
-                <div class="spinner-border spinner-border-sm mb-2" role="status" aria-hidden="true"></div>
-                <p class="mb-0">${message}</p>
-            </div>
-        `;
-    }
 
-    private showEmptyState(
-        container: HTMLElement,
-        message: string,
-        icon: string = "bi-info-circle",
-    ) {
-        container.innerHTML = `
-            <div class="text-center text-muted p-3">
-                <i class="${icon} fs-4 mb-2"></i>
-                <p class="mb-0">${message}</p>
-            </div>
-        `;
-    }
-
-    private showErrorState(container: HTMLElement, message: string) {
-        container.innerHTML = `
-            <div class="text-center text-danger p-3">
-                <i class="bi bi-exclamation-triangle fs-4 mb-2"></i>
-                <p class="mb-0">${message}</p>
-            </div>
-        `;
-    }
 
     private showActionDetails(action: any) {
         const modal = document.createElement("div");
@@ -463,7 +444,7 @@ class ActionDiscoveryPanel {
             }
         } catch (error) {
             console.error("Error starting recording:", error);
-            this.showNotification("Failed to start recording", "error");
+            showNotification("Failed to start recording", "error");
         }
     }
 
@@ -503,7 +484,7 @@ class ActionDiscoveryPanel {
             this.resetModalRecordingUI();
         } catch (error) {
             console.error("Error stopping recording:", error);
-            this.showNotification("Failed to stop recording", "error");
+            showNotification("Failed to stop recording", "error");
             this.resetModalRecordingUI();
         }
     }
@@ -520,7 +501,7 @@ class ActionDiscoveryPanel {
         )?.value.trim();
 
         if (!actionName) {
-            this.showNotification("Please enter an action name", "error");
+            showNotification("Please enter an action name", "error");
             return;
         }
 
@@ -579,7 +560,7 @@ class ActionDiscoveryPanel {
 
             // Action is automatically saved during processing
             if (response.actionId) {
-                this.showNotification(
+                showNotification(
                     "Action created and saved successfully!",
                     "success",
                 );
@@ -587,7 +568,7 @@ class ActionDiscoveryPanel {
                     `Created and saved action: ${response.intentJson.actionName} (ID: ${response.actionId})`,
                 );
             } else {
-                this.showNotification(
+                showNotification(
                     "Action created but save status unknown",
                     "info",
                 );
@@ -604,7 +585,7 @@ class ActionDiscoveryPanel {
             await this.registerTempSchema();
         } catch (error) {
             console.error("Error creating action:", error);
-            this.showNotification("Failed to create action", "error");
+            showNotification("Failed to create action", "error");
         } finally {
             if (saveButton && originalContent) {
                 saveButton.innerHTML = originalContent;
@@ -644,13 +625,13 @@ class ActionDiscoveryPanel {
             await this.updateUserActionsUI();
             await this.registerTempSchema();
 
-            this.showNotification(
+            showNotification(
                 `Cleared ${deletedCount} custom actions`,
                 "success",
             );
         } catch (error) {
             console.error("Error clearing actions:", error);
-            this.showNotification("Failed to clear actions", "error");
+            showNotification("Failed to clear actions", "error");
         }
     }
 
@@ -680,7 +661,7 @@ class ActionDiscoveryPanel {
                     this.renderUserAction(action, index);
                 });
             } else {
-                this.showEmptyState(
+                showEmptyState(
                     userActionsContainer,
                     "No custom actions defined yet",
                     "bi-gear",
@@ -692,7 +673,7 @@ class ActionDiscoveryPanel {
             }
         } catch (error) {
             console.error("Error updating user actions UI:", error);
-            this.showErrorState(
+            showErrorState(
                 userActionsContainer,
                 "Failed to load custom actions",
             );
@@ -775,7 +756,7 @@ class ActionDiscoveryPanel {
         actionName?: string,
     ) {
         if (!steps || steps.length === 0) {
-            this.showEmptyState(container, "No steps recorded", "bi-list-ul");
+            showEmptyState(container, "No steps recorded", "bi-list-ul");
             return;
         }
 
@@ -826,62 +807,31 @@ class ActionDiscoveryPanel {
     }
 
     private async deleteAction(actionId: string) {
-        if (!confirm(`Are you sure you want to delete this action?`)) {
-            return;
-        }
+        const confirmed = await showConfirmationDialog(
+            "Are you sure you want to delete this action?"
+        );
+        if (!confirmed) return;
 
         try {
-            const response = await chrome.runtime.sendMessage({
-                type: "deleteAction",
-                actionId: actionId,
-            });
-
-            if (response?.success) {
+            const result = await deleteAction(actionId);
+            if (result.success) {
                 console.log(`Action deleted: ${actionId}`);
-                // Refresh the UI to show updated action list
                 await this.updateUserActionsUI();
-                // Show success message
-                alert("Action deleted successfully!");
+                showNotification("Action deleted successfully!", "success");
             } else {
-                console.error(`Failed to delete action:`, response?.error);
-                alert(
-                    `Failed to delete action: ${response?.error || "Unknown error"}`,
+                console.error(`Failed to delete action:`, result.error);
+                showNotification(
+                    `Failed to delete action: ${result.error || "Unknown error"}`,
+                    "error"
                 );
             }
         } catch (error) {
             console.error("Error deleting action:", error);
-            alert("Failed to delete action. Please try again.");
+            showNotification("Failed to delete action. Please try again.", "error");
         }
     }
 
-    private showNotification(
-        message: string,
-        type: "success" | "error" | "info" = "info",
-    ) {
-        const toast = document.createElement("div");
-        toast.className = `alert alert-${type === "error" ? "danger" : type === "success" ? "success" : "info"} alert-dismissible position-fixed`;
-        toast.style.cssText =
-            "top: 20px; right: 20px; z-index: 1050; min-width: 300px;";
 
-        const messageSpan = document.createElement("span");
-        messageSpan.textContent = message;
-
-        const closeButton = document.createElement("button");
-        closeButton.type = "button";
-        closeButton.className = "btn-close";
-        closeButton.setAttribute("data-bs-dismiss", "alert");
-
-        toast.appendChild(messageSpan);
-        toast.appendChild(closeButton);
-
-        document.body.appendChild(toast);
-
-        setTimeout(() => {
-            if (toast.parentNode) {
-                toast.parentNode.removeChild(toast);
-            }
-        }, 3000);
-    }
 
     private renderSchemaResults(schemaActions: any) {
         const itemsList = document.getElementById(
@@ -910,7 +860,7 @@ class ActionDiscoveryPanel {
             });
         } else {
             countBadge.textContent = "0";
-            this.showEmptyState(
+            showEmptyState(
                 itemsList,
                 "No actions detected on this page",
                 "bi-search",
@@ -928,17 +878,7 @@ class ActionDiscoveryPanel {
         `;
     }
 
-    // Template utility functions for sidepanel
-    private createButton(
-        text: string,
-        classes: string,
-        attributes: Record<string, string> = {},
-    ): string {
-        const attrs = Object.entries(attributes)
-            .map(([key, value]) => `${key}="${value}"`)
-            .join(" ");
-        return `<button class="${classes}" ${attrs}>${text}</button>`;
-    }
+
 
     private createTabNav(
         tabs: Array<{ id: string; label: string; active?: boolean }>,
@@ -993,7 +933,7 @@ class ActionDiscoveryPanel {
                         <h6 class="mb-1">${index + 1}. ${step.type}</h6>
                         <small class="text-muted">${new Date(step.timestamp).toLocaleTimeString()}</small>
                     </div>
-                    ${this.createButton(
+                    ${createButton(
                         '<i class="bi bi-chevron-down"></i>',
                         "btn btn-outline-secondary btn-sm toggle-details-btn",
                         { "data-index": index.toString() },
@@ -1033,12 +973,12 @@ class ActionDiscoveryPanel {
 
         return `
             <div class="mt-3 text-end">
-                ${this.createButton(
+                ${createButton(
                     '<i class="bi bi-download"></i> Export',
                     "btn btn-outline-primary btn-sm me-2 export-action-btn",
                     { "data-action": actionName },
                 )}
-                ${this.createButton(
+                ${createButton(
                     '<i class="bi bi-trash"></i> Delete',
                     "btn btn-outline-danger btn-sm delete-action-btn",
                     { "data-action": actionName },
@@ -1068,12 +1008,12 @@ class ActionDiscoveryPanel {
                     <small class="text-muted">${action.steps?.length || 0} recorded steps</small>
                 </div>
                 <div class="btn-group-vertical btn-group-sm">
-                    ${this.createButton(
+                    ${createButton(
                         '<i class="bi bi-eye"></i>',
                         "btn btn-outline-primary btn-sm",
                         { title: "View details", "data-action": "view" },
                     )}
-                    ${this.createButton(
+                    ${createButton(
                         '<i class="bi bi-trash"></i>',
                         "btn btn-outline-danger btn-sm",
                         { title: "Delete action", "data-action": "delete" },
