@@ -204,6 +204,7 @@ export function printConstructionCache(
                 {
                     enableWildcard: false,
                     rejectReferences: false,
+                    partial: false,
                 },
                 printMatchedValueTranslator,
             );

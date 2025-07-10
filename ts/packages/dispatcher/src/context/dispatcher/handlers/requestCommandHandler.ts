@@ -40,7 +40,7 @@ import {
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { DispatcherName, isUnknownAction } from "../dispatcherUtils.js";
 import {
-    getHistoryContext,
+    getHistoryContextForTranslation,
     getTranslatorForSchema,
     translateRequest,
     TranslationResult,
@@ -48,6 +48,7 @@ import {
 import { matchRequest } from "../../../translation/matchRequest.js";
 import { addRequestToMemory, addResultToMemory } from "../../memory.js";
 const debugExplain = registerDebug("typeagent:explain");
+const debugCompletion = registerDebug("typeagent:request:completion");
 
 async function canTranslateWithoutContext(
     requestAction: RequestAction,
@@ -349,10 +350,7 @@ export class RequestCommandHandler implements CommandHandler {
 
             // Translate to action
 
-            const history = systemContext.session.getConfig().translation
-                .history.enabled
-                ? getHistoryContext(systemContext)
-                : undefined;
+            const history = getHistoryContextForTranslation(systemContext);
 
             const canUseCacheMatch =
                 (attachments === undefined || attachments.length === 0) &&
@@ -417,6 +415,7 @@ export class RequestCommandHandler implements CommandHandler {
         names: string[],
     ): Promise<string[]> {
         const completions: string[] = [];
+
         for (const name of names) {
             if (name === "request") {
                 const requestPrefix = params.args.request;
@@ -424,8 +423,51 @@ export class RequestCommandHandler implements CommandHandler {
                     // Don't have any request prefix, don't provide any completion as it will be too many.
                     continue;
                 }
-                // TODO: use the agent cache to provide completion.
-                console.log(requestPrefix);
+                const systemContext = context.agentContext;
+                const constructionStore =
+                    systemContext.agentCache.constructionStore;
+                if (!constructionStore.isEnabled()) {
+                    continue;
+                }
+
+                debugCompletion(
+                    `Request completion for prefix '${requestPrefix}'`,
+                );
+                const config = systemContext.session.getConfig();
+                const activeSchemaNames =
+                    systemContext.agents.getActiveSchemas();
+                const results = constructionStore.match(requestPrefix, {
+                    partial: true,
+                    wildcard: config.cache.matchWildcard,
+                    rejectReferences: config.explainer.filter.reference.list,
+                    namespaceKeys:
+                        systemContext.agentCache.getNamespaceKeys(
+                            activeSchemaNames,
+                        ),
+                    history: getHistoryContextForTranslation(systemContext),
+                });
+
+                debugCompletion(
+                    `Request completion construction match: ${results.length}`,
+                );
+
+                for (const result of results) {
+                    const { construction, partialPartCount } = result;
+                    if (partialPartCount === undefined) {
+                        throw new Error(
+                            "Internal Error: Partial part count is undefined",
+                        );
+                    }
+
+                    if (partialPartCount === construction.parts.length) {
+                        continue; // No more parts to complete
+                    }
+                    const nextPart = construction.parts[partialPartCount];
+                    const partCompletions = nextPart.getCompletion();
+                    if (partCompletions) {
+                        completions.push(...partCompletions);
+                    }
+                }
             }
         }
 
