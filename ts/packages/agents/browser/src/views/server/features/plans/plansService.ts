@@ -9,9 +9,72 @@ import { WebPlanData, PlanNode } from "./plansTypes.js";
 export class PlansService {
     private dynamicPlanData!: WebPlanData;
     private staticPlanData!: WebPlanData;
+    private requestCounter: number = 0;
+    private pendingRequests: Map<string, {
+        resolve: Function;
+        reject: Function;
+        timeout: NodeJS.Timeout;
+    }> = new Map();
 
     constructor() {
         this.initializePlanData();
+        this.setupIPCConnection();
+    }
+
+    /**
+     * Setup IPC connection with agent service
+     */
+    private setupIPCConnection(): void {
+        process.on('message', (message: any) => {
+            this.handleIPCMessage(message);
+        });
+    }
+
+    /**
+     * Handle IPC messages from agent service
+     */
+    private handleIPCMessage(message: any): void {
+        if (message.type === 'getActionResponse') {
+            const pending = this.pendingRequests.get(message.requestId);
+            if (pending) {
+                clearTimeout(pending.timeout);
+                this.pendingRequests.delete(message.requestId);
+                
+                if (message.success) {
+                    pending.resolve(message.action);
+                } else {
+                    pending.reject(new Error(message.error || 'Unknown error'));
+                }
+            }
+        }
+    }
+
+    /**
+     * Send IPC request to agent service
+     */
+    private async sendIPCRequest(type: string, data: any, timeoutMs: number = 5000): Promise<any> {
+        const requestId = `req-${++this.requestCounter}-${Date.now()}`;
+        
+        return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                this.pendingRequests.delete(requestId);
+                reject(new Error('IPC request timeout'));
+            }, timeoutMs);
+            
+            this.pendingRequests.set(requestId, { resolve, reject, timeout });
+            
+            if (process.send) {
+                process.send({
+                    type,
+                    requestId,
+                    ...data
+                });
+            } else {
+                clearTimeout(timeout);
+                this.pendingRequests.delete(requestId);
+                reject(new Error('IPC not available'));
+            }
+        });
     }
 
     /**
@@ -380,6 +443,192 @@ export class PlansService {
         }
 
         throw new Error("Node not found");
+    }
+
+    /**
+     * Get action data by ID from agent service
+     */
+    async getActionData(actionId: string): Promise<{
+        action: any;
+        planData: WebPlanData;
+    } | null> {
+        try {
+            const action = await this.sendIPCRequest('getAction', { actionId });
+            
+            if (!action) {
+                return null;
+            }
+            
+            if (!action.definition?.actionsJson) {
+                return {
+                    action,
+                    planData: this.createEmptyPlan(action.name)
+                };
+            }
+            
+            const planData = this.convertPageActionsPlanToWebPlan(
+                action.definition.actionsJson,
+                action.name
+            );
+            
+            return { action, planData };
+        } catch (error) {
+            console.error('Error retrieving action data:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Create empty plan for actions without plan data
+     */
+    private createEmptyPlan(actionName: string): WebPlanData {
+        return {
+            nodes: [
+                { id: "start", label: "Start", type: "start" },
+                { id: "action", label: actionName, type: "action" },
+                { id: "end", label: "Complete", type: "end" }
+            ],
+            links: [
+                { source: "start", target: "action", label: "Execute" },
+                { source: "action", target: "end", label: "Complete" }
+            ],
+            currentNode: "start",
+            title: actionName
+        };
+    }
+
+    /**
+     * Convert PageActionsPlan to WebPlanData format
+     */
+    private convertPageActionsPlanToWebPlan(
+        pageActionsPlan: any,
+        actionName: string
+    ): WebPlanData {
+        const nodes: any[] = [];
+        const links: any[] = [];
+        
+        nodes.push({
+            id: "start",
+            label: "Start",
+            type: "start"
+        });
+        
+        if (pageActionsPlan.steps && Array.isArray(pageActionsPlan.steps)) {
+            pageActionsPlan.steps.forEach((step: any, index: number) => {
+                const nodeId = `step-${index}`;
+                nodes.push({
+                    id: nodeId,
+                    label: this.getStepLabel(step),
+                    type: this.getStepType(step)
+                });
+                
+                const sourceId = index === 0 ? "start" : `step-${index - 1}`;
+                links.push({
+                    source: sourceId,
+                    target: nodeId,
+                    label: this.getStepAction(step)
+                });
+            });
+            
+            if (pageActionsPlan.steps.length > 0) {
+                nodes.push({
+                    id: "end",
+                    label: "Complete",
+                    type: "end"
+                });
+                
+                links.push({
+                    source: `step-${pageActionsPlan.steps.length - 1}`,
+                    target: "end"
+                });
+            }
+        } else {
+            nodes.push({
+                id: "action",
+                label: pageActionsPlan.planName || actionName,
+                type: "action"
+            });
+            
+            nodes.push({
+                id: "end",
+                label: "Complete",
+                type: "end"
+            });
+            
+            links.push({
+                source: "start",
+                target: "action",
+                label: "Execute"
+            });
+            
+            links.push({
+                source: "action",
+                target: "end"
+            });
+        }
+        
+        return {
+            nodes,
+            links,
+            currentNode: "start",
+            title: actionName
+        };
+    }
+
+    /**
+     * Get step label for display
+     */
+    private getStepLabel(step: any): string {
+        switch (step.actionType) {
+            case 'ClickOnButton':
+                return `Click "${step.buttonText || step.text || 'Button'}"`;
+            case 'ClickOnLink':
+                return `Click "${step.linkText || step.text || 'Link'}"`;
+            case 'ClickOnElement':
+                return `Click Element${step.selector ? ` (${step.selector})` : ''}`;
+            case 'TypeText':
+                return `Type "${step.text || 'Text'}"`;
+            case 'FillInput':
+                return `Fill "${step.inputLabel || step.placeholder || 'Input'}"`;
+            case 'SelectOption':
+                return `Select "${step.optionText || 'Option'}"`;
+            case 'WaitFor':
+                return `Wait for ${step.condition || 'Element'}`;
+            case 'Navigate':
+                return `Navigate to ${step.url || 'Page'}`;
+            default:
+                return step.actionType?.replace(/([A-Z])/g, ' $1').trim() || 'Action';
+        }
+    }
+
+    /**
+     * Get step type for visualization
+     */
+    private getStepType(step: any): string {
+        switch (step.actionType) {
+            case 'ClickOnButton':
+            case 'ClickOnLink':
+            case 'ClickOnElement':
+                return 'action';
+            case 'TypeText':
+            case 'FillInput':
+                return 'input';
+            case 'SelectOption':
+                return 'selection';
+            case 'WaitFor':
+                return 'wait';
+            case 'Navigate':
+                return 'navigation';
+            default:
+                return 'action';
+        }
+    }
+
+    /**
+     * Get step action label for edges
+     */
+    private getStepAction(step: any): string {
+        return step.actionType?.replace(/([A-Z])/g, ' $1').trim() || 'Action';
     }
 
     /**

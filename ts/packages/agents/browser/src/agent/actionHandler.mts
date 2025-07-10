@@ -887,6 +887,93 @@ async function handleTabIndexActions(
     return undefined;
 }
 
+/**
+ * Setup IPC communication with view service for action retrieval
+ */
+function setupViewServiceIPC(
+    viewServiceProcess: ChildProcess, 
+    context: SessionContext<BrowserActionContext>
+): void {
+    viewServiceProcess.on('message', async (message: any) => {
+        try {
+            if (message.type === 'getAction') {
+                await handleGetActionRequest(message, viewServiceProcess, context);
+            }
+        } catch (error) {
+            debug('Error handling IPC message:', error);
+        }
+    });
+    
+    viewServiceProcess.on('error', (error: Error) => {
+        debug('View service process error:', error);
+    });
+}
+
+/**
+ * Handle action retrieval request from view service
+ */
+async function handleGetActionRequest(
+    message: any, 
+    viewServiceProcess: ChildProcess,
+    context: SessionContext<BrowserActionContext>
+): Promise<void> {
+    const { actionId, requestId } = message;
+    const startTime = Date.now();
+    
+    try {
+        if (!actionId || !requestId) {
+            throw new Error("Missing required parameters: actionId or requestId");
+        }
+        
+        if (typeof actionId !== 'string') {
+            throw new Error("Invalid actionId format");
+        }
+        
+        debug(`Handling action request for ID: ${actionId}`);
+        
+        // Get the actions store from context
+        const actionsStore = context.agentContext.actionsStore;
+        if (!actionsStore) {
+            throw new Error("ActionsStore not available");
+        }
+        
+        const action = await actionsStore.getAction(actionId);
+        
+        if (!action) {
+            viewServiceProcess.send({
+                type: 'getActionResponse',
+                requestId,
+                success: false,
+                error: 'Action not found',
+                timestamp: Date.now()
+            });
+            return;
+        }
+        
+        viewServiceProcess.send({
+            type: 'getActionResponse',
+            requestId,
+            success: true,
+            action,
+            timestamp: Date.now()
+        });
+        
+        const duration = Date.now() - startTime;
+        debug(`Action request completed in ${duration}ms`);
+        
+    } catch (error) {
+        debug("Error handling action request:", error);
+        
+        viewServiceProcess.send({
+            type: 'getActionResponse',
+            requestId,
+            success: false,
+            error: (error as Error).message || 'Unknown error',
+            timestamp: Date.now()
+        });
+    }
+}
+
 export async function createViewServiceHost(
     context: SessionContext<BrowserActionContext>,
 ) {
@@ -921,6 +1008,9 @@ export async function createViewServiceHost(
                         TYPEAGENT_BROWSER_FILES: folderPath,
                     },
                 });
+
+                // Setup IPC message handling for action retrieval
+                setupViewServiceIPC(childProcess, context);
 
                 childProcess.on("message", function (message) {
                     if (message === "Success") {

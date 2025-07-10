@@ -247,6 +247,48 @@ class ApiService {
             throw error;
         }
     }
+
+    /**
+     * Get action data by ID
+     * @param {string} actionId - ID of the action to retrieve
+     * @returns {Promise<{action: any, planData: WebPlanData}>} Promise that resolves to action and plan data
+     */
+    static async getActionData(actionId: string): Promise<{
+        action: any;
+        planData: WebPlanData;
+    }> {
+        try {
+            if (!actionId) {
+                throw new Error("Action ID is required");
+            }
+            
+            const encodedActionId = encodeURIComponent(actionId);
+            const response = await fetch(`/api/plans/action/${encodedActionId}`);
+            
+            if (!response.ok) {
+                if (response.status === 404) {
+                    throw new Error("Action not found");
+                } else if (response.status === 400) {
+                    throw new Error("Invalid action ID");
+                } else if (response.status >= 500) {
+                    throw new Error("Server error");
+                } else {
+                    throw new Error(`Failed to fetch action data: ${response.statusText}`);
+                }
+            }
+            
+            const data = await response.json();
+            
+            if (!data.action || !data.planData) {
+                throw new Error("Invalid response format");
+            }
+            
+            return data;
+        } catch (parseError) {
+            console.error("Error fetching action data:", parseError);
+            throw parseError;
+        }
+    }
 }
 
 export default ApiService;

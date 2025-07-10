@@ -839,6 +839,9 @@ class ActionIndexApp {
             return;
         }
 
+        // Add action-view-modal class to hide header
+        modal.classList.add('action-view-modal');
+
         modalTitle.textContent = actionTitle;
 
         const iframe = document.createElement("iframe");
@@ -849,6 +852,9 @@ class ActionIndexApp {
         modalBody.innerHTML = "";
         modalBody.appendChild(iframe);
 
+        // Set up message listener for iframe communication
+        this.setupIframeMessageListener(modal, iframe);
+
         const bsModal = new (window as any).bootstrap.Modal(modal);
         bsModal.show();
 
@@ -856,10 +862,33 @@ class ActionIndexApp {
             "hidden.bs.modal",
             () => {
                 modalBody.innerHTML = "";
+                modal.classList.remove('action-view-modal');
+                // Remove message listener
+                window.removeEventListener('message', this.handleIframeMessage);
             },
             { once: true },
         );
     }
+
+    private setupIframeMessageListener(modal: HTMLElement, iframe: HTMLIFrameElement) {
+        this.handleIframeMessage = (event: MessageEvent) => {
+            // Verify origin for security (optional but recommended)
+            if (event.source !== iframe.contentWindow) {
+                return;
+            }
+
+            if (event.data.type === 'closeModal') {
+                const bsModal = (window as any).bootstrap.Modal.getInstance(modal);
+                if (bsModal) {
+                    bsModal.hide();
+                }
+            }
+        };
+
+        window.addEventListener('message', this.handleIframeMessage);
+    }
+
+    private handleIframeMessage: (event: MessageEvent) => void = () => {};
 
     private editAction(action: any) {
         // TODO: Implement action editing
