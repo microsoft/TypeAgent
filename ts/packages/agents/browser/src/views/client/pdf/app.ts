@@ -803,7 +803,7 @@ export class TypeAgentPDFViewerApp {
         const toolbarHeight = toolbar ? toolbar.offsetHeight : 56;
 
         viewerContainer.style.cssText = `
-            position: absolute; top: ${toolbarHeight}px; left: 0; right: 0; bottom: 0; overflow: auto;
+            position: relative; top: 0; left: 0; right: 0; height: calc(100vh - ${toolbarHeight}px); overflow: auto;
         `;
 
         const linkService = new window.pdfjsViewer.PDFLinkService({

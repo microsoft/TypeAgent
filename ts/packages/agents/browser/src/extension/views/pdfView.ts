@@ -276,6 +276,9 @@ class PDFViewPage {
             loadingText.textContent = message;
         }
 
+        // Keep header hidden during loading - only show for errors
+        // Use full viewport height for loading container
+        this.loadingContainer.style.height = '100vh';
         this.loadingContainer.style.display = 'flex';
         this.errorContainer.style.display = 'none';
         this.pdfFrame.style.display = 'none';
@@ -286,6 +289,16 @@ class PDFViewPage {
      */
     private showError(message: string, errorType: string = 'UNKNOWN'): void {
         debugError(`PDF viewer error [${errorType}]:`, message);
+        
+        // Show extension header for error state
+        const header = document.querySelector('.header') as HTMLElement;
+        if (header) {
+            header.style.display = 'flex';
+        }
+        
+        // Adjust container height for header
+        this.errorContainer.style.height = 'calc(100vh - 60px)';
+        this.pdfFrame.style.height = 'calc(100vh - 60px)';
         
         this.errorMessage.textContent = message;
         this.errorContainer.style.display = 'flex';
@@ -304,6 +317,14 @@ class PDFViewPage {
      * Show PDF viewer (hide loading/error states)
      */
     private showPDFViewer(): void {
+        // Hide extension header to give full height to iframe
+        const header = document.querySelector('.header') as HTMLElement;
+        if (header) {
+            header.style.display = 'none';
+        }
+        
+        // Give iframe full viewport height
+        this.pdfFrame.style.height = '100vh';
         this.pdfFrame.style.display = 'block';
         this.loadingContainer.style.display = 'none';
         this.errorContainer.style.display = 'none';
