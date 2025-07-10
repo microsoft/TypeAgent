@@ -325,7 +325,10 @@ export function matchesUrlPattern(url: string, pattern: string): boolean {
         const normalizedPattern = normalizeUrl(pattern);
 
         const regex = new RegExp(
-            normalizedPattern.replace(/\*/g, ".*").replace(/\?/g, "\\?"),
+            normalizedPattern
+                .replace(/\\/g, "\\\\") // Escape backslashes
+                .replace(/\*/g, ".*")
+                .replace(/\?/g, "\\?"),
         );
         return regex.test(normalizedUrl);
     } catch {
