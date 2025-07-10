@@ -137,7 +137,6 @@ export async function handleMessage(
             }
 
             // Register the dynamic agent schema
-            /*
             const schemaResult = await sendActionToAgent({
                 actionName: "registerPageDynamicAgent",
                 parameters: {
@@ -145,9 +144,6 @@ export async function handleMessage(
                 },
             });
             return { schema: schemaResult };
-*/
-            return {};
-            // return { schema: schemaResult };
         }
         case "getIntentFromRecording": {
             // Authoring now auto-saves actions

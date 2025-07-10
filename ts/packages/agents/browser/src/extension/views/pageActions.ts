@@ -51,7 +51,6 @@ class ActionDiscoveryPanel {
             .getElementById("clearRecordedActions")!
             .addEventListener("click", () => this.clearRecordedUserAction());
 
-        
         document
             .getElementById("autoDiscoveryToggle")!
             .addEventListener("change", (e) => {
@@ -97,26 +96,6 @@ class ActionDiscoveryPanel {
                 <span class="status-indicator status-idle"></span>
                 Connection unavailable
             `;
-        }
-    }
-
-    private updateRecordingStatus(isRecording: boolean) {
-        this.connectionStatus.recording = isRecording;
-        const statusElement = document.getElementById("connectionStatus")!;
-        const recordingStatus = document.getElementById("recordingStatus")!;
-
-        if (isRecording) {
-            statusElement.innerHTML = `
-                <span class="status-indicator status-recording"></span>
-                Recording action steps...
-            `;
-            recordingStatus.classList.remove("d-none");
-        } else {
-            statusElement.innerHTML = `
-                <span class="status-indicator status-connected"></span>
-                Connected to TypeAgent
-            `;
-            recordingStatus.classList.add("d-none");
         }
     }
 
@@ -212,8 +191,7 @@ class ActionDiscoveryPanel {
                 const legacySchema = currentActions.map((action) => ({
                     actionName: action.name,
                     description: action.description,
-                    parameters:
-                        action.definition?.detectedSchema?.parameters || {},
+                    parameters: action.definition?.intentJson?.parameters || {},
                 }));
                 this.renderSchemaResults(legacySchema);
             }
@@ -374,10 +352,6 @@ class ActionDiscoveryPanel {
                                     >
                                         <i class="bi bi-stop-circle"></i> Stop Recording
                                     </button>
-                                    <div id="modalRecordingStatus" class="ms-3 text-muted d-none">
-                                        <span class="status-indicator status-recording"></span>
-                                        Recording in progress...
-                                    </div>
                                 </div>
                             </div>
 
@@ -461,11 +435,9 @@ class ActionDiscoveryPanel {
     private resetModalRecordingUI() {
         const recordBtn = document.getElementById("modalRecordAction");
         const stopBtn = document.getElementById("modalStopRecording");
-        const status = document.getElementById("modalRecordingStatus");
 
         if (recordBtn) recordBtn.classList.remove("d-none");
         if (stopBtn) stopBtn.classList.add("d-none");
-        if (status) status.classList.add("d-none");
 
         recording = false;
     }
@@ -477,11 +449,9 @@ class ActionDiscoveryPanel {
             recording = true;
             const recordBtn = document.getElementById("modalRecordAction");
             const stopBtn = document.getElementById("modalStopRecording");
-            const status = document.getElementById("modalRecordingStatus");
 
             if (recordBtn) recordBtn.classList.add("d-none");
             if (stopBtn) stopBtn.classList.remove("d-none");
-            if (status) status.classList.remove("d-none");
 
             const stepsContainer = document.getElementById(
                 "modalStepsTimelineContainer",
@@ -693,14 +663,14 @@ class ActionDiscoveryPanel {
         ) as HTMLElement;
 
         try {
-            console.log("Getting actions after update. URL: ", launchUrl)
+            console.log("Getting actions after update. URL: ", launchUrl);
             // Get user-authored actions from the new ActionsStore
             const actions = await getActionsForUrl(launchUrl!, {
                 includeGlobal: false,
                 author: "user",
             });
 
-            console.log("Custom actions: ", actions)
+            console.log("Custom actions: ", actions);
 
             countBadge.textContent = actions.length.toString();
 
@@ -736,6 +706,24 @@ class ActionDiscoveryPanel {
 
         const actionElement = document.createElement("div");
         actionElement.className = "action-item mb-3";
+
+        if (!action.intentSchema) {
+            action.intentSchema = action.definition?.intentSchema;
+        }
+
+        if (!action.actionsJson) {
+            action.actionsJson = action.definition?.actionsJson;
+        }
+
+        let steps = action.definition?.steps || action.steps;
+        if (typeof steps === "string") {
+            steps = JSON.parse(steps);
+        }
+
+        if (!action.steps) {
+            action.steps = steps;
+        }
+
         actionElement.innerHTML = this.createUserActionCard(action, index);
 
         const viewButton = actionElement.querySelector('[data-action="view"]');
@@ -762,9 +750,8 @@ class ActionDiscoveryPanel {
         userActionsContainer.appendChild(actionElement);
 
         // Handle both old and new StoredAction formats
-        const steps = action.context?.recordedSteps || action.steps;
-        const screenshots = action.context?.screenshots || action.screenshot;
-        const htmlFragments = action.context?.htmlFragments || action.html;
+        const screenshots = action.definition?.screenshot || action.screenshot;
+        const htmlFragments = action.definition?.htmlFragments || action.html;
 
         if (steps) {
             const stepsContent = actionElement.querySelector(
@@ -813,7 +800,7 @@ class ActionDiscoveryPanel {
                 const src = img.getAttribute("data-src");
                 if (src) {
                     // Open image in new tab for viewing
-                    window.open(src, '_blank');
+                    window.open(src, "_blank");
                 }
             });
         });
@@ -937,11 +924,6 @@ class ActionDiscoveryPanel {
                 <div>
                     <span class="fw-semibold">${action.actionName}</span>
                 </div>
-                ${this.createButton(
-                    '<i class="bi bi-eye"></i>',
-                    "btn btn-sm btn-outline-primary",
-                    { title: "View details" },
-                )}
             </div>
         `;
     }

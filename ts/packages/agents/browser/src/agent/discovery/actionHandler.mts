@@ -228,6 +228,8 @@ export async function handleSchemaDiscoveryAction(
                                                   ],
                                               ),
                                 }),
+                                actionDefinition:
+                                    typeDefinitions[actionData.actionName],
                             },
                         });
 
@@ -318,21 +320,10 @@ export async function handleSchemaDiscoveryAction(
         const authoredActions = new Map<string, any>();
 
         for (const storedAction of urlActions) {
-            if (
-                storedAction.author === "discovered" &&
-                storedAction.definition.intentSchema
-            ) {
+            if (storedAction.definition.actionDefinition) {
                 detectedActions.set(
                     storedAction.name,
-                    storedAction.definition.intentSchema,
-                );
-            } else if (
-                storedAction.author === "user" &&
-                storedAction.definition.intentSchema
-            ) {
-                authoredActions.set(
-                    storedAction.name,
-                    storedAction.definition.intentSchema,
+                    storedAction.definition.actionDefinition,
                 );
             }
         }
@@ -664,12 +655,12 @@ export async function handleSchemaDiscoveryAction(
 
                 const storedAction =
                     agentContext.actionsStore.createDefaultAction({
-                        name: action.parameters.recordedActionName,
+                        name: intentData.actionName,
                         description:
                             action.parameters.recordedActionDescription ||
-                            `User action: ${action.parameters.recordedActionName}`,
+                            `User action: ${intentData.actionName}`,
                         category: inferCategoryFromAction({
-                            name: action.parameters.recordedActionName,
+                            name: intentData.actionName,
                             description:
                                 action.parameters.recordedActionDescription,
                         }) as ActionCategory,
@@ -747,6 +738,12 @@ export async function handleSchemaDiscoveryAction(
                                               : [],
                                     },
                                 }),
+                            actionsJson: stepsResponse.data,
+                            actionDefinition: typeDefinition,
+                            description:
+                                action.parameters.recordedActionDescription,
+                            screenshot: action.parameters.screenshots,
+                            steps: JSON.parse(recordedSteps || "[]"),
                         },
                     });
 

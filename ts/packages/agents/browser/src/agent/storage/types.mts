@@ -81,6 +81,13 @@ export interface ActionDefinition {
 
     // Auto-discovered schema data
     detectedSchema?: any;
+
+    actionsJson?: any;
+    actionDefinition?: any;
+    description?: string;
+
+    screenshot?: string[] | undefined;
+    steps?: any | undefined;
 }
 
 export interface ActionContext {
