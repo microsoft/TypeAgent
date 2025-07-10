@@ -38,7 +38,6 @@ export interface FilterOptions {
     author?: string;
     domain?: string;
     category?: string;
-    usage?: string;
 }
 
 export interface NotificationConfig {
@@ -79,13 +78,7 @@ export interface ActionStats {
     actions: StoredAction[];
 }
 
-export interface ActionUsageStats {
-    count: number;
-    lastUsed: Date | null;
-}
-
 export type ActionCategory = "Search" | "Authentication" | "Form Interaction" | "Navigation" | "E-commerce" | "File Operations" | "Other";
-export type UsageFrequency = "frequent" | "occasional" | "rarely" | "never";
 export type NotificationType = "success" | "error" | "warning" | "info";
 
 export async function getActionsForUrl(
@@ -107,36 +100,7 @@ export async function getActionsForUrl(
     }
 }
 
-export async function recordActionUsage(actionId: string): Promise<boolean> {
-    try {
-        const response = await chrome.runtime.sendMessage({
-            type: "recordActionUsage",
-            actionId: actionId,
-        });
 
-        return response?.success || false;
-    } catch (error) {
-        console.error("Failed to record action usage:", error);
-        return false;
-    }
-}
-
-export async function getActionStatistics(url?: string): Promise<ActionStats> {
-    try {
-        const response = await chrome.runtime.sendMessage({
-            type: "getActionStatistics",
-            url: url,
-        });
-
-        return {
-            totalActions: response?.totalActions || 0,
-            actions: response?.actions || [],
-        };
-    } catch (error) {
-        console.error("Failed to get action statistics:", error);
-        return { totalActions: 0, actions: [] };
-    }
-}
 
 export async function getAllActions(): Promise<StoredAction[]> {
     try {
@@ -373,35 +337,7 @@ export function categorizeAction(action: StoredAction): ActionCategory {
     return "Other";
 }
 
-export function getActionUsageFrequency(stats: ActionUsageStats): UsageFrequency {
-    const { count, lastUsed } = stats;
-    const now = new Date();
-    const daysSinceLastUse = lastUsed
-        ? Math.floor((now.getTime() - lastUsed.getTime()) / (1000 * 60 * 60 * 24))
-        : 999;
 
-    if (count >= 10 || (count > 0 && daysSinceLastUse <= 7)) return "frequent";
-    if (count >= 3 && count < 10 && daysSinceLastUse <= 30) return "occasional";
-    if (count > 0 && count < 3 && daysSinceLastUse > 30) return "rarely";
-    return "never";
-}
-
-export function sortActionsByUsage(actions: StoredAction[]): StoredAction[] {
-    return [...actions].sort((a, b) => {
-        const statsA = getActionUsageStats(a);
-        const statsB = getActionUsageStats(b);
-        
-        if (statsA.count !== statsB.count) {
-            return statsB.count - statsA.count;
-        }
-        
-        if (statsA.lastUsed && statsB.lastUsed) {
-            return statsB.lastUsed.getTime() - statsA.lastUsed.getTime();
-        }
-        
-        return a.name.localeCompare(b.name);
-    });
-}
 
 export function groupActionsByDomain(actions: StoredAction[]): Map<string, StoredAction[]> {
     const grouped = new Map<string, StoredAction[]>();
@@ -417,12 +353,7 @@ export function groupActionsByDomain(actions: StoredAction[]): Map<string, Store
     return grouped;
 }
 
-function getActionUsageStats(action: StoredAction): ActionUsageStats {
-    return {
-        count: 0,
-        lastUsed: null,
-    };
-}
+
 export function formatRelativeDate(date: Date): string {
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
@@ -445,14 +376,7 @@ export function formatRelativeDate(date: Date): string {
     }
 }
 
-export function formatActionStats(stats: ActionUsageStats): string {
-    if (stats.count === 0) {
-        return "Never used";
-    }
-    
-    const lastUsedStr = stats.lastUsed ? formatRelativeDate(stats.lastUsed) : "unknown";
-    return `Used ${stats.count} times, last ${lastUsedStr}`;
-}
+
 
 export function escapeHtml(text: string): string {
     const div = document.createElement("div");
@@ -493,10 +417,3 @@ export function extractCategories(actions: StoredAction[]): string[] {
     return Array.from(categories).sort();
 }
 
-export function matchesUsageFrequency(
-    stats: ActionUsageStats,
-    frequency: string
-): boolean {
-    const actualFrequency = getActionUsageFrequency(stats);
-    return actualFrequency === frequency;
-}

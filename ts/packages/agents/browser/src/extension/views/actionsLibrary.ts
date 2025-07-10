@@ -14,8 +14,6 @@ import {
     showConfirmationDialog,
     extractDomain,
     categorizeAction,
-    getActionUsageFrequency,
-    matchesUsageFrequency,
     formatRelativeDate,
     escapeHtml,
     extractCategories,
@@ -39,7 +37,6 @@ interface ActionIndexState {
         author: string;
         domain: string;
         category: string;
-        usage: string;
     };
 
     // UI State
@@ -59,7 +56,6 @@ class ActionIndexApp {
             author: "all",
             domain: "all",
             category: "all",
-            usage: "all",
         },
         viewMode: "grid",
         selectedActions: [],
@@ -142,14 +138,7 @@ class ActionIndexApp {
                 this.applyFilters();
             });
 
-        document
-            .getElementById("usageFilter")!
-            .addEventListener("change", (e) => {
-                this.state.filters.usage = (
-                    e.target as HTMLSelectElement
-                ).value;
-                this.applyFilters();
-            });
+
 
         // Clear filters
         document
@@ -302,29 +291,13 @@ class ActionIndexApp {
             category: this.state.filters.category,
         });
 
-        if (this.state.filters.usage !== "all") {
-            this.state.filteredActions = this.state.filteredActions.filter((action) => {
-                const stats = this.getActionUsageStats(action);
-                return matchesUsageFrequency(stats, this.state.filters.usage);
-            });
-        }
-
         this.renderActions();
         this.updateFilteredCount();
     }
 
 
 
-    private getActionUsageStats(action: any): {
-        count: number;
-        lastUsed: Date | null;
-    } {
-        // Return default stats since we removed statistics tracking
-        return {
-            count: 0,
-            lastUsed: null,
-        };
-    }
+
 
 
 
@@ -333,7 +306,6 @@ class ActionIndexApp {
             author: "all",
             domain: "all",
             category: "all",
-            usage: "all",
         };
 
         // Reset UI controls
@@ -342,8 +314,6 @@ class ActionIndexApp {
         (document.getElementById("domainFilter") as HTMLSelectElement).value =
             "all";
         (document.getElementById("categoryFilter") as HTMLSelectElement).value =
-            "all";
-        (document.getElementById("usageFilter") as HTMLSelectElement).value =
             "all";
 
         // Clear search
@@ -528,7 +498,6 @@ class ActionIndexApp {
 
         const domain = extractDomain(action);
         const category = categorizeAction(action);
-        const stats = this.getActionUsageStats(action);
         const isSelected = this.state.selectedActions.includes(
             action.id || action.name,
         );
@@ -561,7 +530,6 @@ class ActionIndexApp {
                     </button>
                 </div>
             </div>
-            ${stats.count > 0 || stats.lastUsed ? this.createUsageStats(stats) : ""}
         `;
 
         // Add event listeners
@@ -570,35 +538,7 @@ class ActionIndexApp {
         return card;
     }
 
-    private createUsageStats(stats: {
-        count: number;
-        lastUsed: Date | null;
-    }): string {
-        return `
-            <div class="usage-stats">
-                ${
-                    stats.count > 0
-                        ? `
-                    <div class="usage-stat">
-                        <i class="bi bi-graph-up"></i>
-                        <span>Used ${stats.count} times</span>
-                    </div>
-                `
-                        : ""
-                }
-                ${
-                    stats.lastUsed
-                        ? `
-                    <div class="usage-stat">
-                        <i class="bi bi-clock"></i>
-                        <span>Last used ${formatRelativeDate(stats.lastUsed)}</span>
-                    </div>
-                `
-                        : ""
-                }
-            </div>
-        `;
-    }
+
 
     private attachCardEventListeners(
         card: HTMLElement,
@@ -781,23 +721,6 @@ class ActionIndexApp {
             showNotification(`Failed to delete action: ${error}`, "error");
         }
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 }
 
 // Initialize the app when DOM is loaded

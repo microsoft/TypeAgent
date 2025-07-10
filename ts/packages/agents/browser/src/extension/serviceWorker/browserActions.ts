@@ -244,14 +244,7 @@ export async function runBrowserAction(action: AppAction): Promise<any> {
             break;
         }
 
-        case "recordActionUsage": {
-            // Record action usage for analytics
-            responseObject = await chrome.runtime.sendMessage({
-                type: "recordActionUsage",
-                actionId: action.parameters.actionId,
-            });
-            break;
-        }
+
         default:
             throw new Error(`Unknown action: ${actionName}. `);
     }

@@ -603,32 +603,7 @@ export async function handleMessage(
             return await handleDeleteKnowledgeIndex();
         }
 
-        case "getActionStatistics": {
-            try {
-                const result = await sendActionToAgent({
-                    actionName: "getActionsForUrl",
-                    parameters: {
-                        url: message.url || (await getActiveTab())?.url,
-                        includeGlobal: true,
-                    },
-                });
 
-                return {
-                    success: true,
-                    totalActions: result.count || 0,
-                    actions: result.actions || [],
-                };
-            } catch (error) {
-                console.warn("Failed to get action statistics:", error);
-                return {
-                    success: false,
-                    error:
-                        error instanceof Error
-                            ? error.message
-                            : "Unknown error",
-                };
-            }
-        }
 
         case "deleteAction": {
             // Handler for deleting actions from the ActionsStore
