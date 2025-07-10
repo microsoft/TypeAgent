@@ -9,6 +9,7 @@ import shutil
 import time
 
 import black
+import colorama
 import dotenv
 import typechat
 
@@ -24,19 +25,23 @@ def timelog(label: str):
         yield
     finally:
         elapsed_time = time.time() - start_time
-        print(f"{elapsed_time:.3f}s -- {label}")
+        print(
+            f"{colorama.Style.DIM}{elapsed_time:.3f}s -- {label}{colorama.Style.RESET_ALL}"
+        )
 
 
-def pretty_print(obj: object) -> None:
+def pretty_print(obj: object, prefix: str = "", suffix: str = "") -> None:
     """Pretty-print an object using black.
 
     NOTE: Only works if the repr() is a valid Python expression.
     """
     line_width = cap(200, shutil.get_terminal_size().columns)
     print(
-        black.format_str(
+        prefix
+        + black.format_str(
             repr(obj), mode=black.FileMode(line_length=line_width)
         ).rstrip()
+        + suffix
     )
 
 
