@@ -6,6 +6,7 @@ __version__ = "0.1"
 import argparse
 import asyncio
 import io
+import json
 import re
 import sys
 import traceback
@@ -36,11 +37,13 @@ from ..knowpro.query import QueryEvalContext
 from ..knowpro.search import ConversationSearchResult
 from ..knowpro.searchlang import (
     LanguageQueryCompileOptions,
+    LanguageQueryExpr,
     LanguageSearchDebugContext,
     LanguageSearchOptions,
     search_conversation_with_language,
 )
 from ..knowpro.search_query_schema import SearchQuery
+from ..knowpro.serialization import deserialize_object
 from ..podcasts.podcast import Podcast
 
 
@@ -58,6 +61,12 @@ def main() -> None:
         default=None,
         help="Path to alternate schema file for query translator.",
     )
+    parser.add_argument(
+        "--search-query-index",
+        type=str,
+        default=None,
+        help="Path to a JSON file containing a search query index mapping.",
+    )
 
     args = parser.parse_args()
 
@@ -74,6 +83,14 @@ def main() -> None:
             query_translator.schema_str = f.read()
 
     print(colorama.Fore.YELLOW + query_translator.schema_str.rstrip())
+
+    search_query_index: dict[str, object] = {}
+    if args.search_query_index:
+        print(f"Loading search query index from {args.search_query_index}")
+        with open(args.search_query_index) as f:
+            # TODO: Add type checks and annotations.
+            srdata = json.load(f)
+            search_query_index = {item["searchText"]: item for item in srdata}
 
     lang_search_options = LanguageSearchOptions(
         exact_match=False,
@@ -113,6 +130,7 @@ def main() -> None:
             answer_context_options,
             context,
             cast(io.TextIOWrapper, sys.stdin),
+            search_query_index,
         )
 
     except KeyboardInterrupt:
@@ -130,6 +148,7 @@ def process_inputs[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
     answer_context_options: AnswerContextOptions,
     context: QueryEvalContext[TMessage, TIndex],
     stream: io.TextIOWrapper,
+    search_query_index: dict[str, dict[str, object]],
 ) -> None:
     ps1 = "--> "
     while True:
@@ -165,6 +184,13 @@ def process_inputs[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
             case _:
                 print("-" * 50)
                 with timelog("Query processing"):
+                    use_search_query: SearchQuery | None = None
+                    if search_query_index and query_text in search_query_index:
+                        print(colorama.Fore.YELLOW + "Using pre-computed SearchQuery")
+                        use_search_query = deserialize_object(
+                            SearchQuery,
+                            search_query_index[query_text]["searchQueryExpr"],
+                        )
                     asyncio.run(
                         wrap_process_query(
                             query_text,
@@ -173,6 +199,7 @@ def process_inputs[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
                             answer_translator,
                             lang_search_options,
                             answer_context_options,
+                            use_search_query,
                         )
                     )
                 print("-" * 50)
@@ -203,6 +230,7 @@ async def wrap_process_query[TMessage: IMessage, TIndex: ITermToSemanticRefIndex
     answer_translator: typechat.TypeChatJsonTranslator[AnswerResponse],
     lang_search_options: LanguageSearchOptions,
     answer_context_options: AnswerContextOptions,
+    use_search_query: SearchQuery | None = None,
 ) -> None:
     """Wrap the process_query function to handle exceptions."""
     try:
@@ -213,6 +241,7 @@ async def wrap_process_query[TMessage: IMessage, TIndex: ITermToSemanticRefIndex
             answer_translator,
             lang_search_options,
             answer_context_options,
+            use_search_query,
         )
     except Exception as exc:
         traceback.print_exc()
@@ -226,8 +255,9 @@ async def process_query[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
     answer_translator: typechat.TypeChatJsonTranslator[AnswerResponse],
     lang_search_options: LanguageSearchOptions,
     answer_context_options: AnswerContextOptions,
+    use_search_query: SearchQuery | None = None,
 ) -> None:
-    debug_context = LanguageSearchDebugContext()  # For lots of debug output.
+    debug_context = LanguageSearchDebugContext(use_search_query=use_search_query)
     result = await search_conversation_with_language(
         conversation,
         query_translator,
