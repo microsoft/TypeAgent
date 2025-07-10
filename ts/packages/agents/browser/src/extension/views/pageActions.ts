@@ -52,22 +52,6 @@ class ActionDiscoveryPanel {
             .addEventListener("click", () => this.clearRecordedUserAction());
 
         document
-            .getElementById("saveAction")!
-            .addEventListener("click", () => this.saveUserAction());
-
-        document
-            .getElementById("cancelAddingAction")!
-            .addEventListener("click", () => this.cancelActionForm());
-
-        document
-            .getElementById("recordAction")!
-            .addEventListener("click", () => this.startRecording());
-
-        document
-            .getElementById("stopRecording")!
-            .addEventListener("click", () => this.stopRecording());
-
-        document
             .getElementById("autoDiscoveryToggle")!
             .addEventListener("change", (e) => {
                 const checkbox = e.target as HTMLInputElement;
@@ -112,26 +96,6 @@ class ActionDiscoveryPanel {
                 <span class="status-indicator status-idle"></span>
                 Connection unavailable
             `;
-        }
-    }
-
-    private updateRecordingStatus(isRecording: boolean) {
-        this.connectionStatus.recording = isRecording;
-        const statusElement = document.getElementById("connectionStatus")!;
-        const recordingStatus = document.getElementById("recordingStatus")!;
-
-        if (isRecording) {
-            statusElement.innerHTML = `
-                <span class="status-indicator status-recording"></span>
-                Recording action steps...
-            `;
-            recordingStatus.classList.remove("d-none");
-        } else {
-            statusElement.innerHTML = `
-                <span class="status-indicator status-connected"></span>
-                Connected to TypeAgent
-            `;
-            recordingStatus.classList.add("d-none");
         }
     }
 
@@ -227,8 +191,7 @@ class ActionDiscoveryPanel {
                 const legacySchema = currentActions.map((action) => ({
                     actionName: action.name,
                     description: action.description,
-                    parameters:
-                        action.definition?.detectedSchema?.parameters || {},
+                    parameters: action.definition?.intentJson?.parameters || {},
                 }));
                 this.renderSchemaResults(legacySchema);
             }
@@ -309,7 +272,6 @@ class ActionDiscoveryPanel {
     }
 
     private toggleActionForm() {
-        // Show modal instead of inline form
         this.showActionModal();
     }
 
@@ -390,10 +352,6 @@ class ActionDiscoveryPanel {
                                     >
                                         <i class="bi bi-stop-circle"></i> Stop Recording
                                     </button>
-                                    <div id="modalRecordingStatus" class="ms-3 text-muted d-none">
-                                        <span class="status-indicator status-recording"></span>
-                                        Recording in progress...
-                                    </div>
                                 </div>
                             </div>
 
@@ -477,11 +435,9 @@ class ActionDiscoveryPanel {
     private resetModalRecordingUI() {
         const recordBtn = document.getElementById("modalRecordAction");
         const stopBtn = document.getElementById("modalStopRecording");
-        const status = document.getElementById("modalRecordingStatus");
 
         if (recordBtn) recordBtn.classList.remove("d-none");
         if (stopBtn) stopBtn.classList.add("d-none");
-        if (status) status.classList.add("d-none");
 
         recording = false;
     }
@@ -493,11 +449,9 @@ class ActionDiscoveryPanel {
             recording = true;
             const recordBtn = document.getElementById("modalRecordAction");
             const stopBtn = document.getElementById("modalStopRecording");
-            const status = document.getElementById("modalRecordingStatus");
 
             if (recordBtn) recordBtn.classList.add("d-none");
             if (stopBtn) stopBtn.classList.remove("d-none");
-            if (status) status.classList.remove("d-none");
 
             const stepsContainer = document.getElementById(
                 "modalStepsTimelineContainer",
@@ -577,7 +531,7 @@ class ActionDiscoveryPanel {
 
         if (saveButton) {
             saveButton.innerHTML =
-                '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Creating & Saving...';
+                '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...';
             saveButton.disabled = true;
         }
 
@@ -659,205 +613,6 @@ class ActionDiscoveryPanel {
         }
     }
 
-    private cancelActionForm() {
-        // This method is now handled by modal close events
-        // Kept for compatibility but functionality moved to modal handlers
-        const form = document.getElementById("actionForm")!;
-        if (form && !form.classList.contains("d-none")) {
-            form.classList.add("d-none");
-            this.clearFormFields();
-        }
-
-        if (recording) {
-            this.stopRecording();
-        }
-    }
-
-    private clearFormFields() {
-        (document.getElementById("actionName") as HTMLInputElement).value = "";
-        (
-            document.getElementById(
-                "actionStepsDescription",
-            ) as HTMLTextAreaElement
-        ).value = "";
-
-        const stepsContainer = document.getElementById(
-            "stepsTimelineContainer",
-        )!;
-        stepsContainer.classList.add("d-none");
-        stepsContainer.innerHTML = `<label class="form-label fw-semibold">Recorded Steps</label>
-              <div id="stepsTimeline" class="border rounded p-3 bg-white">
-              </div>
-        `;
-
-        this.resetRecordingUI();
-    }
-
-    private resetRecordingUI() {
-        document.getElementById("recordAction")!.classList.remove("d-none");
-        document.getElementById("stopRecording")!.classList.add("d-none");
-        this.updateRecordingStatus(false);
-        recording = false;
-    }
-
-    private async startRecording() {
-        try {
-            await chrome.runtime.sendMessage({ type: "startRecording" });
-
-            recording = true;
-            document.getElementById("recordAction")!.classList.add("d-none");
-            document
-                .getElementById("stopRecording")!
-                .classList.remove("d-none");
-            this.updateRecordingStatus(true);
-
-            const stepsContainer = document.getElementById(
-                "stepsTimelineContainer",
-            )!;
-            stepsContainer.dataset.steps = "";
-            stepsContainer.dataset.screenshot = "";
-            stepsContainer.dataset.html = "";
-        } catch (error) {
-            console.error("Error starting recording:", error);
-            this.showNotification("Failed to start recording", "error");
-        }
-    }
-
-    private async stopRecording() {
-        try {
-            const response = await chrome.runtime.sendMessage({
-                type: "stopRecording",
-            });
-
-            if (response && response.recordedActions) {
-                const stepsContainer = document.getElementById(
-                    "stepsTimelineContainer",
-                )!;
-                stepsContainer.classList.remove("d-none");
-                stepsContainer.dataset.steps = JSON.stringify(
-                    response.recordedActions,
-                );
-                stepsContainer.dataset.screenshot = JSON.stringify(
-                    response.recordedActionScreenshot,
-                );
-                stepsContainer.dataset.html = JSON.stringify(
-                    response.recordedActionHtml,
-                );
-
-                this.renderTimelineSteps(
-                    response.recordedActions,
-                    document.getElementById("stepsTimeline")!,
-                    response.recordedActionScreenshot,
-                    response.recordedActionHtml,
-                );
-            }
-
-            this.resetRecordingUI();
-        } catch (error) {
-            console.error("Error stopping recording:", error);
-            this.showNotification("Failed to stop recording", "error");
-            this.resetRecordingUI();
-        }
-    }
-
-    private async saveUserAction() {
-        const nameField = document.getElementById(
-            "actionName",
-        ) as HTMLInputElement;
-        const actionName = nameField.value.trim();
-        const stepsDescription = (
-            document.getElementById(
-                "actionStepsDescription",
-            ) as HTMLTextAreaElement
-        ).value.trim();
-
-        if (!actionName) {
-            this.showNotification("Please enter an action name", "error");
-            return;
-        }
-
-        const saveButton = document.getElementById(
-            "saveAction",
-        ) as HTMLButtonElement;
-        const originalContent = saveButton.innerHTML;
-
-        saveButton.innerHTML =
-            '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Creating & Saving...';
-        saveButton.disabled = true;
-
-        try {
-            const stepsContainer = document.getElementById(
-                "stepsTimelineContainer",
-            )!;
-            const steps = JSON.parse(stepsContainer.dataset?.steps || "[]");
-            const screenshot = JSON.parse(
-                stepsContainer.dataset?.screenshot || "[]",
-            );
-            let html = JSON.parse(stepsContainer.dataset?.html || '""');
-
-            if (!html || html === "[]") {
-                const htmlFragments = await chrome.runtime.sendMessage({
-                    type: "captureHtmlFragments",
-                });
-                if (htmlFragments && htmlFragments.length > 0) {
-                    html = [htmlFragments[0].content];
-                }
-            }
-
-            // Get existing action names from ActionsStore to avoid duplicates
-            const allActions = await getActionsForUrl(launchUrl!, {
-                includeGlobal: true,
-            });
-            const existingActionNames: string[] = allActions.map(
-                (action) => action.name,
-            );
-
-            // Create and auto-save action in one step
-            const response = await chrome.runtime.sendMessage({
-                type: "getIntentFromRecording",
-                html: html.map((str: string) => ({ content: str, frameId: 0 })),
-                screenshot,
-                actionName,
-                actionDescription: stepsDescription,
-                existingActionNames,
-                steps: JSON.stringify(steps),
-            });
-
-            if (chrome.runtime.lastError) {
-                throw new Error(chrome.runtime.lastError.message);
-            }
-
-            // Action is automatically saved during processing
-            if (response.actionId) {
-                this.showNotification(
-                    "Action created and saved successfully!",
-                    "success",
-                );
-                console.log(
-                    `Created and saved action: ${response.intentJson.actionName} (ID: ${response.actionId})`,
-                );
-            } else {
-                this.showNotification(
-                    "Action created but save status unknown",
-                    "info",
-                );
-                console.warn(
-                    "Action creation completed but no actionId returned",
-                );
-            }
-
-            this.toggleActionForm();
-            await this.updateUserActionsUI();
-            await this.registerTempSchema();
-        } catch (error) {
-            console.error("Error creating action:", error);
-            this.showNotification("Failed to create action", "error");
-        } finally {
-            saveButton.innerHTML = originalContent;
-            saveButton.disabled = false;
-        }
-    }
-
     private async clearRecordedUserAction() {
         if (
             !confirm(
@@ -908,11 +663,14 @@ class ActionDiscoveryPanel {
         ) as HTMLElement;
 
         try {
+            console.log("Getting actions after update. URL: ", launchUrl);
             // Get user-authored actions from the new ActionsStore
             const actions = await getActionsForUrl(launchUrl!, {
                 includeGlobal: false,
                 author: "user",
             });
+
+            console.log("Custom actions: ", actions);
 
             countBadge.textContent = actions.length.toString();
 
@@ -948,6 +706,24 @@ class ActionDiscoveryPanel {
 
         const actionElement = document.createElement("div");
         actionElement.className = "action-item mb-3";
+
+        if (!action.intentSchema) {
+            action.intentSchema = action.definition?.intentSchema;
+        }
+
+        if (!action.actionsJson) {
+            action.actionsJson = action.definition?.actionsJson;
+        }
+
+        let steps = action.definition?.steps || action.steps;
+        if (typeof steps === "string") {
+            steps = JSON.parse(steps);
+        }
+
+        if (!action.steps) {
+            action.steps = steps;
+        }
+
         actionElement.innerHTML = this.createUserActionCard(action, index);
 
         const viewButton = actionElement.querySelector('[data-action="view"]');
@@ -974,9 +750,8 @@ class ActionDiscoveryPanel {
         userActionsContainer.appendChild(actionElement);
 
         // Handle both old and new StoredAction formats
-        const steps = action.context?.recordedSteps || action.steps;
-        const screenshots = action.context?.screenshots || action.screenshot;
-        const htmlFragments = action.context?.htmlFragments || action.html;
+        const screenshots = action.definition?.screenshot || action.screenshot;
+        const htmlFragments = action.definition?.htmlFragments || action.html;
 
         if (steps) {
             const stepsContent = actionElement.querySelector(
@@ -1023,11 +798,10 @@ class ActionDiscoveryPanel {
         container.querySelectorAll(".screenshot-img").forEach((img) => {
             img.addEventListener("click", () => {
                 const src = img.getAttribute("data-src");
-                /*
-    if (src && typeof this.showScreenshotModal === 'function') {
-      this.showScreenshotModal(src);
-    }
-      */
+                if (src) {
+                    // Open image in new tab for viewing
+                    window.open(src, "_blank");
+                }
             });
         });
 
@@ -1150,11 +924,6 @@ class ActionDiscoveryPanel {
                 <div>
                     <span class="fw-semibold">${action.actionName}</span>
                 </div>
-                ${this.createButton(
-                    '<i class="bi bi-eye"></i>',
-                    "btn btn-sm btn-outline-primary",
-                    { title: "View details" },
-                )}
             </div>
         `;
     }

@@ -28,12 +28,6 @@ interface ActionIndexState {
     selectedActions: string[];
     loading: boolean;
     error: string | null;
-
-    // Statistics
-    totalActions: number;
-    totalDomains: number;
-    userActionsCount: number;
-    actionStatistics: any[];
 }
 
 class ActionIndexApp {
@@ -51,10 +45,6 @@ class ActionIndexApp {
         selectedActions: [],
         loading: false,
         error: null,
-        totalActions: 0,
-        totalDomains: 0,
-        userActionsCount: 0,
-        actionStatistics: [],
     };
 
     private searchTimeout: number | null = null;
@@ -152,13 +142,6 @@ class ActionIndexApp {
             .addEventListener("click", () => {
                 this.bulkDeleteActions();
             });
-
-        // Refresh actions
-        document
-            .getElementById("refreshActionsBtn")!
-            .addEventListener("click", () => {
-                this.loadAllActions();
-            });
     }
 
     private handleSearch(query: string) {
@@ -200,12 +183,6 @@ class ActionIndexApp {
             const actions = await getAllActions();
             this.state.allActions = actions;
 
-            // Load analytics data for actions
-            await this.loadActionStatistics();
-
-            // Update statistics
-            this.updateStatistics();
-
             // Populate filter dropdowns
             this.populateFilterDropdowns();
 
@@ -218,64 +195,6 @@ class ActionIndexApp {
         } finally {
             this.state.loading = false;
         }
-    }
-
-    private async loadActionStatistics() {
-        try {
-            const response = await chrome.runtime.sendMessage({
-                type: "getActionStatistics",
-            });
-
-            this.state.actionStatistics = response?.actions || [];
-        } catch (error) {
-            console.warn("Failed to load action statistics:", error);
-            this.state.actionStatistics = [];
-        }
-    }
-
-    private updateStatistics() {
-        this.state.totalActions = this.state.allActions.length;
-        this.state.userActionsCount = this.state.allActions.filter(
-            (action) => action.author === "user",
-        ).length;
-
-        // Count unique domains
-        const domains = new Set();
-        this.state.allActions.forEach((action) => {
-            if (action.scope?.pattern || action.urlPattern) {
-                try {
-                    const url = action.scope?.pattern || action.urlPattern;
-                    const domain = new URL(url).hostname;
-                    domains.add(domain);
-                } catch {
-                    // If URL parsing fails, try to extract domain from pattern
-                    const pattern = action.scope?.pattern || action.urlPattern;
-                    const domainMatch = pattern.match(
-                        /(?:https?:\/\/)?([^\/\*]+)/,
-                    );
-                    if (domainMatch) {
-                        domains.add(domainMatch[1]);
-                    }
-                }
-            }
-        });
-        this.state.totalDomains = domains.size;
-
-        // Update UI
-        this.updateStatsDisplay();
-    }
-
-    private updateStatsDisplay() {
-        const totalActionsEl = document.getElementById("totalActionsCount");
-        const userActionsEl = document.getElementById("userActionsCount");
-        const domainsEl = document.getElementById("domainsCount");
-
-        if (totalActionsEl)
-            totalActionsEl.textContent = this.state.totalActions.toString();
-        if (userActionsEl)
-            userActionsEl.textContent = this.state.userActionsCount.toString();
-        if (domainsEl)
-            domainsEl.textContent = this.state.totalDomains.toString();
     }
 
     private populateFilterDropdowns() {
@@ -494,15 +413,10 @@ class ActionIndexApp {
         count: number;
         lastUsed: Date | null;
     } {
-        // Try to get usage stats from analytics data
-        const stats = this.state.actionStatistics.find(
-            (stat) =>
-                stat.actionId === action.id || stat.actionName === action.name,
-        );
-
+        // Return default stats since we removed statistics tracking
         return {
-            count: stats?.usageCount || 0,
-            lastUsed: stats?.lastUsed ? new Date(stats.lastUsed) : null,
+            count: 0,
+            lastUsed: null,
         };
     }
 
@@ -679,7 +593,6 @@ class ActionIndexApp {
     }
 
     private renderUI() {
-        this.updateStatsDisplay();
         this.renderActions();
         this.updateViewModeUI();
     }
@@ -759,9 +672,6 @@ class ActionIndexApp {
                     </div>
                 </div>
                 <div class="action-controls">
-                    <button class="favorite-btn" data-action="favorite" title="Add to favorites">
-                        <i class="bi bi-star"></i>
-                    </button>
                     <button data-action="view" title="View details">
                         <i class="bi bi-eye"></i>
                     </button>
@@ -829,14 +739,9 @@ class ActionIndexApp {
         });
 
         // Action buttons
-        const favoriteBtn = card.querySelector('[data-action="favorite"]');
         const viewBtn = card.querySelector('[data-action="view"]');
         const editBtn = card.querySelector('[data-action="edit"]');
         const deleteBtn = card.querySelector('[data-action="delete"]');
-
-        favoriteBtn?.addEventListener("click", () => {
-            this.toggleFavorite(action.id || action.name);
-        });
 
         viewBtn?.addEventListener("click", () => {
             this.viewActionDetails(action);
@@ -863,12 +768,6 @@ class ActionIndexApp {
         }
 
         this.updateBulkOperationsUI();
-    }
-
-    private toggleFavorite(actionId: string) {
-        // TODO: Implement favorite functionality
-        console.log("Toggle favorite for action:", actionId);
-        this.showNotification("Favorite functionality coming soon!", "info");
     }
 
     private viewActionDetails(action: any) {
