@@ -32,7 +32,11 @@ import {
 import registerDebug from "debug";
 import ExifReader from "exifreader";
 import { ProfileNames } from "../../../utils/profileNames.js";
-import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
+import {
+    ActionContext,
+    ParsedCommandParams,
+    SessionContext,
+} from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { DispatcherName, isUnknownAction } from "../dispatcherUtils.js";
 import {
@@ -406,5 +410,25 @@ export class RequestCommandHandler implements CommandHandler {
         } finally {
             profiler?.stop();
         }
+    }
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ): Promise<string[]> {
+        const completions: string[] = [];
+        for (const name of names) {
+            if (name === "request") {
+                const requestPrefix = params.args.request;
+                if (requestPrefix === undefined) {
+                    // Don't have any request prefix, don't provide any completion as it will be too many.
+                    continue;
+                }
+                // TODO: use the agent cache to provide completion.
+                console.log(requestPrefix);
+            }
+        }
+
+        return completions;
     }
 }

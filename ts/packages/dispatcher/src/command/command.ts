@@ -170,17 +170,23 @@ export async function resolveCommand(
     return result;
 }
 
+export function normalizeCommand(
+    originalInput: string,
+    context: CommandHandlerContext,
+) {
+    const input = originalInput.trim();
+    if (!input.startsWith("@")) {
+        const requestHandlerAgent = context.session.getConfig().request;
+        return `${requestHandlerAgent} request ${input}`;
+    }
+    return input.substring(1);
+}
+
 async function parseCommand(
     originalInput: string,
     context: CommandHandlerContext,
 ) {
-    let input = originalInput.trim();
-    if (!input.startsWith("@")) {
-        const requestHandlerAgent = context.session.getConfig().request;
-        input = `${requestHandlerAgent} request ${input}`;
-    } else {
-        input = input.substring(1);
-    }
+    const input = normalizeCommand(originalInput, context);
     const result = await resolveCommand(input, context);
     if (result.descriptor !== undefined) {
         context.logger?.logEvent("command", {
