@@ -20,6 +20,7 @@ export type LangSearchResults = {
     searchText: string;
     cmd?: string | undefined;
     searchQueryExpr: kp.querySchema.SearchQuery;
+    compiledQueryExpr?: kp.SearchQueryExpr[] | undefined;
     results: LangSearchResult[];
 };
 
@@ -65,7 +66,6 @@ export async function runSearchBatch(
     }
     return success(results);
 }
-
 async function getSearchResults(
     context: KnowproContext,
     args: string[],
@@ -90,6 +90,7 @@ function collectLangSearchResults(
     return {
         searchText,
         searchQueryExpr: debugContext.searchQuery!,
+        compiledQueryExpr: debugContext.searchQueryExpr,
         results: searchResults.map((cr) => {
             const lr: LangSearchResult = {
                 messageMatches: cr.messageMatches.map((m) => m.messageOrdinal),
