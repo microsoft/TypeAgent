@@ -40,6 +40,7 @@ export class PDFRoutes {
      */
     async initialize(): Promise<void> {
         await this.urlMappingService.initialize();
+        await this.pdfService.initialize();
     }
 
     /**
@@ -257,10 +258,10 @@ export class PDFRoutes {
     /**
      * Get annotations for a document
      */
-    private getAnnotations(req: Request, res: Response): void {
+    private async getAnnotations(req: Request, res: Response): Promise<void> {
         try {
             const documentId = req.params.documentId;
-            const annotations = this.pdfService.getAnnotations(documentId);
+            const annotations = await this.pdfService.getAnnotations(documentId);
             res.json(annotations);
         } catch (error) {
             debug("Error getting annotations:", error);
@@ -271,7 +272,7 @@ export class PDFRoutes {
     /**
      * Add annotation to a document
      */
-    private addAnnotation(req: Request, res: Response): void {
+    private async addAnnotation(req: Request, res: Response): Promise<void> {
         try {
             const documentId = req.params.documentId;
             const annotationData = req.body;
@@ -284,7 +285,7 @@ export class PDFRoutes {
                 updatedAt: new Date().toISOString(),
             };
 
-            const savedAnnotation = this.pdfService.addAnnotation(annotation);
+            const savedAnnotation = await this.pdfService.addAnnotation(annotation);
 
             // Broadcast to other clients
             this.broadcastUpdate(
@@ -303,7 +304,7 @@ export class PDFRoutes {
     /**
      * Update annotation
      */
-    private updateAnnotation(req: Request, res: Response): void {
+    private async updateAnnotation(req: Request, res: Response): Promise<void> {
         try {
             const documentId = req.params.documentId;
             const annotationId = req.params.annotationId;
@@ -316,7 +317,7 @@ export class PDFRoutes {
             };
 
             const updatedAnnotation =
-                this.pdfService.updateAnnotation(annotation);
+                await this.pdfService.updateAnnotation(annotation);
 
             if (!updatedAnnotation) {
                 res.status(404).json({ error: "Annotation not found" });
@@ -340,12 +341,12 @@ export class PDFRoutes {
     /**
      * Delete annotation
      */
-    private deleteAnnotation(req: Request, res: Response): void {
+    private async deleteAnnotation(req: Request, res: Response): Promise<void> {
         try {
             const documentId = req.params.documentId;
             const annotationId = req.params.annotationId;
 
-            const deleted = this.pdfService.deleteAnnotation(
+            const deleted = await this.pdfService.deleteAnnotation(
                 documentId,
                 annotationId,
             );
