@@ -33,6 +33,7 @@ const testInput = inputs.flatMap((f) =>
 const matchConfig = {
     enableWildcard: false,
     rejectReferences: false,
+    partial: false,
 };
 
 const schemaInfoProvider = createSchemaInfoProvider(

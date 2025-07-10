@@ -32,16 +32,23 @@ import {
 import registerDebug from "debug";
 import ExifReader from "exifreader";
 import { ProfileNames } from "../../../utils/profileNames.js";
-import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
+import {
+    ActionContext,
+    ParsedCommandParams,
+    SessionContext,
+} from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { DispatcherName, isUnknownAction } from "../dispatcherUtils.js";
 import {
-    getHistoryContext,
+    getHistoryContextForTranslation,
     getTranslatorForSchema,
     translateRequest,
+    TranslationResult,
 } from "../../../translation/translateRequest.js";
 import { matchRequest } from "../../../translation/matchRequest.js";
+import { addRequestToMemory, addResultToMemory } from "../../memory.js";
 const debugExplain = registerDebug("typeagent:explain");
+const debugCompletion = registerDebug("typeagent:request:completion");
 
 async function canTranslateWithoutContext(
     requestAction: RequestAction,
@@ -337,44 +344,41 @@ export class RequestCommandHandler implements CommandHandler {
                 }
             }
 
-            const history = systemContext.session.getConfig().translation
-                .history.enabled
-                ? getHistoryContext(systemContext)
-                : undefined;
-
-            // prefetch entities here
-            systemContext.chatHistory.addUserEntry(
-                request,
-                systemContext.requestId,
-                cachedAttachments,
-            );
-
             // Make sure we clear any left over streaming context
             systemContext.streamingActionContext?.closeActionContext();
             systemContext.streamingActionContext = undefined;
 
+            // Translate to action
+
+            const history = getHistoryContextForTranslation(systemContext);
+
             const canUseCacheMatch =
                 (attachments === undefined || attachments.length === 0) &&
                 canBeCachedWithHistory(history);
-            const match = canUseCacheMatch
-                ? await matchRequest(request, context, history)
-                : undefined;
 
-            const translationResult =
-                match === undefined // undefined means not found
-                    ? await translateRequest(
-                          request,
-                          context,
-                          history,
-                          cachedAttachments,
-                          0,
-                      )
-                    : match; // result or null
+            addRequestToMemory(systemContext, request, cachedAttachments);
+            let translationResult: TranslationResult;
+            try {
+                const match = canUseCacheMatch
+                    ? await matchRequest(request, context, history)
+                    : undefined;
 
-            if (!translationResult) {
-                // undefined means not found or not translated
-                // null means cancelled because of replacement parse error.
-                return;
+                translationResult =
+                    match ??
+                    (await translateRequest(
+                        request,
+                        context,
+                        history,
+                        cachedAttachments,
+                        0,
+                    ));
+            } catch (e: any) {
+                addResultToMemory(
+                    systemContext,
+                    `Error translating request '${request}': ${e.message}`,
+                    DispatcherName,
+                );
+                throw e;
             }
 
             const { requestAction, fromUser, fromCache, tokenUsage } =
@@ -387,17 +391,7 @@ export class RequestCommandHandler implements CommandHandler {
                 }
             }
 
-            if (
-                requestAction !== null &&
-                requestAction !== undefined &&
-                systemContext.conversationManager
-            ) {
-                systemContext.conversationManager.queueAddMessage({
-                    text: request,
-                    timestamp: new Date(),
-                });
-            }
-
+            // Execute the actions
             await executeActions(
                 requestAction.actions,
                 requestAction.history?.entities,
@@ -414,5 +408,69 @@ export class RequestCommandHandler implements CommandHandler {
         } finally {
             profiler?.stop();
         }
+    }
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ): Promise<string[]> {
+        const completions: string[] = [];
+
+        for (const name of names) {
+            if (name === "request") {
+                const requestPrefix = params.args.request;
+                if (requestPrefix === undefined) {
+                    // Don't have any request prefix, don't provide any completion as it will be too many.
+                    continue;
+                }
+                const systemContext = context.agentContext;
+                const constructionStore =
+                    systemContext.agentCache.constructionStore;
+                if (!constructionStore.isEnabled()) {
+                    continue;
+                }
+
+                debugCompletion(
+                    `Request completion for prefix '${requestPrefix}'`,
+                );
+                const config = systemContext.session.getConfig();
+                const activeSchemaNames =
+                    systemContext.agents.getActiveSchemas();
+                const results = constructionStore.match(requestPrefix, {
+                    partial: true,
+                    wildcard: config.cache.matchWildcard,
+                    rejectReferences: config.explainer.filter.reference.list,
+                    namespaceKeys:
+                        systemContext.agentCache.getNamespaceKeys(
+                            activeSchemaNames,
+                        ),
+                    history: getHistoryContextForTranslation(systemContext),
+                });
+
+                debugCompletion(
+                    `Request completion construction match: ${results.length}`,
+                );
+
+                for (const result of results) {
+                    const { construction, partialPartCount } = result;
+                    if (partialPartCount === undefined) {
+                        throw new Error(
+                            "Internal Error: Partial part count is undefined",
+                        );
+                    }
+
+                    if (partialPartCount === construction.parts.length) {
+                        continue; // No more parts to complete
+                    }
+                    const nextPart = construction.parts[partialPartCount];
+                    const partCompletions = nextPart.getCompletion();
+                    if (partCompletions) {
+                        completions.push(...partCompletions);
+                    }
+                }
+            }
+        }
+
+        return completions;
     }
 }

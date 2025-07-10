@@ -35,6 +35,7 @@ import { TabTitleIndex, createTabTitleIndex } from "./tabTitleIndex.mjs";
 import { ChildProcess, fork } from "child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import fs from "node:fs";
 
 import {
     CommandHandler,
@@ -45,8 +46,9 @@ import {
 
 import registerDebug from "debug";
 
-// import { handleInstacartAction } from "./instacart/actionHandler.mjs";
-import { handleInstacartAction } from "./instacart/planHandler.mjs";
+import { handleInstacartAction } from "./instacart/actionHandler.mjs";
+import * as website from "website-memory";
+import { handleKnowledgeAction } from "./knowledge/knowledgeHandler.mjs";
 
 import {
     loadAllowDynamicAgentDomains,
@@ -59,6 +61,9 @@ import { BrowserActions, OpenWebPage } from "./actionsSchema.mjs";
 import {
     resolveURLWithHistory,
     importWebsiteData,
+    importWebsiteDataFromSession,
+    importHtmlFolder,
+    importHtmlFolderFromSession,
     searchWebsites,
     getWebsiteStats,
 } from "./websiteMemory.mjs";
@@ -68,12 +73,12 @@ import { ShoppingActions } from "./commerce/schema/userActions.mjs";
 import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
 import { BrowserControl } from "../common/browserControl.mjs";
-import * as website from "website-memory";
 import { openai, TextEmbeddingModel } from "aiclient";
 import { urlResolver, bingWithGrounding } from "azure-ai-foundry";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 import { deleteCachedSchema } from "./crossword/cachedSchema.mjs";
 import { getCrosswordCommandHandlerTable } from "./crossword/commandHandler.mjs";
+import { ActionsStore } from "./storage/index.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
 const debugWebSocket = registerDebug("typeagent:browser:ws");
@@ -105,6 +110,7 @@ export type BrowserActionContext = {
     index: website.IndexData | undefined;
     viewProcess?: ChildProcess | undefined;
     localHostPort: number;
+    actionsStore?: ActionsStore | undefined; // Add ActionsStore instance
 };
 
 export interface urlResolutionAction {
@@ -126,11 +132,13 @@ async function initializeBrowserContext(
     if (localHostPort === undefined) {
         throw new Error("Local view port not assigned.");
     }
+
     return {
         clientBrowserControl,
         useExternalBrowserControl: clientBrowserControl === undefined,
         index: undefined,
         localHostPort,
+        actionsStore: undefined, // Will be initialized in updateBrowserContext
     };
 }
 
@@ -149,6 +157,21 @@ async function updateBrowserContext(
             context.agentContext.tabTitleIndex = createTabTitleIndex();
         }
 
+        // Initialize ActionsStore
+        if (!context.agentContext.actionsStore && context.sessionStorage) {
+            try {
+                const { ActionsStore } = await import("./storage/index.mjs");
+                context.agentContext.actionsStore = new ActionsStore(
+                    context.sessionStorage,
+                );
+                await context.agentContext.actionsStore.initialize();
+                debug("ActionsStore initialized successfully");
+            } catch (error) {
+                debug("Failed to initialize ActionsStore:", error);
+                // Continue without ActionsStore - will fall back to legacy storage
+            }
+        }
+
         // Load the website index from disk
         if (!context.agentContext.websiteCollection) {
             const websiteIndexes = await context.indexes("website");
@@ -165,11 +188,57 @@ async function updateBrowserContext(
                 );
             } else {
                 debug(
-                    "Unable to load website index, please create one using the @index command or import website data.",
+                    "No existing website index found, creating new index for data persistence",
                 );
+
                 // Create empty collection as fallback
                 context.agentContext.websiteCollection =
                     new website.WebsiteCollection();
+
+                try {
+                    const sessionDir = await getSessionFolderPath(context);
+
+                    if (sessionDir) {
+                        // Create index path following IndexManager pattern: sessionDir/indexes/website-index
+                        const indexPath = path.join(
+                            sessionDir,
+                            "indexes",
+                            "website-index",
+                        );
+                        fs.mkdirSync(indexPath, { recursive: true });
+
+                        // Create proper IndexData object
+                        context.agentContext.index = {
+                            source: "website",
+                            name: "website-index",
+                            location: "browser-agent",
+                            size: 0,
+                            path: indexPath,
+                            state: "new",
+                            progress: 0,
+                            sizeOnDisk: 0,
+                        };
+
+                        debug(
+                            `Created website index with sessionStorage-based path: ${indexPath}`,
+                        );
+                    } else {
+                        debug(
+                            "Warning: Could not determine session directory path",
+                        );
+                    }
+                } catch (error) {
+                    debug(
+                        `Error during sessionStorage path discovery: ${error}`,
+                    );
+                }
+
+                // If index creation failed, log that data will be in-memory only
+                if (!context.agentContext.index) {
+                    debug(
+                        "Website collection created without persistent index - data will be in-memory only",
+                    );
+                }
             }
         }
 
@@ -180,9 +249,8 @@ async function updateBrowserContext(
         }
 
         if (!context.agentContext.viewProcess) {
-            context.agentContext.viewProcess = await createViewServiceHost(
-                context.agentContext.localHostPort,
-            );
+            context.agentContext.viewProcess =
+                await createViewServiceHost(context);
         }
 
         if (context.agentContext.webSocket?.readyState === WebSocket.OPEN) {
@@ -290,7 +358,9 @@ async function updateBrowserContext(
 
                         case "detectPageActions":
                         case "registerPageDynamicAgent":
-                        case "getIntentFromRecording": {
+                        case "getIntentFromRecording":
+                        case "getActionsForUrl":
+                        case "deleteAction": {
                             const discoveryResult =
                                 await handleSchemaDiscoveryAction(
                                     {
@@ -306,6 +376,79 @@ async function updateBrowserContext(
                                     result: discoveryResult.data,
                                 }),
                             );
+                            break;
+                        }
+
+                        case "extractKnowledgeFromPage":
+                        case "indexWebPageContent":
+                        case "queryWebKnowledge":
+                        case "checkPageIndexStatus":
+                        case "getKnowledgeIndexStats":
+                        case "clearKnowledgeIndex":
+                        case "exportKnowledgeData": {
+                            const knowledgeResult = await handleKnowledgeAction(
+                                data.method,
+                                data.params,
+                                context,
+                            );
+
+                            webSocket.send(
+                                JSON.stringify({
+                                    id: data.id,
+                                    result: knowledgeResult,
+                                }),
+                            );
+                            break;
+                        }
+
+                        case "importWebsiteData":
+                        case "importHtmlFolder":
+                        case "searchWebsites":
+                        case "getWebsiteStats": {
+                            const websiteResult = await handleWebsiteAction(
+                                data.method,
+                                data.params,
+                                context,
+                            );
+
+                            webSocket.send(
+                                JSON.stringify({
+                                    id: data.id,
+                                    result: websiteResult,
+                                }),
+                            );
+                            break;
+                        }
+
+                        case "recordActionUsage":
+                        case "getActionStatistics": {
+                            const actionsResult =
+                                await handleActionsStoreAction(
+                                    data.method,
+                                    data.params,
+                                    context,
+                                );
+
+                            webSocket.send(
+                                JSON.stringify({
+                                    id: data.id,
+                                    result: actionsResult,
+                                }),
+                            );
+                            break;
+                        }
+
+                        case "getViewHostUrl": {
+                            const actionsResult = {
+                                url: `http://localhost:${context.agentContext.localHostPort}`,
+                            };
+                            webSocket.send(
+                                JSON.stringify({
+                                    id: data.id,
+                                    result: actionsResult,
+                                }),
+                            );
+                            break;
                         }
                     }
                 }
@@ -329,6 +472,27 @@ async function updateBrowserContext(
             context.agentContext.viewProcess.kill();
         }
     }
+}
+
+async function getSessionFolderPath(
+    context: SessionContext<BrowserActionContext>,
+) {
+    let sessionDir: string | undefined;
+
+    if (!(await context.sessionStorage?.exists("settings.json"))) {
+        await context.sessionStorage?.write("settings.json", "");
+    }
+
+    const existingFiles = await context.sessionStorage?.list("", {
+        fullPath: true,
+    });
+
+    if (existingFiles && existingFiles.length > 0) {
+        sessionDir = path.dirname(existingFiles[0]);
+        debug(`Discovered session directory from existing file: ${sessionDir}`);
+    }
+
+    return sessionDir;
 }
 
 async function resolveEntity(
@@ -516,6 +680,8 @@ async function executeBrowserAction(
                     return closeWebPage(context);
                 case "importWebsiteData":
                     return importWebsiteData(context, action);
+                case "importHtmlFolder":
+                    return importHtmlFolder(context, action);
                 case "searchWebsites":
                     return searchWebsites(context, action);
                 case "getWebsiteStats":
@@ -721,8 +887,12 @@ async function handleTabIndexActions(
     return undefined;
 }
 
-export async function createViewServiceHost(port: number) {
+export async function createViewServiceHost(
+    context: SessionContext<BrowserActionContext>,
+) {
     let timeoutHandle: NodeJS.Timeout;
+    const port = context.agentContext.localHostPort;
+    const sessionDir = await getSessionFolderPath(context);
 
     const timeoutPromise = new Promise<undefined>((_resolve, reject) => {
         timeoutHandle = setTimeout(
@@ -741,7 +911,16 @@ export async function createViewServiceHost(port: number) {
                     ),
                 );
 
-                const childProcess = fork(expressService, [port.toString()]);
+                const folderPath = path.join(sessionDir!, "files");
+
+                fs.mkdirSync(folderPath, { recursive: true });
+
+                const childProcess = fork(expressService, [port.toString()], {
+                    env: {
+                        ...process.env,
+                        TYPEAGENT_BROWSER_FILES: folderPath,
+                    },
+                });
 
                 childProcess.on("message", function (message) {
                     if (message === "Success") {
@@ -885,6 +1064,167 @@ class CloseWebPageHandler implements CommandHandlerNoParams {
         context.actionIO.setDisplay(result.displayContent);
 
         // REVIEW: command doesn't clear the activity context
+    }
+}
+
+async function handleWebsiteAction(
+    actionName: string,
+    parameters: any,
+    context: SessionContext<BrowserActionContext>,
+): Promise<any> {
+    switch (actionName) {
+        case "importWebsiteData":
+            return await importWebsiteDataFromSession(parameters, context);
+
+        case "importHtmlFolder":
+            return await importHtmlFolderFromSession(parameters, context);
+
+        case "searchWebsites":
+            // Convert to ActionContext format for existing function
+            const searchAction = {
+                schemaName: "browser" as const,
+                actionName: "searchWebsites" as const,
+                parameters: parameters,
+            };
+            const mockActionContext: ActionContext<BrowserActionContext> = {
+                sessionContext: context,
+                actionIO: {
+                    setDisplay: () => {},
+                    appendDisplay: () => {},
+                    clearDisplay: () => {},
+                    setError: () => {},
+                } as any,
+                streamingContext: undefined,
+                activityContext: undefined,
+                queueToggleTransientAgent: async () => {},
+            };
+            const searchResult = await searchWebsites(
+                mockActionContext,
+                searchAction,
+            );
+            return {
+                success: !searchResult.error,
+                result: searchResult.literalText || "Search completed",
+                error: searchResult.error,
+            };
+
+        case "getWebsiteStats":
+            // Convert to ActionContext format for existing function
+            const statsAction = {
+                schemaName: "browser" as const,
+                actionName: "getWebsiteStats" as const,
+                parameters: parameters,
+            };
+            const mockStatsActionContext: ActionContext<BrowserActionContext> =
+                {
+                    sessionContext: context,
+                    actionIO: {
+                        setDisplay: () => {},
+                        appendDisplay: () => {},
+                        clearDisplay: () => {},
+                        setError: () => {},
+                    } as any,
+                    streamingContext: undefined,
+                    activityContext: undefined,
+                    queueToggleTransientAgent: async () => {},
+                };
+            const statsResult = await getWebsiteStats(
+                mockStatsActionContext,
+                statsAction,
+            );
+            return {
+                success: !statsResult.error,
+                result: statsResult.literalText || "Stats retrieved",
+                error: statsResult.error,
+            };
+
+        default:
+            throw new Error(`Unknown website action: ${actionName}`);
+    }
+}
+
+async function handleActionsStoreAction(
+    actionName: string,
+    parameters: any,
+    context: SessionContext<BrowserActionContext>,
+): Promise<any> {
+    const actionsStore = context.agentContext.actionsStore;
+
+    if (!actionsStore) {
+        return {
+            success: false,
+            error: "ActionsStore not available",
+        };
+    }
+
+    try {
+        switch (actionName) {
+            case "recordActionUsage": {
+                const { actionId } = parameters;
+                if (!actionId) {
+                    return {
+                        success: false,
+                        error: "Missing actionId parameter",
+                    };
+                }
+
+                await actionsStore.recordUsage(actionId);
+                console.log(`Recorded usage for action: ${actionId}`);
+
+                return {
+                    success: true,
+                    actionId: actionId,
+                };
+            }
+
+            case "getActionStatistics": {
+                const { url } = parameters;
+                let actions: any[] = [];
+                let totalActions = 0;
+
+                if (url) {
+                    // Get actions for specific URL
+                    actions = await actionsStore.getActionsForUrl(url);
+                    totalActions = actions.length;
+                } else {
+                    // Get all actions
+                    actions = await actionsStore.getAllActions();
+                    totalActions = actions.length;
+                }
+
+                console.log(
+                    `Retrieved statistics: ${totalActions} total actions`,
+                );
+
+                return {
+                    success: true,
+                    totalActions: totalActions,
+                    actions: actions.map((action) => ({
+                        id: action.id,
+                        name: action.name,
+                        author: action.author,
+                        category: action.category,
+                        usageCount: action.metadata.usageCount,
+                        lastUsed: action.metadata.lastUsed,
+                    })),
+                };
+            }
+
+            default:
+                return {
+                    success: false,
+                    error: `Unknown ActionsStore action: ${actionName}`,
+                };
+        }
+    } catch (error) {
+        console.error(
+            `Failed to execute ActionsStore action ${actionName}:`,
+            error,
+        );
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
     }
 }
 

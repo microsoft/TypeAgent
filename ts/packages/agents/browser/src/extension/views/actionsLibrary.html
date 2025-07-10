@@ -1,0 +1,749 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Action Library - TypeAgent</title>
+    <link rel="stylesheet" href="../vendor/bootstrap/bootstrap.min.css" />
+    <link rel="stylesheet" href="../vendor/prism/prism.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css"
+    />
+    <style>
+      :root {
+        --primary-color: #2563eb;
+        --secondary-color: #64748b;
+        --success-color: #059669;
+        --danger-color: #dc2626;
+        --warning-color: #d97706;
+        --info-color: #0891b2;
+        --light-color: #f8fafc;
+        --dark-color: #1e293b;
+        --border-color: #e2e8f0;
+        --sidebar-width: 280px;
+        --topnav-height: 64px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        font-size: 14px;
+        line-height: 1.5;
+        color: var(--dark-color);
+        background-color: var(--light-color);
+        margin: 0;
+        padding: 0;
+        overflow-x: hidden;
+      }
+
+      /* Application Shell Layout */
+      .app-shell {
+        display: grid;
+        grid-template-areas:
+          "topnav topnav"
+          "sidebar main";
+        grid-template-columns: var(--sidebar-width) 1fr;
+        grid-template-rows: var(--topnav-height) 1fr;
+        min-height: 100vh;
+      }
+
+      /* Top Navigation */
+      .top-navigation {
+        grid-area: topnav;
+        background: white;
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        align-items: center;
+        padding: 0 2rem;
+        z-index: 1000;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      }
+
+      .top-navigation .brand {
+        font-weight: 600;
+        font-size: 1.125rem;
+        color: var(--primary-color);
+        margin-right: 2rem;
+      }
+
+      .top-navigation .search-container {
+        flex: 1;
+        max-width: 500px;
+        margin-right: 2rem;
+      }
+
+      .top-navigation .search-input {
+        width: 100%;
+        padding: 0.5rem 1rem;
+        border: 1px solid var(--border-color);
+        border-radius: 0.5rem;
+        font-size: 0.875rem;
+        background: var(--light-color);
+        transition: all 0.2s ease;
+      }
+
+      .top-navigation .search-input:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        background: white;
+      }
+
+      .top-navigation .controls {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+      }
+
+      .view-mode-toggle {
+        display: flex;
+        background: var(--light-color);
+        border-radius: 0.5rem;
+        padding: 0.25rem;
+        border: 1px solid var(--border-color);
+      }
+
+      .view-mode-toggle button {
+        padding: 0.5rem 0.75rem;
+        border: none;
+        background: transparent;
+        color: var(--secondary-color);
+        border-radius: 0.25rem;
+        cursor: pointer;
+        font-size: 0.875rem;
+        transition: all 0.2s ease;
+      }
+
+      .view-mode-toggle button.active {
+        background: white;
+        color: var(--primary-color);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+      }
+
+      .view-mode-toggle button:hover:not(.active) {
+        background: rgba(37, 99, 235, 0.1);
+        color: var(--primary-color);
+      }
+
+      /* Sidebar */
+      .sidebar {
+        grid-area: sidebar;
+        background: white;
+        border-right: 1px solid var(--border-color);
+        padding: 1.5rem;
+        overflow-y: auto;
+        height: calc(100vh - var(--topnav-height));
+      }
+
+      .sidebar h6 {
+        font-weight: 600;
+        color: var(--dark-color);
+        margin-bottom: 1rem;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.05em;
+      }
+
+      /* Filter Section */
+      .filter-section {
+        margin-bottom: 2rem;
+      }
+
+      .filter-group {
+        margin-bottom: 1rem;
+      }
+
+      .filter-group label {
+        display: block;
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--secondary-color);
+        margin-bottom: 0.5rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .filter-select {
+        width: 100%;
+        padding: 0.5rem;
+        border: 1px solid var(--border-color);
+        border-radius: 0.375rem;
+        font-size: 0.875rem;
+        background: white;
+        color: var(--dark-color);
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .filter-select:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+      }
+
+      .clear-filters-btn {
+        width: 100%;
+        padding: 0.5rem;
+        border: 1px solid var(--border-color);
+        border-radius: 0.375rem;
+        background: white;
+        color: var(--secondary-color);
+        font-size: 0.875rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .clear-filters-btn:hover {
+        background: var(--light-color);
+        border-color: var(--secondary-color);
+      }
+
+      /* Main Content Area */
+      .main-content {
+        grid-area: main;
+        padding: 2rem;
+        overflow-y: auto;
+        height: calc(100vh - var(--topnav-height));
+        background: var(--light-color);
+      }
+
+      .content-header {
+        display: flex;
+        justify-content: between;
+        align-items: center;
+        margin-bottom: 2rem;
+      }
+
+      .content-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: var(--dark-color);
+        margin: 0;
+      }
+
+      .content-subtitle {
+        color: var(--secondary-color);
+        font-size: 0.875rem;
+        margin-top: 0.25rem;
+      }
+
+      /* Action Grid Layout */
+      .actions-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+      }
+
+      /* Action Cards */
+      .action-card {
+        background: white;
+        border: 1px solid var(--border-color);
+        border-radius: 0.75rem;
+        padding: 1.5rem;
+        transition: all 0.2s ease;
+        position: relative;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      }
+
+      .action-card:hover {
+        border-color: var(--primary-color);
+        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
+        transform: translateY(-2px);
+      }
+
+      .action-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 1rem;
+      }
+
+      .action-title {
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--dark-color);
+        margin: 0 0 0.5rem 0;
+        line-height: 1.4;
+      }
+
+      .action-description {
+        color: var(--secondary-color);
+        font-size: 0.875rem;
+        line-height: 1.5;
+        margin: 0 0 1rem 0;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
+      .action-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: center;
+        margin-bottom: 1rem;
+      }
+
+      .action-controls {
+        display: flex;
+        gap: 0.5rem;
+        align-items: flex-start;
+      }
+
+      .action-controls button {
+        padding: 0.5rem;
+        border: 1px solid var(--border-color);
+        border-radius: 0.375rem;
+        background: white;
+        color: var(--secondary-color);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-size: 0.875rem;
+      }
+
+      .action-controls button:hover {
+        border-color: var(--primary-color);
+        color: var(--primary-color);
+        background: rgba(37, 99, 235, 0.05);
+      }
+
+      /* Badges */
+      .badge {
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+        line-height: 1;
+      }
+
+      .badge-author {
+        background: #dbeafe;
+        color: #1e40af;
+      }
+
+      .badge-author.user {
+        background: #fed7aa;
+        color: #c2410c;
+      }
+
+      .badge-domain {
+        background: #f0f9ff;
+        color: #0369a1;
+      }
+
+      .badge-category {
+        background: #f0fdf4;
+        color: #166534;
+      }
+
+      .badge-usage {
+        background: #fef3c7;
+        color: #92400e;
+      }
+
+      /* Usage Stats */
+      .usage-stats {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.75rem;
+        background: var(--light-color);
+        border-radius: 0.5rem;
+        margin-top: 1rem;
+        font-size: 0.875rem;
+      }
+
+      .usage-stat {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        color: var(--secondary-color);
+      }
+
+      .usage-stat i {
+        font-size: 0.75rem;
+      }
+
+      /* Bulk Operations */
+      .bulk-operations {
+        background: white;
+        border: 1px solid var(--border-color);
+        border-radius: 0.75rem;
+        padding: 1rem;
+        margin-bottom: 2rem;
+        display: none;
+      }
+
+      .bulk-operations.active {
+        display: block;
+        border-color: var(--primary-color);
+        background: rgba(37, 99, 235, 0.05);
+      }
+
+      .bulk-operations-content {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+      }
+
+      .bulk-operations button {
+        padding: 0.5rem 1rem;
+        border: 1px solid var(--border-color);
+        border-radius: 0.375rem;
+        background: white;
+        color: var(--dark-color);
+        cursor: pointer;
+        font-size: 0.875rem;
+        transition: all 0.2s ease;
+      }
+
+      .bulk-operations button:hover {
+        border-color: var(--primary-color);
+        color: var(--primary-color);
+      }
+
+      .bulk-operations .btn-danger {
+        border-color: var(--danger-color);
+        color: var(--danger-color);
+      }
+
+      .bulk-operations .btn-danger:hover {
+        background: var(--danger-color);
+        color: white;
+      }
+
+      /* Loading & Empty States */
+      .loading-state,
+      .empty-state,
+      .error-state {
+        text-align: center;
+        padding: 4rem 2rem;
+        color: var(--secondary-color);
+      }
+
+      .loading-state i,
+      .empty-state i,
+      .error-state i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        display: block;
+        color: var(--border-color);
+      }
+
+      .loading-state h6,
+      .empty-state h6,
+      .error-state h6 {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        color: var(--dark-color);
+      }
+
+      .loading-state .spinner {
+        width: 3rem;
+        height: 3rem;
+        border: 3px solid var(--border-color);
+        border-top: 3px solid var(--primary-color);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 1rem;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* Responsive Design */
+      @media (max-width: 1200px) {
+        .actions-grid {
+          grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+          gap: 1rem;
+        }
+      }
+
+      @media (max-width: 992px) {
+        .app-shell {
+          grid-template-areas:
+            "topnav"
+            "main";
+          grid-template-columns: 1fr;
+          grid-template-rows: var(--topnav-height) 1fr;
+        }
+
+        .sidebar {
+          display: none;
+        }
+
+        .main-content {
+          padding: 1rem;
+        }
+
+        .top-navigation {
+          padding: 0 1rem;
+        }
+
+        .top-navigation .search-container {
+          max-width: 300px;
+          margin-right: 1rem;
+        }
+
+        .actions-grid {
+          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        }
+      }
+
+      @media (max-width: 768px) {
+        .top-navigation .brand {
+          display: none;
+        }
+
+        .top-navigation .search-container {
+          max-width: 200px;
+        }
+
+        .actions-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .action-card {
+          padding: 1rem;
+        }
+
+        .action-card-header {
+          flex-direction: column;
+          gap: 1rem;
+        }
+
+        .action-controls {
+          align-self: flex-start;
+        }
+      }
+
+      /* Utility Classes */
+      .text-primary {
+        color: var(--primary-color) !important;
+      }
+      .text-secondary {
+        color: var(--secondary-color) !important;
+      }
+      .text-success {
+        color: var(--success-color) !important;
+      }
+      .text-danger {
+        color: var(--danger-color) !important;
+      }
+      .text-warning {
+        color: var(--warning-color) !important;
+      }
+      .text-info {
+        color: var(--info-color) !important;
+      }
+
+      .d-none {
+        display: none !important;
+      }
+      .d-block {
+        display: block !important;
+      }
+      .d-flex {
+        display: flex !important;
+      }
+      .d-grid {
+        display: grid !important;
+      }
+
+      .fade-in {
+        animation: fadeIn 0.3s ease-out;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-shell">
+      <!-- Top Navigation -->
+      <nav class="top-navigation">
+        <div class="brand">
+          <i class="bi bi-collection-fill"></i>
+          Action Library
+        </div>
+
+        <div class="search-container">
+          <input
+            type="text"
+            id="globalSearchInput"
+            class="search-input"
+            placeholder="Search actions by name, description, or website..."
+            autocomplete="off"
+          />
+        </div>
+
+        <div class="controls">
+          <div class="view-mode-toggle">
+            <button id="viewModeGrid" class="active" title="Grid view">
+              <i class="bi bi-grid-3x3-gap"></i>
+            </button>
+            <button id="viewModeList" title="List view">
+              <i class="bi bi-list"></i>
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <!-- Filters -->
+        <div class="filter-section">
+          <h6>Filters</h6>
+
+          <div class="filter-group">
+            <label for="authorFilter">Author</label>
+            <select id="authorFilter" class="filter-select">
+              <option value="all">All Authors</option>
+              <option value="user">User Created</option>
+              <option value="discovered">Auto Discovered</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label for="domainFilter">Website</label>
+            <select id="domainFilter" class="filter-select">
+              <option value="all">All Websites</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label for="categoryFilter">Category</label>
+            <select id="categoryFilter" class="filter-select">
+              <option value="all">All Categories</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label for="usageFilter">Usage</label>
+            <select id="usageFilter" class="filter-select">
+              <option value="all">All Actions</option>
+              <option value="frequent">Frequently Used</option>
+              <option value="occasional">Occasionally Used</option>
+              <option value="rarely">Rarely Used</option>
+              <option value="never">Never Used</option>
+            </select>
+          </div>
+
+          <button id="clearFiltersBtn" class="clear-filters-btn">
+            <i class="bi bi-funnel"></i> Clear All Filters
+          </button>
+        </div>
+      </aside>
+
+      <!-- Main Content -->
+      <main class="main-content">
+        <!-- Content Header -->
+        <div class="content-header">
+          <div>
+            <p class="content-subtitle">
+              <span id="filteredActionsCount">0</span> actions available
+            </p>
+          </div>
+        </div>
+
+        <!-- Bulk Operations -->
+        <div id="bulkOperationsContainer" class="bulk-operations">
+          <div class="bulk-operations-content">
+            <div class="bulk-info">
+              <strong id="selectedActionsCount">0</strong> action(s) selected
+            </div>
+            <div class="bulk-controls">
+              <button id="selectAllBtn" title="Select all visible actions">
+                <i class="bi bi-check-all"></i> Select All
+              </button>
+              <button id="deselectAllBtn" title="Deselect all actions">
+                <i class="bi bi-square"></i> Deselect All
+              </button>
+              <button
+                id="bulkDeleteBtn"
+                class="btn-danger"
+                title="Delete selected actions"
+              >
+                <i class="bi bi-trash"></i> Delete Selected
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Actions Container -->
+        <div id="actionsContainer">
+          <!-- Loading state -->
+          <div class="loading-state">
+            <div class="spinner"></div>
+            <h6>Loading Actions</h6>
+            <p>Please wait while we load your action library...</p>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Action Details Modal -->
+    <div class="modal fade" id="actionDetailsModal" tabindex="-1">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="actionDetailsModalTitle">
+              Action Details
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+            ></button>
+          </div>
+          <div class="modal-body" id="actionDetailsModalBody">
+            <!-- Action details will be populated here -->
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="actionsLibrary.js"></script>
+    <script src="../vendor/bootstrap/bootstrap.bundle.min.js"></script>
+    <script src="../vendor/prism/prism.js"></script>
+    <script src="../vendor/prism/prism-typescript.js"></script>
+    <script src="../vendor/prism/prism-json.js"></script>
+  </body>
+</html>

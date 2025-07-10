@@ -52,6 +52,7 @@
     "azure-ai-foundry": "workspace:*",
     "chalk": "^5.4.1",
     "common-utils": "workspace:*",
+    "conversation-memory": "workspace:*",
     "debug": "^4.4.0",
     "exifreader": "^4.30.1",
     "file-size": "^1.0.0",

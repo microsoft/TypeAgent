@@ -946,6 +946,9 @@ importers:
       chalk:
         specifier: ^5.4.1
         version: 5.4.1
+      cheerio:
+        specifier: ^1.1.0
+        version: 1.1.0
       common-utils:
         specifier: workspace:*
         version: link:../../commonUtils
@@ -2353,8 +2356,8 @@ importers:
         specifier: ^1.8.0
         version: 1.11.3
       '@modelcontextprotocol/server-filesystem':
-        specifier: 2025.1.14
-        version: 2025.1.14(zod@3.24.4)
+        specifier: 2025.7.1
+        version: 2025.7.1(zod@3.24.4)
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
@@ -2536,6 +2539,9 @@ importers:
       common-utils:
         specifier: workspace:*
         version: link:../commonUtils
+      conversation-memory:
+        specifier: workspace:*
+        version: link:../memory/conversation
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
@@ -3015,6 +3021,9 @@ importers:
       common-utils:
         specifier: workspace:*
         version: link:../../commonUtils
+      conversation-memory:
+        specifier: workspace:*
+        version: link:../conversation
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
@@ -4806,9 +4815,6 @@ packages:
       '@milkdown/prose': ^7.2.0
       '@milkdown/transformer': ^7.2.0
 
-  '@modelcontextprotocol/sdk@0.5.0':
-    resolution: {integrity: sha512-RXgulUX6ewvxjAG0kOpLMEdXXWkzWgaoCGaA2CwNW7cQCIphjpJhjpHSiaPdVCnisjRF/0Cm9KWHUuIoeiAblQ==}
-
   '@modelcontextprotocol/sdk@1.11.3':
     resolution: {integrity: sha512-rmOWVRUbUJD7iSvJugjUbFZshTAuJ48MXoZ80Osx1GM0K/H1w7rSEvmw8m6vdWxNASgtaHIhAgre4H/E9GJiYQ==}
     engines: {node: '>=18'}
@@ -4817,8 +4823,12 @@ packages:
     resolution: {integrity: sha512-KG1CZhZfWg+u8pxeM/mByJDScJSrjjxLc8fwQqbsS8xCjBmQfMNEBTotYdNanKekepnfRI85GtgQlctLFpcYPw==}
     engines: {node: '>=18'}
 
-  '@modelcontextprotocol/server-filesystem@2025.1.14':
-    resolution: {integrity: sha512-WjJYa2OAAf0fpslyxjzJK3JUeEk10IaDukLOc4NSoJtNptvJONd4NMC6U3Xr04VOb++2iNfM7Vp6Ac7o94Pv6g==}
+  '@modelcontextprotocol/sdk@1.13.3':
+    resolution: {integrity: sha512-bGwA78F/U5G2jrnsdRkPY3IwIwZeWUEfb5o764b79lb0rJmMT76TLwKhdNZOWakOQtedYefwIR4emisEMvInKA==}
+    engines: {node: '>=18'}
+
+  '@modelcontextprotocol/server-filesystem@2025.7.1':
+    resolution: {integrity: sha512-mGXxYX8l4EWQPgh/1pLZI2baKifPy4+WUx1jJ572TsCbe/Bs7S8f7z0Dp9aRlpcLEMr/Qp+Rp1m3NXNsgdKUmg==}
     hasBin: true
 
   '@mongodb-js/saslprep@1.2.2':
@@ -14816,12 +14826,6 @@ snapshots:
       nanoid: 5.1.5
       tslib: 2.8.1
 
-  '@modelcontextprotocol/sdk@0.5.0':
-    dependencies:
-      content-type: 1.0.5
-      raw-body: 3.0.0
-      zod: 3.24.4
-
   '@modelcontextprotocol/sdk@1.11.3':
     dependencies:
       content-type: 1.0.5
@@ -14853,14 +14857,32 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@modelcontextprotocol/server-filesystem@2025.1.14(zod@3.24.4)':
+  '@modelcontextprotocol/sdk@1.13.3':
     dependencies:
-      '@modelcontextprotocol/sdk': 0.5.0
+      ajv: 6.12.6
+      content-type: 1.0.5
+      cors: 2.8.5
+      cross-spawn: 7.0.6
+      eventsource: 3.0.6
+      eventsource-parser: 3.0.1
+      express: 5.1.0
+      express-rate-limit: 7.5.0(express@5.1.0)
+      pkce-challenge: 5.0.0
+      raw-body: 3.0.0
+      zod: 3.24.4
+      zod-to-json-schema: 3.24.5(zod@3.24.4)
+    transitivePeerDependencies:
+      - supports-color
+
+  '@modelcontextprotocol/server-filesystem@2025.7.1(zod@3.24.4)':
+    dependencies:
+      '@modelcontextprotocol/sdk': 1.13.3
       diff: 5.2.0
       glob: 10.4.5
       minimatch: 10.0.1
       zod-to-json-schema: 3.24.5(zod@3.24.4)
     transitivePeerDependencies:
+      - supports-color
       - zod
 
   '@mongodb-js/saslprep@1.2.2':
@@ -19263,7 +19285,7 @@ snapshots:
     dependencies:
       domelementtype: 2.3.0
       domhandler: 5.0.3
-      domutils: 3.1.0
+      domutils: 3.2.2
       entities: 4.5.0
 
   http-cache-semantics@4.1.1: {}

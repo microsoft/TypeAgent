@@ -30,7 +30,9 @@ export type MatchedValues = {
     conflictValues: [string, ParamValueType[]][] | undefined;
     matchedCount: number;
     wildcardCharCount: number;
+    partialPartCount?: number; // Only used for partial match
 };
+
 export function matchedValues(
     parts: ConstructionPart[],
     matched: string[],
@@ -38,7 +40,11 @@ export function matchedValues(
     matchValueTranslator: MatchedValueTranslator,
 ): MatchedValues | undefined {
     const matchedParts = parts.filter((e) => e.capture);
-    if (matchedParts.length !== matched.length) {
+    if (
+        config.partial
+            ? matched.length > matchedParts.length
+            : matchedParts.length !== matched.length
+    ) {
         throw new Error(
             "Internal error: number of matched parts doesn't equal match groups",
         );
@@ -55,7 +61,7 @@ export function matchedValues(
         string,
         { transformInfo: TransformInfo; text: string[] }
     >();
-    for (let i = 0; i < matchedParts.length; i++) {
+    for (let i = 0; i < matched.length; i++) {
         const part = matchedParts[i];
         const match = matched[i];
         if (isMatchPart(part)) {
@@ -136,6 +142,7 @@ export function matchedValues(
 export function createActionProps(
     values: [string, ParamValueType][],
     emptyArrayParameters?: string[],
+    partial: boolean = false,
     initial?: JSONAction | JSONAction[],
 ) {
     const result: any = { actionProps: structuredClone(initial) };
@@ -150,17 +157,33 @@ export function createActionProps(
     }
 
     const actionProps = result.actionProps;
+
+    if (actionProps === undefined) {
+        if (partial) {
+            return { fullActionName: "unknown.unknown" };
+        }
+        throw new Error(
+            "Internal error: No values provided for action properties",
+        );
+    }
     // validate fullActionName
     if (Array.isArray(actionProps)) {
         actionProps.forEach((actionProp) => {
             if (actionProp.fullActionName === undefined) {
-                throw new Error("Internal error: fullActionName missing");
+                if (partial) {
+                    actionProp.fullActionName = "unknown.unknown";
+                } else {
+                    throw new Error("Internal error: fullActionName missing");
+                }
             }
         });
-    } else {
-        if (actionProps.fullActionName === undefined) {
+    } else if (actionProps.fullActionName === undefined) {
+        if (partial) {
+            actionProps.fullActionName = "unknown.unknown";
+        } else {
             throw new Error("Internal error: fullActionName missing");
         }
     }
+
     return actionProps;
 }

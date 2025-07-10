@@ -1,16 +1,37 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ActionContext, TypeAgentAction } from "@typeagent/agent-sdk";
+import {
+    ActionContext,
+    SessionContext,
+    TypeAgentAction,
+} from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import {
     ImportWebsiteData,
+    ImportHtmlFolder,
     SearchWebsites,
     GetWebsiteStats,
 } from "./actionsSchema.mjs";
 import * as website from "website-memory";
 import * as kp from "knowpro";
+import { openai as ai } from "aiclient";
 import registerDebug from "debug";
+import * as path from "path";
+import {
+    processHtmlBatch,
+    ProcessingOptions,
+    WebsiteData,
+} from "./htmlProcessor.mjs";
+import {
+    enumerateHtmlFiles,
+    readHtmlFile,
+    validateHtmlFolder,
+    getFileMetadata,
+    createFileBatches,
+    FolderOptions,
+    DEFAULT_FOLDER_OPTIONS,
+} from "./folderUtils.mjs";
 
 export interface BrowserActionContext {
     browserControl?: any | undefined;
@@ -97,7 +118,8 @@ export async function resolveURLWithHistory(
                                         messageOrdinal,
                                     );
                                 if (website && website.metadata) {
-                                    const metadata = website.metadata;
+                                    const metadata =
+                                        website.metadata as website.WebsiteDocPartMeta;
                                     let totalScore = refMatch.score;
 
                                     // Apply additional scoring based on special patterns and recency
@@ -243,7 +265,7 @@ export function calculateWebsiteScore(
 }
 
 /**
- * Find websites matching search criteria using knowpro search utilities
+ * Find websites matching search criteria using enhanced search capabilities
  */
 export async function findRequestedWebsites(
     searchFilters: string[],
@@ -259,6 +281,68 @@ export async function findRequestedWebsites(
     }
 
     try {
+        // Try enhanced search capabilities first
+        if (searchFilters.length === 1 && !exactMatch) {
+            const query = searchFilters[0];
+
+            // Try hybrid search for single term queries
+            try {
+                const hybridResults =
+                    await context.websiteCollection.hybridSearch(query);
+                if (hybridResults.length > 0) {
+                    debug(
+                        `Found ${hybridResults.length} results using hybrid search`,
+                    );
+                    return hybridResults
+                        .filter((result) => result.relevanceScore >= minScore)
+                        .map((result) => result.website.toWebsite())
+                        .slice(0, 20);
+                }
+            } catch (hybridError) {
+                debug(`Hybrid search failed, falling back: ${hybridError}`);
+            }
+        }
+
+        // Try entity search for proper nouns and specific terms
+        if (searchFilters.some((filter) => /^[A-Z]/.test(filter))) {
+            try {
+                const entityResults =
+                    await context.websiteCollection.searchByEntities(
+                        searchFilters,
+                    );
+                if (entityResults.length > 0) {
+                    debug(
+                        `Found ${entityResults.length} results using entity search`,
+                    );
+                    return entityResults
+                        .map((result) => result.toWebsite())
+                        .slice(0, 20);
+                }
+            } catch (entityError) {
+                debug(`Entity search failed, falling back: ${entityError}`);
+            }
+        }
+
+        // Try topic search for conceptual terms
+        try {
+            const topicResults =
+                await context.websiteCollection.searchByTopics(searchFilters);
+            if (topicResults.length > 0) {
+                debug(
+                    `Found ${topicResults.length} results using topic search`,
+                );
+                return topicResults
+                    .map((result) => result.toWebsite())
+                    .slice(0, 20);
+            }
+        } catch (topicError) {
+            debug(`Topic search failed, falling back: ${topicError}`);
+        }
+
+        // Fallback to original semantic search for backward compatibility
+        debug(
+            `Falling back to semantic search for filters: ${searchFilters.join(", ")}`,
+        );
         const matches = await kp.searchConversationKnowledge(
             context.websiteCollection,
             // search group
@@ -312,7 +396,7 @@ export async function findRequestedWebsites(
                                 const websiteData =
                                     context.websiteCollection!.messages.get(
                                         messageOrdinal,
-                                    );
+                                    ) as any;
                                 if (websiteData) {
                                     let totalScore = refMatch.score;
 
@@ -395,14 +479,29 @@ function searchFiltersToSearchTerms(filters: string[]): any[] {
 /**
  * Import website data from browser history or bookmarks
  */
-export async function importWebsiteData(
-    context: ActionContext<BrowserActionContext>,
-    action: TypeAgentAction<ImportWebsiteData>,
+export async function importWebsiteDataFromSession(
+    parameters: ImportWebsiteData["parameters"],
+    context: SessionContext<BrowserActionContext>,
+    displayProgress?: (message: string) => void,
 ) {
     try {
-        context.actionIO.setDisplay("Importing website data...");
+        if (displayProgress) {
+            displayProgress("Importing website data...");
+        }
 
-        const { source, type, limit, days, folder } = action.parameters;
+        const {
+            source,
+            type,
+            limit,
+            days,
+            folder,
+            extractContent,
+            enableIntelligentAnalysis,
+            enableActionDetection,
+            extractionMode,
+            maxConcurrent,
+            contentTimeout,
+        } = parameters;
         const defaultPaths = website.getDefaultBrowserPaths();
 
         let filePath: string;
@@ -418,16 +517,18 @@ export async function importWebsiteData(
                     : defaultPaths.edge.history;
         }
 
+        // Enhanced progress callback that uses both debug logging and display callback
         const progressCallback = (
             current: number,
             total: number,
             item: string,
         ) => {
             if (current % 100 === 0) {
-                // Update every 100 items
-                context.actionIO.setDisplay(
-                    `Importing... ${current}/${total}: ${item.substring(0, 50)}...`,
-                );
+                const message = `Importing... ${current}/${total}: ${item.substring(0, 50)}...`;
+                debug(message);
+                if (displayProgress) {
+                    displayProgress(message);
+                }
             }
         };
 
@@ -437,33 +538,82 @@ export async function importWebsiteData(
         if (days !== undefined) importOptions.days = days;
         if (folder !== undefined) importOptions.folder = folder;
 
-        const websites = await website.importWebsites(
-            source,
-            type,
-            filePath,
-            importOptions,
-            progressCallback,
-        );
+        // Add enhancement options
+        if (extractContent !== undefined)
+            importOptions.extractContent = extractContent;
+        if (enableIntelligentAnalysis !== undefined)
+            importOptions.enableIntelligentAnalysis = enableIntelligentAnalysis;
+        if (enableActionDetection !== undefined)
+            importOptions.enableActionDetection = enableActionDetection;
+        if (extractionMode !== undefined)
+            importOptions.extractionMode = extractionMode;
+        if (maxConcurrent !== undefined)
+            importOptions.maxConcurrent = maxConcurrent;
+        if (contentTimeout !== undefined)
+            importOptions.contentTimeout = contentTimeout;
 
-        if (!context.sessionContext.agentContext.websiteCollection) {
-            context.sessionContext.agentContext.websiteCollection =
+        // Create chat model for intelligent analysis if enabled
+        if (enableIntelligentAnalysis) {
+            try {
+                const apiSettings = ai.azureApiSettingsFromEnv(
+                    ai.ModelType.Chat,
+                    undefined,
+                    undefined, // Use default model
+                );
+                importOptions.model = ai.createChatModel(
+                    apiSettings,
+                    undefined,
+                    undefined,
+                    ["website-analysis"],
+                );
+                debug("Created chat model for intelligent analysis");
+            } catch (error) {
+                debug(
+                    "Failed to create chat model for intelligent analysis:",
+                    error,
+                );
+                // Continue without intelligent analysis if model creation fails
+            }
+        }
+
+        let websites;
+        if (extractContent) {
+            // Use enhanced import with content extraction
+            websites = await website.importWebsitesWithContent(
+                source,
+                type,
+                filePath,
+                importOptions,
+                progressCallback,
+            );
+        } else {
+            // Use basic import for fast metadata-only import
+            websites = await website.importWebsites(
+                source,
+                type,
+                filePath,
+                importOptions,
+                progressCallback,
+            );
+        }
+
+        if (!context.agentContext.websiteCollection) {
+            context.agentContext.websiteCollection =
                 new website.WebsiteCollection();
         }
 
-        context.sessionContext.agentContext.websiteCollection.addWebsites(
-            websites,
-        );
-        await context.sessionContext.agentContext.websiteCollection.buildIndex();
+        context.agentContext.websiteCollection.addWebsites(websites);
+        await context.agentContext.websiteCollection.buildIndex();
 
         // Persist the website collection to disk
         try {
-            if (context.sessionContext.agentContext.index?.path) {
-                await context.sessionContext.agentContext.websiteCollection.writeToFile(
-                    context.sessionContext.agentContext.index.path,
+            if (context.agentContext.index?.path) {
+                await context.agentContext.websiteCollection.writeToFile(
+                    context.agentContext.index.path,
                     "index",
                 );
                 debug(
-                    `Saved website collection to ${context.sessionContext.agentContext.index.path}`,
+                    `Saved website collection to ${context.agentContext.index.path}`,
                 );
             } else {
                 debug("No index path available, website data not persisted");
@@ -472,16 +622,325 @@ export async function importWebsiteData(
             debug(`Failed to save website collection: ${error}`);
         }
 
-        const result = createActionResult(
-            `Successfully imported ${websites.length} ${type} from ${source}.`,
+        return {
+            success: true,
+            message: `Successfully imported ${websites.length} ${type} from ${source}.`,
+            itemCount: websites.length,
+        };
+    } catch (error: any) {
+        return {
+            success: false,
+            error: error.message,
+            message: `Failed to import website data: ${error.message}`,
+        };
+    }
+}
+
+/**
+ * Import website data from browser history or bookmarks (ActionContext version for regular actions)
+ */
+export async function importWebsiteData(
+    context: ActionContext<BrowserActionContext>,
+    action: TypeAgentAction<ImportWebsiteData>,
+) {
+    try {
+        context.actionIO.setDisplay("Importing website data...");
+
+        // Use the session-based function and pass actionIO.setDisplay for progress reporting
+        const result = await importWebsiteDataFromSession(
+            action.parameters,
+            context.sessionContext,
+            context.actionIO.setDisplay,
         );
-        return result;
+
+        if (result.success) {
+            return createActionResult(result.message);
+        } else {
+            return createActionResult(result.message, true);
+        }
     } catch (error: any) {
         return createActionResult(
             `Failed to import website data: ${error.message}`,
             true,
         );
     }
+}
+
+/**
+ * Import HTML files from local folder (SessionContext version for service worker calls)
+ */
+export async function importHtmlFolderFromSession(
+    parameters: any,
+    context: SessionContext<BrowserActionContext>,
+    displayProgress?: (message: string) => void,
+): Promise<any> {
+    const startTime = Date.now();
+
+    try {
+        if (displayProgress) {
+            displayProgress("Validating folder and enumerating HTML files...");
+        }
+
+        const { folderPath, options = {}, importId } = parameters;
+        const errors: any[] = [];
+        let successCount = 0;
+
+        // Validate folder path first
+        const validation = await validateHtmlFolder(folderPath, options);
+        if (!validation.valid) {
+            throw new Error(validation.error);
+        }
+
+        if (validation.warning && displayProgress) {
+            displayProgress(`Warning: ${validation.warning}`);
+        }
+
+        // Enumerate HTML files in the folder
+        const folderOptions: FolderOptions = {
+            ...DEFAULT_FOLDER_OPTIONS,
+            ...options,
+        };
+
+        const htmlFiles = await enumerateHtmlFiles(folderPath, folderOptions);
+
+        if (htmlFiles.length === 0) {
+            throw new Error(`No HTML files found in folder: ${folderPath}`);
+        }
+
+        if (displayProgress) {
+            displayProgress(
+                `Found ${htmlFiles.length} HTML files. Processing...`,
+            );
+        }
+
+        // Ensure we have a website collection
+        if (!context.agentContext.websiteCollection) {
+            context.agentContext.websiteCollection =
+                new website.WebsiteCollection();
+        }
+
+        // Process files in batches for better performance and progress reporting
+        const batches = createFileBatches(htmlFiles, 10);
+        const websiteDataResults: WebsiteData[] = [];
+
+        for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+            const batch = batches[batchIndex];
+
+            if (displayProgress) {
+                const progressPercent = Math.round(
+                    (batchIndex / batches.length) * 100,
+                );
+                displayProgress(
+                    `Processing batch ${batchIndex + 1}/${batches.length} (${progressPercent}%)`,
+                );
+            }
+
+            // Read and prepare batch data
+            const batchData = [];
+            for (const filePath of batch) {
+                try {
+                    const htmlContent = await readHtmlFile(filePath);
+                    const fileMetadata = await getFileMetadata(filePath);
+
+                    batchData.push({
+                        html: htmlContent,
+                        identifier: filePath,
+                        metadata: fileMetadata,
+                    });
+                } catch (error: any) {
+                    errors.push({
+                        type: "file_read",
+                        message: `Failed to read ${filePath}: ${error.message}`,
+                        timestamp: Date.now(),
+                    });
+                    debug(`Error reading file ${filePath}:`, error);
+                }
+            }
+
+            // Process the batch using shared HTML processing
+            try {
+                const processingOptions: ProcessingOptions = {
+                    extractContent: options.extractContent !== false,
+                    extractionMode: options.extractionMode || "content",
+                    enableIntelligentAnalysis:
+                        options.enableIntelligentAnalysis || false,
+                    enableActionDetection:
+                        options.enableActionDetection || false,
+                    maxConcurrent: 5,
+                };
+
+                const batchResults = await processHtmlBatch(
+                    batchData,
+                    processingOptions,
+                    (current, total, item) => {
+                        if (displayProgress && current % 2 === 0) {
+                            displayProgress(
+                                `Processing: ${path.basename(item)}`,
+                            );
+                        }
+                    },
+                );
+
+                websiteDataResults.push(...batchResults);
+                successCount += batchResults.length;
+            } catch (error: any) {
+                errors.push({
+                    type: "batch_processing",
+                    message: `Failed to process batch ${batchIndex + 1}: ${error.message}`,
+                    timestamp: Date.now(),
+                });
+                debug(`Error processing batch ${batchIndex + 1}:`, error);
+            }
+        }
+
+        // Add all processed websites to the collection
+        if (websiteDataResults.length > 0) {
+            const websites = websiteDataResults.map((data) =>
+                convertWebsiteDataToWebsite(data),
+            );
+            context.agentContext.websiteCollection.addWebsites(websites);
+
+            await context.agentContext.websiteCollection.buildIndex();
+
+            try {
+                if (context.agentContext.index?.path) {
+                    await context.agentContext.websiteCollection.writeToFile(
+                        context.agentContext.index.path,
+                        "index",
+                    );
+                    debug(
+                        `Saved website collection with ${successCount} new files to ${context.agentContext.index.path}`,
+                    );
+                } else {
+                    debug(
+                        "No index path available, HTML folder data not persisted",
+                    );
+                }
+            } catch (error) {
+                debug(`Failed to save website collection: ${error}`);
+                errors.push({
+                    type: "persistence",
+                    message: `Failed to save data: ${(error as Error).message}`,
+                    timestamp: Date.now(),
+                });
+            }
+        }
+
+        const duration = Date.now() - startTime;
+
+        if (displayProgress) {
+            displayProgress(
+                `Folder import complete: ${successCount}/${htmlFiles.length} files processed successfully`,
+            );
+        }
+
+        return {
+            success: errors.length === 0,
+            importId: importId,
+            itemCount: successCount,
+            duration,
+            errors,
+            summary: {
+                totalFiles: htmlFiles.length,
+                totalProcessed: htmlFiles.length,
+                successfullyImported: successCount,
+                knowledgeExtracted: options?.enableIntelligentAnalysis
+                    ? successCount
+                    : 0,
+                entitiesFound: 0, // Entities extraction would need different logic
+                topicsIdentified: 0, // Topics extraction would need different logic
+                actionsDetected: websiteDataResults.reduce(
+                    (sum, data) =>
+                        sum + (data.enhancedContent?.actions?.length || 0),
+                    0,
+                ),
+            },
+        };
+    } catch (error: any) {
+        return {
+            success: false,
+            importId: parameters.importId,
+            itemCount: 0,
+            duration: Date.now() - startTime,
+            errors: [
+                {
+                    type: "processing",
+                    message: error.message,
+                    timestamp: Date.now(),
+                },
+            ],
+            summary: {
+                totalFiles: 0,
+                totalProcessed: 0,
+                successfullyImported: 0,
+                knowledgeExtracted: 0,
+                entitiesFound: 0,
+                topicsIdentified: 0,
+                actionsDetected: 0,
+            },
+        };
+    }
+}
+
+/**
+ * Import HTML files from local folder (ActionContext version for regular actions)
+ */
+export async function importHtmlFolder(
+    context: ActionContext<BrowserActionContext>,
+    action: TypeAgentAction<ImportHtmlFolder>,
+) {
+    try {
+        context.actionIO.setDisplay("Importing HTML folder...");
+
+        // Use the session-based function and pass actionIO.setDisplay for progress reporting
+        const result = await importHtmlFolderFromSession(
+            action.parameters,
+            context.sessionContext,
+            context.actionIO.setDisplay,
+        );
+
+        if (result.success) {
+            return createActionResult(
+                `Successfully imported ${result.itemCount} HTML files from folder.`,
+            );
+        } else {
+            const errorCount = result.errors.length;
+            const message = `Folder import completed: ${result.itemCount} successful, ${errorCount} failed.`;
+            return createActionResult(message, errorCount > 0);
+        }
+    } catch (error: any) {
+        return createActionResult(
+            `Failed to import HTML folder: ${error.message}`,
+            true,
+        );
+    }
+}
+
+/**
+ * Import HTML files from local file system (ActionContext version for regular actions)
+ */
+/**
+ * Helper function to convert HTML file data to website data format
+ */
+/**
+ * Helper function to convert WebsiteData to Website format for collection storage
+ */
+function convertWebsiteDataToWebsite(data: WebsiteData): any {
+    return {
+        url: data.url,
+        title: data.title,
+        content: data.content,
+        domain: data.domain,
+        metadata: {
+            ...data.metadata,
+            url: data.url,
+            title: data.title,
+            domain: data.domain,
+        },
+        visitCount: data.visitCount,
+        lastVisited: data.lastVisited,
+        enhancedContent: data.enhancedContent,
+    };
 }
 
 /**
@@ -584,7 +1043,7 @@ export async function getWebsiteStats(
         let totalCount = websites.length;
 
         for (const site of websites) {
-            const metadata = site.metadata;
+            const metadata = site.metadata as website.WebsiteDocPartMeta;
             let key: string;
 
             switch (groupBy) {
@@ -621,7 +1080,9 @@ export async function getWebsiteStats(
         if (groupBy !== "source") {
             const sourceCounts = { bookmark: 0, history: 0, reading_list: 0 };
             for (const site of websites) {
-                sourceCounts[site.metadata.websiteSource]++;
+                sourceCounts[
+                    (site.metadata as website.WebsiteDocPartMeta).websiteSource
+                ]++;
             }
             resultText += `\nBy Source:\n`;
             for (const [source, count] of Object.entries(sourceCounts)) {

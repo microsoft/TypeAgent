@@ -1,0 +1,632 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>TypeAgent Website Library</title>
+    <link rel="stylesheet" href="../vendor/bootstrap/bootstrap.min.css" />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="knowledgeLibrary.css" />
+  </head>
+  <body>
+    <!-- Top Navigation Bar -->
+    <header class="top-nav">
+      <div class="nav-container">
+        <div class="nav-brand">
+          <i class="bi bi-collection"></i>
+          <span>TypeAgent Website Library</span>
+        </div>
+        <div class="nav-actions">
+          <div class="connection-status" id="connectionStatus">
+            <span class="status-indicator status-connected"></span>
+            <span>Connected</span>
+          </div>
+          <button id="settingsButton" class="settings-btn" title="Settings">
+            <i class="bi bi-gear"></i>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Container -->
+    <div class="main-container">
+      <!-- Sidebar Navigation -->
+      <aside class="sidebar">
+        <!-- Main Navigation -->
+        <nav class="main-nav">
+          <button class="nav-item active" data-page="search">
+            <i class="bi bi-search"></i>
+            <span>Search</span>
+          </button>
+          <button class="nav-item" data-page="discover">
+            <i class="bi bi-lightbulb"></i>
+            <span>Discover</span>
+          </button>
+          <button class="nav-item" data-page="analytics">
+            <i class="bi bi-graph-up"></i>
+            <span>Analytics</span>
+          </button>
+        </nav>
+
+        <!-- Quick Actions -->
+        <div class="quick-actions">
+          <h3 class="section-title">Import Data</h3>
+          <div class="action-buttons">
+            <button
+              id="importWebActivityBtn"
+              class="action-btn import-web-activity-btn"
+            >
+              <i class="bi bi-download"></i>
+              <span>Import Web Activity</span>
+            </button>
+            <button id="importFromFileBtn" class="action-btn import-file-btn">
+              <i class="bi bi-file-earmark-arrow-up"></i>
+              <span>Import from Files</span>
+            </button>
+          </div>
+
+          <h3 class="section-title">Quick Actions</h3>
+          <div class="action-buttons">
+            <button class="action-btn" data-action="exploreRecentBookmarks">
+              <i class="bi bi-bookmark-star"></i>
+              <span>Recent Bookmarks</span>
+            </button>
+            <button class="action-btn" data-action="exploreMostVisited">
+              <i class="bi bi-graph-up"></i>
+              <span>Most Visited</span>
+            </button>
+            <button class="action-btn" data-action="exploreByDomain">
+              <i class="bi bi-globe"></i>
+              <span>Browse Domains</span>
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main Content Area -->
+      <main class="content-area">
+        <!-- Search Page -->
+        <div id="search-page" class="page-content active">
+          <div class="page-header">
+            <h1 class="page-title">
+              <i class="bi bi-search text-primary"></i>Search Your Library
+            </h1>
+            <p class="page-subtitle">
+              Find websites, bookmarks, and pages using AI-powered search
+            </p>
+          </div>
+
+          <!-- Search Interface -->
+          <div class="search-interface">
+            <div class="search-bar">
+              <input
+                type="text"
+                id="searchInput"
+                class="search-input"
+                placeholder="Search websites, bookmarks, and pages using AI..."
+              />
+              <button id="searchButton" class="search-btn">
+                <i class="bi bi-search"></i>
+              </button>
+            </div>
+
+            <!-- Advanced Filters -->
+            <details class="search-filters">
+              <summary class="filter-toggle">
+                <i class="bi bi-funnel"></i>Advanced Filters
+              </summary>
+              <div class="filter-content">
+                <div class="filter-row">
+                  <div class="filter-group">
+                    <label>Date Range</label>
+                    <div class="date-inputs">
+                      <input type="date" id="dateFrom" />
+                      <input type="date" id="dateTo" />
+                    </div>
+                  </div>
+                  <div class="filter-group">
+                    <label>Source Type</label>
+                    <select id="sourceFilter">
+                      <option value="">All Sources</option>
+                      <option value="bookmarks">Bookmarks Only</option>
+                      <option value="history">History Only</option>
+                    </select>
+                  </div>
+                  <div class="filter-group">
+                    <label>Domain</label>
+                    <input
+                      type="text"
+                      id="domainFilter"
+                      placeholder="e.g., github.com"
+                    />
+                  </div>
+                  <div class="filter-group">
+                    <label
+                      >Min Relevance: <span id="relevanceValue">0%</span></label
+                    >
+                    <input
+                      type="range"
+                      id="relevanceFilter"
+                      min="0"
+                      max="100"
+                      value="0"
+                    />
+                  </div>
+                </div>
+                <div class="filter-row">
+                  <div class="filter-group">
+                    <label>Knowledge Filters</label>
+                    <div class="checkbox-group">
+                      <label class="checkbox-item">
+                        <input type="checkbox" id="hasEntitiesFilter" />
+                        <i class="bi bi-diagram-2"></i>Has Entities
+                      </label>
+                      <label class="checkbox-item">
+                        <input type="checkbox" id="hasTopicsFilter" />
+                        <i class="bi bi-tags"></i>Has Topics
+                      </label>
+                      <label class="checkbox-item">
+                        <input type="checkbox" id="hasActionsFilter" />
+                        <i class="bi bi-lightning"></i>Has Actions
+                      </label>
+                      <label class="checkbox-item">
+                        <input type="checkbox" id="knowledgeExtractedFilter" />
+                        <i class="bi bi-check-circle"></i>Knowledge Extracted
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </details>
+
+            <!-- Recent Searches -->
+            <div class="recent-searches" id="recentSearches">
+              <div class="recent-label">Recent searches:</div>
+              <div id="recentSearchesList">
+                <span class="empty-message">No recent searches</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Search Results -->
+          <div id="searchResults" class="search-results" style="display: none">
+            <div class="results-header">
+              <h2 class="results-title">Search Results</h2>
+              <div class="view-controls">
+                <div class="view-modes">
+                  <button
+                    class="view-btn active"
+                    data-view="list"
+                    title="List View"
+                  >
+                    <i class="bi bi-list"></i>
+                    <span>List</span>
+                  </button>
+                  <button class="view-btn" data-view="grid" title="Grid View">
+                    <i class="bi bi-grid"></i>
+                    <span>Grid</span>
+                  </button>
+                  <button
+                    class="view-btn"
+                    data-view="timeline"
+                    title="Timeline View"
+                  >
+                    <i class="bi bi-clock"></i>
+                    <span>Timeline</span>
+                  </button>
+                  <button
+                    class="view-btn"
+                    data-view="domain"
+                    title="Domain View"
+                  >
+                    <i class="bi bi-globe"></i>
+                    <span>Domain</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- AI Summary -->
+            <div id="aiSummary" class="ai-summary" style="display: none">
+              <div class="summary-header">
+                <i class="bi bi-robot"></i>
+                <span>AI Summary</span>
+              </div>
+              <div id="summaryContent" class="summary-content"></div>
+            </div>
+
+            <!-- Results Container -->
+            <div id="resultsContainer" class="results-container"></div>
+
+            <!-- Pagination -->
+            <div id="pagination" class="pagination" style="display: none">
+              <div class="pagination-info" id="paginationInfo"></div>
+              <div class="pagination-controls" id="paginationControls"></div>
+            </div>
+          </div>
+
+          <!-- Empty State -->
+          <div class="empty-state" id="searchEmptyState">
+            <i class="bi bi-search"></i>
+            <h6>Search Your Library</h6>
+            <p class="mb-3">
+              Enter a search term above to find websites, bookmarks, and pages
+              using AI-powered search.
+            </p>
+          </div>
+        </div>
+
+        <!-- Discover Page -->
+        <div id="discover-page" class="page-content">
+          <div class="page-header">
+            <h1 class="page-title">
+              <i class="bi bi-lightbulb text-primary"></i>Discover Content
+              Trends
+            </h1>
+            <p class="page-subtitle">
+              Explore your reading patterns, popular topics, and content
+              insights
+            </p>
+          </div>
+
+          <!-- Trending Topics -->
+          <div class="content-section">
+            <div class="section-header">
+              <h2 class="section-title">
+                <i class="bi bi-trending-up"></i>Trending in Your Library
+              </h2>
+            </div>
+
+            <div class="discovery-grid" id="trendingContent">
+              <!-- Trending content will be populated here -->
+            </div>
+          </div>
+
+          <!-- Reading Patterns -->
+          <div class="content-section">
+            <div class="section-header">
+              <h2 class="section-title">
+                <i class="bi bi-clock-history"></i>Your Reading Patterns
+              </h2>
+            </div>
+
+            <div class="discovery-grid" id="readingPatterns">
+              <!-- Reading patterns will be populated here -->
+            </div>
+          </div>
+
+          <!-- Recently Popular -->
+          <div class="content-section">
+            <div class="section-header">
+              <h2 class="section-title">
+                <i class="bi bi-fire"></i>Recently Popular Pages
+              </h2>
+            </div>
+
+            <div class="results-grid" id="popularPages">
+              <!-- Popular pages will be populated here -->
+            </div>
+          </div>
+
+          <!-- Empty State -->
+          <div class="empty-state" id="discoverEmptyState">
+            <i class="bi bi-lightbulb"></i>
+            <h6>No Data to Discover</h6>
+            <p class="mb-3">
+              Import your bookmarks or browsing history to see content trends
+              and reading patterns.
+            </p>
+            <button class="action-btn primary" data-action="showImportModal">
+              <i class="bi bi-plus-circle"></i>Import Data
+            </button>
+          </div>
+        </div>
+
+        <!-- Analytics Page -->
+        <div id="analytics-page" class="page-content">
+          <div class="page-header">
+            <h1 class="page-title">
+              <i class="bi bi-graph-up text-primary"></i>Library Analytics
+            </h1>
+            <p class="page-subtitle">
+              Detailed insights into your browsing patterns and content
+              consumption
+            </p>
+          </div>
+
+          <!-- Quick Stats Overview -->
+          <div class="content-section">
+            <div class="section-header">
+              <h2 class="section-title">
+                <i class="bi bi-speedometer2"></i>Quick Stats
+              </h2>
+            </div>
+
+            <div
+              class="quick-stats"
+              style="grid-template-columns: repeat(4, 1fr); margin-bottom: 2rem"
+            >
+              <div class="stat-item">
+                <div class="stat-number" id="totalWebsites">0</div>
+                <div class="stat-label">Total Sites</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-number" id="totalBookmarks">0</div>
+                <div class="stat-label">Bookmarks</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-number" id="totalHistory">0</div>
+                <div class="stat-label">History</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-number" id="topDomains">0</div>
+                <div class="stat-label">Domains</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Overview Stats -->
+          <div class="content-section">
+            <div class="section-header">
+              <h2 class="section-title">
+                <i class="bi bi-graph-up"></i>Overview Dashboard
+              </h2>
+            </div>
+
+            <div
+              class="quick-stats"
+              style="grid-template-columns: repeat(4, 1fr); margin-bottom: 2rem"
+              id="analyticsOverview"
+            >
+              <!-- Analytics overview will be populated here -->
+            </div>
+          </div>
+
+          <!-- Activity Charts -->
+          <div class="content-section">
+            <div class="section-header">
+              <h2 class="section-title">
+                <i class="bi bi-bar-chart"></i>Activity Trends
+              </h2>
+            </div>
+
+            <div class="analytics-grid" id="activityCharts">
+              <!-- Activity charts will be populated here -->
+            </div>
+          </div>
+
+          <!-- Top Domains -->
+          <div class="content-section">
+            <div class="section-header">
+              <h2 class="section-title">
+                <i class="bi bi-globe"></i>Top Domains
+              </h2>
+            </div>
+
+            <div class="top-domains">
+              <div id="topDomainsList" class="domain-list">
+                <div class="empty-message">No data available</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- AI Insights -->
+          <div class="content-section">
+            <div class="section-header">
+              <h2 class="section-title">
+                <i class="bi bi-brain"></i>AI Insights
+              </h2>
+            </div>
+
+            <div class="ai-insights">
+              <div class="insights-grid">
+                <div class="insight-item">
+                  <div class="insight-number" id="knowledgeExtracted">0</div>
+                  <div class="insight-label">Knowledge Extracted</div>
+                </div>
+                <div class="insight-item">
+                  <div class="insight-number" id="totalEntities">0</div>
+                  <div class="insight-label">Entities</div>
+                </div>
+                <div class="insight-item">
+                  <div class="insight-number" id="totalTopics">0</div>
+                  <div class="insight-label">Topics</div>
+                </div>
+                <div class="insight-item">
+                  <div class="insight-number" id="totalActions">0</div>
+                  <div class="insight-label">Actions</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Knowledge Insights -->
+          <div class="content-section">
+            <div class="section-header">
+              <h2 class="section-title">
+                <i class="bi bi-lightbulb"></i>Advanced Knowledge Insights
+              </h2>
+            </div>
+
+            <div class="discovery-grid" id="knowledgeInsights">
+              <!-- Knowledge insights will be populated here -->
+            </div>
+          </div>
+
+          <!-- Knowledge Visualization Dashboard -->
+          <div class="content-section">
+            <div class="section-header">
+              <h2 class="section-title">
+                <i class="bi bi-diagram-3"></i>Knowledge Visualization
+              </h2>
+            </div>
+
+            <div class="knowledge-dashboard">
+              <div class="knowledge-overview-cards">
+                <div class="knowledge-card entities">
+                  <div class="knowledge-card-header">
+                    <i class="bi bi-diagram-2"></i>
+                    <h3>Entities</h3>
+                  </div>
+                  <div class="knowledge-card-body">
+                    <div class="knowledge-metric" id="totalEntitiesMetric">
+                      245
+                    </div>
+                    <div class="knowledge-label">Total Entities Extracted</div>
+                    <div class="knowledge-breakdown">
+                      <div class="breakdown-item">
+                        <span class="breakdown-type">Companies</span>
+                        <span class="breakdown-count">89</span>
+                      </div>
+                      <div class="breakdown-item">
+                        <span class="breakdown-type">Technologies</span>
+                        <span class="breakdown-count">67</span>
+                      </div>
+                      <div class="breakdown-item">
+                        <span class="breakdown-type">People</span>
+                        <span class="breakdown-count">43</span>
+                      </div>
+                      <div class="breakdown-item">
+                        <span class="breakdown-type">Other</span>
+                        <span class="breakdown-count">46</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="knowledge-card topics">
+                  <div class="knowledge-card-header">
+                    <i class="bi bi-tags"></i>
+                    <h3>Topics</h3>
+                  </div>
+                  <div class="knowledge-card-body">
+                    <div class="knowledge-metric" id="totalTopicsMetric">
+                      128
+                    </div>
+                    <div class="knowledge-label">Topics Identified</div>
+                    <div class="topic-cloud">
+                      <span class="topic-tag size-large">JavaScript</span>
+                      <span class="topic-tag size-medium">React</span>
+                      <span class="topic-tag size-medium">TypeScript</span>
+                      <span class="topic-tag size-small">Node.js</span>
+                      <span class="topic-tag size-small">API</span>
+                      <span class="topic-tag size-large">Web Development</span>
+                      <span class="topic-tag size-medium">Database</span>
+                      <span class="topic-tag size-small">CSS</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="knowledge-card actions">
+                  <div class="knowledge-card-header">
+                    <i class="bi bi-lightning"></i>
+                    <h3>Actions</h3>
+                  </div>
+                  <div class="knowledge-card-body">
+                    <div class="knowledge-metric" id="totalActionsMetric">
+                      156
+                    </div>
+                    <div class="knowledge-label">Actionable Items Found</div>
+                    <div class="action-breakdown">
+                      <div class="action-type">
+                        <i class="bi bi-download"></i>
+                        <span>Downloads</span>
+                        <span class="action-count">42</span>
+                      </div>
+                      <div class="action-type">
+                        <i class="bi bi-link-45deg"></i>
+                        <span>Links to Follow</span>
+                        <span class="action-count">38</span>
+                      </div>
+                      <div class="action-type">
+                        <i class="bi bi-bookmark"></i>
+                        <span>Save for Later</span>
+                        <span class="action-count">29</span>
+                      </div>
+                      <div class="action-type">
+                        <i class="bi bi-share"></i>
+                        <span>Share Items</span>
+                        <span class="action-count">47</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Empty State -->
+          <div class="empty-state" id="analyticsEmptyState">
+            <i class="bi bi-graph-up"></i>
+            <h6>No Analytics Data</h6>
+            <p class="mb-3">
+              Import and analyze your web data to see detailed usage analytics
+              and insights.
+            </p>
+            <button class="action-btn primary" data-action="showImportModal">
+              <i class="bi bi-plus-circle"></i>Import Data
+            </button>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Settings Modal (keeping existing functionality) -->
+    <div
+      class="modal fade"
+      id="settingsModal"
+      tabindex="-1"
+      aria-labelledby="settingsModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div
+            class="modal-header"
+            style="
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              color: white;
+            "
+          >
+            <h5 class="modal-title" id="settingsModalLabel">
+              <i class="bi bi-gear me-2"></i>Settings & Import
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+              style="filter: invert(1)"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <!-- Import interface will be populated here -->
+            <div id="importInterface">
+              <p class="text-muted">
+                Import settings and data management options will be available
+                here.
+              </p>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="../vendor/bootstrap/bootstrap.bundle.min.js"></script>
+    <script src="knowledgeLibrary.js"></script>
+  </body>
+</html>

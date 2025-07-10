@@ -24,11 +24,13 @@ import { async } from "typeagent";
  * @see ../../knowPro/src/search.ts
  * @param context
  * @param {SearchRequest} request Structured request or Named Arguments
+ * @param {kp.querySchema.SearchQuery} preTranslatedQuery already have turned request.query into query expressions
  * @returns
  */
 export async function execSearchRequest(
     context: KnowproContext,
     request: SearchRequest | string[] | NamedArgs,
+    preTranslatedQuery?: kp.querySchema.SearchQuery | undefined,
 ): Promise<SearchResponse> {
     const conversation = context.ensureConversationLoaded();
     if (shouldParseRequest(request)) {
@@ -37,7 +39,10 @@ export async function execSearchRequest(
             searchRequestDef(),
         );
     }
-    const langQuery = request.query; // Natural language query to run
+    const langQuery = request.query.trim(); // Natural language query to run
+    if (!langQuery) {
+        throw new Error("No query provided");
+    }
     const debugContext: AnswerDebugContext = { searchText: langQuery };
     //
     // Set up options  for the search API Call
@@ -60,23 +65,60 @@ export async function execSearchRequest(
     //
     // We can specify the subset of the conversation to search using a filter
     //
-    const langFilter: kp.LanguageSearchFilter | undefined = createLangFilter(
+    let langFilter: kp.LanguageSearchFilter | undefined = createLangFilter(
         undefined,
         request,
     );
     //
-    // Run query
+    // If optional "when" subquery provided, run that query to find messages to scope by
     //
-    const searchResults = await async.getResultWithRetry(() =>
-        getLangSearchResult(
+    if (request.when) {
+        const whenResult = await scopingTermsFromLanguage(
+            context,
+            request.when,
+        );
+        if (!whenResult.success) {
+            return { searchResults: error(whenResult.message), debugContext };
+        }
+        if (whenResult.data) {
+            langFilter ??= {};
+            langFilter.scopeDefiningTerms = whenResult.data;
+            //langFilter.scopeDefiningTerms.booleanOp = "and";
+        }
+    }
+
+    let searchResults: Result<kp.ConversationSearchResult[]>;
+    if (preTranslatedQuery) {
+        // Pre-existing query expr for request.query
+        const compiledQueries = kp.compileSearchQuery(
             conversation,
-            context.queryTranslator,
-            langQuery,
-            options,
+            preTranslatedQuery,
+            options.compileOptions,
             langFilter,
-            debugContext,
-        ),
-    );
+        );
+        const queryResults = await kp.runSearchQueries(
+            conversation,
+            compiledQueries,
+            options,
+        );
+        debugContext.searchQuery = preTranslatedQuery;
+        debugContext.searchQueryExpr = compiledQueries;
+        searchResults = success(queryResults.flat());
+    } else {
+        //
+        // Run raw NLP query
+        //
+        searchResults = await async.getResultWithRetry(() =>
+            getLangSearchResult(
+                conversation,
+                context.queryTranslator,
+                langQuery,
+                options,
+                langFilter,
+                debugContext,
+            ),
+        );
+    }
 
     return { searchResults, debugContext };
 }
@@ -108,7 +150,8 @@ export async function execGetAnswerRequest(
         );
     }
     //
-    // Turn user question into a search query and evaluate it
+    // Step 1:
+    // Search conversation with the user's query
     //
     const searchResponse = request.searchResponse
         ? request.searchResponse
@@ -127,6 +170,7 @@ export async function execGetAnswerRequest(
         return response;
     }
     //
+    // Step 2:
     // Use search results to generate a natural language answer
     //
     const answerResponses = await getAnswersForSearchResults(
@@ -238,20 +282,30 @@ async function getAnswerFromSearchResult(
     }
     try {
         let question = searchResult.rawSearchQuery ?? request.query;
-        if (choices && choices.length > 0) {
-            question = kp.createMultipleChoiceQuestion(question, choices);
-        }
         //
         // Generate an answer from search results
         //
-        let answerResult = await kp.generateAnswer(
-            conversation,
-            context.answerGenerator,
-            question,
-            searchResult,
-            undefined,
-            options,
-        );
+        let answerResult: Result<kp.AnswerResponse>;
+        if (choices && choices.length > 0) {
+            answerResult = await kp.generateMultipleChoiceAnswer(
+                conversation,
+                context.answerGenerator,
+                question,
+                choices,
+                searchResult,
+                undefined,
+                options,
+            );
+        } else {
+            answerResult = await kp.generateAnswer(
+                conversation,
+                context.answerGenerator,
+                question,
+                searchResult,
+                undefined,
+                options,
+            );
+        }
         return answerResult;
     } finally {
         context.answerGenerator.settings.fastStop = fastStopSav;
@@ -297,6 +351,35 @@ function createAnswerOptions(
         topicsTopK: topK,
     };
     return options;
+}
+
+async function scopingTermsFromLanguage(
+    context: KnowproContext,
+    langQuery: string,
+    options?: kp.LanguageSearchOptions,
+    termsOnly: boolean = true,
+): Promise<Result<kp.SearchTermGroup | undefined>> {
+    if (termsOnly) {
+        return success(context.termParser.getSearchTerms(langQuery));
+    }
+
+    const result = await kp.searchQueryExprFromLanguage(
+        context.conversation!,
+        context.queryTranslator,
+        langQuery,
+        options,
+    );
+    if (!result.success) {
+        return result;
+    }
+    //
+    // FUTURE: use this is a true sub-query
+    //
+    const selectExpr = result.data.queryExpressions[0]?.selectExpressions;
+    if (selectExpr === undefined || selectExpr.length === 0) {
+        return error("No select expr");
+    }
+    return success(selectExpr[0].searchTermGroup);
 }
 
 /**

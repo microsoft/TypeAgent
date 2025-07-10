@@ -2,24 +2,27 @@
 // Licensed under the MIT License.
 
 import { KnowproContext } from "./knowproContext.js";
-import { readJsonFile, writeJsonFile } from "typeagent";
+import { dateTime, readJsonFile, writeJsonFile } from "typeagent";
 import { error, Result, success } from "typechat";
 import { BatchCallback, Comparison } from "./types.js";
 import {
     compareArray,
+    compareObject,
+    dateRangeToTimeRange,
     getCommandArgs,
-    isJsonEqual,
     queryError,
 } from "./common.js";
 import { getLangSearchResult } from "./knowproCommands.js";
 import { getBatchFileLines } from "interactive-app";
 import { execSearchRequest } from "./knowproCommands.js";
 import * as kp from "knowpro";
+import { TestRunReport } from "./logging.js";
 
 export type LangSearchResults = {
     searchText: string;
     cmd?: string | undefined;
     searchQueryExpr: kp.querySchema.SearchQuery;
+    compiledQueryExpr?: kp.SearchQueryExpr[] | undefined;
     results: LangSearchResult[];
 };
 
@@ -65,7 +68,6 @@ export async function runSearchBatch(
     }
     return success(results);
 }
-
 async function getSearchResults(
     context: KnowproContext,
     args: string[],
@@ -82,7 +84,7 @@ async function getSearchResults(
     return success(results);
 }
 
-export function collectLangSearchResults(
+function collectLangSearchResults(
     searchText: string,
     searchResults: kp.ConversationSearchResult[],
     debugContext: kp.LanguageSearchDebugContext,
@@ -90,6 +92,7 @@ export function collectLangSearchResults(
     return {
         searchText,
         searchQueryExpr: debugContext.searchQuery!,
+        compiledQueryExpr: debugContext.searchQueryExpr,
         results: searchResults.map((cr) => {
             const lr: LangSearchResult = {
                 messageMatches: cr.messageMatches.map((m) => m.messageOrdinal),
@@ -198,6 +201,23 @@ export async function* runLangSearchBatch(
     }
 }
 
+export function createSearchTestReport(
+    results: Comparison<LangSearchResults>[],
+    srcDataPath: string,
+    dateRange: dateTime.DateRange,
+): TestRunReport<Comparison<LangSearchResults>> {
+    const errors = results.filter(
+        (c) => c.error !== undefined && c.error.length > 0,
+    );
+    return {
+        name: "search",
+        timeRange: dateRangeToTimeRange(dateRange),
+        srcData: srcDataPath,
+        errors,
+        countRun: results.length,
+    };
+}
+
 function getKnowledgeResults(
     cr: kp.ConversationSearchResult,
     lr: LangSearchResult,
@@ -216,31 +236,11 @@ function getMatchedSemanticRefOrdinals(
         ?.semanticRefMatches.map((sr) => sr.semanticRefOrdinal);
 }
 
-function compareSearchExpr(
-    s1: kp.querySchema.SearchQuery,
-    s2: kp.querySchema.SearchQuery,
-): string | undefined {
-    if (s1.searchExpressions.length !== s2?.searchExpressions.length) {
-        return "searchQuery expressions Length";
-    }
-    for (let i = 0; i < s1.searchExpressions.length; ++i) {
-        if (
-            !isJsonEqual(
-                s1.searchExpressions[i].filters,
-                s2.searchExpressions[i].filters,
-            )
-        ) {
-            return `searchExpr.Filter #${i}`;
-        }
-    }
-    return undefined;
-}
-
 function compareLangSearchResults(
     lr1: LangSearchResults,
     lr2: LangSearchResults,
 ): string | undefined {
-    let error = compareSearchExpr(lr1.searchQueryExpr, lr2.searchQueryExpr);
+    let error = compareSearchQuery(lr1.searchQueryExpr, lr2.searchQueryExpr);
     if (error !== undefined && error.length > 0) {
         return error;
     }
@@ -275,6 +275,65 @@ function compareLangSearchResult(
     error = compareArray("action", lr1.actionMatches, lr2.actionMatches);
     if (error !== undefined) {
         return error;
+    }
+    return undefined;
+}
+
+function compareSearchQuery(
+    s1: kp.querySchema.SearchQuery,
+    s2: kp.querySchema.SearchQuery,
+): string | undefined {
+    if (s1.searchExpressions.length !== s2?.searchExpressions.length) {
+        return `searchQuery.searchExpressions.length: ${s1.searchExpressions.length} !== ${s2.searchExpressions.length}`;
+    }
+    for (let i = 0; i < s1.searchExpressions.length; ++i) {
+        const error = compareSearchExpr(
+            s1.searchExpressions[i],
+            s2.searchExpressions[i],
+        );
+        if (error !== undefined) {
+            return error;
+        }
+    }
+    return undefined;
+}
+
+function compareSearchExpr(
+    s1: kp.querySchema.SearchExpr,
+    s2: kp.querySchema.SearchExpr,
+): string | undefined {
+    if (s1.filters.length !== s2.filters.length) {
+        return `SearchExpr.filters.length: ${s1.filters.length} !== ${s2.filters.length}`;
+    }
+
+    for (let i = 0; i < s1.filters.length; ++i) {
+        const f1 = s1.filters[i];
+        const f2 = s2.filters[i];
+
+        let error = compareObject(
+            f1.entitySearchTerms,
+            f2.entitySearchTerms,
+            "entitySearchTerms",
+        );
+        if (error !== undefined) {
+            return error;
+        }
+        error = compareObject(
+            f1.actionSearchTerm,
+            f2.actionSearchTerm,
+            "actionSearchTerm",
+        );
+        if (error !== undefined) {
+            return error;
+        }
+        error = compareObject(f1.searchTerms, f2.searchTerms, "searchTerms");
+        if (error !== undefined) {
+            return error;
+        }
+        error = compareObject(f1.timeRange, f2.timeRange, "searchTerms");
+        if (error !== undefined) {
+            return error;
+        }
     }
     return undefined;
 }

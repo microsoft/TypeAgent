@@ -33,6 +33,7 @@
     "better-sqlite3": "11.9.1",
     "cheerio": "^1.0.0",
     "common-utils": "workspace:*",
+    "conversation-memory": "workspace:*",
     "debug": "^4.4.0",
     "get-folder-size": "^5.0.0",
     "knowledge-processor": "workspace:*",

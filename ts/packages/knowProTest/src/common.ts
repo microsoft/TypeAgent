@@ -4,7 +4,7 @@
 import fs from "fs";
 import { ArgDef, NamedArgs, parseCommandLine } from "interactive-app";
 import path from "path";
-import { getFileName } from "typeagent";
+import { dateTime, getFileName } from "typeagent";
 import { error, Result, Error } from "typechat";
 
 export function ensureDirSync(folderPath: string): string {
@@ -12,6 +12,30 @@ export function ensureDirSync(folderPath: string): string {
         fs.mkdirSync(folderPath, { recursive: true });
     }
     return folderPath;
+}
+
+export function ensureUniqueFilePath(filePath: string): string {
+    if (!fs.existsSync(filePath)) {
+        return filePath;
+    }
+
+    for (let i = 1; i < 1000; ++i) {
+        const tempPath = addFileNameSuffixToPath(filePath, `_${i}`);
+        if (!fs.existsSync(tempPath)) {
+            return tempPath;
+        }
+    }
+
+    throw new Error(`Could not ensure unique ${filePath}`);
+}
+
+export function writeObjectToUniqueFile(filePath: string, obj: any): void {
+    filePath = ensureUniqueFilePath(filePath);
+    fs.writeFileSync(filePath, stringifyReadable(obj));
+}
+
+export function writeObjectToFile(filePath: string, obj: any): void {
+    fs.writeFileSync(filePath, stringifyReadable(obj));
 }
 
 export function getCommandArgs(line: string | undefined): string[] {
@@ -25,6 +49,15 @@ export function getCommandArgs(line: string | undefined): string[] {
         }
     }
     return [];
+}
+
+export function dateRangeToTimeRange(
+    range: dateTime.DateRange,
+): dateTime.TimestampRange {
+    return {
+        startTimestamp: range.startDate.toISOString(),
+        endTimestamp: range.stopDate ? range.stopDate.toISOString() : undefined,
+    };
 }
 
 export async function execCommandLine<T>(
@@ -102,6 +135,17 @@ export function isJsonEqual(x: any | undefined, y: any | undefined): boolean {
     return false;
 }
 
+export function compareObject(
+    x: any,
+    y: any,
+    label: string,
+): string | undefined {
+    if (!isJsonEqual(x, y)) {
+        return `${label}: ${stringifyReadable(x)}\n !== \n${stringifyReadable(y)}`;
+    }
+    return undefined;
+}
+
 export function compareArray(
     name: string,
     x: any[] | undefined,
@@ -128,4 +172,8 @@ export function compareArray(
 
 export function queryError(query: string, result: Error): Error {
     return error(`${query}\n${result.message}`);
+}
+
+export function stringifyReadable(value: any): string {
+    return JSON.stringify(value, undefined, 2);
 }

@@ -4,6 +4,8 @@
 import { initializeEventHandlers } from "./eventHandlers";
 import { restoreRecordingState } from "./recording";
 import { interceptHistory } from "./spaNavigation";
+import { PDFInterceptor } from "./pdfInterceptor";
+import "./autoIndexing"; // Initialize auto-indexing
 
 // Imports to help with bundling
 import "./domUtils";
@@ -14,6 +16,7 @@ import "./htmlReducer";
 import "./loadingDetector";
 import "./messaging";
 import "./pageContent";
+import "./pdfInterceptor";
 import "./schemaExtraction";
 import "./spaNavigation";
 import "./types";
@@ -29,6 +32,9 @@ async function initialize(): Promise<void> {
 
     // Set up SPA navigation detection
     setupSpaNavigation();
+
+    // Initialize PDF interceptor
+    await initializePDFInterceptor();
 
     // Restore recording state if any
     await restoreRecordingStateFromStorage();
@@ -57,6 +63,18 @@ async function restoreRecordingStateFromStorage(): Promise<void> {
         restoreRecordingState(restoredData);
     } catch (error) {
         console.error("Error restoring recording state:", error);
+    }
+}
+
+/**
+ * Initializes PDF link interceptor
+ */
+async function initializePDFInterceptor(): Promise<void> {
+    try {
+        const pdfInterceptor = new PDFInterceptor();
+        await pdfInterceptor.initialize();
+    } catch (error) {
+        console.error("Error initializing PDF interceptor:", error);
     }
 }
 

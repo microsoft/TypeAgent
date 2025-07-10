@@ -344,7 +344,7 @@ async function getRecentChatHistory(
     const chatHistory: string[] = [];
 
     if (conversationManager !== undefined) {
-        let searchResponse = await conversationManager.getSearchResponse(
+        const searchResponse = await conversationManager.getSearchResponse(
             "What were we talking about most recently?",
             [{ terms: ["last conversation", "project"] }],
             { maxMatches: 5 },
@@ -378,32 +378,24 @@ async function getRecentChatHistory(
                 chatHistory.push(`- \"${msg.value.value}\"`);
             });
 
-            chatHistory.push("###");
-            if (
-                context.sessionContext.agentContext.user.givenName &&
-                context.sessionContext.agentContext.user.givenName.length > 0
-            ) {
-                chatHistory.push(
-                    `The user's given name is '${context.sessionContext.agentContext.user.givenName}'.`,
-                );
+            if (debug.enabled) {
+                const matches =
+                    await conversationManager.generateAnswerForSearchResponse(
+                        "What were we talking about last?",
+                        searchResponse,
+                    );
+                debug(matches);
             }
-            if (
-                context.sessionContext.agentContext.user.surName &&
-                context.sessionContext.agentContext.user.surName.length > 0
-            ) {
-                chatHistory.push(
-                    `The user's sur name is '${context.sessionContext.agentContext.user.surName}'.`,
-                );
-            }
-
-            const matches =
-                await conversationManager.generateAnswerForSearchResponse(
-                    "What were we talking about last?",
-                    searchResponse,
-                );
-            debug(matches);
         }
     }
 
+    chatHistory.push("###");
+    const user = context.sessionContext.agentContext.user;
+    if (user.givenName) {
+        chatHistory.push(`The user's given name is '${user.givenName}'.`);
+    }
+    if (user.surName) {
+        chatHistory.push(`The user's sur name is '${user.surName}'.`);
+    }
     return chatHistory;
 }

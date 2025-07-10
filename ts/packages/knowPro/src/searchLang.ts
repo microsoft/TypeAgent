@@ -45,12 +45,13 @@ import {
 */
 
 /**
- * Type representing the filter options for language search.
+ * Filter options for language search.
  */
 export type LanguageSearchFilter = {
     knowledgeType?: KnowledgeType | undefined;
     threadDescription?: string | undefined;
     tags?: string[] | undefined;
+    scopeDefiningTerms?: SearchTermGroup | undefined;
 };
 
 /**
@@ -144,12 +145,23 @@ export async function searchConversationWithLanguage(
     }
     return success(searchResults);
 
+    //
+    // Scoping queries can be precise. However, there may be random variations in how LLMs
+    // translate some user utterances into queries.. .particularly verbs. They verbs
+    // may not match action verbs actually in the index.. related terms may not meet the similarity
+    // cutoff.
+    // If configured (compileOptions.exactScope == false), we can do a fallback query that does
+    // not enforce verb matching. This improves recall while still providing a reasonable level of scoping because it
+    //
     function compileFallbackQuery(
         query: querySchema.SearchQuery,
         compileOptions: LanguageQueryCompileOptions,
         langSearchFilter?: LanguageSearchFilter,
     ): SearchQueryExpr[] | undefined {
         const verbScope = compileOptions.verbScope;
+        //
+        // If no exact scope... and verbScope is not provided or true,
+        // then we can build a fallback query that is more forgiving
         if (
             !compileOptions.exactScope &&
             (verbScope == undefined || verbScope)
@@ -164,6 +176,9 @@ export async function searchConversationWithLanguage(
                 langSearchFilter,
             );
         }
+        //
+        // No fallback query currently possible
+        //
         return undefined;
     }
 
@@ -248,6 +263,9 @@ export type LanguageQueryCompileOptions = {
      * Is fuzzy matching enabled when applying scope?
      */
     exactScope?: boolean | undefined;
+    /**
+     * Should use verbs in scoping expressions (default true)
+     */
     verbScope?: boolean | undefined;
     // Use to ignore noise terms etc.
     termFilter?: (text: string) => boolean;
@@ -502,6 +520,17 @@ class SearchQueryCompiler {
                 when ??= {};
                 when.threadDescription =
                     this.langSearchFilter.threadDescription;
+            }
+            if (this.langSearchFilter.scopeDefiningTerms) {
+                when ??= {};
+                if (when.scopeDefiningTerms) {
+                    when.scopeDefiningTerms.terms.push(
+                        this.langSearchFilter.scopeDefiningTerms,
+                    );
+                } else {
+                    when.scopeDefiningTerms =
+                        this.langSearchFilter.scopeDefiningTerms;
+                }
             }
         }
         return when;

@@ -19,7 +19,10 @@ describe("Argument parsing", () => {
                 description: "string",
                 type: "string",
             },
-
+            bool: {
+                description: "boolean",
+                type: "boolean",
+            },
             defStr: {
                 description: "default string",
             },
@@ -45,7 +48,7 @@ describe("Argument parsing", () => {
             arr: [l1, l1],
         };
         const params = parseParams(
-            `'${JSON.stringify(l2)}' 10 \t hello   world !`,
+            `'${JSON.stringify(l2)}' 10 \t hello 1  world !`,
             parameters,
         );
         const flags: undefined = params.flags;
@@ -55,13 +58,14 @@ describe("Argument parsing", () => {
         const obj: ObjectValue = args.obj;
         const num: number = args.num;
         const str: string = args.str;
+        const bool: boolean = args.bool;
         const defStr: string = args.defStr;
         const optional: string = args.optional!; // Use ! to make sure the type is correct
         const optional2: string = args.optional2!; // Use ! to make sure the type is correct
         expect(obj).toStrictEqual(l2);
         expect(num).toBe(10);
         expect(str).toBe("hello");
-        expect(str).toBe("hello");
+        expect(bool).toBe(true);
         expect(defStr).toBe("world");
         expect(optional).toBe("!");
         expect(optional2).toBe(undefined);
@@ -88,7 +92,46 @@ describe("Argument parsing", () => {
         expect(single).toBe("hello");
         expect(multiple).toStrictEqual(["world", "again", "!"]);
     });
+    it("arguments - multiple boolean value", () => {
+        const params = parseParams("true false 1 0 tRue False", {
+            args: {
+                bool: {
+                    description: "boolean",
+                    type: "boolean",
+                    multiple: true,
+                },
+            },
+        });
+        expect(params.args.bool).toStrictEqual([
+            true,
+            false,
+            true,
+            false,
+            true,
+            false,
+        ]);
+    });
+    it("arguments - multiple terminate", () => {
+        const params = parseParams("hello world ! -- again", {
+            args: {
+                multiple: {
+                    description: "multiple",
+                    multiple: true,
+                },
+                single: {
+                    description: "single",
+                },
+            },
+        });
+        const flags: undefined = params.flags;
+        expect(flags).toBe(undefined);
 
+        const args = params.args;
+        const multiple: string[] = args.multiple;
+        const single: string = args.single;
+        expect(multiple).toStrictEqual(["hello", "world", "!"]);
+        expect(single).toBe("again");
+    });
     const optionalMultipleArgs = {
         args: {
             single: {
@@ -155,7 +198,7 @@ describe("Argument parsing", () => {
     });
     it("Too many args", () => {
         try {
-            parseParams("{} 10 \t hello   world invalid", parameters);
+            parseParams("{} 10 \t hello 1  world invalid", parameters);
         } catch (e: any) {
             expect(e.message).toBe("Too many arguments 'invalid'");
         }
@@ -169,18 +212,29 @@ describe("Argument parsing", () => {
     });
     it("Invalid number value", () => {
         try {
-            parseParams("{} abc hello world", parameters);
+            parseParams("{} abc hello 1  world", parameters);
         } catch (e: any) {
             expect(e.message).toBe(
                 "Invalid number value 'abc' for argument 'num'",
             );
         }
     });
+
+    it("Invalid boolean value", () => {
+        try {
+            parseParams("{} 10 hello falsy world", parameters);
+        } catch (e: any) {
+            expect(e.message).toBe(
+                "Invalid boolean value 'falsy' for argument 'bool'",
+            );
+        }
+    });
+
     const invalidJsonTests = [10, [], null, true, false, "hello"];
     it.each(invalidJsonTests)("Invalid json value - %s", (value) => {
         try {
             parseParams(
-                `'${JSON.stringify(value)}' 10 hello world`,
+                `'${JSON.stringify(value)}' 10 hello 1  world`,
                 parameters,
             );
         } catch (e: any) {

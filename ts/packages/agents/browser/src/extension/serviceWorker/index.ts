@@ -199,6 +199,25 @@ function setupEventListeners(): void {
         },
     );
 
+    // Command shortcuts
+    chrome.commands?.onCommand.addListener(async (command) => {
+        if (command === "open_action_index") {
+            // Open action index panel
+            try {
+                const tabs = await chrome.tabs.query({
+                    active: true,
+                    currentWindow: true,
+                });
+                if (tabs.length > 0) {
+                    await chrome.sidePanel.open({ windowId: tabs[0].windowId });
+                    // The action index will be opened via URL navigation in the sidepanel
+                }
+            } catch (error) {
+                console.error("Error opening action index:", error);
+            }
+        }
+    });
+
     // Context menu clicks
     chrome.contextMenus?.onClicked.addListener(handleContextMenuClick);
 
@@ -315,7 +334,18 @@ async function sendActionToTabIndex(action: any): Promise<string | undefined> {
             );
 
             const handler = async (event: MessageEvent) => {
-                const text = await (event.data as Blob).text();
+                let text: string;
+                if (typeof event.data === "string") {
+                    text = event.data;
+                } else if (event.data instanceof Blob) {
+                    text = await event.data.text();
+                } else if (event.data instanceof ArrayBuffer) {
+                    text = new TextDecoder().decode(event.data);
+                } else {
+                    console.warn("Unknown message type:", typeof event.data);
+                    return;
+                }
+
                 const data = JSON.parse(text);
                 if (data.id == callId && data.result) {
                     webSocket.removeEventListener("message", handler);

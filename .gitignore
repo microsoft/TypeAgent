@@ -446,3 +446,6 @@ android/samples/mobile/.idea/deploymentTargetSelector.xml
 
 # Mac OS files
 .DS_Store
+
+# Everybody gets to maintain their own .github/instructions/ folder
+/.github/instructions/

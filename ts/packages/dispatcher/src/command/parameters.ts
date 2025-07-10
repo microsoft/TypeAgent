@@ -13,6 +13,26 @@ import {
 } from "@typeagent/agent-sdk/helpers/command";
 import { setObjectProperty } from "common-utils";
 
+function parseBooleanParameter(
+    valueStr: string,
+    kind: "flag" | "argument",
+    name: string,
+) {
+    // Allow true/false or 1/0 as boolean values.
+    const lower = valueStr.toLowerCase();
+    if (lower === "true" || lower === "1") {
+        return true;
+    }
+    if (lower === "false" || lower === "0") {
+        return false;
+    }
+
+    // Caller can default the flag to true and roll back in this case.
+    throw new Error(
+        `Invalid boolean value '${valueStr}' for ${kind} '${name}'`,
+    );
+}
+
 function parseIntParameter(
     valueStr: string,
     kind: "flag" | "argument",
@@ -76,7 +96,7 @@ function parseValueToken(
     flagToken: string,
     flag: string,
     parsedFlags: any,
-    valueType: "string" | "number" | "json",
+    valueType: "boolean" | "string" | "number" | "json",
     valueToken?: string,
 ) {
     if (valueToken === undefined || invalidValueToken(valueToken)) {
@@ -86,35 +106,34 @@ function parseValueToken(
     // stripped any quotes
     const stripped = stripQuoteFromToken(valueToken);
 
-    if (valueType === "number") {
-        return parseIntParameter(stripped, "flag", flagToken);
-    }
+    switch (valueType) {
+        case "boolean":
+            return parseBooleanParameter(stripped, "flag", flagToken);
+        case "number":
+            return parseIntParameter(stripped, "flag", flagToken);
+        case "string":
+            // It is a string, just return the value stripped of quote.
+            return stripped;
+        case "json":
+            const prefix = `--${flag}.`;
+            if (!flagToken.startsWith(prefix)) {
+                // Full json object
+                return parseJsonParameter(stripped, "flag", flagToken);
+            }
 
-    if (valueType === "string") {
-        // It is a string, just return the value stripped of quote.
-        return stripped;
+            // Json object property
+            const existing = parsedFlags[flag];
+            if (Array.isArray(existing)) {
+                throw new Error(
+                    `Invalid flag '${flag}': multiple json value cannot use property syntax`,
+                );
+            }
+            parsedFlags[flag] = undefined; // avoid duplicate flag error, this will be assigned back later
+            const propertyName = flagToken.substring(prefix.length);
+            const data = { obj: existing ?? {} };
+            setObjectProperty(data, "obj", propertyName, stripped, true);
+            return data.obj;
     }
-
-    // valueType === "json"
-
-    const prefix = `--${flag}.`;
-    if (!flagToken.startsWith(prefix)) {
-        // Full json object
-        return parseJsonParameter(stripped, "flag", flagToken);
-    }
-
-    // Json object property
-    const existing = parsedFlags[flag];
-    if (Array.isArray(existing)) {
-        throw new Error(
-            `Invalid flag '${flag}': multiple json value cannot use property syntax`,
-        );
-    }
-    parsedFlags[flag] = undefined; // avoid duplicate flag error, this will be assigned back later
-    const propertyName = flagToken.substring(prefix.length);
-    const data = { obj: existing ?? {} };
-    setObjectProperty(data, "obj", propertyName, stripped, true);
-    return data.obj;
 }
 
 export function parseParams<T extends ParameterDefinitions>(
@@ -165,6 +184,9 @@ export function parseParams<T extends ParameterDefinitions>(
     const parsedArgs: any = {};
 
     let argDefIndex = 0;
+    let lastCompletableParam: string | undefined = undefined;
+    let lastParamImplicitQuotes: boolean = false;
+    let advanceMultiple = false;
     while (true) {
         try {
             // Save the rest for implicit quote arguments;
@@ -173,41 +195,43 @@ export function parseParams<T extends ParameterDefinitions>(
             if (next === undefined) {
                 break;
             }
+            lastCompletableParam = undefined; // reset last param name
             const flagInfo = flagDefs ? resolveFlag(flagDefs, next) : undefined;
             if (flagInfo !== undefined) {
+                if (advanceMultiple) {
+                    // Detect a flag, that last multiple flag is terminated.
+                    advanceMultiple = false;
+                    argDefIndex++;
+                }
                 const [name, flag] = flagInfo;
                 const valueType = getFlagType(flag);
                 let value: FlagValueTypes;
                 const rollback = curr;
                 const valueToken = nextToken();
-                if (valueType === "boolean") {
-                    value = true;
-                    if (valueToken === "false") {
-                        value = false;
-                    } else if (valueToken !== "true") {
-                        value = true;
-                        // default to true if not specified. Rollback
+
+                try {
+                    value = parseValueToken(
+                        next,
+                        name,
+                        parsedFlags,
+                        valueType,
+                        valueToken,
+                    );
+                } catch (e) {
+                    // rollback to continue with partial or default boolean value.
+                    if (valueToken !== undefined) {
                         curr = rollback;
                         parsedTokens.pop();
                     }
-                } else {
-                    try {
-                        value = parseValueToken(
-                            next,
-                            name,
-                            parsedFlags,
-                            valueType,
-                            valueToken,
-                        );
-                    } catch (e) {
-                        // rollback to continue with partial
-                        if (valueToken !== undefined) {
-                            curr = rollback;
-                            parsedTokens.pop();
-                        }
+                    if (valueType === "boolean") {
+                        // default to true if not specified or next value isn't valid for boolean
+                        value = true;
+                    } else {
+                        // Continue with partial parsing
                         throw e;
                     }
                 }
+
                 const multiple = getFlagMultiple(flag);
                 if (multiple) {
                     if (parsedFlags[name] === undefined) {
@@ -221,8 +245,26 @@ export function parseParams<T extends ParameterDefinitions>(
                     }
                     parsedFlags[name] = value;
                 }
+                if (valueType === "string") {
+                    lastCompletableParam = `--${name}`;
+                    lastParamImplicitQuotes = false;
+                }
             } else {
+                if (next === "--") {
+                    // '--' is used to separate arguments or flags when necessary.
+                    // e.g.
+                    // - separate boolean flags from arguments that look like boolean values. (true/false or 1/0)
+                    // - separate multiple arguments to the next argument.
+
+                    if (advanceMultiple) {
+                        // Explicit termination of the last multiple argument.
+                        advanceMultiple = false;
+                        argDefIndex++;
+                    }
+                    continue;
+                }
                 if (next.startsWith("-")) {
+                    // Quote is needed if it is an actual argument value similar to a flag.
                     throw new Error(`Invalid flag '${next}'`);
                 }
                 if (argDefs === undefined || argDefIndex >= argDefs.length) {
@@ -237,22 +279,32 @@ export function parseParams<T extends ParameterDefinitions>(
                     arg = rest; // take the rest of the parameters
                     curr = "";
                 }
+                const argType = argDef.type ?? "string";
                 const argValue =
-                    argDef.type === "number"
+                    argType === "number"
                         ? parseIntParameter(arg, "argument", name)
-                        : argDef.type === "json"
+                        : argType === "json"
                           ? parseJsonParameter(arg, "argument", name)
-                          : arg;
+                          : argType === "boolean"
+                            ? parseBooleanParameter(arg, "argument", name)
+                            : arg;
+
                 if (argDef.multiple !== true) {
                     argDefIndex++;
                     parsedArgs[name] = argValue;
                 } else {
-                    // TODO: currently only support multiple for the last argument. Define have a way to terminate multiple
+                    // Indicate that we are in a multiple argument, and should advance the arg index
+                    // if we found a flag or '--' terminator.
+                    advanceMultiple = true;
                     if (parsedArgs[name] === undefined) {
                         parsedArgs[name] = [argValue];
                     } else {
                         parsedArgs[name].push(argValue);
                     }
+                }
+                if (argType === "string") {
+                    lastCompletableParam = name;
+                    lastParamImplicitQuotes = argDef.implicitQuotes ?? false;
                 }
             }
         } catch (e: any) {
@@ -306,6 +358,9 @@ export function parseParams<T extends ParameterDefinitions>(
         args: argDefs !== undefined ? parsedArgs : undefined,
         flags: flagDefs !== undefined ? parsedFlags : undefined,
         tokens: parsedTokens,
+
+        lastCompletableParam,
+        lastParamImplicitQuotes,
         nextArgs,
     };
 }

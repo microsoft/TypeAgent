@@ -4,22 +4,19 @@
 import {
     WebsiteVisitInfo,
     Website,
+    WebsiteMeta,
     importWebsiteVisit,
 } from "./websiteMeta.js";
 import {
     ContentExtractor,
     ExtractionMode,
     EnhancedContent,
+    EnhancedContentWithKnowledge,
+    KnowledgeExtractionMode,
 } from "./contentExtractor.js";
-import { ContentAnalyzer } from "./contentAnalyzer.js";
-import { ChatModel } from "aiclient";
 import path from "path";
 import fs from "fs";
 import * as sqlite from "better-sqlite3";
-import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 export interface ImportOptions {
     source: "chrome" | "edge";
@@ -33,12 +30,13 @@ export interface ImportOptions {
     contentTimeout?: number;
     maxConcurrent?: number;
 
-    enableIntelligentAnalysis?: boolean;
-    model?: ChatModel;
-
     enableActionDetection?: boolean;
     actionTimeout?: number;
     actionConfidence?: number;
+
+    // NEW: Knowledge extraction options
+    enableKnowledgeExtraction?: boolean;
+    knowledgeMode?: KnowledgeExtractionMode;
 }
 
 export interface ChromeBookmark {
@@ -127,6 +125,15 @@ function extractDomain(url: string): string {
     }
 }
 
+function isValidHttpUrl(url: string): boolean {
+    try {
+        const urlObj = new URL(url);
+        return urlObj.protocol === "http:" || urlObj.protocol === "https:";
+    } catch {
+        return false;
+    }
+}
+
 /**
  * Import bookmarks from Chrome
  */
@@ -205,6 +212,11 @@ function extractBookmarks(
     if (limit && websites.length >= limit) return;
 
     if (bookmark.type === "url" && bookmark.url) {
+        // Filter out non-HTTP/HTTPS URLs
+        if (!isValidHttpUrl(bookmark.url)) {
+            return;
+        }
+
         const bookmarkDate = bookmark.date_added
             ? chromeTimeToDate(bookmark.date_added)
             : undefined;
@@ -330,18 +342,12 @@ export async function importChromeHistory(
             for (let i = 0; i < rows.length; i++) {
                 const row = rows[i];
 
-                if (
-                    !row.url ||
-                    row.url.startsWith("chrome://") ||
-                    row.url.startsWith("chrome-extension://")
-                ) {
-                    continue; // Skip Chrome internal URLs
+                if (!row.url || !isValidHttpUrl(row.url)) {
+                    continue; // Skip non-HTTP/HTTPS URLs
                 }
 
                 const domain = extractDomain(row.url);
                 const visitDate = chromeTimeToISOString(row.last_visit_time);
-                // Note: Using fallback pageType determination here.
-                // LLM-based classification happens later during content enhancement
                 const pageType = determinePageType(row.url, row.title);
 
                 const visitInfo: WebsiteVisitInfo = {
@@ -473,6 +479,8 @@ export async function importWebsitesWithContent(
         extractionMode?: ExtractionMode;
         contentTimeout?: number;
         maxConcurrent?: number;
+        enableKnowledgeExtraction?: boolean;
+        knowledgeMode?: KnowledgeExtractionMode;
     },
     progressCallback?: ImportProgressCallback,
 ): Promise<Website[]> {
@@ -506,15 +514,12 @@ async function enhanceWithContent(
         timeout: options.contentTimeout || 10000,
         maxContentLength: 20000,
         enableActionDetection: options.enableActionDetection,
+        enableKnowledgeExtraction: options.enableKnowledgeExtraction || false,
+        knowledgeMode: options.knowledgeMode || "hybrid",
     });
 
-    // Initialize content analyzer if enabled and model is provided
-    let analyzer: ContentAnalyzer | undefined;
-    if (options.enableIntelligentAnalysis && options.model) {
-        analyzer = new ContentAnalyzer(options.model);
-    }
-
-    const maxConcurrent = options.maxConcurrent || 3;
+    // TEMPORARY: Force batch size to 1 for debugging timeout issues
+    const maxConcurrent = 1; // options.maxConcurrent || 3;
     const enhanced: Website[] = [];
 
     // Process in batches to avoid overwhelming networks
@@ -523,28 +528,32 @@ async function enhanceWithContent(
 
         const batchPromises = batch.map(async (website) => {
             try {
-                const contentData = await extractor.extractFromUrl(
-                    website.metadata.url,
-                    options.extractionMode || "content",
-                );
+                let contentData: EnhancedContent | EnhancedContentWithKnowledge;
+
+                // Use knowledge extraction if enabled
+                if (options.enableKnowledgeExtraction) {
+                    // First fetch the HTML content for knowledge processing
+                    const html = await extractor["fetchPage"](
+                        website.metadata.url,
+                    );
+                    contentData = await extractor.extractWithKnowledge(
+                        website.metadata.url,
+                        html,
+                        options.extractionMode || "content",
+                        options.knowledgeMode || "hybrid",
+                    );
+                } else {
+                    contentData = await extractor.extractFromUrl(
+                        website.metadata.url,
+                        options.extractionMode || "content",
+                    );
+                }
 
                 if (contentData.success) {
-                    // Run intelligent analysis if available
-                    let intelligentAnalysis;
-                    if (analyzer && contentData.pageContent) {
-                        intelligentAnalysis = await analyzer.analyzeContent(
-                            website.metadata.url,
-                            contentData.pageContent,
-                            contentData.metaTags,
-                            contentData.structuredData,
-                        );
-                    }
-
-                    // Create enhanced website with content and analysis
-                    return createEnhancedWebsite(
+                    // Create enhanced website with content and knowledge
+                    return createEnhancedWebsiteWithKnowledge(
                         website,
                         contentData,
-                        intelligentAnalysis,
                     );
                 } else {
                     console.warn(
@@ -570,9 +579,7 @@ async function enhanceWithContent(
 
         // Progress reporting
         if (progressCallback) {
-            const message = analyzer
-                ? `Processing content + AI analysis batch ${Math.floor(i / maxConcurrent) + 1}`
-                : `Processing content batch ${Math.floor(i / maxConcurrent) + 1}`;
+            const message = `Processing content batch ${Math.floor(i / maxConcurrent) + 1}`;
             progressCallback(
                 Math.min(i + maxConcurrent, websites.length),
                 websites.length,
@@ -589,10 +596,9 @@ async function enhanceWithContent(
     return enhanced;
 }
 
-function createEnhancedWebsite(
+function createEnhancedWebsiteWithKnowledge(
     originalWebsite: Website,
-    contentData: EnhancedContent,
-    intelligentAnalysis?: any,
+    contentData: EnhancedContent | EnhancedContentWithKnowledge,
 ): Website {
     // Create enhanced visit info with content
     const enhancedVisitInfo: WebsiteVisitInfo = {
@@ -639,26 +645,37 @@ function createEnhancedWebsite(
     if (contentData.actions)
         enhancedVisitInfo.extractedActions = contentData.actions;
 
-    // NEW: Action detection data
+    // Action detection data
     if (contentData.detectedActions)
         enhancedVisitInfo.detectedActions = contentData.detectedActions;
     if (contentData.actionSummary)
         enhancedVisitInfo.actionSummary = contentData.actionSummary;
 
-    // Add intelligent analysis if available
-    if (intelligentAnalysis) {
-        enhancedVisitInfo.intelligentAnalysis = intelligentAnalysis;
-
-        // Update page type based on LLM analysis (more accurate than hardcoded rules)
-        if (intelligentAnalysis.contentType) {
-            enhancedVisitInfo.pageType = intelligentAnalysis.contentType;
-        }
-    }
-
     // Use page content as the main text if available, otherwise use existing text
     const mainText = contentData.pageContent?.mainContent || "";
 
-    return importWebsiteVisit(enhancedVisitInfo, mainText);
+    // Create website with enhanced metadata
+    const meta = new WebsiteMeta(enhancedVisitInfo);
+
+    // Get enhanced knowledge if available
+    let finalKnowledge;
+    if ("knowledge" in contentData && contentData.knowledge) {
+        finalKnowledge = meta.getEnhancedKnowledge(contentData.knowledge);
+    } else {
+        finalKnowledge = meta.getKnowledge();
+    }
+
+    // Create website with enhanced knowledge
+    const enhancedWebsite = new Website(
+        meta,
+        mainText,
+        [],
+        finalKnowledge,
+        undefined,
+        true,
+    );
+
+    return enhancedWebsite;
 }
 
 /**
@@ -818,150 +835,4 @@ export function determinePageType(url: string, title?: string): string {
     }
 
     return "general";
-}
-
-/**
- * Enhanced page type determination using LLM analysis
- * This replaces the hardcoded string matching with intelligent analysis
- */
-export async function determinePageTypeWithLLM(
-    url: string,
-    title?: string,
-    description?: string,
-    model?: ChatModel,
-): Promise<string> {
-    // If no model provided, fall back to hardcoded classification
-    if (!model) {
-        return determinePageType(url, title);
-    }
-
-    try {
-        // Load page type schema for accurate classification
-        const pageTypeSchemaPath = path.join(
-            __dirname,
-            "schemas",
-            "pageTypeSchema.ts",
-        );
-        const pageTypeSchema = fs.readFileSync(pageTypeSchemaPath, "utf-8");
-
-        // Extract page type definitions from schema
-        const pageTypeDefinitions =
-            extractPageTypeDefinitionsFromSchema(pageTypeSchema);
-
-        // Create a lightweight analysis prompt focused just on content type
-        const prompt = `Analyze this web page and determine its primary content type:
-
-URL: ${url}
-${title ? `Title: ${title}` : ""}
-${description ? `Description: ${description}` : ""}
-
-${pageTypeDefinitions}
-
-Choose the MOST SPECIFIC content type from the available options based on the content and purpose.
-
-Respond with ONLY the content type, no explanation.`;
-
-        // Create a lightweight analysis prompt focused just on content type
-        const response = await model.complete([
-            {
-                role: "system",
-                content:
-                    "You are a web content classifier. Analyze the URL, title, and description to determine the primary content type. Respond with only the content type name from the provided list, no additional text or explanation.",
-            },
-            {
-                role: "user",
-                content: prompt,
-            },
-        ]);
-
-        if (!response.success) {
-            throw new Error(response.message || "LLM request failed");
-        }
-
-        const contentType = response.data.trim().toLowerCase();
-
-        // Validate the response
-        const validTypes = [
-            "tutorial",
-            "documentation",
-            "article",
-            "guide",
-            "reference",
-            "blog_post",
-            "news",
-            "product_page",
-            "landing_page",
-            "interactive_demo",
-            "code_example",
-            "api_docs",
-            "other",
-        ];
-
-        if (validTypes.includes(contentType)) {
-            return contentType;
-        }
-
-        // If LLM returns unexpected format, try to map it
-        if (contentType.includes("doc")) return "documentation";
-        if (contentType.includes("tutorial")) return "tutorial";
-        if (contentType.includes("guide")) return "guide";
-        if (contentType.includes("article")) return "article";
-        if (contentType.includes("blog")) return "blog_post";
-        if (contentType.includes("news")) return "news";
-        if (contentType.includes("product")) return "product_page";
-        if (contentType.includes("api")) return "api_docs";
-        if (contentType.includes("demo")) return "interactive_demo";
-        if (contentType.includes("example")) return "code_example";
-        if (contentType.includes("reference")) return "reference";
-
-        // Fallback to hardcoded if LLM response doesn't match expected format
-        console.warn(
-            `LLM returned unexpected content type "${contentType}" for ${url}, falling back to hardcoded classification`,
-        );
-        return determinePageType(url, title);
-    } catch (error) {
-        console.warn(`LLM page type determination failed for ${url}:`, error);
-        return determinePageType(url, title);
-    }
-}
-
-/**
- * Extract page type definitions from the schema file
- */
-function extractPageTypeDefinitionsFromSchema(schemaContent: string): string {
-    const lines = schemaContent.split("\n");
-    let definitions = "Available page types and their definitions:\n";
-    let inTypeDefinition = false;
-    let currentType = "";
-
-    for (const line of lines) {
-        if (line.includes("export type PageType =")) {
-            inTypeDefinition = true;
-            continue;
-        }
-
-        if (inTypeDefinition) {
-            // Look for type definitions with comments
-            const typeMatch = line.match(/\|\s*"([^"]+)"/);
-            if (typeMatch) {
-                currentType = typeMatch[1];
-                continue;
-            }
-
-            // Look for description comments
-            const commentMatch = line.match(/\/\*\*\s*(.+?)\s*\*\//);
-            if (commentMatch && currentType) {
-                definitions += `- ${currentType}: ${commentMatch[1]}\n`;
-                currentType = "";
-            }
-
-            // End of type definition
-            if (line.includes(";")) {
-                inTypeDefinition = false;
-                break;
-            }
-        }
-    }
-
-    return definitions;
 }

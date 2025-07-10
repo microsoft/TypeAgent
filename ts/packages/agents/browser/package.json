@@ -55,6 +55,7 @@
     "azure-ai-foundry": "workspace:*",
     "bootstrap": "^5.3.3",
     "chalk": "^5.4.1",
+    "cheerio": "^1.1.0",
     "common-utils": "workspace:*",
     "cytoscape": "^3.32.0",
     "cytoscape-dagre": "^2.5.0",

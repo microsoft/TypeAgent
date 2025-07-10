@@ -535,7 +535,7 @@ export interface SearchTerm {
     /**
      * Additional terms related to term.
      * These can be supplied from synonym tables and so on.
-     *  - Zero length array: no related matches for this term
+     *  - Zero length array: no related matches for this term. That will force an exact match
      *  - undefined array: the search processor may try to resolve related terms from any  {@link IConversationSecondaryIndexes}
      * related term {@link ITermToRelatedTermsIndex} indexes available to it
      */
@@ -618,13 +618,23 @@ export type SearchSelectExpr = {
  *   Semantic Refs are within supplied SCOPE.. i.e. only Semantic Refs from a 'scoping' set of text ranges will match
  */
 export type WhenFilter = {
-    knowledgeType?: KnowledgeType | undefined;
-    dateRange?: DateRange | undefined;
-    threadDescription?: string | undefined;
-    tags?: string[] | undefined;
-    // SCOPE DEFINITION
     /**
-     * Search terms whose matching text ranges supply the scope for this query
+     * Match SemanticRefs of this knowledge type
+     */
+    knowledgeType?: KnowledgeType | undefined;
+    /**
+     * Match only in this date range
+     */
+    dateRange?: DateRange | undefined;
+    /**
+     * If a thread index is available, match in a thread closest to ths description
+     */
+    threadDescription?: string | undefined;
+
+    tags?: string[] | undefined;
+    /**
+     * Use this SearchTermGroup as a sub-query to find matching text ranges
+     * Match SemanticRefs the scope for this query
      */
     scopeDefiningTerms?: SearchTermGroup | undefined;
     /**

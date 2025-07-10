@@ -31,7 +31,7 @@ describeIf(
             expect(collection.nameTag).toBe("test-collection");
             expect(collection.messages.length).toBe(0);
             expect(collection.dataFrames).toBeDefined();
-            expect(collection.dataFrames.size).toBe(3); // visitFrequency, websiteCategories, bookmarkFolders
+            expect(collection.dataFrames.size).toBe(6); // visitFrequency, websiteCategories, bookmarkFolders, knowledgeEntities, knowledgeTopics, actionKnowledgeCorrelations
         });
 
         test("create collection with bookmarks", () => {

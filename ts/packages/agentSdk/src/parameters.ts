@@ -26,7 +26,7 @@ type SingleFlagDefinition<T extends FlagDefinitionValueTypes> = {
     description: string;
     multiple?: false;
     char?: string;
-    type?: FlagValueLiteral<T>;
+    type?: FlagValueLiteral<T>; // default is the type of the default value, or "string" if no default value
     default?: T;
 };
 
@@ -34,7 +34,7 @@ type MultipleFlagDefinition<T extends FlagDefinitionValueTypes> = {
     description: string;
     multiple: true;
     char?: string;
-    type?: FlagValueLiteral<T>;
+    type?: FlagValueLiteral<T>; // default is the type of the default value, or "string" if no default value
     default?: readonly T[];
 };
 
@@ -49,7 +49,7 @@ export type FlagDefinitions = Record<string, FlagDefinition>;
 // Arguments
 export type ArgDefinition = {
     description: string;
-    type?: "string" | "number" | "json";
+    type?: "boolean" | "string" | "number" | "json"; // default is "string"
     optional?: boolean;
     multiple?: boolean;
     implicitQuotes?: boolean; // implicitly assume there are quotes and take the whole string as the argument
@@ -77,7 +77,7 @@ export type FlagValueTypes =
     | readonly ObjectValue[];
 
 // For converting the type name to the actual type
-type FlagValueTypeFromLiteral<
+type ValueTypeFromLiteral<
     T extends "json" | "string" | "number" | "boolean" | undefined,
 > = T extends "json"
     ? ObjectValue
@@ -87,7 +87,7 @@ type FlagValueTypeFromLiteral<
         ? boolean
         : string;
 
-// For infering the type based on the default value
+// For inferring the type based on the default value
 type FlagValueTypeFromValue<T> = T extends never[]
     ? string[]
     : T extends Array<infer Item extends FlagValueTypes>
@@ -110,8 +110,8 @@ type FlagOutputType<T extends FlagDefinition> =
         ? FlagValueTypeFromValue<Writeable<T["default"]>>
         : // Base the value on the type name literal, and value is undefined not flag is not specified
           T["multiple"] extends true
-          ? FlagValueTypeFromLiteral<T["type"]>[] | undefined
-          : FlagValueTypeFromLiteral<T["type"]> | undefined;
+          ? ValueTypeFromLiteral<T["type"]>[] | undefined
+          : ValueTypeFromLiteral<T["type"]> | undefined;
 
 type FlagsOutput<T extends FlagDefinitions | undefined> =
     T extends FlagDefinitions
@@ -123,16 +123,13 @@ type FlagsOutput<T extends FlagDefinitions | undefined> =
 // -------------------------------
 // Arg output types
 // -------------------------------
-type ArgTypeFromLiteral<T extends "number" | "string" | "json" | undefined> =
-    T extends "json" ? ObjectValue : T extends "number" ? number : string;
-
 type ArgOutputType<T extends ArgDefinition> = T["multiple"] extends true
     ? T["optional"] extends true
-        ? ArgTypeFromLiteral<T["type"]>[] | undefined
-        : ArgTypeFromLiteral<T["type"]>[]
+        ? ValueTypeFromLiteral<T["type"]>[] | undefined
+        : ValueTypeFromLiteral<T["type"]>[]
     : T["optional"] extends true
-      ? ArgTypeFromLiteral<T["type"]> | undefined
-      : ArgTypeFromLiteral<T["type"]>;
+      ? ValueTypeFromLiteral<T["type"]> | undefined
+      : ValueTypeFromLiteral<T["type"]>;
 
 type ArgsOutput<T extends ArgDefinitions | undefined> = T extends ArgDefinitions
     ? {
@@ -143,8 +140,12 @@ type ArgsOutput<T extends ArgDefinitions | undefined> = T extends ArgDefinitions
 export type ParsedCommandParams<T extends ParameterDefinitions> = {
     args: ArgsOutput<T["args"]>;
     flags: FlagsOutput<T["flags"]>;
-    tokens: string[];
-    nextArgs: string[];
+
+    // Information for partial command completion.
+    tokens: string[]; // The list of tokens parsed from the command.
+    lastCompletableParam: string | undefined; // The last parameter that was parsed that can be completed.
+    lastParamImplicitQuotes: boolean; // If the last parameter is implicitly quoted.
+    nextArgs: string[]; // A list of potential arguments next.
 };
 
 export type PartialParsedCommandParams<T extends ParameterDefinitions> =

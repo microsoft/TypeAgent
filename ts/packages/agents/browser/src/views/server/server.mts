@@ -20,7 +20,7 @@ async function main() {
     const config: ServerConfig = {
         port,
         enableCors: true,
-        rateLimitWindow: 60000,
+        rateLimitWindow: 1000,
         rateLimitMax: 100,
         bodyLimit: "10mb",
     };

@@ -46,6 +46,11 @@ export class ParsePart implements ConstructionPart {
     public toString(verbose: boolean = false) {
         return `<P:${this.parser.name}${verbose ? `=${this.propertyName}` : ""}>`;
     }
+
+    public getCompletion(): Iterable<string> | undefined {
+        // Parse parts don't have completions.
+        return undefined;
+    }
 }
 
 export type ParsePartJSON = {
