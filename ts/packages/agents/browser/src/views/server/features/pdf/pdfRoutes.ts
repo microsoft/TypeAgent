@@ -261,7 +261,8 @@ export class PDFRoutes {
     private async getAnnotations(req: Request, res: Response): Promise<void> {
         try {
             const documentId = req.params.documentId;
-            const annotations = await this.pdfService.getAnnotations(documentId);
+            const annotations =
+                await this.pdfService.getAnnotations(documentId);
             res.json(annotations);
         } catch (error) {
             debug("Error getting annotations:", error);
@@ -285,7 +286,8 @@ export class PDFRoutes {
                 updatedAt: new Date().toISOString(),
             };
 
-            const savedAnnotation = await this.pdfService.addAnnotation(annotation);
+            const savedAnnotation =
+                await this.pdfService.addAnnotation(annotation);
 
             // Broadcast to other clients
             this.broadcastUpdate(
