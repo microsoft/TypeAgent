@@ -22,6 +22,10 @@ import {
     ResolveCommandResult,
 } from "./command.js";
 
+import registerDebug from "debug";
+const debug = registerDebug("typeagent:command:completion");
+const debugError = registerDebug("typeagent:command:completion:error");
+
 export type CommandCompletionResult = {
     startIndex: number; // the index for the input where completion starts
     completions: string[]; // All the partial completions available after partial (and space if true)
@@ -171,77 +175,89 @@ export async function getCommandCompletion(
     input: string,
     context: CommandHandlerContext,
 ): Promise<CommandCompletionResult | undefined> {
-    const completionStartIndex = getCompletionStartIndex(input);
-    // Trim spaces and remove leading '@'
-    const partialCommand = normalizeCommand(
-        completionStartIndex !== -1
-            ? input.substring(0, completionStartIndex)
-            : input,
-        context,
-    );
-
-    const result = await resolveCommand(partialCommand, context);
-
-    const table = result.table;
-    if (table === undefined) {
-        // Unknown app agent, or appAgent doesn't support commands
-        return undefined;
-    }
-
-    // Collect completions
-    let completions: string[] = [];
-    const descriptor = result.descriptor;
-    if (descriptor !== undefined) {
-        if (
-            result.suffix.length === 0 &&
-            table !== undefined &&
-            getDefaultSubCommandDescriptor(table) === result.descriptor
-        ) {
-            // Match the default sub command.  Includes additional subcommand names
-            completions.push(...Object.keys(table.commands));
-        }
-        const parameterCompletions = await getCommandParameterCompletion(
-            descriptor,
+    try {
+        debug(`Command completion start: '${input}'`);
+        const completionStartIndex = getCompletionStartIndex(input);
+        // Trim spaces and remove leading '@'
+        const partialCommand = normalizeCommand(
+            completionStartIndex !== -1
+                ? input.substring(0, completionStartIndex)
+                : input,
             context,
-            result,
         );
 
-        if (parameterCompletions === undefined) {
-            if (completions.length === 0) {
-                // No more completion from the descriptor.
-                return undefined;
+        debug(`Command completion resolve command: '${partialCommand}'`);
+        const result = await resolveCommand(partialCommand, context);
+
+        const table = result.table;
+        if (table === undefined) {
+            // Unknown app agent, or appAgent doesn't support commands
+            return undefined;
+        }
+
+        // Collect completions
+        let completions: string[] = [];
+        const descriptor = result.descriptor;
+        if (descriptor !== undefined) {
+            if (
+                result.suffix.length === 0 &&
+                table !== undefined &&
+                getDefaultSubCommandDescriptor(table) === result.descriptor
+            ) {
+                // Match the default sub command.  Includes additional subcommand names
+                completions.push(...Object.keys(table.commands));
+            }
+            const parameterCompletions = await getCommandParameterCompletion(
+                descriptor,
+                context,
+                result,
+            );
+
+            if (parameterCompletions === undefined) {
+                if (completions.length === 0) {
+                    // No more completion from the descriptor.
+                    return undefined;
+                }
+            } else {
+                completions.push(...parameterCompletions);
             }
         } else {
-            completions.push(...parameterCompletions);
+            if (result.suffix.length !== 0) {
+                // Unknown command
+                return undefined;
+            }
+            completions.push(...Object.keys(table.commands));
+            if (
+                result.parsedAppAgentName === undefined &&
+                result.commands.length === 0
+            ) {
+                // Include the agent names
+                completions.push(
+                    ...context.agents
+                        .getAppAgentNames()
+                        .filter((name) =>
+                            context.agents.isCommandEnabled(name),
+                        ),
+                );
+            }
+            if (completions.length === 0) {
+                // No more completion from the table.
+                return undefined;
+            }
         }
-    } else {
-        if (result.suffix.length !== 0) {
-            // Unknown command
-            return undefined;
-        }
-        completions.push(...Object.keys(table.commands));
-        if (
-            result.parsedAppAgentName === undefined &&
-            result.commands.length === 0
-        ) {
-            // Include the agent names
-            completions.push(
-                ...context.agents
-                    .getAppAgentNames()
-                    .filter((name) => context.agents.isCommandEnabled(name)),
-            );
-        }
-        if (completions.length === 0) {
-            // No more completion from the table.
-            return undefined;
-        }
-    }
 
-    const space =
-        completionStartIndex > 0 && input[completionStartIndex - 1] !== "@";
-    return {
-        startIndex: completionStartIndex,
-        completions,
-        space,
-    };
+        const space =
+            completionStartIndex > 0 && input[completionStartIndex - 1] !== "@";
+        const completionResult = {
+            startIndex: completionStartIndex,
+            completions,
+            space,
+        };
+
+        debug(`Command completion result:`, completionResult);
+        return completionResult;
+    } catch (e: any) {
+        debugError(`Command completion error: ${e}\n${e.stack}`);
+        return undefined;
+    }
 }

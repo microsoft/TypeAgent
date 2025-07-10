@@ -22,8 +22,8 @@ const wildcardRegex = new RegExp(
 
 type MatchState = {
     capture: string[];
-    matchedStart: number[];
-    matchedEnd: number[];
+    matchedStart: number[]; // array of start indices for each part
+    matchedEnd: number[]; // array of end indices for each part, -1 for wildcard match
     matchedCurrent: number;
     pendingWildcard: number;
 };
@@ -31,6 +31,7 @@ type MatchState = {
 export type MatchConfig = {
     readonly enableWildcard: boolean;
     readonly rejectReferences: boolean;
+    readonly partial: boolean;
     readonly history?: HistoryContext | undefined;
     readonly matchPartsCache?: MatchPartsCache | undefined;
     readonly conflicts?: boolean | undefined;
@@ -60,6 +61,9 @@ export function matchParts(
                 matchValueTranslator,
             );
             if (values !== undefined) {
+                if (config.partial) {
+                    values.partialPartCount = state.matchedStart.length;
+                }
                 return values;
             }
         }
@@ -146,8 +150,9 @@ function finishMatchParts(
                 state.matchedStart.push(-1);
                 continue;
             }
-
-            return false;
+            // For partial, report as matched if we matched all the text in the request
+            // even when not all the parted are matched yet.
+            return config.partial && state.matchedCurrent === request.length;
         }
 
         // Matched

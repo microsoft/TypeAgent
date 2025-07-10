@@ -180,6 +180,10 @@ export class MatchPart {
                 toTransformInfosKey(this.transformInfos)
         );
     }
+
+    public getCompletion(): Iterable<string> | undefined {
+        return this.matchSet.matches.values();
+    }
 }
 
 export function createMatchPart(

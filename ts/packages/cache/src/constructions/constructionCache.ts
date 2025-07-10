@@ -70,6 +70,9 @@ export type MatchOptions = {
     rejectReferences?: boolean; // default is true
     conflicts?: boolean; // default is false
     history?: HistoryContext | undefined;
+
+    // Partial (prefix) match, for completions.
+    partial?: boolean; // default is false
 };
 
 export class ConstructionCache {
@@ -269,6 +272,7 @@ export class ConstructionCache {
             history: options?.history,
             conflicts: options?.conflicts,
             matchPartsCache: createMatchPartsCache(request),
+            partial: options?.partial ?? false, // default to false.
         };
 
         // If the useTranslators is undefined use all the translators
