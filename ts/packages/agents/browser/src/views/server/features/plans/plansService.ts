@@ -484,7 +484,7 @@ export class PlansService {
     private createEmptyPlan(actionName: string): WebPlanData {
         return {
             nodes: [
-                { id: "start", label: "Start", type: "start" },
+                { id: "start", label: "Home", type: "start" },
                 { id: "action", label: actionName, type: "action" },
                 { id: "end", label: "Complete", type: "end" }
             ],
@@ -507,26 +507,37 @@ export class PlansService {
         const nodes: any[] = [];
         const links: any[] = [];
         
+        // Create start node with label "Home"
         nodes.push({
             id: "start",
-            label: "Start",
+            label: "Home",
             type: "start"
         });
         
         if (pageActionsPlan.steps && Array.isArray(pageActionsPlan.steps)) {
             pageActionsPlan.steps.forEach((step: any, index: number) => {
                 const nodeId = `step-${index}`;
+                
+                // Create node label from step description or fallback to actionName + parameter
+                let label = step.description;
+                if (!label && step.actionName) {
+                    if (step.parameters?.valueTextParameter) {
+                        label = `${step.actionName} (${step.parameters.valueTextParameter})`;
+                    } else {
+                        label = step.actionName;
+                    }
+                }
+                
                 nodes.push({
                     id: nodeId,
-                    label: this.getStepLabel(step),
-                    type: this.getStepType(step)
+                    label: label || 'Action',
+                    type: "action"
                 });
                 
                 const sourceId = index === 0 ? "start" : `step-${index - 1}`;
                 links.push({
                     source: sourceId,
-                    target: nodeId,
-                    label: this.getStepAction(step)
+                    target: nodeId
                 });
             });
             
@@ -571,64 +582,9 @@ export class PlansService {
             nodes,
             links,
             currentNode: "start",
-            title: actionName
+            title: pageActionsPlan.planName || actionName,
+            description: pageActionsPlan.description
         };
-    }
-
-    /**
-     * Get step label for display
-     */
-    private getStepLabel(step: any): string {
-        switch (step.actionType) {
-            case 'ClickOnButton':
-                return `Click "${step.buttonText || step.text || 'Button'}"`;
-            case 'ClickOnLink':
-                return `Click "${step.linkText || step.text || 'Link'}"`;
-            case 'ClickOnElement':
-                return `Click Element${step.selector ? ` (${step.selector})` : ''}`;
-            case 'TypeText':
-                return `Type "${step.text || 'Text'}"`;
-            case 'FillInput':
-                return `Fill "${step.inputLabel || step.placeholder || 'Input'}"`;
-            case 'SelectOption':
-                return `Select "${step.optionText || 'Option'}"`;
-            case 'WaitFor':
-                return `Wait for ${step.condition || 'Element'}`;
-            case 'Navigate':
-                return `Navigate to ${step.url || 'Page'}`;
-            default:
-                return step.actionType?.replace(/([A-Z])/g, ' $1').trim() || 'Action';
-        }
-    }
-
-    /**
-     * Get step type for visualization
-     */
-    private getStepType(step: any): string {
-        switch (step.actionType) {
-            case 'ClickOnButton':
-            case 'ClickOnLink':
-            case 'ClickOnElement':
-                return 'action';
-            case 'TypeText':
-            case 'FillInput':
-                return 'input';
-            case 'SelectOption':
-                return 'selection';
-            case 'WaitFor':
-                return 'wait';
-            case 'Navigate':
-                return 'navigation';
-            default:
-                return 'action';
-        }
-    }
-
-    /**
-     * Get step action label for edges
-     */
-    private getStepAction(step: any): string {
-        return step.actionType?.replace(/([A-Z])/g, ' $1').trim() || 'Action';
     }
 
     /**

@@ -47,10 +47,16 @@ async function initializeActionView(actionId: string): Promise<void> {
         // Set up the plan data
         const webPlanData = actionData.planData;
         
-        // Update title
+        // Update title and description
         const titleElement = document.getElementById("plan-title");
         if (titleElement) {
-            titleElement.textContent = actionData.action.name;
+            titleElement.textContent = webPlanData.title || actionData.action.name;
+        }
+        
+        const descriptionElement = document.getElementById("plan-description");
+        if (descriptionElement && webPlanData.description) {
+            descriptionElement.textContent = webPlanData.description;
+            descriptionElement.style.display = "block";
         }
         
         // Initialize visualization for action view
