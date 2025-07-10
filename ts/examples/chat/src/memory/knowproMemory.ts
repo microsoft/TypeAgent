@@ -310,7 +310,7 @@ export async function createKnowproCommands(
         }
         // Log any new queries
         if (!savedQuery) {
-            context.log.writeFile("kpSearch", {
+            context.log.writeCommandResult("kpSearch", {
                 searchText: debugContext.searchText,
                 searchQuery: debugContext.searchQuery,
             });
@@ -395,7 +395,7 @@ export async function createKnowproCommands(
                 return;
             },
         );
-        context.log.writeFile("kpAnswer", answerResponse);
+        context.log.writeCommandResult("kpAnswer", answerResponse);
         context.printer.writeLine();
     }
 

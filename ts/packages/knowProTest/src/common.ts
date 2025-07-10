@@ -4,7 +4,7 @@
 import fs from "fs";
 import { ArgDef, NamedArgs, parseCommandLine } from "interactive-app";
 import path from "path";
-import { getFileName } from "typeagent";
+import { dateTime, getFileName } from "typeagent";
 import { error, Result, Error } from "typechat";
 
 export function ensureDirSync(folderPath: string): string {
@@ -34,6 +34,10 @@ export function writeObjectToUniqueFile(filePath: string, obj: any): void {
     fs.writeFileSync(filePath, stringifyReadable(obj));
 }
 
+export function writeObjectToFile(filePath: string, obj: any): void {
+    fs.writeFileSync(filePath, stringifyReadable(obj));
+}
+
 export function getCommandArgs(line: string | undefined): string[] {
     if (line !== undefined && line.length > 0) {
         const args = parseCommandLine(line);
@@ -45,6 +49,15 @@ export function getCommandArgs(line: string | undefined): string[] {
         }
     }
     return [];
+}
+
+export function dateRangeToTimeRange(
+    range: dateTime.DateRange,
+): dateTime.TimestampRange {
+    return {
+        startTimestamp: range.startDate.toISOString(),
+        endTimestamp: range.stopDate ? range.stopDate.toISOString() : undefined,
+    };
 }
 
 export async function execCommandLine<T>(
