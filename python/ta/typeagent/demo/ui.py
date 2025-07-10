@@ -3,6 +3,7 @@
 
 __version__ = "0.1"
 
+import argparse
 import asyncio
 import io
 import re
@@ -44,11 +45,33 @@ from ..podcasts.podcast import Podcast
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="TypeAgent demo UI.")
+    parser.add_argument(
+        "--podcast",
+        type=str,
+        default="testdata/Episode_53_AdrianTchaikovsky_index",
+        help="Path to the podcast file, less _data.json suffix.",
+    )
+    parser.add_argument(
+        "--alt-schema",
+        type=str,
+        default=None,
+        help="Path to alternate schema file for query translator.",
+    )
+
+    args = parser.parse_args()
+
     colorama.init(autoreset=True)
     load_dotenv()
+
     model = create_typechat_model()
     query_translator = create_translator(model, SearchQuery)
     answer_translator = create_translator(model, AnswerResponse)
+
+    if args.alt_schema:
+        print(f"Substituting alt schema from {args.alt_schema}")
+        with open(args.alt_schema) as f:
+            query_translator.schema_str = f.read()
 
     print(colorama.Fore.YELLOW + query_translator.schema_str.rstrip())
 
@@ -67,9 +90,9 @@ def main() -> None:
     )
     pretty_print(answer_context_options, colorama.Fore.CYAN)
 
-    file = "testdata/Episode_53_AdrianTchaikovsky_index"
+    file = args.podcast
     settings = ConversationSettings()
-    with timelog("load podcast"):
+    with timelog(f"load podcast from {file!r}"):
         pod = Podcast.read_from_file(file, settings)
     assert pod is not None, f"Failed to load podcast from {file!r}"
     context = QueryEvalContext(pod)
