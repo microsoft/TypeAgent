@@ -11,6 +11,7 @@ import registerDebug from "debug";
 import * as fs from "fs/promises";
 import * as path from "path";
 import * as os from "os";
+import sanitizeFilename from "sanitize-filename";
 
 const debug = registerDebug("typeagent:views:server:pdf:service");
 
@@ -110,10 +111,16 @@ export class PDFService {
     private async saveAnnotationsToDisk(documentId: string): Promise<void> {
         try {
             const annotations = this.annotations.get(documentId) || [];
-            const filePath = path.join(
+            const sanitizedDocumentId =
+                sanitizeFilename(documentId) || "default";
+            const filePath = path.resolve(
                 this.annotationsPath,
-                `${documentId}.json`,
+                `${sanitizedDocumentId}.json`,
             );
+
+            if (!filePath.startsWith(this.annotationsPath)) {
+                throw new Error("Invalid documentId: Path traversal detected");
+            }
 
             await fs.writeFile(
                 filePath,
@@ -204,10 +211,18 @@ export class PDFService {
         // If not in memory, try to load from disk
         if (!annotations) {
             try {
-                const filePath = path.join(
+                const sanitizedDocumentId =
+                    sanitizeFilename(documentId) || "default";
+                const filePath = path.resolve(
                     this.annotationsPath,
-                    `${documentId}.json`,
+                    `${sanitizedDocumentId}.json`,
                 );
+                if (!filePath.startsWith(this.annotationsPath)) {
+                    throw new Error(
+                        "Invalid documentId: Path traversal detected",
+                    );
+                }
+
                 const data = await fs.readFile(filePath, "utf-8");
                 const loadedAnnotations: PDFAnnotation[] = JSON.parse(data);
 

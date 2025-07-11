@@ -135,6 +135,13 @@ export type MatchPartJSON = {
     transformInfos?: TransformInfo[] | undefined;
 };
 
+export function getPropertyNameFromTransformInfo(
+    transformInfo: TransformInfo,
+): string {
+    const { transformName, actionIndex } = transformInfo;
+    return `${actionIndex !== undefined ? `${actionIndex}.` : ""}${transformName}`;
+}
+
 export class MatchPart {
     constructor(
         public readonly matchSet: MatchSet,
@@ -179,6 +186,16 @@ export class MatchPart {
             toTransformInfosKey(e.transformInfos) ===
                 toTransformInfosKey(this.transformInfos)
         );
+    }
+
+    public getPropertyNames() {
+        return this.transformInfos
+            ? this.transformInfos.map(getPropertyNameFromTransformInfo)
+            : undefined;
+    }
+
+    public getCompletion(): Iterable<string> | undefined {
+        return this.matchSet.matches.values();
     }
 }
 

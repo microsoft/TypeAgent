@@ -6,6 +6,7 @@
 import * as fs from "fs";
 import * as vscode from "vscode";
 import { initializeWS } from "./wsConnect";
+import { initializeAliasManager } from "./commandAliasMgr";
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -15,6 +16,8 @@ export function activate(context: vscode.ExtensionContext) {
     console.log('Congratulations, your extension "coda" is now active!');
 
     initializeWS();
+
+    initializeAliasManager(context);
 
     // The command has been defined in the package.json file
     // Now provide the implemeninitializeWStation of the command with registerCommand

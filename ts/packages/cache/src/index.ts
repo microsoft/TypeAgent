@@ -12,6 +12,7 @@ export type {
 } from "./explanation/requestAction.js";
 
 export type { ConstructionStore } from "./cache/store.js";
+export type { MatchOptions } from "./constructions/constructionCache.js";
 export type {
     GenericExplanationResult,
     CorrectionRecord,
@@ -45,6 +46,7 @@ export {
     createExecutableAction,
     toExecutableActions,
     toFullActions,
+    getPropertyInfo,
 } from "./explanation/requestAction.js";
 export { AgentCacheFactory, getDefaultExplainerName } from "./cache/factory.js";
 export { MatchResult } from "./constructions/constructions.js";

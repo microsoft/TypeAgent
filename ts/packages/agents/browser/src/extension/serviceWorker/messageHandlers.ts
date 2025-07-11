@@ -20,66 +20,59 @@ export async function handleMessage(
     message: any,
     sender: chrome.runtime.MessageSender,
 ): Promise<any> {
-    // Handle action-based messages (from websiteLibraryPanel)
-    if (message.action) {
-        switch (message.action) {
-            case "checkWebSocketConnection": {
-                try {
-                    const websocket = getWebSocket();
-                    return {
-                        connected:
-                            websocket &&
-                            websocket.readyState === WebSocket.OPEN,
-                    };
-                } catch (error) {
-                    return { connected: false };
-                }
-            }
-
-            case "getLibraryStats": {
-                return await handleGetWebsiteLibraryStats();
-            }
-
-            case "searchWebsites": {
-                return await handleSearchWebsitesEnhanced(message);
-            }
-
-            case "extractKnowledge": {
-                // TODO: Implement knowledge extraction
+    switch (message.type) {
+        case "checkWebSocketConnection": {
+            try {
+                const websocket = getWebSocket();
                 return {
-                    hasKnowledge: false,
-                    status: "none",
-                    error: "Knowledge extraction not implemented",
+                    connected:
+                        websocket && websocket.readyState === WebSocket.OPEN,
                 };
-            }
-
-            case "checkKnowledgeStatus": {
-                // TODO: Implement knowledge status check
-                return {
-                    hasKnowledge: false,
-                    status: "none",
-                };
-            }
-
-            case "getSearchSuggestions": {
-                return await handleGetSearchSuggestions(message);
-            }
-
-            case "getRecentSearches": {
-                return await handleGetSearchHistory();
-            }
-
-            case "saveSearch": {
-                return await handleSaveSearchHistory({
-                    query: message.query,
-                    results: message.results,
-                });
+            } catch (error) {
+                return { connected: false };
             }
         }
-    }
 
-    // Handle type-based messages (existing code)
-    switch (message.type) {
+        case "getLibraryStats": {
+            return await handleGetWebsiteLibraryStats();
+        }
+
+        case "searchWebsites": {
+            return await handleSearchWebsitesEnhanced(message);
+        }
+
+        case "extractKnowledge": {
+            // TODO: Implement knowledge extraction
+            return {
+                hasKnowledge: false,
+                status: "none",
+                error: "Knowledge extraction not implemented",
+            };
+        }
+
+        case "checkKnowledgeStatus": {
+            // TODO: Implement knowledge status check
+            return {
+                hasKnowledge: false,
+                status: "none",
+            };
+        }
+
+        case "getSearchSuggestions": {
+            return await handleGetSearchSuggestions(message);
+        }
+
+        case "getRecentSearches": {
+            return await handleGetSearchHistory();
+        }
+
+        case "saveSearch": {
+            return await handleSaveSearchHistory({
+                query: message.query,
+                results: message.results,
+            });
+        }
+
         case "initialize": {
             console.log("Browser Agent Service Worker started");
             try {
@@ -521,47 +514,6 @@ export async function handleMessage(
             };
         }
 
-        case "openPanelWithGesture": {
-            const tabId = message.tabId;
-            const panel = message.panel;
-
-            try {
-                if (panel === "schema") {
-                    await chrome.sidePanel.setOptions({
-                        tabId: tabId,
-                        path: "views/pageActions.html",
-                        enabled: true,
-                    });
-                    await chrome.sidePanel.open({ tabId });
-                } else if (panel === "knowledge") {
-                    await chrome.sidePanel.setOptions({
-                        tabId: tabId,
-                        path: "views/pageKnowledge.html",
-                        enabled: true,
-                    });
-                    await chrome.sidePanel.open({ tabId });
-
-                    // If there's a specific action, trigger it
-                    if (message.action === "extractKnowledge") {
-                        setTimeout(() => {
-                            chrome.tabs.sendMessage(
-                                tabId,
-                                {
-                                    type: "triggerKnowledgeExtraction",
-                                },
-                                { frameId: 0 },
-                            );
-                        }, 500);
-                    }
-                }
-
-                return { success: true };
-            } catch (error) {
-                console.error("Error opening panel with gesture:", error);
-                return { success: false, error: String(error) };
-            }
-        }
-
         case "autoIndexSettingChanged": {
             console.log("Auto-indexing setting changed:", message.enabled);
             return { success: true };
@@ -649,52 +601,6 @@ export async function handleMessage(
 
         case "deleteKnowledgeIndex": {
             return await handleDeleteKnowledgeIndex();
-        }
-
-        case "recordActionUsage": {
-            // New handler for tracking action usage
-            try {
-                // This would be implemented when we add usage tracking to the discovery agent
-                console.log(`Recording usage for action: ${message.actionId}`);
-                return { success: true };
-            } catch (error) {
-                console.warn("Failed to record action usage:", error);
-                return {
-                    success: false,
-                    error:
-                        error instanceof Error
-                            ? error.message
-                            : "Unknown error",
-                };
-            }
-        }
-
-        case "getActionStatistics": {
-            // New handler for getting action statistics
-            try {
-                const result = await sendActionToAgent({
-                    actionName: "getActionsForUrl",
-                    parameters: {
-                        url: message.url || (await getActiveTab())?.url,
-                        includeGlobal: true,
-                    },
-                });
-
-                return {
-                    success: true,
-                    totalActions: result.count || 0,
-                    actions: result.actions || [],
-                };
-            } catch (error) {
-                console.warn("Failed to get action statistics:", error);
-                return {
-                    success: false,
-                    error:
-                        error instanceof Error
-                            ? error.message
-                            : "Unknown error",
-                };
-            }
         }
 
         case "deleteAction": {

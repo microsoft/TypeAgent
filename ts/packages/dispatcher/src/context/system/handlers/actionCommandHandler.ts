@@ -4,6 +4,7 @@
 import {
     ActionContext,
     AppAction,
+    CompletionGroup,
     ParsedCommandParams,
     PartialParsedCommandParams,
     SessionContext,
@@ -81,13 +82,16 @@ export class ActionCommandHandler implements CommandHandler {
         context: SessionContext<CommandHandlerContext>,
         params: PartialParsedCommandParams<typeof this.parameters>,
         names: string[],
-    ): Promise<string[]> {
+    ): Promise<CompletionGroup[]> {
         const systemContext = context.agentContext;
-        const completions: string[] = [];
+        const completions: CompletionGroup[] = [];
         for (const name of names) {
             if (name === "schemaName") {
                 const schemaNames = systemContext.agents.getActiveSchemas();
-                completions.push(...schemaNames);
+                completions.push({
+                    name,
+                    completions: schemaNames,
+                });
                 continue;
             }
 
@@ -101,9 +105,12 @@ export class ActionCommandHandler implements CommandHandler {
                 if (actionSchemaFile === undefined) {
                     continue;
                 }
-                completions.push(
-                    ...actionSchemaFile.parsedActionSchema.actionSchemas.keys(),
-                );
+                completions.push({
+                    name,
+                    completions: Array.from(
+                        actionSchemaFile.parsedActionSchema.actionSchemas.keys(),
+                    ),
+                });
                 continue;
             }
 
@@ -128,11 +135,12 @@ export class ActionCommandHandler implements CommandHandler {
                     actionInfo,
                     getCurrentValue,
                 );
-                completions.push(
-                    ...parameterNames
+                completions.push({
+                    name,
+                    completions: parameterNames
                         .filter((p) => getCurrentValue(p) === undefined)
                         .map((p) => `--${p}`),
-                );
+                });
                 continue;
             }
 
@@ -155,17 +163,21 @@ export class ActionCommandHandler implements CommandHandler {
                 const propertyName = name.substring(2);
                 const fieldType = getParameterType(actionSchema, propertyName);
                 if (fieldType?.type === "string-union") {
-                    completions.push(...fieldType.typeEnum);
+                    completions.push({
+                        name,
+                        completions: fieldType.typeEnum,
+                    });
                     continue;
                 }
 
-                completions.push(
-                    ...(await getActionCompletion(
+                completions.push({
+                    name: propertyName,
+                    completions: await getActionCompletion(
                         systemContext,
                         action as Partial<AppAction>,
                         propertyName,
-                    )),
-                );
+                    ),
+                });
 
                 continue;
             }

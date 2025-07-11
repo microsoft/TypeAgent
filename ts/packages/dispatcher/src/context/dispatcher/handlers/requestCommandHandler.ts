@@ -36,17 +36,19 @@ import {
     ActionContext,
     ParsedCommandParams,
     SessionContext,
+    CompletionGroup,
 } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { DispatcherName, isUnknownAction } from "../dispatcherUtils.js";
 import {
-    getHistoryContext,
+    getHistoryContextForTranslation,
     getTranslatorForSchema,
     translateRequest,
     TranslationResult,
 } from "../../../translation/translateRequest.js";
 import { matchRequest } from "../../../translation/matchRequest.js";
 import { addRequestToMemory, addResultToMemory } from "../../memory.js";
+import { requestCompletion } from "../../../translation/requestCompletion.js";
 const debugExplain = registerDebug("typeagent:explain");
 
 async function canTranslateWithoutContext(
@@ -349,10 +351,7 @@ export class RequestCommandHandler implements CommandHandler {
 
             // Translate to action
 
-            const history = systemContext.session.getConfig().translation
-                .history.enabled
-                ? getHistoryContext(systemContext)
-                : undefined;
+            const history = getHistoryContextForTranslation(systemContext);
 
             const canUseCacheMatch =
                 (attachments === undefined || attachments.length === 0) &&
@@ -415,8 +414,8 @@ export class RequestCommandHandler implements CommandHandler {
         context: SessionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
         names: string[],
-    ): Promise<string[]> {
-        const completions: string[] = [];
+    ): Promise<CompletionGroup[]> {
+        const completions: CompletionGroup[] = [];
         for (const name of names) {
             if (name === "request") {
                 const requestPrefix = params.args.request;
@@ -424,11 +423,14 @@ export class RequestCommandHandler implements CommandHandler {
                     // Don't have any request prefix, don't provide any completion as it will be too many.
                     continue;
                 }
-                // TODO: use the agent cache to provide completion.
-                console.log(requestPrefix);
+                completions.push(
+                    ...(await requestCompletion(
+                        requestPrefix,
+                        context.agentContext,
+                    )),
+                );
             }
         }
-
         return completions;
     }
 }

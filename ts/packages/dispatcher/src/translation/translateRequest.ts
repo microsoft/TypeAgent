@@ -697,9 +697,16 @@ async function finalizeMultipleActions(
     return actions;
 }
 
-export function getHistoryContext(
+export function getHistoryContextForTranslation(
     context: CommandHandlerContext,
-): HistoryContext {
+) {
+    const config = context.session.getConfig();
+    return config.translation.history.enabled
+        ? getHistoryContext(context)
+        : undefined;
+}
+
+function getHistoryContext(context: CommandHandlerContext): HistoryContext {
     const promptSections = context.chatHistory.getPromptSections();
     if (promptSections.length !== 0) {
         promptSections.unshift({
@@ -841,7 +848,7 @@ export function translatePendingRequestAction(
 ) {
     try {
         const systemContext = context.sessionContext.agentContext;
-        const history = getHistoryContext(systemContext);
+        const history = getHistoryContextForTranslation(systemContext);
         return translateRequest(
             action.parameters.pendingRequest,
             context,

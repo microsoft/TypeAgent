@@ -25,6 +25,7 @@ export {
     CommandDescriptors,
     CommandDescriptorTable,
     AppAgentCommandInterface,
+    CompletionGroup,
 } from "./command.js";
 
 export {

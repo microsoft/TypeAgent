@@ -5,6 +5,7 @@ import {
     ActionContext,
     AppAgent,
     AppAgentManifest,
+    CompletionGroup,
     ParsedCommandParams,
     PartialParsedCommandParams,
     SessionContext,
@@ -111,15 +112,16 @@ class ShellSetSettingCommandHandler implements CommandHandler {
         context: SessionContext<ShellContext>,
         params: PartialParsedCommandParams<typeof this.parameters>,
         names: string[],
-    ): Promise<string[]> {
-        const completions: string[] = [];
+    ): Promise<CompletionGroup[]> {
+        const completions: CompletionGroup[] = [];
         for (const name of names) {
             if (name === "name") {
-                completions.push(
-                    ...getObjectPropertyNames(
+                completions.push({
+                    name,
+                    completions: getObjectPropertyNames(
                         context.agentContext.shellWindow.getUserSettings(),
                     ),
-                );
+                });
             }
 
             if (name === "value") {
@@ -129,8 +131,10 @@ class ShellSetSettingCommandHandler implements CommandHandler {
                         context.agentContext.shellWindow.getUserSettings();
                     const value = getObjectProperty(settings, settingName);
                     if (typeof value === "boolean") {
-                        completions.push("true");
-                        completions.push("false");
+                        completions.push({
+                            name,
+                            completions: ["true", "false"],
+                        });
                     }
                 }
             }

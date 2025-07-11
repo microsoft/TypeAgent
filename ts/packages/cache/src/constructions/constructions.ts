@@ -45,6 +45,12 @@ export type ConstructionPart = {
     equals(other: ConstructionPart): boolean;
 
     toString(verbose?: boolean): string;
+
+    // For partial match, return completion value for this part.
+    getCompletion(): Iterable<string> | undefined;
+
+    // For partial match, return the property name for this part.
+    getPropertyNames(): string[] | undefined;
 };
 
 function getDefaultTranslator(transformNamespaces: Map<string, Transforms>) {
@@ -126,6 +132,7 @@ export class Construction {
         const actionProps = createActionProps(
             matchedValues.values,
             this.emptyArrayParameters,
+            config.partial,
         );
         return [
             {
@@ -139,6 +146,7 @@ export class Construction {
                 matchedCount: matchedValues.matchedCount,
                 wildcardCharCount: matchedValues.wildcardCharCount,
                 nonOptionalCount: this.parts.filter((p) => !p.optional).length,
+                partialPartCount: matchedValues.partialPartCount,
             },
         ];
     }
@@ -308,6 +316,7 @@ export type MatchResult = {
     wildcardCharCount: number;
     nonOptionalCount: number;
     conflictValues?: [string, ParamValueType[]][] | undefined;
+    partialPartCount?: number | undefined; // Only used for partial match
 };
 
 export function convertConstructionV2ToV3(

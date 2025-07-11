@@ -196,10 +196,15 @@ export class PartialCompletion {
                 }
 
                 this.searchMenu.setChoices(
-                    result.completions.map((choice) => ({
-                        matchText: choice,
-                        selectedText: choice,
-                    })),
+                    result.completions.flatMap((group) =>
+                        group.completions.map((choice) => {
+                            return {
+                                matchText: choice,
+                                selectedText: choice,
+                                needQuotes: group.needQuotes,
+                            };
+                        }),
+                    ),
                 );
 
                 if (!this.isSelectionAtEnd()) {
@@ -268,9 +273,10 @@ export class PartialCompletion {
             debugError(`Partial completion prefix not found`);
             return;
         }
-        const replaceText = /\s/.test(item.selectedText)
-            ? `"${item.selectedText.replaceAll('"', '\\"')}"`
-            : item.selectedText;
+        const replaceText =
+            item.needQuotes !== false && /\s/.test(item.selectedText)
+                ? `"${item.selectedText.replaceAll('"', '\\"')}"`
+                : item.selectedText;
         this.input.replaceTextAtCursor(
             replaceText,
             -prefix.length,
