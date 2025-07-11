@@ -36,6 +36,7 @@ import {
     ActionContext,
     ParsedCommandParams,
     SessionContext,
+    CompletionGroup,
 } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { DispatcherName, isUnknownAction } from "../dispatcherUtils.js";
@@ -413,9 +414,8 @@ export class RequestCommandHandler implements CommandHandler {
         context: SessionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
         names: string[],
-    ): Promise<string[]> {
-        const completions: string[] = [];
-
+    ): Promise<CompletionGroup[]> {
+        const completions: CompletionGroup[] = [];
         for (const name of names) {
             if (name === "request") {
                 const requestPrefix = params.args.request;
@@ -423,14 +423,14 @@ export class RequestCommandHandler implements CommandHandler {
                     // Don't have any request prefix, don't provide any completion as it will be too many.
                     continue;
                 }
-                await requestCompletion(
-                    requestPrefix,
-                    completions,
-                    context.agentContext,
+                completions.push(
+                    ...(await requestCompletion(
+                        requestPrefix,
+                        context.agentContext,
+                    )),
                 );
             }
         }
-
         return completions;
     }
 }

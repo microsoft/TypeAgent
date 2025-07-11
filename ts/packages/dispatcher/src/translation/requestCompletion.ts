@@ -6,18 +6,18 @@ import registerDebug from "debug";
 import { getHistoryContextForTranslation } from "./translateRequest.js";
 import { ExecutableAction, getPropertyInfo } from "agent-cache";
 import { getAppAgentName } from "./agentTranslators.js";
+import { CompletionGroup } from "@typeagent/agent-sdk";
 const debugCompletion = registerDebug("typeagent:request:completion");
 const debugCompletionError = registerDebug(
     "typeagent:request:completion:error",
 );
 export async function requestCompletion(
     requestPrefix: string,
-    completions: string[],
     context: CommandHandlerContext,
-) {
+): Promise<CompletionGroup[]> {
     const constructionStore = context.agentCache.constructionStore;
     if (!constructionStore.isEnabled()) {
-        return;
+        return [];
     }
 
     debugCompletion(`Request completion for prefix '${requestPrefix}'`);
@@ -33,6 +33,8 @@ export async function requestCompletion(
 
     debugCompletion(`Request completion construction match: ${results.length}`);
 
+    const propertyCompletions = new Map<string, CompletionGroup>();
+    const requestText: string[] = [];
     for (const result of results) {
         const { construction, partialPartCount } = result;
         if (partialPartCount === undefined) {
@@ -46,11 +48,14 @@ export async function requestCompletion(
         const nextPart = construction.parts[partialPartCount];
         const partCompletions = nextPart.getCompletion();
         if (partCompletions) {
-            completions.push(...partCompletions);
+            requestText.push(...partCompletions);
         }
 
-        const propertyNames = nextPart.getPropertyNames();
-        if (propertyNames !== undefined) {
+        // TODO: assuming the partial action doesn't change the possible values.
+        const propertyNames = nextPart
+            .getPropertyNames()
+            ?.filter((name) => !propertyCompletions.has(name));
+        if (propertyNames !== undefined && propertyNames.length > 0) {
             // Detect multi-part properties
             const allPropertyNames = new Map<string, number>();
             for (const part of construction.parts) {
@@ -74,17 +79,28 @@ export async function requestCompletion(
                 queryPropertyNames,
                 result.match.actions,
                 context,
-                completions,
+                propertyCompletions,
             );
         }
     }
+    const completions: CompletionGroup[] = [];
+    if (requestText.length > 0) {
+        completions.push({
+            name: "Request Completions",
+            completions: requestText,
+            needQuotes: false, // Request completions are partial, no quotes needed
+        });
+    }
+
+    completions.push(...propertyCompletions.values());
+    return completions;
 }
 
 async function getActionCompletion(
     properties: string[],
     partialActions: ExecutableAction[],
     context: CommandHandlerContext,
-    completions: string[],
+    propertyCompletions: Map<string, CompletionGroup>,
 ) {
     for (const propertyName of properties) {
         const { action, parameterName } = getPropertyInfo(
@@ -115,7 +131,11 @@ async function getActionCompletion(
             );
 
             if (paramCompletion !== undefined) {
-                completions.push(...paramCompletion);
+                propertyCompletions.set(propertyName, {
+                    name: `property ${propertyName}`,
+                    completions: paramCompletion,
+                    needQuotes: false, // Request completions are partial, no quotes needed
+                });
             }
         } catch (e: any) {
             // If the agent completion fails, just ignore it.

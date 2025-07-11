@@ -7,7 +7,7 @@ export type SearchMenuItem = {
     matchText: string;
     selectedText: string;
     emojiChar?: string;
-    groupName?: string;
+    needQuotes?: boolean; // default is true, and will add quote to the selectedText if it has spaces.
 };
 
 export class SearchMenu {

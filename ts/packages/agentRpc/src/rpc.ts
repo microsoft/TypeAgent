@@ -47,7 +47,7 @@ export function createRpc<
         }
     >();
 
-    const out = (message: any, cbErr?: (err: Error | null) => void) => {
+    const out = (message: RpcMessage, cbErr?: (err: Error | null) => void) => {
         debugOut(message);
         channel.send(message, cbErr);
     };
@@ -129,10 +129,10 @@ export function createRpc<
             name: keyof InvokeTargetFunctions,
             ...args: any[]
         ): Promise<any> {
-            const message = {
+            const message: InvokeMessage = {
                 type: "invoke",
                 callId: nextCallId++,
-                name,
+                name: name as string,
                 args,
             };
 
@@ -150,7 +150,7 @@ export function createRpc<
             out({
                 type: "call",
                 callId: nextCallId++,
-                name,
+                name: name as string,
                 args,
             });
         },
@@ -188,10 +188,10 @@ type InvokeMessage = {
     args: any[];
 };
 
-type InvokeResult<T = void> = {
+type InvokeResult = {
     type: "invokeResult";
     callId: number;
-    result: T;
+    result: any;
 };
 
 type InvokeError = {
@@ -200,3 +200,5 @@ type InvokeError = {
     error: string;
     stack?: string; // Optional stack trace for debugging.
 };
+
+type RpcMessage = CallMessage | InvokeMessage | InvokeResult | InvokeError;
