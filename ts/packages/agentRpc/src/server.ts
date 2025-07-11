@@ -170,9 +170,7 @@ export function createAgentRpcServer(
             }
             return agent.getCommands(getSessionContextShim(param));
         },
-        async getCommandCompletion(
-            param,
-        ): Promise<CompletionGroup[]> {
+        async getCommandCompletion(param): Promise<CompletionGroup[]> {
             if (agent.getCommandCompletion === undefined) {
                 throw new Error("Invalid invocation of getCommandCompletion");
             }
