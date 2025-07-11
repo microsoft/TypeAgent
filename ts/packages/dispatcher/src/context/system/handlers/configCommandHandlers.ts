@@ -18,6 +18,7 @@ import { SessionOptions } from "../../session.js";
 import chalk from "chalk";
 import {
     ActionContext,
+    CompletionGroup,
     ParameterDefinitions,
     ParsedCommandParams,
     PartialParsedCommandParams,
@@ -429,7 +430,7 @@ class AgentToggleCommandHandler implements CommandHandler {
         params: PartialParsedCommandParams<typeof this.parameters>,
         names: string[],
     ) {
-        const completions: string[] = [];
+        const completions: CompletionGroup[] = [];
 
         for (const name of names) {
             if (name === "agentNames" || name === "--off") {
@@ -438,7 +439,10 @@ class AgentToggleCommandHandler implements CommandHandler {
                     this.toggle === AgentToggle.Agent
                         ? context.agentContext.agents.getAppAgentNames()
                         : context.agentContext.agents.getSchemaNames();
-                completions.push(...existingNames);
+                completions.push({
+                    name,
+                    completions: existingNames,
+                });
             }
         }
 
@@ -488,10 +492,13 @@ class ExplainerCommandHandler implements CommandHandler {
         params: PartialParsedCommandParams<typeof this.parameters>,
         names: string[],
     ) {
-        const completions: string[] = [];
+        const completions: CompletionGroup[] = [];
         for (const name of names) {
             if (name === "explainerName") {
-                completions.push(...getCacheFactory().getExplainerNames());
+                completions.push({
+                    name,
+                    completions: getCacheFactory().getExplainerNames(),
+                });
             }
         }
         return completions;
@@ -563,11 +570,18 @@ class ConfigModelSetCommandHandler implements CommandHandler {
         context: SessionContext<CommandHandlerContext>,
         params: PartialParsedCommandParams<ParameterDefinitions>,
         names: string[],
-    ): Promise<string[]> {
-        if (params.args?.model === undefined) {
-            return getChatModelNames();
+    ): Promise<CompletionGroup[]> {
+        const completions: CompletionGroup[] = [];
+        for (const name of names) {
+            if (name === "model") {
+                completions.push({
+                    name,
+                    completions: await getChatModelNames(),
+                });
+            }
         }
-        return [];
+
+        return completions;
     }
 }
 
@@ -677,12 +691,15 @@ class FixedSchemaCommandHandler implements CommandHandler {
         context: SessionContext<CommandHandlerContext>,
         params: PartialParsedCommandParams<ParameterDefinitions>,
         names: string[],
-    ): Promise<string[]> {
-        const completions: string[] = [];
+    ): Promise<CompletionGroup[]> {
+        const completions: CompletionGroup[] = [];
         const systemContext = context.agentContext;
         for (const name of names) {
             if (name === "schemaName") {
-                return systemContext.agents.getActiveSchemas();
+                completions.push({
+                    name,
+                    completions: systemContext.agents.getActiveSchemas(),
+                });
             }
         }
         return completions;
@@ -1057,11 +1074,12 @@ class ConfigRequestCommandHandler implements CommandHandler {
         context: SessionContext<CommandHandlerContext>,
         params: PartialParsedCommandParams<ParameterDefinitions>,
         names: string[],
-    ): Promise<string[]> {
-        const completions: string[] = [];
+    ): Promise<CompletionGroup[]> {
+        const completions: CompletionGroup[] = [];
         const systemContext = context.agentContext;
         for (const name of names) {
             if (name === "appAgentName") {
+                const appAgentNames: string[] = [];
                 for (const appAgentName of systemContext.agents.getAppAgentNames()) {
                     if (
                         await checkRequestHandler(
@@ -1070,8 +1088,14 @@ class ConfigRequestCommandHandler implements CommandHandler {
                             false,
                         )
                     ) {
-                        completions.push(appAgentName);
+                        appAgentNames.push(appAgentName);
                     }
+                }
+                if (appAgentNames.length !== 0) {
+                    completions.push({
+                        name,
+                        completions: appAgentNames,
+                    });
                 }
             }
         }
