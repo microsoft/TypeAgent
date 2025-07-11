@@ -42,7 +42,7 @@ export type ActionTerm = {
     targetEntities?: EntityTerm[];
     // additional entities participating in the action.
     // E.g. in the phrase "Jane ate the spaghetti with the fork", "the fork" would be an additional entity
-    // E.g. in the phrase "Did Jane speak about Bach with Nina", "Bach" would be the additional entity "
+    // E.g. in the phrase "Did Jane speak about Bach with Nina", "Bach" would be the additional entity
     additionalEntities?: EntityTerm[];
     // Is the intent of the phrase translated to this ActionTerm to actually get information about a specific entities?
     // Examples:
@@ -52,13 +52,13 @@ export type ActionTerm = {
 };
 
 //
-// Search a search engine for:
+// Search a search engine using filters:
 // entitySearchTerms cannot contain entities already in actionSearchTerms
 export type SearchFilter = {
     actionSearchTerm?: ActionTerm;
     entitySearchTerms?: EntityTerm[];
     // searchTerms:
-    // Use for all concepts, topics, abstract concepts or other terms that don't fit ActionTerms or EntityTerms
+    // Use for all concepts, topics, or other search terms that don't fit ActionTerms or EntityTerms
     // - Do not use noisy searchTerms like "topic", "topics", "subject", "discussion" etc. even if they are mentioned in the user request
     // - Phrases like 'email address' or 'first name' are a single term
     // - use empty searchTerms array when use asks for summaries
@@ -69,6 +69,7 @@ export type SearchFilter = {
 
 export type SearchExpr = {
     rewrittenQuery: string;
+    // Translate rewritten query into filters
     filters: SearchFilter[];
 };
 
