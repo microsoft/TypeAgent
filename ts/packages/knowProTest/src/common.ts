@@ -160,6 +160,28 @@ export function compareObject(
     return undefined;
 }
 
+export async function compareObjectFuzzy(
+    x: any,
+    y: any,
+    label: string,
+    similarityModel: TextEmbeddingModel,
+    threshold = 0.9,
+): Promise<string | undefined> {
+    // First do a straight compare
+    let error = compareObject(x, y, label);
+    if (error === undefined) {
+        return undefined;
+    }
+    // Try compare again.. fuzzily
+    return compareStringFuzzy(
+        stringifyReadable(x),
+        stringifyReadable(y),
+        label,
+        similarityModel,
+        threshold,
+    );
+}
+
 export function compareNumberArray(
     x: number[] | undefined,
     y: number[] | undefined,
@@ -224,6 +246,7 @@ export async function compareStringFuzzy(
             if (x.toLowerCase() === y.toLowerCase()) {
                 return undefined;
             }
+            // Strings definitely not equal. Try a fuzzy comparison
             const embeddings = await generateTextEmbeddingsWithRetry(
                 similarityModel,
                 [x, y],

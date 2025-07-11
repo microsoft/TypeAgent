@@ -18,7 +18,6 @@ import { getBatchFileLines } from "interactive-app";
 import { execSearchRequest } from "./knowproCommands.js";
 import * as kp from "knowpro";
 import { TestRunReport } from "./logging.js";
-import { TextEmbeddingModel } from "aiclient";
 
 export type LangSearchResults = {
     searchText: string;
@@ -127,11 +126,7 @@ export async function verifyLangSearchResultsBatch(
         let response = await getSearchResults(context, args);
         if (response.success) {
             const actual = response.data;
-            const error = await compareLangSearchResults(
-                actual,
-                expected,
-                context.similarityModel,
-            );
+            const error = compareLangSearchResults(actual, expected);
             let comparisonResult: Comparison<LangSearchResults> = {
                 actual,
                 expected,
@@ -242,16 +237,11 @@ function getMatchedSemanticRefOrdinals(
         ?.semanticRefMatches.map((sr) => sr.semanticRefOrdinal);
 }
 
-async function compareLangSearchResults(
+function compareLangSearchResults(
     lr1: LangSearchResults,
     lr2: LangSearchResults,
-    similarityModel?: TextEmbeddingModel,
-): Promise<string | undefined> {
-    let error = await compareSearchQuery(
-        lr1.searchQueryExpr,
-        lr2.searchQueryExpr,
-        similarityModel,
-    );
+): string | undefined {
+    let error = compareSearchQuery(lr1.searchQueryExpr, lr2.searchQueryExpr);
     if (error !== undefined && error.length > 0) {
         return error;
     }
@@ -294,11 +284,10 @@ function compareLangSearchResult(
     return undefined;
 }
 
-async function compareSearchQuery(
+function compareSearchQuery(
     s1: kp.querySchema.SearchQuery,
     s2: kp.querySchema.SearchQuery,
-    similarityModel?: TextEmbeddingModel,
-): Promise<string | undefined> {
+): string | undefined {
     if (s1.searchExpressions.length !== s2?.searchExpressions.length) {
         return `searchQuery.searchExpressions.length: ${s1.searchExpressions.length} !== ${s2.searchExpressions.length}`;
     }
@@ -361,7 +350,11 @@ function compareActionTerm(
     if (x === undefined && y === undefined) {
         return undefined;
     }
-    let error = compareObject(x?.actionVerbs, y?.actionVerbs, "verbs");
+    let error = compareStringArray(
+        x?.actionVerbs?.words,
+        y?.actionVerbs?.words,
+        "verbs",
+    );
     if (error !== undefined) {
         return error;
     }
