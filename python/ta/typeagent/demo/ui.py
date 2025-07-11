@@ -84,7 +84,7 @@ def main() -> None:
 
     print(colorama.Fore.YELLOW + query_translator.schema_str.rstrip())
 
-    search_query_index: dict[str, object] = {}
+    search_query_index: dict[str, dict[str, object]] = {}
     if args.search_query_index:
         print(f"Loading search query index from {args.search_query_index}")
         with open(args.search_query_index) as f:
