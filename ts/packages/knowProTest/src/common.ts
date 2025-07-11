@@ -140,6 +140,9 @@ export function compareObject(
     y: any,
     label: string,
 ): string | undefined {
+    if (isUndefinedOrEmpty(x) && isUndefinedOrEmpty(y)) {
+        return undefined;
+    }
     if (!isJsonEqual(x, y)) {
         return `${label}: ${stringifyReadable(x)}\n !== \n${stringifyReadable(y)}`;
     }
@@ -152,7 +155,7 @@ export function compareArray(
     y: any[] | undefined,
     sort: boolean = true,
 ): string | undefined {
-    if (x === undefined && y === undefined) {
+    if (isUndefinedOrEmpty(x) && isUndefinedOrEmpty(y)) {
         return undefined;
     }
     if (x === undefined || y === undefined || x.length != y.length) {
@@ -168,6 +171,16 @@ export function compareArray(
         }
     }
     return undefined;
+}
+
+export function isUndefinedOrEmpty(x?: any): boolean {
+    if (x === undefined) {
+        return true;
+    }
+    if (Array.isArray(x)) {
+        return x.length === 0;
+    }
+    return false;
 }
 
 export function queryError(query: string, result: Error): Error {
