@@ -66,6 +66,7 @@
     "express-rate-limit": "^7.5.0",
     "html-to-text": "^9.0.5",
     "jsonpath": "^1.1.1",
+    "knowledge-processor": "workspace:*",
     "knowpro": "workspace:*",
     "pdfjs-dist": "^5.3.31",
     "prismjs": "^1.30.0",

@@ -5,6 +5,8 @@ import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "../actionHandler.mjs";
 import { findRequestedWebsites } from "../websiteMemory.mjs";
 import * as website from "website-memory";
+import { conversation as kpLib } from "knowledge-processor";
+import { openai as ai } from "aiclient";
 import {
     KnowledgeExtractionResult,
     EnhancedKnowledgeExtractionResult,
@@ -134,26 +136,53 @@ export async function extractKnowledgeFromPage(
 
         if (extractionMode !== "basic") {
             try {
-                // Use ContentExtractor for rich content analysis
-                const { ContentExtractor } = website;
-                const contentExtractor = new ContentExtractor({
-                    timeout: 15000,
-                    enableActionDetection:
-                        parameters.extractionSettings?.enableActionDetection !==
-                        false,
-                    maxCharsPerChunk: 4000,
-                });
+                // Create AI model for enhanced knowledge extraction
+                let knowledgeExtractor: kpLib.KnowledgeExtractor | undefined;
+                try {
+                    const apiSettings = ai.azureApiSettingsFromEnv(ai.ModelType.Chat);
+                    const languageModel = ai.createChatModel(apiSettings);
+                    knowledgeExtractor = kpLib.createKnowledgeExtractor(languageModel);
+                } catch (modelError) {
+                    console.warn("Failed to create AI model for knowledge extraction:", modelError);
+                }
+
+                // Configure ContentExtractor with enhanced capabilities
+                const contentExtractor = knowledgeExtractor 
+                    ? website.createContentExtractorWithKnowledge(knowledgeExtractor, {
+                        timeout: 15000,
+                        enableActionDetection: parameters.extractionSettings?.enableActionDetection !== false,
+                        knowledgeMode: "enhanced",
+                        maxCharsPerChunk: 4000,
+                        maxConcurrentExtractions: 3,
+                        knowledgeQualityThreshold: 0.4,
+                    })
+                    : website.createBasicContentExtractor({
+                        timeout: 15000,
+                        enableActionDetection: parameters.extractionSettings?.enableActionDetection !== false,
+                        maxCharsPerChunk: 4000,
+                    });
 
                 enhancedContent = await contentExtractor.extractFromHtml(
                     htmlContent,
                     extractionMode,
                 );
 
-                const enhancedContent2 = await contentExtractor.extractWithKnowledge(
-                    htmlContent,
-                    extractionMode,
-                );
-                console.log("Enhanced knowledge ", enhancedContent2)
+                // Use enhanced knowledge extraction if AI model is available
+                if (knowledgeExtractor) {
+                    const enhancedKnowledgeResult = await contentExtractor.extractWithKnowledge(
+                        htmlContent,
+                        extractionMode,
+                        "enhanced"
+                    );
+                    
+                    if (enhancedKnowledgeResult.knowledge) {
+                        console.log(`Enhanced knowledge extracted: ${enhancedKnowledgeResult.knowledge.entities.length} entities, ${enhancedKnowledgeResult.knowledge.topics.length} topics, quality: ${enhancedKnowledgeResult.knowledgeQuality?.confidence}`);
+                        enhancedContent.enhancedKnowledge = enhancedKnowledgeResult.knowledge;
+                        enhancedContent.knowledgeQuality = enhancedKnowledgeResult.knowledgeQuality;
+                    }
+                } else {
+                    console.log("Enhanced knowledge extraction skipped - no AI model available");
+                }
             } catch (extractorError) {
                 console.warn(
                     "Enhanced content extraction failed, falling back to basic:",
@@ -183,7 +212,18 @@ export async function extractKnowledgeFromPage(
             visitInfo,
             enhancedContent?.pageContent?.mainContent || textContent,
         );
-        const knowledge = websiteObj.getKnowledge();
+        
+        // Integrate enhanced knowledge if available
+        let knowledge = websiteObj.getKnowledge();
+        if (enhancedContent?.enhancedKnowledge) {
+            // Merge enhanced AI-extracted knowledge with base knowledge
+            knowledge = {
+                topics: [...new Set([...knowledge?.topics || [], ...enhancedContent.enhancedKnowledge.topics])],
+                entities: [...(knowledge?.entities || []), ...enhancedContent.enhancedKnowledge.entities],
+                actions: [...(knowledge?.actions || []), ...enhancedContent.enhancedKnowledge.actions],
+                inverseActions: [...(knowledge?.inverseActions || []), ...enhancedContent.enhancedKnowledge.inverseActions],
+            };
+        }
 
         // Generate smart suggested questions using enhanced content
         const suggestedQuestions: string[] = [];
@@ -226,6 +266,7 @@ export async function extractKnowledgeFromPage(
             knowledge,
             enhancedContent,
             parameters.title,
+            enhancedContent?.knowledgeQuality,
         );
 
         // Build content metrics
@@ -731,12 +772,21 @@ function generateEnhancedSummary(
     knowledge: any,
     enhancedContent: any,
     title: string,
+    knowledgeQuality?: any,
 ): string {
     const entityCount = knowledge?.entities?.length || 0;
     const topicCount = knowledge?.topics?.length || 0;
     const relationshipCount = knowledge?.actions?.length || 0;
 
     let summary = `Knowledge extracted from ${title}: ${entityCount} entities, ${topicCount} topics, ${relationshipCount} relationships found.`;
+
+    // Add quality information if available
+    if (knowledgeQuality) {
+        summary += ` Quality: ${Math.round(knowledgeQuality.confidence * 100)}% confidence`;
+        if (knowledgeQuality.extractionMode) {
+            summary += ` (${knowledgeQuality.extractionMode} mode)`;
+        }
+    }
 
     if (enhancedContent?.pageContent) {
         const details = [];

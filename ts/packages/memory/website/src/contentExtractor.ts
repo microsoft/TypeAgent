@@ -90,21 +90,28 @@ export interface EnhancedContent {
 
 export type KnowledgeExtractionMode = "none" | "basic" | "enhanced" | "hybrid";
 
+export interface ContentExtractorConfig {
+    timeout?: number;
+    userAgent?: string;
+    maxContentLength?: number;
+    enableActionDetection?: boolean;
+    enableKnowledgeExtraction?: boolean;
+    knowledgeMode?: KnowledgeExtractionMode;
+    maxCharsPerChunk?: number;
+    knowledgeExtractor?: kpLib.KnowledgeExtractor;
+    maxConcurrentExtractions?: number;
+    knowledgeQualityThreshold?: number;
+    enableCrossChunkMerging?: boolean;
+    preserveChunkContext?: boolean;
+}
+
 export class ContentExtractor {
     private userAgent = "Mozilla/5.0 (compatible; TypeAgent-WebMemory/1.0)";
     private defaultTimeout = 10000;
     private actionExtractor: ActionExtractor;
 
     constructor(
-        private config?: {
-            timeout?: number;
-            userAgent?: string;
-            maxContentLength?: number;
-            enableActionDetection?: boolean;
-            enableKnowledgeExtraction?: boolean;
-            knowledgeMode?: KnowledgeExtractionMode;
-            maxCharsPerChunk?: number;
-        },
+        private config?: ContentExtractorConfig,
     ) {
         if (config?.timeout) this.defaultTimeout = config.timeout;
         if (config?.userAgent) this.userAgent = config.userAgent;
@@ -112,6 +119,85 @@ export class ContentExtractor {
             minConfidence: 0.5,
             maxActions: 20,
         });
+
+        this.validateKnowledgeExtractionRequirements();
+    }
+
+    /**
+     * Validates that enhanced knowledge extraction requirements are met
+     * Logs error and disables enhanced extraction if AI model is not available
+     */
+    private validateKnowledgeExtractionRequirements(): void {
+        if (this.config?.enableKnowledgeExtraction && !this.config.knowledgeExtractor) {
+            console.error(
+                "Enhanced knowledge extraction enabled but no knowledgeExtractor provided. " +
+                "Enhanced extraction will be disabled. Please provide a configured KnowledgeExtractor with AI model."
+            );
+            // Disable enhanced extraction - do not fallback to basic extraction
+            this.config = { 
+                ...this.config, 
+                enableKnowledgeExtraction: false,
+                knowledgeMode: "none"
+            };
+        }
+
+        // Log configuration status for debugging
+        if (this.config?.enableKnowledgeExtraction && this.config.knowledgeExtractor) {
+            console.log(
+                `Enhanced knowledge extraction enabled with mode: ${this.config.knowledgeMode || "hybrid"}`
+            );
+        }
+    }
+
+    /**
+     * Returns whether enhanced knowledge extraction is properly configured and enabled
+     */
+    private isEnhancedKnowledgeExtractionAvailable(): boolean {
+        return !!(
+            this.config?.enableKnowledgeExtraction && 
+            this.config.knowledgeExtractor &&
+            this.config.knowledgeMode !== "none"
+        );
+    }
+
+    /**
+     * Gets the effective configuration with defaults applied
+     */
+    private getEffectiveConfig(): Required<Pick<ContentExtractorConfig, 
+        'maxConcurrentExtractions' | 'knowledgeQualityThreshold' | 'enableCrossChunkMerging' | 'preserveChunkContext' | 'maxCharsPerChunk'
+    >> {
+        return {
+            maxConcurrentExtractions: this.config?.maxConcurrentExtractions || 3,
+            knowledgeQualityThreshold: this.config?.knowledgeQualityThreshold || 0.3,
+            enableCrossChunkMerging: this.config?.enableCrossChunkMerging !== false,
+            preserveChunkContext: this.config?.preserveChunkContext !== false,
+            maxCharsPerChunk: this.config?.maxCharsPerChunk || 1000,
+        };
+    }
+
+    /**
+     * Returns current configuration status for debugging and diagnostics
+     */
+    public getConfigurationStatus(): {
+        enhancedKnowledgeAvailable: boolean;
+        knowledgeExtractionEnabled: boolean;
+        knowledgeMode: KnowledgeExtractionMode;
+        hasKnowledgeExtractor: boolean;
+        effectiveConfig: {
+            maxConcurrentExtractions: number;
+            knowledgeQualityThreshold: number;
+            enableCrossChunkMerging: boolean;
+            preserveChunkContext: boolean;
+            maxCharsPerChunk: number;
+        };
+    } {
+        return {
+            enhancedKnowledgeAvailable: this.isEnhancedKnowledgeExtractionAvailable(),
+            knowledgeExtractionEnabled: this.config?.enableKnowledgeExtraction !== false,
+            knowledgeMode: this.config?.knowledgeMode || "hybrid",
+            hasKnowledgeExtractor: !!this.config?.knowledgeExtractor,
+            effectiveConfig: this.getEffectiveConfig(),
+        };
     }
 
     async extractFromUrl(
@@ -287,22 +373,429 @@ export class ContentExtractor {
     private async extractEnhancedKnowledge(
         html: string,
     ): Promise<kpLib.KnowledgeResponse> {
-        try {
-            // Use conversation package's knowledge extraction
-            const maxCharsPerChunk = this.config?.maxCharsPerChunk || 1000;
-            const docParts = docPartsFromHtml(html, maxCharsPerChunk);
-
-            // For now, extract knowledge from the first doc part
-            // In a full implementation, this would integrate with the knowledge processor
-            if (docParts.length > 0 && docParts[0].knowledge) {
-                return docParts[0].knowledge;
-            }
-
-            return this.createEmptyKnowledge();
-        } catch (error) {
-            console.warn("Enhanced knowledge extraction failed:", error);
+        if (!this.isEnhancedKnowledgeExtractionAvailable()) {
+            console.warn(
+                "Enhanced knowledge extraction requested but not properly configured. " +
+                "Returning empty knowledge response."
+            );
             return this.createEmptyKnowledge();
         }
+
+        try {
+            const effectiveConfig = this.getEffectiveConfig();
+            const docParts = docPartsFromHtml(html, effectiveConfig.maxCharsPerChunk);
+            
+            if (docParts.length === 0) {
+                return this.createEmptyKnowledge();
+            }
+
+            const knowledgeResults = await this.extractKnowledgeFromAllParts(docParts);
+            
+            const aggregatedKnowledge = await this.aggregateKnowledgeResults(knowledgeResults);
+            
+            return this.enhanceAndFilterKnowledge(aggregatedKnowledge, docParts);
+            
+        } catch (error) {
+            console.error("Enhanced knowledge extraction failed:", error);
+            return this.createEmptyKnowledge();
+        }
+    }
+
+    private async extractKnowledgeFromAllParts(
+        docParts: any[]
+    ): Promise<Array<{ 
+        chunkIndex: number; 
+        knowledge: kpLib.KnowledgeResponse; 
+        confidence: number 
+    }>> {
+        const effectiveConfig = this.getEffectiveConfig();
+        const maxConcurrent = effectiveConfig.maxConcurrentExtractions;
+        const results: Array<{ chunkIndex: number; knowledge: kpLib.KnowledgeResponse; confidence: number }> = [];
+        
+        for (let i = 0; i < docParts.length; i += maxConcurrent) {
+            const batch = docParts.slice(i, i + maxConcurrent);
+            const batchPromises = batch.map(async (part, batchIndex) => {
+                const chunkIndex = i + batchIndex;
+                return this.extractKnowledgeFromSinglePart(part, chunkIndex, docParts);
+            });
+            
+            const batchResults = await Promise.allSettled(batchPromises);
+            
+            batchResults.forEach((result, batchIndex) => {
+                if (result.status === 'fulfilled' && result.value) {
+                    results.push(result.value);
+                } else if (result.status === 'rejected') {
+                    console.warn(`Chunk ${i + batchIndex} extraction failed:`, result.reason);
+                }
+            });
+        }
+        
+        return results;
+    }
+
+    private async extractKnowledgeFromSinglePart(
+        part: any, 
+        chunkIndex: number, 
+        allParts: any[]
+    ): Promise<{ chunkIndex: number; knowledge: kpLib.KnowledgeResponse; confidence: number } | null> {
+        
+        if (!this.config?.knowledgeExtractor) {
+            throw new Error("Knowledge extractor not available - this indicates a configuration error");
+        }
+        
+        try {
+            const contextualText = this.buildContextualText(part, chunkIndex, allParts);
+            
+            const knowledge = await this.config.knowledgeExtractor.extract(contextualText);
+            
+            if (!knowledge) {
+                return null;
+            }
+            
+            const confidence = this.calculateExtractionConfidence(knowledge, part);
+            
+            const effectiveConfig = this.getEffectiveConfig();
+            const threshold = effectiveConfig.knowledgeQualityThreshold;
+            if (confidence < threshold) {
+                return null;
+            }
+            
+            return { chunkIndex, knowledge, confidence };
+            
+        } catch (error) {
+            console.warn(`Knowledge extraction failed for chunk ${chunkIndex}:`, error);
+            throw error;
+        }
+    }
+
+    private buildContextualText(part: any, chunkIndex: number, allParts: any[]): string {
+        const effectiveConfig = this.getEffectiveConfig();
+        
+        if (!effectiveConfig.preserveChunkContext) {
+            return part.content || part.textChunks?.join(' ') || '';
+        }
+
+        const contextParts: string[] = [];
+        const contextWindow = 1;
+        
+        const startIndex = Math.max(0, chunkIndex - contextWindow);
+        const endIndex = Math.min(allParts.length, chunkIndex + contextWindow + 1);
+        
+        for (let i = startIndex; i < endIndex; i++) {
+            const currentPart = allParts[i];
+            const text = currentPart.content || currentPart.textChunks?.join(' ') || '';
+            
+            if (i === chunkIndex) {
+                contextParts.push(`[MAIN CONTENT]: ${text}`);
+            } else if (i < chunkIndex) {
+                contextParts.push(`[CONTEXT BEFORE]: ${text.substring(0, 200)}`);
+            } else {
+                contextParts.push(`[CONTEXT AFTER]: ${text.substring(0, 200)}`);
+            }
+        }
+        
+        return contextParts.join('\n\n');
+    }
+
+    private calculateExtractionConfidence(knowledge: kpLib.KnowledgeResponse, part: any): number {
+        let confidence = 0.5;
+        
+        const entityCount = knowledge.entities?.length || 0;
+        const topicCount = knowledge.topics?.length || 0;
+        const actionCount = knowledge.actions?.length || 0;
+        
+        if (entityCount > 0) confidence += Math.min(entityCount * 0.1, 0.3);
+        if (topicCount > 0) confidence += Math.min(topicCount * 0.05, 0.2);
+        if (actionCount > 0) confidence += Math.min(actionCount * 0.05, 0.2);
+        
+        const textLength = (part.content || part.textChunks?.join('') || '').length;
+        if (textLength > 200) confidence += 0.1;
+        if (textLength > 500) confidence += 0.1;
+        
+        return Math.min(confidence, 1.0);
+    }
+
+    private async aggregateKnowledgeResults(
+        results: Array<{ chunkIndex: number; knowledge: kpLib.KnowledgeResponse; confidence: number }>
+    ): Promise<kpLib.KnowledgeResponse> {
+        
+        const aggregated = this.createEmptyKnowledge();
+        const entityMap = new Map<string, { entity: kpLib.ConcreteEntity; confidence: number; sources: number[] }>();
+        const topicMap = new Map<string, { topic: string; confidence: number; sources: number[] }>();
+        const actionList: Array<{ action: kpLib.Action; confidence: number; source: number }> = [];
+        
+        for (const result of results) {
+            for (const entity of result.knowledge.entities) {
+                this.aggregateEntity(entity, result.confidence, result.chunkIndex, entityMap);
+            }
+            
+            for (const topic of result.knowledge.topics) {
+                this.aggregateTopic(topic, result.confidence, result.chunkIndex, topicMap);
+            }
+            
+            for (const action of result.knowledge.actions || []) {
+                actionList.push({ 
+                    action, 
+                    confidence: result.confidence, 
+                    source: result.chunkIndex 
+                });
+            }
+        }
+        
+        aggregated.entities = this.rankAndSelectEntities(entityMap);
+        aggregated.topics = this.rankAndSelectTopics(topicMap);
+        aggregated.actions = this.buildActionRelationships(actionList);
+        
+        return aggregated;
+    }
+
+    private aggregateEntity(
+        entity: kpLib.ConcreteEntity,
+        confidence: number,
+        sourceIndex: number,
+        entityMap: Map<string, { entity: kpLib.ConcreteEntity; confidence: number; sources: number[] }>
+    ): void {
+        
+        const normalizedName = this.normalizeEntityName(entity.name);
+        const existing = entityMap.get(normalizedName);
+        
+        if (existing) {
+            existing.confidence = Math.max(existing.confidence, confidence);
+            existing.sources.push(sourceIndex);
+            
+            existing.entity.type = this.mergeEntityTypes(existing.entity.type, entity.type);
+            
+            if (entity.facets && existing.entity.facets) {
+                existing.entity.facets = this.mergeFacets(existing.entity.facets, entity.facets, confidence);
+            } else if (entity.facets && !existing.entity.facets) {
+                existing.entity.facets = [...entity.facets];
+            }
+            
+        } else {
+            entityMap.set(normalizedName, {
+                entity: { ...entity, name: normalizedName },
+                confidence,
+                sources: [sourceIndex]
+            });
+        }
+    }
+
+    private aggregateTopic(
+        topic: string,
+        confidence: number,
+        sourceIndex: number,
+        topicMap: Map<string, { topic: string; confidence: number; sources: number[] }>
+    ): void {
+        const normalizedTopic = topic.toLowerCase().trim();
+        const existing = topicMap.get(normalizedTopic);
+        
+        if (existing) {
+            existing.confidence = Math.max(existing.confidence, confidence);
+            existing.sources.push(sourceIndex);
+        } else {
+            topicMap.set(normalizedTopic, {
+                topic,
+                confidence,
+                sources: [sourceIndex]
+            });
+        }
+    }
+
+    private normalizeEntityName(name: string): string {
+        return name.toLowerCase().trim().replace(/\s+/g, ' ');
+    }
+
+    private mergeEntityTypes(type1: string[], type2: string[]): string[] {
+        const types1 = Array.isArray(type1) ? type1 : [type1];
+        const types2 = Array.isArray(type2) ? type2 : [type2];
+        
+        return [...new Set([...types1, ...types2])];
+    }
+
+    private mergeFacets(facets1: any[], facets2: any[], confidence: number): any[] {
+        const facetMap = new Map<string, any>();
+        
+        for (const facet of facets1) {
+            facetMap.set(facet.name, facet);
+        }
+        
+        for (const facet of facets2) {
+            const existing = facetMap.get(facet.name);
+            if (!existing || confidence > 0.7) {
+                facetMap.set(facet.name, facet);
+            }
+        }
+        
+        return Array.from(facetMap.values());
+    }
+
+    private rankAndSelectEntities(
+        entityMap: Map<string, { entity: kpLib.ConcreteEntity; confidence: number; sources: number[] }>
+    ): kpLib.ConcreteEntity[] {
+        return Array.from(entityMap.values())
+            .sort((a, b) => {
+                if (b.confidence !== a.confidence) {
+                    return b.confidence - a.confidence;
+                }
+                return b.sources.length - a.sources.length;
+            })
+            .slice(0, 30)
+            .map(item => item.entity);
+    }
+
+    private rankAndSelectTopics(
+        topicMap: Map<string, { topic: string; confidence: number; sources: number[] }>
+    ): string[] {
+        return Array.from(topicMap.values())
+            .sort((a, b) => {
+                if (b.confidence !== a.confidence) {
+                    return b.confidence - a.confidence;
+                }
+                return b.sources.length - a.sources.length;
+            })
+            .slice(0, 20)
+            .map(item => item.topic);
+    }
+
+    private buildActionRelationships(
+        actionList: Array<{ action: kpLib.Action; confidence: number; source: number }>
+    ): kpLib.Action[] {
+        const actionMap = new Map<string, { action: kpLib.Action; confidence: number; sources: number[] }>();
+        
+        for (const item of actionList) {
+            const key = this.createActionKey(item.action);
+            const existing = actionMap.get(key);
+            
+            if (existing) {
+                existing.confidence = Math.max(existing.confidence, item.confidence);
+                existing.sources.push(item.source);
+            } else {
+                actionMap.set(key, {
+                    action: item.action,
+                    confidence: item.confidence,
+                    sources: [item.source]
+                });
+            }
+        }
+        
+        return Array.from(actionMap.values())
+            .sort((a, b) => b.confidence - a.confidence)
+            .slice(0, 15)
+            .map(item => item.action);
+    }
+
+    private createActionKey(action: kpLib.Action): string {
+        const verbs = action.verbs.join('|');
+        return `${action.subjectEntityName || 'unknown'}:${verbs}:${action.objectEntityName || 'unknown'}`;
+    }
+
+    private enhanceAndFilterKnowledge(
+        knowledge: kpLib.KnowledgeResponse,
+        originalParts: any[]
+    ): kpLib.KnowledgeResponse {
+        
+        const qualityScore = this.calculateKnowledgeQualityScore(knowledge, originalParts);
+        
+        const filtered = this.filterByQuality(knowledge, qualityScore);
+        
+        const enhanced = this.addCrossReferences(filtered, originalParts);
+        
+        return this.validateAndCleanKnowledge(enhanced);
+    }
+
+    private calculateKnowledgeQualityScore(knowledge: kpLib.KnowledgeResponse, originalParts: any[]): number {
+        let score = 0.5;
+        
+        const entityCount = knowledge.entities?.length || 0;
+        const topicCount = knowledge.topics?.length || 0;
+        const actionCount = knowledge.actions?.length || 0;
+        
+        if (entityCount > 0) score += Math.min(entityCount * 0.05, 0.2);
+        if (topicCount > 0) score += Math.min(topicCount * 0.03, 0.15);
+        if (actionCount > 0) score += Math.min(actionCount * 0.03, 0.15);
+        
+        const totalTextLength = originalParts.reduce((sum, part) => {
+            return sum + ((part.content || part.textChunks?.join('') || '').length);
+        }, 0);
+        
+        if (totalTextLength > 1000) score += 0.1;
+        if (totalTextLength > 5000) score += 0.1;
+        
+        return Math.min(score, 1.0);
+    }
+
+    private filterByQuality(knowledge: kpLib.KnowledgeResponse, qualityScore: number): kpLib.KnowledgeResponse {
+        if (qualityScore < 0.3) {
+            return this.createEmptyKnowledge();
+        }
+        
+        const filtered = this.createEmptyKnowledge();
+        
+        filtered.entities = knowledge.entities.filter(entity => {
+            const nameLength = entity.name?.length || 0;
+            return nameLength > 2 && nameLength < 100;
+        });
+        
+        filtered.topics = knowledge.topics.filter(topic => {
+            return topic.length > 2 && topic.length < 50;
+        });
+        
+        filtered.actions = knowledge.actions.filter(action => {
+            return action.verbs && action.verbs.length > 0 && 
+                   (action.subjectEntityName || action.objectEntityName);
+        });
+        
+        return filtered;
+    }
+
+    private addCrossReferences(knowledge: kpLib.KnowledgeResponse, originalParts: any[]): kpLib.KnowledgeResponse {
+        const enhanced = { ...knowledge };
+        
+        const allText = originalParts.map(part => 
+            (part.content || part.textChunks?.join('') || '').toLowerCase()
+        ).join(' ');
+        
+        enhanced.entities = enhanced.entities.map(entity => {
+            const mentions = this.countEntityMentions(entity.name, allText);
+            if (mentions > 1 && entity.facets) {
+                entity.facets.push({
+                    name: 'cross_references',
+                    value: mentions
+                });
+            }
+            return entity;
+        });
+        
+        enhanced.topics = enhanced.topics.filter(topic => {
+            return this.countEntityMentions(topic, allText) > 0;
+        });
+        
+        return enhanced;
+    }
+
+    private countEntityMentions(entityName: string, text: string): number {
+        const normalized = entityName.toLowerCase();
+        const regex = new RegExp(`\\b${normalized.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+        const matches = text.match(regex);
+        return matches ? matches.length : 0;
+    }
+
+    private validateAndCleanKnowledge(knowledge: kpLib.KnowledgeResponse): kpLib.KnowledgeResponse {
+        const cleaned = this.createEmptyKnowledge();
+        
+        cleaned.entities = knowledge.entities
+            .filter(entity => entity.name && entity.name.trim().length > 0)
+            .slice(0, 30);
+        
+        cleaned.topics = [...new Set(knowledge.topics)]
+            .filter(topic => topic && topic.trim().length > 0)
+            .slice(0, 20);
+        
+        cleaned.actions = knowledge.actions
+            .filter(action => action.verbs && action.verbs.length > 0)
+            .slice(0, 15);
+        
+        return cleaned;
     }
 
     private async extractHybridKnowledge(
@@ -848,4 +1341,49 @@ export class ContentExtractor {
             },
         };
     }
+}
+
+/**
+ * Factory function to create a ContentExtractor with enhanced knowledge extraction
+ * @param knowledgeExtractor The configured knowledge extractor with AI model
+ * @param options Additional configuration options
+ * @returns ContentExtractor instance with enhanced knowledge extraction enabled
+ */
+export function createContentExtractorWithKnowledge(
+    knowledgeExtractor: kpLib.KnowledgeExtractor,
+    options: Partial<ContentExtractorConfig> = {}
+): ContentExtractor {
+    const config: ContentExtractorConfig = {
+        enableKnowledgeExtraction: true,
+        knowledgeMode: "hybrid",
+        maxCharsPerChunk: 1500,
+        maxConcurrentExtractions: 3,
+        knowledgeQualityThreshold: 0.4,
+        enableCrossChunkMerging: true,
+        preserveChunkContext: true,
+        ...options,
+        knowledgeExtractor, // Ensure this is set
+    };
+
+    return new ContentExtractor(config);
+}
+
+/**
+ * Factory function to create a basic ContentExtractor without enhanced knowledge extraction
+ * @param options Configuration options
+ * @returns ContentExtractor instance with basic functionality only
+ */
+export function createBasicContentExtractor(
+    options: Partial<ContentExtractorConfig> = {}
+): ContentExtractor {
+    const config: ContentExtractorConfig = {
+        enableKnowledgeExtraction: false,
+        knowledgeMode: "none",
+        ...options,
+    };
+    
+    // Explicitly remove knowledgeExtractor to avoid type issues
+    delete config.knowledgeExtractor;
+
+    return new ContentExtractor(config);
 }

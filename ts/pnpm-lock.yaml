@@ -979,6 +979,9 @@ importers:
       jsonpath:
         specifier: ^1.1.1
         version: 1.1.1
+      knowledge-processor:
+        specifier: workspace:*
+        version: link:../../knowledgeProcessor
       knowpro:
         specifier: workspace:*
         version: link:../../knowPro
