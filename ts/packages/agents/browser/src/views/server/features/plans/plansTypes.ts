@@ -20,6 +20,7 @@ export interface WebPlanData {
     links: PlanLink[];
     currentNode: string | null;
     title: string;
+    description?: string;
 }
 
 export interface TransitionRequest {

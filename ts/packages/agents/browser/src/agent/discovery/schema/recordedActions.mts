@@ -41,6 +41,8 @@ export type UserIntent = {
 
 export type SelectElementByText = {
     actionName: "selectElementByText";
+    // a short user-friendly description of the operation e.g. select name
+    description: string;
     parameters: {
         // IMPORTANT: the shortName of the UserIntentParameter to use for this value
         text: string;
@@ -50,6 +52,8 @@ export type SelectElementByText = {
 
 export type EnterText = {
     actionName: "enterText";
+    // a short user-friendly description of the operation e.g. enter name
+    description: string;
     parameters: {
         // IMPORTANT: the shortName of the UserIntentParameter to use for this value
         textParameter: string;
@@ -60,6 +64,8 @@ export type EnterText = {
 // and the page captures input
 export type EnterTextAtPageScope = {
     actionName: "enterTextAtPageScope";
+    // a short user-friendly description of the operation e.g. enter name
+    description: string;
     parameters: {
         // IMPORTANT: the shortName of the UserIntentParameter to use for this value
         textParameter: string;
@@ -68,6 +74,8 @@ export type EnterTextAtPageScope = {
 
 export type SelectValueFromDropdown = {
     actionName: "selectValueFromDropdown";
+    // a short user-friendly description of the operation e.g. select month
+    description: string;
     parameters: {
         // IMPORTANT: the shortName of the UserIntentParameter to use for this value
         valueTextParameter: string;
@@ -76,6 +84,8 @@ export type SelectValueFromDropdown = {
 
 export type ClickOnButton = {
     actionName: "clickOnButton";
+    // a short user-friendly description of the operation e.g. click on home link
+    description: string;
     parameters: {
         // the displayed text of the button to click on
         buttonText: string;
@@ -84,6 +94,8 @@ export type ClickOnButton = {
 
 export type ClickOnElement = {
     actionName: "clickOnElement";
+    // a short user-friendly description of the operation e.g. click on home link
+    description: string;
     parameters: {
         // the displayed text of the element to click on
         elementText: string;
@@ -92,6 +104,8 @@ export type ClickOnElement = {
 
 export type ClickOnLink = {
     actionName: "ClickOnLink";
+    // a short user-friendly description of the operation e.g. click on home link
+    description: string;
     parameters: {
         // the shortName of the UserIntentParameter to use for this value
         linkTextParameter: string;

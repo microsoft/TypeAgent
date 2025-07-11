@@ -85,6 +85,7 @@ export function createRpc<
                             type: "invokeError",
                             callId: message.callId,
                             error: error.message,
+                            stack: debugError.enabled ? error.stack : undefined,
                         });
                     },
                 );
@@ -103,6 +104,7 @@ export function createRpc<
         if (isInvokeResult(message)) {
             r.resolve(message.result);
         } else {
+            debugError("Invoke error", message.stack);
             r.reject(new Error(message.error));
         }
     };
@@ -196,4 +198,5 @@ type InvokeError = {
     type: "invokeError";
     callId: number;
     error: string;
+    stack?: string; // Optional stack trace for debugging.
 };

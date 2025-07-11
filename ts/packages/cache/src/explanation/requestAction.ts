@@ -292,3 +292,43 @@ export class RequestAction {
         );
     }
 }
+
+export function getPropertyInfo(
+    propertyName: string,
+    actions: ExecutableAction[],
+): {
+    action: FullAction;
+    parameterName?: string;
+    actionIndex: number | undefined;
+} {
+    const parts = propertyName.split(".");
+    let firstPart = parts.shift();
+    if (firstPart === undefined) {
+        throw new Error(`Invalid property name '${propertyName}'`);
+    }
+
+    let action: FullAction | undefined;
+    let actionIndex: number | undefined;
+    if (actions.length > 1) {
+        // Multiple actions
+        actionIndex = parseInt(firstPart);
+        if (!isNaN(actionIndex) && actionIndex.toString() === firstPart) {
+            action = actions[actionIndex].action;
+        }
+        if (action === undefined) {
+            throw new Error(
+                `Invalid index '${firstPart}' in property name '${propertyName}'`,
+            );
+        }
+        firstPart = parts.shift();
+    } else {
+        action = actions[0].action;
+    }
+    if (firstPart === "fullActionName" && parts.length === 0) {
+        return { action, actionIndex };
+    }
+    if (firstPart !== "parameters" || parts.length === 0) {
+        throw new Error(`Invalid property name '${propertyName}'`);
+    }
+    return { action, parameterName: parts.join("."), actionIndex };
+}
