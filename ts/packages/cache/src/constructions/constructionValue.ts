@@ -8,7 +8,12 @@ import {
     ParamValueType,
 } from "../explanation/requestAction.js";
 import { ConstructionPart } from "./constructions.js";
-import { TransformInfo, isMatchPart, toTransformInfoKey } from "./matchPart.js";
+import {
+    TransformInfo,
+    getPropertyNameFromTransformInfo,
+    isMatchPart,
+    toTransformInfoKey,
+} from "./matchPart.js";
 import { ParsePart, isParsePart } from "./parsePart.js";
 import { MatchConfig } from "./constructionMatch.js";
 
@@ -97,8 +102,9 @@ export function matchedValues(
             matches.text,
             config.history,
         );
-        const { transformName, actionIndex } = matches.transformInfo;
-        const propertyName = `${actionIndex !== undefined ? `${actionIndex}.` : ""}${transformName}`;
+        const propertyName = getPropertyNameFromTransformInfo(
+            matches.transformInfo,
+        );
         if (value !== undefined) {
             values.push([propertyName, value]);
             matchedCount++;
