@@ -21,7 +21,7 @@ export type EntityTerm = {
     // the specific types of the entity such as "book", "movie", "song", "speaker", "person", "artist", "animal", "instrument", "school", "room", "museum", "food" etc.
     // Do not include generic types such as: "entity", "object", "thing", "concept" etc.
     // An entity can have multiple types; entity types should be single words
-    type?: string[];
+    type: string[];
     // Facet terms search for properties or attributes of the entity.
     // Eg: color(blue), profession(writer), author(*), aunt(Agatha), weight(4kg), phoneNumber(...), title(*) etc.
     facets?: FacetTerm[];
@@ -51,6 +51,7 @@ export type ActionTerm = {
     isInformational: boolean;
 };
 
+//
 // Search a search engine for:
 // entitySearchTerms cannot contain entities already in actionSearchTerms
 export type SearchFilter = {
