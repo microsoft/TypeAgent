@@ -51,6 +51,10 @@ export class ParsePart implements ConstructionPart {
         // Parse parts don't have completions.
         return undefined;
     }
+
+    public getPropertyNames(): string[] | undefined {
+        return [this.propertyName];
+    }
 }
 
 export type ParsePartJSON = {

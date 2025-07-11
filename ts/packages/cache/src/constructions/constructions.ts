@@ -48,6 +48,9 @@ export type ConstructionPart = {
 
     // For partial match, return completion value for this part.
     getCompletion(): Iterable<string> | undefined;
+
+    // For partial match, return the property name for this part.
+    getPropertyNames(): string[] | undefined;
 };
 
 function getDefaultTranslator(transformNamespaces: Map<string, Transforms>) {
