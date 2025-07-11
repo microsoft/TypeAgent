@@ -537,7 +537,6 @@ async function enhanceWithContent(
                         website.metadata.url,
                     );
                     contentData = await extractor.extractWithKnowledge(
-                        website.metadata.url,
                         html,
                         options.extractionMode || "content",
                         options.knowledgeMode || "hybrid",

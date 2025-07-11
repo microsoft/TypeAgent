@@ -187,7 +187,6 @@ export class ContentExtractor {
     }
 
     async extractWithKnowledge(
-        url: string,
         html: string,
         mode: ExtractionMode = "content",
         knowledgeMode: KnowledgeExtractionMode = "hybrid",

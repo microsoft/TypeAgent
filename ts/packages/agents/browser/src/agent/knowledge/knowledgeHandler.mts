@@ -141,13 +141,19 @@ export async function extractKnowledgeFromPage(
                     enableActionDetection:
                         parameters.extractionSettings?.enableActionDetection !==
                         false,
-                    maxContentLength: 15000,
+                    maxCharsPerChunk: 4000,
                 });
 
                 enhancedContent = await contentExtractor.extractFromHtml(
                     htmlContent,
                     extractionMode,
                 );
+
+                const enhancedContent2 = await contentExtractor.extractWithKnowledge(
+                    htmlContent,
+                    extractionMode,
+                );
+                console.log("Enhanced knowledge ", enhancedContent2)
             } catch (extractorError) {
                 console.warn(
                     "Enhanced content extraction failed, falling back to basic:",
@@ -486,15 +492,20 @@ export async function getKnowledgeIndexStats(
         let lastIndexed: string | null = null;
 
         for (const site of websites) {
-            const knowledge = site.getKnowledge();
-            if (knowledge) {
-                totalEntities += knowledge.entities?.length || 0;
-                totalRelationships += knowledge.actions?.length || 0;
+            try {
+                const knowledge = site.getKnowledge();
+                if (knowledge) {
+                    totalEntities += knowledge.entities?.length || 0;
+                    totalRelationships += knowledge.actions?.length || 0;
+                }
+            } catch (error) {
+                console.warn("Error getting knowledge for site:", error);
+                // Continue processing other sites
             }
 
             const metadata = site.metadata as website.WebsiteDocPartMeta;
 
-            const siteDate = metadata.visitDate || metadata.bookmarkDate;
+            const siteDate = metadata?.visitDate || metadata?.bookmarkDate;
             if (siteDate && (!lastIndexed || siteDate > lastIndexed)) {
                 lastIndexed = siteDate;
             }
@@ -648,7 +659,7 @@ async function generateAnswerFromResults(
 function reconstructHtmlFromFragments(htmlFragments: any[]): string {
     return htmlFragments
         .map((fragment) => {
-            if (fragment.html) return fragment.html;
+            if (fragment.content) return fragment.content;
             if (fragment.text) return fragment.text;
             return "";
         })

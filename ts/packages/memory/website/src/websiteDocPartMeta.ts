@@ -91,6 +91,16 @@ export class WebsiteDocPartMeta extends DocPartMeta {
     }
 
     public getKnowledge(): kpLib.KnowledgeResponse | undefined {
-        return this.websiteMeta.getKnowledge();
+        try {
+            if (this.websiteMeta && typeof this.websiteMeta.getKnowledge === 'function') {
+                return this.websiteMeta.getKnowledge();
+            } else {
+                console.warn("websiteMeta is not properly initialized or missing getKnowledge method");
+                return undefined;
+            }
+        } catch (error) {
+            console.warn("Error calling websiteMeta.getKnowledge():", error);
+            return undefined;
+        }
     }
 }
