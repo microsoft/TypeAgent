@@ -101,6 +101,33 @@ function isFullyQuoted(value: string) {
     );
 }
 
+function collectFlags(
+    agentCommandCompletions: string[],
+    flags: FlagDefinitions,
+    parsedFlags: any,
+) {
+    const flagCompletions: string[] = [];
+    for (const [key, value] of Object.entries(flags)) {
+        const multiple = getFlagMultiple(value);
+        if (!multiple) {
+            if (getFlagType(value) === "json") {
+                // JSON property flags
+                agentCommandCompletions.push(`--${key}.`);
+            }
+            if (parsedFlags?.[key] !== undefined) {
+                // filter out non-multiple flags that is already set.
+                continue;
+            }
+        }
+        flagCompletions.push(`--${key}`);
+        if (value.char !== undefined) {
+            flagCompletions.push(`-${value.char}`);
+        }
+    }
+
+    return flagCompletions;
+}
+
 async function getCommandParameterCompletion(
     descriptor: CommandDescriptor,
     context: CommandHandlerContext,
@@ -113,38 +140,17 @@ async function getCommandParameterCompletion(
     }
     const flags = descriptor.parameters.flags;
     const params = parseParams(result.suffix, descriptor.parameters, true);
-    const agent = context.agents.getAppAgent(result.actualAppAgentName);
-    const sessionContext = context.agents.getSessionContext(
-        result.actualAppAgentName,
-    );
-
     const pendingFlag = getPendingFlag(params, flags, completions);
-
-    const pendingCompletions: string[] = [];
+    const agentCommandCompletions: string[] = [];
     if (pendingFlag === undefined) {
         // TODO: auto inject boolean value for boolean args.
-        pendingCompletions.push(...params.nextArgs);
+        agentCommandCompletions.push(...params.nextArgs);
         if (flags !== undefined) {
-            const parsedFlags = params.flags;
-            const flagCompletions: string[] = [];
-            for (const [key, value] of Object.entries(flags)) {
-                const multiple = getFlagMultiple(value);
-                if (!multiple) {
-                    if (getFlagType(value) === "json") {
-                        // JSON property flags
-                        pendingCompletions.push(`--${key}.`);
-                    }
-                    if (parsedFlags?.[key] !== undefined) {
-                        // filter out non-multiple flags that is already set.
-                        continue;
-                    }
-                }
-                flagCompletions.push(`--${key}`);
-                if (value.char !== undefined) {
-                    flagCompletions.push(`-${value.char}`);
-                }
-            }
-
+            const flagCompletions = collectFlags(
+                agentCommandCompletions,
+                flags,
+                params.flags,
+            );
             if (flagCompletions.length > 0) {
                 completions.push({
                     name: "Command Flags",
@@ -154,9 +160,10 @@ async function getCommandParameterCompletion(
         }
     } else {
         // get the potential values for the pending flag
-        pendingCompletions.push(pendingFlag);
+        agentCommandCompletions.push(pendingFlag);
     }
 
+    const agent = context.agents.getAppAgent(result.actualAppAgentName);
     if (agent.getCommandCompletion) {
         const { tokens, lastCompletableParam, lastParamImplicitQuotes } =
             params;
@@ -168,15 +175,18 @@ async function getCommandParameterCompletion(
                 quoted === false ||
                 (quoted === undefined && lastParamImplicitQuotes)
             ) {
-                pendingCompletions.push(lastCompletableParam);
+                agentCommandCompletions.push(lastCompletableParam);
             }
         }
-        if (pendingCompletions.length > 0) {
+        if (agentCommandCompletions.length > 0) {
+            const sessionContext = context.agents.getSessionContext(
+                result.actualAppAgentName,
+            );
             completions.push(
                 ...(await agent.getCommandCompletion(
                     result.commands,
                     params,
-                    pendingCompletions,
+                    agentCommandCompletions,
                     sessionContext,
                 )),
             );

@@ -95,6 +95,8 @@ export class PartialCompletion {
         const trimmed = prefix.trimStart();
         return trimmed === prefix ? undefined : trimmed;
     }
+
+    // Determine if the current search menu can still be reused, or if we need to update the completions.
     private reuseSearchMenu(input: string) {
         if (!this.current || !input.startsWith(this.current)) {
             return false;
@@ -117,14 +119,11 @@ export class PartialCompletion {
             return false;
         }
 
-        // Space are delimiters.  Don't reuse the search menu if we have a space at the end.
-        // space.  We will try to refresh the completion.
-        if (prefix.trimEnd() !== prefix) {
-            return false;
-        }
-
         this.updateSearchMenuPrefix(prefix);
-        return true;
+
+        // If the search menu is still matching continue to use it.
+        // Otherwise, space are delimiters and we only refresh the completions
+        return this.searchMenu.isActive() || prefix.trimEnd() === prefix;
     }
 
     private updateSearchMenuPrefix(prefix: string) {
@@ -133,10 +132,11 @@ export class PartialCompletion {
             return;
         }
         const items = this.searchMenu.completePrefix(prefix);
-        if (
+        const showMenu =
             items.length !== 0 &&
-            (items.length !== 1 || items[0].matchText !== prefix)
-        ) {
+            (items.length !== 1 || items[0].matchText !== prefix);
+
+        if (showMenu) {
             debug(
                 `Partial completion updated: '${prefix}' with ${items.length} items`,
             );
