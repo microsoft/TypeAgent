@@ -318,11 +318,7 @@ function compareSearchExpr(
         if (error !== undefined) {
             return error;
         }
-        error = compareObject(
-            f1.actionSearchTerm,
-            f2.actionSearchTerm,
-            "actionSearchTerm",
-        );
+        error = compareActionTerm(f1.actionSearchTerm, f2.actionSearchTerm);
         if (error !== undefined) {
             return error;
         }
@@ -330,10 +326,47 @@ function compareSearchExpr(
         if (error !== undefined) {
             return error;
         }
-        error = compareObject(f1.timeRange, f2.timeRange, "searchTerms");
+        error = compareObject(f1.timeRange, f2.timeRange, "timeRange");
         if (error !== undefined) {
             return error;
         }
+    }
+    return undefined;
+}
+
+function compareActionTerm(
+    x?: kp.querySchema.ActionTerm,
+    y?: kp.querySchema.ActionTerm,
+): string | undefined {
+    if (x === undefined && y === undefined) {
+        return undefined;
+    }
+    let error = compareObject(x?.actionVerbs, y?.actionVerbs, "verbs");
+    if (error !== undefined) {
+        return error;
+    }
+    error = compareObject(x?.actorEntities, y?.actorEntities, "actorEntities");
+    if (error !== undefined) {
+        return error;
+    }
+    error = compareObject(
+        x?.additionalEntities,
+        y?.additionalEntities,
+        "additionalEntities",
+    );
+    if (error !== undefined) {
+        return error;
+    }
+    error = compareObject(
+        x?.targetEntities,
+        y?.targetEntities,
+        "targetEntities",
+    );
+    if (error !== undefined) {
+        return error;
+    }
+    if (x?.isInformational !== y?.isInformational) {
+        return `isInformational: ${x?.isInformational} !== ${y?.isInformational}`;
     }
     return undefined;
 }
