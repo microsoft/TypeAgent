@@ -1,10 +1,17 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { TextEmbeddingModel } from "aiclient";
 import fs from "fs";
 import { ArgDef, NamedArgs, parseCommandLine } from "interactive-app";
 import path from "path";
-import { dateTime, getFileName } from "typeagent";
+import {
+    collections,
+    dateTime,
+    dotProduct,
+    generateTextEmbeddingsWithRetry,
+    getFileName,
+} from "typeagent";
 import { error, Result, Error } from "typechat";
 
 export function ensureDirSync(folderPath: string): string {
@@ -143,33 +150,93 @@ export function compareObject(
     if (isUndefinedOrEmpty(x) && isUndefinedOrEmpty(y)) {
         return undefined;
     }
-    if (!isJsonEqual(x, y)) {
-        return `${label}: ${stringifyReadable(x)}\n !== \n${stringifyReadable(y)}`;
+    if (typeof x === "object" || typeof y === "object") {
+        if (!isJsonEqual(x, y)) {
+            return `${label}: ${stringifyReadable(x)}\n !== \n${stringifyReadable(y)}`;
+        }
+    } else if (x !== y) {
+        return `${label}: ${x} !== ${y}`;
     }
     return undefined;
 }
 
-export function compareArray(
-    name: string,
-    x: any[] | undefined,
-    y: any[] | undefined,
-    sort: boolean = true,
+export function compareNumberArray(
+    x: number[] | undefined,
+    y: number[] | undefined,
+    label: string,
+    sort = true,
 ): string | undefined {
     if (isUndefinedOrEmpty(x) && isUndefinedOrEmpty(y)) {
         return undefined;
     }
     if (x === undefined || y === undefined || x.length != y.length) {
-        return `${name}: length mismatch`;
+        return `${label}: length mismatch`;
     }
     if (sort) {
-        x = [...x].sort();
-        y = [...y].sort();
+        const sortFn = (a: number, b: number) => a - b;
+        x = [...x].sort(sortFn);
+        y = [...y].sort(sortFn);
     }
     for (let i = 0; i < x.length; ++i) {
         if (x[i] !== y[i]) {
-            return `${name}[${i}]: ${x[i]} !== ${y[i]}`;
+            return `${label}: [${i}] ${x[i]} !== ${y[i]}`;
         }
     }
+    return undefined;
+}
+
+export function compareStringArray(
+    x: string[] | undefined,
+    y: string[] | undefined,
+    label: string,
+    sort = true,
+): string | undefined {
+    if (isUndefinedOrEmpty(x) && isUndefinedOrEmpty(y)) {
+        return undefined;
+    }
+    if (x === undefined || y === undefined || x.length != y.length) {
+        return `${label}: length mismatch`;
+    }
+
+    if (sort) {
+        const sortFn = (a: string, b: string) =>
+            collections.stringCompare(a, b, false);
+        x = [...x].sort(sortFn);
+        y = [...y].sort(sortFn);
+    }
+    for (let i = 0; i < x.length; ++i) {
+        if (collections.stringCompare(x[i], y[i], false) !== 0) {
+            return `${label}: [${i}] ${x[i]} !== ${y[i]}`;
+        }
+    }
+    return undefined;
+}
+
+export async function compareStringFuzzy(
+    x: string | undefined,
+    y: string | undefined,
+    label: string,
+    similarityModel: TextEmbeddingModel,
+    threshold: number = 0.9,
+): Promise<string | undefined> {
+    if (x !== y) {
+        if (x !== undefined && y !== undefined) {
+            if (x.toLowerCase() === y.toLowerCase()) {
+                return undefined;
+            }
+            const embeddings = await generateTextEmbeddingsWithRetry(
+                similarityModel,
+                [x, y],
+            );
+            const similarity = dotProduct(embeddings[0], embeddings[1]);
+            if (similarity >= threshold) {
+                return undefined;
+            }
+            return `${label}: ${x} !== ${y}\n$[${similarity} < ${threshold}]`;
+        }
+        return `${label}: ${x} !== ${y}`;
+    }
+
     return undefined;
 }
 
@@ -178,6 +245,9 @@ export function isUndefinedOrEmpty(x?: any): boolean {
         return true;
     }
     if (Array.isArray(x)) {
+        return x.length === 0;
+    }
+    if (typeof x === "string") {
         return x.length === 0;
     }
     return false;

@@ -6,8 +6,9 @@ import { dateTime, readJsonFile, writeJsonFile } from "typeagent";
 import { error, Result, success } from "typechat";
 import { BatchCallback, Comparison } from "./types.js";
 import {
-    compareArray,
+    compareNumberArray,
     compareObject,
+    compareStringArray,
     dateRangeToTimeRange,
     getCommandArgs,
     queryError,
@@ -17,6 +18,7 @@ import { getBatchFileLines } from "interactive-app";
 import { execSearchRequest } from "./knowproCommands.js";
 import * as kp from "knowpro";
 import { TestRunReport } from "./logging.js";
+import { TextEmbeddingModel } from "aiclient";
 
 export type LangSearchResults = {
     searchText: string;
@@ -125,7 +127,11 @@ export async function verifyLangSearchResultsBatch(
         let response = await getSearchResults(context, args);
         if (response.success) {
             const actual = response.data;
-            const error = compareLangSearchResults(actual, expected);
+            const error = await compareLangSearchResults(
+                actual,
+                expected,
+                context.similarityModel,
+            );
             let comparisonResult: Comparison<LangSearchResults> = {
                 actual,
                 expected,
@@ -236,11 +242,16 @@ function getMatchedSemanticRefOrdinals(
         ?.semanticRefMatches.map((sr) => sr.semanticRefOrdinal);
 }
 
-function compareLangSearchResults(
+async function compareLangSearchResults(
     lr1: LangSearchResults,
     lr2: LangSearchResults,
-): string | undefined {
-    let error = compareSearchQuery(lr1.searchQueryExpr, lr2.searchQueryExpr);
+    similarityModel?: TextEmbeddingModel,
+): Promise<string | undefined> {
+    let error = await compareSearchQuery(
+        lr1.searchQueryExpr,
+        lr2.searchQueryExpr,
+        similarityModel,
+    );
     if (error !== undefined && error.length > 0) {
         return error;
     }
@@ -260,29 +271,34 @@ function compareLangSearchResult(
     lr1: LangSearchResult,
     lr2: LangSearchResult,
 ): string | undefined {
-    let error = compareArray("message", lr1.messageMatches, lr2.messageMatches);
+    let error = compareNumberArray(
+        lr1.messageMatches,
+        lr2.messageMatches,
+        "message",
+    );
     if (error !== undefined) {
         return error;
     }
-    error = compareArray("entity", lr1.entityMatches, lr2.entityMatches);
+    error = compareNumberArray(lr1.entityMatches, lr2.entityMatches, "entity");
     if (error !== undefined) {
         return error;
     }
-    error = compareArray("topic", lr1.topicMatches, lr2.topicMatches);
+    error = compareNumberArray(lr1.topicMatches, lr2.topicMatches, "topic");
     if (error !== undefined) {
         return error;
     }
-    error = compareArray("action", lr1.actionMatches, lr2.actionMatches);
+    error = compareNumberArray(lr1.actionMatches, lr2.actionMatches, "action");
     if (error !== undefined) {
         return error;
     }
     return undefined;
 }
 
-function compareSearchQuery(
+async function compareSearchQuery(
     s1: kp.querySchema.SearchQuery,
     s2: kp.querySchema.SearchQuery,
-): string | undefined {
+    similarityModel?: TextEmbeddingModel,
+): Promise<string | undefined> {
     if (s1.searchExpressions.length !== s2?.searchExpressions.length) {
         return `searchQuery.searchExpressions.length: ${s1.searchExpressions.length} !== ${s2.searchExpressions.length}`;
     }
@@ -322,7 +338,11 @@ function compareSearchExpr(
         if (error !== undefined) {
             return error;
         }
-        error = compareObject(f1.searchTerms, f2.searchTerms, "searchTerms");
+        error = compareStringArray(
+            f1.searchTerms,
+            f2.searchTerms,
+            "searchTerms",
+        );
         if (error !== undefined) {
             return error;
         }

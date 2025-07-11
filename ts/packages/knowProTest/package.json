@@ -31,6 +31,7 @@
     "aiclient": "workspace:*",
     "conversation-memory": "workspace:*",
     "interactive-app": "workspace:*",
+    "knowledge-processor": "workspace:*",
     "knowpro": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "0.1.1"

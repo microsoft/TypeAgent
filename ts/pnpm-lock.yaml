@@ -2703,6 +2703,9 @@ importers:
       interactive-app:
         specifier: workspace:*
         version: link:../interactiveApp
+      knowledge-processor:
+        specifier: workspace:*
+        version: link:../knowledgeProcessor
       knowpro:
         specifier: workspace:*
         version: link:../knowPro
