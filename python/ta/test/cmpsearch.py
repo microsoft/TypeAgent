@@ -39,6 +39,7 @@ class Context:
     answer_options: answers.AnswerContextOptions
     interactive: bool
     sr_index: dict[str, dict]
+    use_search_query: bool
 
 
 def main():
@@ -52,7 +53,9 @@ def main():
     explanation_sr = (
         "a list of objects with 'searchText', 'searchQueryExpr' and 'results' keys"
     )
-    parser = argparse.ArgumentParser(description="Parse Q/A data file")
+    parser = argparse.ArgumentParser(
+        description="Run queries from` QAFILE and compare answers to expectations"
+    )
     parser.add_argument(
         "--qafile",
         type=str,
@@ -64,6 +67,12 @@ def main():
         type=str,
         default=default_srfile,
         help=f"Path to the Search_results.json file ({explanation_sr})",
+    )
+    parser.add_argument(
+        "--use-search-query",
+        action="store_true",
+        default=False,
+        help="Use search query from SRFILE",
     )
     parser.add_argument(
         "--podcast",
@@ -139,6 +148,7 @@ def main():
         ),
         interactive=args.interactive,
         sr_index=sr_index,
+        use_search_query=args.use_search_query,
     )
     utils.pretty_print(context.lang_search_options)
     utils.pretty_print(context.answer_options)
@@ -229,6 +239,10 @@ async def compare_actual_to_expected(
     answer = qa_pair.get("answer")
     failed = qa_pair.get("hasNoAnswer")
     cmd = qa_pair.get("cmd")
+    if question:
+        question = question.strip()
+    if answer:
+        answer = answer.strip()
     if not (question and answer):
         return None, score
 
@@ -246,6 +260,14 @@ async def compare_actual_to_expected(
     log("-" * 40)
 
     debug_context = searchlang.LanguageSearchDebugContext()
+    if context.use_search_query:
+        record = context.sr_index.get(question)
+        if record:
+            print("Using search query from SRFILE")
+            debug_context.use_search_query = deserialize_object(
+                SearchQuery, record["searchQueryExpr"]
+            )
+
     result = await searchlang.search_conversation_with_language(
         context.conversation,
         context.query_translator,
