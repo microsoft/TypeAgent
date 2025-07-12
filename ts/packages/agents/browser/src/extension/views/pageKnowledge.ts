@@ -257,12 +257,42 @@ class KnowledgePanel {
             });
 
             if (response.isIndexed) {
-                return '<span class="badge bg-success">Indexed</span>';
+                const lastIndexedDate = response.lastIndexed ? 
+                    new Date(response.lastIndexed).toLocaleDateString() : 
+                    'Unknown';
+                const entityCount = response.entityCount || 0;
+                
+                return `
+                    <span class="badge bg-success position-relative">
+                        <i class="bi bi-check-circle me-1"></i>Indexed
+                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-info">
+                            ${entityCount}
+                            <span class="visually-hidden">entities</span>
+                        </span>
+                    </span>
+                    <div class="small text-muted mt-1">
+                        Last: ${lastIndexedDate}
+                    </div>
+                `;
             } else {
-                return '<span class="badge bg-secondary">Not indexed</span>';
+                return `
+                    <span class="badge bg-secondary">
+                        <i class="bi bi-circle me-1"></i>Not indexed
+                    </span>
+                    <div class="small text-muted mt-1">
+                        Ready to index
+                    </div>
+                `;
             }
         } catch (error) {
-            return '<span class="badge bg-warning">Unknown</span>';
+            return `
+                <span class="badge bg-warning">
+                    <i class="bi bi-question-circle me-1"></i>Unknown
+                </span>
+                <div class="small text-muted mt-1">
+                    Check connection
+                </div>
+            `;
         }
     }
 
@@ -299,6 +329,15 @@ class KnowledgePanel {
     }
 
     private async extractKnowledge() {
+        const button = document.getElementById("extractKnowledge") as HTMLButtonElement;
+        const originalContent = button.innerHTML;
+        
+        // Show extracting state with progress indicator
+        button.innerHTML = '<i class="bi bi-hourglass-split spinner-grow spinner-grow-sm me-2"></i>Extracting...';
+        button.disabled = true;
+        button.classList.add('btn-warning');
+        button.classList.remove('btn-primary');
+
         this.showKnowledgeLoading();
 
         try {
@@ -308,6 +347,8 @@ class KnowledgePanel {
                 return;
             }
 
+            const startTime = Date.now();
+
             const response = await chrome.runtime.sendMessage({
                 type: "extractPageKnowledge",
                 url: this.currentUrl,
@@ -315,27 +356,65 @@ class KnowledgePanel {
                 extractionSettings: this.extractionSettings,
             });
 
+            const processingTime = Date.now() - startTime;
+
             this.knowledgeData = response.knowledge;
             if (this.knowledgeData) {
+                // Show success state briefly
+                button.innerHTML = '<i class="bi bi-check-circle me-2"></i>Extracted!';
+                button.classList.remove('btn-warning');
+                button.classList.add('btn-success');
+
                 await this.renderKnowledgeResults(this.knowledgeData);
                 await this.cacheKnowledge(this.knowledgeData);
                 this.showExtractionInfo();
                 await this.updateQualityIndicator();
-            }
 
-            this.showTemporaryStatus(
-                `Knowledge extracted successfully using ${this.extractionSettings.mode} mode!`,
-                "success",
-            );
+                // Show detailed success notification
+                const entityCount = this.knowledgeData.entities?.length || 0;
+                const topicCount = this.knowledgeData.keyTopics?.length || 0;
+                const relationshipCount = this.knowledgeData.relationships?.length || 0;
+                
+                this.showEnhancedNotification(
+                    "success",
+                    "Knowledge Extracted Successfully!",
+                    `Found ${entityCount} entities, ${topicCount} topics, ${relationshipCount} relationships using ${this.extractionSettings.mode} mode in ${Math.round(processingTime / 1000)}s`,
+                    "bi-brain"
+                );
+
+                // Brief delay to show success state
+                await new Promise(resolve => setTimeout(resolve, 1500));
+            }
         } catch (error) {
             console.error("Error extracting knowledge:", error);
+            
+            // Show error state
+            button.innerHTML = '<i class="bi bi-exclamation-triangle me-2"></i>Error';
+            button.classList.remove('btn-warning');
+            button.classList.add('btn-danger');
+            
             if ((error as Error).message?.includes('AI model required')) {
                 this.showAIRequiredError();
             } else {
                 this.showKnowledgeError(
                     "Failed to extract knowledge. Please check your connection.",
                 );
+                this.showEnhancedNotification(
+                    "danger",
+                    "Knowledge Extraction Failed",
+                    (error as Error).message || "Failed to extract knowledge from page",
+                    "bi-exclamation-triangle"
+                );
             }
+            
+            // Brief delay to show error state
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        } finally {
+            // Restore original button state
+            button.innerHTML = originalContent;
+            button.disabled = false;
+            button.classList.remove('btn-warning', 'btn-success', 'btn-danger');
+            button.classList.add('btn-primary');
         }
     }
 
@@ -345,8 +424,11 @@ class KnowledgePanel {
         ) as HTMLButtonElement;
         const originalContent = button.innerHTML;
 
-        button.innerHTML = '<i class="bi bi-hourglass-split"></i> Indexing...';
+        // Show indexing state with progress indicator
+        button.innerHTML = '<i class="bi bi-hourglass-split spinner-grow spinner-grow-sm me-2"></i>Indexing...';
         button.disabled = true;
+        button.classList.add('btn-warning');
+        button.classList.remove('btn-outline-primary');
 
         try {
             // Validate mode selection before indexing
@@ -355,30 +437,65 @@ class KnowledgePanel {
                 return;
             }
 
-            await chrome.runtime.sendMessage({
+            const startTime = Date.now();
+            
+            const response = await chrome.runtime.sendMessage({
                 type: "indexPageContentDirect",
                 url: this.currentUrl,
                 mode: this.extractionSettings.mode,
             });
 
+            const processingTime = Date.now() - startTime;
+
+            // Show success state briefly
+            button.innerHTML = '<i class="bi bi-check-circle me-2"></i>Indexed!';
+            button.classList.remove('btn-warning');
+            button.classList.add('btn-success');
+
+            // Update all relevant UI components
             await this.loadCurrentPageInfo();
             await this.loadIndexStats();
             await this.updateQualityIndicator();
 
-            this.showTemporaryStatus(
-                `Page indexed successfully using ${this.extractionSettings.mode} mode!`, 
-                "success"
+            // Show detailed success notification
+            const entityCount = response.entityCount || 0;
+            this.showEnhancedNotification(
+                "success",
+                "Page Indexed Successfully!",
+                `Extracted ${entityCount} entities using ${this.extractionSettings.mode} mode in ${Math.round(processingTime / 1000)}s`,
+                "bi-database-check"
             );
+
+            // Brief delay to show success state
+            await new Promise(resolve => setTimeout(resolve, 1500));
+
         } catch (error) {
             console.error("Error indexing page:", error);
+            
+            // Show error state
+            button.innerHTML = '<i class="bi bi-exclamation-triangle me-2"></i>Error';
+            button.classList.remove('btn-warning');
+            button.classList.add('btn-danger');
+            
             if ((error as Error).message?.includes('AI model required')) {
                 this.showAIRequiredError();
             } else {
-                this.showTemporaryStatus("Failed to index page", "danger");
+                this.showEnhancedNotification(
+                    "danger", 
+                    "Indexing Failed",
+                    (error as Error).message || "Failed to index page",
+                    "bi-exclamation-triangle"
+                );
             }
+            
+            // Brief delay to show error state
+            await new Promise(resolve => setTimeout(resolve, 1000));
         } finally {
+            // Restore original button state
             button.innerHTML = originalContent;
             button.disabled = false;
+            button.classList.remove('btn-warning', 'btn-success', 'btn-danger');
+            button.classList.add('btn-outline-primary');
         }
     }
 
@@ -1471,6 +1588,51 @@ class KnowledgePanel {
                 statusDiv.remove();
             }
         }, 3000);
+    }
+
+    private showEnhancedNotification(
+        type: "success" | "danger" | "info" | "warning",
+        title: string,
+        message: string,
+        icon: string = "bi-info-circle"
+    ) {
+        const notification = document.createElement("div");
+        notification.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+        notification.style.cssText = `
+            top: 20px; 
+            right: 20px; 
+            z-index: 9999; 
+            min-width: 350px; 
+            max-width: 400px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            border: none;
+            border-radius: 8px;
+        `;
+        
+        notification.innerHTML = `
+            <div class="d-flex align-items-start">
+                <i class="${icon} me-3 mt-1" style="font-size: 1.2rem;"></i>
+                <div class="flex-grow-1">
+                    <div class="fw-bold mb-1">${title}</div>
+                    <div class="small">${message}</div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // Auto-remove after 6 seconds for enhanced notifications
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.classList.remove('show');
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 300);
+            }
+        }, 6000);
     }
 
     // Template utility functions for knowledge panel

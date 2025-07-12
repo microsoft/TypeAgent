@@ -150,6 +150,66 @@
         color: #6c757d;
       }
 
+      /* Enhanced button animations */
+      .btn {
+        transition: all 0.3s ease;
+      }
+
+      .btn-success {
+        animation: pulse-success 0.6s ease-in-out;
+      }
+
+      .btn-danger {
+        animation: pulse-error 0.6s ease-in-out;
+      }
+
+      .btn-warning {
+        animation: pulse-warning 0.3s ease-in-out infinite alternate;
+      }
+
+      @keyframes pulse-success {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.05); background-color: #28a745; }
+        100% { transform: scale(1); }
+      }
+
+      @keyframes pulse-error {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.05); background-color: #dc3545; }
+        100% { transform: scale(1); }
+      }
+
+      @keyframes pulse-warning {
+        0% { opacity: 0.8; }
+        100% { opacity: 1; }
+      }
+
+      /* Enhanced notification styling */
+      .alert.position-fixed {
+        animation: slideInRight 0.4s ease-out;
+      }
+
+      .alert.position-fixed.show {
+        animation: slideInRight 0.4s ease-out;
+      }
+
+      @keyframes slideInRight {
+        from {
+          opacity: 0;
+          transform: translateX(100%);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+
+      /* Spinner animation for indexing state */
+      .spinner-grow-sm {
+        width: 0.75rem;
+        height: 0.75rem;
+      }
+
       /* Enhanced Question Styling */
       .question-category-card {
         background: rgba(255, 255, 255, 0.8);
