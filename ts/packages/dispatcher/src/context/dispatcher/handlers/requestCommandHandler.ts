@@ -419,10 +419,6 @@ export class RequestCommandHandler implements CommandHandler {
         for (const name of names) {
             if (name === "request") {
                 const requestPrefix = params.args.request;
-                if (requestPrefix === undefined) {
-                    // Don't have any request prefix, don't provide any completion as it will be too many.
-                    continue;
-                }
                 completions.push(
                     ...(await requestCompletion(
                         requestPrefix,
