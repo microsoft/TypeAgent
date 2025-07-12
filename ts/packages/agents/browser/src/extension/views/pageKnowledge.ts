@@ -249,7 +249,7 @@ class KnowledgePanel {
         }
     }
 
-    private async getPageIndexStatus(): Promise<string> {
+    private async getPageIndexStatus(retryCount: number = 0): Promise<string> {
         try {
             const response = await chrome.runtime.sendMessage({
                 type: "getPageIndexStatus",
@@ -275,6 +275,13 @@ class KnowledgePanel {
                     </div>
                 `;
             } else {
+                // If not indexed and this is a retry attempt (likely after recent indexing), 
+                // try once more with a longer delay
+                if (retryCount < 2) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    return this.getPageIndexStatus(retryCount + 1);
+                }
+                
                 return `
                     <span class="badge bg-secondary">
                         <i class="bi bi-circle me-1"></i>Not indexed
@@ -293,6 +300,37 @@ class KnowledgePanel {
                     Check connection
                 </div>
             `;
+        }
+    }
+
+    private async refreshPageStatusAfterIndexing() {
+        try {
+            const tabs = await chrome.tabs.query({
+                active: true,
+                currentWindow: true,
+            });
+            if (tabs.length > 0) {
+                const tab = tabs[0];
+                this.currentUrl = tab.url || "";
+
+                const pageInfo = document.getElementById("currentPageInfo")!;
+                const domain = new URL(this.currentUrl).hostname;
+                
+                // Force a status check with retry for recent indexing
+                const status = await this.getPageIndexStatus(0);
+
+                pageInfo.innerHTML = this.createPageInfo(
+                    tab.title || "Untitled",
+                    domain,
+                    status,
+                );
+                
+                // Also update the page source info
+                await this.loadPageSourceInfo();
+                this.updatePageSourceDisplay();
+            }
+        } catch (error) {
+            console.error("Error refreshing page status after indexing:", error);
         }
     }
 
@@ -452,11 +490,6 @@ class KnowledgePanel {
             button.classList.remove('btn-warning');
             button.classList.add('btn-success');
 
-            // Update all relevant UI components
-            await this.loadCurrentPageInfo();
-            await this.loadIndexStats();
-            await this.updateQualityIndicator();
-
             // Show detailed success notification
             const entityCount = response.entityCount || 0;
             this.showEnhancedNotification(
@@ -466,8 +499,13 @@ class KnowledgePanel {
                 "bi-database-check"
             );
 
-            // Brief delay to show success state
+            // Brief delay to show success state and allow backend to update
             await new Promise(resolve => setTimeout(resolve, 1500));
+
+            // Update all relevant UI components after the delay to ensure backend has processed
+            await this.refreshPageStatusAfterIndexing();
+            await this.loadIndexStats();
+            await this.updateQualityIndicator();
 
         } catch (error) {
             console.error("Error indexing page:", error);
@@ -489,7 +527,7 @@ class KnowledgePanel {
             }
             
             // Brief delay to show error state
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise(resolve => setTimeout(resolve, 2000));
         } finally {
             // Restore original button state
             button.innerHTML = originalContent;

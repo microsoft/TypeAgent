@@ -137,6 +137,7 @@ interface EntityMatch {
 
 class WebsiteLibraryPanelFullPage {
     private isConnected: boolean = false;
+    private isInitialized: boolean = false; // Add initialization guard
     private navigation: FullPageNavigation = {
         currentPage: "search",
         previousPage: null,
@@ -182,6 +183,13 @@ class WebsiteLibraryPanelFullPage {
     }
 
     async initialize() {
+        // Prevent duplicate initialization
+        if (this.isInitialized) {
+            console.log("Website Library Panel already initialized, skipping");
+            return;
+        }
+        
+        this.isInitialized = true;
         console.log("Initializing Enhanced Full-Page Website Library Panel");
 
         try {
@@ -202,6 +210,7 @@ class WebsiteLibraryPanelFullPage {
             );
         } catch (error) {
             console.error("Failed to initialize Website Library:", error);
+            this.isInitialized = false; // Reset flag on error so retry is possible
             this.notificationManager.showError(
                 "Failed to load Website Library. Please refresh the page.",
                 () => window.location.reload(),
@@ -326,7 +335,10 @@ class WebsiteLibraryPanelFullPage {
         });
 
         this.importUI.onImportError((error: any) => {
-            this.importUI.showImportError(error);
+            // Handle the error without calling showImportError again to avoid infinite recursion
+            // showImportError is already called from within the import process
+            console.error("Import error:", error);
+            this.notificationManager.showError(`Import failed: ${error.message || 'Unknown error'}`);
         });
     }
 
@@ -3072,20 +3084,25 @@ class ChromeExtensionServiceImpl implements ChromeExtensionService {
 
 // Create global instance for compatibility
 let libraryPanel: WebsiteLibraryPanelFullPage;
+let isInitialized = false;
 
-// Initialize when DOM is ready
-if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => {
-        libraryPanel = new WebsiteLibraryPanelFullPage();
-        libraryPanel.initialize();
-
-        // Make available globally for any remaining references
-        (window as any).libraryPanel = libraryPanel;
-    });
-} else {
+// Initialize when DOM is ready - with guard to prevent double initialization
+function initializeLibraryPanel() {
+    if (isInitialized) {
+        console.log("Website Library already initialized, skipping duplicate initialization");
+        return;
+    }
+    
+    isInitialized = true;
     libraryPanel = new WebsiteLibraryPanelFullPage();
     libraryPanel.initialize();
 
     // Make available globally for any remaining references
     (window as any).libraryPanel = libraryPanel;
+}
+
+if (document.readyState === "loading") {
+    // document.addEventListener("DOMContentLoaded", initializeLibraryPanel);
+} else {
+    // initializeLibraryPanel();
 }
