@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 import { conversation as kpLib } from "knowledge-processor";
-import { PageContent, MetaTagCollection } from "../contentExtractor.js";
-import { DetectedAction } from "../actionExtractor.js";
+import { PageContent, MetaTagCollection, ActionInfo, StructuredDataCollection } from "../contentExtractor.js";
+import { DetectedAction, ActionSummary } from "../actionExtractor.js";
 
 /**
  * Extraction modes determine the level of content processing and AI usage
@@ -139,7 +139,7 @@ export interface ExtractionInput {
 }
 
 /**
- * Extraction result interface
+ * Extraction result interface with compatibility properties
  */
 export interface ExtractionResult {
     // Content extraction results (varies by mode)
@@ -157,6 +157,14 @@ export interface ExtractionResult {
     source: string;
     timestamp: string;
     processingTime: number;
+    
+    // Compatibility properties for migration from EnhancedContent
+    success: boolean;                         // Always true for successful extractions
+    error?: string;                          // Error message if extraction failed
+    extractionTime: number;                  // Alias for processingTime
+    actions?: ActionInfo[];                  // Computed from detectedActions for legacy compatibility
+    structuredData?: StructuredDataCollection; // Structured data extracted from page
+    actionSummary?: ActionSummary;           // Summary of detected actions
 }
 
 /**

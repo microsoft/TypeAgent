@@ -347,10 +347,8 @@ export async function createKnowproWebsiteCommands(
                         contentTimeout: namedArgs.contentTimeout,
                         enableActionDetection: namedArgs.enableActionDetection,
                         actionConfidence: namedArgs.actionConfidence,
-                        // NEW: Knowledge extraction options
                         enableKnowledgeExtraction:
                             namedArgs.enableKnowledgeExtraction,
-                        knowledgeMode: namedArgs.knowledgeMode as any,
                     },
                     (current, total, item) => {
                         // writeProgress might only expect one argument
@@ -1510,11 +1508,16 @@ export async function createKnowproWebsiteCommands(
     async function websiteAnalyzeContent(args: string[]) {
         const namedArgs = parseNamedArguments(args, websiteAnalyzeContentDef());
 
-        const extractor = new website.ContentExtractor();
+        const extractor = new website.ContentExtractor({ mode: "basic" });
         try {
             context.printer.writeLine(`🔍 Analyzing content: ${namedArgs.url}`);
-            const analysis = await extractor.extractFromUrl(
-                namedArgs.url,
+            const input: website.ExtractionInput = {
+                url: namedArgs.url,
+                title: namedArgs.url,
+                source: "direct"
+            };
+            const analysis = await extractor.extract(
+                input,
                 namedArgs.mode as any,
             );
 

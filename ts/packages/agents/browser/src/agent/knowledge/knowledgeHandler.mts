@@ -656,16 +656,16 @@ async function generateAnswerFromResults(
 // Enhanced suggested questions using content analysis and DataFrames
 async function generateSmartSuggestedQuestions(
     knowledge: any,
-    enhancedContent: any,
+    extractionResult: any,
     url: string,
     context: SessionContext<BrowserActionContext>,
 ): Promise<string[]> {
     const questions: string[] = [];
     const domain = extractDomainFromUrl(url);
 
-    // Content-specific questions based on enhanced content
-    if (enhancedContent?.pageContent) {
-        if (enhancedContent.pageContent.readingTime > 10) {
+    // Content-specific questions based on extraction result
+    if (extractionResult?.pageContent) {
+        if (extractionResult.pageContent.readingTime > 10) {
             questions.push("What are the key points from this long article?");
         }
     }

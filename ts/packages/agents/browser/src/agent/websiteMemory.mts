@@ -929,7 +929,7 @@ export async function importHtmlFolderFromSession(
                 topicsIdentified: 0, // Topics extraction would need different logic
                 actionsDetected: websiteDataResults.reduce(
                     (sum, data) =>
-                        sum + (data.enhancedContent?.actions?.length || 0),
+                        sum + (data.extractionResult?.detectedActions?.length || 0),
                     0,
                 ),
             },
@@ -1017,7 +1017,7 @@ function convertWebsiteDataToWebsite(data: WebsiteData): any {
         },
         visitCount: data.visitCount,
         lastVisited: data.lastVisited,
-        enhancedContent: data.enhancedContent,
+        extractionResult: data.extractionResult,
     };
 }
 

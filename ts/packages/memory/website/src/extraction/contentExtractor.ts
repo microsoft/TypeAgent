@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import { conversation as kpLib } from "knowledge-processor";
-import { ContentExtractor as BaseContentExtractor } from "../contentExtractor.js";
 import { AIModelManager } from "./aiModelManager.js";
 import {
     ExtractionMode,
@@ -17,30 +16,43 @@ import {
 
 /**
  * Enhanced ContentExtractor with extraction mode capabilities
- * Extends the base ContentExtractor with automatic AI usage and knowledge extraction
+ * Provides unified content extraction with automatic AI usage and knowledge extraction
  */
-export class ContentExtractor extends BaseContentExtractor {
+export class ContentExtractor {
     private aiModelManager?: AIModelManager;
+    private extractionConfig?: ExtractionConfig;
 
-    constructor(config?: ExtractionConfig & { knowledgeExtractor?: kpLib.KnowledgeExtractor }) {
-        // Convert extraction config to base config format
-        const baseConfig = config ? {
-            timeout: config.timeout || 10000,
-            maxContentLength: config.maxContentLength || 1000000,
-            enableActionDetection: true, // Will be controlled by mode
-            enableKnowledgeExtraction: false, // We handle this ourselves
-        } : undefined;
-
-        super(baseConfig);
-
-        if (config) {
-            const modeConfig = EXTRACTION_MODE_CONFIGS[config.mode];
+    constructor(inputConfig?: ExtractionConfig & { knowledgeExtractor?: kpLib.KnowledgeExtractor }) {
+        if (inputConfig) {
+            // Create a clean config object with only defined values
+            const cleanConfig: ExtractionConfig = {
+                mode: inputConfig.mode
+            };
+            
+            // Only add optional properties if they have values
+            if (inputConfig.timeout !== undefined) cleanConfig.timeout = inputConfig.timeout;
+            if (inputConfig.maxContentLength !== undefined) cleanConfig.maxContentLength = inputConfig.maxContentLength;
+            if (inputConfig.maxCharsPerChunk !== undefined) cleanConfig.maxCharsPerChunk = inputConfig.maxCharsPerChunk;
+            if (inputConfig.maxConcurrentExtractions !== undefined) cleanConfig.maxConcurrentExtractions = inputConfig.maxConcurrentExtractions;
+            if (inputConfig.qualityThreshold !== undefined) cleanConfig.qualityThreshold = inputConfig.qualityThreshold;
+            if (inputConfig.enableCrossChunkMerging !== undefined) cleanConfig.enableCrossChunkMerging = inputConfig.enableCrossChunkMerging;
+            
+            this.extractionConfig = cleanConfig;
+            
+            const modeConfig = EXTRACTION_MODE_CONFIGS[inputConfig.mode];
             
             // Create AI model manager if AI is needed for this mode
-            if (modeConfig.usesAI && config.knowledgeExtractor) {
-                this.aiModelManager = new AIModelManager(config.knowledgeExtractor);
+            if (modeConfig.usesAI && inputConfig.knowledgeExtractor) {
+                this.aiModelManager = new AIModelManager(inputConfig.knowledgeExtractor);
             }
         }
+    }
+
+    /**
+     * Get the current extraction configuration
+     */
+    public getConfig(): ExtractionConfig | undefined {
+        return this.extractionConfig;
     }
 
     /**
@@ -81,6 +93,34 @@ export class ContentExtractor extends BaseContentExtractor {
                 Date.now() - startTime
             );
 
+            const processingTime = Date.now() - startTime;
+            
+            // Convert DetectedAction[] to ActionInfo[] for legacy compatibility
+            const actions = extractedContent.detectedActions?.map((da: any) => ({
+                type: da.actionType as "form" | "button" | "link",
+                action: da.selector,
+                method: da.method,
+                text: da.description
+            }));
+            
+            // Create action summary from detected actions
+            let actionSummary;
+            if (extractedContent.detectedActions && extractedContent.detectedActions.length > 0) {
+                const actionTypes = [...new Set(extractedContent.detectedActions.map((a: any) => a.actionType))];
+                const highConfidenceActions = extractedContent.detectedActions.filter((a: any) => a.confidence > 0.8).length;
+                const actionDistribution = extractedContent.detectedActions.reduce((acc: any, action: any) => {
+                    acc[action.actionType] = (acc[action.actionType] || 0) + 1;
+                    return acc;
+                }, {});
+                
+                actionSummary = {
+                    totalActions: extractedContent.detectedActions.length,
+                    actionTypes,
+                    highConfidenceActions,
+                    actionDistribution
+                };
+            }
+
             return {
                 ...extractedContent,
                 knowledge,
@@ -89,7 +129,12 @@ export class ContentExtractor extends BaseContentExtractor {
                 aiProcessingUsed: modeConfig.usesAI,
                 source: content.source,
                 timestamp: new Date().toISOString(),
-                processingTime: Date.now() - startTime,
+                processingTime,
+                // Compatibility properties
+                success: true,
+                extractionTime: processingTime,
+                actions,
+                actionSummary
             };
 
         } catch (error) {
@@ -126,7 +171,7 @@ export class ContentExtractor extends BaseContentExtractor {
             };
         }
 
-        // For content/actions/full modes, use base ContentExtractor functionality
+        // For content/actions/full modes, extract from HTML content
         const htmlContent = this.prepareHtmlContent(content);
         
         if (!htmlContent) {
@@ -141,18 +186,18 @@ export class ContentExtractor extends BaseContentExtractor {
             };
         }
 
-        // Use base class extraction with appropriate mode
-        const baseResult = await this.extractFromHtml(htmlContent, "content");
+        // Basic HTML content extraction - implement essential features here
+        const pageContent = this.extractBasicPageContent(htmlContent, content.title);
         
         // Add detected actions if this mode supports them
         let detectedActions = undefined;
         if (modeConfig.extractsActions) {
-            // TODO: Implement action detection
+            // TODO: Implement action detection using ActionExtractor
             detectedActions = [];
         }
 
         return {
-            pageContent: baseResult,
+            pageContent,
             detectedActions,
         };
     }
@@ -335,5 +380,49 @@ export class ContentExtractor extends BaseContentExtractor {
             return !!this.aiModelManager;
         }
         return true; // Basic mode always works
+    }
+
+    /**
+     * Basic HTML content extraction
+     */
+    private extractBasicPageContent(html: string, title: string): any {
+        // Simple HTML content extraction without using BaseContentExtractor
+        // Remove script and style elements
+        let textContent = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+        textContent = textContent.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+        
+        // Remove HTML tags
+        textContent = textContent.replace(/<[^>]+>/g, ' ');
+        
+        // Decode basic HTML entities
+        textContent = textContent.replace(/&nbsp;/g, ' ');
+        textContent = textContent.replace(/&amp;/g, '&');
+        textContent = textContent.replace(/&lt;/g, '<');
+        textContent = textContent.replace(/&gt;/g, '>');
+        textContent = textContent.replace(/&quot;/g, '"');
+        
+        // Clean up whitespace
+        textContent = textContent.replace(/\s+/g, ' ').trim();
+        
+        // Extract basic headings
+        const headingMatches = html.match(/<h[1-6][^>]*>([^<]+)<\/h[1-6]>/gi) || [];
+        const headings = headingMatches.map(match => {
+            const text = match.replace(/<[^>]+>/g, '').trim();
+            return text;
+        }).filter(text => text.length > 0);
+
+        const wordCount = textContent.split(/\s+/).filter(word => word.length > 0).length;
+        const readingTime = Math.ceil(wordCount / 200);
+
+        return {
+            title: title || "Untitled",
+            mainContent: textContent.substring(0, 10000), // Limit content size
+            headings,
+            wordCount,
+            readingTime,
+            codeBlocks: [],
+            images: [],
+            links: []
+        };
     }
 }

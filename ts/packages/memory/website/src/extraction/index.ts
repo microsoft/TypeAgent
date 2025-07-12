@@ -3,5 +3,5 @@
 
 export * from "./types.js";
 export * from "./aiModelManager.js";
-export { ContentExtractor as ExtractionContentExtractor } from "./contentExtractor.js";
+export { ContentExtractor } from "./contentExtractor.js";
 export * from "./batchProcessor.js";

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { 
-    ContentExtractor as ExtractionContentExtractor,
+    ContentExtractor,
     BatchProcessor,
     ExtractionMode,
     ExtractionInput,
@@ -20,7 +20,7 @@ import { openai as ai } from "aiclient";
  * This simplifies the browser agent by removing duplication
  */
 export class BrowserKnowledgeExtractor {
-    private contentExtractor: ExtractionContentExtractor;
+    private contentExtractor: ContentExtractor;
     private batchProcessor: BatchProcessor;
 
     constructor(context: SessionContext<BrowserActionContext>) {
@@ -43,7 +43,7 @@ export class BrowserKnowledgeExtractor {
             config.knowledgeExtractor = knowledgeExtractor;
         }
 
-        this.contentExtractor = new ExtractionContentExtractor(config);
+        this.contentExtractor = new ContentExtractor(config);
         this.batchProcessor = new BatchProcessor(this.contentExtractor);
     }
 
