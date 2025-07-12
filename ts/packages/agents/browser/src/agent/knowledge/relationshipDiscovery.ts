@@ -136,16 +136,14 @@ export class RelationshipDiscovery {
             }
         }
 
-        // 4. Technical content relationships (if code is detected)
-        if (currentKnowledge.contentMetrics?.hasCode) {
-            const technicalResults = await this.findTechnicalRelationships(
-                currentUrl,
-                websiteCollection,
-                maxResults,
-            );
-            if (technicalResults.relatedPages.length > 0) {
-                results.push(technicalResults);
-            }
+        // 4. Technical content relationships
+        const technicalResults = await this.findTechnicalRelationships(
+            currentUrl,
+            websiteCollection,
+            maxResults,
+        );
+        if (technicalResults.relatedPages.length > 0) {
+            results.push(technicalResults);
         }
 
         // 5. Temporal relationships (recent visits in same domain/topic)

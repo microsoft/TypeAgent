@@ -144,9 +144,6 @@ export async function extractKnowledgeFromPage(
             contentMetrics: {
                 readingTime: 0,
                 wordCount: 0,
-                hasCode: false,
-                interactivity: "static",
-                pageType: "other",
             },
         };
     }
@@ -200,9 +197,6 @@ export async function extractKnowledgeFromPage(
         const contentMetrics = {
             readingTime: Math.ceil(textContent.split(/\s+/).length / 225),
             wordCount: textContent.split(/\s+/).length,
-            hasCode: /```|<code>|function\s*\(|class\s+\w+/.test(textContent),
-            interactivity: extractionResult.qualityMetrics.actionCount > 0 ? "interactive" : "static",
-            pageType: "other",
         };
 
         return {
@@ -228,9 +222,6 @@ export async function extractKnowledgeFromPage(
             contentMetrics: {
                 readingTime: 0,
                 wordCount: 0,
-                hasCode: false,
-                interactivity: "static",
-                pageType: "other",
             },
         };
     }
@@ -663,15 +654,6 @@ async function generateSmartSuggestedQuestions(
 
     // Content-specific questions based on enhanced content
     if (enhancedContent?.pageContent) {
-        const hasCode =
-            enhancedContent.pageContent.codeBlocks &&
-            enhancedContent.pageContent.codeBlocks.length > 0;
-
-        if (hasCode) {
-            questions.push("Show me other code examples I've saved");
-            questions.push("Find similar programming content");
-        }
-
         if (enhancedContent.pageContent.readingTime > 10) {
             questions.push("What are the key points from this long article?");
         }
@@ -982,23 +964,6 @@ async function applyMetadataFilters(
                 }
             }
 
-            // Code content filtering
-            if (filters.hasCode !== undefined) {
-                const knowledge = website.getKnowledge();
-                const hasCodeContent = hasCodeIndicators(knowledge, website);
-                if (filters.hasCode !== hasCodeContent) {
-                    includeWebsite = false;
-                }
-            }
-
-            // Page type filtering
-            if (
-                filters.pageType &&
-                website.metadata.pageType !== filters.pageType
-            ) {
-                includeWebsite = false;
-            }
-
             if (includeWebsite) {
                 filteredUrls.push(website.metadata.url);
             }
@@ -1216,30 +1181,6 @@ function getTimeRangeThreshold(timeRange: string): Date {
     return new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 }
 
-function hasCodeIndicators(knowledge: any, website: any): boolean {
-    // Check for code-related topics
-    const codeTopics = (knowledge?.topics || []).some((topic: string) =>
-        /code|programming|javascript|python|react|api|function|class|method|library|framework/i.test(
-            topic,
-        ),
-    );
-
-    // Check for technical entities
-    const techEntities = (knowledge?.entities || []).some((entity: any) =>
-        /api|function|method|class|library|framework|code|programming/i.test(
-            entity.type,
-        ),
-    );
-
-    // Check URL patterns
-    const techUrl =
-        /github|stackoverflow|docs?\.|developer|api\.|dev\.|codepen|jsfiddle|repl\.it/i.test(
-            website.metadata.url,
-        );
-
-    return codeTopics || techEntities || techUrl;
-}
-
 function getAppliedFilters(filters?: any): string[] {
     if (!filters) return [];
 
@@ -1248,8 +1189,6 @@ function getAppliedFilters(filters?: any): string[] {
         applied.push(`Content Type: ${filters.contentType}`);
     if (filters.timeRange) applied.push(`Time Range: ${filters.timeRange}`);
     if (filters.domain) applied.push(`Domain: ${filters.domain}`);
-    if (filters.hasCode) applied.push("Has Code");
-    if (filters.pageType) applied.push(`Page Type: ${filters.pageType}`);
     if (filters.technicalLevel)
         applied.push(`Technical Level: ${filters.technicalLevel}`);
 

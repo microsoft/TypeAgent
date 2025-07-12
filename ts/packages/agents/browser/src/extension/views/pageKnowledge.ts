@@ -13,9 +13,6 @@ interface KnowledgeData {
     contentMetrics?: {
         readingTime: number;
         wordCount: number;
-        hasCode: boolean;
-        interactivity: string;
-        pageType: string;
     };
 }
 
@@ -1848,11 +1845,6 @@ class KnowledgePanel {
             metrics.readingTime,
         );
         const wordCountCategory = this.getWordCountCategory(metrics.wordCount);
-        const pageTypeInfo = this.getPageTypeInfo(metrics.pageType);
-        const codeIntensity = this.getCodeIntensity(
-            metrics.hasCode,
-            metrics.wordCount,
-        );
 
         container.innerHTML = `
             <!-- Reading Time Section -->
@@ -1906,57 +1898,6 @@ class KnowledgePanel {
                         </div>
                     </div>
                     <small class="text-muted">${wordCountCategory.description}</small>
-                </div>
-            </div>
-
-            <!-- Page Type Section -->
-            <div class="metric-section mb-4">
-                <div class="d-flex align-items-center justify-content-between mb-2">
-                    <h6 class="mb-0 text-success">
-                        <i class="${pageTypeInfo.icon} me-2"></i>Page Type
-                    </h6>
-                    <span class="badge bg-${pageTypeInfo.color}">${pageTypeInfo.label}</span>
-                </div>
-                <div class="metric-visual-container">
-                    <div class="page-type-indicator p-3 bg-light rounded">
-                        <div class="d-flex align-items-center">
-                            <i class="${pageTypeInfo.icon} text-${pageTypeInfo.color} me-3" style="font-size: 1.5rem;"></i>
-                            <div>
-                                <div class="fw-semibold">${metrics.pageType}</div>
-                                <small class="text-muted">${pageTypeInfo.description}</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Technical Content Section -->
-            <div class="metric-section">
-                <div class="d-flex align-items-center justify-content-between mb-2">
-                    <h6 class="mb-0 text-warning">
-                        <i class="bi bi-code-slash me-2"></i>Technical Content
-                    </h6>
-                    <span class="badge bg-${codeIntensity.color}">${codeIntensity.label}</span>
-                </div>
-                <div class="metric-visual-container">
-                    <div class="row text-center">
-                        <div class="col-6">
-                            <div class="metric-card p-2 bg-light rounded">
-                                <div class="h5 mb-0 text-${metrics.hasCode ? "success" : "muted"}">
-                                    <i class="bi bi-${metrics.hasCode ? "check-circle-fill" : "x-circle"}"></i>
-                                </div>
-                                <small class="text-muted">Code Present</small>
-                            </div>
-                        </div>
-                        <div class="col-6">
-                            <div class="metric-card p-2 bg-light rounded">
-                                <div class="h5 mb-0 text-secondary">
-                                    ${metrics.interactivity !== "static" ? '<i class="bi bi-lightning-fill"></i>' : '<i class="bi bi-file-text"></i>'}
-                                </div>
-                                <small class="text-muted">${this.getInteractivityLevel(metrics.interactivity)}</small>
-                            </div>
-                        </div>
-                    </div>
                 </div>
             </div>
         `;
@@ -2073,116 +2014,6 @@ class KnowledgePanel {
                 description: "In-depth exploration",
             };
         }
-    }
-
-    private getPageTypeInfo(pageType: string) {
-        const typeMap: {
-            [key: string]: {
-                icon: string;
-                color: string;
-                label: string;
-                description: string;
-            };
-        } = {
-            tutorial: {
-                icon: "bi-book",
-                color: "primary",
-                label: "Tutorial",
-                description: "Step-by-step learning content",
-            },
-            documentation: {
-                icon: "bi-file-earmark-text",
-                color: "info",
-                label: "Documentation",
-                description: "Reference material",
-            },
-            blog: {
-                icon: "bi-journal-text",
-                color: "success",
-                label: "Blog Post",
-                description: "Opinion and insights",
-            },
-            news: {
-                icon: "bi-newspaper",
-                color: "warning",
-                label: "News",
-                description: "Current events",
-            },
-            product: {
-                icon: "bi-box",
-                color: "danger",
-                label: "Product",
-                description: "Commercial content",
-            },
-            forum: {
-                icon: "bi-chat-dots",
-                color: "secondary",
-                label: "Discussion",
-                description: "Community content",
-            },
-            other: {
-                icon: "bi-file-text",
-                color: "light",
-                label: "General",
-                description: "Mixed content type",
-            },
-        };
-
-        return typeMap[pageType] || typeMap["other"];
-    }
-
-    private getCodeIntensity(hasCode: boolean, wordCount: number) {
-        if (!hasCode) {
-            return {
-                color: "light",
-                label: "Non-Technical",
-                percentage: 0,
-                description: "No code content detected",
-            };
-        }
-
-        // Estimate technical intensity based on word count and code presence
-        const intensity = Math.min(
-            Math.round((1000 / Math.max(wordCount, 100)) * 100),
-            100,
-        );
-
-        if (intensity >= 50) {
-            return {
-                color: "danger",
-                label: "Code-Heavy",
-                percentage: intensity,
-                description: "Significant programming content",
-            };
-        } else if (intensity >= 25) {
-            return {
-                color: "warning",
-                label: "Technical",
-                percentage: intensity,
-                description: "Mixed technical content",
-            };
-        } else {
-            return {
-                color: "info",
-                label: "Light Code",
-                percentage: intensity,
-                description: "Some code examples",
-            };
-        }
-    }
-
-    private getInteractivityLevel(interactivity: string): string {
-        if (interactivity === "static" || !interactivity) return "Static";
-        if (interactivity.includes("form")) return "Interactive";
-        if (interactivity.includes("button")) return "Clickable";
-        return "Dynamic";
-    }
-
-    private getInteractivityIcon(interactivity: string): string {
-        if (interactivity === "static" || !interactivity) return "file-text";
-        if (interactivity.includes("form")) return "ui-checks";
-        if (interactivity.includes("button")) return "hand-index";
-        return "cursor";
     }
 
     // Render related content discovery using enhanced search methods
@@ -2319,17 +2150,6 @@ class KnowledgePanel {
                     relationshipType: "topic-match",
                     excerpt: `Find other pages that discuss ${topic} in your knowledge base`,
                 });
-            });
-        }
-
-        // Generate code-related suggestions if code is detected
-        if (knowledge.contentMetrics?.hasCode) {
-            relatedContent.push({
-                url: "#",
-                title: "Similar programming content",
-                similarity: 0.6,
-                relationshipType: "code-related",
-                excerpt: "Other pages with code examples and technical content",
             });
         }
 
@@ -3121,15 +2941,7 @@ class KnowledgePanel {
                             </div>
                         </div>
                         <div class="row g-2 mt-2">
-                            <div class="col-md-6">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="hasCodeFilter">
-                                    <label class="form-check-label" for="hasCodeFilter">
-                                        Has Code/Technical Content
-                                    </label>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
+                            <div class="col-12">
                                 <button type="button" class="btn btn-sm btn-outline-secondary" id="clearFilters">
                                     <i class="bi bi-x-circle me-1"></i>Clear Filters
                                 </button>
@@ -3195,8 +3007,6 @@ class KnowledgePanel {
         (
             document.getElementById("technicalLevelFilter") as HTMLSelectElement
         ).value = "";
-        (document.getElementById("hasCodeFilter") as HTMLInputElement).checked =
-            false;
     }
 
     private async submitEnhancedQuery(query: string): Promise<void> {
@@ -3224,11 +3034,6 @@ class KnowledgePanel {
             document.getElementById("technicalLevelFilter") as HTMLSelectElement
         )?.value;
         if (technicalLevel) filters.technicalLevel = technicalLevel;
-
-        const hasCode = (
-            document.getElementById("hasCodeFilter") as HTMLInputElement
-        )?.checked;
-        if (hasCode) filters.hasCode = true;
 
         queryResults.innerHTML = this.createEnhancedSearchLoadingState();
 

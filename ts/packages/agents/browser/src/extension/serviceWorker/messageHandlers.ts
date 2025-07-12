@@ -302,9 +302,6 @@ export async function handleMessage(
                             contentMetrics: knowledgeResult.contentMetrics || {
                                 readingTime: 0,
                                 wordCount: 0,
-                                hasCode: false,
-                                interactivity: "static",
-                                pageType: "other",
                             },
                         },
                     };

@@ -1027,7 +1027,6 @@ export async function searchWebsites(
             originalUserRequest,
             //query,
             domain,
-            pageType,
             source,
             limit = 10,
             minScore = 0.5,
@@ -1036,7 +1035,6 @@ export async function searchWebsites(
         // Build search filters
         const searchFilters = [originalUserRequest];
         if (domain) searchFilters.push(domain);
-        if (pageType) searchFilters.push(pageType);
 
         // Use the improved search function
         let matchedWebsites = await findRequestedWebsites(
