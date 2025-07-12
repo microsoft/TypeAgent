@@ -1,6 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+// ===================================================================
+// MAIN CLASS DEFINITION
+// ===================================================================
+
 // Full-page Website Library implementation
 // Extends the existing interfaces and functionality for full-page layout
 
@@ -878,27 +882,54 @@ class WebsiteLibraryPanelFullPage {
     private showSearchLoading() {
         const resultsContainer = document.getElementById("searchResults");
         const emptyState = document.getElementById("searchEmptyState");
+        const loadingState = document.getElementById("searchLoadingState");
 
+        // Show the results container
         if (resultsContainer) {
             resultsContainer.style.display = "block";
-            resultsContainer.innerHTML = `
-                <div class="results-header">
-                    <h2 class="results-title">Searching...</h2>
-                </div>
-                <div class="results-container">
-                    <div class="text-center">
-                        <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Searching...</span>
-                        </div>
-                        <p class="mt-3">Searching your library...</p>
-                    </div>
-                </div>
-            `;
         }
 
+        // Hide empty state
         if (emptyState) {
             emptyState.style.display = "none";
         }
+
+        // Show loading state (create if it doesn't exist)
+        if (!loadingState) {
+            this.createSearchLoadingState();
+        } else {
+            loadingState.style.display = "block";
+        }
+
+        // Hide any existing results content while loading
+        const resultsContent = document.getElementById("resultsContainer");
+        if (resultsContent) {
+            resultsContent.style.display = "none";
+        }
+    }
+
+    private createSearchLoadingState() {
+        const resultsContainer = document.getElementById("searchResults");
+        if (!resultsContainer) return;
+
+        // Create loading state container
+        const loadingDiv = document.createElement("div");
+        loadingDiv.id = "searchLoadingState";
+        loadingDiv.style.display = "block";
+        loadingDiv.innerHTML = `
+            <div class="results-header">
+                <h2 class="results-title">Searching...</h2>
+            </div>
+            <div class="text-center p-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Searching...</span>
+                </div>
+                <p class="mt-3 mb-0">Searching your library...</p>
+            </div>
+        `;
+
+        // Insert the loading state into the results container
+        resultsContainer.appendChild(loadingDiv);
     }
 
     private showSearchResults(results: SearchResult) {
@@ -906,19 +937,41 @@ class WebsiteLibraryPanelFullPage {
 
         const resultsContainer = document.getElementById("searchResults");
         const emptyState = document.getElementById("searchEmptyState");
+        const loadingState = document.getElementById("searchLoadingState");
+        const errorState = document.getElementById("searchErrorState");
 
+        // Hide empty state
         if (emptyState) {
             emptyState.style.display = "none";
         }
 
+        // Hide loading state
+        if (loadingState) {
+            loadingState.style.display = "none";
+        }
+
+        // Hide error state
+        if (errorState) {
+            errorState.style.display = "none";
+        }
+
+        // Show results container
         if (resultsContainer) {
             resultsContainer.style.display = "block";
-            this.renderSearchResults(results.websites);
+        }
 
-            // Show AI summary if available
-            if (results.summary.text) {
-                this.showAISummary(results.summary.text);
-            }
+        // Show results content
+        const resultsContent = document.getElementById("resultsContainer");
+        if (resultsContent) {
+            resultsContent.style.display = "block";
+        }
+
+        // Render the search results
+        this.renderSearchResults(results.websites);
+
+        // Show AI summary if available
+        if (results.summary.text) {
+            this.showAISummary(results.summary.text);
         }
     }
 
@@ -1220,8 +1273,39 @@ class WebsiteLibraryPanelFullPage {
 
     private showSearchError(message: string) {
         const resultsContainer = document.getElementById("searchResults");
+        const emptyState = document.getElementById("searchEmptyState");
+        const loadingState = document.getElementById("searchLoadingState");
+
+        // Hide loading state
+        if (loadingState) {
+            loadingState.style.display = "none";
+        }
+
+        // Hide empty state
+        if (emptyState) {
+            emptyState.style.display = "none";
+        }
+
+        // Show error in results container without destroying its structure
         if (resultsContainer) {
-            resultsContainer.innerHTML = `
+            resultsContainer.style.display = "block";
+            
+            // Hide results content
+            const resultsContent = document.getElementById("resultsContainer");
+            if (resultsContent) {
+                resultsContent.style.display = "none";
+            }
+
+            // Create or update error container
+            let errorContainer = document.getElementById("searchErrorState");
+            if (!errorContainer) {
+                errorContainer = document.createElement("div");
+                errorContainer.id = "searchErrorState";
+                resultsContainer.appendChild(errorContainer);
+            }
+
+            errorContainer.style.display = "block";
+            errorContainer.innerHTML = `
                 <div class="alert alert-danger" role="alert">
                     <i class="bi bi-exclamation-triangle me-2"></i>
                     ${message}
@@ -2700,17 +2784,6 @@ class WebsiteLibraryPanelFullPage {
     }
 }
 
-// Initialize the panel when DOM is loaded
-let libraryPanelFullPage: WebsiteLibraryPanelFullPage;
-
-document.addEventListener("DOMContentLoaded", () => {
-    libraryPanelFullPage = new WebsiteLibraryPanelFullPage();
-    libraryPanelFullPage.initialize();
-
-    // Make it globally available for onclick handlers
-    (window as any).libraryPanel = libraryPanelFullPage;
-});
-
 // ===================================================================
 // ENHANCED FEATURES: Real-time Integration & Advanced Features
 // ===================================================================
@@ -3082,8 +3155,12 @@ class ChromeExtensionServiceImpl implements ChromeExtensionService {
     }
 }
 
+// ===================================================================
+// INITIALIZATION
+// ===================================================================
+
 // Create global instance for compatibility
-let libraryPanel: WebsiteLibraryPanelFullPage;
+let libraryPanelInstance: WebsiteLibraryPanelFullPage;
 let isInitialized = false;
 
 // Initialize when DOM is ready - with guard to prevent double initialization
@@ -3094,15 +3171,15 @@ function initializeLibraryPanel() {
     }
     
     isInitialized = true;
-    libraryPanel = new WebsiteLibraryPanelFullPage();
-    libraryPanel.initialize();
+    libraryPanelInstance = new WebsiteLibraryPanelFullPage();
+    libraryPanelInstance.initialize();
 
     // Make available globally for any remaining references
-    (window as any).libraryPanel = libraryPanel;
+    (window as any).libraryPanel = libraryPanelInstance;
 }
 
 if (document.readyState === "loading") {
-    // document.addEventListener("DOMContentLoaded", initializeLibraryPanel);
+    document.addEventListener("DOMContentLoaded", initializeLibraryPanel);
 } else {
-    // initializeLibraryPanel();
+    initializeLibraryPanel();
 }

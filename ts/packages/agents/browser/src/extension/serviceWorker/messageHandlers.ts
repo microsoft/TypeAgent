@@ -1139,27 +1139,18 @@ async function handleSearchWebsitesEnhanced(message: any) {
         const searchTime = Date.now() - startTime;
 
         // Generate AI summary if requested
-        let summary = null;
-        if (
-            message.parameters.includeSummary &&
-            searchResult.websites?.length > 0
-        ) {
-            summary = await generateSearchSummary(
-                searchResult.websites,
-                message.parameters.query,
-            );
-        }
-
+        let summary = searchResult.answer;
+        
         return {
             success: true,
             results: {
-                websites: searchResult.websites || [],
+                websites: searchResult.sources || [],
                 summary: {
                     text: summary || "",
-                    totalFound: searchResult.websites?.length || 0,
+                    totalFound: searchResult.sources?.length || 0,
                     searchTime: searchTime,
-                    sources: extractSources(searchResult.websites || []),
-                    entities: searchResult.entities || [],
+                    sources: extractSources(searchResult.sources || []),
+                    entities: searchResult.relatedEntities || [],
                 },
                 query: message.parameters.query,
                 filters: message.parameters.filters || {},
@@ -1584,7 +1575,7 @@ function extractSources(websites: any[]): any[] {
     return websites.slice(0, 10).map((site) => ({
         url: site.url,
         title: site.title || site.url,
-        relevance: site.score || 0.5,
+        relevance: site.relevanceScore || 0.5,
     }));
 }
 

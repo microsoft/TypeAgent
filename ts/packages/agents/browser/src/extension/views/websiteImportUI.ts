@@ -190,9 +190,9 @@ export class WebsiteImportUI {
             }
         }
 
-        if (this.progressCallback) {
-            this.progressCallback(progress);
-        }
+        // Note: Do not call this.progressCallback here to avoid infinite recursion
+        // The progress callback should only be triggered by external progress updates,
+        // not by internal UI updates like this method
     }
 
     /**
