@@ -3,8 +3,8 @@
 import * as cheerio from "cheerio";
 import {
     createMdElement,
-    MarkdownElement,
-    MarkdownImage,
+    MdElement,
+    MdImageElement,
     MdElementName,
 } from "./markdown.js";
 
@@ -627,8 +627,8 @@ export class HtmlToMdConvertor {
 export class HtmlToMarkdownDom {
     private $: cheerio.CheerioAPI;
     private depth: number;
-    private root: MarkdownElement;
-    public curElement: MarkdownElement;
+    private root: MdElement;
+    public curElement: MdElement;
 
     public tagsToIgnore: string[];
 
@@ -657,7 +657,7 @@ export class HtmlToMarkdownDom {
         this.depth = 0;
     }
 
-    public getMarkdown(rootPath: string = "body"): MarkdownElement {
+    public getMarkdown(rootPath: string = "body"): MdElement {
         this.start();
         const root: cheerio.AnyNode = this.$(rootPath)[0];
         if (root && root.type === "tag") {
@@ -745,7 +745,7 @@ export class HtmlToMarkdownDom {
                             this.endElement();
                             break;
                         case "a":
-                            const img: MarkdownImage = {
+                            const img: MdImageElement = {
                                 name: "a",
                                 text: "",
                                 href: childElement.attribs["href"],
@@ -824,7 +824,7 @@ export class HtmlToMarkdownDom {
         }
     }
 
-    private appendChild(node: MarkdownElement): void {
+    private appendChild(node: MdElement): void {
         this.curElement.children ??= [];
         this.curElement.children.push(node);
         node.parent = this.curElement;
