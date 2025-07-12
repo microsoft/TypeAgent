@@ -1,36 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 import * as cheerio from "cheerio";
-
-/**
- * Extract all text from the given html.
- * @param html raw html
- * @param nodeQuery A JQuery like list of node types to extract text from. By default, p, div and span
- * @returns text
- */
-export function htmlToText(html: string, nodeQuery?: string): string {
-    //nodeQuery ??= "*:not(iframe, script, style, noscript)"; // "body, p, div, span, li, tr, td, h1, h2, h3, h4, h5, h6, a";
-    nodeQuery ??=
-        "a, p, div, span, em, strong, li, tr, td, h1, h2, h3, h4, h5, h6, article, section, header, footer";
-    const $ = cheerio.load(html);
-    const query = $(nodeQuery);
-    return query
-        .contents()
-        .filter(function () {
-            return (
-                this.nodeType === 3 ||
-                (this.nodeType === 1 && this.name === "a")
-            );
-        })
-        .map(function () {
-            return $(this).text().trim();
-        })
-        .filter(function () {
-            return this.length > 0;
-        })
-        .get()
-        .join(" ");
-}
+import {
+    createMdElement,
+    MarkdownElement,
+    MarkdownImage,
+    MdElementName,
+} from "./markdown.js";
 
 /**
  * Returns text from html. Only takes text from typically useful nodes, cleaning up
@@ -38,7 +14,7 @@ export function htmlToText(html: string, nodeQuery?: string): string {
  * @param html Html to extract text from
  * @returns raw text
  */
-export function simplifyText(html: string): string {
+export function htmlToText(html: string): string {
     const editor = new HtmlEditor(html);
     editor.simplify();
     return editor.getText().trim();
@@ -89,7 +65,7 @@ class HtmlEditor {
     }
 
     public getHtml(): string {
-        return this.$.root().html();
+        return this.$.root().html() ?? "";
     }
 
     public getText(): string {
@@ -645,5 +621,220 @@ export class HtmlToMdConvertor {
             }
         }
         return true;
+    }
+}
+
+export class HtmlToMarkdownDom {
+    private $: cheerio.CheerioAPI;
+    private depth: number;
+    private root: MarkdownElement;
+    public curElement: MarkdownElement;
+
+    public tagsToIgnore: string[];
+
+    constructor(public html: string) {
+        html = removeExtraWhitespace(html);
+        this.$ = cheerio.load(html);
+        this.tagsToIgnore = [
+            "header",
+            "footer",
+            "script",
+            "link",
+            "style",
+            "meta",
+            "form",
+            "button",
+            //"svg",
+            "summary",
+            "dialog",
+            "details",
+            //"react",
+            "clipboard",
+            "notification",
+        ];
+        this.root = createMdElement("root");
+        this.curElement = this.root;
+        this.depth = 0;
+    }
+
+    public getMarkdown(rootPath: string = "body"): MarkdownElement {
+        this.start();
+        const root: cheerio.AnyNode = this.$(rootPath)[0];
+        if (root && root.type === "tag") {
+            this.traverseChildren(root as cheerio.Element);
+        }
+        return this.root;
+    }
+
+    private start(): void {
+        this.root = createMdElement("root");
+        this.curElement = this.root;
+        this.depth = 0;
+    }
+
+    private traverseChildren(element: cheerio.Element): void {
+        for (let i = 0; i < element.children.length; ++i) {
+            const child = element.children[i];
+            switch (child.type) {
+                default:
+                    break;
+                case "tag":
+                    const childElement = child as cheerio.Element;
+                    const tagName = childElement.tagName;
+                    switch (tagName) {
+                        default:
+                            const shouldSkipTag = this.tagsToIgnore.some(
+                                (tagPrefix) =>
+                                    tagName === tagPrefix ||
+                                    tagName.startsWith(tagPrefix),
+                            );
+
+                            if (!shouldSkipTag) {
+                                this.traverseChildren(childElement);
+                            }
+                            break;
+                        case "h1":
+                        case "h2":
+                        case "h3":
+                        case "h4":
+                        case "h5":
+                        case "h6":
+                            this.beginElement(tagName);
+                            this.append(this.$(childElement).text());
+                            this.endElement();
+                            break;
+                        case "p":
+                        case "blockquote":
+                        case "code":
+                        case "ul":
+                        case "ol":
+                            this.beginBlock(tagName);
+                            this.traverseChildren(childElement);
+                            this.endBlock();
+                            break;
+                        case "div":
+                            this.traverseChildren(childElement);
+                            this.appendLineBreak();
+                            break;
+                        case "span":
+                            this.traverseChildren(childElement);
+                            break;
+                        case "article":
+                        case "section":
+                            this.traverseChildren(childElement);
+                            break;
+                        case "li":
+                        case "table":
+                        case "tr":
+                        case "th":
+                        case "td":
+                            this.beginElement(tagName);
+                            this.traverseChildren(childElement);
+                            this.endElement();
+                            break;
+                        case "strong":
+                        case "b":
+                            this.beginElement("strong");
+                            this.traverseChildren(childElement);
+                            this.endElement();
+                            break;
+                        case "em":
+                        case "i":
+                            this.beginElement("em");
+                            this.traverseChildren(childElement);
+                            this.endElement();
+                            break;
+                        case "a":
+                            const img: MarkdownImage = {
+                                name: "a",
+                                text: "",
+                                href: childElement.attribs["href"],
+                                depth: this.depth,
+                            };
+                            if (childElement.children.length > 0) {
+                                img.text =
+                                    this.getInnerText(childElement) ?? "";
+                            }
+                            this.appendChild(img);
+                            break;
+                        case "br":
+                            this.appendLineBreak();
+                            break;
+                    }
+                    break;
+                case "text":
+                    let text = this.getInnerText(child);
+                    if (text && text.length > 0) {
+                        this.append(text);
+                    }
+                    break;
+            }
+        }
+    }
+
+    private getInnerText(node: any): string | undefined {
+        const childNode = this.$(node);
+        let text = childNode.text();
+        let originalLength = text.length;
+        let spacesAdded = 0;
+        if (originalLength > 0) {
+            // Spaces are meaningful, but generated html can contain unnecessary whitespace
+            text = text.trimStart();
+            if (originalLength - text.length > 0) {
+                text = " " + text;
+                originalLength = text.length;
+                spacesAdded++;
+            }
+            text = text.trimEnd();
+            if (originalLength - text.length > 0) {
+                // More than one trailing space.
+                text += " ";
+                spacesAdded++;
+            }
+            if (spacesAdded === 0 || text.length > spacesAdded) {
+                return text;
+            }
+        }
+        return undefined;
+    }
+
+    private beginBlock(tag: MdElementName): void {
+        this.depth++;
+        this.beginElement(tag);
+    }
+
+    private endBlock(): void {
+        this.endElement();
+        this.depth--;
+    }
+
+    private beginElement(tag: MdElementName): void {
+        const node = createMdElement(tag, "", this.depth);
+        this.appendChild(node);
+        this.curElement = node;
+    }
+
+    private endElement(): void {
+        if (this.curElement.parent) {
+            this.curElement = this.curElement.parent;
+        } else {
+            throw new Error(
+                `DOM corrupt: ${this.curElement.name}; [${this.depth}]`,
+            );
+        }
+    }
+
+    private appendChild(node: MarkdownElement): void {
+        this.curElement.children ??= [];
+        this.curElement.children.push(node);
+        node.parent = this.curElement;
+    }
+
+    private append(text: string): void {
+        this.curElement.text += text;
+    }
+
+    private appendLineBreak(): void {
+        this.appendChild(createMdElement("br"));
     }
 }
