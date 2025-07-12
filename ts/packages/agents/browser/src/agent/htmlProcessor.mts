@@ -39,10 +39,7 @@ export type {
  * Processing options for HTML content processing
  */
 export interface ProcessingOptions {
-    extractContent?: boolean;
-    extractionMode?: ExtractionMode;
-    enableIntelligentAnalysis?: boolean;
-    enableActionDetection?: boolean;
+    mode?: ExtractionMode;
     contentTimeout?: number;
     maxContentLength?: number;
     maxConcurrent?: number;
@@ -110,11 +107,6 @@ export async function processHtmlContent(
         extractorOptions.userAgent = options.userAgent;
     if (options.maxContentLength !== undefined)
         extractorOptions.maxContentLength = options.maxContentLength;
-    if (options.enableActionDetection !== undefined)
-        extractorOptions.enableActionDetection = options.enableActionDetection;
-    if (options.enableIntelligentAnalysis !== undefined)
-        extractorOptions.enableKnowledgeExtraction =
-            options.enableIntelligentAnalysis;
     if (options.knowledgeMode !== undefined)
         extractorOptions.knowledgeMode = options.knowledgeMode;
     if (options.maxCharsPerChunk !== undefined)
@@ -124,7 +116,7 @@ export async function processHtmlContent(
 
     const enhancedContent = (await extractor.extractFromHtml(
         html,
-        options.extractionMode || "content",
+        options.mode || "content",
     )) as EnhancedContent;
 
     const parsedContent = await parseHtmlStructure(html);

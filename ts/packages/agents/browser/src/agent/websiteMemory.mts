@@ -35,31 +35,12 @@ import {
 } from "./folderUtils.mjs";
 import {
     UnifiedKnowledgeExtractor,
-    UnifiedExtractionMode,
     ContentInput,
     BatchProgress,
     AIModelUnavailableError
 } from "./knowledge/unified/index.mjs";
 
-function mapImportParametersToUnifiedMode(
-    extractContent?: boolean,
-    enableIntelligentAnalysis?: boolean,
-    extractionMode?: string
-): UnifiedExtractionMode {
-    if (extractionMode && ['basic', 'content', 'actions', 'full'].includes(extractionMode)) {
-        return extractionMode as UnifiedExtractionMode;
-    }
-    
-    if (!extractContent) {
-        return 'basic';
-    }
-    
-    if (enableIntelligentAnalysis) {
-        return 'content';
-    }
-    
-    return 'basic';
-}const debug = registerDebug("typeagent:browser:website-memory");
+const debug = registerDebug("typeagent:browser:website-memory");
 
 /**
  * Resolve URL using website visit history (bookmarks, browser history)
@@ -507,10 +488,7 @@ export async function importWebsiteDataFromSession(
             limit,
             days,
             folder,
-            extractContent,
-            enableIntelligentAnalysis,
-            enableActionDetection,
-            extractionMode,
+            mode,
             maxConcurrent,
             contentTimeout,
         } = parameters;
@@ -544,11 +522,7 @@ export async function importWebsiteDataFromSession(
             }
         };
 
-        const unifiedMode = mapImportParametersToUnifiedMode(
-            extractContent,
-            enableIntelligentAnalysis,
-            extractionMode
-        );
+        const unifiedMode = mode || "basic";
 
         // Build options object with only defined values
         const importOptions: any = {};
@@ -556,15 +530,8 @@ export async function importWebsiteDataFromSession(
         if (days !== undefined) importOptions.days = days;
         if (folder !== undefined) importOptions.folder = folder;
 
-        // Add enhancement options - these will be handled by unified extractor
-        if (extractContent !== undefined)
-            importOptions.extractContent = extractContent;
-        if (enableIntelligentAnalysis !== undefined)
-            importOptions.enableIntelligentAnalysis = enableIntelligentAnalysis;
-        if (enableActionDetection !== undefined)
-            importOptions.enableActionDetection = enableActionDetection;
-        if (extractionMode !== undefined)
-            importOptions.extractionMode = extractionMode;
+        // Add unified extraction mode
+        if (mode !== undefined) importOptions.mode = mode;
         if (maxConcurrent !== undefined)
             importOptions.maxConcurrent = maxConcurrent;
         if (contentTimeout !== undefined)
@@ -588,8 +555,8 @@ export async function importWebsiteDataFromSession(
             }
         }
 
-        // Create chat model for intelligent analysis if enabled
-        if (enableIntelligentAnalysis) {
+        // Create chat model for intelligent analysis if AI mode is enabled
+        if (unifiedMode !== 'basic') {
             try {
                 const apiSettings = ai.azureApiSettingsFromEnv(
                     ai.ModelType.Chat,
@@ -764,11 +731,7 @@ export async function importHtmlFolderFromSession(
         const errors: any[] = [];
         let successCount = 0;
 
-        const unifiedMode = mapImportParametersToUnifiedMode(
-            options.extractContent,
-            options.enableIntelligentAnalysis,
-            options.extractionMode || options.mode
-        );
+        const unifiedMode = options.mode || "basic";
 
         // For AI-enabled modes, validate AI availability before starting import
         if (unifiedMode !== 'basic') {
@@ -863,10 +826,7 @@ export async function importHtmlFolderFromSession(
             // Process the batch using shared HTML processing
             try {
                 const processingOptions: ProcessingOptions = {
-                    extractContent: unifiedMode !== 'basic',
-                    extractionMode: unifiedMode,
-                    enableIntelligentAnalysis: unifiedMode !== 'basic',
-                    enableActionDetection: unifiedMode === 'actions' || unifiedMode === 'full',
+                    mode: unifiedMode,
                     maxConcurrent: 5,
                 };
 
@@ -945,7 +905,7 @@ export async function importHtmlFolderFromSession(
                 totalFiles: htmlFiles.length,
                 totalProcessed: htmlFiles.length,
                 successfullyImported: successCount,
-                knowledgeExtracted: options?.enableIntelligentAnalysis
+                knowledgeExtracted: options?.mode !== 'basic'
                     ? successCount
                     : 0,
                 entitiesFound: 0, // Entities extraction would need different logic

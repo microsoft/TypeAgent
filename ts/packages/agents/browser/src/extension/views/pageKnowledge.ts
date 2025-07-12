@@ -49,10 +49,7 @@ interface Relationship {
 
 interface ExtractionSettings {
     mode: "basic" | "content" | "actions" | "full";
-    enableIntelligentAnalysis: boolean;
-    enableActionDetection: boolean;
     suggestQuestions: boolean;
-    quality: "fast" | "balanced" | "deep";
 }
 
 interface UnifiedModeInfo {
@@ -134,10 +131,7 @@ class KnowledgePanel {
     constructor() {
         this.extractionSettings = {
             mode: "content",
-            enableIntelligentAnalysis: true,
-            enableActionDetection: false,
             suggestQuestions: true,
-            quality: "balanced",
         };
     }
 
@@ -151,7 +145,6 @@ class KnowledgePanel {
         await this.loadIndexStats();
         await this.checkConnectionStatus();
         await this.loadCachedKnowledge();
-        this.setupExtractionModeControls();
         await this.loadExtractionSettings();
         await this.checkAIModelAvailability();
         await this.checkMigrationStatus();
@@ -1383,54 +1376,11 @@ class KnowledgePanel {
         }
     }
 
-    private setupExtractionModeControls() {
-        const extractButton = document.getElementById("extractKnowledge")!;
-        const buttonGroup = extractButton.parentElement!;
 
-        const modeSelector = document.createElement("div");
-        modeSelector.className = "btn-group btn-group-sm ms-2";
-        modeSelector.innerHTML = this.createExtractionModeDropdown();
 
-        buttonGroup.appendChild(modeSelector);
 
-        document
-            .getElementById("extractionModeMenu")!
-            .addEventListener("click", (e) => {
-                e.preventDefault();
-                const target = e.target as HTMLElement;
-                const item = target.closest(".dropdown-item") as HTMLElement;
 
-                if (item) {
-                    const mode = item.getAttribute("data-mode");
-                    const option = item.getAttribute("data-option");
 
-                    if (mode) {
-                        this.extractionSettings.mode = mode as any;
-                        this.updateExtractionModeDisplay();
-                        this.saveExtractionSettings();
-                    } else if (option === "quality") {
-                        this.toggleQualitySetting();
-                    }
-                }
-            });
-    }
-
-    private updateExtractionModeDisplay() {
-        const button = document.getElementById("extractionModeButton")!;
-        button.innerHTML = `<i class="bi bi-gear"></i> ${this.extractionSettings.mode}`;
-    }
-
-    private toggleQualitySetting() {
-        const qualities = ["fast", "balanced", "deep"];
-        const currentIndex = qualities.indexOf(this.extractionSettings.quality);
-        const nextIndex = (currentIndex + 1) % qualities.length;
-        this.extractionSettings.quality = qualities[nextIndex] as any;
-
-        const qualityItem = document.querySelector('[data-option="quality"]')!;
-        qualityItem.innerHTML = `<i class="bi bi-sliders"></i> Quality: ${this.extractionSettings.quality}`;
-
-        this.saveExtractionSettings();
-    }
 
     private async loadExtractionSettings() {
         try {
@@ -1442,7 +1392,11 @@ class KnowledgePanel {
                     ...this.extractionSettings,
                     ...settings.extractionSettings,
                 };
-                this.updateExtractionModeDisplay();
+                // Sync with modern dropdown
+                const modernSelect = document.getElementById("extractionMode") as HTMLSelectElement;
+                if (modernSelect && this.extractionSettings.mode) {
+                    modernSelect.value = this.extractionSettings.mode;
+                }
             }
         } catch (error) {
             console.error("Error loading extraction settings:", error);
@@ -1463,8 +1417,7 @@ class KnowledgePanel {
 
         let content = `<small>
             <i class="bi bi-cpu me-1"></i>
-            <strong>Enhanced Extraction</strong> using <strong>${this.extractionSettings.mode}</strong> mode 
-            (${this.extractionSettings.quality} quality)
+            <strong>Enhanced Extraction</strong> using <strong>${this.extractionSettings.mode}</strong> mode
             <div class="mt-2">
                 <div class="d-flex align-items-center justify-content-between">
                     <span>Knowledge Quality:</span>
@@ -1819,46 +1772,9 @@ class KnowledgePanel {
         return this.createAlert("info", "bi bi-lightbulb", content);
     }
 
-    // Extraction mode dropdown components
-    private createDropdownHeader(text: string): string {
-        return `<li><h6 class="dropdown-header">${text}</h6></li>`;
-    }
+    // Template utility functions for knowledge panel
 
-    private createDropdownItem(
-        icon: string,
-        text: string,
-        dataAttr: string,
-        value: string,
-    ): string {
-        return `
-            <li><a class="dropdown-item" href="#" ${dataAttr}="${value}">
-                <i class="${icon}"></i> ${text}
-            </a></li>
-        `;
-    }
 
-    private createDropdownDivider(): string {
-        return `<li><hr class="dropdown-divider"></li>`;
-    }
-
-    private createExtractionModeDropdown(): string {
-        return `
-            <button type="button" class="btn btn-outline-secondary dropdown-toggle" 
-                    data-bs-toggle="dropdown" aria-expanded="false" id="extractionModeButton">
-                <i class="bi bi-gear"></i> ${this.extractionSettings.mode}
-            </button>
-            <ul class="dropdown-menu" id="extractionModeMenu">
-                ${this.createDropdownHeader("Extraction Mode")}
-                ${this.createDropdownItem("bi bi-speedometer", "Basic - Fast extraction", "data-mode", "basic")}
-                ${this.createDropdownItem("bi bi-file-text", "Content - Include page analysis", "data-mode", "content")}
-                ${this.createDropdownItem("bi bi-lightning", "Actions - Detect actionable elements", "data-mode", "actions")}
-                ${this.createDropdownItem("bi bi-cpu", "Full - Complete analysis", "data-mode", "full")}
-                ${this.createDropdownDivider()}
-                ${this.createDropdownHeader("Options")}
-                ${this.createDropdownItem("bi bi-sliders", `Quality: ${this.extractionSettings.quality}`, "data-option", "quality")}
-            </ul>
-        `;
-    }
 
     private createPageInfo(
         title: string,
@@ -3575,8 +3491,6 @@ class KnowledgePanel {
 
     private updateExtractionMode(mode: "basic" | "content" | "actions" | "full") {
         this.extractionSettings.mode = mode;
-        this.extractionSettings.enableIntelligentAnalysis = mode !== 'basic';
-        this.extractionSettings.enableActionDetection = mode === 'actions' || mode === 'full';
         
         this.updateModeDescription(mode);
         this.updateAIStatusDisplay();
@@ -3762,8 +3676,7 @@ class KnowledgePanel {
         try {
             await chrome.storage.sync.set({
                 extractionMode: this.extractionSettings.mode,
-                enableIntelligentAnalysis: this.extractionSettings.enableIntelligentAnalysis,
-                enableActionDetection: this.extractionSettings.enableActionDetection
+                suggestQuestions: this.extractionSettings.suggestQuestions
             });
         } catch (error) {
             console.warn("Could not save extraction settings:", error);

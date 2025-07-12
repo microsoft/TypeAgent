@@ -442,11 +442,7 @@ export class WebsiteImportUI {
         const options: ImportOptions = {
             source,
             type,
-            extractContent: extractContentInput?.checked ?? true,
-            enableIntelligentAnalysis:
-                intelligentAnalysisInput?.checked ?? true,
-            enableActionDetection: actionDetectionInput?.checked ?? false,
-            extractionMode: (extractionModeInput?.value as any) ?? "content",
+            mode: (extractionModeInput?.value as any) ?? "content",
             maxConcurrent: maxConcurrentInput?.value
                 ? parseInt(maxConcurrentInput.value)
                 : 5,
@@ -516,11 +512,7 @@ export class WebsiteImportUI {
 
         const options: FolderImportOptions = {
             folderPath: folderPathInput.value.trim(),
-            extractContent: extractContentInput?.checked ?? true,
-            enableIntelligentAnalysis:
-                intelligentAnalysisInput?.checked ?? true,
-            enableActionDetection: actionDetectionInput?.checked ?? false,
-            extractionMode: (extractionModeInput?.value as any) ?? "content",
+            mode: (extractionModeInput?.value as any) ?? "content",
             preserveStructure: preserveStructureInput?.checked ?? true,
             recursive: recursiveInput?.checked ?? true,
             fileTypes: [".html", ".htm", ".mhtml"],

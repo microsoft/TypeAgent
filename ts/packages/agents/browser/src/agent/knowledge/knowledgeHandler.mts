@@ -34,31 +34,7 @@ import {
     UnifiedQualityMonitor
 } from "./unified/index.mjs";
 
-function mapLegacyToUnified(
-    extractionSettings?: { mode?: string; enableIntelligentAnalysis?: boolean },
-    quality?: string,
-    mode?: string
-): UnifiedExtractionMode {
-    // Direct mode mapping (preferred)
-    if (mode && ['basic', 'content', 'actions', 'full'].includes(mode)) {
-        return mode as UnifiedExtractionMode;
-    }
-    
-    if (extractionSettings?.mode) {
-        const settingsMode = extractionSettings.mode;
-        if (['basic', 'content', 'actions', 'full'].includes(settingsMode)) {
-            return settingsMode as UnifiedExtractionMode;
-        }
-    }
-    
-    // Quality parameter fallback
-    switch (quality) {
-        case 'fast': return 'basic';
-        case 'balanced': return 'content';  
-        case 'deep': return 'full';
-        default: return 'content';
-    }
-}
+
 
 export interface WebPageDocument {
     url: string;
@@ -149,12 +125,6 @@ export async function extractKnowledgeFromPage(
         extractEntities: boolean;
         extractRelationships: boolean;
         suggestQuestions: boolean;
-        quality?: "fast" | "balanced" | "deep";
-        extractionSettings?: {
-            mode: "basic" | "content" | "actions" | "full";
-            enableIntelligentAnalysis: boolean;
-            enableActionDetection: boolean;
-        };
         mode?: "basic" | "content" | "actions" | "full";
     },
     context: SessionContext<BrowserActionContext>,
@@ -182,11 +152,7 @@ export async function extractKnowledgeFromPage(
     }
 
     try {
-        const unifiedMode = mapLegacyToUnified(
-            parameters.extractionSettings,
-            parameters.quality,
-            parameters.mode
-        );
+        const unifiedMode = parameters.mode || "content";
 
         const extractor = new UnifiedKnowledgeExtractor(context);
         
@@ -277,12 +243,8 @@ export async function indexWebPageContent(
         htmlFragments: any[];
         extractKnowledge: boolean;
         timestamp: string;
-        quality?: "fast" | "balanced" | "deep";
         textOnly?: boolean;
         mode?: "basic" | "content" | "actions" | "full";
-        extractionSettings?: {
-            mode?: "basic" | "content" | "actions" | "full";
-        };
     },
     context: SessionContext<BrowserActionContext>,
 ): Promise<{
@@ -295,11 +257,7 @@ export async function indexWebPageContent(
             .map((fragment) => fragment.text || "")
             .join("\n\n");
 
-        const unifiedMode = mapLegacyToUnified(
-            parameters.extractionSettings,
-            parameters.quality,
-            parameters.mode
-        );
+        const unifiedMode = parameters.mode || "content";
 
         const extractor = new UnifiedKnowledgeExtractor(context);
         

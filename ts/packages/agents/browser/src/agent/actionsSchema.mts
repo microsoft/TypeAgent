@@ -141,11 +141,6 @@ export type ImportWebsiteData = {
         folder?: string;
         // Unified extraction mode
         mode?: "basic" | "content" | "actions" | "full";
-        // Legacy parameters (mapped to unified mode)
-        extractContent?: boolean;
-        enableIntelligentAnalysis?: boolean;
-        enableActionDetection?: boolean;
-        extractionMode?: "basic" | "content" | "actions" | "full";
         maxConcurrent?: number;
         contentTimeout?: number;
     };
@@ -161,11 +156,6 @@ export type ImportHtmlFolder = {
         options?: {
             // Unified extraction mode
             mode?: "basic" | "content" | "actions" | "full";
-            // Legacy parameters (mapped to unified mode)
-            extractContent?: boolean;
-            enableIntelligentAnalysis?: boolean;
-            enableActionDetection?: boolean;
-            extractionMode?: "basic" | "content" | "actions" | "full";
             preserveStructure?: boolean;
             // Folder-specific options
             recursive?: boolean;

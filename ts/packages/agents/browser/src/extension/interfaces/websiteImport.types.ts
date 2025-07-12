@@ -13,10 +13,7 @@ export interface ImportOptions {
     limit?: number;
     days?: number;
     folder?: string;
-    extractContent?: boolean;
-    enableIntelligentAnalysis?: boolean;
-    enableActionDetection?: boolean;
-    extractionMode?: "basic" | "content" | "actions" | "full";
+    mode?: "basic" | "content" | "actions" | "full";
     maxConcurrent?: number;
     contentTimeout?: number;
 }
@@ -24,10 +21,7 @@ export interface ImportOptions {
 // Folder import specific options
 export interface FolderImportOptions {
     folderPath: string;
-    extractContent?: boolean;
-    enableIntelligentAnalysis?: boolean;
-    enableActionDetection?: boolean;
-    extractionMode?: "basic" | "content" | "actions" | "full";
+    mode?: "basic" | "content" | "actions" | "full";
     preserveStructure?: boolean;
     recursive?: boolean;
     fileTypes?: string[];

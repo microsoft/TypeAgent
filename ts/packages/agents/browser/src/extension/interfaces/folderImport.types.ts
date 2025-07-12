@@ -9,10 +9,7 @@ import { ImportProgress, ImportError } from "./websiteImport.types";
  */
 export interface FolderImportOptions {
     folderPath: string;
-    extractContent?: boolean;
-    enableIntelligentAnalysis?: boolean;
-    enableActionDetection?: boolean;
-    extractionMode?: "basic" | "content" | "actions" | "full";
+    mode?: "basic" | "content" | "actions" | "full";
     preserveStructure?: boolean;
     recursive?: boolean;
     fileTypes?: string[];

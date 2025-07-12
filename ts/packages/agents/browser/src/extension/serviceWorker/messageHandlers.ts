@@ -278,19 +278,7 @@ export async function handleMessage(
                             extractEntities: true,
                             extractRelationships: true,
                             suggestQuestions: true,
-                            quality:
-                                message.extractionSettings?.quality ||
-                                "balanced",
-                            extractionSettings: {
-                                mode:
-                                    message.extractionSettings?.mode || "full",
-                                enableIntelligentAnalysis:
-                                    message.extractionSettings
-                                        ?.enableIntelligentAnalysis !== false,
-                                enableActionDetection:
-                                    message.extractionSettings
-                                        ?.enableActionDetection !== false,
-                            },
+                            mode: message.extractionSettings?.mode || "content",  // Use unified mode parameter
                         },
                     });
 
@@ -886,12 +874,7 @@ async function handleImportWebsiteDataWithProgress(message: any) {
                 limit: message.parameters.limit,
                 days: message.parameters.days,
                 folder: message.parameters.folder,
-                // Enhancement options
-                extractContent: message.parameters.extractContent,
-                enableIntelligentAnalysis:
-                    message.parameters.enableIntelligentAnalysis,
-                enableActionDetection: message.parameters.enableActionDetection,
-                extractionMode: message.parameters.extractionMode,
+                mode: message.parameters.mode || "basic",  // Use unified mode parameter
                 maxConcurrent: message.parameters.maxConcurrent,
                 contentTimeout: message.parameters.contentTimeout,
             },
@@ -1027,12 +1010,7 @@ async function handleImportHtmlFolder(message: any) {
             parameters: {
                 folderPath,
                 options: {
-                    extractContent: options?.extractContent ?? true,
-                    enableIntelligentAnalysis:
-                        options?.enableIntelligentAnalysis ?? true,
-                    enableActionDetection:
-                        options?.enableActionDetection ?? false,
-                    extractionMode: options?.extractionMode ?? "content",
+                    mode: options?.mode || "basic",  // Use unified mode parameter
                     preserveStructure: options?.preserveStructure ?? true,
                     recursive: options?.recursive ?? true,
                     fileTypes: options?.fileTypes ?? [

@@ -573,7 +573,7 @@ export class WebsiteImportManager {
             );
         }
 
-        if (options.enableIntelligentAnalysis) {
+        if (options.mode && options.mode !== "basic") {
             warnings.push(
                 "AI analysis will increase processing time significantly",
             );
