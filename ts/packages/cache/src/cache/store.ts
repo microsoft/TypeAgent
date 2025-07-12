@@ -87,6 +87,9 @@ export interface ConstructionStore {
 
     // Usage
     match(request: string, options?: MatchOptions): MatchResult[];
+
+    // Completion
+    getPrefix(namespaceKeys?: string[]): string[];
 }
 
 export class ConstructionStoreImpl implements ConstructionStore {
@@ -390,5 +393,12 @@ export class ConstructionStoreImpl implements ConstructionStore {
         this.modified = true;
         await this.doAutoSave();
         return count;
+    }
+
+    public getPrefix(namespaceKeys?: string[]): string[] {
+        if (this.cache === undefined) {
+            throw new Error("Construction cache not initialized");
+        }
+        return this.cache.getPrefix(namespaceKeys);
     }
 }

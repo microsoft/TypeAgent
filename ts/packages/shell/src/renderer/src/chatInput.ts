@@ -48,13 +48,13 @@ export class ExpandableTextarea {
             if (event.key === "Enter") {
                 event.preventDefault();
                 this.send(sendButton);
-            } else if (event.key == "Escape") {
+            } else if (event.key === "Escape") {
                 this.textEntry.textContent = "";
                 event.preventDefault();
             }
 
             if (sendButton !== undefined) {
-                sendButton.disabled = this.textEntry.innerHTML.length == 0;
+                sendButton.disabled = this.textEntry.innerHTML.length === 0;
             }
 
             return true;
@@ -66,7 +66,7 @@ export class ExpandableTextarea {
         });
         this.textEntry.onchange = () => {
             if (sendButton !== undefined) {
-                sendButton.disabled = this.textEntry.innerHTML.length == 0;
+                sendButton.disabled = this.textEntry.innerHTML.length === 0;
             }
         };
         this.textEntry.onwheel = (event) => {

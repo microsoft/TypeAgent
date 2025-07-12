@@ -42,7 +42,7 @@ function getCompletionStartIndex(input: string) {
         // Input is a command
         const command = input.substring(commandPrefix.length);
         if (!/\s/.test(command)) {
-            // No space no command yet just return right after the '@' as the start of the last term.
+            // No space on command yet just return right after the '@' as the start of the last term.
             return commandPrefix.length;
         }
     }
@@ -202,13 +202,13 @@ export async function getCommandCompletion(
     try {
         debug(`Command completion start: '${input}'`);
         const completionStartIndex = getCompletionStartIndex(input);
-        // Trim spaces and remove leading '@'
-        const partialCommand = normalizeCommand(
+        const commandPrefix =
             completionStartIndex !== -1
                 ? input.substring(0, completionStartIndex)
-                : input,
-            context,
-        );
+                : input;
+
+        // Trim spaces and remove leading '@'
+        const partialCommand = normalizeCommand(commandPrefix, context);
 
         debug(`Command completion resolve command: '${partialCommand}'`);
         const result = await resolveCommand(partialCommand, context);
@@ -222,6 +222,13 @@ export async function getCommandCompletion(
 
         // Collect completions
         const completions: CompletionGroup[] = [];
+        if (commandPrefix.trim() === "") {
+            completions.push({
+                name: "Command Prefixes",
+                completions: ["@"],
+            });
+        }
+
         const descriptor = result.descriptor;
         if (descriptor !== undefined) {
             if (
