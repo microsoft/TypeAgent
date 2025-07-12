@@ -2,8 +2,6 @@
 // Licensed under the MIT License.
 
 export type MdElementName =
-    | "root"
-    | "br"
     | "h1"
     | "h2"
     | "h3"
@@ -52,6 +50,13 @@ export interface MdWriterEvents {
     onBlockEnd(element: MdElement): void;
 }
 
+export function mdToText(
+    element: MdElement,
+    eventHandler?: MdWriterEvents,
+): string {
+    const writer = new MdWriter(eventHandler);
+    return writer.getMarkdown(element);
+}
 /**
  * Basic HTML to MD text convertor
  *
@@ -82,7 +87,7 @@ export class MdWriter {
 
     public getTextBlocks(element: MdElement): string[] {
         this.start();
-        this.traverseChildren(element);
+        this.collectInnerText(element);
         return this.textBlocks;
     }
 
@@ -110,7 +115,8 @@ export class MdWriter {
             case "p":
                 this.beginBlock(element);
                 this.appendPrefix();
-                this.traverseChildren(element);
+                this.append(element.text);
+                this.collectInnerText(element);
                 this.append("\n");
                 this.appendBlankLine();
                 this.endBlock(element);
@@ -118,12 +124,10 @@ export class MdWriter {
             case "blockquote":
                 this.beginBlock(element);
                 this.appendBlankLine();
-
                 this.appendPrefix();
                 this.append("> ");
-
                 this.prefix.push(">");
-                this.traverseChildren(element);
+                this.collectInnerText(element);
                 this.prefix.pop();
 
                 this.append("\n");
@@ -134,7 +138,7 @@ export class MdWriter {
                 this.beginBlock(element);
                 this.appendPrefix();
                 this.append("\t");
-                this.traverseChildren(element);
+                this.collectInnerText(element);
                 this.append("\n");
                 this.endBlock(element);
                 break;
@@ -142,7 +146,7 @@ export class MdWriter {
             case "ol":
                 this.beginBlock(element);
                 this.beginList(element.name);
-                this.traverseChildren(element);
+                this.collectInnerText(element);
                 this.endList();
                 this.endBlock(element);
                 break;
@@ -156,17 +160,17 @@ export class MdWriter {
                         this.append("1. ");
                     }
                 }
-                this.traverseChildren(element);
+                this.collectInnerText(element);
                 this.append("\n");
                 break;
             case "table":
                 this.beginBlock(element);
-                this.traverseChildren(element);
+                this.collectInnerText(element);
                 this.append("\n");
                 this.endBlock(element);
                 break;
             case "tr":
-                this.traverseChildren(element);
+                this.collectInnerText(element);
                 this.append("|\n");
                 if (this.isTableHeader(element)) {
                     this.append("| ---".repeat(element.children!.length));
@@ -176,29 +180,29 @@ export class MdWriter {
             case "th":
             case "td":
                 this.append("|");
-                this.traverseChildren(element);
+                this.collectInnerText(element);
                 break;
             case "strong":
                 this.append("**");
-                this.traverseChildren(element);
+                this.collectInnerText(element);
                 this.append("**");
                 break;
             case "em":
                 this.append("__");
-                this.traverseChildren(element);
+                this.collectInnerText(element);
                 this.append("__");
                 break;
             case "a":
                 const img = element as MdImageElement;
                 this.append(`[${img.text}](${img.href})`);
                 break;
-            case "br":
-                this.appendLineBreak();
-                break;
         }
     }
 
-    private traverseChildren(element: MdElement): void {
+    private collectInnerText(element: MdElement): void {
+        if (element.text.length > 0) {
+            this.append(element.text);
+        }
         if (element.children !== undefined && element.children.length > 0) {
             for (const child of element.children) {
                 this.collectText(child);
@@ -258,10 +262,6 @@ export class MdWriter {
     private appendBlankLine(): void {
         this.appendPrefix();
         this.append("\n");
-    }
-
-    private appendLineBreak(): void {
-        this.append("  ");
     }
 
     private appendHeading(element: MdElement): void {

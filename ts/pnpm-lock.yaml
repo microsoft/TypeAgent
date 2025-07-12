@@ -121,6 +121,9 @@ importers:
       memory-storage:
         specifier: workspace:*
         version: link:../../packages/memory/storage
+      textpro:
+        specifier: workspace:*
+        version: link:../../packages/textPro
       typeagent:
         specifier: workspace:*
         version: link:../../packages/typeagent
