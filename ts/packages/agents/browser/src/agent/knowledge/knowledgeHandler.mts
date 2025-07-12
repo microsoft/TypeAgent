@@ -133,6 +133,9 @@ export async function handleKnowledgeAction(
         case "enhancePageKnowledge":
             return await enhancePageKnowledge(parameters, context);
 
+        case "getRecentKnowledgeItems":
+            return await getRecentKnowledgeItems(parameters, context);
+
         default:
             throw new Error(`Unknown knowledge action: ${actionName}`);
     }
@@ -334,6 +337,21 @@ export async function indexWebPageContent(
 
             if (parameters.extractKnowledge) {
                 await context.agentContext.websiteCollection.buildIndex();
+                
+                // Persist the updated collection to disk
+                try {
+                    if (context.agentContext.index?.path) {
+                        await context.agentContext.websiteCollection.writeToFile(
+                            context.agentContext.index.path,
+                            "index",
+                        );
+                        console.log(`Saved updated website collection to ${context.agentContext.index.path}`);
+                    } else {
+                        console.warn("No index path available, indexed page data not persisted to disk");
+                    }
+                } catch (error) {
+                    console.error("Error persisting website collection:", error);
+                }
             }
         }
 
@@ -1820,6 +1838,96 @@ export async function enhancePageKnowledge(
             qualityBefore: 0,
             qualityAfter: 0,
             error: error instanceof Error ? error.message : "Unknown error"
+        };
+    }
+}
+
+export async function getRecentKnowledgeItems(
+    parameters: { 
+        limit?: number;
+        type?: "entities" | "topics" | "both";
+    },
+    context: SessionContext<BrowserActionContext>
+): Promise<{
+    entities: Array<{ name: string; type: string; fromPage: string; extractedAt: string; }>;
+    topics: Array<{ name: string; fromPage: string; extractedAt: string; }>;
+    success: boolean;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+        
+        if (!websiteCollection) {
+            return {
+                entities: [],
+                topics: [],
+                success: false
+            };
+        }
+
+        const websites = websiteCollection.messages.getAll();
+        const limit = parameters.limit || 10;
+        const type = parameters.type || "both";
+        
+        const recentEntities: Array<{ name: string; type: string; fromPage: string; extractedAt: string; }> = [];
+        const recentTopics: Array<{ name: string; fromPage: string; extractedAt: string; }> = [];
+        
+        // Process all websites and extract entities/topics with timestamps
+        for (const site of websites) {
+            const knowledge = site.getKnowledge();
+            const metadata = site.metadata as any;
+            const extractedAt = metadata.visitDate || metadata.bookmarkDate || new Date().toISOString();
+            const pageTitle = metadata.title || metadata.url || 'Unknown Page';
+            
+            if (knowledge) {
+                // Extract entities
+                if ((type === "entities" || type === "both") && knowledge.entities) {
+                    for (const entity of knowledge.entities) {
+                        recentEntities.push({
+                            name: entity.name,
+                            type: Array.isArray(entity.type) ? entity.type.join(", ") : entity.type,
+                            fromPage: pageTitle,
+                            extractedAt: extractedAt
+                        });
+                    }
+                }
+                
+                // Extract topics
+                if ((type === "topics" || type === "both") && knowledge.topics) {
+                    for (const topic of knowledge.topics) {
+                        recentTopics.push({
+                            name: topic,
+                            fromPage: pageTitle,
+                            extractedAt: extractedAt
+                        });
+                    }
+                }
+            }
+        }
+        
+        // Sort by extraction date (most recent first) and limit results
+        recentEntities.sort((a, b) => new Date(b.extractedAt).getTime() - new Date(a.extractedAt).getTime());
+        recentTopics.sort((a, b) => new Date(b.extractedAt).getTime() - new Date(a.extractedAt).getTime());
+        
+        // Remove duplicates while preserving order
+        const uniqueEntities = recentEntities.filter((entity, index, arr) => 
+            arr.findIndex(e => e.name.toLowerCase() === entity.name.toLowerCase()) === index
+        ).slice(0, limit);
+        
+        const uniqueTopics = recentTopics.filter((topic, index, arr) => 
+            arr.findIndex(t => t.name.toLowerCase() === topic.name.toLowerCase()) === index
+        ).slice(0, limit);
+        
+        return {
+            entities: uniqueEntities,
+            topics: uniqueTopics,
+            success: true
+        };
+    } catch (error) {
+        console.error("Error getting recent knowledge items:", error);
+        return {
+            entities: [],
+            topics: [],
+            success: false
         };
     }
 }

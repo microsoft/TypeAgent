@@ -844,6 +844,32 @@ export async function handleMessage(
             return { success: true };
         }
 
+        case "getRecentKnowledgeItems": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getRecentKnowledgeItems",
+                    parameters: {
+                        limit: message.limit || 10,
+                        type: message.itemType || "both"
+                    },
+                });
+
+                return {
+                    success: result.success || false,
+                    entities: result.entities || [],
+                    topics: result.topics || []
+                };
+            } catch (error) {
+                console.error("Error getting recent knowledge items:", error);
+                return {
+                    success: false,
+                    entities: [],
+                    topics: [],
+                    error: error instanceof Error ? error.message : String(error)
+                };
+            }
+        }
+
         default:
             return null;
     }
