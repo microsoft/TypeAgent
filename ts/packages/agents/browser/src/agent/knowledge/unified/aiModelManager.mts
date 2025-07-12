@@ -14,26 +14,34 @@ export interface AIModelManager {
 
 export class StrictAIModelManager implements AIModelManager {
     private knowledgeExtractor?: kpLib.KnowledgeExtractor;
-    
+
     constructor(context: SessionContext<BrowserActionContext>) {
         try {
             const apiSettings = ai.azureApiSettingsFromEnv(ai.ModelType.Chat);
             const languageModel = ai.createChatModel(apiSettings);
-            this.knowledgeExtractor = kpLib.createKnowledgeExtractor(languageModel);
+            this.knowledgeExtractor =
+                kpLib.createKnowledgeExtractor(languageModel);
         } catch (error) {
-            console.warn('AI model initialization failed:', error);
+            console.warn("AI model initialization failed:", error);
         }
     }
-    
+
     validateAvailability(): void {
         if (!this.knowledgeExtractor) {
-            throw new AIModelUnavailableError('content');
+            throw new AIModelUnavailableError("content");
         }
     }
-    
+
     async extractKnowledge(content: string): Promise<kpLib.KnowledgeResponse> {
         this.validateAvailability();
         const result = await this.knowledgeExtractor!.extract(content);
-        return result || { entities: [], topics: [], actions: [], inverseActions: [] };
+        return (
+            result || {
+                entities: [],
+                topics: [],
+                actions: [],
+                inverseActions: [],
+            }
+        );
     }
 }

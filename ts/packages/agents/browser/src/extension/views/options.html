@@ -124,7 +124,10 @@
     <div class="container">
       <div class="header">
         <h4><i class="bi bi-gear me-2"></i>TypeAgent Knowledge Settings</h4>
-        <p class="text-muted mb-0">Configure how TypeAgent extracts and processes knowledge from web pages</p>
+        <p class="text-muted mb-0">
+          Configure how TypeAgent extracts and processes knowledge from web
+          pages
+        </p>
       </div>
 
       <form id="optionsForm">
@@ -133,7 +136,7 @@
           <div class="section-title">
             <i class="bi bi-robot me-2"></i>AI Model Configuration
           </div>
-          
+
           <div id="aiStatusContainer" class="mb-3">
             <div id="aiStatus" class="ai-status ai-checking">
               <i class="bi bi-hourglass-split"></i>
@@ -160,17 +163,21 @@
           <div class="section-title">
             <i class="bi bi-cpu me-2"></i>Default Extraction Mode
           </div>
-          <p class="text-muted small mb-3">Choose the default mode for knowledge extraction operations</p>
-          
+          <p class="text-muted small mb-3">
+            Choose the default mode for knowledge extraction operations
+          </p>
+
           <div id="modeOptions">
             <div class="mode-option" data-mode="basic">
               <div class="d-flex justify-content-between align-items-start">
                 <div class="flex-grow-1">
                   <div class="mode-title">
-                    <i class="bi bi-lightning-charge text-warning me-2"></i>Basic Mode
+                    <i class="bi bi-lightning-charge text-warning me-2"></i
+                    >Basic Mode
                   </div>
                   <div class="mode-description">
-                    Fast metadata extraction without AI - perfect for bulk operations
+                    Fast metadata extraction without AI - perfect for bulk
+                    operations
                   </div>
                   <div class="mode-features">
                     <span class="feature-badge">URL Analysis</span>
@@ -178,7 +185,12 @@
                     <span class="feature-badge">Basic Topics</span>
                   </div>
                 </div>
-                <input type="radio" name="defaultMode" value="basic" class="form-check-input mt-1">
+                <input
+                  type="radio"
+                  name="defaultMode"
+                  value="basic"
+                  class="form-check-input mt-1"
+                />
               </div>
             </div>
 
@@ -197,7 +209,13 @@
                     <span class="feature-badge">Topic Identification</span>
                   </div>
                 </div>
-                <input type="radio" name="defaultMode" value="content" class="form-check-input mt-1" checked>
+                <input
+                  type="radio"
+                  name="defaultMode"
+                  value="content"
+                  class="form-check-input mt-1"
+                  checked
+                />
               </div>
             </div>
 
@@ -216,7 +234,12 @@
                     <span class="feature-badge">Interactive Elements</span>
                   </div>
                 </div>
-                <input type="radio" name="defaultMode" value="actions" class="form-check-input mt-1">
+                <input
+                  type="radio"
+                  name="defaultMode"
+                  value="actions"
+                  class="form-check-input mt-1"
+                />
               </div>
             </div>
 
@@ -235,7 +258,12 @@
                     <span class="feature-badge">Cross-references</span>
                   </div>
                 </div>
-                <input type="radio" name="defaultMode" value="full" class="form-check-input mt-1">
+                <input
+                  type="radio"
+                  name="defaultMode"
+                  value="full"
+                  class="form-check-input mt-1"
+                />
               </div>
             </div>
           </div>
@@ -289,11 +317,19 @@
 
         <!-- Actions -->
         <div class="d-flex justify-content-between align-items-center">
-          <button type="button" id="resetToDefaults" class="btn btn-outline-secondary">
+          <button
+            type="button"
+            id="resetToDefaults"
+            class="btn btn-outline-secondary"
+          >
             <i class="bi bi-arrow-clockwise me-2"></i>Reset to Defaults
           </button>
           <div>
-            <button type="button" id="exportSettings" class="btn btn-outline-info me-2">
+            <button
+              type="button"
+              id="exportSettings"
+              class="btn btn-outline-info me-2"
+            >
               <i class="bi bi-download me-2"></i>Export
             </button>
             <button type="submit" id="saveOptions" class="btn btn-primary">

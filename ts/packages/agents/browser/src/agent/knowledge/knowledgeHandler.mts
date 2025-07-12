@@ -30,10 +30,8 @@ import {
     ContentInput,
     AIModelUnavailableError,
     UnifiedExtractionAnalytics,
-    UnifiedQualityMonitor
+    UnifiedQualityMonitor,
 } from "./unified/index.mjs";
-
-
 
 export interface WebPageDocument {
     url: string;
@@ -148,33 +146,42 @@ export async function extractKnowledgeFromPage(
         const unifiedMode = parameters.mode || "content";
 
         const extractor = new UnifiedKnowledgeExtractor(context);
-        
+
         const contentInput: ContentInput = {
             url: parameters.url,
             title: parameters.title,
             htmlFragments: parameters.htmlFragments,
             textContent: textContent,
-            source: 'direct'
+            source: "direct",
         };
 
-        const extractionResult = await extractor.extractKnowledge(contentInput, unifiedMode);
+        const extractionResult = await extractor.extractKnowledge(
+            contentInput,
+            unifiedMode,
+        );
         const knowledge = extractionResult.knowledge;
 
-        const entities: Entity[] = knowledge.entities?.map((entity) => ({
-            name: entity.name,
-            type: Array.isArray(entity.type) ? entity.type.join(", ") : entity.type,
-            description: entity.facets?.find((f) => f.name === "description")?.value as string,
-            confidence: extractionResult.qualityMetrics.confidence,
-        })) || [];
+        const entities: Entity[] =
+            knowledge.entities?.map((entity) => ({
+                name: entity.name,
+                type: Array.isArray(entity.type)
+                    ? entity.type.join(", ")
+                    : entity.type,
+                description: entity.facets?.find(
+                    (f) => f.name === "description",
+                )?.value as string,
+                confidence: extractionResult.qualityMetrics.confidence,
+            })) || [];
 
         const keyTopics: string[] = knowledge.topics || [];
 
-        const relationships: Relationship[] = knowledge.actions?.map((action) => ({
-            from: action.subjectEntityName || "unknown",
-            relationship: action.verbs?.join(", ") || "related to",
-            to: action.objectEntityName || "unknown",
-            confidence: extractionResult.qualityMetrics.confidence,
-        })) || [];
+        const relationships: Relationship[] =
+            knowledge.actions?.map((action) => ({
+                from: action.subjectEntityName || "unknown",
+                relationship: action.verbs?.join(", ") || "related to",
+                to: action.objectEntityName || "unknown",
+                confidence: extractionResult.qualityMetrics.confidence,
+            })) || [];
 
         const suggestedQuestions: string[] = [];
         if (parameters.suggestQuestions && knowledge) {
@@ -207,7 +214,7 @@ export async function extractKnowledgeFromPage(
         if (error instanceof AIModelUnavailableError) {
             throw error;
         }
-        
+
         console.error("Error during knowledge extraction:", error);
         return {
             entities: [],
@@ -247,17 +254,20 @@ export async function indexWebPageContent(
         const unifiedMode = parameters.mode || "content";
 
         const extractor = new UnifiedKnowledgeExtractor(context);
-        
+
         const contentInput: ContentInput = {
             url: parameters.url,
             title: parameters.title,
             htmlFragments: parameters.htmlFragments,
             textContent: textContent,
-            source: 'index',
-            timestamp: parameters.timestamp
+            source: "index",
+            timestamp: parameters.timestamp,
         };
 
-        const extractionResult = await extractor.extractKnowledge(contentInput, unifiedMode);
+        const extractionResult = await extractor.extractKnowledge(
+            contentInput,
+            unifiedMode,
+        );
 
         const visitInfo: website.WebsiteVisitInfo = {
             url: parameters.url,
@@ -272,7 +282,7 @@ export async function indexWebPageContent(
         );
 
         const websiteObj = website.importWebsiteVisit(visitInfo, textContent);
-        
+
         if (extractionResult.knowledge) {
             websiteObj.knowledge = extractionResult.knowledge;
         }
@@ -282,7 +292,7 @@ export async function indexWebPageContent(
 
             if (parameters.extractKnowledge) {
                 await context.agentContext.websiteCollection.buildIndex();
-                
+
                 // Persist the updated collection to disk
                 try {
                     if (context.agentContext.index?.path) {
@@ -290,12 +300,19 @@ export async function indexWebPageContent(
                             context.agentContext.index.path,
                             "index",
                         );
-                        console.log(`Saved updated website collection to ${context.agentContext.index.path}`);
+                        console.log(
+                            `Saved updated website collection to ${context.agentContext.index.path}`,
+                        );
                     } else {
-                        console.warn("No index path available, indexed page data not persisted to disk");
+                        console.warn(
+                            "No index path available, indexed page data not persisted to disk",
+                        );
                     }
                 } catch (error) {
-                    console.error("Error persisting website collection:", error);
+                    console.error(
+                        "Error persisting website collection:",
+                        error,
+                    );
                 }
             }
         }
@@ -311,7 +328,7 @@ export async function indexWebPageContent(
         if (error instanceof AIModelUnavailableError) {
             throw error;
         }
-        
+
         console.error("Error indexing page content:", error);
         return {
             indexed: false,
@@ -1378,13 +1395,13 @@ export async function getExtractionAnalytics(
 
         return {
             success: true,
-            analytics: summary
+            analytics: summary,
         };
     } catch (error) {
         console.error("Error getting extraction analytics:", error);
         return {
             success: false,
-            analytics: null
+            analytics: null,
         };
     }
 }
@@ -1402,20 +1419,20 @@ export async function generateQualityReport(
 
         return {
             success: true,
-            report
+            report,
         };
     } catch (error) {
         console.error("Error generating quality report:", error);
         return {
             success: false,
-            report: null
+            report: null,
         };
     }
 }
 
 export async function getPageQualityMetrics(
     parameters: { url: string },
-    context: SessionContext<BrowserActionContext>
+    context: SessionContext<BrowserActionContext>,
 ): Promise<{
     score: number;
     entityCount: number;
@@ -1426,7 +1443,7 @@ export async function getPageQualityMetrics(
 }> {
     try {
         const websiteCollection = context.agentContext.websiteCollection;
-        
+
         if (!websiteCollection) {
             return {
                 score: 0,
@@ -1434,13 +1451,13 @@ export async function getPageQualityMetrics(
                 topicCount: 0,
                 actionCount: 0,
                 extractionMode: "unknown",
-                lastUpdated: null
+                lastUpdated: null,
             };
         }
 
         const websites = websiteCollection.messages.getAll();
         const foundWebsite = websites.find(
-            (site: any) => site.metadata.url === parameters.url
+            (site: any) => site.metadata.url === parameters.url,
         );
 
         if (!foundWebsite) {
@@ -1450,28 +1467,28 @@ export async function getPageQualityMetrics(
                 topicCount: 0,
                 actionCount: 0,
                 extractionMode: "unknown",
-                lastUpdated: null
+                lastUpdated: null,
             };
         }
 
         const knowledge = foundWebsite.getKnowledge();
         const metadata = foundWebsite.metadata as any;
-        
+
         const entityCount = knowledge?.entities?.length || 0;
         const topicCount = knowledge?.topics?.length || 0;
         const actionCount = knowledge?.actions?.length || 0;
-        
+
         // Calculate quality score based on knowledge richness
         let score = 0.2; // Base score
-        
+
         if (entityCount > 0) score += 0.2;
         if (topicCount > 2) score += 0.2;
         if (actionCount > 0) score += 0.2;
         if (entityCount > 5) score += 0.1;
         if (topicCount > 5) score += 0.1;
-        
+
         score = Math.min(score, 1.0);
-        
+
         // Determine extraction mode based on knowledge richness
         let extractionMode = "basic";
         if (actionCount > 0) {
@@ -1486,7 +1503,7 @@ export async function getPageQualityMetrics(
             topicCount,
             actionCount,
             extractionMode,
-            lastUpdated: metadata.visitDate || metadata.bookmarkDate || null
+            lastUpdated: metadata.visitDate || metadata.bookmarkDate || null,
         };
     } catch (error) {
         console.error("Error getting page quality metrics:", error);
@@ -1496,14 +1513,14 @@ export async function getPageQualityMetrics(
             topicCount: 0,
             actionCount: 0,
             extractionMode: "unknown",
-            lastUpdated: null
+            lastUpdated: null,
         };
     }
 }
 
 export async function checkAIModelStatus(
     parameters: {},
-    context: SessionContext<BrowserActionContext>
+    context: SessionContext<BrowserActionContext>,
 ): Promise<{
     available: boolean;
     version?: string;
@@ -1512,121 +1529,172 @@ export async function checkAIModelStatus(
 }> {
     try {
         const extractor = new UnifiedKnowledgeExtractor(context);
-        
+
         // Test AI availability with a simple extraction
-        await extractor.extractKnowledge({
-            url: "test://ai-check",
-            title: "AI Availability Test",
-            textContent: "test content for AI availability check",
-            source: "direct"
-        }, "content");
+        await extractor.extractKnowledge(
+            {
+                url: "test://ai-check",
+                title: "AI Availability Test",
+                textContent: "test content for AI availability check",
+                source: "direct",
+            },
+            "content",
+        );
 
         return {
             available: true,
             version: "available",
-            endpoint: "configured"
+            endpoint: "configured",
         };
     } catch (error) {
         if (error instanceof AIModelUnavailableError) {
             return {
                 available: false,
-                error: error.message
+                error: error.message,
             };
         }
-        
+
         return {
             available: false,
-            error: error instanceof Error ? error.message : "Unknown AI model error"
+            error:
+                error instanceof Error
+                    ? error.message
+                    : "Unknown AI model error",
         };
     }
 }
 
 export async function getRecentKnowledgeItems(
-    parameters: { 
+    parameters: {
         limit?: number;
         type?: "entities" | "topics" | "both";
     },
-    context: SessionContext<BrowserActionContext>
+    context: SessionContext<BrowserActionContext>,
 ): Promise<{
-    entities: Array<{ name: string; type: string; fromPage: string; extractedAt: string; }>;
-    topics: Array<{ name: string; fromPage: string; extractedAt: string; }>;
+    entities: Array<{
+        name: string;
+        type: string;
+        fromPage: string;
+        extractedAt: string;
+    }>;
+    topics: Array<{ name: string; fromPage: string; extractedAt: string }>;
     success: boolean;
 }> {
     try {
         const websiteCollection = context.agentContext.websiteCollection;
-        
+
         if (!websiteCollection) {
             return {
                 entities: [],
                 topics: [],
-                success: false
+                success: false,
             };
         }
 
         const websites = websiteCollection.messages.getAll();
         const limit = parameters.limit || 10;
         const type = parameters.type || "both";
-        
-        const recentEntities: Array<{ name: string; type: string; fromPage: string; extractedAt: string; }> = [];
-        const recentTopics: Array<{ name: string; fromPage: string; extractedAt: string; }> = [];
-        
+
+        const recentEntities: Array<{
+            name: string;
+            type: string;
+            fromPage: string;
+            extractedAt: string;
+        }> = [];
+        const recentTopics: Array<{
+            name: string;
+            fromPage: string;
+            extractedAt: string;
+        }> = [];
+
         // Process all websites and extract entities/topics with timestamps
         for (const site of websites) {
             const knowledge = site.getKnowledge();
             const metadata = site.metadata as any;
-            const extractedAt = metadata.visitDate || metadata.bookmarkDate || new Date().toISOString();
-            const pageTitle = metadata.title || metadata.url || 'Unknown Page';
-            
+            const extractedAt =
+                metadata.visitDate ||
+                metadata.bookmarkDate ||
+                new Date().toISOString();
+            const pageTitle = metadata.title || metadata.url || "Unknown Page";
+
             if (knowledge) {
                 // Extract entities
-                if ((type === "entities" || type === "both") && knowledge.entities) {
+                if (
+                    (type === "entities" || type === "both") &&
+                    knowledge.entities
+                ) {
                     for (const entity of knowledge.entities) {
                         recentEntities.push({
                             name: entity.name,
-                            type: Array.isArray(entity.type) ? entity.type.join(", ") : entity.type,
+                            type: Array.isArray(entity.type)
+                                ? entity.type.join(", ")
+                                : entity.type,
                             fromPage: pageTitle,
-                            extractedAt: extractedAt
+                            extractedAt: extractedAt,
                         });
                     }
                 }
-                
+
                 // Extract topics
-                if ((type === "topics" || type === "both") && knowledge.topics) {
+                if (
+                    (type === "topics" || type === "both") &&
+                    knowledge.topics
+                ) {
                     for (const topic of knowledge.topics) {
                         recentTopics.push({
                             name: topic,
                             fromPage: pageTitle,
-                            extractedAt: extractedAt
+                            extractedAt: extractedAt,
                         });
                     }
                 }
             }
         }
-        
+
         // Sort by extraction date (most recent first) and limit results
-        recentEntities.sort((a, b) => new Date(b.extractedAt).getTime() - new Date(a.extractedAt).getTime());
-        recentTopics.sort((a, b) => new Date(b.extractedAt).getTime() - new Date(a.extractedAt).getTime());
-        
+        recentEntities.sort(
+            (a, b) =>
+                new Date(b.extractedAt).getTime() -
+                new Date(a.extractedAt).getTime(),
+        );
+        recentTopics.sort(
+            (a, b) =>
+                new Date(b.extractedAt).getTime() -
+                new Date(a.extractedAt).getTime(),
+        );
+
         // Remove duplicates while preserving order
-        const uniqueEntities = recentEntities.filter((entity, index, arr) => 
-            arr.findIndex(e => e.name.toLowerCase() === entity.name.toLowerCase()) === index
-        ).slice(0, limit);
-        
-        const uniqueTopics = recentTopics.filter((topic, index, arr) => 
-            arr.findIndex(t => t.name.toLowerCase() === topic.name.toLowerCase()) === index
-        ).slice(0, limit);
-        
+        const uniqueEntities = recentEntities
+            .filter(
+                (entity, index, arr) =>
+                    arr.findIndex(
+                        (e) =>
+                            e.name.toLowerCase() === entity.name.toLowerCase(),
+                    ) === index,
+            )
+            .slice(0, limit);
+
+        const uniqueTopics = recentTopics
+            .filter(
+                (topic, index, arr) =>
+                    arr.findIndex(
+                        (t) =>
+                            t.name.toLowerCase() === topic.name.toLowerCase(),
+                    ) === index,
+            )
+            .slice(0, limit);
+
         return {
             entities: uniqueEntities,
             topics: uniqueTopics,
-            success: true
+            success: true,
         };
     } catch (error) {
         console.error("Error getting recent knowledge items:", error);
         return {
             entities: [],
             topics: [],
-            success: false
+            success: false,
         };
     }
 }
@@ -1643,9 +1711,9 @@ export async function getPageIndexedKnowledge(
         const websiteCollection = context.agentContext.websiteCollection;
 
         if (!websiteCollection) {
-            return { 
-                isIndexed: false, 
-                error: "No website collection available" 
+            return {
+                isIndexed: false,
+                error: "No website collection available",
             };
         }
 
@@ -1655,56 +1723,64 @@ export async function getPageIndexedKnowledge(
         );
 
         if (!foundWebsite) {
-            return { 
-                isIndexed: false, 
-                error: "Page not found in index" 
+            return {
+                isIndexed: false,
+                error: "Page not found in index",
             };
         }
 
         try {
             const knowledge = foundWebsite.getKnowledge();
-            
+
             if (!knowledge) {
-                return { 
-                    isIndexed: true, 
+                return {
+                    isIndexed: true,
                     knowledge: {
                         entities: [],
                         relationships: [],
                         keyTopics: [],
                         suggestedQuestions: [],
-                        summary: "Page is indexed but no knowledge was extracted.",
+                        summary:
+                            "Page is indexed but no knowledge was extracted.",
                         contentMetrics: {
                             readingTime: 0,
                             wordCount: 0,
                         },
-                    }
+                    },
                 };
             }
 
             // Convert the stored knowledge to the expected format
-            const entities: Entity[] = knowledge.entities?.map((entity) => ({
-                name: entity.name,
-                type: Array.isArray(entity.type) ? entity.type.join(", ") : entity.type,
-                description: entity.facets?.find((f) => f.name === "description")?.value as string,
-                confidence: 0.8, // Default confidence for indexed content
-            })) || [];
+            const entities: Entity[] =
+                knowledge.entities?.map((entity) => ({
+                    name: entity.name,
+                    type: Array.isArray(entity.type)
+                        ? entity.type.join(", ")
+                        : entity.type,
+                    description: entity.facets?.find(
+                        (f) => f.name === "description",
+                    )?.value as string,
+                    confidence: 0.8, // Default confidence for indexed content
+                })) || [];
 
             const keyTopics: string[] = knowledge.topics || [];
 
-            const relationships: Relationship[] = knowledge.actions?.map((action) => ({
-                from: action.subjectEntityName || "unknown",
-                relationship: action.verbs?.join(", ") || "related to",
-                to: action.objectEntityName || "unknown",
-                confidence: 0.8, // Default confidence for indexed content
-            })) || [];
+            const relationships: Relationship[] =
+                knowledge.actions?.map((action) => ({
+                    from: action.subjectEntityName || "unknown",
+                    relationship: action.verbs?.join(", ") || "related to",
+                    to: action.objectEntityName || "unknown",
+                    confidence: 0.8, // Default confidence for indexed content
+                })) || [];
 
             // Generate contextual questions for indexed content
-            const suggestedQuestions: string[] = await generateSmartSuggestedQuestions(
-                knowledge,
-                null,
-                parameters.url,
-                context,
-            );
+            const suggestedQuestions: string[] =
+                await generateSmartSuggestedQuestions(
+                    knowledge,
+                    null,
+                    parameters.url,
+                    context,
+                );
 
             // Calculate content metrics from the stored text
             const textContent = foundWebsite.textChunks?.join("\n\n") || "";
@@ -1725,13 +1801,15 @@ export async function getPageIndexedKnowledge(
                     suggestedQuestions,
                     summary,
                     contentMetrics,
-                }
+                },
             };
-
         } catch (knowledgeError) {
-            console.warn("Error extracting knowledge from indexed page:", knowledgeError);
-            return { 
-                isIndexed: true, 
+            console.warn(
+                "Error extracting knowledge from indexed page:",
+                knowledgeError,
+            );
+            return {
+                isIndexed: true,
                 knowledge: {
                     entities: [],
                     relationships: [],
@@ -1742,15 +1820,14 @@ export async function getPageIndexedKnowledge(
                         readingTime: 0,
                         wordCount: 0,
                     },
-                }
+                },
             };
         }
-
     } catch (error) {
         console.error("Error getting page indexed knowledge:", error);
-        return { 
-            isIndexed: false, 
-            error: "Failed to retrieve indexed knowledge" 
+        return {
+            isIndexed: false,
+            error: "Failed to retrieve indexed knowledge",
         };
     }
 }

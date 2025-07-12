@@ -246,12 +246,10 @@ async function updateBrowserContext(
                     }
                 }
             } catch (error) {
-                debug(
-                    "Error initializing website collection:",
-                    error,
-                );
+                debug("Error initializing website collection:", error);
                 // Fallback to empty collection without index
-                context.agentContext.websiteCollection = new website.WebsiteCollection();
+                context.agentContext.websiteCollection =
+                    new website.WebsiteCollection();
                 context.agentContext.index = undefined;
             }
         }

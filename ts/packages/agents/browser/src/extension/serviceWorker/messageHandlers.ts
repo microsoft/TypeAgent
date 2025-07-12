@@ -278,7 +278,7 @@ export async function handleMessage(
                             extractEntities: true,
                             extractRelationships: true,
                             suggestQuestions: true,
-                            mode: message.extractionSettings?.mode || "content",  // Use unified mode parameter
+                            mode: message.extractionSettings?.mode || "content", // Use unified mode parameter
                         },
                     });
 
@@ -482,10 +482,10 @@ export async function handleMessage(
                 };
             } catch (error) {
                 console.error("Error getting page indexed knowledge:", error);
-                return { 
-                    isIndexed: false, 
-                    knowledge: null, 
-                    error: "Failed to retrieve indexed knowledge" 
+                return {
+                    isIndexed: false,
+                    knowledge: null,
+                    error: "Failed to retrieve indexed knowledge",
                 };
             }
         }
@@ -692,24 +692,27 @@ export async function handleMessage(
                     parameters: {
                         url: "test://ai-check",
                         title: "AI Availability Test",
-                        htmlFragments: [{ text: "test content for AI availability check" }],
+                        htmlFragments: [
+                            { text: "test content for AI availability check" },
+                        ],
                         extractEntities: false,
                         extractRelationships: false,
                         suggestQuestions: false,
-                        mode: "basic"
+                        mode: "basic",
                     },
                 });
 
                 return {
                     available: !result.error,
                     version: result.version || "unknown",
-                    endpoint: result.endpoint || "unknown"
+                    endpoint: result.endpoint || "unknown",
                 };
             } catch (error) {
                 console.error("Error checking AI model availability:", error);
                 return {
                     available: false,
-                    error: error instanceof Error ? error.message : String(error)
+                    error:
+                        error instanceof Error ? error.message : String(error),
                 };
             }
         }
@@ -719,13 +722,13 @@ export async function handleMessage(
                 const result = await sendActionToAgent({
                     actionName: "getKnowledgeIndexStats",
                     parameters: {
-                        url: message.url
+                        url: message.url,
                     },
                 });
 
                 // Extract quality metrics for the specific page
                 const pageStats = result.pageStats || {};
-                
+
                 return {
                     success: !result.error,
                     quality: {
@@ -734,8 +737,8 @@ export async function handleMessage(
                         topicCount: pageStats.topicCount || 0,
                         actionCount: pageStats.actionCount || 0,
                         extractionMode: pageStats.extractionMode || "unknown",
-                        lastUpdated: pageStats.lastUpdated || null
-                    }
+                        lastUpdated: pageStats.lastUpdated || null,
+                    },
                 };
             } catch (error) {
                 console.error("Error getting page quality metrics:", error);
@@ -747,9 +750,10 @@ export async function handleMessage(
                         topicCount: 0,
                         actionCount: 0,
                         extractionMode: "unknown",
-                        lastUpdated: null
+                        lastUpdated: null,
                     },
-                    error: error instanceof Error ? error.message : String(error)
+                    error:
+                        error instanceof Error ? error.message : String(error),
                 };
             }
         }
@@ -757,12 +761,12 @@ export async function handleMessage(
         case "settingsUpdated": {
             // Handle settings update notification
             console.log("Settings updated:", message.settings);
-            
+
             // Store the new settings for use by other handlers
-            await chrome.storage.local.set({ 
-                knowledgeSettings: message.settings 
+            await chrome.storage.local.set({
+                knowledgeSettings: message.settings,
             });
-            
+
             return { success: true };
         }
 
@@ -772,14 +776,14 @@ export async function handleMessage(
                     actionName: "getRecentKnowledgeItems",
                     parameters: {
                         limit: message.limit || 10,
-                        type: message.itemType || "both"
+                        type: message.itemType || "both",
                     },
                 });
 
                 return {
                     success: result.success || false,
                     entities: result.entities || [],
-                    topics: result.topics || []
+                    topics: result.topics || [],
                 };
             } catch (error) {
                 console.error("Error getting recent knowledge items:", error);
@@ -787,7 +791,8 @@ export async function handleMessage(
                     success: false,
                     entities: [],
                     topics: [],
-                    error: error instanceof Error ? error.message : String(error)
+                    error:
+                        error instanceof Error ? error.message : String(error),
                 };
             }
         }
@@ -808,7 +813,7 @@ async function handleImportWebsiteDataWithProgress(message: any) {
                 limit: message.parameters.limit,
                 days: message.parameters.days,
                 folder: message.parameters.folder,
-                mode: message.parameters.mode || "basic",  // Use unified mode parameter
+                mode: message.parameters.mode || "basic", // Use unified mode parameter
                 maxConcurrent: message.parameters.maxConcurrent,
                 contentTimeout: message.parameters.contentTimeout,
             },
@@ -944,7 +949,7 @@ async function handleImportHtmlFolder(message: any) {
             parameters: {
                 folderPath,
                 options: {
-                    mode: options?.mode || "basic",  // Use unified mode parameter
+                    mode: options?.mode || "basic", // Use unified mode parameter
                     preserveStructure: options?.preserveStructure ?? true,
                     recursive: options?.recursive ?? true,
                     fileTypes: options?.fileTypes ?? [
@@ -1052,7 +1057,7 @@ async function handleSearchWebsitesEnhanced(message: any) {
 
         // Generate AI summary if requested
         let summary = searchResult.answer;
-        
+
         return {
             success: true,
             results: {

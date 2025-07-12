@@ -3,7 +3,7 @@
 
 import { conversation as kpLib } from "knowledge-processor";
 
-export type UnifiedExtractionMode = 'basic' | 'content' | 'actions' | 'full';
+export type UnifiedExtractionMode = "basic" | "content" | "actions" | "full";
 
 export interface UnifiedModeConfig {
     mode: UnifiedExtractionMode;
@@ -15,46 +15,49 @@ export interface UnifiedModeConfig {
     maxConcurrentExtractions: number;
 }
 
-export const UNIFIED_EXTRACTION_MODES: Record<UnifiedExtractionMode, UnifiedModeConfig> = {
+export const UNIFIED_EXTRACTION_MODES: Record<
+    UnifiedExtractionMode,
+    UnifiedModeConfig
+> = {
     basic: {
-        mode: 'basic',
+        mode: "basic",
         enableAI: false,
         enableActionDetection: false,
         enableRelationshipExtraction: false,
         maxCharsPerChunk: 500,
         qualityThreshold: 0.2,
-        maxConcurrentExtractions: 10
+        maxConcurrentExtractions: 10,
     },
-    
+
     content: {
-        mode: 'content',
+        mode: "content",
         enableAI: true,
         enableActionDetection: false,
         enableRelationshipExtraction: false,
         maxCharsPerChunk: 1000,
         qualityThreshold: 0.3,
-        maxConcurrentExtractions: 5
+        maxConcurrentExtractions: 5,
     },
-    
+
     actions: {
-        mode: 'actions',
+        mode: "actions",
         enableAI: true,
         enableActionDetection: true,
         enableRelationshipExtraction: false,
         maxCharsPerChunk: 1200,
         qualityThreshold: 0.35,
-        maxConcurrentExtractions: 3
+        maxConcurrentExtractions: 3,
     },
-    
+
     full: {
-        mode: 'full',
+        mode: "full",
         enableAI: true,
         enableActionDetection: true,
         enableRelationshipExtraction: true,
         maxCharsPerChunk: 1500,
         qualityThreshold: 0.4,
-        maxConcurrentExtractions: 2
-    }
+        maxConcurrentExtractions: 2,
+    },
 };
 
 export interface ContentInput {
@@ -63,7 +66,7 @@ export interface ContentInput {
     htmlContent?: string;
     htmlFragments?: any[];
     textContent?: string;
-    source: 'direct' | 'index' | 'bookmark' | 'history' | 'import';
+    source: "direct" | "index" | "bookmark" | "history" | "import";
     timestamp?: string;
 }
 
@@ -100,7 +103,9 @@ export interface BatchError {
 
 export class AIModelUnavailableError extends Error {
     constructor(mode: UnifiedExtractionMode) {
-        super(`AI model required for ${mode} mode but not available. Use 'basic' mode or configure AI model.`);
-        this.name = 'AIModelUnavailableError';
+        super(
+            `AI model required for ${mode} mode but not available. Use 'basic' mode or configure AI model.`,
+        );
+        this.name = "AIModelUnavailableError";
     }
 }

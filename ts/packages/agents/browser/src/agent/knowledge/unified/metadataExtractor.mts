@@ -9,8 +9,8 @@ export interface MetadataExtractor {
     extractTemporal(visitDate?: string, bookmarkDate?: string): TemporalFacets;
     extractDomain(url: string): DomainEntity;
     mergeWithAIKnowledge(
-        metadata: BasicKnowledge, 
-        aiKnowledge: kpLib.KnowledgeResponse
+        metadata: BasicKnowledge,
+        aiKnowledge: kpLib.KnowledgeResponse,
     ): kpLib.KnowledgeResponse;
 }
 

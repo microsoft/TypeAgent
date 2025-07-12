@@ -192,7 +192,7 @@ class WebsiteLibraryPanelFullPage {
             console.log("Website Library Panel already initialized, skipping");
             return;
         }
-        
+
         this.isInitialized = true;
         console.log("Initializing Enhanced Full-Page Website Library Panel");
 
@@ -342,7 +342,9 @@ class WebsiteLibraryPanelFullPage {
             // Handle the error without calling showImportError again to avoid infinite recursion
             // showImportError is already called from within the import process
             console.error("Import error:", error);
-            this.notificationManager.showError(`Import failed: ${error.message || 'Unknown error'}`);
+            this.notificationManager.showError(
+                `Import failed: ${error.message || "Unknown error"}`,
+            );
         });
     }
 
@@ -1289,7 +1291,7 @@ class WebsiteLibraryPanelFullPage {
         // Show error in results container without destroying its structure
         if (resultsContainer) {
             resultsContainer.style.display = "block";
-            
+
             // Hide results content
             const resultsContent = document.getElementById("resultsContainer");
             if (resultsContent) {
@@ -1391,7 +1393,7 @@ class WebsiteLibraryPanelFullPage {
     private async initializeAnalyticsPage() {
         // Clear placeholder content immediately to avoid showing misleading data
         this.clearPlaceholderContent();
-        
+
         if (!this.analyticsData) {
             await this.loadAnalyticsData();
         }
@@ -1534,42 +1536,42 @@ class WebsiteLibraryPanelFullPage {
         try {
             // Get real knowledge index statistics
             const indexStats = await chrome.runtime.sendMessage({
-                type: "getIndexStats"
+                type: "getIndexStats",
             });
 
             // Get library stats for total counts
-            const libraryStats = await this.chromeExtensionService.getLibraryStats();
+            const libraryStats =
+                await this.chromeExtensionService.getLibraryStats();
 
             this.analyticsData = {
                 overview: {
                     totalSites: indexStats.totalPages || 0,
                     totalBookmarks: libraryStats.totalBookmarks || 0,
                     totalHistory: libraryStats.totalHistory || 0,
-                    knowledgeExtracted: indexStats.totalPages || 0
+                    knowledgeExtracted: indexStats.totalPages || 0,
                 },
                 trends: [],
                 insights: [
                     {
                         category: "Entities",
                         value: indexStats.totalEntities || 0,
-                        change: 0
+                        change: 0,
                     },
                     {
-                        category: "Relationships", 
+                        category: "Relationships",
                         value: indexStats.totalRelationships || 0,
-                        change: 0
+                        change: 0,
                     },
                     {
                         category: "Knowledge Quality",
                         value: this.calculateKnowledgeQuality(indexStats),
-                        change: 0
-                    }
-                ]
+                        change: 0,
+                    },
+                ],
             };
 
             // Store the actual statistics for the visualization section
             this.updateKnowledgeVisualizationData(indexStats);
-
         } catch (error) {
             console.error("Failed to load analytics data:", error);
             this.analyticsData = {
@@ -1577,7 +1579,7 @@ class WebsiteLibraryPanelFullPage {
                     totalSites: this.libraryStats.totalWebsites,
                     totalBookmarks: this.libraryStats.totalBookmarks,
                     totalHistory: this.libraryStats.totalHistory,
-                    knowledgeExtracted: 0
+                    knowledgeExtracted: 0,
                 },
                 trends: [],
                 insights: [],
@@ -1595,70 +1597,90 @@ class WebsiteLibraryPanelFullPage {
 
     private calculateKnowledgeQuality(indexStats: any): number {
         if (!indexStats.totalPages || indexStats.totalPages === 0) return 0;
-        
-        const entitiesPerPage = (indexStats.totalEntities || 0) / indexStats.totalPages;
-        const relationshipsPerPage = (indexStats.totalRelationships || 0) / indexStats.totalPages;
-        
+
+        const entitiesPerPage =
+            (indexStats.totalEntities || 0) / indexStats.totalPages;
+        const relationshipsPerPage =
+            (indexStats.totalRelationships || 0) / indexStats.totalPages;
+
         // Calculate quality score from 0-100
         let quality = 0;
         if (entitiesPerPage > 0) quality += 30;
         if (entitiesPerPage > 3) quality += 20;
         if (relationshipsPerPage > 0) quality += 25;
         if (relationshipsPerPage > 2) quality += 25;
-        
+
         return Math.round(quality);
     }
 
     private updateKnowledgeVisualizationData(indexStats: any) {
         // Update AI Insights section with real data
-        const knowledgeExtractedElement = document.getElementById("knowledgeExtracted");
+        const knowledgeExtractedElement =
+            document.getElementById("knowledgeExtracted");
         const totalEntitiesElement = document.getElementById("totalEntities");
         const totalTopicsElement = document.getElementById("totalTopics");
         const totalActionsElement = document.getElementById("totalActions");
 
         if (knowledgeExtractedElement) {
-            knowledgeExtractedElement.textContent = (indexStats.totalPages || 0).toString();
+            knowledgeExtractedElement.textContent = (
+                indexStats.totalPages || 0
+            ).toString();
         }
         if (totalEntitiesElement) {
-            totalEntitiesElement.textContent = (indexStats.totalEntities || 0).toString();
+            totalEntitiesElement.textContent = (
+                indexStats.totalEntities || 0
+            ).toString();
         }
         if (totalTopicsElement) {
             // Estimate topics from entities (rough approximation)
-            const estimatedTopics = Math.round((indexStats.totalEntities || 0) * 0.6);
+            const estimatedTopics = Math.round(
+                (indexStats.totalEntities || 0) * 0.6,
+            );
             totalTopicsElement.textContent = estimatedTopics.toString();
         }
         if (totalActionsElement) {
-            totalActionsElement.textContent = (indexStats.totalRelationships || 0).toString();
+            totalActionsElement.textContent = (
+                indexStats.totalRelationships || 0
+            ).toString();
         }
 
         // Update knowledge visualization cards with real data
         this.updateKnowledgeVisualizationCards(indexStats);
-        
+
         // Clear placeholder content and load real data or show empty states
         this.clearPlaceholderContent();
-        
+
         // Load and display recent entities and topics
         this.loadRecentKnowledgeItems(indexStats);
     }
 
     private updateKnowledgeVisualizationCards(indexStats: any) {
         // Update total entities metric
-        const totalEntitiesMetric = document.getElementById("totalEntitiesMetric");
+        const totalEntitiesMetric = document.getElementById(
+            "totalEntitiesMetric",
+        );
         if (totalEntitiesMetric) {
-            totalEntitiesMetric.textContent = (indexStats.totalEntities || 0).toString();
+            totalEntitiesMetric.textContent = (
+                indexStats.totalEntities || 0
+            ).toString();
         }
 
         // Update total topics metric (estimate based on entities)
         const totalTopicsMetric = document.getElementById("totalTopicsMetric");
         if (totalTopicsMetric) {
-            const estimatedTopics = Math.round((indexStats.totalEntities || 0) * 0.6);
+            const estimatedTopics = Math.round(
+                (indexStats.totalEntities || 0) * 0.6,
+            );
             totalTopicsMetric.textContent = estimatedTopics.toString();
         }
 
         // Update total actions metric
-        const totalActionsMetric = document.getElementById("totalActionsMetric");
+        const totalActionsMetric =
+            document.getElementById("totalActionsMetric");
         if (totalActionsMetric) {
-            totalActionsMetric.textContent = (indexStats.totalRelationships || 0).toString();
+            totalActionsMetric.textContent = (
+                indexStats.totalRelationships || 0
+            ).toString();
         }
 
         // If we have real data, hide the sample breakdown and show a message about real data
@@ -1670,9 +1692,11 @@ class WebsiteLibraryPanelFullPage {
     private replaceVisualizationSampleData(indexStats: any) {
         // Don't replace the breakdown content here since we'll populate it with recent items
         // Just update the metrics if needed
-        
+
         // Replace the actions breakdown with real data
-        const actionBreakdown = document.querySelector(".knowledge-card.actions .action-breakdown");
+        const actionBreakdown = document.querySelector(
+            ".knowledge-card.actions .action-breakdown",
+        );
         if (actionBreakdown && indexStats.totalRelationships > 0) {
             actionBreakdown.innerHTML = `
                 <div class="action-type">
@@ -1703,15 +1727,15 @@ class WebsiteLibraryPanelFullPage {
         // Update all knowledge metric displays to show zero when no real data is available
         const elements = [
             "knowledgeExtracted",
-            "totalEntities", 
+            "totalEntities",
             "totalTopics",
             "totalActions",
             "totalEntitiesMetric",
-            "totalTopicsMetric", 
-            "totalActionsMetric"
+            "totalTopicsMetric",
+            "totalActionsMetric",
         ];
 
-        elements.forEach(elementId => {
+        elements.forEach((elementId) => {
             const element = document.getElementById(elementId);
             if (element) {
                 element.textContent = "0";
@@ -1721,9 +1745,11 @@ class WebsiteLibraryPanelFullPage {
 
     private clearPlaceholderContent() {
         // Clear placeholder content from the HTML to ensure we only show real data
-        
+
         // Clear entities breakdown placeholder
-        const entitiesBreakdown = document.querySelector(".knowledge-card.entities .knowledge-breakdown");
+        const entitiesBreakdown = document.querySelector(
+            ".knowledge-card.entities .knowledge-breakdown",
+        );
         if (entitiesBreakdown) {
             entitiesBreakdown.innerHTML = `
                 <div class="text-center py-3">
@@ -1736,7 +1762,9 @@ class WebsiteLibraryPanelFullPage {
         }
 
         // Clear topics placeholder
-        const topicCloud = document.querySelector(".knowledge-card.topics .topic-cloud");
+        const topicCloud = document.querySelector(
+            ".knowledge-card.topics .topic-cloud",
+        );
         if (topicCloud) {
             topicCloud.innerHTML = `
                 <div class="text-center py-3">
@@ -1751,7 +1779,7 @@ class WebsiteLibraryPanelFullPage {
 
     private formatDate(dateString: string): string {
         if (!dateString || dateString === "Never") return "Never";
-        
+
         try {
             const date = new Date(dateString);
             return date.toLocaleDateString();
@@ -1765,7 +1793,7 @@ class WebsiteLibraryPanelFullPage {
             const response = await chrome.runtime.sendMessage({
                 type: "getRecentKnowledgeItems",
                 limit: 10,
-                itemType: "both"
+                itemType: "both",
             });
 
             if (response && response.success) {
@@ -1773,7 +1801,9 @@ class WebsiteLibraryPanelFullPage {
                 this.updateRecentTopicsDisplay(response.topics || []);
             } else {
                 // API call succeeded but returned no data or failed
-                console.warn("No recent knowledge items found or API returned failure");
+                console.warn(
+                    "No recent knowledge items found or API returned failure",
+                );
                 this.updateRecentEntitiesDisplay([]);
                 this.updateRecentTopicsDisplay([]);
             }
@@ -1785,8 +1815,17 @@ class WebsiteLibraryPanelFullPage {
         }
     }
 
-    private updateRecentEntitiesDisplay(entities: Array<{ name: string; type: string; fromPage: string; extractedAt: string; }>) {
-        const entitiesBreakdown = document.querySelector(".knowledge-card.entities .knowledge-breakdown");
+    private updateRecentEntitiesDisplay(
+        entities: Array<{
+            name: string;
+            type: string;
+            fromPage: string;
+            extractedAt: string;
+        }>,
+    ) {
+        const entitiesBreakdown = document.querySelector(
+            ".knowledge-card.entities .knowledge-breakdown",
+        );
         if (!entitiesBreakdown) return;
 
         if (entities.length === 0) {
@@ -1799,17 +1838,21 @@ class WebsiteLibraryPanelFullPage {
             return;
         }
 
-        const recentEntitiesList = entities.slice(0, 10).map(entity => {
-            const shortPageTitle = entity.fromPage.length > 30 ? 
-                entity.fromPage.substring(0, 30) + "..." : 
-                entity.fromPage;
-            return `
+        const recentEntitiesList = entities
+            .slice(0, 10)
+            .map((entity) => {
+                const shortPageTitle =
+                    entity.fromPage.length > 30
+                        ? entity.fromPage.substring(0, 30) + "..."
+                        : entity.fromPage;
+                return `
                 <div class="breakdown-item">
                     <span class="breakdown-type" title="${entity.type}">${entity.name}</span>
                     <span class="breakdown-count small text-muted" title="From: ${entity.fromPage}">${shortPageTitle}</span>
                 </div>
             `;
-        }).join('');
+            })
+            .join("");
 
         entitiesBreakdown.innerHTML = `
             <div class="mb-2">
@@ -1822,8 +1865,12 @@ class WebsiteLibraryPanelFullPage {
         `;
     }
 
-    private updateRecentTopicsDisplay(topics: Array<{ name: string; fromPage: string; extractedAt: string; }>) {
-        const topicCloud = document.querySelector(".knowledge-card.topics .topic-cloud");
+    private updateRecentTopicsDisplay(
+        topics: Array<{ name: string; fromPage: string; extractedAt: string }>,
+    ) {
+        const topicCloud = document.querySelector(
+            ".knowledge-card.topics .topic-cloud",
+        );
         if (!topicCloud) return;
 
         if (topics.length === 0) {
@@ -1837,16 +1884,23 @@ class WebsiteLibraryPanelFullPage {
         }
 
         const recentTopics = topics.slice(0, 10);
-        const topicTags = recentTopics.map((topic, index) => {
-            // Vary sizes to create visual interest
-            const sizeClass = index < 3 ? 'size-large' : 
-                             index < 6 ? 'size-medium' : 'size-small';
-            const shortPageTitle = topic.fromPage.length > 30 ? 
-                topic.fromPage.substring(0, 30) + "..." : 
-                topic.fromPage;
-            
-            return `<span class="topic-tag ${sizeClass}" title="From: ${topic.fromPage} (${this.formatDate(topic.extractedAt)})">${topic.name}</span>`;
-        }).join('');
+        const topicTags = recentTopics
+            .map((topic, index) => {
+                // Vary sizes to create visual interest
+                const sizeClass =
+                    index < 3
+                        ? "size-large"
+                        : index < 6
+                          ? "size-medium"
+                          : "size-small";
+                const shortPageTitle =
+                    topic.fromPage.length > 30
+                        ? topic.fromPage.substring(0, 30) + "..."
+                        : topic.fromPage;
+
+                return `<span class="topic-tag ${sizeClass}" title="From: ${topic.fromPage} (${this.formatDate(topic.extractedAt)})">${topic.name}</span>`;
+            })
+            .join("");
 
         topicCloud.innerHTML = `
             <div class="mb-2">
@@ -3166,10 +3220,12 @@ let isInitialized = false;
 // Initialize when DOM is ready - with guard to prevent double initialization
 function initializeLibraryPanel() {
     if (isInitialized) {
-        console.log("Website Library already initialized, skipping duplicate initialization");
+        console.log(
+            "Website Library already initialized, skipping duplicate initialization",
+        );
         return;
     }
-    
+
     isInitialized = true;
     libraryPanelInstance = new WebsiteLibraryPanelFullPage();
     libraryPanelInstance.initialize();

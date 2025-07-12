@@ -58,29 +58,44 @@ interface UnifiedModeInfo {
 
 const MODE_DESCRIPTIONS: Record<string, UnifiedModeInfo> = {
     basic: {
-        description: "Fast metadata extraction without AI - perfect for bulk operations",
+        description:
+            "Fast metadata extraction without AI - perfect for bulk operations",
         requiresAI: false,
         features: ["URL analysis", "Domain classification", "Basic topics"],
-        performance: "Fastest"
+        performance: "Fastest",
     },
     content: {
-        description: "AI-powered content analysis with entity and topic extraction",
+        description:
+            "AI-powered content analysis with entity and topic extraction",
         requiresAI: true,
-        features: ["AI content analysis", "Entity extraction", "Topic identification"],
-        performance: "Fast"
+        features: [
+            "AI content analysis",
+            "Entity extraction",
+            "Topic identification",
+        ],
+        performance: "Fast",
     },
     actions: {
         description: "AI analysis plus interaction detection for dynamic pages",
         requiresAI: true,
-        features: ["AI content analysis", "Action detection", "Interactive elements"],
-        performance: "Medium"
+        features: [
+            "AI content analysis",
+            "Action detection",
+            "Interactive elements",
+        ],
+        performance: "Medium",
     },
     full: {
-        description: "Complete AI analysis with relationships and cross-references",
+        description:
+            "Complete AI analysis with relationships and cross-references",
         requiresAI: true,
-        features: ["Full AI analysis", "Relationship extraction", "Cross-references"],
-        performance: "Thorough"
-    }
+        features: [
+            "Full AI analysis",
+            "Relationship extraction",
+            "Cross-references",
+        ],
+        performance: "Thorough",
+    },
 };
 
 interface QuestionCategory {
@@ -238,11 +253,11 @@ class KnowledgePanel {
             });
 
             if (response.isIndexed) {
-                const lastIndexedDate = response.lastIndexed ? 
-                    new Date(response.lastIndexed).toLocaleDateString() : 
-                    'Unknown';
+                const lastIndexedDate = response.lastIndexed
+                    ? new Date(response.lastIndexed).toLocaleDateString()
+                    : "Unknown";
                 const entityCount = response.entityCount || 0;
-                
+
                 return `
                     <span class="badge bg-success position-relative">
                         <i class="bi bi-check-circle me-1"></i>Indexed
@@ -256,13 +271,13 @@ class KnowledgePanel {
                     </div>
                 `;
             } else {
-                // If not indexed and this is a retry attempt (likely after recent indexing), 
+                // If not indexed and this is a retry attempt (likely after recent indexing),
                 // try once more with a longer delay
                 if (retryCount < 2) {
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    await new Promise((resolve) => setTimeout(resolve, 1000));
                     return this.getPageIndexStatus(retryCount + 1);
                 }
-                
+
                 return `
                     <span class="badge bg-secondary">
                         <i class="bi bi-circle me-1"></i>Not indexed
@@ -296,7 +311,7 @@ class KnowledgePanel {
 
                 const pageInfo = document.getElementById("currentPageInfo")!;
                 const domain = new URL(this.currentUrl).hostname;
-                
+
                 // Force a status check with retry for recent indexing
                 const status = await this.getPageIndexStatus(0);
 
@@ -305,13 +320,16 @@ class KnowledgePanel {
                     domain,
                     status,
                 );
-                
+
                 // Also update the page source info
                 await this.loadPageSourceInfo();
                 this.updatePageSourceDisplay();
             }
         } catch (error) {
-            console.error("Error refreshing page status after indexing:", error);
+            console.error(
+                "Error refreshing page status after indexing:",
+                error,
+            );
         }
     }
 
@@ -348,20 +366,26 @@ class KnowledgePanel {
     }
 
     private async extractKnowledge() {
-        const button = document.getElementById("extractKnowledge") as HTMLButtonElement;
+        const button = document.getElementById(
+            "extractKnowledge",
+        ) as HTMLButtonElement;
         const originalContent = button.innerHTML;
-        
+
         // Show extracting state with progress indicator
-        button.innerHTML = '<i class="bi bi-hourglass-split spinner-grow spinner-grow-sm me-2"></i>Extracting...';
+        button.innerHTML =
+            '<i class="bi bi-hourglass-split spinner-grow spinner-grow-sm me-2"></i>Extracting...';
         button.disabled = true;
-        button.classList.add('btn-warning');
-        button.classList.remove('btn-primary');
+        button.classList.add("btn-warning");
+        button.classList.remove("btn-primary");
 
         this.showKnowledgeLoading();
 
         try {
             // Validate mode selection before extraction
-            if (this.extractionSettings.mode !== 'basic' && !this.aiModelAvailable) {
+            if (
+                this.extractionSettings.mode !== "basic" &&
+                !this.aiModelAvailable
+            ) {
                 this.showAIRequiredError();
                 return;
             }
@@ -380,9 +404,10 @@ class KnowledgePanel {
             this.knowledgeData = response.knowledge;
             if (this.knowledgeData) {
                 // Show success state briefly
-                button.innerHTML = '<i class="bi bi-check-circle me-2"></i>Extracted!';
-                button.classList.remove('btn-warning');
-                button.classList.add('btn-success');
+                button.innerHTML =
+                    '<i class="bi bi-check-circle me-2"></i>Extracted!';
+                button.classList.remove("btn-warning");
+                button.classList.add("btn-success");
 
                 await this.renderKnowledgeResults(this.knowledgeData);
                 await this.cacheKnowledge(this.knowledgeData);
@@ -392,27 +417,29 @@ class KnowledgePanel {
                 // Show detailed success notification
                 const entityCount = this.knowledgeData.entities?.length || 0;
                 const topicCount = this.knowledgeData.keyTopics?.length || 0;
-                const relationshipCount = this.knowledgeData.relationships?.length || 0;
-                
+                const relationshipCount =
+                    this.knowledgeData.relationships?.length || 0;
+
                 this.showEnhancedNotification(
                     "success",
                     "Knowledge Extracted Successfully!",
                     `Found ${entityCount} entities, ${topicCount} topics, ${relationshipCount} relationships using ${this.extractionSettings.mode} mode in ${Math.round(processingTime / 1000)}s`,
-                    "bi-brain"
+                    "bi-brain",
                 );
 
                 // Brief delay to show success state
-                await new Promise(resolve => setTimeout(resolve, 1500));
+                await new Promise((resolve) => setTimeout(resolve, 1500));
             }
         } catch (error) {
             console.error("Error extracting knowledge:", error);
-            
+
             // Show error state
-            button.innerHTML = '<i class="bi bi-exclamation-triangle me-2"></i>Error';
-            button.classList.remove('btn-warning');
-            button.classList.add('btn-danger');
-            
-            if ((error as Error).message?.includes('AI model required')) {
+            button.innerHTML =
+                '<i class="bi bi-exclamation-triangle me-2"></i>Error';
+            button.classList.remove("btn-warning");
+            button.classList.add("btn-danger");
+
+            if ((error as Error).message?.includes("AI model required")) {
                 this.showAIRequiredError();
             } else {
                 this.showKnowledgeError(
@@ -421,19 +448,20 @@ class KnowledgePanel {
                 this.showEnhancedNotification(
                     "danger",
                     "Knowledge Extraction Failed",
-                    (error as Error).message || "Failed to extract knowledge from page",
-                    "bi-exclamation-triangle"
+                    (error as Error).message ||
+                        "Failed to extract knowledge from page",
+                    "bi-exclamation-triangle",
                 );
             }
-            
+
             // Brief delay to show error state
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise((resolve) => setTimeout(resolve, 1000));
         } finally {
             // Restore original button state
             button.innerHTML = originalContent;
             button.disabled = false;
-            button.classList.remove('btn-warning', 'btn-success', 'btn-danger');
-            button.classList.add('btn-primary');
+            button.classList.remove("btn-warning", "btn-success", "btn-danger");
+            button.classList.add("btn-primary");
         }
     }
 
@@ -444,20 +472,24 @@ class KnowledgePanel {
         const originalContent = button.innerHTML;
 
         // Show indexing state with progress indicator
-        button.innerHTML = '<i class="bi bi-hourglass-split spinner-grow spinner-grow-sm me-2"></i>Indexing...';
+        button.innerHTML =
+            '<i class="bi bi-hourglass-split spinner-grow spinner-grow-sm me-2"></i>Indexing...';
         button.disabled = true;
-        button.classList.add('btn-warning');
-        button.classList.remove('btn-outline-primary');
+        button.classList.add("btn-warning");
+        button.classList.remove("btn-outline-primary");
 
         try {
             // Validate mode selection before indexing
-            if (this.extractionSettings.mode !== 'basic' && !this.aiModelAvailable) {
+            if (
+                this.extractionSettings.mode !== "basic" &&
+                !this.aiModelAvailable
+            ) {
                 this.showAIRequiredError();
                 return;
             }
 
             const startTime = Date.now();
-            
+
             const response = await chrome.runtime.sendMessage({
                 type: "indexPageContentDirect",
                 url: this.currentUrl,
@@ -467,9 +499,10 @@ class KnowledgePanel {
             const processingTime = Date.now() - startTime;
 
             // Show success state briefly
-            button.innerHTML = '<i class="bi bi-check-circle me-2"></i>Indexed!';
-            button.classList.remove('btn-warning');
-            button.classList.add('btn-success');
+            button.innerHTML =
+                '<i class="bi bi-check-circle me-2"></i>Indexed!';
+            button.classList.remove("btn-warning");
+            button.classList.add("btn-success");
 
             // Show detailed success notification
             const entityCount = response.entityCount || 0;
@@ -477,44 +510,44 @@ class KnowledgePanel {
                 "success",
                 "Page Indexed Successfully!",
                 `Extracted ${entityCount} entities using ${this.extractionSettings.mode} mode in ${Math.round(processingTime / 1000)}s`,
-                "bi-database-check"
+                "bi-database-check",
             );
 
             // Brief delay to show success state and allow backend to update
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            await new Promise((resolve) => setTimeout(resolve, 1500));
 
             // Update all relevant UI components after the delay to ensure backend has processed
             await this.refreshPageStatusAfterIndexing();
             await this.loadIndexStats();
             await this.updateQualityIndicator();
-
         } catch (error) {
             console.error("Error indexing page:", error);
-            
+
             // Show error state
-            button.innerHTML = '<i class="bi bi-exclamation-triangle me-2"></i>Error';
-            button.classList.remove('btn-warning');
-            button.classList.add('btn-danger');
-            
-            if ((error as Error).message?.includes('AI model required')) {
+            button.innerHTML =
+                '<i class="bi bi-exclamation-triangle me-2"></i>Error';
+            button.classList.remove("btn-warning");
+            button.classList.add("btn-danger");
+
+            if ((error as Error).message?.includes("AI model required")) {
                 this.showAIRequiredError();
             } else {
                 this.showEnhancedNotification(
-                    "danger", 
+                    "danger",
                     "Indexing Failed",
                     (error as Error).message || "Failed to index page",
-                    "bi-exclamation-triangle"
+                    "bi-exclamation-triangle",
                 );
             }
-            
+
             // Brief delay to show error state
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            await new Promise((resolve) => setTimeout(resolve, 2000));
         } finally {
             // Restore original button state
             button.innerHTML = originalContent;
             button.disabled = false;
-            button.classList.remove('btn-warning', 'btn-success', 'btn-danger');
-            button.classList.add('btn-outline-primary');
+            button.classList.remove("btn-warning", "btn-success", "btn-danger");
+            button.classList.add("btn-outline-primary");
         }
     }
 
@@ -1364,12 +1397,6 @@ class KnowledgePanel {
         }
     }
 
-
-
-
-
-
-
     private async loadExtractionSettings() {
         try {
             const settings = await chrome.storage.sync.get([
@@ -1381,7 +1408,9 @@ class KnowledgePanel {
                     ...settings.extractionSettings,
                 };
                 // Sync with modern dropdown
-                const modernSelect = document.getElementById("extractionMode") as HTMLSelectElement;
+                const modernSelect = document.getElementById(
+                    "extractionMode",
+                ) as HTMLSelectElement;
                 if (modernSelect && this.extractionSettings.mode) {
                     modernSelect.value = this.extractionSettings.mode;
                 }
@@ -1551,12 +1580,15 @@ class KnowledgePanel {
                 this.knowledgeData = response.knowledge;
                 if (this.knowledgeData) {
                     await this.renderKnowledgeResults(this.knowledgeData);
-                    
+
                     // Show indicator that this is indexed knowledge
                     this.showIndexedKnowledgeIndicator();
                 }
             } else if (response.error) {
-                console.warn("Error loading indexed knowledge:", response.error);
+                console.warn(
+                    "Error loading indexed knowledge:",
+                    response.error,
+                );
                 // Fall back to local cache or show empty state
                 await this.loadCachedKnowledgeFromStorage();
             }
@@ -1587,14 +1619,17 @@ class KnowledgePanel {
                 questionsSection.className = "knowledge-card card d-none";
             }
         } catch (error) {
-            console.error("Error loading cached knowledge from storage:", error);
+            console.error(
+                "Error loading cached knowledge from storage:",
+                error,
+            );
         }
     }
 
     private showIndexedKnowledgeIndicator() {
         const knowledgeSection = document.getElementById("knowledgeSection")!;
         const firstCard = knowledgeSection.querySelector(".knowledge-card");
-        
+
         if (firstCard) {
             const indicatorDiv = document.createElement("div");
             indicatorDiv.className = "alert alert-info mt-2";
@@ -1609,7 +1644,7 @@ class KnowledgePanel {
                     </div>
                 </small>
             `;
-            
+
             knowledgeSection.insertBefore(indicatorDiv, firstCard);
         }
     }
@@ -1660,7 +1695,7 @@ class KnowledgePanel {
         type: "success" | "danger" | "info" | "warning",
         title: string,
         message: string,
-        icon: string = "bi-info-circle"
+        icon: string = "bi-info-circle",
     ) {
         const notification = document.createElement("div");
         notification.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
@@ -1674,7 +1709,7 @@ class KnowledgePanel {
             border: none;
             border-radius: 8px;
         `;
-        
+
         notification.innerHTML = `
             <div class="d-flex align-items-start">
                 <i class="${icon} me-3 mt-1" style="font-size: 1.2rem;"></i>
@@ -1685,13 +1720,13 @@ class KnowledgePanel {
                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             </div>
         `;
-        
+
         document.body.appendChild(notification);
-        
+
         // Auto-remove after 6 seconds for enhanced notifications
         setTimeout(() => {
             if (notification.parentNode) {
-                notification.classList.remove('show');
+                notification.classList.remove("show");
                 setTimeout(() => {
                     if (notification.parentNode) {
                         notification.parentNode.removeChild(notification);
@@ -1848,8 +1883,6 @@ class KnowledgePanel {
     }
 
     // Template utility functions for knowledge panel
-
-
 
     private createPageInfo(
         title: string,
@@ -3331,9 +3364,11 @@ class KnowledgePanel {
 
     // === NEW UNIFIED MODE METHODS ===
 
-    private updateExtractionMode(mode: "basic" | "content" | "actions" | "full") {
+    private updateExtractionMode(
+        mode: "basic" | "content" | "actions" | "full",
+    ) {
         this.extractionSettings.mode = mode;
-        
+
         this.updateModeDescription(mode);
         this.updateAIStatusDisplay();
         this.saveExtractionSettings();
@@ -3342,7 +3377,7 @@ class KnowledgePanel {
     private updateModeDescription(mode: string) {
         const descriptionElement = document.getElementById("modeDescription");
         const modeInfo = MODE_DESCRIPTIONS[mode];
-        
+
         if (descriptionElement && modeInfo) {
             descriptionElement.innerHTML = `
                 <div class="mode-description">
@@ -3361,11 +3396,12 @@ class KnowledgePanel {
     private updateAIStatusDisplay() {
         const statusElement = document.getElementById("aiModelStatus");
         const messageElement = document.getElementById("aiStatusMessage");
-        
+
         if (!statusElement || !messageElement) return;
 
-        const requiresAI = MODE_DESCRIPTIONS[this.extractionSettings.mode]?.requiresAI;
-        
+        const requiresAI =
+            MODE_DESCRIPTIONS[this.extractionSettings.mode]?.requiresAI;
+
         // Only show AI status notification when there's an error (AI required but not available)
         if (requiresAI && !this.aiModelAvailable) {
             statusElement.classList.remove("d-none");
@@ -3382,12 +3418,12 @@ class KnowledgePanel {
 
     private async checkAIModelAvailability() {
         // Don't show checking notification - keep it hidden by default
-        
+
         try {
             const response = await chrome.runtime.sendMessage({
-                type: "checkAIModelAvailability"
+                type: "checkAIModelAvailability",
             });
-            
+
             this.aiModelAvailable = response.available || false;
         } catch (error) {
             console.warn("Could not check AI model availability:", error);
@@ -3421,7 +3457,9 @@ class KnowledgePanel {
         `;
 
         (window as any).switchToBasicMode = () => {
-            const modeSelect = document.getElementById("extractionMode") as HTMLSelectElement;
+            const modeSelect = document.getElementById(
+                "extractionMode",
+            ) as HTMLSelectElement;
             modeSelect.value = "basic";
             this.updateExtractionMode("basic");
             knowledgeSection.innerHTML = "";
@@ -3433,16 +3471,16 @@ class KnowledgePanel {
         try {
             const response = await chrome.runtime.sendMessage({
                 type: "getPageQualityMetrics",
-                url: this.currentUrl
+                url: this.currentUrl,
             });
 
             const indicator = document.getElementById("qualityIndicator");
             if (indicator && response.quality) {
                 const quality = response.quality;
-                
+
                 let qualityClass = "bg-secondary";
                 let qualityText = "Unknown";
-                
+
                 if (quality.score >= 0.8) {
                     qualityClass = "quality-excellent";
                     qualityText = "Excellent";
@@ -3456,7 +3494,7 @@ class KnowledgePanel {
                     qualityClass = "quality-poor";
                     qualityText = "Poor";
                 }
-                
+
                 indicator.className = `badge ${qualityClass}`;
                 indicator.textContent = qualityText;
                 indicator.title = `Quality Score: ${Math.round(quality.score * 100)}% • ${quality.entityCount} entities • ${quality.topicCount} topics`;
@@ -3470,7 +3508,7 @@ class KnowledgePanel {
         try {
             await chrome.storage.sync.set({
                 extractionMode: this.extractionSettings.mode,
-                suggestQuestions: this.extractionSettings.suggestQuestions
+                suggestQuestions: this.extractionSettings.suggestQuestions,
             });
         } catch (error) {
             console.warn("Could not save extraction settings:", error);

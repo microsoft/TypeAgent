@@ -121,8 +121,13 @@
       }
 
       @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.5; }
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
       }
 
       .progress-container {
@@ -168,20 +173,38 @@
       }
 
       @keyframes pulse-success {
-        0% { transform: scale(1); }
-        50% { transform: scale(1.05); background-color: #28a745; }
-        100% { transform: scale(1); }
+        0% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.05);
+          background-color: #28a745;
+        }
+        100% {
+          transform: scale(1);
+        }
       }
 
       @keyframes pulse-error {
-        0% { transform: scale(1); }
-        50% { transform: scale(1.05); background-color: #dc3545; }
-        100% { transform: scale(1); }
+        0% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.05);
+          background-color: #dc3545;
+        }
+        100% {
+          transform: scale(1);
+        }
       }
 
       @keyframes pulse-warning {
-        0% { opacity: 0.8; }
-        100% { opacity: 1; }
+        0% {
+          opacity: 0.8;
+        }
+        100% {
+          opacity: 1;
+        }
       }
 
       /* Enhanced notification styling */
@@ -386,7 +409,9 @@
           <div id="aiModelStatus" class="mb-3 d-none">
             <div class="alert alert-warning alert-sm p-2 mb-0">
               <i class="bi bi-exclamation-triangle me-2"></i>
-              <span id="aiStatusMessage">Checking AI model availability...</span>
+              <span id="aiStatusMessage"
+                >Checking AI model availability...</span
+              >
             </div>
           </div>
 
@@ -512,7 +537,9 @@
           <div class="mt-3">
             <div class="d-flex justify-content-between align-items-center mb-2">
               <small class="text-muted">Knowledge Quality</small>
-              <div id="qualityIndicator" class="badge bg-secondary">Unknown</div>
+              <div id="qualityIndicator" class="badge bg-secondary">
+                Unknown
+              </div>
             </div>
 
             <button

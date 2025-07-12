@@ -36,13 +36,13 @@ export class WebsiteImportUI {
      */
     public showWebActivityImportModal(): void {
         this.hideActiveModal();
-        
+
         // Only create modal if it doesn't exist to prevent duplicate event listeners
         const existingModal = document.getElementById(this.webActivityModalId);
         if (!existingModal) {
             this.createWebActivityModal();
         }
-        
+
         this.showModal(this.webActivityModalId);
         this.activeModal = this.webActivityModalId;
     }
@@ -52,13 +52,13 @@ export class WebsiteImportUI {
      */
     public showFolderImportModal(): void {
         this.hideActiveModal();
-        
+
         // Only create modal if it doesn't exist to prevent duplicate event listeners
         const existingModal = document.getElementById(this.folderImportModalId);
         if (!existingModal) {
             this.createFolderImportModal();
         }
-        
+
         this.showModal(this.folderImportModalId);
         this.activeModal = this.folderImportModalId;
     }
@@ -1155,7 +1155,7 @@ export class WebsiteImportUI {
             // Clone the button to remove any existing event listeners
             const newStartButton = startButton.cloneNode(true) as HTMLElement;
             startButton.replaceWith(newStartButton);
-            
+
             newStartButton.addEventListener("click", () => {
                 const options = this.getWebActivityImportOptions();
                 if (options) {
@@ -1302,7 +1302,7 @@ export class WebsiteImportUI {
             // Clone the button to remove any existing event listeners
             const newStartButton = startButton.cloneNode(true) as HTMLElement;
             startButton.replaceWith(newStartButton);
-            
+
             newStartButton.addEventListener("click", () => {
                 const options = this.getFolderImportOptions();
                 if (options) {
