@@ -55,6 +55,40 @@ interface ExtractionSettings {
     quality: "fast" | "balanced" | "deep";
 }
 
+interface UnifiedModeInfo {
+    description: string;
+    requiresAI: boolean;
+    features: string[];
+    performance: string;
+}
+
+const MODE_DESCRIPTIONS: Record<string, UnifiedModeInfo> = {
+    basic: {
+        description: "Fast metadata extraction without AI - perfect for bulk operations",
+        requiresAI: false,
+        features: ["URL analysis", "Domain classification", "Basic topics"],
+        performance: "Fastest"
+    },
+    content: {
+        description: "AI-powered content analysis with entity and topic extraction",
+        requiresAI: true,
+        features: ["AI content analysis", "Entity extraction", "Topic identification"],
+        performance: "Fast"
+    },
+    actions: {
+        description: "AI analysis plus interaction detection for dynamic pages",
+        requiresAI: true,
+        features: ["AI content analysis", "Action detection", "Interactive elements"],
+        performance: "Medium"
+    },
+    full: {
+        description: "Complete AI analysis with relationships and cross-references",
+        requiresAI: true,
+        features: ["Full AI analysis", "Relationship extraction", "Cross-references"],
+        performance: "Thorough"
+    }
+};
+
 interface QuestionCategory {
     name: string;
     icon: string;
@@ -95,12 +129,13 @@ class KnowledgePanel {
     private knowledgeData: KnowledgeData | null = null;
     private pageSourceInfo: PageSourceInfo | null = null;
     private extractionSettings: ExtractionSettings;
+    private aiModelAvailable: boolean = false;
 
     constructor() {
         this.extractionSettings = {
-            mode: "full",
+            mode: "content",
             enableIntelligentAnalysis: true,
-            enableActionDetection: true,
+            enableActionDetection: false,
             suggestQuestions: true,
             quality: "balanced",
         };
@@ -118,8 +153,9 @@ class KnowledgePanel {
         await this.loadCachedKnowledge();
         this.setupExtractionModeControls();
         await this.loadExtractionSettings();
+        await this.checkAIModelAvailability();
+        await this.checkMigrationStatus();
 
-        // Setup advanced query controls
         this.setupAdvancedQueryControls();
     }
 
@@ -160,6 +196,22 @@ class KnowledgePanel {
             .addEventListener("click", () => {
                 chrome.runtime.openOptionsPage();
             });
+
+        // Unified mode selection
+        document
+            .getElementById("extractionMode")!
+            .addEventListener("change", (e) => {
+                const select = e.target as HTMLSelectElement;
+                this.updateExtractionMode(select.value as any);
+            });
+
+        // Enhanced knowledge button
+        const enhanceBtn = document.getElementById("enhanceKnowledge");
+        if (enhanceBtn) {
+            enhanceBtn.addEventListener("click", () => {
+                this.enhancePageKnowledge();
+            });
+        }
 
         chrome.tabs.onActivated.addListener(() => {
             this.onTabChange();
@@ -250,9 +302,16 @@ class KnowledgePanel {
         this.showKnowledgeLoading();
 
         try {
+            // Validate mode selection before extraction
+            if (this.extractionSettings.mode !== 'basic' && !this.aiModelAvailable) {
+                this.showAIRequiredError();
+                return;
+            }
+
             const response = await chrome.runtime.sendMessage({
                 type: "extractPageKnowledge",
                 url: this.currentUrl,
+                mode: this.extractionSettings.mode,
                 extractionSettings: this.extractionSettings,
             });
 
@@ -261,6 +320,7 @@ class KnowledgePanel {
                 await this.renderKnowledgeResults(this.knowledgeData);
                 await this.cacheKnowledge(this.knowledgeData);
                 this.showExtractionInfo();
+                await this.updateQualityIndicator();
             }
 
             this.showTemporaryStatus(
@@ -269,9 +329,13 @@ class KnowledgePanel {
             );
         } catch (error) {
             console.error("Error extracting knowledge:", error);
-            this.showKnowledgeError(
-                "Failed to extract knowledge. Please check your connection.",
-            );
+            if ((error as Error).message?.includes('AI model required')) {
+                this.showAIRequiredError();
+            } else {
+                this.showKnowledgeError(
+                    "Failed to extract knowledge. Please check your connection.",
+                );
+            }
         }
     }
 
@@ -285,18 +349,33 @@ class KnowledgePanel {
         button.disabled = true;
 
         try {
+            // Validate mode selection before indexing
+            if (this.extractionSettings.mode !== 'basic' && !this.aiModelAvailable) {
+                this.showAIRequiredError();
+                return;
+            }
+
             await chrome.runtime.sendMessage({
                 type: "indexPageContentDirect",
                 url: this.currentUrl,
+                mode: this.extractionSettings.mode,
             });
 
             await this.loadCurrentPageInfo();
             await this.loadIndexStats();
+            await this.updateQualityIndicator();
 
-            this.showTemporaryStatus("Page indexed successfully!", "success");
+            this.showTemporaryStatus(
+                `Page indexed successfully using ${this.extractionSettings.mode} mode!`, 
+                "success"
+            );
         } catch (error) {
             console.error("Error indexing page:", error);
-            this.showTemporaryStatus("Failed to index page", "danger");
+            if ((error as Error).message?.includes('AI model required')) {
+                this.showAIRequiredError();
+            } else {
+                this.showTemporaryStatus("Failed to index page", "danger");
+            }
         } finally {
             button.innerHTML = originalContent;
             button.disabled = false;
@@ -1212,16 +1291,6 @@ class KnowledgePanel {
             }
         } catch (error) {
             console.error("Error loading extraction settings:", error);
-        }
-    }
-
-    private async saveExtractionSettings() {
-        try {
-            await chrome.storage.sync.set({
-                extractionSettings: this.extractionSettings,
-            });
-        } catch (error) {
-            console.error("Error saving extraction settings:", error);
         }
     }
 
@@ -3300,6 +3369,222 @@ class KnowledgePanel {
             labels[type] ||
             type.replace("_", " ").replace(/\b\w/g, (l) => l.toUpperCase())
         );
+    }
+
+    // === NEW UNIFIED MODE METHODS ===
+
+    private updateExtractionMode(mode: "basic" | "content" | "actions" | "full") {
+        this.extractionSettings.mode = mode;
+        this.extractionSettings.enableIntelligentAnalysis = mode !== 'basic';
+        this.extractionSettings.enableActionDetection = mode === 'actions' || mode === 'full';
+        
+        this.updateModeDescription(mode);
+        this.updateAIStatusDisplay();
+        this.saveExtractionSettings();
+    }
+
+    private updateModeDescription(mode: string) {
+        const descriptionElement = document.getElementById("modeDescription");
+        const modeInfo = MODE_DESCRIPTIONS[mode];
+        
+        if (descriptionElement && modeInfo) {
+            descriptionElement.innerHTML = `
+                <div class="mode-description">
+                    ${modeInfo.description}
+                    <div class="mt-1">
+                        <small class="text-muted">
+                            <i class="bi bi-cpu me-1"></i>${modeInfo.performance}
+                            ${modeInfo.requiresAI ? ' • <i class="bi bi-robot me-1"></i>Requires AI' : ' • <i class="bi bi-lightning me-1"></i>No AI needed'}
+                        </small>
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    private updateAIStatusDisplay() {
+        const statusElement = document.getElementById("aiModelStatus");
+        const messageElement = document.getElementById("aiStatusMessage");
+        
+        if (!statusElement || !messageElement) return;
+
+        const requiresAI = MODE_DESCRIPTIONS[this.extractionSettings.mode]?.requiresAI;
+        
+        if (requiresAI) {
+            statusElement.classList.remove("d-none");
+            
+            if (this.aiModelAvailable) {
+                statusElement.className = "mb-3 alert alert-success alert-sm p-2";
+                messageElement.innerHTML = `
+                    <span class="ai-status-indicator ai-available"></span>
+                    AI model available - ${this.extractionSettings.mode} mode ready
+                `;
+            } else {
+                statusElement.className = "mb-3 alert alert-warning alert-sm p-2";
+                messageElement.innerHTML = `
+                    <span class="ai-status-indicator ai-unavailable"></span>
+                    AI model required but not available. Please configure AI model or use Basic mode.
+                `;
+            }
+        } else {
+            statusElement.classList.add("d-none");
+        }
+    }
+
+    private async checkAIModelAvailability() {
+        const statusElement = document.getElementById("aiModelStatus");
+        const messageElement = document.getElementById("aiStatusMessage");
+        
+        if (statusElement && messageElement) {
+            statusElement.classList.remove("d-none");
+            statusElement.className = "mb-3 alert alert-info alert-sm p-2";
+            messageElement.innerHTML = `
+                <span class="ai-status-indicator ai-checking"></span>
+                Checking AI model availability...
+            `;
+        }
+
+        try {
+            const response = await chrome.runtime.sendMessage({
+                type: "checkAIModelAvailability"
+            });
+            
+            this.aiModelAvailable = response.available || false;
+        } catch (error) {
+            console.warn("Could not check AI model availability:", error);
+            this.aiModelAvailable = false;
+        }
+
+        this.updateAIStatusDisplay();
+    }
+
+    private showAIRequiredError() {
+        const knowledgeSection = document.getElementById("knowledgeSection")!;
+        knowledgeSection.className = "";
+        knowledgeSection.innerHTML = `
+            <div class="knowledge-card card">
+                <div class="card-body text-center">
+                    <i class="bi bi-robot text-warning h3"></i>
+                    <h6 class="mt-2">AI Model Required</h6>
+                    <p class="text-muted mb-3">
+                        The <strong>${this.extractionSettings.mode}</strong> mode requires an AI model for analysis.
+                    </p>
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-primary btn-sm" onclick="switchToBasicMode()">
+                            <i class="bi bi-lightning me-2"></i>Switch to Basic Mode
+                        </button>
+                        <button class="btn btn-outline-secondary btn-sm" onclick="chrome.runtime.openOptionsPage()">
+                            <i class="bi bi-gear me-2"></i>Configure AI Model
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        (window as any).switchToBasicMode = () => {
+            const modeSelect = document.getElementById("extractionMode") as HTMLSelectElement;
+            modeSelect.value = "basic";
+            this.updateExtractionMode("basic");
+            knowledgeSection.innerHTML = "";
+            knowledgeSection.classList.add("d-none");
+        };
+    }
+
+    private async checkMigrationStatus() {
+        try {
+            const response = await chrome.runtime.sendMessage({
+                type: "detectMigrationCandidates",
+                url: this.currentUrl
+            });
+
+            const migrationElement = document.getElementById("migrationStatus");
+            if (migrationElement && response.needsMigration) {
+                migrationElement.classList.remove("d-none");
+            }
+        } catch (error) {
+            console.warn("Could not check migration status:", error);
+        }
+    }
+
+    private async enhancePageKnowledge() {
+        const button = document.getElementById("enhanceKnowledge") as HTMLButtonElement;
+        const originalContent = button.innerHTML;
+        
+        button.innerHTML = '<i class="bi bi-arrow-up-circle"></i> Enhancing...';
+        button.disabled = true;
+
+        try {
+            await chrome.runtime.sendMessage({
+                type: "migratePageKnowledge",
+                url: this.currentUrl,
+                mode: "content"
+            });
+
+            await this.loadCurrentPageInfo();
+            await this.updateQualityIndicator();
+            
+            const migrationElement = document.getElementById("migrationStatus");
+            if (migrationElement) {
+                migrationElement.classList.add("d-none");
+            }
+
+            this.showTemporaryStatus("Knowledge enhanced successfully!", "success");
+        } catch (error) {
+            console.error("Error enhancing knowledge:", error);
+            this.showTemporaryStatus("Failed to enhance knowledge", "danger");
+        } finally {
+            button.innerHTML = originalContent;
+            button.disabled = false;
+        }
+    }
+
+    private async updateQualityIndicator() {
+        try {
+            const response = await chrome.runtime.sendMessage({
+                type: "getPageQualityMetrics",
+                url: this.currentUrl
+            });
+
+            const indicator = document.getElementById("qualityIndicator");
+            if (indicator && response.quality) {
+                const quality = response.quality;
+                
+                let qualityClass = "bg-secondary";
+                let qualityText = "Unknown";
+                
+                if (quality.score >= 0.8) {
+                    qualityClass = "quality-excellent";
+                    qualityText = "Excellent";
+                } else if (quality.score >= 0.6) {
+                    qualityClass = "quality-good";
+                    qualityText = "Good";
+                } else if (quality.score >= 0.4) {
+                    qualityClass = "quality-basic";
+                    qualityText = "Basic";
+                } else {
+                    qualityClass = "quality-poor";
+                    qualityText = "Poor";
+                }
+                
+                indicator.className = `badge ${qualityClass}`;
+                indicator.textContent = qualityText;
+                indicator.title = `Quality Score: ${Math.round(quality.score * 100)}% • ${quality.entityCount} entities • ${quality.topicCount} topics`;
+            }
+        } catch (error) {
+            console.warn("Could not get quality metrics:", error);
+        }
+    }
+
+    private async saveExtractionSettings() {
+        try {
+            await chrome.storage.sync.set({
+                extractionMode: this.extractionSettings.mode,
+                enableIntelligentAnalysis: this.extractionSettings.enableIntelligentAnalysis,
+                enableActionDetection: this.extractionSettings.enableActionDetection
+            });
+        } catch (error) {
+            console.warn("Could not save extraction settings:", error);
+        }
     }
 }
 

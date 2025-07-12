@@ -139,7 +139,9 @@ export type ImportWebsiteData = {
         days?: number;
         // Specific bookmark folder to import (for bookmarks)
         folder?: string;
-        // Enhancement options
+        // Unified extraction mode
+        mode?: "basic" | "content" | "actions" | "full";
+        // Legacy parameters (mapped to unified mode)
         extractContent?: boolean;
         enableIntelligentAnalysis?: boolean;
         enableActionDetection?: boolean;
@@ -157,6 +159,9 @@ export type ImportHtmlFolder = {
         folderPath: string;
         // Import options
         options?: {
+            // Unified extraction mode
+            mode?: "basic" | "content" | "actions" | "full";
+            // Legacy parameters (mapped to unified mode)
             extractContent?: boolean;
             enableIntelligentAnalysis?: boolean;
             enableActionDetection?: boolean;

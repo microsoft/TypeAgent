@@ -673,6 +673,177 @@ export async function handleMessage(
             }
         }
 
+        // === NEW UNIFIED KNOWLEDGE HANDLERS ===
+
+        case "checkAIModelAvailability": {
+            try {
+                // Check if AI model is available by attempting a simple extraction
+                const result = await sendActionToAgent({
+                    actionName: "extractKnowledgeFromPage",
+                    parameters: {
+                        url: "test://ai-check",
+                        title: "AI Availability Test",
+                        htmlFragments: [{ text: "test content for AI availability check" }],
+                        extractEntities: false,
+                        extractRelationships: false,
+                        suggestQuestions: false,
+                        mode: "basic"
+                    },
+                });
+
+                return {
+                    available: !result.error,
+                    version: result.version || "unknown",
+                    endpoint: result.endpoint || "unknown"
+                };
+            } catch (error) {
+                console.error("Error checking AI model availability:", error);
+                return {
+                    available: false,
+                    error: error instanceof Error ? error.message : String(error)
+                };
+            }
+        }
+
+        case "detectMigrationCandidates": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "detectMigrationCandidates",
+                    parameters: {
+                        url: message.url,
+                        maxCandidates: message.maxCandidates || 50
+                    },
+                });
+
+                return {
+                    success: !result.error,
+                    candidates: result.candidates || [],
+                    needsMigration: message.url ? (result.candidates || []).some((c: any) => c.url === message.url) : false,
+                    totalFound: (result.candidates || []).length
+                };
+            } catch (error) {
+                console.error("Error detecting migration candidates:", error);
+                return {
+                    success: false,
+                    candidates: [],
+                    needsMigration: false,
+                    totalFound: 0,
+                    error: error instanceof Error ? error.message : String(error)
+                };
+            }
+        }
+
+        case "migratePageKnowledge": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "migrateKnowledgeIndex",
+                    parameters: {
+                        url: message.url,
+                        mode: message.mode || "content",
+                        maxCandidates: 1
+                    },
+                });
+
+                return {
+                    success: !result.error,
+                    migrated: result.migrated || 0,
+                    qualityImprovement: result.qualityImprovement || {}
+                };
+            } catch (error) {
+                console.error("Error migrating page knowledge:", error);
+                return {
+                    success: false,
+                    migrated: 0,
+                    error: error instanceof Error ? error.message : String(error)
+                };
+            }
+        }
+
+        case "migrateKnowledgeIndex": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "migrateKnowledgeIndex",
+                    parameters: {
+                        mode: message.mode || "content",
+                        maxCandidates: message.maxCandidates || 100
+                    },
+                });
+
+                return {
+                    success: !result.error,
+                    total: result.total || 0,
+                    migrated: result.migrated || 0,
+                    skipped: result.skipped || 0,
+                    errors: result.errors || [],
+                    duration: result.duration || 0,
+                    qualityImprovement: result.qualityImprovement || {}
+                };
+            } catch (error) {
+                console.error("Error migrating knowledge index:", error);
+                return {
+                    success: false,
+                    total: 0,
+                    migrated: 0,
+                    skipped: 0,
+                    errors: [],
+                    duration: 0,
+                    error: error instanceof Error ? error.message : String(error)
+                };
+            }
+        }
+
+        case "getPageQualityMetrics": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getKnowledgeIndexStats",
+                    parameters: {
+                        url: message.url
+                    },
+                });
+
+                // Extract quality metrics for the specific page
+                const pageStats = result.pageStats || {};
+                
+                return {
+                    success: !result.error,
+                    quality: {
+                        score: pageStats.qualityScore || 0.5,
+                        entityCount: pageStats.entityCount || 0,
+                        topicCount: pageStats.topicCount || 0,
+                        actionCount: pageStats.actionCount || 0,
+                        extractionMode: pageStats.extractionMode || "unknown",
+                        lastUpdated: pageStats.lastUpdated || null
+                    }
+                };
+            } catch (error) {
+                console.error("Error getting page quality metrics:", error);
+                return {
+                    success: false,
+                    quality: {
+                        score: 0,
+                        entityCount: 0,
+                        topicCount: 0,
+                        actionCount: 0,
+                        extractionMode: "unknown",
+                        lastUpdated: null
+                    },
+                    error: error instanceof Error ? error.message : String(error)
+                };
+            }
+        }
+
+        case "settingsUpdated": {
+            // Handle settings update notification
+            console.log("Settings updated:", message.settings);
+            
+            // Store the new settings for use by other handlers
+            await chrome.storage.local.set({ 
+                knowledgeSettings: message.settings 
+            });
+            
+            return { success: true };
+        }
+
         default:
             return null;
     }

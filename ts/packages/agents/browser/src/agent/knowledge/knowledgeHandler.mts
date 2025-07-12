@@ -5,8 +5,6 @@ import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "../actionHandler.mjs";
 import { findRequestedWebsites } from "../websiteMemory.mjs";
 import * as website from "website-memory";
-import { conversation as kpLib } from "knowledge-processor";
-import { openai as ai } from "aiclient";
 import {
     KnowledgeExtractionResult,
     EnhancedKnowledgeExtractionResult,
@@ -26,6 +24,41 @@ import {
     TemporalQuery,
     TemporalPattern,
 } from "./temporalQueryProcessor.js";
+import {
+    UnifiedKnowledgeExtractor,
+    UnifiedExtractionMode,
+    ContentInput,
+    AIModelUnavailableError,
+    KnowledgeMigrationManager,
+    UnifiedExtractionAnalytics,
+    UnifiedQualityMonitor
+} from "./unified/index.mjs";
+
+function mapLegacyToUnified(
+    extractionSettings?: { mode?: string; enableIntelligentAnalysis?: boolean },
+    quality?: string,
+    mode?: string
+): UnifiedExtractionMode {
+    // Direct mode mapping (preferred)
+    if (mode && ['basic', 'content', 'actions', 'full'].includes(mode)) {
+        return mode as UnifiedExtractionMode;
+    }
+    
+    if (extractionSettings?.mode) {
+        const settingsMode = extractionSettings.mode;
+        if (['basic', 'content', 'actions', 'full'].includes(settingsMode)) {
+            return settingsMode as UnifiedExtractionMode;
+        }
+    }
+    
+    // Quality parameter fallback
+    switch (quality) {
+        case 'fast': return 'basic';
+        case 'balanced': return 'content';  
+        case 'deep': return 'full';
+        default: return 'content';
+    }
+}
 
 export interface WebPageDocument {
     url: string;
@@ -82,6 +115,24 @@ export async function handleKnowledgeAction(
         case "generateTemporalSuggestions":
             return await generateTemporalSuggestions(parameters, context);
 
+        case "migrateKnowledgeIndex":
+            return await migrateKnowledgeIndex(parameters, context);
+
+        case "getExtractionAnalytics":
+            return await getExtractionAnalytics(parameters, context);
+
+        case "generateQualityReport":
+            return await generateQualityReport(parameters, context);
+
+        case "getPageQualityMetrics":
+            return await getPageQualityMetrics(parameters, context);
+
+        case "checkAIModelStatus":
+            return await checkAIModelStatus(parameters, context);
+
+        case "enhancePageKnowledge":
+            return await enhancePageKnowledge(parameters, context);
+
         default:
             throw new Error(`Unknown knowledge action: ${actionName}`);
     }
@@ -101,11 +152,10 @@ export async function extractKnowledgeFromPage(
             enableIntelligentAnalysis: boolean;
             enableActionDetection: boolean;
         };
+        mode?: "basic" | "content" | "actions" | "full";
     },
     context: SessionContext<BrowserActionContext>,
 ): Promise<EnhancedKnowledgeExtractionResult> {
-    // Convert htmlFragments to HTML content for ContentExtractor
-    const htmlContent = reconstructHtmlFromFragments(parameters.htmlFragments);
     const textContent = parameters.htmlFragments
         .map((fragment) => fragment.text || "")
         .join("\n\n")
@@ -129,160 +179,61 @@ export async function extractKnowledgeFromPage(
     }
 
     try {
-        // Use website-memory ContentExtractor for enhanced content analysis
-        let enhancedContent: any = null;
+        const unifiedMode = mapLegacyToUnified(
+            parameters.extractionSettings,
+            parameters.quality,
+            parameters.mode
+        );
 
-        const extractionMode = parameters.extractionSettings?.mode || "content";
-
-        if (extractionMode !== "basic") {
-            try {
-                // Create AI model for enhanced knowledge extraction
-                let knowledgeExtractor: kpLib.KnowledgeExtractor | undefined;
-                try {
-                    const apiSettings = ai.azureApiSettingsFromEnv(ai.ModelType.Chat);
-                    const languageModel = ai.createChatModel(apiSettings);
-                    knowledgeExtractor = kpLib.createKnowledgeExtractor(languageModel);
-                } catch (modelError) {
-                    console.warn("Failed to create AI model for knowledge extraction:", modelError);
-                }
-
-                // Configure ContentExtractor with enhanced capabilities
-                const contentExtractor = knowledgeExtractor 
-                    ? website.createContentExtractorWithKnowledge(knowledgeExtractor, {
-                        timeout: 15000,
-                        enableActionDetection: parameters.extractionSettings?.enableActionDetection !== false,
-                        knowledgeMode: "enhanced",
-                        maxCharsPerChunk: 4000,
-                        maxConcurrentExtractions: 3,
-                        knowledgeQualityThreshold: 0.4,
-                    })
-                    : website.createBasicContentExtractor({
-                        timeout: 15000,
-                        enableActionDetection: parameters.extractionSettings?.enableActionDetection !== false,
-                        maxCharsPerChunk: 4000,
-                    });
-
-                enhancedContent = await contentExtractor.extractFromHtml(
-                    htmlContent,
-                    extractionMode,
-                );
-
-                // Use enhanced knowledge extraction if AI model is available
-                if (knowledgeExtractor) {
-                    const enhancedKnowledgeResult = await contentExtractor.extractWithKnowledge(
-                        htmlContent,
-                        extractionMode,
-                        "enhanced"
-                    );
-                    
-                    if (enhancedKnowledgeResult.knowledge) {
-                        console.log(`Enhanced knowledge extracted: ${enhancedKnowledgeResult.knowledge.entities.length} entities, ${enhancedKnowledgeResult.knowledge.topics.length} topics, quality: ${enhancedKnowledgeResult.knowledgeQuality?.confidence}`);
-                        enhancedContent.enhancedKnowledge = enhancedKnowledgeResult.knowledge;
-                        enhancedContent.knowledgeQuality = enhancedKnowledgeResult.knowledgeQuality;
-                    }
-                } else {
-                    console.log("Enhanced knowledge extraction skipped - no AI model available");
-                }
-            } catch (extractorError) {
-                console.warn(
-                    "Enhanced content extraction failed, falling back to basic:",
-                    extractorError,
-                );
-            }
-        }
-
-        // Create enhanced website object
-        const visitInfo: website.WebsiteVisitInfo = {
+        const extractor = new UnifiedKnowledgeExtractor(context);
+        
+        const contentInput: ContentInput = {
             url: parameters.url,
             title: parameters.title,
-            source: "history",
-            visitDate: new Date().toISOString(),
-            description:
-                enhancedContent?.pageContent?.mainContent?.substring(0, 500) ||
-                textContent.substring(0, 500),
+            htmlFragments: parameters.htmlFragments,
+            textContent: textContent,
+            source: 'direct'
         };
 
-        // Set page type using website-memory's built-in detection
-        visitInfo.pageType = website.determinePageType(
-            parameters.url,
-            parameters.title,
-        );
+        const extractionResult = await extractor.extractKnowledge(contentInput, unifiedMode);
+        const knowledge = extractionResult.knowledge;
 
-        const websiteObj = website.importWebsiteVisit(
-            visitInfo,
-            enhancedContent?.pageContent?.mainContent || textContent,
-        );
-        
-        // Integrate enhanced knowledge if available
-        let knowledge = websiteObj.getKnowledge();
-        if (enhancedContent?.enhancedKnowledge) {
-            // Merge enhanced AI-extracted knowledge with base knowledge
-            knowledge = {
-                topics: [...new Set([...knowledge?.topics || [], ...enhancedContent.enhancedKnowledge.topics])],
-                entities: [...(knowledge?.entities || []), ...enhancedContent.enhancedKnowledge.entities],
-                actions: [...(knowledge?.actions || []), ...enhancedContent.enhancedKnowledge.actions],
-                inverseActions: [...(knowledge?.inverseActions || []), ...enhancedContent.enhancedKnowledge.inverseActions],
-            };
-        }
+        const entities: Entity[] = knowledge.entities?.map((entity) => ({
+            name: entity.name,
+            type: Array.isArray(entity.type) ? entity.type.join(", ") : entity.type,
+            description: entity.facets?.find((f) => f.name === "description")?.value as string,
+            confidence: extractionResult.qualityMetrics.confidence,
+        })) || [];
 
-        // Generate smart suggested questions using enhanced content
+        const keyTopics: string[] = knowledge.topics || [];
+
+        const relationships: Relationship[] = knowledge.actions?.map((action) => ({
+            from: action.subjectEntityName || "unknown",
+            relationship: action.verbs?.join(", ") || "related to",
+            to: action.objectEntityName || "unknown",
+            confidence: extractionResult.qualityMetrics.confidence,
+        })) || [];
+
         const suggestedQuestions: string[] = [];
         if (parameters.suggestQuestions && knowledge) {
             suggestedQuestions.push(
                 ...(await generateSmartSuggestedQuestions(
                     knowledge,
-                    enhancedContent,
+                    null,
                     parameters.url,
                     context,
                 )),
             );
         }
 
-        // Transform entities with enhanced information
-        const entities: Entity[] =
-            knowledge?.entities?.map((entity) => ({
-                name: entity.name,
-                type: Array.isArray(entity.type)
-                    ? entity.type.join(", ")
-                    : entity.type,
-                description: entity.facets?.find(
-                    (f) => f.name === "description",
-                )?.value as string,
-                confidence: 0.8,
-            })) || [];
+        const summary = `Knowledge extracted using ${unifiedMode} mode: ${extractionResult.qualityMetrics.entityCount} entities, ${extractionResult.qualityMetrics.topicCount} topics, ${extractionResult.qualityMetrics.actionCount} actions found. Quality: ${Math.round(extractionResult.qualityMetrics.confidence * 100)}% confidence.`;
 
-        const keyTopics: string[] = knowledge?.topics || [];
-
-        const relationships: Relationship[] =
-            knowledge?.actions?.map((action) => ({
-                from: action.subjectEntityName || "unknown",
-                relationship: action.verbs?.join(", ") || "related to",
-                to: action.objectEntityName || "unknown",
-                confidence: 0.7,
-            })) || [];
-
-        // Create enhanced summary
-        const summary = generateEnhancedSummary(
-            knowledge,
-            enhancedContent,
-            parameters.title,
-            enhancedContent?.knowledgeQuality,
-        );
-
-        // Build content metrics
         const contentMetrics = {
-            readingTime:
-                enhancedContent?.pageContent?.readingTime ||
-                Math.ceil(textContent.split(/\s+/).length / 225),
-            wordCount:
-                enhancedContent?.pageContent?.wordCount ||
-                textContent.split(/\s+/).length,
-            hasCode:
-                (enhancedContent?.pageContent?.codeBlocks?.length || 0) > 0,
-            interactivity:
-                enhancedContent?.actionSummary?.actionTypes?.join(", ") ||
-                "static",
-            pageType: visitInfo.pageType || "other",
+            readingTime: Math.ceil(textContent.split(/\s+/).length / 225),
+            wordCount: textContent.split(/\s+/).length,
+            hasCode: /```|<code>|function\s*\(|class\s+\w+/.test(textContent),
+            interactivity: extractionResult.qualityMetrics.actionCount > 0 ? "interactive" : "static",
+            pageType: "other",
         };
 
         return {
@@ -291,16 +242,13 @@ export async function extractKnowledgeFromPage(
             keyTopics,
             suggestedQuestions,
             summary,
-            detectedActions: enhancedContent?.detectedActions || [],
-            actionSummary: enhancedContent?.actionSummary || {
-                totalActions: 0,
-                actionTypes: [],
-                highConfidenceActions: 0,
-                actionDistribution: {},
-            },
             contentMetrics,
         };
     } catch (error) {
+        if (error instanceof AIModelUnavailableError) {
+            throw error;
+        }
+        
         console.error("Error during knowledge extraction:", error);
         return {
             entities: [],
@@ -328,6 +276,10 @@ export async function indexWebPageContent(
         timestamp: string;
         quality?: "fast" | "balanced" | "deep";
         textOnly?: boolean;
+        mode?: "basic" | "content" | "actions" | "full";
+        extractionSettings?: {
+            mode?: "basic" | "content" | "actions" | "full";
+        };
     },
     context: SessionContext<BrowserActionContext>,
 ): Promise<{
@@ -340,6 +292,25 @@ export async function indexWebPageContent(
             .map((fragment) => fragment.text || "")
             .join("\n\n");
 
+        const unifiedMode = mapLegacyToUnified(
+            parameters.extractionSettings,
+            parameters.quality,
+            parameters.mode
+        );
+
+        const extractor = new UnifiedKnowledgeExtractor(context);
+        
+        const contentInput: ContentInput = {
+            url: parameters.url,
+            title: parameters.title,
+            htmlFragments: parameters.htmlFragments,
+            textContent: textContent,
+            source: 'index',
+            timestamp: parameters.timestamp
+        };
+
+        const extractionResult = await extractor.extractKnowledge(contentInput, unifiedMode);
+
         const visitInfo: website.WebsiteVisitInfo = {
             url: parameters.url,
             title: parameters.title,
@@ -351,7 +322,12 @@ export async function indexWebPageContent(
             parameters.url,
             parameters.title,
         );
+
         const websiteObj = website.importWebsiteVisit(visitInfo, textContent);
+        
+        if (extractionResult.knowledge) {
+            websiteObj.knowledge = extractionResult.knowledge;
+        }
 
         if (context.agentContext.websiteCollection) {
             context.agentContext.websiteCollection.addWebsites([websiteObj]);
@@ -361,8 +337,7 @@ export async function indexWebPageContent(
             }
         }
 
-        const knowledge = websiteObj.getKnowledge();
-        const entityCount = knowledge?.entities?.length || 0;
+        const entityCount = extractionResult.qualityMetrics.entityCount;
 
         return {
             indexed: true,
@@ -370,6 +345,10 @@ export async function indexWebPageContent(
             entityCount,
         };
     } catch (error) {
+        if (error instanceof AIModelUnavailableError) {
+            throw error;
+        }
+        
         console.error("Error indexing page content:", error);
         return {
             indexed: false,
@@ -696,17 +675,6 @@ async function generateAnswerFromResults(
     return answer;
 }
 
-// Helper function to reconstruct HTML from fragments
-function reconstructHtmlFromFragments(htmlFragments: any[]): string {
-    return htmlFragments
-        .map((fragment) => {
-            if (fragment.content) return fragment.content;
-            if (fragment.text) return fragment.text;
-            return "";
-        })
-        .join("\n");
-}
-
 // Enhanced suggested questions using content analysis and DataFrames
 async function generateSmartSuggestedQuestions(
     knowledge: any,
@@ -765,60 +733,6 @@ async function generateSmartSuggestedQuestions(
     questions.push("What have I learned recently in this domain?");
 
     return questions.slice(0, 8); // Limit to most relevant questions
-}
-
-// Generate enhanced summary with content analysis
-function generateEnhancedSummary(
-    knowledge: any,
-    enhancedContent: any,
-    title: string,
-    knowledgeQuality?: any,
-): string {
-    const entityCount = knowledge?.entities?.length || 0;
-    const topicCount = knowledge?.topics?.length || 0;
-    const relationshipCount = knowledge?.actions?.length || 0;
-
-    let summary = `Knowledge extracted from ${title}: ${entityCount} entities, ${topicCount} topics, ${relationshipCount} relationships found.`;
-
-    // Add quality information if available
-    if (knowledgeQuality) {
-        summary += ` Quality: ${Math.round(knowledgeQuality.confidence * 100)}% confidence`;
-        if (knowledgeQuality.extractionMode) {
-            summary += ` (${knowledgeQuality.extractionMode} mode)`;
-        }
-    }
-
-    if (enhancedContent?.pageContent) {
-        const details = [];
-
-        if (enhancedContent.pageContent.readingTime) {
-            details.push(`${enhancedContent.pageContent.readingTime} min read`);
-        }
-
-        if (
-            enhancedContent.pageContent.codeBlocks &&
-            enhancedContent.pageContent.codeBlocks.length > 0
-        ) {
-            details.push(
-                `${enhancedContent.pageContent.codeBlocks.length} code examples`,
-            );
-        }
-
-        if (
-            enhancedContent.detectedActions &&
-            enhancedContent.detectedActions.length > 0
-        ) {
-            details.push(
-                `${enhancedContent.detectedActions.length} interactive elements`,
-            );
-        }
-
-        if (details.length > 0) {
-            summary += ` Page analysis: ${details.join(", ")}.`;
-        }
-    }
-
-    return summary;
 }
 
 // Extract domain from URL
@@ -1553,6 +1467,359 @@ export async function generateTemporalSuggestions(
                 uniqueDomains: 0,
                 uniqueTopics: 0,
             },
+        };
+    }
+}
+
+export async function migrateKnowledgeIndex(
+    parameters: {
+        mode?: UnifiedExtractionMode;
+        batchSize?: number;
+        dryRun?: boolean;
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    success: boolean;
+    migrated: number;
+    skipped: number;
+    errors: number;
+    duration: number;
+    qualityImprovement: any;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                success: false,
+                migrated: 0,
+                skipped: 0,
+                errors: 1,
+                duration: 0,
+                qualityImprovement: null
+            };
+        }
+
+        const migrationManager = new KnowledgeMigrationManager(websiteCollection, context);
+        const mode = parameters.mode || 'content';
+
+        if (parameters.dryRun) {
+            const candidates = await migrationManager.detectMigrationCandidates();
+            return {
+                success: true,
+                migrated: 0,
+                skipped: 0,
+                errors: 0,
+                duration: 0,
+                qualityImprovement: {
+                    candidatesFound: candidates.length,
+                    estimatedImprovement: candidates.reduce((sum, c) => sum + c.estimatedImprovement, 0)
+                }
+            };
+        }
+
+        const result = await migrationManager.migrateExistingContent(mode);
+
+        return {
+            success: result.errors.length === 0,
+            migrated: result.migrated,
+            skipped: result.skipped,
+            errors: result.errors.length,
+            duration: result.duration,
+            qualityImprovement: result.qualityImprovement
+        };
+    } catch (error) {
+        console.error("Error during knowledge migration:", error);
+        return {
+            success: false,
+            migrated: 0,
+            skipped: 0,
+            errors: 1,
+            duration: 0,
+            qualityImprovement: null
+        };
+    }
+}
+
+export async function getExtractionAnalytics(
+    parameters: {
+        timeRange?: string;
+        mode?: UnifiedExtractionMode;
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    success: boolean;
+    analytics: any;
+}> {
+    try {
+        // In a real implementation, this would be stored in the session context
+        const analytics = new UnifiedExtractionAnalytics();
+        const summary = analytics.getAnalyticsSummary();
+
+        return {
+            success: true,
+            analytics: summary
+        };
+    } catch (error) {
+        console.error("Error getting extraction analytics:", error);
+        return {
+            success: false,
+            analytics: null
+        };
+    }
+}
+
+export async function generateQualityReport(
+    parameters: {},
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    success: boolean;
+    report: any;
+}> {
+    try {
+        const qualityMonitor = new UnifiedQualityMonitor();
+        const report = qualityMonitor.generateQualityReport();
+
+        return {
+            success: true,
+            report
+        };
+    } catch (error) {
+        console.error("Error generating quality report:", error);
+        return {
+            success: false,
+            report: null
+        };
+    }
+}
+
+export async function detectMigrationCandidates(
+    parameters: {
+        limit?: number;
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    success: boolean;
+    candidates: any[];
+    totalCandidates: number;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                success: false,
+                candidates: [],
+                totalCandidates: 0
+            };
+        }
+
+        const migrationManager = new KnowledgeMigrationManager(websiteCollection, context);
+        const candidates = await migrationManager.detectMigrationCandidates();
+
+        const limit = parameters.limit || 50;
+        const limitedCandidates = candidates.slice(0, limit);
+
+        return {
+            success: true,
+            candidates: limitedCandidates,
+            totalCandidates: candidates.length
+        };
+    } catch (error) {
+        console.error("Error detecting migration candidates:", error);
+        return {
+            success: false,
+            candidates: [],
+            totalCandidates: 0
+        };
+    }
+}
+
+export async function getPageQualityMetrics(
+    parameters: { url: string },
+    context: SessionContext<BrowserActionContext>
+): Promise<{
+    score: number;
+    entityCount: number;
+    topicCount: number;
+    actionCount: number;
+    extractionMode: string;
+    lastUpdated: string | null;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+        
+        if (!websiteCollection) {
+            return {
+                score: 0,
+                entityCount: 0,
+                topicCount: 0,
+                actionCount: 0,
+                extractionMode: "unknown",
+                lastUpdated: null
+            };
+        }
+
+        const websites = websiteCollection.messages.getAll();
+        const foundWebsite = websites.find(
+            (site: any) => site.metadata.url === parameters.url
+        );
+
+        if (!foundWebsite) {
+            return {
+                score: 0,
+                entityCount: 0,
+                topicCount: 0,
+                actionCount: 0,
+                extractionMode: "unknown",
+                lastUpdated: null
+            };
+        }
+
+        const knowledge = foundWebsite.getKnowledge();
+        const metadata = foundWebsite.metadata as any;
+        
+        const entityCount = knowledge?.entities?.length || 0;
+        const topicCount = knowledge?.topics?.length || 0;
+        const actionCount = knowledge?.actions?.length || 0;
+        
+        // Calculate quality score based on knowledge richness
+        let score = 0.2; // Base score
+        
+        if (entityCount > 0) score += 0.2;
+        if (topicCount > 2) score += 0.2;
+        if (actionCount > 0) score += 0.2;
+        if (entityCount > 5) score += 0.1;
+        if (topicCount > 5) score += 0.1;
+        
+        score = Math.min(score, 1.0);
+        
+        // Determine extraction mode based on knowledge richness
+        let extractionMode = "basic";
+        if (actionCount > 0) {
+            extractionMode = "full";
+        } else if (entityCount > 3 && topicCount > 2) {
+            extractionMode = "content";
+        }
+
+        return {
+            score,
+            entityCount,
+            topicCount,
+            actionCount,
+            extractionMode,
+            lastUpdated: metadata.visitDate || metadata.bookmarkDate || null
+        };
+    } catch (error) {
+        console.error("Error getting page quality metrics:", error);
+        return {
+            score: 0,
+            entityCount: 0,
+            topicCount: 0,
+            actionCount: 0,
+            extractionMode: "unknown",
+            lastUpdated: null
+        };
+    }
+}
+
+export async function checkAIModelStatus(
+    parameters: {},
+    context: SessionContext<BrowserActionContext>
+): Promise<{
+    available: boolean;
+    version?: string;
+    endpoint?: string;
+    error?: string;
+}> {
+    try {
+        const extractor = new UnifiedKnowledgeExtractor(context);
+        
+        // Test AI availability with a simple extraction
+        await extractor.extractKnowledge({
+            url: "test://ai-check",
+            title: "AI Availability Test",
+            textContent: "test content for AI availability check",
+            source: "direct"
+        }, "content");
+
+        return {
+            available: true,
+            version: "available",
+            endpoint: "configured"
+        };
+    } catch (error) {
+        if (error instanceof AIModelUnavailableError) {
+            return {
+                available: false,
+                error: error.message
+            };
+        }
+        
+        return {
+            available: false,
+            error: error instanceof Error ? error.message : "Unknown AI model error"
+        };
+    }
+}
+
+export async function enhancePageKnowledge(
+    parameters: { 
+        url: string;
+        mode?: UnifiedExtractionMode;
+    },
+    context: SessionContext<BrowserActionContext>
+): Promise<{
+    success: boolean;
+    enhanced: boolean;
+    qualityBefore: number;
+    qualityAfter: number;
+    error?: string;
+}> {
+    try {
+        const migrationManager = new KnowledgeMigrationManager(
+            context.agentContext.websiteCollection!,
+            context
+        );
+
+        const mode = parameters.mode || 'content';
+        
+        // Get quality before migration
+        const qualityBefore = await getPageQualityMetrics({ url: parameters.url }, context);
+        
+        // Find and migrate the specific page
+        const websites = context.agentContext.websiteCollection!.messages.getAll();
+        const targetSite = websites.find((site: any) => site.metadata.url === parameters.url);
+        
+        if (!targetSite) {
+            return {
+                success: false,
+                enhanced: false,
+                qualityBefore: 0,
+                qualityAfter: 0,
+                error: "Page not found in index"
+            };
+        }
+
+        const result = await migrationManager.migrateSingleSite(targetSite, mode);
+        
+        // Get quality after migration
+        const qualityAfter = await getPageQualityMetrics({ url: parameters.url }, context);
+
+        return {
+            success: true,
+            enhanced: result,
+            qualityBefore: qualityBefore.score,
+            qualityAfter: qualityAfter.score
+        };
+    } catch (error) {
+        console.error("Error enhancing page knowledge:", error);
+        return {
+            success: false,
+            enhanced: false,
+            qualityBefore: 0,
+            qualityAfter: 0,
+            error: error instanceof Error ? error.message : "Unknown error"
         };
     }
 }

@@ -13,6 +13,7 @@ import {
     SearchWebsites,
     GetWebsiteStats,
 } from "./actionsSchema.mjs";
+import { BrowserActionContext } from "./actionHandler.mjs";
 import * as website from "website-memory";
 import * as kp from "knowpro";
 import { openai as ai } from "aiclient";
@@ -32,22 +33,33 @@ import {
     FolderOptions,
     DEFAULT_FOLDER_OPTIONS,
 } from "./folderUtils.mjs";
+import {
+    UnifiedKnowledgeExtractor,
+    UnifiedExtractionMode,
+    ContentInput,
+    BatchProgress,
+    AIModelUnavailableError
+} from "./knowledge/unified/index.mjs";
 
-export interface BrowserActionContext {
-    browserControl?: any | undefined;
-    webSocket?: any | undefined;
-    webAgentChannels?: any | undefined;
-    crossWordState?: any | undefined;
-    browserConnector?: any | undefined;
-    browserProcess?: any | undefined;
-    tabTitleIndex?: any | undefined;
-    allowDynamicAgentDomains?: string[];
-    websiteCollection?: website.WebsiteCollection | undefined;
-    fuzzyMatchingModel?: any | undefined;
-    index: website.IndexData | undefined;
-}
-
-const debug = registerDebug("typeagent:browser:website-memory");
+function mapImportParametersToUnifiedMode(
+    extractContent?: boolean,
+    enableIntelligentAnalysis?: boolean,
+    extractionMode?: string
+): UnifiedExtractionMode {
+    if (extractionMode && ['basic', 'content', 'actions', 'full'].includes(extractionMode)) {
+        return extractionMode as UnifiedExtractionMode;
+    }
+    
+    if (!extractContent) {
+        return 'basic';
+    }
+    
+    if (enableIntelligentAnalysis) {
+        return 'content';
+    }
+    
+    return 'basic';
+}const debug = registerDebug("typeagent:browser:website-memory");
 
 /**
  * Resolve URL using website visit history (bookmarks, browser history)
@@ -532,13 +544,19 @@ export async function importWebsiteDataFromSession(
             }
         };
 
+        const unifiedMode = mapImportParametersToUnifiedMode(
+            extractContent,
+            enableIntelligentAnalysis,
+            extractionMode
+        );
+
         // Build options object with only defined values
         const importOptions: any = {};
         if (limit !== undefined) importOptions.limit = limit;
         if (days !== undefined) importOptions.days = days;
         if (folder !== undefined) importOptions.folder = folder;
 
-        // Add enhancement options
+        // Add enhancement options - these will be handled by unified extractor
         if (extractContent !== undefined)
             importOptions.extractContent = extractContent;
         if (enableIntelligentAnalysis !== undefined)
@@ -551,6 +569,24 @@ export async function importWebsiteDataFromSession(
             importOptions.maxConcurrent = maxConcurrent;
         if (contentTimeout !== undefined)
             importOptions.contentTimeout = contentTimeout;
+
+        // For AI-enabled modes, validate AI availability before starting import
+        if (unifiedMode !== 'basic') {
+            try {
+                const extractor = new UnifiedKnowledgeExtractor(context);
+                // This will throw AIModelUnavailableError if AI model is not available
+                await extractor.extractKnowledge({
+                    url: 'test://validation',
+                    title: 'Validation Test',
+                    textContent: 'test content for validation',
+                    source: 'direct'
+                }, unifiedMode);
+            } catch (error) {
+                if (error instanceof AIModelUnavailableError) {
+                    throw new Error(`Cannot import with ${unifiedMode} mode: ${error.message}`);
+                }
+            }
+        }
 
         // Create chat model for intelligent analysis if enabled
         if (enableIntelligentAnalysis) {
@@ -576,17 +612,8 @@ export async function importWebsiteDataFromSession(
             }
         }
 
-        let websites;
-        if (extractContent) {
-            // Use enhanced import with content extraction
-            websites = await website.importWebsitesWithContent(
-                source,
-                type,
-                filePath,
-                importOptions,
-                progressCallback,
-            );
-        } else {
+        let websites: any[];
+        if (unifiedMode === 'basic') {
             // Use basic import for fast metadata-only import
             websites = await website.importWebsites(
                 source,
@@ -595,6 +622,58 @@ export async function importWebsiteDataFromSession(
                 importOptions,
                 progressCallback,
             );
+        } else {
+            // Use basic import first, then enhance with unified extraction
+            websites = await website.importWebsites(
+                source,
+                type,
+                filePath,
+                { ...importOptions, extractContent: false },
+                progressCallback,
+            );
+            
+            // Enhance with unified extraction if AI mode requested
+            if (websites.length > 0) {
+                const extractor = new UnifiedKnowledgeExtractor(context);
+                
+                const enhancedProgressCallback = (progress: BatchProgress) => {
+                    if (displayProgress) {
+                        displayProgress(`Enhancing knowledge: ${progress.processed}/${progress.total} (${progress.percentage}%)`);
+                    }
+                };
+                
+                const contentInputs: ContentInput[] = websites.map(site => ({
+                    url: site.metadata.url,
+                    title: site.metadata.title || site.metadata.url,
+                    textContent: site.textChunks?.join('\n\n') || '',
+                    source: type === 'bookmarks' ? 'bookmark' : 'history',
+                    timestamp: site.metadata.visitDate || site.metadata.bookmarkDate
+                }));
+                
+                try {
+                    const enhancedResults = await extractor.extractBatch(
+                        contentInputs,
+                        unifiedMode,
+                        enhancedProgressCallback
+                    );
+                    
+                    // Apply enhanced knowledge to websites
+                    enhancedResults.forEach((result, index) => {
+                        if (websites[index]) {
+                            websites[index].knowledge = result.knowledge;
+                        }
+                    });
+                    
+                    if (displayProgress) {
+                        displayProgress(`Enhanced ${enhancedResults.length} items with ${unifiedMode} mode extraction`);
+                    }
+                } catch (error) {
+                    if (error instanceof AIModelUnavailableError) {
+                        throw error;
+                    }
+                    console.warn('Enhanced extraction failed, using basic import:', error);
+                }
+            }
         }
 
         if (!context.agentContext.websiteCollection) {
@@ -685,6 +764,30 @@ export async function importHtmlFolderFromSession(
         const errors: any[] = [];
         let successCount = 0;
 
+        const unifiedMode = mapImportParametersToUnifiedMode(
+            options.extractContent,
+            options.enableIntelligentAnalysis,
+            options.extractionMode || options.mode
+        );
+
+        // For AI-enabled modes, validate AI availability before starting import
+        if (unifiedMode !== 'basic') {
+            try {
+                const extractor = new UnifiedKnowledgeExtractor(context);
+                // This will throw AIModelUnavailableError if AI model is not available
+                await extractor.extractKnowledge({
+                    url: 'test://validation',
+                    title: 'Validation Test',
+                    textContent: 'test content for validation',
+                    source: 'import'
+                }, unifiedMode);
+            } catch (error) {
+                if (error instanceof AIModelUnavailableError) {
+                    throw new Error(`Cannot import HTML folder with ${unifiedMode} mode: ${error.message}`);
+                }
+            }
+        }
+
         // Validate folder path first
         const validation = await validateHtmlFolder(folderPath, options);
         if (!validation.valid) {
@@ -760,12 +863,10 @@ export async function importHtmlFolderFromSession(
             // Process the batch using shared HTML processing
             try {
                 const processingOptions: ProcessingOptions = {
-                    extractContent: options.extractContent !== false,
-                    extractionMode: options.extractionMode || "content",
-                    enableIntelligentAnalysis:
-                        options.enableIntelligentAnalysis || false,
-                    enableActionDetection:
-                        options.enableActionDetection || false,
+                    extractContent: unifiedMode !== 'basic',
+                    extractionMode: unifiedMode,
+                    enableIntelligentAnalysis: unifiedMode !== 'basic',
+                    enableActionDetection: unifiedMode === 'actions' || unifiedMode === 'full',
                     maxConcurrent: 5,
                 };
 

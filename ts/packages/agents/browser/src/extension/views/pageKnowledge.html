@@ -62,10 +62,92 @@
       .question-item:hover {
         background-color: #e9ecef;
       }
-      .auto-index-toggle {
-        position: absolute;
-        top: 1rem;
-        right: 1rem;
+      .mode-description {
+        font-size: 0.75rem;
+        color: #6c757d;
+        margin-top: 0.25rem;
+      }
+
+      .quality-indicator {
+        border-radius: 12px;
+        padding: 0.25rem 0.75rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+      }
+
+      .quality-excellent {
+        background-color: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+      }
+
+      .quality-good {
+        background-color: #d1ecf1;
+        color: #0c5460;
+        border: 1px solid #bee5eb;
+      }
+
+      .quality-basic {
+        background-color: #fff3cd;
+        color: #856404;
+        border: 1px solid #ffeaa7;
+      }
+
+      .quality-poor {
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+      }
+
+      .ai-status-indicator {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 0.5rem;
+      }
+
+      .ai-available {
+        background-color: #28a745;
+      }
+
+      .ai-unavailable {
+        background-color: #dc3545;
+      }
+
+      .ai-checking {
+        background-color: #ffc107;
+        animation: pulse 1.5s infinite;
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+      }
+
+      .progress-container {
+        margin: 1rem 0;
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: 6px;
+        border: 1px solid #e9ecef;
+      }
+
+      .progress-label {
+        font-size: 0.875rem;
+        margin-bottom: 0.5rem;
+        color: #495057;
+      }
+
+      .batch-progress {
+        margin-bottom: 0.5rem;
+      }
+
+      .batch-stats {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.75rem;
+        color: #6c757d;
       }
 
       /* Enhanced Question Styling */
@@ -224,6 +306,30 @@
           </div>
         </div>
         <div class="card-body">
+          <!-- Unified Mode Selection -->
+          <div class="mb-3">
+            <label for="extractionMode" class="form-label text-muted">
+              <i class="bi bi-gear"></i> Extraction Mode
+            </label>
+            <select id="extractionMode" class="form-select form-select-sm">
+              <option value="basic">Basic (Fast, No AI)</option>
+              <option value="content" selected>Content (AI Analysis)</option>
+              <option value="actions">Actions (AI + Interactions)</option>
+              <option value="full">Full (Complete AI Analysis)</option>
+            </select>
+            <div class="form-text" id="modeDescription">
+              AI-powered content analysis with entity and topic extraction
+            </div>
+          </div>
+
+          <!-- AI Model Status -->
+          <div id="aiModelStatus" class="mb-3 d-none">
+            <div class="alert alert-warning alert-sm p-2 mb-0">
+              <i class="bi bi-exclamation-triangle me-2"></i>
+              <span id="aiStatusMessage">Checking AI model availability...</span>
+            </div>
+          </div>
+
           <div id="currentPageInfo">
             <div class="text-center text-muted">
               <i class="bi bi-hourglass-split"></i>
@@ -342,7 +448,23 @@
             </div>
           </div>
 
+          <!-- Index Status Section with Migration -->
           <div class="mt-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <small class="text-muted">Knowledge Quality</small>
+              <div id="qualityIndicator" class="badge bg-secondary">Unknown</div>
+            </div>
+            
+            <div id="migrationStatus" class="d-none">
+              <div class="alert alert-info alert-sm p-2 mb-2">
+                <i class="bi bi-arrow-up-circle me-2"></i>
+                <span class="small">This page could benefit from enhanced knowledge extraction</span>
+                <button id="enhanceKnowledge" class="btn btn-outline-primary btn-sm ms-2">
+                  Enhance
+                </button>
+              </div>
+            </div>
+
             <button
               id="openSettings"
               class="btn btn-outline-secondary btn-sm w-100"
