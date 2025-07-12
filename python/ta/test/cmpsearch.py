@@ -5,9 +5,12 @@ import argparse
 import asyncio
 import builtins
 from dataclasses import dataclass
+import difflib
 import json
+import re
 from typing import TypedDict
 
+import black
 import numpy as np
 import typechat
 
@@ -282,10 +285,23 @@ async def compare_actual_to_expected(
         record = context.sr_index.get(question)
         if record:
             qx = deserialize_object(SearchQuery, record["searchQueryExpr"])
+            qc = deserialize_object(
+                list[searchlang.SearchQueryExpr], record["compiledQueryExpr"]
+            )
             qr: list[RawSearchResult] = record["results"]
-            if debug_context.search_query != qx:
-                print("Warning: Search query from LLM does not match reference.")
-            if not compare_results(result.value, qr):
+            if compare_and_print_diff(
+                debug_context.search_query,
+                qx,
+                "Search query from LLM does not match reference.",
+            ):
+                pass
+            elif compare_and_print_diff(
+                debug_context.search_query_expr,
+                qc,
+                "Compiled search query expression from LLM does not match reference.",
+            ):
+                pass
+            elif not compare_results(result.value, qr):
                 print("Warning: Search results from index do not match reference.")
         all_answers, combined_answer = await answers.generate_answers(
             context.answer_translator,
@@ -393,6 +409,36 @@ async def equality_score(context: Context, a: str, b: str) -> float:
     embeddings = await context.embedding_model.get_embeddings([a, b])
     assert embeddings.shape[0] == 2, "Expected two embeddings"
     return np.dot(embeddings[0], embeddings[1])
+
+
+def compare_and_print_diff(
+    a: object, b: object, message: str
+) -> bool:  # True if unequal
+    """Diff two objects whose repr() is a valid Python expression."""
+    if a == b:
+        return False
+    a_repr = builtins.repr(a)
+    b_repr = builtins.repr(b)
+    if a_repr == b_repr:
+        return False
+    # Shorten floats so slight differences in score etc. don't cause false positives.
+    a_repr = re.sub(r"\b\d\.\d\d+", lambda m: f"{float(m.group()):.1f}", a_repr)
+    b_repr = re.sub(r"\b\d\.\d\d+", lambda m: f"{float(m.group()):.1f}", b_repr)
+    if a_repr == b_repr:
+        return False
+    print("Warning:", message)
+    a_formatted = black.format_str(a_repr, mode=black.FileMode())
+    b_formatted = black.format_str(b_repr, mode=black.FileMode())
+    diff = difflib.unified_diff(
+        a_formatted.splitlines(True),
+        b_formatted.splitlines(True),
+        fromfile="actual",
+        tofile="expected",
+        n=2,
+    )
+    for x in diff:
+        print(x, end="")
+    return True
 
 
 if __name__ == "__main__":
