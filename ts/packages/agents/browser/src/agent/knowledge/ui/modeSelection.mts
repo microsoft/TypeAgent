@@ -1,19 +1,19 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { UnifiedExtractionMode } from "../unified/types.mjs";
+import { ExtractionMode } from "website-memory";
 
 export interface ModeSelectionProps {
-    currentMode: UnifiedExtractionMode;
-    availableModes: UnifiedExtractionMode[];
+    currentMode: ExtractionMode;
+    availableModes: ExtractionMode[];
     aiModelAvailable: boolean;
-    onModeChange: (mode: UnifiedExtractionMode) => void;
+    onModeChange: (mode: ExtractionMode) => void;
     disabled?: boolean;
     showDescription?: boolean;
 }
 
 export interface ModeInfo {
-    mode: UnifiedExtractionMode;
+    mode: ExtractionMode;
     displayName: string;
     description: string;
     requiresAI: boolean;
@@ -23,7 +23,7 @@ export interface ModeInfo {
     concurrency: number;
 }
 
-export const MODE_CONFIGURATIONS: Record<UnifiedExtractionMode, ModeInfo> = {
+export const MODE_CONFIGURATIONS: Record<ExtractionMode, ModeInfo> = {
     basic: {
         mode: "basic",
         displayName: "Basic",
@@ -74,12 +74,12 @@ export const MODE_CONFIGURATIONS: Record<UnifiedExtractionMode, ModeInfo> = {
     },
 };
 
-export function getModeDisplayInfo(mode: UnifiedExtractionMode): ModeInfo {
+export function getModeDisplayInfo(mode: ExtractionMode): ModeInfo {
     return MODE_CONFIGURATIONS[mode];
 }
 
 export function validateModeSelection(
-    mode: UnifiedExtractionMode,
+    mode: ExtractionMode,
     aiModelAvailable: boolean,
 ): boolean {
     const modeInfo = MODE_CONFIGURATIONS[mode];
@@ -87,7 +87,7 @@ export function validateModeSelection(
 }
 
 export interface BatchOperationProgress {
-    mode: UnifiedExtractionMode;
+    mode: ExtractionMode;
     totalItems: number;
     processedItems: number;
     currentItem: string;

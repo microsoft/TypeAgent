@@ -34,11 +34,11 @@ import {
     DEFAULT_FOLDER_OPTIONS,
 } from "./folderUtils.mjs";
 import {
-    UnifiedKnowledgeExtractor,
-    ContentInput,
+    ExtractionInput,
     BatchProgress,
-    AIModelUnavailableError,
-} from "./knowledge/unified/index.mjs";
+    AIModelRequiredError,
+} from "website-memory";
+import { BrowserKnowledgeExtractor } from "./knowledge/browserKnowledgeExtractor.mjs";
 
 const debug = registerDebug("typeagent:browser:website-memory");
 
@@ -540,8 +540,8 @@ export async function importWebsiteDataFromSession(
         // For AI-enabled modes, validate AI availability before starting import
         if (unifiedMode !== "basic") {
             try {
-                const extractor = new UnifiedKnowledgeExtractor(context);
-                // This will throw AIModelUnavailableError if AI model is not available
+                const extractor = new BrowserKnowledgeExtractor(context);
+                // This will throw AIModelRequiredError if AI model is not available
                 await extractor.extractKnowledge(
                     {
                         url: "test://validation",
@@ -552,7 +552,7 @@ export async function importWebsiteDataFromSession(
                     unifiedMode,
                 );
             } catch (error) {
-                if (error instanceof AIModelUnavailableError) {
+                if (error instanceof AIModelRequiredError) {
                     throw new Error(
                         `Cannot import with ${unifiedMode} mode: ${error.message}`,
                     );
@@ -604,9 +604,9 @@ export async function importWebsiteDataFromSession(
                 progressCallback,
             );
 
-            // Enhance with unified extraction if AI mode requested
+            // Enhance with extraction if AI mode requested
             if (websites.length > 0) {
-                const extractor = new UnifiedKnowledgeExtractor(context);
+                const extractor = new BrowserKnowledgeExtractor(context);
 
                 const enhancedProgressCallback = (progress: BatchProgress) => {
                     if (displayProgress) {
@@ -616,7 +616,7 @@ export async function importWebsiteDataFromSession(
                     }
                 };
 
-                const contentInputs: ContentInput[] = websites.map((site) => ({
+                const contentInputs: ExtractionInput[] = websites.map((site) => ({
                     url: site.metadata.url,
                     title: site.metadata.title || site.metadata.url,
                     textContent: site.textChunks?.join("\n\n") || "",
@@ -645,7 +645,7 @@ export async function importWebsiteDataFromSession(
                         );
                     }
                 } catch (error) {
-                    if (error instanceof AIModelUnavailableError) {
+                    if (error instanceof AIModelRequiredError) {
                         throw error;
                     }
                     console.warn(
@@ -749,8 +749,8 @@ export async function importHtmlFolderFromSession(
         // For AI-enabled modes, validate AI availability before starting import
         if (unifiedMode !== "basic") {
             try {
-                const extractor = new UnifiedKnowledgeExtractor(context);
-                // This will throw AIModelUnavailableError if AI model is not available
+                const extractor = new BrowserKnowledgeExtractor(context);
+                // This will throw AIModelRequiredError if AI model is not available
                 await extractor.extractKnowledge(
                     {
                         url: "test://validation",
@@ -761,7 +761,7 @@ export async function importHtmlFolderFromSession(
                     unifiedMode,
                 );
             } catch (error) {
-                if (error instanceof AIModelUnavailableError) {
+                if (error instanceof AIModelRequiredError) {
                     throw new Error(
                         `Cannot import HTML folder with ${unifiedMode} mode: ${error.message}`,
                     );

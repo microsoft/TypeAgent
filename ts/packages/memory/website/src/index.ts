@@ -12,3 +12,21 @@ export * from "./websiteDocPart.js";
 export * from "./websiteDocPartMeta.js";
 export * from "./tables.js";
 export * from "./websiteMeta.js";
+
+// New extraction functionality (selective exports to avoid conflicts)
+export {
+    AIModelManager,
+    BatchProcessor,
+    ExtractionContentExtractor,
+    // Types
+    ExtractionConfig,
+    ExtractionInput,
+    ExtractionResult,
+    ExtractionQualityMetrics,
+    EXTRACTION_MODE_CONFIGS,
+    BatchProgress,
+    BatchError,
+    AIModelRequiredError,
+    AIExtractionFailedError,
+    getEffectiveConfig
+} from "./extraction/index.js";
