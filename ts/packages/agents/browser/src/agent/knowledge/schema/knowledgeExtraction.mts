@@ -58,8 +58,6 @@ export interface EnhancedQueryRequest {
     url?: string;
     searchScope: "current_page" | "all_indexed" | "domain" | "topic";
     filters?: {
-        contentType?: string;
-        technicalLevel?: string;
         domain?: string;
         timeRange?: "week" | "month" | "quarter" | "year";
     };

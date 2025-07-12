@@ -50,7 +50,6 @@ export interface CorrelationMetrics {
     semanticSimilarity: number;
     structuralSimilarity: number;
     temporalRelevance: number;
-    contentDepthAlignment: number;
     topicCoherence: number;
     overallScore: number;
 }
@@ -58,7 +57,6 @@ export interface CorrelationMetrics {
 export interface QualityIndicators {
     contentRichness: number;
     topicSpecificity: number;
-    technicalDepth: number;
     informationDensity: number;
     overallQuality: number;
 }
@@ -136,17 +134,7 @@ export class RelationshipDiscovery {
             }
         }
 
-        // 4. Technical content relationships
-        const technicalResults = await this.findTechnicalRelationships(
-            currentUrl,
-            websiteCollection,
-            maxResults,
-        );
-        if (technicalResults.relatedPages.length > 0) {
-            results.push(technicalResults);
-        }
-
-        // 5. Temporal relationships (recent visits in same domain/topic)
+        // 4. Temporal relationships (recent visits in same domain/topic)
         const temporalResults = await this.findTemporalRelationships(
             currentUrl,
             currentKnowledge,
@@ -248,12 +236,6 @@ export class RelationshipDiscovery {
         // Temporal relevance (based on visit patterns)
         const temporalRelevance = this.calculateTemporalRelevance(result);
 
-        // Content depth alignment (technical level matching)
-        const contentDepthAlignment = this.calculateContentDepthAlignment(
-            result,
-            currentKnowledge,
-        );
-
         // Topic coherence (consistency of topics across related pages)
         const topicCoherence = this.calculateTopicCoherence(result);
 
@@ -262,7 +244,6 @@ export class RelationshipDiscovery {
             semanticSimilarity,
             structuralSimilarity,
             temporalRelevance,
-            contentDepthAlignment,
             topicCoherence,
         });
 
@@ -270,7 +251,6 @@ export class RelationshipDiscovery {
             semanticSimilarity,
             structuralSimilarity,
             temporalRelevance,
-            contentDepthAlignment,
             topicCoherence,
             overallScore,
         };
@@ -327,9 +307,6 @@ export class RelationshipDiscovery {
             page.sharedElements,
         );
 
-        // Technical depth (presence of technical content indicators)
-        const technicalDepth = this.calculateTechnicalDepth(page);
-
         // Information density (estimated content quality)
         const informationDensity = this.calculateInformationDensity(page);
 
@@ -337,14 +314,12 @@ export class RelationshipDiscovery {
         const overallQuality = this.calculateWeightedQualityScore({
             contentRichness,
             topicSpecificity,
-            technicalDepth,
             informationDensity,
         });
 
         return {
             contentRichness,
             topicSpecificity,
-            technicalDepth,
             informationDensity,
             overallQuality,
         };
@@ -600,86 +575,6 @@ export class RelationshipDiscovery {
     }
 
     /**
-     * Find technically similar pages (code content, APIs, etc.)
-     */
-    private async findTechnicalRelationships(
-        currentUrl: string,
-        websiteCollection: website.WebsiteCollection,
-        maxResults: number,
-    ): Promise<RelationshipResult> {
-        const relatedPages: RelatedPage[] = [];
-        const relationships: CrossPageRelationship[] = [];
-
-        try {
-            // Simple technical content matching
-            const websites = websiteCollection.messages.getAll();
-            for (const website of websites) {
-                const metadata = website.metadata as website.WebsiteDocPartMeta;
-                if (metadata.url !== currentUrl) {
-                    const knowledge = website.getKnowledge();
-
-                    // Check if this page likely has technical content
-                    const hasTechnicalContent = this.assessTechnicalContent(
-                        knowledge,
-                        website,
-                    );
-
-                    if (hasTechnicalContent.score > 0.3) {
-                        relatedPages.push(
-                            this.createRelatedPage(
-                                metadata.url,
-                                metadata.title || metadata.url,
-                                hasTechnicalContent.score,
-                                "technical-similarity",
-                                hasTechnicalContent.indicators,
-                                {
-                                    visitCount: 1,
-                                    lastVisited:
-                                        metadata.visitDate ||
-                                        metadata.bookmarkDate ||
-                                        new Date().toISOString(),
-                                    source: this.mapWebsiteSource(
-                                        metadata.websiteSource,
-                                    ),
-                                },
-                            ),
-                        );
-
-                        relationships.push(
-                            this.createCrossPageRelationship(
-                                currentUrl,
-                                metadata.url,
-                                "technical-similarity",
-                                hasTechnicalContent.score,
-                                [],
-                                [],
-                                `Both contain technical content: ${hasTechnicalContent.indicators.join(", ")}`,
-                            ),
-                        );
-                    }
-                }
-
-                if (relatedPages.length >= maxResults) break;
-            }
-        } catch (error) {
-            console.warn("Error finding technical relationships:", error);
-        }
-
-        const topPages = relatedPages
-            .sort((a, b) => b.similarity - a.similarity)
-            .slice(0, maxResults);
-
-        return this.createRelationshipResult(
-            topPages,
-            relationships.slice(0, maxResults),
-            topPages.length > 0
-                ? Math.max(...topPages.map((p) => p.similarity))
-                : 0,
-            "technical",
-        );
-    }
-
-    /**
      * Find temporally related pages (recent visits, sequences)
      */
     private async findTemporalRelationships(
@@ -817,50 +712,6 @@ export class RelationshipDiscovery {
         return shared.length / Math.min(entities1.length, entities2.length);
     }
 
-    private assessTechnicalContent(
-        knowledge: any,
-        website: any,
-    ): { score: number; indicators: string[] } {
-        const indicators: string[] = [];
-        let score = 0;
-
-        // Check for technical terms in topics
-        const technicalTopics = (knowledge?.topics || []).filter(
-            (topic: string) =>
-                /code|api|function|class|method|programming|software|development/i.test(
-                    topic,
-                ),
-        );
-        if (technicalTopics.length > 0) {
-            score += 0.4;
-            indicators.push("technical topics");
-        }
-
-        // Check for technical entities
-        const technicalEntities = (knowledge?.entities || []).filter(
-            (entity: any) =>
-                /api|function|class|method|library|framework/i.test(
-                    entity.type,
-                ),
-        );
-        if (technicalEntities.length > 0) {
-            score += 0.3;
-            indicators.push("technical entities");
-        }
-
-        // Check URL patterns
-        if (
-            /github|stackoverflow|docs?\.|api\.|dev\.|developer/i.test(
-                website.metadata.url,
-            )
-        ) {
-            score += 0.3;
-            indicators.push("technical domain");
-        }
-
-        return { score: Math.min(score, 1), indicators };
-    }
-
     private calculateDaysDifference(date1: string, date2: string): number {
         const d1 = new Date(date1);
         const d2 = new Date(date2);
@@ -902,7 +753,6 @@ export class RelationshipDiscovery {
             qualityIndicators: {
                 contentRichness: 0.5,
                 topicSpecificity: 0.5,
-                technicalDepth: 0.5,
                 informationDensity: 0.5,
                 overallQuality: 0.5,
             },
@@ -964,7 +814,6 @@ export class RelationshipDiscovery {
                 semanticSimilarity: 0.5,
                 structuralSimilarity: 0.5,
                 temporalRelevance: 0.5,
-                contentDepthAlignment: 0.5,
                 topicCoherence: 0.5,
                 overallScore: confidence,
             },
@@ -1074,35 +923,6 @@ export class RelationshipDiscovery {
     }
 
     /**
-     * Calculate content depth alignment
-     */
-    private calculateContentDepthAlignment(
-        result: RelationshipResult,
-        currentKnowledge: any,
-    ): number {
-        if (result.relatedPages.length === 0) return 0;
-
-        // Estimate current content technical depth
-        const currentDepth = this.estimateContentDepth(currentKnowledge);
-
-        let alignmentScore = 0;
-        let count = 0;
-
-        for (const page of result.relatedPages) {
-            const pageDepth = this.estimatePageDepth(page);
-
-            // Calculate alignment (closer depths = higher score)
-            const depthDifference = Math.abs(currentDepth - pageDepth);
-            const alignmentFactor = Math.max(0, 1 - depthDifference / 1.0); // Normalize to 0-1
-
-            alignmentScore += alignmentFactor;
-            count++;
-        }
-
-        return count > 0 ? alignmentScore / count : 0;
-    }
-
-    /**
      * Calculate topic coherence across related pages
      */
     private calculateTopicCoherence(result: RelationshipResult): number {
@@ -1140,18 +960,16 @@ export class RelationshipDiscovery {
     ): number {
         // Weights based on importance for relationship quality
         const weights = {
-            semanticSimilarity: 0.3,
-            structuralSimilarity: 0.2,
+            semanticSimilarity: 0.35,
+            structuralSimilarity: 0.25,
             temporalRelevance: 0.2,
-            contentDepthAlignment: 0.15,
-            topicCoherence: 0.15,
+            topicCoherence: 0.2,
         };
 
         return (
             metrics.semanticSimilarity * weights.semanticSimilarity +
             metrics.structuralSimilarity * weights.structuralSimilarity +
             metrics.temporalRelevance * weights.temporalRelevance +
-            metrics.contentDepthAlignment * weights.contentDepthAlignment +
             metrics.topicCoherence * weights.topicCoherence
         );
     }
@@ -1196,25 +1014,6 @@ export class RelationshipDiscovery {
         return specificityScore / sharedElements.length;
     }
 
-    private calculateTechnicalDepth(page: RelatedPage): number {
-        let depth = 0;
-
-        // Technical relationship types indicate depth
-        if (page.relationshipType === "technical-similarity") {
-            depth += 0.5;
-        }
-
-        // Technical shared elements
-        const technicalElements = page.sharedElements.filter((element) =>
-            /code|api|function|class|programming|development|architecture/i.test(
-                element,
-            ),
-        );
-        depth += Math.min(0.5, technicalElements.length / 5);
-
-        return Math.min(1.0, depth);
-    }
-
     private calculateInformationDensity(page: RelatedPage): number {
         // Estimate based on shared elements richness and visit patterns
         let density = 0;
@@ -1237,16 +1036,14 @@ export class RelationshipDiscovery {
         indicators: Omit<QualityIndicators, "overallQuality">,
     ): number {
         const weights = {
-            contentRichness: 0.3,
-            topicSpecificity: 0.25,
-            technicalDepth: 0.25,
-            informationDensity: 0.2,
+            contentRichness: 0.4,
+            topicSpecificity: 0.35,
+            informationDensity: 0.25,
         };
 
         return (
             indicators.contentRichness * weights.contentRichness +
             indicators.topicSpecificity * weights.topicSpecificity +
-            indicators.technicalDepth * weights.technicalDepth +
             indicators.informationDensity * weights.informationDensity
         );
     }
@@ -1297,43 +1094,5 @@ export class RelationshipDiscovery {
             confidenceFactors,
             qualityScore: metrics.overallScore,
         };
-    }
-
-    private estimateContentDepth(knowledge: any): number {
-        let depth = 0.5; // baseline
-
-        // Technical entities increase depth
-        if (knowledge.entities) {
-            const techEntities = knowledge.entities.filter((e: any) =>
-                /api|framework|architecture|algorithm/i.test(e.type),
-            );
-            depth += Math.min(0.3, techEntities.length / 5);
-        }
-
-        // Advanced topics increase depth
-        if (knowledge.keyTopics) {
-            const advancedTopics = knowledge.keyTopics.filter((topic: string) =>
-                /advanced|expert|architecture|internals|deep/i.test(topic),
-            );
-            depth += Math.min(0.2, advancedTopics.length / 3);
-        }
-
-        return Math.min(1.0, depth);
-    }
-
-    private estimatePageDepth(page: RelatedPage): number {
-        let depth = 0.5; // baseline
-
-        if (page.relationshipType === "technical-similarity") {
-            depth += 0.3;
-        }
-
-        // Technical shared elements
-        const techElements = page.sharedElements.filter((element) =>
-            /advanced|expert|architecture|algorithm|deep/i.test(element),
-        );
-        depth += Math.min(0.2, techElements.length / 3);
-
-        return Math.min(1.0, depth);
     }
 }

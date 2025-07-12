@@ -937,14 +937,6 @@ async function applyMetadataFilters(
         for (const website of websites) {
             let includeWebsite = true;
 
-            // Content type filtering
-            if (
-                filters.contentType &&
-                website.metadata.pageType !== filters.contentType
-            ) {
-                includeWebsite = false;
-            }
-
             // Domain filtering
             if (filters.domain) {
                 const websiteDomain = extractDomainFromUrl(
@@ -979,17 +971,6 @@ function buildEnhancedSearchTerms(query: string, filters?: any): string[] {
     const terms = [query];
 
     // Add filter-based search terms
-    if (filters?.contentType) {
-        terms.push(filters.contentType);
-    }
-
-    if (filters?.technicalLevel) {
-        terms.push(filters.technicalLevel);
-    }
-
-    if (filters?.pageType) {
-        terms.push(filters.pageType);
-    }
 
     return terms;
 }
@@ -1189,8 +1170,6 @@ function getAppliedFilters(filters?: any): string[] {
         applied.push(`Content Type: ${filters.contentType}`);
     if (filters.timeRange) applied.push(`Time Range: ${filters.timeRange}`);
     if (filters.domain) applied.push(`Domain: ${filters.domain}`);
-    if (filters.technicalLevel)
-        applied.push(`Technical Level: ${filters.technicalLevel}`);
 
     return applied;
 }

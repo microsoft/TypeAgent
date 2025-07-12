@@ -2900,19 +2900,6 @@ class KnowledgePanel {
                     <div class="card-body p-3">
                         <div class="row g-2">
                             <div class="col-md-6">
-                                <label class="form-label">Content Type</label>
-                                <select class="form-select form-select-sm" id="contentTypeFilter">
-                                    <option value="">All Types</option>
-                                    <option value="tutorial">Tutorial</option>
-                                    <option value="documentation">Documentation</option>
-                                    <option value="article">Article</option>
-                                    <option value="reference">Reference</option>
-                                    <option value="blog">Blog Post</option>
-                                    <option value="news">News</option>
-                                    <option value="video">Video</option>
-                                </select>
-                            </div>
-                            <div class="col-md-6">
                                 <label class="form-label">Time Range</label>
                                 <select class="form-select form-select-sm" id="timeRangeFilter">
                                     <option value="">All Time</option>
@@ -2922,22 +2909,10 @@ class KnowledgePanel {
                                     <option value="year">Last Year</option>
                                 </select>
                             </div>
-                        </div>
-                        <div class="row g-2 mt-2">
                             <div class="col-md-6">
                                 <label class="form-label">Domain</label>
                                 <input type="text" class="form-control form-control-sm" id="domainFilter" 
                                        placeholder="e.g., github.com">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Technical Level</label>
-                                <select class="form-select form-select-sm" id="technicalLevelFilter">
-                                    <option value="">Any Level</option>
-                                    <option value="beginner">Beginner</option>
-                                    <option value="intermediate">Intermediate</option>
-                                    <option value="advanced">Advanced</option>
-                                    <option value="expert">Expert</option>
-                                </select>
                             </div>
                         </div>
                         <div class="row g-2 mt-2">
@@ -2997,16 +2972,10 @@ class KnowledgePanel {
 
     private clearAllFilters(): void {
         (
-            document.getElementById("contentTypeFilter") as HTMLSelectElement
-        ).value = "";
-        (
             document.getElementById("timeRangeFilter") as HTMLSelectElement
         ).value = "";
         (document.getElementById("domainFilter") as HTMLInputElement).value =
             "";
-        (
-            document.getElementById("technicalLevelFilter") as HTMLSelectElement
-        ).value = "";
     }
 
     private async submitEnhancedQuery(query: string): Promise<void> {
@@ -3014,11 +2983,6 @@ class KnowledgePanel {
 
         // Collect advanced filter values
         const filters: any = {};
-
-        const contentType = (
-            document.getElementById("contentTypeFilter") as HTMLSelectElement
-        )?.value;
-        if (contentType) filters.contentType = contentType;
 
         const timeRange = (
             document.getElementById("timeRangeFilter") as HTMLSelectElement
@@ -3029,11 +2993,6 @@ class KnowledgePanel {
             document.getElementById("domainFilter") as HTMLInputElement
         )?.value;
         if (domain) filters.domain = domain;
-
-        const technicalLevel = (
-            document.getElementById("technicalLevelFilter") as HTMLSelectElement
-        )?.value;
-        if (technicalLevel) filters.technicalLevel = technicalLevel;
 
         queryResults.innerHTML = this.createEnhancedSearchLoadingState();
 

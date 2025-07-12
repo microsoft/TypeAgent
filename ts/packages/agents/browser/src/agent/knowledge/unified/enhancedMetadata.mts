@@ -198,14 +198,6 @@ export class EnhancedTitleProcessor implements TitleProcessor {
         'before', 'after', 'above', 'below', 'between', 'among', 'under', 'over'
     ]);
     
-    private technicalPatterns = [
-        /\b\w+\(\)/g,           // Function calls like "example()"
-        /\b[A-Z][a-z]*[A-Z]\w*/g, // CamelCase
-        /\b\w+\.\w+/g,          // Dot notation like "object.property"
-        /\b\d+\.\d+/g,          // Version numbers
-        /\b[A-Z]{2,}/g          // Acronyms
-    ];
-    
     process(title: string): TitleInfo {
         const cleaned = this.cleanTitle(title);
         const words = this.tokenize(cleaned);
@@ -253,14 +245,6 @@ export class EnhancedTitleProcessor implements TitleProcessor {
     private extractEntities(text: string): string[] {
         const entities: string[] = [];
         
-        // Extract technical entities
-        this.technicalPatterns.forEach(pattern => {
-            const matches = text.match(pattern);
-            if (matches) {
-                entities.push(...matches);
-            }
-        });
-        
         // Extract proper nouns (capitalized words)
         const properNouns = text.match(/\b[A-Z][a-z]+\b/g);
         if (properNouns) {
@@ -282,11 +266,6 @@ export class EnhancedTitleProcessor implements TitleProcessor {
         // Higher confidence for longer titles with more content
         if (title.length > 20) confidence += 0.1;
         if (title.length > 50) confidence += 0.1;
-        
-        // Higher confidence for technical content
-        if (entities.some(entity => this.technicalPatterns.some(pattern => pattern.test(entity)))) {
-            confidence += 0.2;
-        }
         
         // Higher confidence for descriptive titles
         if (keywords.length > 3) confidence += 0.1;
