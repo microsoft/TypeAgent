@@ -25,7 +25,7 @@ from typeagent.knowpro.interfaces import (
     ScoredMessageOrdinal,
     ScoredSemanticRefOrdinal,
 )
-from typeagent.knowpro.search import ConversationSearchResult
+from typeagent.knowpro.search import ConversationSearchResult, SearchQueryExpr
 from typeagent.knowpro.search_query_schema import SearchQuery
 from typeagent.knowpro.serialization import deserialize_object
 from typeagent.knowpro import searchlang
@@ -41,8 +41,9 @@ class Context:
     lang_search_options: searchlang.LanguageSearchOptions
     answer_options: answers.AnswerContextOptions
     interactive: bool
-    sr_index: dict[str, dict]
+    sr_index: dict[str, dict[str, object]]
     use_search_query: bool
+    use_compiled_search_query: bool
 
 
 def main():
@@ -76,6 +77,12 @@ def main():
         action="store_true",
         default=False,
         help="Use search query from SRFILE",
+    )
+    parser.add_argument(
+        "--use-compiled-search-query",
+        action="store_true",
+        default=False,
+        help="Use compiled search query from SRFILE",
     )
     parser.add_argument(
         "--podcast",
@@ -152,6 +159,7 @@ def main():
         interactive=args.interactive,
         sr_index=sr_index,
         use_search_query=args.use_search_query,
+        use_compiled_search_query=args.use_compiled_search_query,
     )
     utils.pretty_print(context.lang_search_options)
     utils.pretty_print(context.answer_options)
@@ -270,6 +278,13 @@ async def compare_actual_to_expected(
             debug_context.use_search_query = deserialize_object(
                 SearchQuery, record["searchQueryExpr"]
             )
+    if context.use_compiled_search_query:
+        record = context.sr_index.get(question)
+        if record:
+            print("Using compiled search query from SRFILE")
+            debug_context.use_compiled_search_query_exprs = deserialize_object(
+                list[SearchQueryExpr], record["compiledQueryExpr"]
+            )
 
     result = await searchlang.search_conversation_with_language(
         context.conversation,
@@ -289,15 +304,15 @@ async def compare_actual_to_expected(
                 list[searchlang.SearchQueryExpr], record["compiledQueryExpr"]
             )
             qr: list[RawSearchResult] = record["results"]
-            if compare_and_print_diff(
-                debug_context.search_query,
+            if debug_context.search_query and compare_and_print_diff(
                 qx,
+                debug_context.search_query,
                 "Search query from LLM does not match reference.",
             ):
                 pass
             elif compare_and_print_diff(
-                debug_context.search_query_expr,
                 qc,
+                debug_context.search_query_expr,
                 "Compiled search query expression from LLM does not match reference.",
             ):
                 pass
@@ -432,8 +447,8 @@ def compare_and_print_diff(
     diff = difflib.unified_diff(
         a_formatted.splitlines(True),
         b_formatted.splitlines(True),
-        fromfile="actual",
-        tofile="expected",
+        fromfile="expected",
+        tofile="actual",
         n=2,
     )
     for x in diff:
