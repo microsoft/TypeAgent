@@ -29,7 +29,6 @@ import {
     UnifiedExtractionMode,
     ContentInput,
     AIModelUnavailableError,
-    KnowledgeMigrationManager,
     UnifiedExtractionAnalytics,
     UnifiedQualityMonitor
 } from "./unified/index.mjs";
@@ -91,9 +90,6 @@ export async function handleKnowledgeAction(
         case "generateTemporalSuggestions":
             return await generateTemporalSuggestions(parameters, context);
 
-        case "migrateKnowledgeIndex":
-            return await migrateKnowledgeIndex(parameters, context);
-
         case "getExtractionAnalytics":
             return await getExtractionAnalytics(parameters, context);
 
@@ -105,9 +101,6 @@ export async function handleKnowledgeAction(
 
         case "checkAIModelStatus":
             return await checkAIModelStatus(parameters, context);
-
-        case "enhancePageKnowledge":
-            return await enhancePageKnowledge(parameters, context);
 
         case "getRecentKnowledgeItems":
             return await getRecentKnowledgeItems(parameters, context);
@@ -1365,76 +1358,6 @@ export async function generateTemporalSuggestions(
     }
 }
 
-export async function migrateKnowledgeIndex(
-    parameters: {
-        mode?: UnifiedExtractionMode;
-        batchSize?: number;
-        dryRun?: boolean;
-    },
-    context: SessionContext<BrowserActionContext>,
-): Promise<{
-    success: boolean;
-    migrated: number;
-    skipped: number;
-    errors: number;
-    duration: number;
-    qualityImprovement: any;
-}> {
-    try {
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection) {
-            return {
-                success: false,
-                migrated: 0,
-                skipped: 0,
-                errors: 1,
-                duration: 0,
-                qualityImprovement: null
-            };
-        }
-
-        const migrationManager = new KnowledgeMigrationManager(websiteCollection, context);
-        const mode = parameters.mode || 'content';
-
-        if (parameters.dryRun) {
-            const candidates = await migrationManager.detectMigrationCandidates();
-            return {
-                success: true,
-                migrated: 0,
-                skipped: 0,
-                errors: 0,
-                duration: 0,
-                qualityImprovement: {
-                    candidatesFound: candidates.length,
-                    estimatedImprovement: candidates.reduce((sum, c) => sum + c.estimatedImprovement, 0)
-                }
-            };
-        }
-
-        const result = await migrationManager.migrateExistingContent(mode);
-
-        return {
-            success: result.errors.length === 0,
-            migrated: result.migrated,
-            skipped: result.skipped,
-            errors: result.errors.length,
-            duration: result.duration,
-            qualityImprovement: result.qualityImprovement
-        };
-    } catch (error) {
-        console.error("Error during knowledge migration:", error);
-        return {
-            success: false,
-            migrated: 0,
-            skipped: 0,
-            errors: 1,
-            duration: 0,
-            qualityImprovement: null
-        };
-    }
-}
-
 export async function getExtractionAnalytics(
     parameters: {
         timeRange?: string;
@@ -1483,48 +1406,6 @@ export async function generateQualityReport(
         return {
             success: false,
             report: null
-        };
-    }
-}
-
-export async function detectMigrationCandidates(
-    parameters: {
-        limit?: number;
-    },
-    context: SessionContext<BrowserActionContext>,
-): Promise<{
-    success: boolean;
-    candidates: any[];
-    totalCandidates: number;
-}> {
-    try {
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection) {
-            return {
-                success: false,
-                candidates: [],
-                totalCandidates: 0
-            };
-        }
-
-        const migrationManager = new KnowledgeMigrationManager(websiteCollection, context);
-        const candidates = await migrationManager.detectMigrationCandidates();
-
-        const limit = parameters.limit || 50;
-        const limitedCandidates = candidates.slice(0, limit);
-
-        return {
-            success: true,
-            candidates: limitedCandidates,
-            totalCandidates: candidates.length
-        };
-    } catch (error) {
-        console.error("Error detecting migration candidates:", error);
-        return {
-            success: false,
-            candidates: [],
-            totalCandidates: 0
         };
     }
 }
@@ -1653,67 +1534,6 @@ export async function checkAIModelStatus(
         return {
             available: false,
             error: error instanceof Error ? error.message : "Unknown AI model error"
-        };
-    }
-}
-
-export async function enhancePageKnowledge(
-    parameters: { 
-        url: string;
-        mode?: UnifiedExtractionMode;
-    },
-    context: SessionContext<BrowserActionContext>
-): Promise<{
-    success: boolean;
-    enhanced: boolean;
-    qualityBefore: number;
-    qualityAfter: number;
-    error?: string;
-}> {
-    try {
-        const migrationManager = new KnowledgeMigrationManager(
-            context.agentContext.websiteCollection!,
-            context
-        );
-
-        const mode = parameters.mode || 'content';
-        
-        // Get quality before migration
-        const qualityBefore = await getPageQualityMetrics({ url: parameters.url }, context);
-        
-        // Find and migrate the specific page
-        const websites = context.agentContext.websiteCollection!.messages.getAll();
-        const targetSite = websites.find((site: any) => site.metadata.url === parameters.url);
-        
-        if (!targetSite) {
-            return {
-                success: false,
-                enhanced: false,
-                qualityBefore: 0,
-                qualityAfter: 0,
-                error: "Page not found in index"
-            };
-        }
-
-        const result = await migrationManager.migrateSingleSite(targetSite, mode);
-        
-        // Get quality after migration
-        const qualityAfter = await getPageQualityMetrics({ url: parameters.url }, context);
-
-        return {
-            success: true,
-            enhanced: result,
-            qualityBefore: qualityBefore.score,
-            qualityAfter: qualityAfter.score
-        };
-    } catch (error) {
-        console.error("Error enhancing page knowledge:", error);
-        return {
-            success: false,
-            enhanced: false,
-            qualityBefore: 0,
-            qualityAfter: 0,
-            error: error instanceof Error ? error.message : "Unknown error"
         };
     }
 }

@@ -6,7 +6,6 @@ interface ExtensionSettings {
     defaultExtractionMode: "basic" | "content" | "actions" | "full";
     maxConcurrentExtractions: number;
     qualityThreshold: number;
-    autoMigration: boolean;
     enableIntelligentAnalysis: boolean;
     enableActionDetection: boolean;
 }
@@ -18,21 +17,13 @@ interface AIModelStatus {
     lastChecked?: string;
 }
 
-interface MigrationCandidate {
-    url: string;
-    title: string;
-    currentEntityCount: number;
-    currentTopicCount: number;
-    estimatedImprovement: number;
-    contentLength: number;
-}
+
 
 const DEFAULT_SETTINGS: ExtensionSettings = {
     websocketHost: "ws://localhost:8080/",
     defaultExtractionMode: "content",
     maxConcurrentExtractions: 3,
     qualityThreshold: 0.3,
-    autoMigration: false,
     enableIntelligentAnalysis: true,
     enableActionDetection: false,
 };
@@ -40,7 +31,6 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
 class EnhancedOptionsPage {
     private settings: ExtensionSettings = { ...DEFAULT_SETTINGS };
     private aiStatus: AIModelStatus = { available: false };
-    private migrationCandidates: MigrationCandidate[] = [];
 
     constructor() {
         this.initializeEventListeners();
@@ -78,15 +68,6 @@ class EnhancedOptionsPage {
             this.updateQualityDisplay(parseFloat(qualityRange.value));
         });
 
-        // Migration controls
-        document.getElementById("checkMigrationCandidates")?.addEventListener('click', () => {
-            this.checkMigrationCandidates();
-        });
-
-        document.getElementById("migrateAll")?.addEventListener('click', () => {
-            this.startMigration();
-        });
-
         // Other controls
         document.getElementById("resetToDefaults")?.addEventListener('click', () => {
             this.resetToDefaults();
@@ -106,7 +87,6 @@ class EnhancedOptionsPage {
             (document.getElementById("websocketHost") as HTMLInputElement).value = this.settings.websocketHost;
             (document.getElementById("maxConcurrentExtractions") as HTMLInputElement).value = this.settings.maxConcurrentExtractions.toString();
             (document.getElementById("qualityThreshold") as HTMLInputElement).value = this.settings.qualityThreshold.toString();
-            (document.getElementById("autoMigration") as HTMLInputElement).checked = this.settings.autoMigration;
 
         } catch (error) {
             console.error("Error loading settings:", error);
@@ -201,139 +181,6 @@ class EnhancedOptionsPage {
         this.settings.qualityThreshold = value;
     }
 
-    private async checkMigrationCandidates() {
-        const button = document.getElementById("checkMigrationCandidates") as HTMLButtonElement;
-        const originalText = button.innerHTML;
-        
-        button.innerHTML = '<i class="bi bi-hourglass-split"></i> Checking...';
-        button.disabled = true;
-
-        try {
-            const response = await chrome.runtime.sendMessage({
-                type: "detectMigrationCandidates"
-            });
-
-            this.migrationCandidates = response.candidates || [];
-            this.displayMigrationCandidates();
-
-        } catch (error) {
-            console.error("Error checking migration candidates:", error);
-            this.showStatus("Error checking for migration candidates", "danger");
-        } finally {
-            button.innerHTML = originalText;
-            button.disabled = false;
-        }
-    }
-
-    private displayMigrationCandidates() {
-        const resultsContainer = document.getElementById("migrationResults")!;
-        
-        if (this.migrationCandidates.length === 0) {
-            resultsContainer.innerHTML = `
-                <div class="alert alert-info">
-                    <i class="bi bi-info-circle me-2"></i>
-                    No pages found that would benefit from knowledge enhancement.
-                </div>
-            `;
-            return;
-        }
-
-        const candidatesList = this.migrationCandidates
-            .slice(0, 10) // Show top 10
-            .map(candidate => `
-                <div class="d-flex justify-content-between align-items-center p-2 border-bottom">
-                    <div class="flex-grow-1">
-                        <div class="fw-semibold small">${candidate.title}</div>
-                        <div class="text-muted" style="font-size: 0.75rem;">
-                            ${candidate.currentEntityCount} entities • ${candidate.currentTopicCount} topics
-                        </div>
-                    </div>
-                    <div class="text-end">
-                        <div class="badge bg-success">+${Math.round(candidate.estimatedImprovement)}</div>
-                    </div>
-                </div>
-            `).join('');
-
-        resultsContainer.innerHTML = `
-            <div class="alert alert-success">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <strong><i class="bi bi-arrow-up-circle me-2"></i>Found ${this.migrationCandidates.length} pages to enhance</strong>
-                </div>
-                <div class="border rounded" style="max-height: 200px; overflow-y: auto;">
-                    ${candidatesList}
-                </div>
-                ${this.migrationCandidates.length > 10 ? `<small class="text-muted mt-2 d-block">...and ${this.migrationCandidates.length - 10} more</small>` : ''}
-            </div>
-        `;
-    }
-
-    private async startMigration() {
-        if (this.migrationCandidates.length === 0) {
-            await this.checkMigrationCandidates();
-            if (this.migrationCandidates.length === 0) return;
-        }
-
-        const button = document.getElementById("migrateAll") as HTMLButtonElement;
-        const progressContainer = document.getElementById("migrationProgress")!;
-        
-        button.disabled = true;
-        progressContainer.classList.remove("d-none");
-
-        try {
-            const response = await chrome.runtime.sendMessage({
-                type: "migrateKnowledgeIndex",
-                mode: this.settings.defaultExtractionMode
-            });
-
-            // Monitor progress (simplified)
-            this.updateMigrationProgress(0, this.migrationCandidates.length, "Starting migration...");
-            
-            // For demo purposes, simulate progress
-            for (let i = 0; i <= this.migrationCandidates.length; i++) {
-                await new Promise(resolve => setTimeout(resolve, 100));
-                const current = Math.min(i, this.migrationCandidates.length);
-                this.updateMigrationProgress(
-                    current, 
-                    this.migrationCandidates.length, 
-                    current < this.migrationCandidates.length ? 
-                        `Processing: ${this.migrationCandidates[current]?.title || 'Unknown'}` : 
-                        "Migration complete!"
-                );
-            }
-
-            this.showStatus(
-                `Successfully enhanced ${this.migrationCandidates.length} pages with ${this.settings.defaultExtractionMode} mode`,
-                "success"
-            );
-
-            // Clear candidates after successful migration
-            this.migrationCandidates = [];
-            document.getElementById("migrationResults")!.innerHTML = "";
-
-        } catch (error) {
-            console.error("Migration error:", error);
-            this.showStatus("Error during knowledge enhancement", "danger");
-        } finally {
-            button.disabled = false;
-            setTimeout(() => {
-                progressContainer.classList.add("d-none");
-            }, 2000);
-        }
-    }
-
-    private updateMigrationProgress(current: number, total: number, status: string) {
-        const progressBar = document.getElementById("migrationProgressBar")!;
-        const statusElement = document.getElementById("migrationStatus")!;
-        const currentElement = document.getElementById("migrationCurrent")!;
-        const totalElement = document.getElementById("migrationTotal")!;
-
-        const percentage = total > 0 ? (current / total) * 100 : 0;
-        progressBar.style.width = `${percentage}%`;
-        statusElement.textContent = status;
-        currentElement.textContent = current.toString();
-        totalElement.textContent = total.toString();
-    }
-
     private async saveOptions(e: Event) {
         e.preventDefault();
 
@@ -346,7 +193,6 @@ class EnhancedOptionsPage {
 
         // Update settings
         this.settings.websocketHost = websocketHost;
-        this.settings.autoMigration = (document.getElementById("autoMigration") as HTMLInputElement).checked;
 
         // Get selected mode
         const selectedMode = document.querySelector('input[name="defaultMode"]:checked') as HTMLInputElement;

@@ -144,7 +144,6 @@ class KnowledgePanel {
         await this.loadCachedKnowledge();
         await this.loadExtractionSettings();
         await this.checkAIModelAvailability();
-        await this.checkMigrationStatus();
 
         this.setupAdvancedQueryControls();
     }
@@ -194,14 +193,6 @@ class KnowledgePanel {
                 const select = e.target as HTMLSelectElement;
                 this.updateExtractionMode(select.value as any);
             });
-
-        // Enhanced knowledge button
-        const enhanceBtn = document.getElementById("enhanceKnowledge");
-        if (enhanceBtn) {
-            enhanceBtn.addEventListener("click", () => {
-                this.enhancePageKnowledge();
-            });
-        }
 
         chrome.tabs.onActivated.addListener(() => {
             this.onTabChange();
@@ -3349,54 +3340,6 @@ class KnowledgePanel {
             knowledgeSection.innerHTML = "";
             knowledgeSection.classList.add("d-none");
         };
-    }
-
-    private async checkMigrationStatus() {
-        try {
-            const response = await chrome.runtime.sendMessage({
-                type: "detectMigrationCandidates",
-                url: this.currentUrl
-            });
-
-            const migrationElement = document.getElementById("migrationStatus");
-            if (migrationElement && response.needsMigration) {
-                migrationElement.classList.remove("d-none");
-            }
-        } catch (error) {
-            console.warn("Could not check migration status:", error);
-        }
-    }
-
-    private async enhancePageKnowledge() {
-        const button = document.getElementById("enhanceKnowledge") as HTMLButtonElement;
-        const originalContent = button.innerHTML;
-        
-        button.innerHTML = '<i class="bi bi-arrow-up-circle"></i> Enhancing...';
-        button.disabled = true;
-
-        try {
-            await chrome.runtime.sendMessage({
-                type: "migratePageKnowledge",
-                url: this.currentUrl,
-                mode: "content"
-            });
-
-            await this.loadCurrentPageInfo();
-            await this.updateQualityIndicator();
-            
-            const migrationElement = document.getElementById("migrationStatus");
-            if (migrationElement) {
-                migrationElement.classList.add("d-none");
-            }
-
-            this.showTemporaryStatus("Knowledge enhanced successfully!", "success");
-        } catch (error) {
-            console.error("Error enhancing knowledge:", error);
-            this.showTemporaryStatus("Failed to enhance knowledge", "danger");
-        } finally {
-            button.innerHTML = originalContent;
-            button.disabled = false;
-        }
     }
 
     private async updateQualityIndicator() {

@@ -21,7 +21,6 @@ export interface UserPreferences {
     qualityThreshold: number;
     maxProcessingTime: number;
     notificationLevel: 'none' | 'errors' | 'progress' | 'all';
-    autoMigration: boolean;
     preferredConcurrency: number;
 }
 
@@ -65,7 +64,6 @@ export const DEFAULT_USER_PREFERENCES: UserPreferences = {
     qualityThreshold: 0.4,
     maxProcessingTime: 300000,
     notificationLevel: 'progress',
-    autoMigration: false,
     preferredConcurrency: 5
 };
 
