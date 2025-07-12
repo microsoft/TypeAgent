@@ -3610,40 +3610,23 @@ class KnowledgePanel {
 
         const requiresAI = MODE_DESCRIPTIONS[this.extractionSettings.mode]?.requiresAI;
         
-        if (requiresAI) {
+        // Only show AI status notification when there's an error (AI required but not available)
+        if (requiresAI && !this.aiModelAvailable) {
             statusElement.classList.remove("d-none");
-            
-            if (this.aiModelAvailable) {
-                statusElement.className = "mb-3 alert alert-success alert-sm p-2";
-                messageElement.innerHTML = `
-                    <span class="ai-status-indicator ai-available"></span>
-                    AI model available - ${this.extractionSettings.mode} mode ready
-                `;
-            } else {
-                statusElement.className = "mb-3 alert alert-warning alert-sm p-2";
-                messageElement.innerHTML = `
-                    <span class="ai-status-indicator ai-unavailable"></span>
-                    AI model required but not available. Please configure AI model or use Basic mode.
-                `;
-            }
+            statusElement.className = "mb-3 alert alert-warning alert-sm p-2";
+            messageElement.innerHTML = `
+                <span class="ai-status-indicator ai-unavailable"></span>
+                AI model required but not available. Please configure AI model or use Basic mode.
+            `;
         } else {
+            // Hide notification by default (when AI is available or not required)
             statusElement.classList.add("d-none");
         }
     }
 
     private async checkAIModelAvailability() {
-        const statusElement = document.getElementById("aiModelStatus");
-        const messageElement = document.getElementById("aiStatusMessage");
+        // Don't show checking notification - keep it hidden by default
         
-        if (statusElement && messageElement) {
-            statusElement.classList.remove("d-none");
-            statusElement.className = "mb-3 alert alert-info alert-sm p-2";
-            messageElement.innerHTML = `
-                <span class="ai-status-indicator ai-checking"></span>
-                Checking AI model availability...
-            `;
-        }
-
         try {
             const response = await chrome.runtime.sendMessage({
                 type: "checkAIModelAvailability"
