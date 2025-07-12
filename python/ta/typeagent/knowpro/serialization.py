@@ -25,6 +25,7 @@ import numpy as np
 from ..aitools.embeddings import NormalizedEmbeddings
 from ..podcasts import podcast
 
+from .searchlang import SearchTermGroupTypes
 from .interfaces import (
     ConversationDataWithIndexes,
     Tag,
@@ -317,7 +318,6 @@ def deserialize_object(typ: Any, obj: Any) -> Any:
         # A forward reference; special-case those that matter.
         match typ:
             case "SearchTermGroupTypes":
-                from .searchlang import SearchTermGroupTypes
                 typ = SearchTermGroupTypes
             case _:
                 raise DeserializationError(f"Unknown forward type reference {typ!r}")
