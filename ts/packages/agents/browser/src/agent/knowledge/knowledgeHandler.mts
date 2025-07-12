@@ -105,6 +105,9 @@ export async function handleKnowledgeAction(
         case "getRecentKnowledgeItems":
             return await getRecentKnowledgeItems(parameters, context);
 
+        case "getPageIndexedKnowledge":
+            return await getPageIndexedKnowledge(parameters, context);
+
         default:
             throw new Error(`Unknown knowledge action: ${actionName}`);
     }
@@ -1624,6 +1627,130 @@ export async function getRecentKnowledgeItems(
             entities: [],
             topics: [],
             success: false
+        };
+    }
+}
+
+export async function getPageIndexedKnowledge(
+    parameters: { url: string },
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    isIndexed: boolean;
+    knowledge?: EnhancedKnowledgeExtractionResult;
+    error?: string;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return { 
+                isIndexed: false, 
+                error: "No website collection available" 
+            };
+        }
+
+        const websites = websiteCollection.messages.getAll();
+        const foundWebsite = websites.find(
+            (site: any) => site.metadata.url === parameters.url,
+        );
+
+        if (!foundWebsite) {
+            return { 
+                isIndexed: false, 
+                error: "Page not found in index" 
+            };
+        }
+
+        try {
+            const knowledge = foundWebsite.getKnowledge();
+            
+            if (!knowledge) {
+                return { 
+                    isIndexed: true, 
+                    knowledge: {
+                        entities: [],
+                        relationships: [],
+                        keyTopics: [],
+                        suggestedQuestions: [],
+                        summary: "Page is indexed but no knowledge was extracted.",
+                        contentMetrics: {
+                            readingTime: 0,
+                            wordCount: 0,
+                        },
+                    }
+                };
+            }
+
+            // Convert the stored knowledge to the expected format
+            const entities: Entity[] = knowledge.entities?.map((entity) => ({
+                name: entity.name,
+                type: Array.isArray(entity.type) ? entity.type.join(", ") : entity.type,
+                description: entity.facets?.find((f) => f.name === "description")?.value as string,
+                confidence: 0.8, // Default confidence for indexed content
+            })) || [];
+
+            const keyTopics: string[] = knowledge.topics || [];
+
+            const relationships: Relationship[] = knowledge.actions?.map((action) => ({
+                from: action.subjectEntityName || "unknown",
+                relationship: action.verbs?.join(", ") || "related to",
+                to: action.objectEntityName || "unknown",
+                confidence: 0.8, // Default confidence for indexed content
+            })) || [];
+
+            // Generate contextual questions for indexed content
+            const suggestedQuestions: string[] = await generateSmartSuggestedQuestions(
+                knowledge,
+                null,
+                parameters.url,
+                context,
+            );
+
+            // Calculate content metrics from the stored text
+            const textContent = foundWebsite.textChunks?.join("\n\n") || "";
+            const wordCount = textContent.split(/\s+/).length;
+            const contentMetrics = {
+                readingTime: Math.ceil(wordCount / 225),
+                wordCount: wordCount,
+            };
+
+            const summary = `Retrieved indexed knowledge: ${entities.length} entities, ${keyTopics.length} topics, ${relationships.length} relationships.`;
+
+            return {
+                isIndexed: true,
+                knowledge: {
+                    entities,
+                    relationships,
+                    keyTopics,
+                    suggestedQuestions,
+                    summary,
+                    contentMetrics,
+                }
+            };
+
+        } catch (knowledgeError) {
+            console.warn("Error extracting knowledge from indexed page:", knowledgeError);
+            return { 
+                isIndexed: true, 
+                knowledge: {
+                    entities: [],
+                    relationships: [],
+                    keyTopics: [],
+                    suggestedQuestions: [],
+                    summary: "Page is indexed but knowledge extraction failed.",
+                    contentMetrics: {
+                        readingTime: 0,
+                        wordCount: 0,
+                    },
+                }
+            };
+        }
+
+    } catch (error) {
+        console.error("Error getting page indexed knowledge:", error);
+        return { 
+            isIndexed: false, 
+            error: "Failed to retrieve indexed knowledge" 
         };
     }
 }

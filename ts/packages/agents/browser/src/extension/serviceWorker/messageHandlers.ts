@@ -466,6 +466,30 @@ export async function handleMessage(
             }
         }
 
+        case "getPageIndexedKnowledge": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getPageIndexedKnowledge",
+                    parameters: {
+                        url: message.url,
+                    },
+                });
+
+                return {
+                    isIndexed: result.isIndexed || false,
+                    knowledge: result.knowledge || null,
+                    error: result.error || null,
+                };
+            } catch (error) {
+                console.error("Error getting page indexed knowledge:", error);
+                return { 
+                    isIndexed: false, 
+                    knowledge: null, 
+                    error: "Failed to retrieve indexed knowledge" 
+                };
+            }
+        }
+
         case "getIndexStats": {
             try {
                 const result = await sendActionToAgent({

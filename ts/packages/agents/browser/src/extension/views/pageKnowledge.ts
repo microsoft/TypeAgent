@@ -1505,6 +1505,19 @@ class KnowledgePanel {
 
     private async loadCachedKnowledge() {
         try {
+            // First check if the page is indexed
+            const indexStatus = await chrome.runtime.sendMessage({
+                type: "getPageIndexStatus",
+                url: this.currentUrl,
+            });
+
+            if (indexStatus.isIndexed) {
+                // Page is indexed, try to load the indexed knowledge
+                await this.loadIndexedKnowledge();
+                return;
+            }
+
+            // Fallback to cached knowledge from local storage
             const knowledgeKey = "knowledge_" + this.currentUrl;
             const cached = await chrome.storage.local.get([knowledgeKey]);
 
@@ -1524,6 +1537,80 @@ class KnowledgePanel {
             }
         } catch (error) {
             console.error("Error loading cached knowledge:", error);
+        }
+    }
+
+    private async loadIndexedKnowledge() {
+        try {
+            const response = await chrome.runtime.sendMessage({
+                type: "getPageIndexedKnowledge",
+                url: this.currentUrl,
+            });
+
+            if (response.isIndexed && response.knowledge) {
+                this.knowledgeData = response.knowledge;
+                if (this.knowledgeData) {
+                    await this.renderKnowledgeResults(this.knowledgeData);
+                    
+                    // Show indicator that this is indexed knowledge
+                    this.showIndexedKnowledgeIndicator();
+                }
+            } else if (response.error) {
+                console.warn("Error loading indexed knowledge:", response.error);
+                // Fall back to local cache or show empty state
+                await this.loadCachedKnowledgeFromStorage();
+            }
+        } catch (error) {
+            console.error("Error loading indexed knowledge:", error);
+            // Fall back to local cache
+            await this.loadCachedKnowledgeFromStorage();
+        }
+    }
+
+    private async loadCachedKnowledgeFromStorage() {
+        try {
+            const knowledgeKey = "knowledge_" + this.currentUrl;
+            const cached = await chrome.storage.local.get([knowledgeKey]);
+
+            if (cached[knowledgeKey]) {
+                this.knowledgeData = cached[knowledgeKey];
+                if (this.knowledgeData) {
+                    await this.renderKnowledgeResults(this.knowledgeData);
+                }
+            } else {
+                const knowledgeSection =
+                    document.getElementById("knowledgeSection")!;
+                knowledgeSection.className = "d-none";
+
+                const questionsSection =
+                    document.getElementById("questionsSection")!;
+                questionsSection.className = "knowledge-card card d-none";
+            }
+        } catch (error) {
+            console.error("Error loading cached knowledge from storage:", error);
+        }
+    }
+
+    private showIndexedKnowledgeIndicator() {
+        const knowledgeSection = document.getElementById("knowledgeSection")!;
+        const firstCard = knowledgeSection.querySelector(".knowledge-card");
+        
+        if (firstCard) {
+            const indicatorDiv = document.createElement("div");
+            indicatorDiv.className = "alert alert-info mt-2";
+            indicatorDiv.innerHTML = `
+                <small>
+                    <i class="bi bi-database-check me-1"></i>
+                    <strong>Indexed Knowledge</strong> - This information was retrieved from your knowledge index
+                    <div class="mt-1">
+                        <span class="badge bg-success">
+                            <i class="bi bi-check-circle me-1"></i>Available Offline
+                        </span>
+                    </div>
+                </small>
+            `;
+            
+            knowledgeSection.insertBefore(indicatorDiv, firstCard);
         }
     }
 

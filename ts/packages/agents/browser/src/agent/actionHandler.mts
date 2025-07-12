@@ -397,6 +397,7 @@ async function updateBrowserContext(
                         case "indexWebPageContent":
                         case "queryWebKnowledge":
                         case "checkPageIndexStatus":
+                        case "getPageIndexedKnowledge":
                         case "getKnowledgeIndexStats":
                         case "clearKnowledgeIndex":
                         case "exportKnowledgeData": {
