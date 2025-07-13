@@ -49,14 +49,14 @@ interface ExtractionSettings {
     suggestQuestions: boolean;
 }
 
-interface UnifiedModeInfo {
+interface ExtractionModeInfo {
     description: string;
     requiresAI: boolean;
     features: string[];
     performance: string;
 }
 
-const MODE_DESCRIPTIONS: Record<string, UnifiedModeInfo> = {
+const MODE_DESCRIPTIONS: Record<string, ExtractionModeInfo> = {
     basic: {
         description:
             "Fast metadata extraction without AI - perfect for bulk operations",
@@ -201,7 +201,7 @@ class KnowledgePanel {
                 chrome.runtime.openOptionsPage();
             });
 
-        // Unified mode selection
+        // Extraction mode selection
         document
             .getElementById("extractionMode")!
             .addEventListener("change", (e) => {
@@ -3361,8 +3361,6 @@ class KnowledgePanel {
             type.replace("_", " ").replace(/\b\w/g, (l) => l.toUpperCase())
         );
     }
-
-    // === NEW UNIFIED MODE METHODS ===
 
     private updateExtractionMode(
         mode: "basic" | "content" | "actions" | "full",

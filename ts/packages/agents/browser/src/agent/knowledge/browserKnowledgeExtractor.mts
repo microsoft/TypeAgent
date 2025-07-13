@@ -17,13 +17,13 @@ import { openai as ai } from "aiclient";
 
 /**
  * Browser Knowledge Extractor that delegates to the website-memory package
-  */
+ */
 export class BrowserKnowledgeExtractor {
     private contentExtractor: ContentExtractor;
     private batchProcessor: BatchProcessor;
 
     constructor(context: SessionContext<BrowserActionContext>) {
-        // Create knowledge extractor from session context (similar to old unified system)
+        // Create knowledge extractor from session context
         let knowledgeExtractor: kpLib.KnowledgeExtractor | undefined;
         try {
             const apiSettings = ai.azureApiSettingsFromEnv(ai.ModelType.Chat);

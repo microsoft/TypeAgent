@@ -139,7 +139,7 @@ export type ImportWebsiteData = {
         days?: number;
         // Specific bookmark folder to import (for bookmarks)
         folder?: string;
-        // Unified extraction mode
+        // extraction mode
         mode?: "basic" | "content" | "actions" | "full";
         maxConcurrent?: number;
         contentTimeout?: number;
@@ -154,7 +154,7 @@ export type ImportHtmlFolder = {
         folderPath: string;
         // Import options
         options?: {
-            // Unified extraction mode
+            // extraction mode
             mode?: "basic" | "content" | "actions" | "full";
             preserveStructure?: boolean;
             // Folder-specific options

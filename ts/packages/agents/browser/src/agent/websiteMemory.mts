@@ -522,7 +522,7 @@ export async function importWebsiteDataFromSession(
             }
         };
 
-        const unifiedMode = mode || "basic";
+        const extractionMode = mode || "basic";
 
         // Build options object with only defined values
         const importOptions: any = {};
@@ -530,7 +530,7 @@ export async function importWebsiteDataFromSession(
         if (days !== undefined) importOptions.days = days;
         if (folder !== undefined) importOptions.folder = folder;
 
-        // Add unified extraction mode
+        // Add extraction mode
         if (mode !== undefined) importOptions.mode = mode;
         if (maxConcurrent !== undefined)
             importOptions.maxConcurrent = maxConcurrent;
@@ -538,7 +538,7 @@ export async function importWebsiteDataFromSession(
             importOptions.contentTimeout = contentTimeout;
 
         // For AI-enabled modes, validate AI availability before starting import
-        if (unifiedMode !== "basic") {
+        if (extractionMode !== "basic") {
             try {
                 const extractor = new BrowserKnowledgeExtractor(context);
                 // This will throw AIModelRequiredError if AI model is not available
@@ -549,19 +549,19 @@ export async function importWebsiteDataFromSession(
                         textContent: "test content for validation",
                         source: "direct",
                     },
-                    unifiedMode,
+                    extractionMode,
                 );
             } catch (error) {
                 if (error instanceof AIModelRequiredError) {
                     throw new Error(
-                        `Cannot import with ${unifiedMode} mode: ${error.message}`,
+                        `Cannot import with ${extractionMode} mode: ${error.message}`,
                     );
                 }
             }
         }
 
         // Create chat model for intelligent analysis if AI mode is enabled
-        if (unifiedMode !== "basic") {
+        if (extractionMode !== "basic") {
             try {
                 const apiSettings = ai.azureApiSettingsFromEnv(
                     ai.ModelType.Chat,
@@ -585,7 +585,7 @@ export async function importWebsiteDataFromSession(
         }
 
         let websites: any[];
-        if (unifiedMode === "basic") {
+        if (extractionMode === "basic") {
             // Use basic import for fast metadata-only import
             websites = await website.importWebsites(
                 source,
@@ -595,7 +595,7 @@ export async function importWebsiteDataFromSession(
                 progressCallback,
             );
         } else {
-            // Use basic import first, then enhance with unified extraction
+            // Use basic import first, then enhance with extraction
             websites = await website.importWebsites(
                 source,
                 type,
@@ -631,7 +631,7 @@ export async function importWebsiteDataFromSession(
                 try {
                     const enhancedResults = await extractor.extractBatch(
                         contentInputs,
-                        unifiedMode,
+                        extractionMode,
                         enhancedProgressCallback,
                     );
 
@@ -644,7 +644,7 @@ export async function importWebsiteDataFromSession(
 
                     if (displayProgress) {
                         displayProgress(
-                            `Enhanced ${enhancedResults.length} items with ${unifiedMode} mode extraction`,
+                            `Enhanced ${enhancedResults.length} items with ${extractionMode} mode extraction`,
                         );
                     }
                 } catch (error) {
@@ -747,10 +747,10 @@ export async function importHtmlFolderFromSession(
         const errors: any[] = [];
         let successCount = 0;
 
-        const unifiedMode = options.mode || "basic";
+        const extractionMode = options.mode || "basic";
 
         // For AI-enabled modes, validate AI availability before starting import
-        if (unifiedMode !== "basic") {
+        if (extractionMode !== "basic") {
             try {
                 const extractor = new BrowserKnowledgeExtractor(context);
                 // This will throw AIModelRequiredError if AI model is not available
@@ -761,12 +761,12 @@ export async function importHtmlFolderFromSession(
                         textContent: "test content for validation",
                         source: "import",
                     },
-                    unifiedMode,
+                    extractionMode,
                 );
             } catch (error) {
                 if (error instanceof AIModelRequiredError) {
                     throw new Error(
-                        `Cannot import HTML folder with ${unifiedMode} mode: ${error.message}`,
+                        `Cannot import HTML folder with ${extractionMode} mode: ${error.message}`,
                     );
                 }
             }
@@ -847,7 +847,7 @@ export async function importHtmlFolderFromSession(
             // Process the batch using shared HTML processing
             try {
                 const processingOptions: ProcessingOptions = {
-                    mode: unifiedMode,
+                    mode: extractionMode,
                     maxConcurrent: 5,
                 };
 
