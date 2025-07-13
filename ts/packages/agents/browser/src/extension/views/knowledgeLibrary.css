@@ -136,6 +136,74 @@ body {
   background-color: var(--accent-color);
 }
 
+/* Import Dropdown */
+.import-dropdown {
+  position: relative;
+}
+
+.import-btn {
+  padding: var(--spacing-sm);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  background: white;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.import-btn:hover {
+  color: var(--primary-color);
+  border-color: var(--primary-color);
+  background-color: var(--accent-color);
+}
+
+.import-dropdown .dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 1000;
+  display: none;
+  min-width: 200px;
+  padding: 0.5rem 0;
+  margin: 0.25rem 0 0;
+  background-color: white;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow-lg);
+}
+
+.import-dropdown .dropdown-menu.show {
+  display: block;
+}
+
+.import-dropdown .dropdown-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 0.5rem 1rem;
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  text-decoration: none;
+  background-color: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.import-dropdown .dropdown-item:hover {
+  background-color: var(--accent-color);
+  color: var(--primary-color);
+}
+
+.import-dropdown .dropdown-item i {
+  width: 16px;
+  margin-right: 0.5rem;
+}
+
 /* Main Container */
 .main-container {
   display: grid;
