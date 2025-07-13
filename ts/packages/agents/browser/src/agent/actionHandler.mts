@@ -174,71 +174,83 @@ async function updateBrowserContext(
 
         // Load the website index from disk
         if (!context.agentContext.websiteCollection) {
-            const websiteIndexes = await context.indexes("website");
+            try {
+                const websiteIndexes = await context.indexes("website");
 
-            if (websiteIndexes.length > 0) {
-                context.agentContext.index = websiteIndexes[0];
-                context.agentContext.websiteCollection =
-                    await website.WebsiteCollection.readFromFile(
-                        websiteIndexes[0].path,
-                        "index",
+                if (websiteIndexes.length > 0) {
+                    context.agentContext.index = websiteIndexes[0];
+                    context.agentContext.websiteCollection =
+                        await website.WebsiteCollection.readFromFile(
+                            websiteIndexes[0].path,
+                            "index",
+                        );
+                    debug(
+                        `Loaded website index with ${context.agentContext.websiteCollection?.messages.length || 0} websites`,
                     );
-                debug(
-                    `Loaded website index with ${context.agentContext.websiteCollection?.messages.length || 0} websites`,
-                );
-            } else {
-                debug(
-                    "No existing website index found, creating new index for data persistence",
-                );
+                } else {
+                    debug(
+                        "No existing website index found, creating new index for data persistence",
+                    );
 
-                // Create empty collection as fallback
-                context.agentContext.websiteCollection =
-                    new website.WebsiteCollection();
+                    // Create empty collection as fallback
+                    context.agentContext.websiteCollection =
+                        new website.WebsiteCollection();
 
-                try {
-                    const sessionDir = await getSessionFolderPath(context);
+                    try {
+                        const sessionDir = await getSessionFolderPath(context);
 
-                    if (sessionDir) {
-                        // Create index path following IndexManager pattern: sessionDir/indexes/website-index
-                        const indexPath = path.join(
-                            sessionDir,
-                            "indexes",
-                            "website-index",
-                        );
-                        fs.mkdirSync(indexPath, { recursive: true });
+                        if (sessionDir) {
+                            // Create index path following IndexManager pattern: sessionDir/indexes/website-index
+                            const indexPath = path.join(
+                                sessionDir,
+                                "indexes",
+                                "website-index",
+                            );
+                            fs.mkdirSync(indexPath, { recursive: true });
 
-                        // Create proper IndexData object
-                        context.agentContext.index = {
-                            source: "website",
-                            name: "website-index",
-                            location: "browser-agent",
-                            size: 0,
-                            path: indexPath,
-                            state: "new",
-                            progress: 0,
-                            sizeOnDisk: 0,
-                        };
+                            // Create proper IndexData object
+                            context.agentContext.index = {
+                                source: "website",
+                                name: "website-index",
+                                location: "browser-agent",
+                                size: 0,
+                                path: indexPath,
+                                state: "new",
+                                progress: 0,
+                                sizeOnDisk: 0,
+                            };
 
+                            debug(
+                                `Created website index with sessionStorage-based path: ${indexPath}`,
+                            );
+                        } else {
+                            debug(
+                                "Warning: Could not determine session directory path",
+                            );
+                            // Set index to undefined to prevent path access errors
+                            context.agentContext.index = undefined;
+                        }
+                    } catch (error) {
                         debug(
-                            `Created website index with sessionStorage-based path: ${indexPath}`,
+                            `Error during sessionStorage path discovery: ${error}`,
                         );
-                    } else {
+                        // Set index to undefined to prevent path access errors
+                        context.agentContext.index = undefined;
+                    }
+
+                    // If index creation failed, log that data will be in-memory only
+                    if (!context.agentContext.index) {
                         debug(
-                            "Warning: Could not determine session directory path",
+                            "Website collection created without persistent index - data will be in-memory only",
                         );
                     }
-                } catch (error) {
-                    debug(
-                        `Error during sessionStorage path discovery: ${error}`,
-                    );
                 }
-
-                // If index creation failed, log that data will be in-memory only
-                if (!context.agentContext.index) {
-                    debug(
-                        "Website collection created without persistent index - data will be in-memory only",
-                    );
-                }
+            } catch (error) {
+                debug("Error initializing website collection:", error);
+                // Fallback to empty collection without index
+                context.agentContext.websiteCollection =
+                    new website.WebsiteCollection();
+                context.agentContext.index = undefined;
             }
         }
 
@@ -383,6 +395,7 @@ async function updateBrowserContext(
                         case "indexWebPageContent":
                         case "queryWebKnowledge":
                         case "checkPageIndexStatus":
+                        case "getPageIndexedKnowledge":
                         case "getKnowledgeIndexStats":
                         case "clearKnowledgeIndex":
                         case "exportKnowledgeData": {

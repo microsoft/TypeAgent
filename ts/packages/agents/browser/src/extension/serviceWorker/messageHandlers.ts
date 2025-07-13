@@ -41,23 +41,6 @@ export async function handleMessage(
             return await handleSearchWebsitesEnhanced(message);
         }
 
-        case "extractKnowledge": {
-            // TODO: Implement knowledge extraction
-            return {
-                hasKnowledge: false,
-                status: "none",
-                error: "Knowledge extraction not implemented",
-            };
-        }
-
-        case "checkKnowledgeStatus": {
-            // TODO: Implement knowledge status check
-            return {
-                hasKnowledge: false,
-                status: "none",
-            };
-        }
-
         case "getSearchSuggestions": {
             return await handleGetSearchSuggestions(message);
         }
@@ -278,19 +261,7 @@ export async function handleMessage(
                             extractEntities: true,
                             extractRelationships: true,
                             suggestQuestions: true,
-                            quality:
-                                message.extractionSettings?.quality ||
-                                "balanced",
-                            extractionSettings: {
-                                mode:
-                                    message.extractionSettings?.mode || "full",
-                                enableIntelligentAnalysis:
-                                    message.extractionSettings
-                                        ?.enableIntelligentAnalysis !== false,
-                                enableActionDetection:
-                                    message.extractionSettings
-                                        ?.enableActionDetection !== false,
-                            },
+                            mode: message.extractionSettings?.mode || "content", // Use extraction mode parameter
                         },
                     });
 
@@ -314,9 +285,6 @@ export async function handleMessage(
                             contentMetrics: knowledgeResult.contentMetrics || {
                                 readingTime: 0,
                                 wordCount: 0,
-                                hasCode: false,
-                                interactivity: "static",
-                                pageType: "other",
                             },
                         },
                     };
@@ -478,6 +446,30 @@ export async function handleMessage(
             } catch (error) {
                 console.error("Error checking page index status:", error);
                 return { isIndexed: false, error: "Failed to check status" };
+            }
+        }
+
+        case "getPageIndexedKnowledge": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getPageIndexedKnowledge",
+                    parameters: {
+                        url: message.url,
+                    },
+                });
+
+                return {
+                    isIndexed: result.isIndexed || false,
+                    knowledge: result.knowledge || null,
+                    error: result.error || null,
+                };
+            } catch (error) {
+                console.error("Error getting page indexed knowledge:", error);
+                return {
+                    isIndexed: false,
+                    knowledge: null,
+                    error: "Failed to retrieve indexed knowledge",
+                };
             }
         }
 
@@ -673,6 +665,119 @@ export async function handleMessage(
             }
         }
 
+        case "checkAIModelAvailability": {
+            try {
+                // Check if AI model is available by attempting a simple extraction
+                const result = await sendActionToAgent({
+                    actionName: "extractKnowledgeFromPage",
+                    parameters: {
+                        url: "test://ai-check",
+                        title: "AI Availability Test",
+                        htmlFragments: [
+                            { text: "test content for AI availability check" },
+                        ],
+                        extractEntities: false,
+                        extractRelationships: false,
+                        suggestQuestions: false,
+                        mode: "basic",
+                    },
+                });
+
+                return {
+                    available: !result.error,
+                    version: result.version || "unknown",
+                    endpoint: result.endpoint || "unknown",
+                };
+            } catch (error) {
+                console.error("Error checking AI model availability:", error);
+                return {
+                    available: false,
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                };
+            }
+        }
+
+        case "getPageQualityMetrics": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getKnowledgeIndexStats",
+                    parameters: {
+                        url: message.url,
+                    },
+                });
+
+                // Extract quality metrics for the specific page
+                const pageStats = result.pageStats || {};
+
+                return {
+                    success: !result.error,
+                    quality: {
+                        score: pageStats.qualityScore || 0.5,
+                        entityCount: pageStats.entityCount || 0,
+                        topicCount: pageStats.topicCount || 0,
+                        actionCount: pageStats.actionCount || 0,
+                        extractionMode: pageStats.extractionMode || "unknown",
+                        lastUpdated: pageStats.lastUpdated || null,
+                    },
+                };
+            } catch (error) {
+                console.error("Error getting page quality metrics:", error);
+                return {
+                    success: false,
+                    quality: {
+                        score: 0,
+                        entityCount: 0,
+                        topicCount: 0,
+                        actionCount: 0,
+                        extractionMode: "unknown",
+                        lastUpdated: null,
+                    },
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                };
+            }
+        }
+
+        case "settingsUpdated": {
+            // Handle settings update notification
+            console.log("Settings updated:", message.settings);
+
+            // Store the new settings for use by other handlers
+            await chrome.storage.local.set({
+                knowledgeSettings: message.settings,
+            });
+
+            return { success: true };
+        }
+
+        case "getRecentKnowledgeItems": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getRecentKnowledgeItems",
+                    parameters: {
+                        limit: message.limit || 10,
+                        type: message.itemType || "both",
+                    },
+                });
+
+                return {
+                    success: result.success || false,
+                    entities: result.entities || [],
+                    topics: result.topics || [],
+                };
+            } catch (error) {
+                console.error("Error getting recent knowledge items:", error);
+                return {
+                    success: false,
+                    entities: [],
+                    topics: [],
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                };
+            }
+        }
+
         default:
             return null;
     }
@@ -689,12 +794,7 @@ async function handleImportWebsiteDataWithProgress(message: any) {
                 limit: message.parameters.limit,
                 days: message.parameters.days,
                 folder: message.parameters.folder,
-                // Enhancement options
-                extractContent: message.parameters.extractContent,
-                enableIntelligentAnalysis:
-                    message.parameters.enableIntelligentAnalysis,
-                enableActionDetection: message.parameters.enableActionDetection,
-                extractionMode: message.parameters.extractionMode,
+                mode: message.parameters.mode || "basic",
                 maxConcurrent: message.parameters.maxConcurrent,
                 contentTimeout: message.parameters.contentTimeout,
             },
@@ -830,12 +930,7 @@ async function handleImportHtmlFolder(message: any) {
             parameters: {
                 folderPath,
                 options: {
-                    extractContent: options?.extractContent ?? true,
-                    enableIntelligentAnalysis:
-                        options?.enableIntelligentAnalysis ?? true,
-                    enableActionDetection:
-                        options?.enableActionDetection ?? false,
-                    extractionMode: options?.extractionMode ?? "content",
+                    mode: options?.mode || "basic",
                     preserveStructure: options?.preserveStructure ?? true,
                     recursive: options?.recursive ?? true,
                     fileTypes: options?.fileTypes ?? [
@@ -942,27 +1037,18 @@ async function handleSearchWebsitesEnhanced(message: any) {
         const searchTime = Date.now() - startTime;
 
         // Generate AI summary if requested
-        let summary = null;
-        if (
-            message.parameters.includeSummary &&
-            searchResult.websites?.length > 0
-        ) {
-            summary = await generateSearchSummary(
-                searchResult.websites,
-                message.parameters.query,
-            );
-        }
+        let summary = searchResult.answer;
 
         return {
             success: true,
             results: {
-                websites: searchResult.websites || [],
+                websites: searchResult.sources || [],
                 summary: {
                     text: summary || "",
-                    totalFound: searchResult.websites?.length || 0,
+                    totalFound: searchResult.sources?.length || 0,
                     searchTime: searchTime,
-                    sources: extractSources(searchResult.websites || []),
-                    entities: searchResult.entities || [],
+                    sources: extractSources(searchResult.sources || []),
+                    entities: searchResult.relatedEntities || [],
                 },
                 query: message.parameters.query,
                 filters: message.parameters.filters || {},
@@ -1387,7 +1473,7 @@ function extractSources(websites: any[]): any[] {
     return websites.slice(0, 10).map((site) => ({
         url: site.url,
         title: site.title || site.url,
-        relevance: site.score || 0.5,
+        relevance: site.relevanceScore || 0.5,
     }));
 }
 

@@ -13,9 +13,6 @@ interface KnowledgeData {
     contentMetrics?: {
         readingTime: number;
         wordCount: number;
-        hasCode: boolean;
-        interactivity: string;
-        pageType: string;
     };
 }
 
@@ -49,11 +46,57 @@ interface Relationship {
 
 interface ExtractionSettings {
     mode: "basic" | "content" | "actions" | "full";
-    enableIntelligentAnalysis: boolean;
-    enableActionDetection: boolean;
     suggestQuestions: boolean;
-    quality: "fast" | "balanced" | "deep";
 }
+
+interface ExtractionModeInfo {
+    description: string;
+    requiresAI: boolean;
+    features: string[];
+    performance: string;
+}
+
+const MODE_DESCRIPTIONS: Record<string, ExtractionModeInfo> = {
+    basic: {
+        description:
+            "Fast metadata extraction without AI - perfect for bulk operations",
+        requiresAI: false,
+        features: ["URL analysis", "Domain classification", "Basic topics"],
+        performance: "Fastest",
+    },
+    content: {
+        description:
+            "AI-powered content analysis with entity and topic extraction",
+        requiresAI: true,
+        features: [
+            "AI content analysis",
+            "Entity extraction",
+            "Topic identification",
+        ],
+        performance: "Fast",
+    },
+    actions: {
+        description: "AI analysis plus interaction detection for dynamic pages",
+        requiresAI: true,
+        features: [
+            "AI content analysis",
+            "Action detection",
+            "Interactive elements",
+        ],
+        performance: "Medium",
+    },
+    full: {
+        description:
+            "Complete AI analysis with relationships and cross-references",
+        requiresAI: true,
+        features: [
+            "Full AI analysis",
+            "Relationship extraction",
+            "Cross-references",
+        ],
+        performance: "Thorough",
+    },
+};
 
 interface QuestionCategory {
     name: string;
@@ -95,14 +138,12 @@ class KnowledgePanel {
     private knowledgeData: KnowledgeData | null = null;
     private pageSourceInfo: PageSourceInfo | null = null;
     private extractionSettings: ExtractionSettings;
+    private aiModelAvailable: boolean = false;
 
     constructor() {
         this.extractionSettings = {
-            mode: "full",
-            enableIntelligentAnalysis: true,
-            enableActionDetection: true,
+            mode: "content",
             suggestQuestions: true,
-            quality: "balanced",
         };
     }
 
@@ -116,10 +157,9 @@ class KnowledgePanel {
         await this.loadIndexStats();
         await this.checkConnectionStatus();
         await this.loadCachedKnowledge();
-        this.setupExtractionModeControls();
         await this.loadExtractionSettings();
+        await this.checkAIModelAvailability();
 
-        // Setup advanced query controls
         this.setupAdvancedQueryControls();
     }
 
@@ -161,6 +201,14 @@ class KnowledgePanel {
                 chrome.runtime.openOptionsPage();
             });
 
+        // Extraction mode selection
+        document
+            .getElementById("extractionMode")!
+            .addEventListener("change", (e) => {
+                const select = e.target as HTMLSelectElement;
+                this.updateExtractionMode(select.value as any);
+            });
+
         chrome.tabs.onActivated.addListener(() => {
             this.onTabChange();
         });
@@ -197,7 +245,7 @@ class KnowledgePanel {
         }
     }
 
-    private async getPageIndexStatus(): Promise<string> {
+    private async getPageIndexStatus(retryCount: number = 0): Promise<string> {
         try {
             const response = await chrome.runtime.sendMessage({
                 type: "getPageIndexStatus",
@@ -205,12 +253,83 @@ class KnowledgePanel {
             });
 
             if (response.isIndexed) {
-                return '<span class="badge bg-success">Indexed</span>';
+                const lastIndexedDate = response.lastIndexed
+                    ? new Date(response.lastIndexed).toLocaleDateString()
+                    : "Unknown";
+                const entityCount = response.entityCount || 0;
+
+                return `
+                    <span class="badge bg-success position-relative">
+                        <i class="bi bi-check-circle me-1"></i>Indexed
+                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-info">
+                            ${entityCount}
+                            <span class="visually-hidden">entities</span>
+                        </span>
+                    </span>
+                    <div class="small text-muted mt-1">
+                        Last: ${lastIndexedDate}
+                    </div>
+                `;
             } else {
-                return '<span class="badge bg-secondary">Not indexed</span>';
+                // If not indexed and this is a retry attempt (likely after recent indexing),
+                // try once more with a longer delay
+                if (retryCount < 2) {
+                    await new Promise((resolve) => setTimeout(resolve, 1000));
+                    return this.getPageIndexStatus(retryCount + 1);
+                }
+
+                return `
+                    <span class="badge bg-secondary">
+                        <i class="bi bi-circle me-1"></i>Not indexed
+                    </span>
+                    <div class="small text-muted mt-1">
+                        Ready to index
+                    </div>
+                `;
             }
         } catch (error) {
-            return '<span class="badge bg-warning">Unknown</span>';
+            return `
+                <span class="badge bg-warning">
+                    <i class="bi bi-question-circle me-1"></i>Unknown
+                </span>
+                <div class="small text-muted mt-1">
+                    Check connection
+                </div>
+            `;
+        }
+    }
+
+    private async refreshPageStatusAfterIndexing() {
+        try {
+            const tabs = await chrome.tabs.query({
+                active: true,
+                currentWindow: true,
+            });
+            if (tabs.length > 0) {
+                const tab = tabs[0];
+                this.currentUrl = tab.url || "";
+
+                const pageInfo = document.getElementById("currentPageInfo")!;
+                const domain = new URL(this.currentUrl).hostname;
+
+                // Force a status check with retry for recent indexing
+                const status = await this.getPageIndexStatus(0);
+
+                pageInfo.innerHTML = this.createPageInfo(
+                    tab.title || "Untitled",
+                    domain,
+                    status,
+                );
+
+                // Also update the page source info
+                await this.loadPageSourceInfo();
+                this.updatePageSourceDisplay();
+            }
+        } catch (error) {
+            console.error(
+                "Error refreshing page status after indexing:",
+                error,
+            );
         }
     }
 
@@ -247,31 +366,102 @@ class KnowledgePanel {
     }
 
     private async extractKnowledge() {
+        const button = document.getElementById(
+            "extractKnowledge",
+        ) as HTMLButtonElement;
+        const originalContent = button.innerHTML;
+
+        // Show extracting state with progress indicator
+        button.innerHTML =
+            '<i class="bi bi-hourglass-split spinner-grow spinner-grow-sm me-2"></i>Extracting...';
+        button.disabled = true;
+        button.classList.add("btn-warning");
+        button.classList.remove("btn-primary");
+
         this.showKnowledgeLoading();
 
         try {
+            // Validate mode selection before extraction
+            if (
+                this.extractionSettings.mode !== "basic" &&
+                !this.aiModelAvailable
+            ) {
+                this.showAIRequiredError();
+                return;
+            }
+
+            const startTime = Date.now();
+
             const response = await chrome.runtime.sendMessage({
                 type: "extractPageKnowledge",
                 url: this.currentUrl,
+                mode: this.extractionSettings.mode,
                 extractionSettings: this.extractionSettings,
             });
 
+            const processingTime = Date.now() - startTime;
+
             this.knowledgeData = response.knowledge;
             if (this.knowledgeData) {
+                // Show success state briefly
+                button.innerHTML =
+                    '<i class="bi bi-check-circle me-2"></i>Extracted!';
+                button.classList.remove("btn-warning");
+                button.classList.add("btn-success");
+
                 await this.renderKnowledgeResults(this.knowledgeData);
                 await this.cacheKnowledge(this.knowledgeData);
                 this.showExtractionInfo();
-            }
+                await this.updateQualityIndicator();
 
-            this.showTemporaryStatus(
-                `Knowledge extracted successfully using ${this.extractionSettings.mode} mode!`,
-                "success",
-            );
+                // Show detailed success notification
+                const entityCount = this.knowledgeData.entities?.length || 0;
+                const topicCount = this.knowledgeData.keyTopics?.length || 0;
+                const relationshipCount =
+                    this.knowledgeData.relationships?.length || 0;
+
+                this.showEnhancedNotification(
+                    "success",
+                    "Knowledge Extracted Successfully!",
+                    `Found ${entityCount} entities, ${topicCount} topics, ${relationshipCount} relationships using ${this.extractionSettings.mode} mode in ${Math.round(processingTime / 1000)}s`,
+                    "bi-brain",
+                );
+
+                // Brief delay to show success state
+                await new Promise((resolve) => setTimeout(resolve, 1500));
+            }
         } catch (error) {
             console.error("Error extracting knowledge:", error);
-            this.showKnowledgeError(
-                "Failed to extract knowledge. Please check your connection.",
-            );
+
+            // Show error state
+            button.innerHTML =
+                '<i class="bi bi-exclamation-triangle me-2"></i>Error';
+            button.classList.remove("btn-warning");
+            button.classList.add("btn-danger");
+
+            if ((error as Error).message?.includes("AI model required")) {
+                this.showAIRequiredError();
+            } else {
+                this.showKnowledgeError(
+                    "Failed to extract knowledge. Please check your connection.",
+                );
+                this.showEnhancedNotification(
+                    "danger",
+                    "Knowledge Extraction Failed",
+                    (error as Error).message ||
+                        "Failed to extract knowledge from page",
+                    "bi-exclamation-triangle",
+                );
+            }
+
+            // Brief delay to show error state
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+        } finally {
+            // Restore original button state
+            button.innerHTML = originalContent;
+            button.disabled = false;
+            button.classList.remove("btn-warning", "btn-success", "btn-danger");
+            button.classList.add("btn-primary");
         }
     }
 
@@ -281,25 +471,83 @@ class KnowledgePanel {
         ) as HTMLButtonElement;
         const originalContent = button.innerHTML;
 
-        button.innerHTML = '<i class="bi bi-hourglass-split"></i> Indexing...';
+        // Show indexing state with progress indicator
+        button.innerHTML =
+            '<i class="bi bi-hourglass-split spinner-grow spinner-grow-sm me-2"></i>Indexing...';
         button.disabled = true;
+        button.classList.add("btn-warning");
+        button.classList.remove("btn-outline-primary");
 
         try {
-            await chrome.runtime.sendMessage({
+            // Validate mode selection before indexing
+            if (
+                this.extractionSettings.mode !== "basic" &&
+                !this.aiModelAvailable
+            ) {
+                this.showAIRequiredError();
+                return;
+            }
+
+            const startTime = Date.now();
+
+            const response = await chrome.runtime.sendMessage({
                 type: "indexPageContentDirect",
                 url: this.currentUrl,
+                mode: this.extractionSettings.mode,
             });
 
-            await this.loadCurrentPageInfo();
-            await this.loadIndexStats();
+            const processingTime = Date.now() - startTime;
 
-            this.showTemporaryStatus("Page indexed successfully!", "success");
+            // Show success state briefly
+            button.innerHTML =
+                '<i class="bi bi-check-circle me-2"></i>Indexed!';
+            button.classList.remove("btn-warning");
+            button.classList.add("btn-success");
+
+            // Show detailed success notification
+            const entityCount = response.entityCount || 0;
+            this.showEnhancedNotification(
+                "success",
+                "Page Indexed Successfully!",
+                `Extracted ${entityCount} entities using ${this.extractionSettings.mode} mode in ${Math.round(processingTime / 1000)}s`,
+                "bi-database-check",
+            );
+
+            // Brief delay to show success state and allow backend to update
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+
+            // Update all relevant UI components after the delay to ensure backend has processed
+            await this.refreshPageStatusAfterIndexing();
+            await this.loadIndexStats();
+            await this.updateQualityIndicator();
         } catch (error) {
             console.error("Error indexing page:", error);
-            this.showTemporaryStatus("Failed to index page", "danger");
+
+            // Show error state
+            button.innerHTML =
+                '<i class="bi bi-exclamation-triangle me-2"></i>Error';
+            button.classList.remove("btn-warning");
+            button.classList.add("btn-danger");
+
+            if ((error as Error).message?.includes("AI model required")) {
+                this.showAIRequiredError();
+            } else {
+                this.showEnhancedNotification(
+                    "danger",
+                    "Indexing Failed",
+                    (error as Error).message || "Failed to index page",
+                    "bi-exclamation-triangle",
+                );
+            }
+
+            // Brief delay to show error state
+            await new Promise((resolve) => setTimeout(resolve, 2000));
         } finally {
+            // Restore original button state
             button.innerHTML = originalContent;
             button.disabled = false;
+            button.classList.remove("btn-warning", "btn-success", "btn-danger");
+            button.classList.add("btn-outline-primary");
         }
     }
 
@@ -1149,55 +1397,6 @@ class KnowledgePanel {
         }
     }
 
-    private setupExtractionModeControls() {
-        const extractButton = document.getElementById("extractKnowledge")!;
-        const buttonGroup = extractButton.parentElement!;
-
-        const modeSelector = document.createElement("div");
-        modeSelector.className = "btn-group btn-group-sm ms-2";
-        modeSelector.innerHTML = this.createExtractionModeDropdown();
-
-        buttonGroup.appendChild(modeSelector);
-
-        document
-            .getElementById("extractionModeMenu")!
-            .addEventListener("click", (e) => {
-                e.preventDefault();
-                const target = e.target as HTMLElement;
-                const item = target.closest(".dropdown-item") as HTMLElement;
-
-                if (item) {
-                    const mode = item.getAttribute("data-mode");
-                    const option = item.getAttribute("data-option");
-
-                    if (mode) {
-                        this.extractionSettings.mode = mode as any;
-                        this.updateExtractionModeDisplay();
-                        this.saveExtractionSettings();
-                    } else if (option === "quality") {
-                        this.toggleQualitySetting();
-                    }
-                }
-            });
-    }
-
-    private updateExtractionModeDisplay() {
-        const button = document.getElementById("extractionModeButton")!;
-        button.innerHTML = `<i class="bi bi-gear"></i> ${this.extractionSettings.mode}`;
-    }
-
-    private toggleQualitySetting() {
-        const qualities = ["fast", "balanced", "deep"];
-        const currentIndex = qualities.indexOf(this.extractionSettings.quality);
-        const nextIndex = (currentIndex + 1) % qualities.length;
-        this.extractionSettings.quality = qualities[nextIndex] as any;
-
-        const qualityItem = document.querySelector('[data-option="quality"]')!;
-        qualityItem.innerHTML = `<i class="bi bi-sliders"></i> Quality: ${this.extractionSettings.quality}`;
-
-        this.saveExtractionSettings();
-    }
-
     private async loadExtractionSettings() {
         try {
             const settings = await chrome.storage.sync.get([
@@ -1208,20 +1407,16 @@ class KnowledgePanel {
                     ...this.extractionSettings,
                     ...settings.extractionSettings,
                 };
-                this.updateExtractionModeDisplay();
+                // Sync with modern dropdown
+                const modernSelect = document.getElementById(
+                    "extractionMode",
+                ) as HTMLSelectElement;
+                if (modernSelect && this.extractionSettings.mode) {
+                    modernSelect.value = this.extractionSettings.mode;
+                }
             }
         } catch (error) {
             console.error("Error loading extraction settings:", error);
-        }
-    }
-
-    private async saveExtractionSettings() {
-        try {
-            await chrome.storage.sync.set({
-                extractionSettings: this.extractionSettings,
-            });
-        } catch (error) {
-            console.error("Error saving extraction settings:", error);
         }
     }
 
@@ -1239,8 +1434,7 @@ class KnowledgePanel {
 
         let content = `<small>
             <i class="bi bi-cpu me-1"></i>
-            <strong>Enhanced Extraction</strong> using <strong>${this.extractionSettings.mode}</strong> mode 
-            (${this.extractionSettings.quality} quality)
+            <strong>Enhanced Extraction</strong> using <strong>${this.extractionSettings.mode}</strong> mode
             <div class="mt-2">
                 <div class="d-flex align-items-center justify-content-between">
                     <span>Knowledge Quality:</span>
@@ -1340,6 +1534,19 @@ class KnowledgePanel {
 
     private async loadCachedKnowledge() {
         try {
+            // First check if the page is indexed
+            const indexStatus = await chrome.runtime.sendMessage({
+                type: "getPageIndexStatus",
+                url: this.currentUrl,
+            });
+
+            if (indexStatus.isIndexed) {
+                // Page is indexed, try to load the indexed knowledge
+                await this.loadIndexedKnowledge();
+                return;
+            }
+
+            // Fallback to cached knowledge from local storage
             const knowledgeKey = "knowledge_" + this.currentUrl;
             const cached = await chrome.storage.local.get([knowledgeKey]);
 
@@ -1359,6 +1566,86 @@ class KnowledgePanel {
             }
         } catch (error) {
             console.error("Error loading cached knowledge:", error);
+        }
+    }
+
+    private async loadIndexedKnowledge() {
+        try {
+            const response = await chrome.runtime.sendMessage({
+                type: "getPageIndexedKnowledge",
+                url: this.currentUrl,
+            });
+
+            if (response.isIndexed && response.knowledge) {
+                this.knowledgeData = response.knowledge;
+                if (this.knowledgeData) {
+                    await this.renderKnowledgeResults(this.knowledgeData);
+
+                    // Show indicator that this is indexed knowledge
+                    this.showIndexedKnowledgeIndicator();
+                }
+            } else if (response.error) {
+                console.warn(
+                    "Error loading indexed knowledge:",
+                    response.error,
+                );
+                // Fall back to local cache or show empty state
+                await this.loadCachedKnowledgeFromStorage();
+            }
+        } catch (error) {
+            console.error("Error loading indexed knowledge:", error);
+            // Fall back to local cache
+            await this.loadCachedKnowledgeFromStorage();
+        }
+    }
+
+    private async loadCachedKnowledgeFromStorage() {
+        try {
+            const knowledgeKey = "knowledge_" + this.currentUrl;
+            const cached = await chrome.storage.local.get([knowledgeKey]);
+
+            if (cached[knowledgeKey]) {
+                this.knowledgeData = cached[knowledgeKey];
+                if (this.knowledgeData) {
+                    await this.renderKnowledgeResults(this.knowledgeData);
+                }
+            } else {
+                const knowledgeSection =
+                    document.getElementById("knowledgeSection")!;
+                knowledgeSection.className = "d-none";
+
+                const questionsSection =
+                    document.getElementById("questionsSection")!;
+                questionsSection.className = "knowledge-card card d-none";
+            }
+        } catch (error) {
+            console.error(
+                "Error loading cached knowledge from storage:",
+                error,
+            );
+        }
+    }
+
+    private showIndexedKnowledgeIndicator() {
+        const knowledgeSection = document.getElementById("knowledgeSection")!;
+        const firstCard = knowledgeSection.querySelector(".knowledge-card");
+
+        if (firstCard) {
+            const indicatorDiv = document.createElement("div");
+            indicatorDiv.className = "alert alert-info mt-2";
+            indicatorDiv.innerHTML = `
+                <small>
+                    <i class="bi bi-database-check me-1"></i>
+                    <strong>Indexed Knowledge</strong> - This information was retrieved from your knowledge index
+                    <div class="mt-1">
+                        <span class="badge bg-success">
+                            <i class="bi bi-check-circle me-1"></i>Available Offline
+                        </span>
+                    </div>
+                </small>
+            `;
+
+            knowledgeSection.insertBefore(indicatorDiv, firstCard);
         }
     }
 
@@ -1402,6 +1689,51 @@ class KnowledgePanel {
                 statusDiv.remove();
             }
         }, 3000);
+    }
+
+    private showEnhancedNotification(
+        type: "success" | "danger" | "info" | "warning",
+        title: string,
+        message: string,
+        icon: string = "bi-info-circle",
+    ) {
+        const notification = document.createElement("div");
+        notification.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+        notification.style.cssText = `
+            top: 20px; 
+            right: 20px; 
+            z-index: 9999; 
+            min-width: 350px; 
+            max-width: 400px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            border: none;
+            border-radius: 8px;
+        `;
+
+        notification.innerHTML = `
+            <div class="d-flex align-items-start">
+                <i class="${icon} me-3 mt-1" style="font-size: 1.2rem;"></i>
+                <div class="flex-grow-1">
+                    <div class="fw-bold mb-1">${title}</div>
+                    <div class="small">${message}</div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        `;
+
+        document.body.appendChild(notification);
+
+        // Auto-remove after 6 seconds for enhanced notifications
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.classList.remove("show");
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 300);
+            }
+        }, 6000);
     }
 
     // Template utility functions for knowledge panel
@@ -1550,46 +1882,7 @@ class KnowledgePanel {
         return this.createAlert("info", "bi bi-lightbulb", content);
     }
 
-    // Extraction mode dropdown components
-    private createDropdownHeader(text: string): string {
-        return `<li><h6 class="dropdown-header">${text}</h6></li>`;
-    }
-
-    private createDropdownItem(
-        icon: string,
-        text: string,
-        dataAttr: string,
-        value: string,
-    ): string {
-        return `
-            <li><a class="dropdown-item" href="#" ${dataAttr}="${value}">
-                <i class="${icon}"></i> ${text}
-            </a></li>
-        `;
-    }
-
-    private createDropdownDivider(): string {
-        return `<li><hr class="dropdown-divider"></li>`;
-    }
-
-    private createExtractionModeDropdown(): string {
-        return `
-            <button type="button" class="btn btn-outline-secondary dropdown-toggle" 
-                    data-bs-toggle="dropdown" aria-expanded="false" id="extractionModeButton">
-                <i class="bi bi-gear"></i> ${this.extractionSettings.mode}
-            </button>
-            <ul class="dropdown-menu" id="extractionModeMenu">
-                ${this.createDropdownHeader("Extraction Mode")}
-                ${this.createDropdownItem("bi bi-speedometer", "Basic - Fast extraction", "data-mode", "basic")}
-                ${this.createDropdownItem("bi bi-file-text", "Content - Include page analysis", "data-mode", "content")}
-                ${this.createDropdownItem("bi bi-lightning", "Actions - Detect actionable elements", "data-mode", "actions")}
-                ${this.createDropdownItem("bi bi-cpu", "Full - Complete analysis", "data-mode", "full")}
-                ${this.createDropdownDivider()}
-                ${this.createDropdownHeader("Options")}
-                ${this.createDropdownItem("bi bi-sliders", `Quality: ${this.extractionSettings.quality}`, "data-option", "quality")}
-            </ul>
-        `;
-    }
+    // Template utility functions for knowledge panel
 
     private createPageInfo(
         title: string,
@@ -1663,11 +1956,6 @@ class KnowledgePanel {
             metrics.readingTime,
         );
         const wordCountCategory = this.getWordCountCategory(metrics.wordCount);
-        const pageTypeInfo = this.getPageTypeInfo(metrics.pageType);
-        const codeIntensity = this.getCodeIntensity(
-            metrics.hasCode,
-            metrics.wordCount,
-        );
 
         container.innerHTML = `
             <!-- Reading Time Section -->
@@ -1721,57 +2009,6 @@ class KnowledgePanel {
                         </div>
                     </div>
                     <small class="text-muted">${wordCountCategory.description}</small>
-                </div>
-            </div>
-
-            <!-- Page Type Section -->
-            <div class="metric-section mb-4">
-                <div class="d-flex align-items-center justify-content-between mb-2">
-                    <h6 class="mb-0 text-success">
-                        <i class="${pageTypeInfo.icon} me-2"></i>Page Type
-                    </h6>
-                    <span class="badge bg-${pageTypeInfo.color}">${pageTypeInfo.label}</span>
-                </div>
-                <div class="metric-visual-container">
-                    <div class="page-type-indicator p-3 bg-light rounded">
-                        <div class="d-flex align-items-center">
-                            <i class="${pageTypeInfo.icon} text-${pageTypeInfo.color} me-3" style="font-size: 1.5rem;"></i>
-                            <div>
-                                <div class="fw-semibold">${metrics.pageType}</div>
-                                <small class="text-muted">${pageTypeInfo.description}</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Technical Content Section -->
-            <div class="metric-section">
-                <div class="d-flex align-items-center justify-content-between mb-2">
-                    <h6 class="mb-0 text-warning">
-                        <i class="bi bi-code-slash me-2"></i>Technical Content
-                    </h6>
-                    <span class="badge bg-${codeIntensity.color}">${codeIntensity.label}</span>
-                </div>
-                <div class="metric-visual-container">
-                    <div class="row text-center">
-                        <div class="col-6">
-                            <div class="metric-card p-2 bg-light rounded">
-                                <div class="h5 mb-0 text-${metrics.hasCode ? "success" : "muted"}">
-                                    <i class="bi bi-${metrics.hasCode ? "check-circle-fill" : "x-circle"}"></i>
-                                </div>
-                                <small class="text-muted">Code Present</small>
-                            </div>
-                        </div>
-                        <div class="col-6">
-                            <div class="metric-card p-2 bg-light rounded">
-                                <div class="h5 mb-0 text-secondary">
-                                    ${metrics.interactivity !== "static" ? '<i class="bi bi-lightning-fill"></i>' : '<i class="bi bi-file-text"></i>'}
-                                </div>
-                                <small class="text-muted">${this.getInteractivityLevel(metrics.interactivity)}</small>
-                            </div>
-                        </div>
-                    </div>
                 </div>
             </div>
         `;
@@ -1888,116 +2125,6 @@ class KnowledgePanel {
                 description: "In-depth exploration",
             };
         }
-    }
-
-    private getPageTypeInfo(pageType: string) {
-        const typeMap: {
-            [key: string]: {
-                icon: string;
-                color: string;
-                label: string;
-                description: string;
-            };
-        } = {
-            tutorial: {
-                icon: "bi-book",
-                color: "primary",
-                label: "Tutorial",
-                description: "Step-by-step learning content",
-            },
-            documentation: {
-                icon: "bi-file-earmark-text",
-                color: "info",
-                label: "Documentation",
-                description: "Reference material",
-            },
-            blog: {
-                icon: "bi-journal-text",
-                color: "success",
-                label: "Blog Post",
-                description: "Opinion and insights",
-            },
-            news: {
-                icon: "bi-newspaper",
-                color: "warning",
-                label: "News",
-                description: "Current events",
-            },
-            product: {
-                icon: "bi-box",
-                color: "danger",
-                label: "Product",
-                description: "Commercial content",
-            },
-            forum: {
-                icon: "bi-chat-dots",
-                color: "secondary",
-                label: "Discussion",
-                description: "Community content",
-            },
-            other: {
-                icon: "bi-file-text",
-                color: "light",
-                label: "General",
-                description: "Mixed content type",
-            },
-        };
-
-        return typeMap[pageType] || typeMap["other"];
-    }
-
-    private getCodeIntensity(hasCode: boolean, wordCount: number) {
-        if (!hasCode) {
-            return {
-                color: "light",
-                label: "Non-Technical",
-                percentage: 0,
-                description: "No code content detected",
-            };
-        }
-
-        // Estimate technical intensity based on word count and code presence
-        const intensity = Math.min(
-            Math.round((1000 / Math.max(wordCount, 100)) * 100),
-            100,
-        );
-
-        if (intensity >= 50) {
-            return {
-                color: "danger",
-                label: "Code-Heavy",
-                percentage: intensity,
-                description: "Significant programming content",
-            };
-        } else if (intensity >= 25) {
-            return {
-                color: "warning",
-                label: "Technical",
-                percentage: intensity,
-                description: "Mixed technical content",
-            };
-        } else {
-            return {
-                color: "info",
-                label: "Light Code",
-                percentage: intensity,
-                description: "Some code examples",
-            };
-        }
-    }
-
-    private getInteractivityLevel(interactivity: string): string {
-        if (interactivity === "static" || !interactivity) return "Static";
-        if (interactivity.includes("form")) return "Interactive";
-        if (interactivity.includes("button")) return "Clickable";
-        return "Dynamic";
-    }
-
-    private getInteractivityIcon(interactivity: string): string {
-        if (interactivity === "static" || !interactivity) return "file-text";
-        if (interactivity.includes("form")) return "ui-checks";
-        if (interactivity.includes("button")) return "hand-index";
-        return "cursor";
     }
 
     // Render related content discovery using enhanced search methods
@@ -2134,17 +2261,6 @@ class KnowledgePanel {
                     relationshipType: "topic-match",
                     excerpt: `Find other pages that discuss ${topic} in your knowledge base`,
                 });
-            });
-        }
-
-        // Generate code-related suggestions if code is detected
-        if (knowledge.contentMetrics?.hasCode) {
-            relatedContent.push({
-                url: "#",
-                title: "Similar programming content",
-                similarity: 0.6,
-                relationshipType: "code-related",
-                excerpt: "Other pages with code examples and technical content",
             });
         }
 
@@ -2895,19 +3011,6 @@ class KnowledgePanel {
                     <div class="card-body p-3">
                         <div class="row g-2">
                             <div class="col-md-6">
-                                <label class="form-label">Content Type</label>
-                                <select class="form-select form-select-sm" id="contentTypeFilter">
-                                    <option value="">All Types</option>
-                                    <option value="tutorial">Tutorial</option>
-                                    <option value="documentation">Documentation</option>
-                                    <option value="article">Article</option>
-                                    <option value="reference">Reference</option>
-                                    <option value="blog">Blog Post</option>
-                                    <option value="news">News</option>
-                                    <option value="video">Video</option>
-                                </select>
-                            </div>
-                            <div class="col-md-6">
                                 <label class="form-label">Time Range</label>
                                 <select class="form-select form-select-sm" id="timeRangeFilter">
                                     <option value="">All Time</option>
@@ -2917,34 +3020,14 @@ class KnowledgePanel {
                                     <option value="year">Last Year</option>
                                 </select>
                             </div>
-                        </div>
-                        <div class="row g-2 mt-2">
                             <div class="col-md-6">
                                 <label class="form-label">Domain</label>
                                 <input type="text" class="form-control form-control-sm" id="domainFilter" 
                                        placeholder="e.g., github.com">
                             </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Technical Level</label>
-                                <select class="form-select form-select-sm" id="technicalLevelFilter">
-                                    <option value="">Any Level</option>
-                                    <option value="beginner">Beginner</option>
-                                    <option value="intermediate">Intermediate</option>
-                                    <option value="advanced">Advanced</option>
-                                    <option value="expert">Expert</option>
-                                </select>
-                            </div>
                         </div>
                         <div class="row g-2 mt-2">
-                            <div class="col-md-6">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="hasCodeFilter">
-                                    <label class="form-check-label" for="hasCodeFilter">
-                                        Has Code/Technical Content
-                                    </label>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
+                            <div class="col-12">
                                 <button type="button" class="btn btn-sm btn-outline-secondary" id="clearFilters">
                                     <i class="bi bi-x-circle me-1"></i>Clear Filters
                                 </button>
@@ -3000,18 +3083,10 @@ class KnowledgePanel {
 
     private clearAllFilters(): void {
         (
-            document.getElementById("contentTypeFilter") as HTMLSelectElement
-        ).value = "";
-        (
             document.getElementById("timeRangeFilter") as HTMLSelectElement
         ).value = "";
         (document.getElementById("domainFilter") as HTMLInputElement).value =
             "";
-        (
-            document.getElementById("technicalLevelFilter") as HTMLSelectElement
-        ).value = "";
-        (document.getElementById("hasCodeFilter") as HTMLInputElement).checked =
-            false;
     }
 
     private async submitEnhancedQuery(query: string): Promise<void> {
@@ -3019,11 +3094,6 @@ class KnowledgePanel {
 
         // Collect advanced filter values
         const filters: any = {};
-
-        const contentType = (
-            document.getElementById("contentTypeFilter") as HTMLSelectElement
-        )?.value;
-        if (contentType) filters.contentType = contentType;
 
         const timeRange = (
             document.getElementById("timeRangeFilter") as HTMLSelectElement
@@ -3034,16 +3104,6 @@ class KnowledgePanel {
             document.getElementById("domainFilter") as HTMLInputElement
         )?.value;
         if (domain) filters.domain = domain;
-
-        const technicalLevel = (
-            document.getElementById("technicalLevelFilter") as HTMLSelectElement
-        )?.value;
-        if (technicalLevel) filters.technicalLevel = technicalLevel;
-
-        const hasCode = (
-            document.getElementById("hasCodeFilter") as HTMLInputElement
-        )?.checked;
-        if (hasCode) filters.hasCode = true;
 
         queryResults.innerHTML = this.createEnhancedSearchLoadingState();
 
@@ -3300,6 +3360,157 @@ class KnowledgePanel {
             labels[type] ||
             type.replace("_", " ").replace(/\b\w/g, (l) => l.toUpperCase())
         );
+    }
+
+    private updateExtractionMode(
+        mode: "basic" | "content" | "actions" | "full",
+    ) {
+        this.extractionSettings.mode = mode;
+
+        this.updateModeDescription(mode);
+        this.updateAIStatusDisplay();
+        this.saveExtractionSettings();
+    }
+
+    private updateModeDescription(mode: string) {
+        const descriptionElement = document.getElementById("modeDescription");
+        const modeInfo = MODE_DESCRIPTIONS[mode];
+
+        if (descriptionElement && modeInfo) {
+            descriptionElement.innerHTML = `
+                <div class="mode-description">
+                    ${modeInfo.description}
+                    <div class="mt-1">
+                        <small class="text-muted">
+                            <i class="bi bi-cpu me-1"></i>${modeInfo.performance}
+                            ${modeInfo.requiresAI ? ' • <i class="bi bi-robot me-1"></i>Requires AI' : ' • <i class="bi bi-lightning me-1"></i>No AI needed'}
+                        </small>
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    private updateAIStatusDisplay() {
+        const statusElement = document.getElementById("aiModelStatus");
+        const messageElement = document.getElementById("aiStatusMessage");
+
+        if (!statusElement || !messageElement) return;
+
+        const requiresAI =
+            MODE_DESCRIPTIONS[this.extractionSettings.mode]?.requiresAI;
+
+        // Only show AI status notification when there's an error (AI required but not available)
+        if (requiresAI && !this.aiModelAvailable) {
+            statusElement.classList.remove("d-none");
+            statusElement.className = "mb-3 alert alert-warning alert-sm p-2";
+            messageElement.innerHTML = `
+                <span class="ai-status-indicator ai-unavailable"></span>
+                AI model required but not available. Please configure AI model or use Basic mode.
+            `;
+        } else {
+            // Hide notification by default (when AI is available or not required)
+            statusElement.classList.add("d-none");
+        }
+    }
+
+    private async checkAIModelAvailability() {
+        // Don't show checking notification - keep it hidden by default
+
+        try {
+            const response = await chrome.runtime.sendMessage({
+                type: "checkAIModelAvailability",
+            });
+
+            this.aiModelAvailable = response.available || false;
+        } catch (error) {
+            console.warn("Could not check AI model availability:", error);
+            this.aiModelAvailable = false;
+        }
+
+        this.updateAIStatusDisplay();
+    }
+
+    private showAIRequiredError() {
+        const knowledgeSection = document.getElementById("knowledgeSection")!;
+        knowledgeSection.className = "";
+        knowledgeSection.innerHTML = `
+            <div class="knowledge-card card">
+                <div class="card-body text-center">
+                    <i class="bi bi-robot text-warning h3"></i>
+                    <h6 class="mt-2">AI Model Required</h6>
+                    <p class="text-muted mb-3">
+                        The <strong>${this.extractionSettings.mode}</strong> mode requires an AI model for analysis.
+                    </p>
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-primary btn-sm" onclick="switchToBasicMode()">
+                            <i class="bi bi-lightning me-2"></i>Switch to Basic Mode
+                        </button>
+                        <button class="btn btn-outline-secondary btn-sm" onclick="chrome.runtime.openOptionsPage()">
+                            <i class="bi bi-gear me-2"></i>Configure AI Model
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        (window as any).switchToBasicMode = () => {
+            const modeSelect = document.getElementById(
+                "extractionMode",
+            ) as HTMLSelectElement;
+            modeSelect.value = "basic";
+            this.updateExtractionMode("basic");
+            knowledgeSection.innerHTML = "";
+            knowledgeSection.classList.add("d-none");
+        };
+    }
+
+    private async updateQualityIndicator() {
+        try {
+            const response = await chrome.runtime.sendMessage({
+                type: "getPageQualityMetrics",
+                url: this.currentUrl,
+            });
+
+            const indicator = document.getElementById("qualityIndicator");
+            if (indicator && response.quality) {
+                const quality = response.quality;
+
+                let qualityClass = "bg-secondary";
+                let qualityText = "Unknown";
+
+                if (quality.score >= 0.8) {
+                    qualityClass = "quality-excellent";
+                    qualityText = "Excellent";
+                } else if (quality.score >= 0.6) {
+                    qualityClass = "quality-good";
+                    qualityText = "Good";
+                } else if (quality.score >= 0.4) {
+                    qualityClass = "quality-basic";
+                    qualityText = "Basic";
+                } else {
+                    qualityClass = "quality-poor";
+                    qualityText = "Poor";
+                }
+
+                indicator.className = `badge ${qualityClass}`;
+                indicator.textContent = qualityText;
+                indicator.title = `Quality Score: ${Math.round(quality.score * 100)}% • ${quality.entityCount} entities • ${quality.topicCount} topics`;
+            }
+        } catch (error) {
+            console.warn("Could not get quality metrics:", error);
+        }
+    }
+
+    private async saveExtractionSettings() {
+        try {
+            await chrome.storage.sync.set({
+                extractionMode: this.extractionSettings.mode,
+                suggestQuestions: this.extractionSettings.suggestQuestions,
+            });
+        } catch (error) {
+            console.warn("Could not save extraction settings:", error);
+        }
     }
 }
 

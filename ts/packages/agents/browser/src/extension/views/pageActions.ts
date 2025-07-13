@@ -197,7 +197,6 @@ class ActionDiscoveryPanel {
                     );
                 }
             } else {
-                // Convert ActionsStore format to legacy schema format for display
                 const legacySchema = currentActions.map((action) => ({
                     actionName: action.name,
                     description: action.description,

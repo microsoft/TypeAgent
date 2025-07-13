@@ -67,7 +67,6 @@ describe("Stage 2 Enhanced Import", () => {
                 maxCharsPerChunk: 500,
                 preserveStructure: true,
                 extractionMode: "content",
-                enableActionDetection: false,
                 contentTimeout: 5000,
             });
 

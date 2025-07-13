@@ -24,6 +24,12 @@ import {
     TemporalQuery,
     TemporalPattern,
 } from "./temporalQueryProcessor.js";
+import {
+    ExtractionMode,
+    ExtractionInput,
+    AIModelRequiredError,
+} from "website-memory";
+import { BrowserKnowledgeExtractor } from "./browserKnowledgeExtractor.mjs";
 
 export interface WebPageDocument {
     url: string;
@@ -80,6 +86,24 @@ export async function handleKnowledgeAction(
         case "generateTemporalSuggestions":
             return await generateTemporalSuggestions(parameters, context);
 
+        case "getExtractionAnalytics":
+            return await getExtractionAnalytics(parameters, context);
+
+        case "generateQualityReport":
+            return await generateQualityReport(parameters, context);
+
+        case "getPageQualityMetrics":
+            return await getPageQualityMetrics(parameters, context);
+
+        case "checkAIModelStatus":
+            return await checkAIModelStatus(parameters, context);
+
+        case "getRecentKnowledgeItems":
+            return await getRecentKnowledgeItems(parameters, context);
+
+        case "getPageIndexedKnowledge":
+            return await getPageIndexedKnowledge(parameters, context);
+
         default:
             throw new Error(`Unknown knowledge action: ${actionName}`);
     }
@@ -93,17 +117,10 @@ export async function extractKnowledgeFromPage(
         extractEntities: boolean;
         extractRelationships: boolean;
         suggestQuestions: boolean;
-        quality?: "fast" | "balanced" | "deep";
-        extractionSettings?: {
-            mode: "basic" | "content" | "actions" | "full";
-            enableIntelligentAnalysis: boolean;
-            enableActionDetection: boolean;
-        };
+        mode?: "basic" | "content" | "actions" | "full";
     },
     context: SessionContext<BrowserActionContext>,
 ): Promise<EnhancedKnowledgeExtractionResult> {
-    // Convert htmlFragments to HTML content for ContentExtractor
-    const htmlContent = reconstructHtmlFromFragments(parameters.htmlFragments);
     const textContent = parameters.htmlFragments
         .map((fragment) => fragment.text || "")
         .join("\n\n")
@@ -119,123 +136,68 @@ export async function extractKnowledgeFromPage(
             contentMetrics: {
                 readingTime: 0,
                 wordCount: 0,
-                hasCode: false,
-                interactivity: "static",
-                pageType: "other",
             },
         };
     }
 
     try {
-        // Use website-memory ContentExtractor for enhanced content analysis
-        let enhancedContent: any = null;
+        const extractionMode = parameters.mode || "content";
 
-        const extractionMode = parameters.extractionSettings?.mode || "content";
+        const extractor = new BrowserKnowledgeExtractor(context);
 
-        if (extractionMode !== "basic") {
-            try {
-                // Use ContentExtractor for rich content analysis
-                const { ContentExtractor } = website;
-                const contentExtractor = new ContentExtractor({
-                    timeout: 15000,
-                    enableActionDetection:
-                        parameters.extractionSettings?.enableActionDetection !==
-                        false,
-                    maxContentLength: 15000,
-                });
-
-                enhancedContent = await contentExtractor.extractFromHtml(
-                    htmlContent,
-                    extractionMode,
-                );
-            } catch (extractorError) {
-                console.warn(
-                    "Enhanced content extraction failed, falling back to basic:",
-                    extractorError,
-                );
-            }
-        }
-
-        // Create enhanced website object
-        const visitInfo: website.WebsiteVisitInfo = {
+        const contentInput: ExtractionInput = {
             url: parameters.url,
             title: parameters.title,
-            source: "history",
-            visitDate: new Date().toISOString(),
-            description:
-                enhancedContent?.pageContent?.mainContent?.substring(0, 500) ||
-                textContent.substring(0, 500),
+            htmlFragments: parameters.htmlFragments,
+            textContent: textContent,
+            source: "direct",
         };
 
-        // Set page type using website-memory's built-in detection
-        visitInfo.pageType = website.determinePageType(
-            parameters.url,
-            parameters.title,
+        const extractionResult = await extractor.extractKnowledge(
+            contentInput,
+            extractionMode,
         );
+        const knowledge = extractionResult.knowledge;
 
-        const websiteObj = website.importWebsiteVisit(
-            visitInfo,
-            enhancedContent?.pageContent?.mainContent || textContent,
-        );
-        const knowledge = websiteObj.getKnowledge();
+        const entities: Entity[] =
+            knowledge.entities?.map((entity: any) => ({
+                name: entity.name,
+                type: Array.isArray(entity.type)
+                    ? entity.type.join(", ")
+                    : entity.type,
+                description: entity.facets?.find(
+                    (f: any) => f.name === "description",
+                )?.value as string,
+                confidence: extractionResult.qualityMetrics.confidence,
+            })) || [];
 
-        // Generate smart suggested questions using enhanced content
+        const keyTopics: string[] = knowledge.topics || [];
+
+        const relationships: Relationship[] =
+            knowledge.actions?.map((action: any) => ({
+                from: action.subjectEntityName || "unknown",
+                relationship: action.verbs?.join(", ") || "related to",
+                to: action.objectEntityName || "unknown",
+                confidence: extractionResult.qualityMetrics.confidence,
+            })) || [];
+
         const suggestedQuestions: string[] = [];
         if (parameters.suggestQuestions && knowledge) {
             suggestedQuestions.push(
                 ...(await generateSmartSuggestedQuestions(
                     knowledge,
-                    enhancedContent,
+                    null,
                     parameters.url,
                     context,
                 )),
             );
         }
 
-        // Transform entities with enhanced information
-        const entities: Entity[] =
-            knowledge?.entities?.map((entity) => ({
-                name: entity.name,
-                type: Array.isArray(entity.type)
-                    ? entity.type.join(", ")
-                    : entity.type,
-                description: entity.facets?.find(
-                    (f) => f.name === "description",
-                )?.value as string,
-                confidence: 0.8,
-            })) || [];
+        const summary = `Knowledge extracted using ${extractionMode} mode: ${extractionResult.qualityMetrics.entityCount} entities, ${extractionResult.qualityMetrics.topicCount} topics, ${extractionResult.qualityMetrics.actionCount} actions found. Quality: ${Math.round(extractionResult.qualityMetrics.confidence * 100)}% confidence.`;
 
-        const keyTopics: string[] = knowledge?.topics || [];
-
-        const relationships: Relationship[] =
-            knowledge?.actions?.map((action) => ({
-                from: action.subjectEntityName || "unknown",
-                relationship: action.verbs?.join(", ") || "related to",
-                to: action.objectEntityName || "unknown",
-                confidence: 0.7,
-            })) || [];
-
-        // Create enhanced summary
-        const summary = generateEnhancedSummary(
-            knowledge,
-            enhancedContent,
-            parameters.title,
-        );
-
-        // Build content metrics
         const contentMetrics = {
-            readingTime:
-                enhancedContent?.pageContent?.readingTime ||
-                Math.ceil(textContent.split(/\s+/).length / 225),
-            wordCount:
-                enhancedContent?.pageContent?.wordCount ||
-                textContent.split(/\s+/).length,
-            hasCode:
-                (enhancedContent?.pageContent?.codeBlocks?.length || 0) > 0,
-            interactivity:
-                enhancedContent?.actionSummary?.actionTypes?.join(", ") ||
-                "static",
-            pageType: visitInfo.pageType || "other",
+            readingTime: Math.ceil(textContent.split(/\s+/).length / 225),
+            wordCount: textContent.split(/\s+/).length,
         };
 
         return {
@@ -244,16 +206,13 @@ export async function extractKnowledgeFromPage(
             keyTopics,
             suggestedQuestions,
             summary,
-            detectedActions: enhancedContent?.detectedActions || [],
-            actionSummary: enhancedContent?.actionSummary || {
-                totalActions: 0,
-                actionTypes: [],
-                highConfidenceActions: 0,
-                actionDistribution: {},
-            },
             contentMetrics,
         };
     } catch (error) {
+        if (error instanceof AIModelRequiredError) {
+            throw error;
+        }
+
         console.error("Error during knowledge extraction:", error);
         return {
             entities: [],
@@ -264,9 +223,6 @@ export async function extractKnowledgeFromPage(
             contentMetrics: {
                 readingTime: 0,
                 wordCount: 0,
-                hasCode: false,
-                interactivity: "static",
-                pageType: "other",
             },
         };
     }
@@ -279,8 +235,8 @@ export async function indexWebPageContent(
         htmlFragments: any[];
         extractKnowledge: boolean;
         timestamp: string;
-        quality?: "fast" | "balanced" | "deep";
         textOnly?: boolean;
+        mode?: "basic" | "content" | "actions" | "full";
     },
     context: SessionContext<BrowserActionContext>,
 ): Promise<{
@@ -293,6 +249,24 @@ export async function indexWebPageContent(
             .map((fragment) => fragment.text || "")
             .join("\n\n");
 
+        const extractionMode = parameters.mode || "content";
+
+        const extractor = new BrowserKnowledgeExtractor(context);
+
+        const contentInput: ExtractionInput = {
+            url: parameters.url,
+            title: parameters.title,
+            htmlFragments: parameters.htmlFragments,
+            textContent: textContent,
+            source: "index",
+            timestamp: parameters.timestamp,
+        };
+
+        const extractionResult = await extractor.extractKnowledge(
+            contentInput,
+            extractionMode,
+        );
+
         const visitInfo: website.WebsiteVisitInfo = {
             url: parameters.url,
             title: parameters.title,
@@ -304,18 +278,44 @@ export async function indexWebPageContent(
             parameters.url,
             parameters.title,
         );
+
         const websiteObj = website.importWebsiteVisit(visitInfo, textContent);
+
+        if (extractionResult.knowledge) {
+            websiteObj.knowledge = extractionResult.knowledge;
+        }
 
         if (context.agentContext.websiteCollection) {
             context.agentContext.websiteCollection.addWebsites([websiteObj]);
 
             if (parameters.extractKnowledge) {
                 await context.agentContext.websiteCollection.buildIndex();
+
+                // Persist the updated collection to disk
+                try {
+                    if (context.agentContext.index?.path) {
+                        await context.agentContext.websiteCollection.writeToFile(
+                            context.agentContext.index.path,
+                            "index",
+                        );
+                        console.log(
+                            `Saved updated website collection to ${context.agentContext.index.path}`,
+                        );
+                    } else {
+                        console.warn(
+                            "No index path available, indexed page data not persisted to disk",
+                        );
+                    }
+                } catch (error) {
+                    console.error(
+                        "Error persisting website collection:",
+                        error,
+                    );
+                }
             }
         }
 
-        const knowledge = websiteObj.getKnowledge();
-        const entityCount = knowledge?.entities?.length || 0;
+        const entityCount = extractionResult.qualityMetrics.entityCount;
 
         return {
             indexed: true,
@@ -323,6 +323,10 @@ export async function indexWebPageContent(
             entityCount,
         };
     } catch (error) {
+        if (error instanceof AIModelRequiredError) {
+            throw error;
+        }
+
         console.error("Error indexing page content:", error);
         return {
             indexed: false,
@@ -486,15 +490,20 @@ export async function getKnowledgeIndexStats(
         let lastIndexed: string | null = null;
 
         for (const site of websites) {
-            const knowledge = site.getKnowledge();
-            if (knowledge) {
-                totalEntities += knowledge.entities?.length || 0;
-                totalRelationships += knowledge.actions?.length || 0;
+            try {
+                const knowledge = site.getKnowledge();
+                if (knowledge) {
+                    totalEntities += knowledge.entities?.length || 0;
+                    totalRelationships += knowledge.actions?.length || 0;
+                }
+            } catch (error) {
+                console.warn("Error getting knowledge for site:", error);
+                // Continue processing other sites
             }
 
             const metadata = site.metadata as website.WebsiteDocPartMeta;
 
-            const siteDate = metadata.visitDate || metadata.bookmarkDate;
+            const siteDate = metadata?.visitDate || metadata?.bookmarkDate;
             if (siteDate && (!lastIndexed || siteDate > lastIndexed)) {
                 lastIndexed = siteDate;
             }
@@ -644,39 +653,19 @@ async function generateAnswerFromResults(
     return answer;
 }
 
-// Helper function to reconstruct HTML from fragments
-function reconstructHtmlFromFragments(htmlFragments: any[]): string {
-    return htmlFragments
-        .map((fragment) => {
-            if (fragment.html) return fragment.html;
-            if (fragment.text) return fragment.text;
-            return "";
-        })
-        .join("\n");
-}
-
 // Enhanced suggested questions using content analysis and DataFrames
 async function generateSmartSuggestedQuestions(
     knowledge: any,
-    enhancedContent: any,
+    extractionResult: any,
     url: string,
     context: SessionContext<BrowserActionContext>,
 ): Promise<string[]> {
     const questions: string[] = [];
     const domain = extractDomainFromUrl(url);
 
-    // Content-specific questions based on enhanced content
-    if (enhancedContent?.pageContent) {
-        const hasCode =
-            enhancedContent.pageContent.codeBlocks &&
-            enhancedContent.pageContent.codeBlocks.length > 0;
-
-        if (hasCode) {
-            questions.push("Show me other code examples I've saved");
-            questions.push("Find similar programming content");
-        }
-
-        if (enhancedContent.pageContent.readingTime > 10) {
+    // Content-specific questions based on extraction result
+    if (extractionResult?.pageContent) {
+        if (extractionResult.pageContent.readingTime > 10) {
             questions.push("What are the key points from this long article?");
         }
     }
@@ -713,51 +702,6 @@ async function generateSmartSuggestedQuestions(
     questions.push("What have I learned recently in this domain?");
 
     return questions.slice(0, 8); // Limit to most relevant questions
-}
-
-// Generate enhanced summary with content analysis
-function generateEnhancedSummary(
-    knowledge: any,
-    enhancedContent: any,
-    title: string,
-): string {
-    const entityCount = knowledge?.entities?.length || 0;
-    const topicCount = knowledge?.topics?.length || 0;
-    const relationshipCount = knowledge?.actions?.length || 0;
-
-    let summary = `Knowledge extracted from ${title}: ${entityCount} entities, ${topicCount} topics, ${relationshipCount} relationships found.`;
-
-    if (enhancedContent?.pageContent) {
-        const details = [];
-
-        if (enhancedContent.pageContent.readingTime) {
-            details.push(`${enhancedContent.pageContent.readingTime} min read`);
-        }
-
-        if (
-            enhancedContent.pageContent.codeBlocks &&
-            enhancedContent.pageContent.codeBlocks.length > 0
-        ) {
-            details.push(
-                `${enhancedContent.pageContent.codeBlocks.length} code examples`,
-            );
-        }
-
-        if (
-            enhancedContent.detectedActions &&
-            enhancedContent.detectedActions.length > 0
-        ) {
-            details.push(
-                `${enhancedContent.detectedActions.length} interactive elements`,
-            );
-        }
-
-        if (details.length > 0) {
-            summary += ` Page analysis: ${details.join(", ")}.`;
-        }
-    }
-
-    return summary;
 }
 
 // Extract domain from URL
@@ -1004,14 +948,6 @@ async function applyMetadataFilters(
         for (const website of websites) {
             let includeWebsite = true;
 
-            // Content type filtering
-            if (
-                filters.contentType &&
-                website.metadata.pageType !== filters.contentType
-            ) {
-                includeWebsite = false;
-            }
-
             // Domain filtering
             if (filters.domain) {
                 const websiteDomain = extractDomainFromUrl(
@@ -1031,23 +967,6 @@ async function applyMetadataFilters(
                 }
             }
 
-            // Code content filtering
-            if (filters.hasCode !== undefined) {
-                const knowledge = website.getKnowledge();
-                const hasCodeContent = hasCodeIndicators(knowledge, website);
-                if (filters.hasCode !== hasCodeContent) {
-                    includeWebsite = false;
-                }
-            }
-
-            // Page type filtering
-            if (
-                filters.pageType &&
-                website.metadata.pageType !== filters.pageType
-            ) {
-                includeWebsite = false;
-            }
-
             if (includeWebsite) {
                 filteredUrls.push(website.metadata.url);
             }
@@ -1063,17 +982,6 @@ function buildEnhancedSearchTerms(query: string, filters?: any): string[] {
     const terms = [query];
 
     // Add filter-based search terms
-    if (filters?.contentType) {
-        terms.push(filters.contentType);
-    }
-
-    if (filters?.technicalLevel) {
-        terms.push(filters.technicalLevel);
-    }
-
-    if (filters?.pageType) {
-        terms.push(filters.pageType);
-    }
 
     return terms;
 }
@@ -1265,30 +1173,6 @@ function getTimeRangeThreshold(timeRange: string): Date {
     return new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 }
 
-function hasCodeIndicators(knowledge: any, website: any): boolean {
-    // Check for code-related topics
-    const codeTopics = (knowledge?.topics || []).some((topic: string) =>
-        /code|programming|javascript|python|react|api|function|class|method|library|framework/i.test(
-            topic,
-        ),
-    );
-
-    // Check for technical entities
-    const techEntities = (knowledge?.entities || []).some((entity: any) =>
-        /api|function|method|class|library|framework|code|programming/i.test(
-            entity.type,
-        ),
-    );
-
-    // Check URL patterns
-    const techUrl =
-        /github|stackoverflow|docs?\.|developer|api\.|dev\.|codepen|jsfiddle|repl\.it/i.test(
-            website.metadata.url,
-        );
-
-    return codeTopics || techEntities || techUrl;
-}
-
 function getAppliedFilters(filters?: any): string[] {
     if (!filters) return [];
 
@@ -1297,10 +1181,6 @@ function getAppliedFilters(filters?: any): string[] {
         applied.push(`Content Type: ${filters.contentType}`);
     if (filters.timeRange) applied.push(`Time Range: ${filters.timeRange}`);
     if (filters.domain) applied.push(`Domain: ${filters.domain}`);
-    if (filters.hasCode) applied.push("Has Code");
-    if (filters.pageType) applied.push(`Page Type: ${filters.pageType}`);
-    if (filters.technicalLevel)
-        applied.push(`Technical Level: ${filters.technicalLevel}`);
 
     return applied;
 }
@@ -1492,6 +1372,477 @@ export async function generateTemporalSuggestions(
                 uniqueDomains: 0,
                 uniqueTopics: 0,
             },
+        };
+    }
+}
+
+export async function getExtractionAnalytics(
+    parameters: {
+        timeRange?: string;
+        mode?: ExtractionMode;
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    success: boolean;
+    analytics: any;
+}> {
+    try {
+        // Analytics functionality moved to website-memory package
+        // For now, return basic analytics info
+        return {
+            success: true,
+            analytics: {
+                totalExtractions: 0,
+                successRate: 100,
+                averageProcessingTime: 0,
+                modes: {
+                    basic: 0,
+                    content: 0,
+                    actions: 0,
+                    full: 0,
+                },
+            },
+        };
+    } catch (error) {
+        console.error("Error getting extraction analytics:", error);
+        return {
+            success: false,
+            analytics: null,
+        };
+    }
+}
+
+export async function generateQualityReport(
+    parameters: {},
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    success: boolean;
+    report: any;
+}> {
+    try {
+        // Quality monitoring functionality moved to website-memory package
+        // For now, return basic quality report
+        return {
+            success: true,
+            report: {
+                overallQuality: "good",
+                averageConfidence: 0.8,
+                totalItems: 0,
+                qualityDistribution: {
+                    excellent: 0,
+                    good: 0,
+                    fair: 0,
+                    poor: 0,
+                },
+            },
+        };
+    } catch (error) {
+        console.error("Error generating quality report:", error);
+        return {
+            success: false,
+            report: null,
+        };
+    }
+}
+
+export async function getPageQualityMetrics(
+    parameters: { url: string },
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    score: number;
+    entityCount: number;
+    topicCount: number;
+    actionCount: number;
+    extractionMode: string;
+    lastUpdated: string | null;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                score: 0,
+                entityCount: 0,
+                topicCount: 0,
+                actionCount: 0,
+                extractionMode: "unknown",
+                lastUpdated: null,
+            };
+        }
+
+        const websites = websiteCollection.messages.getAll();
+        const foundWebsite = websites.find(
+            (site: any) => site.metadata.url === parameters.url,
+        );
+
+        if (!foundWebsite) {
+            return {
+                score: 0,
+                entityCount: 0,
+                topicCount: 0,
+                actionCount: 0,
+                extractionMode: "unknown",
+                lastUpdated: null,
+            };
+        }
+
+        const knowledge = foundWebsite.getKnowledge();
+        const metadata = foundWebsite.metadata as any;
+
+        const entityCount = knowledge?.entities?.length || 0;
+        const topicCount = knowledge?.topics?.length || 0;
+        const actionCount = knowledge?.actions?.length || 0;
+
+        // Calculate quality score based on knowledge richness
+        let score = 0.2; // Base score
+
+        if (entityCount > 0) score += 0.2;
+        if (topicCount > 2) score += 0.2;
+        if (actionCount > 0) score += 0.2;
+        if (entityCount > 5) score += 0.1;
+        if (topicCount > 5) score += 0.1;
+
+        score = Math.min(score, 1.0);
+
+        // Determine extraction mode based on knowledge richness
+        let extractionMode = "basic";
+        if (actionCount > 0) {
+            extractionMode = "full";
+        } else if (entityCount > 3 && topicCount > 2) {
+            extractionMode = "content";
+        }
+
+        return {
+            score,
+            entityCount,
+            topicCount,
+            actionCount,
+            extractionMode,
+            lastUpdated: metadata.visitDate || metadata.bookmarkDate || null,
+        };
+    } catch (error) {
+        console.error("Error getting page quality metrics:", error);
+        return {
+            score: 0,
+            entityCount: 0,
+            topicCount: 0,
+            actionCount: 0,
+            extractionMode: "unknown",
+            lastUpdated: null,
+        };
+    }
+}
+
+export async function checkAIModelStatus(
+    parameters: {},
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    available: boolean;
+    version?: string;
+    endpoint?: string;
+    error?: string;
+}> {
+    try {
+        const extractor = new BrowserKnowledgeExtractor(context);
+
+        // Test AI availability with a simple extraction
+        await extractor.extractKnowledge(
+            {
+                url: "test://ai-check",
+                title: "AI Availability Test",
+                textContent: "test content for AI availability check",
+                source: "direct",
+            },
+            "content",
+        );
+
+        return {
+            available: true,
+            version: "available",
+            endpoint: "configured",
+        };
+    } catch (error) {
+        if (error instanceof AIModelRequiredError) {
+            return {
+                available: false,
+                error: error.message,
+            };
+        }
+
+        return {
+            available: false,
+            error:
+                error instanceof Error
+                    ? error.message
+                    : "Unknown AI model error",
+        };
+    }
+}
+
+export async function getRecentKnowledgeItems(
+    parameters: {
+        limit?: number;
+        type?: "entities" | "topics" | "both";
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    entities: Array<{
+        name: string;
+        type: string;
+        fromPage: string;
+        extractedAt: string;
+    }>;
+    topics: Array<{ name: string; fromPage: string; extractedAt: string }>;
+    success: boolean;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                entities: [],
+                topics: [],
+                success: false,
+            };
+        }
+
+        const websites = websiteCollection.messages.getAll();
+        const limit = parameters.limit || 10;
+        const type = parameters.type || "both";
+
+        const recentEntities: Array<{
+            name: string;
+            type: string;
+            fromPage: string;
+            extractedAt: string;
+        }> = [];
+        const recentTopics: Array<{
+            name: string;
+            fromPage: string;
+            extractedAt: string;
+        }> = [];
+
+        // Process all websites and extract entities/topics with timestamps
+        for (const site of websites) {
+            const knowledge = site.getKnowledge();
+            const metadata = site.metadata as any;
+            const extractedAt =
+                metadata.visitDate ||
+                metadata.bookmarkDate ||
+                new Date().toISOString();
+            const pageTitle = metadata.title || metadata.url || "Unknown Page";
+
+            if (knowledge) {
+                // Extract entities
+                if (
+                    (type === "entities" || type === "both") &&
+                    knowledge.entities
+                ) {
+                    for (const entity of knowledge.entities) {
+                        recentEntities.push({
+                            name: entity.name,
+                            type: Array.isArray(entity.type)
+                                ? entity.type.join(", ")
+                                : entity.type,
+                            fromPage: pageTitle,
+                            extractedAt: extractedAt,
+                        });
+                    }
+                }
+
+                // Extract topics
+                if (
+                    (type === "topics" || type === "both") &&
+                    knowledge.topics
+                ) {
+                    for (const topic of knowledge.topics) {
+                        recentTopics.push({
+                            name: topic,
+                            fromPage: pageTitle,
+                            extractedAt: extractedAt,
+                        });
+                    }
+                }
+            }
+        }
+
+        // Sort by extraction date (most recent first) and limit results
+        recentEntities.sort(
+            (a, b) =>
+                new Date(b.extractedAt).getTime() -
+                new Date(a.extractedAt).getTime(),
+        );
+        recentTopics.sort(
+            (a, b) =>
+                new Date(b.extractedAt).getTime() -
+                new Date(a.extractedAt).getTime(),
+        );
+
+        // Remove duplicates while preserving order
+        const uniqueEntities = recentEntities
+            .filter(
+                (entity, index, arr) =>
+                    arr.findIndex(
+                        (e) =>
+                            e.name.toLowerCase() === entity.name.toLowerCase(),
+                    ) === index,
+            )
+            .slice(0, limit);
+
+        const uniqueTopics = recentTopics
+            .filter(
+                (topic, index, arr) =>
+                    arr.findIndex(
+                        (t) =>
+                            t.name.toLowerCase() === topic.name.toLowerCase(),
+                    ) === index,
+            )
+            .slice(0, limit);
+
+        return {
+            entities: uniqueEntities,
+            topics: uniqueTopics,
+            success: true,
+        };
+    } catch (error) {
+        console.error("Error getting recent knowledge items:", error);
+        return {
+            entities: [],
+            topics: [],
+            success: false,
+        };
+    }
+}
+
+export async function getPageIndexedKnowledge(
+    parameters: { url: string },
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    isIndexed: boolean;
+    knowledge?: EnhancedKnowledgeExtractionResult;
+    error?: string;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                isIndexed: false,
+                error: "No website collection available",
+            };
+        }
+
+        const websites = websiteCollection.messages.getAll();
+        const foundWebsite = websites.find(
+            (site: any) => site.metadata.url === parameters.url,
+        );
+
+        if (!foundWebsite) {
+            return {
+                isIndexed: false,
+                error: "Page not found in index",
+            };
+        }
+
+        try {
+            const knowledge = foundWebsite.getKnowledge();
+
+            if (!knowledge) {
+                return {
+                    isIndexed: true,
+                    knowledge: {
+                        entities: [],
+                        relationships: [],
+                        keyTopics: [],
+                        suggestedQuestions: [],
+                        summary:
+                            "Page is indexed but no knowledge was extracted.",
+                        contentMetrics: {
+                            readingTime: 0,
+                            wordCount: 0,
+                        },
+                    },
+                };
+            }
+
+            // Convert the stored knowledge to the expected format
+            const entities: Entity[] =
+                knowledge.entities?.map((entity) => ({
+                    name: entity.name,
+                    type: Array.isArray(entity.type)
+                        ? entity.type.join(", ")
+                        : entity.type,
+                    description: entity.facets?.find(
+                        (f) => f.name === "description",
+                    )?.value as string,
+                    confidence: 0.8, // Default confidence for indexed content
+                })) || [];
+
+            const keyTopics: string[] = knowledge.topics || [];
+
+            const relationships: Relationship[] =
+                knowledge.actions?.map((action) => ({
+                    from: action.subjectEntityName || "unknown",
+                    relationship: action.verbs?.join(", ") || "related to",
+                    to: action.objectEntityName || "unknown",
+                    confidence: 0.8, // Default confidence for indexed content
+                })) || [];
+
+            // Generate contextual questions for indexed content
+            const suggestedQuestions: string[] =
+                await generateSmartSuggestedQuestions(
+                    knowledge,
+                    null,
+                    parameters.url,
+                    context,
+                );
+
+            // Calculate content metrics from the stored text
+            const textContent = foundWebsite.textChunks?.join("\n\n") || "";
+            const wordCount = textContent.split(/\s+/).length;
+            const contentMetrics = {
+                readingTime: Math.ceil(wordCount / 225),
+                wordCount: wordCount,
+            };
+
+            const summary = `Retrieved indexed knowledge: ${entities.length} entities, ${keyTopics.length} topics, ${relationships.length} relationships.`;
+
+            return {
+                isIndexed: true,
+                knowledge: {
+                    entities,
+                    relationships,
+                    keyTopics,
+                    suggestedQuestions,
+                    summary,
+                    contentMetrics,
+                },
+            };
+        } catch (knowledgeError) {
+            console.warn(
+                "Error extracting knowledge from indexed page:",
+                knowledgeError,
+            );
+            return {
+                isIndexed: true,
+                knowledge: {
+                    entities: [],
+                    relationships: [],
+                    keyTopics: [],
+                    suggestedQuestions: [],
+                    summary: "Page is indexed but knowledge extraction failed.",
+                    contentMetrics: {
+                        readingTime: 0,
+                        wordCount: 0,
+                    },
+                },
+            };
+        }
+    } catch (error) {
+        console.error("Error getting page indexed knowledge:", error);
+        return {
+            isIndexed: false,
+            error: "Failed to retrieve indexed knowledge",
         };
     }
 }

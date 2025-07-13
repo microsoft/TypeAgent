@@ -7,13 +7,13 @@ import {
     WebsiteMeta,
     importWebsiteVisit,
 } from "./websiteMeta.js";
+import { ExtractionMode } from "./contentExtractor.js";
 import {
     ContentExtractor,
-    ExtractionMode,
-    EnhancedContent,
-    EnhancedContentWithKnowledge,
-    KnowledgeExtractionMode,
-} from "./contentExtractor.js";
+    ExtractionInput,
+    ExtractionResult,
+} from "./extraction/index.js";
+import { conversation as kpLib } from "knowledge-processor";
 import path from "path";
 import fs from "fs";
 import * as sqlite from "better-sqlite3";
@@ -30,13 +30,8 @@ export interface ImportOptions {
     contentTimeout?: number;
     maxConcurrent?: number;
 
-    enableActionDetection?: boolean;
-    actionTimeout?: number;
-    actionConfidence?: number;
-
-    // NEW: Knowledge extraction options
-    enableKnowledgeExtraction?: boolean;
-    knowledgeMode?: KnowledgeExtractionMode;
+    // AI model for knowledge extraction
+    knowledgeExtractor?: kpLib.KnowledgeExtractor;
 }
 
 export interface ChromeBookmark {
@@ -479,8 +474,8 @@ export async function importWebsitesWithContent(
         extractionMode?: ExtractionMode;
         contentTimeout?: number;
         maxConcurrent?: number;
-        enableKnowledgeExtraction?: boolean;
-        knowledgeMode?: KnowledgeExtractionMode;
+        // NEW: AI model for knowledge extraction
+        knowledgeExtractor?: kpLib.KnowledgeExtractor;
     },
     progressCallback?: ImportProgressCallback,
 ): Promise<Website[]> {
@@ -510,13 +505,22 @@ async function enhanceWithContent(
     options: any,
     progressCallback?: ImportProgressCallback,
 ): Promise<Website[]> {
-    const extractor = new ContentExtractor({
+    // Use provided extraction mode or default to basic
+    const extractionMode = options.extractionMode || "basic";
+
+    // Create unified content extractor
+    const extractorConfig: any = {
+        mode: extractionMode,
         timeout: options.contentTimeout || 10000,
         maxContentLength: 20000,
-        enableActionDetection: options.enableActionDetection,
-        enableKnowledgeExtraction: options.enableKnowledgeExtraction || false,
-        knowledgeMode: options.knowledgeMode || "hybrid",
-    });
+    };
+
+    // Only add knowledgeExtractor if it's provided
+    if (options.knowledgeExtractor) {
+        extractorConfig.knowledgeExtractor = options.knowledgeExtractor;
+    }
+
+    const extractor = new ContentExtractor(extractorConfig);
 
     // TEMPORARY: Force batch size to 1 for debugging timeout issues
     const maxConcurrent = 1; // options.maxConcurrent || 3;
@@ -528,39 +532,18 @@ async function enhanceWithContent(
 
         const batchPromises = batch.map(async (website) => {
             try {
-                let contentData: EnhancedContent | EnhancedContentWithKnowledge;
+                // Use unified extraction API
+                const input: ExtractionInput = {
+                    url: website.metadata.url,
+                    title: website.metadata.title || website.metadata.url,
+                    source: "import",
+                    timestamp: new Date().toISOString(),
+                };
 
-                // Use knowledge extraction if enabled
-                if (options.enableKnowledgeExtraction) {
-                    // First fetch the HTML content for knowledge processing
-                    const html = await extractor["fetchPage"](
-                        website.metadata.url,
-                    );
-                    contentData = await extractor.extractWithKnowledge(
-                        website.metadata.url,
-                        html,
-                        options.extractionMode || "content",
-                        options.knowledgeMode || "hybrid",
-                    );
-                } else {
-                    contentData = await extractor.extractFromUrl(
-                        website.metadata.url,
-                        options.extractionMode || "content",
-                    );
-                }
+                const result = await extractor.extract(input, extractionMode);
 
-                if (contentData.success) {
-                    // Create enhanced website with content and knowledge
-                    return createEnhancedWebsiteWithKnowledge(
-                        website,
-                        contentData,
-                    );
-                } else {
-                    console.warn(
-                        `Content extraction failed for ${website.metadata.url}: ${contentData.error}`,
-                    );
-                    return website; // Return original on failure
-                }
+                // Create enhanced website with content and knowledge
+                return createEnhancedWebsiteWithKnowledge(website, result);
             } catch (error) {
                 console.warn(
                     `Content extraction failed for ${website.metadata.url}:`,
@@ -598,7 +581,7 @@ async function enhanceWithContent(
 
 function createEnhancedWebsiteWithKnowledge(
     originalWebsite: Website,
-    contentData: EnhancedContent | EnhancedContentWithKnowledge,
+    extractionResult: ExtractionResult,
 ): Website {
     // Create enhanced visit info with content
     const enhancedVisitInfo: WebsiteVisitInfo = {
@@ -608,7 +591,7 @@ function createEnhancedWebsiteWithKnowledge(
 
     // Add optional properties only if they exist
     const titleValue =
-        contentData.pageContent?.title || originalWebsite.metadata.title;
+        extractionResult.pageContent?.title || originalWebsite.metadata.title;
     if (titleValue) {
         enhancedVisitInfo.title = titleValue;
     }
@@ -637,30 +620,31 @@ function createEnhancedWebsiteWithKnowledge(
         enhancedVisitInfo.typedCount = originalWebsite.metadata.typedCount;
 
     // Enhanced content
-    if (contentData.pageContent)
-        enhancedVisitInfo.pageContent = contentData.pageContent;
-    if (contentData.metaTags) enhancedVisitInfo.metaTags = contentData.metaTags;
-    if (contentData.structuredData)
-        enhancedVisitInfo.structuredData = contentData.structuredData;
-    if (contentData.actions)
-        enhancedVisitInfo.extractedActions = contentData.actions;
+    if (extractionResult.pageContent)
+        enhancedVisitInfo.pageContent = extractionResult.pageContent;
+    if (extractionResult.metaTags)
+        enhancedVisitInfo.metaTags = extractionResult.metaTags;
+    if (extractionResult.structuredData)
+        enhancedVisitInfo.structuredData = extractionResult.structuredData;
+    if (extractionResult.actions)
+        enhancedVisitInfo.extractedActions = extractionResult.actions;
 
     // Action detection data
-    if (contentData.detectedActions)
-        enhancedVisitInfo.detectedActions = contentData.detectedActions;
-    if (contentData.actionSummary)
-        enhancedVisitInfo.actionSummary = contentData.actionSummary;
+    if (extractionResult.detectedActions)
+        enhancedVisitInfo.detectedActions = extractionResult.detectedActions;
+    if (extractionResult.actionSummary)
+        enhancedVisitInfo.actionSummary = extractionResult.actionSummary;
 
     // Use page content as the main text if available, otherwise use existing text
-    const mainText = contentData.pageContent?.mainContent || "";
+    const mainText = extractionResult.pageContent?.mainContent || "";
 
     // Create website with enhanced metadata
     const meta = new WebsiteMeta(enhancedVisitInfo);
 
     // Get enhanced knowledge if available
     let finalKnowledge;
-    if ("knowledge" in contentData && contentData.knowledge) {
-        finalKnowledge = meta.getEnhancedKnowledge(contentData.knowledge);
+    if (extractionResult.knowledge) {
+        finalKnowledge = meta.getEnhancedKnowledge(extractionResult.knowledge);
     } else {
         finalKnowledge = meta.getKnowledge();
     }

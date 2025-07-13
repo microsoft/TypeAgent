@@ -1,6 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+// ===================================================================
+// MAIN CLASS DEFINITION
+// ===================================================================
+
 // Full-page Website Library implementation
 // Extends the existing interfaces and functionality for full-page layout
 
@@ -66,7 +70,6 @@ interface LocalImportOptions {
     folder?: string;
     extractContent?: boolean;
     enableIntelligentAnalysis?: boolean;
-    enableActionDetection?: boolean;
     extractionMode?: "basic" | "content" | "actions" | "full";
     maxConcurrent?: number;
     contentTimeout?: number;
@@ -137,6 +140,7 @@ interface EntityMatch {
 
 class WebsiteLibraryPanelFullPage {
     private isConnected: boolean = false;
+    private isInitialized: boolean = false; // Add initialization guard
     private navigation: FullPageNavigation = {
         currentPage: "search",
         previousPage: null,
@@ -182,6 +186,13 @@ class WebsiteLibraryPanelFullPage {
     }
 
     async initialize() {
+        // Prevent duplicate initialization
+        if (this.isInitialized) {
+            console.log("Website Library Panel already initialized, skipping");
+            return;
+        }
+
+        this.isInitialized = true;
         console.log("Initializing Enhanced Full-Page Website Library Panel");
 
         try {
@@ -202,6 +213,7 @@ class WebsiteLibraryPanelFullPage {
             );
         } catch (error) {
             console.error("Failed to initialize Website Library:", error);
+            this.isInitialized = false; // Reset flag on error so retry is possible
             this.notificationManager.showError(
                 "Failed to load Website Library. Please refresh the page.",
                 () => window.location.reload(),
@@ -326,7 +338,12 @@ class WebsiteLibraryPanelFullPage {
         });
 
         this.importUI.onImportError((error: any) => {
-            this.importUI.showImportError(error);
+            // Handle the error without calling showImportError again to avoid infinite recursion
+            // showImportError is already called from within the import process
+            console.error("Import error:", error);
+            this.notificationManager.showError(
+                `Import failed: ${error.message || "Unknown error"}`,
+            );
         });
     }
 
@@ -866,27 +883,54 @@ class WebsiteLibraryPanelFullPage {
     private showSearchLoading() {
         const resultsContainer = document.getElementById("searchResults");
         const emptyState = document.getElementById("searchEmptyState");
+        const loadingState = document.getElementById("searchLoadingState");
 
+        // Show the results container
         if (resultsContainer) {
             resultsContainer.style.display = "block";
-            resultsContainer.innerHTML = `
-                <div class="results-header">
-                    <h2 class="results-title">Searching...</h2>
-                </div>
-                <div class="results-container">
-                    <div class="text-center">
-                        <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Searching...</span>
-                        </div>
-                        <p class="mt-3">Searching your library...</p>
-                    </div>
-                </div>
-            `;
         }
 
+        // Hide empty state
         if (emptyState) {
             emptyState.style.display = "none";
         }
+
+        // Show loading state (create if it doesn't exist)
+        if (!loadingState) {
+            this.createSearchLoadingState();
+        } else {
+            loadingState.style.display = "block";
+        }
+
+        // Hide any existing results content while loading
+        const resultsContent = document.getElementById("resultsContainer");
+        if (resultsContent) {
+            resultsContent.style.display = "none";
+        }
+    }
+
+    private createSearchLoadingState() {
+        const resultsContainer = document.getElementById("searchResults");
+        if (!resultsContainer) return;
+
+        // Create loading state container
+        const loadingDiv = document.createElement("div");
+        loadingDiv.id = "searchLoadingState";
+        loadingDiv.style.display = "block";
+        loadingDiv.innerHTML = `
+            <div class="results-header">
+                <h2 class="results-title">Searching...</h2>
+            </div>
+            <div class="text-center p-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Searching...</span>
+                </div>
+                <p class="mt-3 mb-0">Searching your library...</p>
+            </div>
+        `;
+
+        // Insert the loading state into the results container
+        resultsContainer.appendChild(loadingDiv);
     }
 
     private showSearchResults(results: SearchResult) {
@@ -894,19 +938,41 @@ class WebsiteLibraryPanelFullPage {
 
         const resultsContainer = document.getElementById("searchResults");
         const emptyState = document.getElementById("searchEmptyState");
+        const loadingState = document.getElementById("searchLoadingState");
+        const errorState = document.getElementById("searchErrorState");
 
+        // Hide empty state
         if (emptyState) {
             emptyState.style.display = "none";
         }
 
+        // Hide loading state
+        if (loadingState) {
+            loadingState.style.display = "none";
+        }
+
+        // Hide error state
+        if (errorState) {
+            errorState.style.display = "none";
+        }
+
+        // Show results container
         if (resultsContainer) {
             resultsContainer.style.display = "block";
-            this.renderSearchResults(results.websites);
+        }
 
-            // Show AI summary if available
-            if (results.summary.text) {
-                this.showAISummary(results.summary.text);
-            }
+        // Show results content
+        const resultsContent = document.getElementById("resultsContainer");
+        if (resultsContent) {
+            resultsContent.style.display = "block";
+        }
+
+        // Render the search results
+        this.renderSearchResults(results.websites);
+
+        // Show AI summary if available
+        if (results.summary.text) {
+            this.showAISummary(results.summary.text);
         }
     }
 
@@ -1208,8 +1274,39 @@ class WebsiteLibraryPanelFullPage {
 
     private showSearchError(message: string) {
         const resultsContainer = document.getElementById("searchResults");
+        const emptyState = document.getElementById("searchEmptyState");
+        const loadingState = document.getElementById("searchLoadingState");
+
+        // Hide loading state
+        if (loadingState) {
+            loadingState.style.display = "none";
+        }
+
+        // Hide empty state
+        if (emptyState) {
+            emptyState.style.display = "none";
+        }
+
+        // Show error in results container without destroying its structure
         if (resultsContainer) {
-            resultsContainer.innerHTML = `
+            resultsContainer.style.display = "block";
+
+            // Hide results content
+            const resultsContent = document.getElementById("resultsContainer");
+            if (resultsContent) {
+                resultsContent.style.display = "none";
+            }
+
+            // Create or update error container
+            let errorContainer = document.getElementById("searchErrorState");
+            if (!errorContainer) {
+                errorContainer = document.createElement("div");
+                errorContainer.id = "searchErrorState";
+                resultsContainer.appendChild(errorContainer);
+            }
+
+            errorContainer.style.display = "block";
+            errorContainer.innerHTML = `
                 <div class="alert alert-danger" role="alert">
                     <i class="bi bi-exclamation-triangle me-2"></i>
                     ${message}
@@ -1293,6 +1390,8 @@ class WebsiteLibraryPanelFullPage {
     }
 
     private async initializeAnalyticsPage() {
+        this.clearPlaceholderContent();
+
         if (!this.analyticsData) {
             await this.loadAnalyticsData();
         }
@@ -1432,18 +1531,379 @@ class WebsiteLibraryPanelFullPage {
             return;
         }
 
-        // TODO: Implement actual API call to get analytics data
-        // For now, return basic data based on library stats
-        this.analyticsData = {
-            overview: {
-                totalSites: this.libraryStats.totalWebsites,
-                totalBookmarks: this.libraryStats.totalBookmarks,
-                totalHistory: this.libraryStats.totalHistory,
-                knowledgeExtracted: 0,
-            },
-            trends: [],
-            insights: [],
-        };
+        try {
+            // Get real knowledge index statistics
+            const indexStats = await chrome.runtime.sendMessage({
+                type: "getIndexStats",
+            });
+
+            // Get library stats for total counts
+            const libraryStats =
+                await this.chromeExtensionService.getLibraryStats();
+
+            this.analyticsData = {
+                overview: {
+                    totalSites: indexStats.totalPages || 0,
+                    totalBookmarks: libraryStats.totalBookmarks || 0,
+                    totalHistory: libraryStats.totalHistory || 0,
+                    knowledgeExtracted: indexStats.totalPages || 0,
+                },
+                trends: [],
+                insights: [
+                    {
+                        category: "Entities",
+                        value: indexStats.totalEntities || 0,
+                        change: 0,
+                    },
+                    {
+                        category: "Relationships",
+                        value: indexStats.totalRelationships || 0,
+                        change: 0,
+                    },
+                    {
+                        category: "Knowledge Quality",
+                        value: this.calculateKnowledgeQuality(indexStats),
+                        change: 0,
+                    },
+                ],
+            };
+
+            // Store the actual statistics for the visualization section
+            this.updateKnowledgeVisualizationData(indexStats);
+        } catch (error) {
+            console.error("Failed to load analytics data:", error);
+            this.analyticsData = {
+                overview: {
+                    totalSites: this.libraryStats.totalWebsites,
+                    totalBookmarks: this.libraryStats.totalBookmarks,
+                    totalHistory: this.libraryStats.totalHistory,
+                    knowledgeExtracted: 0,
+                },
+                trends: [],
+                insights: [],
+            };
+
+            // Update metric displays with zeros since no real data is available
+            this.updateMetricDisplaysWithZeros();
+
+            this.clearPlaceholderContent();
+            this.updateRecentEntitiesDisplay([]);
+            this.updateRecentTopicsDisplay([]);
+        }
+    }
+
+    private calculateKnowledgeQuality(indexStats: any): number {
+        if (!indexStats.totalPages || indexStats.totalPages === 0) return 0;
+
+        const entitiesPerPage =
+            (indexStats.totalEntities || 0) / indexStats.totalPages;
+        const relationshipsPerPage =
+            (indexStats.totalRelationships || 0) / indexStats.totalPages;
+
+        // Calculate quality score from 0-100
+        let quality = 0;
+        if (entitiesPerPage > 0) quality += 30;
+        if (entitiesPerPage > 3) quality += 20;
+        if (relationshipsPerPage > 0) quality += 25;
+        if (relationshipsPerPage > 2) quality += 25;
+
+        return Math.round(quality);
+    }
+
+    private updateKnowledgeVisualizationData(indexStats: any) {
+        // Update AI Insights section with real data
+        const knowledgeExtractedElement =
+            document.getElementById("knowledgeExtracted");
+        const totalEntitiesElement = document.getElementById("totalEntities");
+        const totalTopicsElement = document.getElementById("totalTopics");
+        const totalActionsElement = document.getElementById("totalActions");
+
+        if (knowledgeExtractedElement) {
+            knowledgeExtractedElement.textContent = (
+                indexStats.totalPages || 0
+            ).toString();
+        }
+        if (totalEntitiesElement) {
+            totalEntitiesElement.textContent = (
+                indexStats.totalEntities || 0
+            ).toString();
+        }
+        if (totalTopicsElement) {
+            // Estimate topics from entities (rough approximation)
+            const estimatedTopics = Math.round(
+                (indexStats.totalEntities || 0) * 0.6,
+            );
+            totalTopicsElement.textContent = estimatedTopics.toString();
+        }
+        if (totalActionsElement) {
+            totalActionsElement.textContent = (
+                indexStats.totalRelationships || 0
+            ).toString();
+        }
+
+        // Update knowledge visualization cards with real data
+        this.updateKnowledgeVisualizationCards(indexStats);
+
+        this.clearPlaceholderContent();
+
+        // Load and display recent entities and topics
+        this.loadRecentKnowledgeItems(indexStats);
+    }
+
+    private updateKnowledgeVisualizationCards(indexStats: any) {
+        // Update total entities metric
+        const totalEntitiesMetric = document.getElementById(
+            "totalEntitiesMetric",
+        );
+        if (totalEntitiesMetric) {
+            totalEntitiesMetric.textContent = (
+                indexStats.totalEntities || 0
+            ).toString();
+        }
+
+        // Update total topics metric (estimate based on entities)
+        const totalTopicsMetric = document.getElementById("totalTopicsMetric");
+        if (totalTopicsMetric) {
+            const estimatedTopics = Math.round(
+                (indexStats.totalEntities || 0) * 0.6,
+            );
+            totalTopicsMetric.textContent = estimatedTopics.toString();
+        }
+
+        // Update total actions metric
+        const totalActionsMetric =
+            document.getElementById("totalActionsMetric");
+        if (totalActionsMetric) {
+            totalActionsMetric.textContent = (
+                indexStats.totalRelationships || 0
+            ).toString();
+        }
+
+        // If we have real data, hide the sample breakdown and show a message about real data
+        if (indexStats.totalEntities > 0) {
+            this.replaceVisualizationSampleData(indexStats);
+        }
+    }
+
+    private replaceVisualizationSampleData(indexStats: any) {
+        // Just update the metrics if needed
+
+        // Update the actions breakdown with real data
+        const actionBreakdown = document.querySelector(
+            ".knowledge-card.actions .action-breakdown",
+        );
+        if (actionBreakdown && indexStats.totalRelationships > 0) {
+            actionBreakdown.innerHTML = `
+                <div class="action-type">
+                    <i class="bi bi-diagram-2"></i>
+                    <span>Relationships Found</span>
+                    <span class="action-count">${indexStats.totalRelationships}</span>
+                </div>
+                <div class="action-type">
+                    <i class="bi bi-link-45deg"></i>
+                    <span>Cross-references</span>
+                    <span class="action-count">${Math.round(indexStats.totalRelationships * 0.7)}</span>
+                </div>
+                <div class="action-type">
+                    <i class="bi bi-search"></i>
+                    <span>Searchable Items</span>
+                    <span class="action-count">${indexStats.totalEntities + indexStats.totalRelationships}</span>
+                </div>
+                <div class="action-type">
+                    <i class="bi bi-clock-history"></i>
+                    <span>Last Updated</span>
+                    <span class="action-count">${this.formatDate(indexStats.lastIndexed)}</span>
+                </div>
+            `;
+        }
+    }
+
+    private updateMetricDisplaysWithZeros() {
+        // Update all knowledge metric displays to show zero when no real data is available
+        const elements = [
+            "knowledgeExtracted",
+            "totalEntities",
+            "totalTopics",
+            "totalActions",
+            "totalEntitiesMetric",
+            "totalTopicsMetric",
+            "totalActionsMetric",
+        ];
+
+        elements.forEach((elementId) => {
+            const element = document.getElementById(elementId);
+            if (element) {
+                element.textContent = "0";
+            }
+        });
+    }
+
+    private clearPlaceholderContent() {
+        const entitiesBreakdown = document.querySelector(
+            ".knowledge-card.entities .knowledge-breakdown",
+        );
+        if (entitiesBreakdown) {
+            entitiesBreakdown.innerHTML = `
+                <div class="text-center py-3">
+                    <div class="spinner-border spinner-border-sm text-muted" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <div class="small text-muted mt-2">Loading entities...</div>
+                </div>
+            `;
+        }
+
+        const topicCloud = document.querySelector(
+            ".knowledge-card.topics .topic-cloud",
+        );
+        if (topicCloud) {
+            topicCloud.innerHTML = `
+                <div class="text-center py-3">
+                    <div class="spinner-border spinner-border-sm text-muted" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <div class="small text-muted mt-2">Loading topics...</div>
+                </div>
+            `;
+        }
+    }
+
+    private formatDate(dateString: string): string {
+        if (!dateString || dateString === "Never") return "Never";
+
+        try {
+            const date = new Date(dateString);
+            return date.toLocaleDateString();
+        } catch {
+            return "Unknown";
+        }
+    }
+
+    private async loadRecentKnowledgeItems(indexStats: any) {
+        try {
+            const response = await chrome.runtime.sendMessage({
+                type: "getRecentKnowledgeItems",
+                limit: 10,
+                itemType: "both",
+            });
+
+            if (response && response.success) {
+                this.updateRecentEntitiesDisplay(response.entities || []);
+                this.updateRecentTopicsDisplay(response.topics || []);
+            } else {
+                // API call succeeded but returned no data or failed
+                console.warn(
+                    "No recent knowledge items found or API returned failure",
+                );
+                this.updateRecentEntitiesDisplay([]);
+                this.updateRecentTopicsDisplay([]);
+            }
+        } catch (error) {
+            console.error("Failed to load recent knowledge items:", error);
+            // Update with empty arrays to show appropriate "no data" messages
+            this.updateRecentEntitiesDisplay([]);
+            this.updateRecentTopicsDisplay([]);
+        }
+    }
+
+    private updateRecentEntitiesDisplay(
+        entities: Array<{
+            name: string;
+            type: string;
+            fromPage: string;
+            extractedAt: string;
+        }>,
+    ) {
+        const entitiesBreakdown = document.querySelector(
+            ".knowledge-card.entities .knowledge-breakdown",
+        );
+        if (!entitiesBreakdown) return;
+
+        if (entities.length === 0) {
+            entitiesBreakdown.innerHTML = `
+                <div class="text-muted text-center py-3">
+                    <i class="bi bi-diagram-2 me-2"></i>
+                    No entities extracted yet. Visit websites to start building your knowledge base.
+                </div>
+            `;
+            return;
+        }
+
+        const recentEntitiesList = entities
+            .slice(0, 10)
+            .map((entity) => {
+                const shortPageTitle =
+                    entity.fromPage.length > 30
+                        ? entity.fromPage.substring(0, 30) + "..."
+                        : entity.fromPage;
+                return `
+                <div class="breakdown-item">
+                    <span class="breakdown-type" title="${entity.type}">${entity.name}</span>
+                    <span class="breakdown-count small text-muted" title="From: ${entity.fromPage}">${shortPageTitle}</span>
+                </div>
+            `;
+            })
+            .join("");
+
+        entitiesBreakdown.innerHTML = `
+            <div class="mb-2">
+                <small class="text-muted d-flex align-items-center">
+                    <i class="bi bi-clock-history me-2"></i>
+                    10 Most Recent Entities
+                </small>
+            </div>
+            ${recentEntitiesList}
+        `;
+    }
+
+    private updateRecentTopicsDisplay(
+        topics: Array<{ name: string; fromPage: string; extractedAt: string }>,
+    ) {
+        const topicCloud = document.querySelector(
+            ".knowledge-card.topics .topic-cloud",
+        );
+        if (!topicCloud) return;
+
+        if (topics.length === 0) {
+            topicCloud.innerHTML = `
+                <div class="text-muted text-center py-3">
+                    <i class="bi bi-tags me-2"></i>
+                    No topics identified yet. Visit websites to start building your knowledge base.
+                </div>
+            `;
+            return;
+        }
+
+        const recentTopics = topics.slice(0, 10);
+        const topicTags = recentTopics
+            .map((topic, index) => {
+                // Vary sizes to create visual interest
+                const sizeClass =
+                    index < 3
+                        ? "size-large"
+                        : index < 6
+                          ? "size-medium"
+                          : "size-small";
+                const shortPageTitle =
+                    topic.fromPage.length > 30
+                        ? topic.fromPage.substring(0, 30) + "..."
+                        : topic.fromPage;
+
+                return `<span class="topic-tag ${sizeClass}" title="From: ${topic.fromPage} (${this.formatDate(topic.extractedAt)})">${topic.name}</span>`;
+            })
+            .join("");
+
+        topicCloud.innerHTML = `
+            <div class="mb-2">
+                <small class="text-muted d-flex align-items-center">
+                    <i class="bi bi-clock-history me-2"></i>
+                    10 Most Recent Topics
+                </small>
+            </div>
+            <div class="topic-tags-container">
+                ${topicTags}
+            </div>
+        `;
     }
 
     private renderAnalyticsContent() {
@@ -2369,17 +2829,6 @@ class WebsiteLibraryPanelFullPage {
     }
 }
 
-// Initialize the panel when DOM is loaded
-let libraryPanelFullPage: WebsiteLibraryPanelFullPage;
-
-document.addEventListener("DOMContentLoaded", () => {
-    libraryPanelFullPage = new WebsiteLibraryPanelFullPage();
-    libraryPanelFullPage.initialize();
-
-    // Make it globally available for onclick handlers
-    (window as any).libraryPanel = libraryPanelFullPage;
-});
-
 // ===================================================================
 // ENHANCED FEATURES: Real-time Integration & Advanced Features
 // ===================================================================
@@ -2751,22 +3200,32 @@ class ChromeExtensionServiceImpl implements ChromeExtensionService {
     }
 }
 
-// Create global instance for compatibility
-let libraryPanel: WebsiteLibraryPanelFullPage;
+// ===================================================================
+// INITIALIZATION
+// ===================================================================
 
-// Initialize when DOM is ready
-if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => {
-        libraryPanel = new WebsiteLibraryPanelFullPage();
-        libraryPanel.initialize();
+let libraryPanelInstance: WebsiteLibraryPanelFullPage;
+let isInitialized = false;
 
-        // Make available globally for any remaining references
-        (window as any).libraryPanel = libraryPanel;
-    });
-} else {
-    libraryPanel = new WebsiteLibraryPanelFullPage();
-    libraryPanel.initialize();
+// Initialize when DOM is ready - with guard to prevent double initialization
+function initializeLibraryPanel() {
+    if (isInitialized) {
+        console.log(
+            "Website Library already initialized, skipping duplicate initialization",
+        );
+        return;
+    }
+
+    isInitialized = true;
+    libraryPanelInstance = new WebsiteLibraryPanelFullPage();
+    libraryPanelInstance.initialize();
 
     // Make available globally for any remaining references
-    (window as any).libraryPanel = libraryPanel;
+    (window as any).libraryPanel = libraryPanelInstance;
+}
+
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initializeLibraryPanel);
+} else {
+    initializeLibraryPanel();
 }

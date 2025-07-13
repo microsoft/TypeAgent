@@ -109,7 +109,7 @@ export class HTMLReducer {
 
     removeAllClasses: boolean = true;
     removeLinkTags: boolean = true;
-    removeMetaTags: boolean = true;
+    removeMetaTags: boolean = false;
     removeStyleTags: boolean = true;
     removeSvgTags: boolean = true;
     removeScripts: boolean = true;
