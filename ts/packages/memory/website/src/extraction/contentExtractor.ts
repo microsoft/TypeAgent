@@ -363,12 +363,22 @@ export class ContentExtractor {
         }
 
         if (content.htmlFragments && content.htmlFragments.length > 0) {
-            // Combine HTML fragments
-            return content.htmlFragments
-                .map((frag) =>
-                    typeof frag === "string" ? frag : frag.content || "",
-                )
-                .join("\n");
+            // Handle iframe fragments properly - each should maintain its context
+            if (content.htmlFragments.length === 1) {
+                // Single fragment (ideal case for iframe isolation)
+                const frag = content.htmlFragments[0];
+                return typeof frag === "string" ? frag : frag.content || "";
+            } else {
+                // Multiple fragments - preserve iframe boundaries with context markers
+                return content.htmlFragments
+                    .map((frag, index) => {
+                        const fragmentContent = typeof frag === "string" ? frag : frag.content || "";
+                        const frameId = frag.frameId || index;
+                        // Add iframe context markers to preserve boundaries
+                        return `<!-- IFRAME_START:${frameId} -->\n${fragmentContent}\n<!-- IFRAME_END:${frameId} -->`;
+                    })
+                    .join("\n\n");
+            }
         }
 
         return null;
