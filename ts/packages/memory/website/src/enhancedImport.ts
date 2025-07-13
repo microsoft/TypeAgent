@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DocPart, docPartsFromHtml } from "conversation-memory";
 import { WebsiteDocPart } from "./websiteDocPart.js";
 import { WebsiteMeta, WebsiteVisitInfo } from "./websiteMeta.js";
 import { ExtractionMode } from "./contentExtractor.js";
@@ -24,9 +23,6 @@ export interface EnhancedImportOptions {
     
     // NEW: AI model for knowledge extraction
     knowledgeExtractor?: kpLib.KnowledgeExtractor;
-    
-    // Legacy option (deprecated)
-    enableActionDetection?: boolean;
 }
 
 /**
@@ -280,13 +276,61 @@ async function processHtmlWithEnhancedCapabilities(
         });
     } catch (err) {
         console.warn(
-            "Enhanced HTML processing failed, falling back to basic processing:",
+            "Enhanced HTML processing failed, falling back to basic extraction:",
             err,
         );
 
-        // Fallback to conversation package's basic HTML processing
-        const docParts = docPartsFromHtml(html, options.maxCharsPerChunk, url);
-        return convertDocPartsToWebsiteDocParts(docParts, url, existingMeta);
+        // Fallback to basic mode with unified ContentExtractor
+        try {
+            const basicExtractor = new ContentExtractor({ mode: "basic" });
+            const basicInput: ExtractionInput = {
+                url,
+                title: existingMeta?.title || url,
+                htmlContent: html,
+                source: "import",
+                timestamp: new Date().toISOString()
+            };
+            
+            const basicResult = await basicExtractor.extract(basicInput, "basic");
+            
+            // Create minimal WebsiteMeta from basic extraction
+            const basicMeta = existingMeta || new WebsiteMeta({
+                url,
+                title: basicResult.pageContent?.title || url,
+                source: "history"
+            });
+            
+            if (basicResult.pageContent) {
+                basicMeta.pageContent = basicResult.pageContent;
+            }
+            
+            // Apply chunking to basic content
+            const mainContent = basicResult.pageContent?.mainContent || html;
+            const chunks = intelligentWebsiteChunking(mainContent, {
+                maxCharsPerChunk: options.maxCharsPerChunk,
+                preserveStructure: options.preserveStructure,
+                includeMetadata: true,
+            });
+            
+            return chunks.map((chunk, index) => {
+                return new WebsiteDocPart(
+                    basicMeta,
+                    [chunk],
+                    [],
+                    basicMeta.visitDate || basicMeta.bookmarkDate,
+                    basicMeta.getKnowledge(),
+                );
+            });
+        } catch (basicError) {
+            console.error("Basic extraction also failed:", basicError);
+            // Return minimal result if everything fails
+            const fallbackMeta = existingMeta || new WebsiteMeta({
+                url,
+                title: url,
+                source: "history"
+            });
+            return [new WebsiteDocPart(fallbackMeta, [])];
+        }
     }
 }
 
@@ -322,40 +366,6 @@ function processPlainTextContent(
             [],
             websiteMeta.visitDate || websiteMeta.bookmarkDate,
             websiteMeta.getKnowledge(),
-        );
-    });
-}
-
-/**
- * Convert DocPart objects to WebsiteDocPart objects
- */
-function convertDocPartsToWebsiteDocParts(
-    docParts: DocPart[],
-    url: string,
-    existingMeta?: WebsiteMeta,
-): WebsiteDocPart[] {
-    return docParts.map((docPart) => {
-        let websiteMeta: WebsiteMeta;
-
-        if (existingMeta) {
-            websiteMeta = existingMeta;
-        } else {
-            // Create minimal WebsiteMeta from DocPart
-            const visitInfo: WebsiteVisitInfo = {
-                url: docPart.metadata.sourceUrl || url,
-                title: "Imported Content",
-                source: "history",
-            };
-            websiteMeta = new WebsiteMeta(visitInfo);
-        }
-
-        return new WebsiteDocPart(
-            websiteMeta,
-            docPart.textChunks,
-            docPart.tags,
-            docPart.timestamp,
-            docPart.knowledge,
-            docPart.deletionInfo,
         );
     });
 }

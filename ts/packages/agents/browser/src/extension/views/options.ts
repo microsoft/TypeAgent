@@ -7,7 +7,6 @@ interface ExtensionSettings {
     maxConcurrentExtractions: number;
     qualityThreshold: number;
     enableIntelligentAnalysis: boolean;
-    enableActionDetection: boolean;
 }
 
 interface AIModelStatus {
@@ -23,7 +22,6 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
     maxConcurrentExtractions: 3,
     qualityThreshold: 0.3,
     enableIntelligentAnalysis: true,
-    enableActionDetection: false,
 };
 
 class EnhancedOptionsPage {
@@ -170,8 +168,6 @@ class EnhancedOptionsPage {
         // Update settings
         this.settings.defaultExtractionMode = mode;
         this.settings.enableIntelligentAnalysis = mode !== "basic";
-        this.settings.enableActionDetection =
-            mode === "actions" || mode === "full";
 
         // Show warning if AI required but not available
         if (mode !== "basic" && !this.aiStatus.available) {

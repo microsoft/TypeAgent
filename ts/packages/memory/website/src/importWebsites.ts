@@ -31,14 +31,8 @@ export interface ImportOptions {
     extractionMode?: ExtractionMode;
     contentTimeout?: number;
     maxConcurrent?: number;
-
-    // Legacy options (deprecated but supported for backward compatibility)
-    enableActionDetection?: boolean;
-    actionTimeout?: number;
-    actionConfidence?: number;
-    enableKnowledgeExtraction?: boolean;
     
-    // NEW: AI model for knowledge extraction
+    // AI model for knowledge extraction
     knowledgeExtractor?: kpLib.KnowledgeExtractor;
 }
 
@@ -482,9 +476,6 @@ export async function importWebsitesWithContent(
         extractionMode?: ExtractionMode;
         contentTimeout?: number;
         maxConcurrent?: number;
-        // Legacy options (deprecated)
-        enableKnowledgeExtraction?: boolean;
-        enableActionDetection?: boolean;
         // NEW: AI model for knowledge extraction
         knowledgeExtractor?: kpLib.KnowledgeExtractor;
     },
@@ -516,19 +507,8 @@ async function enhanceWithContent(
     options: any,
     progressCallback?: ImportProgressCallback,
 ): Promise<Website[]> {
-    // Determine extraction mode from legacy and new options
-    let extractionMode: ExtractionMode = options.extractionMode || "basic";
-    
-    // Legacy option mapping if no explicit mode provided
-    if (!options.extractionMode) {
-        if (options.enableActionDetection && options.enableKnowledgeExtraction) {
-            extractionMode = "actions";
-        } else if (options.enableKnowledgeExtraction) {
-            extractionMode = "content";
-        } else if (options.enableActionDetection) {
-            extractionMode = "actions";
-        }
-    }
+    // Use provided extraction mode or default to basic
+    const extractionMode = options.extractionMode || "basic";
     
     // Create unified content extractor
     const extractorConfig: any = {

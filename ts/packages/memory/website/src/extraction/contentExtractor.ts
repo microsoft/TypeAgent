@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { conversation as kpLib } from "knowledge-processor";
+import * as cheerio from "cheerio";
 import { AIModelManager } from "./aiModelManager.js";
 import {
     ExtractionMode,
@@ -383,46 +384,77 @@ export class ContentExtractor {
     }
 
     /**
-     * Basic HTML content extraction
+     * Basic HTML content extraction using proper HTML parsing
      */
     private extractBasicPageContent(html: string, title: string): any {
-        // Simple HTML content extraction without using BaseContentExtractor
-        // Remove script and style elements
-        let textContent = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
-        textContent = textContent.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
-        
-        // Remove HTML tags
-        textContent = textContent.replace(/<[^>]+>/g, ' ');
-        
-        // Decode basic HTML entities
-        textContent = textContent.replace(/&nbsp;/g, ' ');
-        textContent = textContent.replace(/&amp;/g, '&');
-        textContent = textContent.replace(/&lt;/g, '<');
-        textContent = textContent.replace(/&gt;/g, '>');
-        textContent = textContent.replace(/&quot;/g, '"');
-        
-        // Clean up whitespace
-        textContent = textContent.replace(/\s+/g, ' ').trim();
-        
-        // Extract basic headings
-        const headingMatches = html.match(/<h[1-6][^>]*>([^<]+)<\/h[1-6]>/gi) || [];
-        const headings = headingMatches.map(match => {
-            const text = match.replace(/<[^>]+>/g, '').trim();
-            return text;
-        }).filter(text => text.length > 0);
-
-        const wordCount = textContent.split(/\s+/).filter(word => word.length > 0).length;
-        const readingTime = Math.ceil(wordCount / 200);
-
-        return {
-            title: title || "Untitled",
-            mainContent: textContent.substring(0, 10000), // Limit content size
-            headings,
-            wordCount,
-            readingTime,
-            codeBlocks: [],
-            images: [],
-            links: []
-        };
+        try {
+            // Use cheerio for proper HTML parsing
+            const $ = cheerio.load(html);
+            
+            // Remove script and style elements
+            $('script, style, noscript').remove();
+            
+            // Extract title if not provided
+            const extractedTitle = title || $('title').text().trim() || $('h1').first().text().trim();
+            
+            // Extract main content from body or fall back to entire document
+            const bodyText = $('body').text() || $.text();
+            
+            // Clean up whitespace
+            const mainContent = bodyText.replace(/\s+/g, ' ').trim();
+            
+            // Extract headings
+            const headings: string[] = [];
+            $('h1, h2, h3, h4, h5, h6').each((_, element) => {
+                const heading = $(element).text().trim();
+                if (heading) {
+                    headings.push(heading);
+                }
+            });
+            
+            // Basic word count and reading time calculation
+            const words = mainContent.split(/\s+/).length;
+            const readingTime = Math.max(1, Math.round(words / 200)); // ~200 words per minute
+            
+            return {
+                pageContent: {
+                    title: extractedTitle,
+                    mainContent,
+                    headings,
+                    wordCount: words,
+                    readingTime,
+                    images: [], // Basic extraction doesn't include images
+                    links: []   // Basic extraction doesn't include links
+                }
+            };
+            
+        } catch (error) {
+            console.warn('Cheerio parsing failed, falling back to simple extraction:', error);
+            
+            // Fallback to simple string manipulation if cheerio fails
+            let textContent = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+            textContent = textContent.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+            textContent = textContent.replace(/<[^>]+>/g, ' ');
+            textContent = textContent.replace(/&nbsp;/g, ' ');
+            textContent = textContent.replace(/&amp;/g, '&');
+            textContent = textContent.replace(/&lt;/g, '<');
+            textContent = textContent.replace(/&gt;/g, '>');
+            textContent = textContent.replace(/&quot;/g, '"');
+            textContent = textContent.replace(/\s+/g, ' ').trim();
+            
+            const words = textContent.split(/\s+/).length;
+            
+            return {
+                pageContent: {
+                    title: title || 'Untitled',
+                    mainContent: textContent,
+                    headings: [],
+                    wordCount: words,
+                    readingTime: Math.max(1, Math.round(words / 200)),
+                    images: [],
+                    links: []
+                }
+            };
+        }
     }
 }

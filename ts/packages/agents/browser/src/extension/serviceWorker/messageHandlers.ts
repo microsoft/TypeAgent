@@ -41,22 +41,7 @@ export async function handleMessage(
             return await handleSearchWebsitesEnhanced(message);
         }
 
-        case "extractKnowledge": {
-            // TODO: Implement knowledge extraction
-            return {
-                hasKnowledge: false,
-                status: "none",
-                error: "Knowledge extraction not implemented",
-            };
-        }
 
-        case "checkKnowledgeStatus": {
-            // TODO: Implement knowledge status check
-            return {
-                hasKnowledge: false,
-                status: "none",
-            };
-        }
 
         case "getSearchSuggestions": {
             return await handleGetSearchSuggestions(message);

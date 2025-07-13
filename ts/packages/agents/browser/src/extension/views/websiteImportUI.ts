@@ -426,9 +426,6 @@ export class WebsiteImportUI {
         const intelligentAnalysisInput = modal.querySelector(
             "#enableIntelligentAnalysis",
         ) as HTMLInputElement;
-        const actionDetectionInput = modal.querySelector(
-            "#enableActionDetection",
-        ) as HTMLInputElement;
         const extractionModeInput = modal.querySelector(
             "#extractionMode",
         ) as HTMLSelectElement;
@@ -814,16 +811,6 @@ export class WebsiteImportUI {
                                                 </label>
                                                 <small class="text-muted d-block ms-4">
                                                     Extract entities, topics, and insights using AI
-                                                </small>
-                                            </div>
-
-                                            <div class="form-check mb-3">
-                                                <input class="form-check-input" type="checkbox" id="enableActionDetection">
-                                                <label class="form-check-label" for="enableActionDetection">
-                                                    <i class="bi bi-lightning"></i> Action detection
-                                                </label>
-                                                <small class="text-muted d-block ms-4">
-                                                    Identify actionable elements (buy, download, etc.)
                                                 </small>
                                             </div>
 

@@ -250,21 +250,6 @@ export async function createKnowproWebsiteCommands(
                     "Content extraction timeout (ms)",
                     10000,
                 ),
-
-                enableActionDetection: argBool("Enable action detection", true),
-                actionConfidence: argNum(
-                    "Minimum action confidence threshold",
-                    0.7,
-                ),
-
-                enableKnowledgeExtraction: argBool(
-                    "Enable knowledge extraction",
-                    false,
-                ),
-                knowledgeMode: arg(
-                    "Knowledge extraction mode: basic | enhanced | hybrid",
-                    "hybrid",
-                ),
             },
         };
     }
@@ -326,12 +311,11 @@ export async function createKnowproWebsiteCommands(
                 );
 
                 if (
-                    namedArgs.enableActionDetection &&
-                    (namedArgs.extractionMode === "actions" ||
-                        namedArgs.extractionMode === "full")
+                    namedArgs.extractionMode === "actions" ||
+                    namedArgs.extractionMode === "full"
                 ) {
                     context.printer.writeLine(
-                        `🎯 Action detection enabled (min confidence: ${namedArgs.actionConfidence})`,
+                        `🎯 Action detection enabled via ${namedArgs.extractionMode} mode`,
                     );
                 }
 
@@ -345,10 +329,6 @@ export async function createKnowproWebsiteCommands(
                         extractionMode: namedArgs.extractionMode as any,
                         maxConcurrent: namedArgs.maxConcurrent,
                         contentTimeout: namedArgs.contentTimeout,
-                        enableActionDetection: namedArgs.enableActionDetection,
-                        actionConfidence: namedArgs.actionConfidence,
-                        enableKnowledgeExtraction:
-                            namedArgs.enableKnowledgeExtraction,
                     },
                     (current, total, item) => {
                         // writeProgress might only expect one argument
@@ -374,9 +354,8 @@ export async function createKnowproWebsiteCommands(
 
                 // Report action detection results
                 if (
-                    namedArgs.enableActionDetection &&
-                    (namedArgs.extractionMode === "actions" ||
-                        namedArgs.extractionMode === "full")
+                    namedArgs.extractionMode === "actions" ||
+                    namedArgs.extractionMode === "full"
                 ) {
                     const actionStats = calculateActionStats(websites);
                     if (actionStats.sitesWithActions > 0) {

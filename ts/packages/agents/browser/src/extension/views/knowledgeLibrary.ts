@@ -70,7 +70,6 @@ interface LocalImportOptions {
     folder?: string;
     extractContent?: boolean;
     enableIntelligentAnalysis?: boolean;
-    enableActionDetection?: boolean;
     extractionMode?: "basic" | "content" | "actions" | "full";
     maxConcurrent?: number;
     contentTimeout?: number;
