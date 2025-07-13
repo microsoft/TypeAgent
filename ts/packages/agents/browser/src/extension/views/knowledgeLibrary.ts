@@ -1390,6 +1390,12 @@ class WebsiteLibraryPanelFullPage {
     }
 
     private async initializeDiscoverPage() {
+        // Initially hide the empty state while loading
+        const emptyState = document.getElementById("discoverEmptyState");
+        if (emptyState) {
+            emptyState.style.display = "none";
+        }
+
         if (!this.discoverData) {
             await this.loadDiscoverData();
         }
@@ -1397,6 +1403,12 @@ class WebsiteLibraryPanelFullPage {
     }
 
     private async initializeAnalyticsPage() {
+        // Initially hide the empty state while loading
+        const emptyState = document.getElementById("analyticsEmptyState");
+        if (emptyState) {
+            emptyState.style.display = "none";
+        }
+
         this.clearPlaceholderContent();
 
         if (!this.analyticsData) {
@@ -1407,6 +1419,12 @@ class WebsiteLibraryPanelFullPage {
 
     private async loadDiscoverData() {
         if (!this.isConnected) {
+            // Show the empty state when there's no connection
+            const emptyState = document.getElementById("discoverEmptyState");
+            if (emptyState) {
+                emptyState.style.display = "block";
+            }
+
             const container = document.getElementById("discoverContent");
             if (container) {
                 container.innerHTML = `
@@ -1449,6 +1467,12 @@ class WebsiteLibraryPanelFullPage {
             popularPages: [],
             topDomains: [],
         };
+
+        // Show the empty state when there's an error
+        const emptyState = document.getElementById("discoverEmptyState");
+        if (emptyState) {
+            emptyState.style.display = "block";
+        }
         
         const container = document.getElementById("discoverContent");
         if (container) {
@@ -1468,9 +1492,23 @@ class WebsiteLibraryPanelFullPage {
     private renderDiscoverContent() {
         if (!this.discoverData) return;
 
-        this.renderTrendingContent();
-        this.renderReadingPatterns();
-        this.renderPopularPages();
+        // Check if we have any data to display
+        const hasData = this.discoverData.trendingTopics.length > 0 || 
+                       this.discoverData.readingPatterns.some(p => p.activity > 0) || 
+                       this.discoverData.popularPages.length > 0;
+
+        // Show/hide empty state based on data availability
+        const emptyState = document.getElementById("discoverEmptyState");
+        if (emptyState) {
+            emptyState.style.display = hasData ? "none" : "block";
+        }
+
+        // Only render content sections if we have data
+        if (hasData) {
+            this.renderTrendingContent();
+            this.renderReadingPatterns();
+            this.renderPopularPages();
+        }
     }
 
     private renderTrendingContent() {
@@ -1591,6 +1629,12 @@ class WebsiteLibraryPanelFullPage {
 
     private async loadAnalyticsData() {
         if (!this.isConnected) {
+            // Show the empty state when there's no connection
+            const emptyState = document.getElementById("analyticsEmptyState");
+            if (emptyState) {
+                emptyState.style.display = "block";
+            }
+
             const container = document.getElementById("analyticsContent");
             if (container) {
                 container.innerHTML = `
@@ -1658,6 +1702,12 @@ class WebsiteLibraryPanelFullPage {
                 trends: [],
                 insights: [],
             };
+
+            // Show the empty state when there's an error or no data
+            const emptyState = document.getElementById("analyticsEmptyState");
+            if (emptyState) {
+                emptyState.style.display = "block";
+            }
 
             // Update metric displays with zeros since no real data is available
             this.updateMetricDisplaysWithZeros();
@@ -1991,9 +2041,23 @@ class WebsiteLibraryPanelFullPage {
     private renderAnalyticsContent() {
         if (!this.analyticsData) return;
 
-        this.renderActivityCharts();
-        this.renderKnowledgeInsights();
-        this.renderTopDomains();
+        // Check if we have meaningful analytics data to display
+        const hasData = this.analyticsData.overview.totalSites > 0 || 
+                       this.analyticsData.overview.knowledgeExtracted > 0 ||
+                       this.analyticsData.insights.some(insight => insight.value > 0);
+
+        // Show/hide empty state based on data availability
+        const emptyState = document.getElementById("analyticsEmptyState");
+        if (emptyState) {
+            emptyState.style.display = hasData ? "none" : "block";
+        }
+
+        // Only render content sections if we have data
+        if (hasData) {
+            this.renderActivityCharts();
+            this.renderKnowledgeInsights();
+            this.renderTopDomains();
+        }
     }
 
     private async renderTopDomains() {
@@ -2294,31 +2358,6 @@ class WebsiteLibraryPanelFullPage {
         };
 
         return tooltips[type as keyof typeof tooltips] || "";
-    }
-
-    private renderAnalyticsOverview() {
-        const container = document.getElementById("analyticsOverview");
-        if (!container || !this.analyticsData) return;
-
-        const { overview } = this.analyticsData;
-        container.innerHTML = `
-            <div class="stat-item">
-                <div class="stat-number">${overview.totalSites}</div>
-                <div class="stat-label">Total Sites</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-number">${overview.totalBookmarks}</div>
-                <div class="stat-label">Bookmarks</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-number">${overview.totalHistory}</div>
-                <div class="stat-label">History Items</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-number">${overview.knowledgeExtracted}</div>
-                <div class="stat-label">Knowledge Extracted</div>
-            </div>
-        `;
     }
 
     private async renderActivityCharts() {
