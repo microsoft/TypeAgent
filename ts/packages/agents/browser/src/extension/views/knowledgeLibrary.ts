@@ -2239,23 +2239,123 @@ class WebsiteLibraryPanelFullPage {
         `;
     }
 
-    private renderActivityCharts() {
+    private async renderActivityCharts() {
         const container = document.getElementById("activityCharts");
-        if (!container || !this.analyticsData) return;
+        if (!container) return;
 
-        container.innerHTML = `
-            <div class="card">
-                <div class="card-body">
-                    <h6 class="card-title">Activity Trends</h6>
-                    <div class="analytics-chart">
-                        <p class="text-muted">Activity trends chart would be displayed here</p>
-                        <div class="chart-placeholder" style="height: 200px; background: #f8f9fa; border-radius: 0.375rem; display: flex; align-items: center; justify-content: center;">
-                            <span class="text-muted">Chart visualization would appear here</span>
+        try {
+            // Show loading state
+            container.innerHTML = `
+                <div class="card">
+                    <div class="card-body">
+                        <h6 class="card-title">Activity Trends</h6>
+                        <div class="loading-message">
+                            <i class="bi bi-hourglass-split"></i>
+                            <span>Loading activity trends...</span>
                         </div>
                     </div>
                 </div>
-            </div>
-        `;
+            `;
+
+            // Fetch activity trends data
+            const trendsData = await this.chromeExtensionService.getActivityTrends("30d");
+            
+            if (!trendsData.trends || trendsData.trends.length === 0) {
+                container.innerHTML = `
+                    <div class="card">
+                        <div class="card-body">
+                            <h6 class="card-title">Activity Trends</h6>
+                            <div class="empty-message">
+                                <i class="bi bi-bar-chart"></i>
+                                <span>No activity data available</span>
+                                <small>Import bookmarks or browse websites to see trends</small>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            // Create bar chart visualization
+            const trends = trendsData.trends;
+            const maxActivity = Math.max(...trends.map((t: any) => t.visits + t.bookmarks));
+            const recentTrends = trends.slice(-14); // Show last 14 data points
+
+            const chartBars = recentTrends
+                .map((trend: any) => {
+                    const totalActivity = trend.visits + trend.bookmarks;
+                    const date = new Date(trend.date).toLocaleDateString('en-US', { 
+                        month: 'short', 
+                        day: 'numeric' 
+                    });
+                    
+                    const visitsHeight = maxActivity > 0 ? (trend.visits / maxActivity) * 100 : 0;
+                    const bookmarksHeight = maxActivity > 0 ? (trend.bookmarks / maxActivity) * 100 : 0;
+                    
+                    return `
+                        <div class="chart-bar" title="${date}: ${totalActivity} activities">
+                            <div class="bar-segment visits" style="height: ${visitsHeight}%" title="Visits: ${trend.visits}"></div>
+                            <div class="bar-segment bookmarks" style="height: ${bookmarksHeight}%" title="Bookmarks: ${trend.bookmarks}"></div>
+                            <div class="bar-label">${date}</div>
+                        </div>
+                    `;
+                }).join('');
+
+            const summary = trendsData.summary || {};
+            
+            container.innerHTML = `
+                <div class="card">
+                    <div class="card-body">
+                        <h6 class="card-title">Activity Trends</h6>
+                        
+                        <div class="activity-summary mb-3">
+                            <div class="summary-stat">
+                                <span class="stat-label">Total Activity</span>
+                                <span class="stat-value">${summary.totalActivity || 0}</span>
+                            </div>
+                            <div class="summary-stat">
+                                <span class="stat-label">Daily Average</span>
+                                <span class="stat-value">${Math.round(summary.averagePerDay || 0)}</span>
+                            </div>
+                            <div class="summary-stat">
+                                <span class="stat-label">Peak Day</span>
+                                <span class="stat-value">${summary.peakDay ? new Date(summary.peakDay).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'N/A'}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="activity-chart">
+                            <div class="chart-container">
+                                ${chartBars}
+                            </div>
+                            <div class="chart-legend">
+                                <div class="legend-item">
+                                    <div class="legend-color visits"></div>
+                                    <span>Visits</span>
+                                </div>
+                                <div class="legend-item">
+                                    <div class="legend-color bookmarks"></div>
+                                    <span>Bookmarks</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+        } catch (error) {
+            console.error("Failed to render activity charts:", error);
+            container.innerHTML = `
+                <div class="card">
+                    <div class="card-body">
+                        <h6 class="card-title">Activity Trends</h6>
+                        <div class="error-message">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            <span>Failed to load activity data</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
     }
 
     private renderKnowledgeBadges(knowledge?: KnowledgeStatus): string {
@@ -2944,6 +3044,7 @@ interface ChromeExtensionService {
     getRecentSearches(): Promise<string[]>;
     saveSearch(query: string, results: SearchResult): Promise<void>;
     getTopDomains(limit?: number): Promise<any>;
+    getActivityTrends(timeRange?: string): Promise<any>;
 }
 
 // NotificationManager Implementation
@@ -3285,6 +3386,27 @@ class ChromeExtensionServiceImpl implements ChromeExtensionService {
                 }
             } catch (error) {
                 console.error("Failed to get top domains:", error);
+                throw error;
+            }
+        }
+        throw new Error("Chrome extension not available");
+    }
+
+    async getActivityTrends(timeRange: string = "30d"): Promise<any> {
+        if (typeof chrome !== "undefined" && chrome.runtime) {
+            try {
+                const response = await chrome.runtime.sendMessage({
+                    type: "getActivityTrends",
+                    timeRange
+                });
+
+                if (response.success) {
+                    return response.trends;
+                } else {
+                    throw new Error(response.error || "Failed to get activity trends");
+                }
+            } catch (error) {
+                console.error("Failed to get activity trends:", error);
                 throw error;
             }
         }

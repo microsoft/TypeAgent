@@ -93,6 +93,9 @@ export async function handleKnowledgeAction(
         case "getTopDomains":
             return await getTopDomains(parameters, context);
 
+        case "getActivityTrends":
+            return await getActivityTrends(parameters, context);
+
         case "getPageIndexedKnowledge":
             return await getPageIndexedKnowledge(parameters, context);
 
@@ -1131,6 +1134,126 @@ export async function getTopDomains(
         return {
             domains: [],
             totalSites: 0,
+            success: false,
+        };
+    }
+}
+
+export async function getActivityTrends(
+    parameters: {
+        timeRange?: string;
+        granularity?: string;
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    trends: Array<{
+        date: string;
+        visits: number;
+        bookmarks: number;
+    }>;
+    summary: {
+        totalActivity: number;
+        peakDay: string | null;
+        averagePerDay: number;
+        timeRange: string;
+    };
+    success: boolean;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                trends: [],
+                summary: {
+                    totalActivity: 0,
+                    peakDay: null,
+                    averagePerDay: 0,
+                    timeRange: parameters.timeRange || "30d",
+                },
+                success: false,
+            };
+        }
+
+        const websites = websiteCollection.messages.getAll();
+        const timeRange = parameters.timeRange || "30d";
+        
+        // Calculate date range
+        const endDate = new Date();
+        const startDate = new Date();
+        switch (timeRange) {
+            case "7d": startDate.setDate(endDate.getDate() - 7); break;
+            case "30d": startDate.setDate(endDate.getDate() - 30); break;
+            case "90d": startDate.setDate(endDate.getDate() - 90); break;
+            default: startDate.setDate(endDate.getDate() - 30);
+        }
+
+        // Extract activity data from websites
+        const activityMap = new Map<string, { visits: number; bookmarks: number }>();
+        
+        for (const site of websites) {
+            const metadata = site.metadata as any;
+            
+            // Process visit dates
+            if (metadata.visitDate) {
+                const visitDate = new Date(metadata.visitDate);
+                if (visitDate >= startDate && visitDate <= endDate) {
+                    const dateKey = visitDate.toISOString().split('T')[0];
+                    const current = activityMap.get(dateKey) || { visits: 0, bookmarks: 0 };
+                    current.visits += metadata.visitCount || 1;
+                    activityMap.set(dateKey, current);
+                }
+            }
+            
+            // Process bookmark dates
+            if (metadata.bookmarkDate) {
+                const bookmarkDate = new Date(metadata.bookmarkDate);
+                if (bookmarkDate >= startDate && bookmarkDate <= endDate) {
+                    const dateKey = bookmarkDate.toISOString().split('T')[0];
+                    const current = activityMap.get(dateKey) || { visits: 0, bookmarks: 0 };
+                    current.bookmarks += 1;
+                    activityMap.set(dateKey, current);
+                }
+            }
+        }
+
+        // Convert to trends array
+        const trends = Array.from(activityMap.entries())
+            .map(([date, activity]) => ({ 
+                date, 
+                visits: activity.visits, 
+                bookmarks: activity.bookmarks 
+            }))
+            .sort((a, b) => a.date.localeCompare(b.date));
+
+        // Calculate summary statistics
+        const totalVisits = trends.reduce((sum, t) => sum + t.visits, 0);
+        const totalBookmarks = trends.reduce((sum, t) => sum + t.bookmarks, 0);
+        const peakDay = trends.reduce((peak, current) => 
+            (current.visits + current.bookmarks) > (peak.visits + peak.bookmarks) ? current : peak, 
+            trends[0] || { date: null, visits: 0, bookmarks: 0 }
+        );
+
+        return {
+            trends,
+            summary: {
+                totalActivity: totalVisits + totalBookmarks,
+                peakDay: peakDay.date,
+                averagePerDay: trends.length > 0 ? (totalVisits + totalBookmarks) / trends.length : 0,
+                timeRange,
+            },
+            success: true,
+        };
+    } catch (error) {
+        console.error("Error getting activity trends:", error);
+        return {
+            trends: [],
+            summary: {
+                totalActivity: 0,
+                peakDay: null,
+                averagePerDay: 0,
+                timeRange: parameters.timeRange || "30d",
+            },
             success: false,
         };
     }

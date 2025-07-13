@@ -63,6 +63,33 @@ export async function handleMessage(
             }
         }
 
+        case "getActivityTrends": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getActivityTrends",
+                    parameters: {
+                        timeRange: message.timeRange || "30d",
+                        granularity: message.granularity || "day"
+                    },
+                });
+
+                return {
+                    success: result.success || false,
+                    trends: {
+                        trends: result.trends || [],
+                        summary: result.summary || {}
+                    }
+                };
+            } catch (error) {
+                console.error("Error getting activity trends:", error);
+                return {
+                    success: false,
+                    error: error instanceof Error ? error.message : "Unknown error",
+                    trends: { trends: [], summary: {} }
+                };
+            }
+        }
+
         case "getSearchSuggestions": {
             return await handleGetSearchSuggestions(message);
         }
