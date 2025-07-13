@@ -3036,3 +3036,96 @@ body {
     font-size: 0.8rem;
     opacity: 0.7;
 }
+
+/* Discover View Styling */
+.reading-pattern-chart {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    height: 100px;
+    padding: 10px 0;
+    gap: 5px;
+}
+
+.pattern-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+}
+
+.pattern-bar {
+    width: 100%;
+    max-width: 30px;
+    background: linear-gradient(180deg, #007bff, #0056b3);
+    border-radius: 3px 3px 0 0;
+    min-height: 2px;
+    transition: all 0.3s ease;
+}
+
+.pattern-item.peak .pattern-bar {
+    background: linear-gradient(180deg, #28a745, #1e7e34);
+    box-shadow: 0 0 8px rgba(40, 167, 69, 0.4);
+}
+
+.pattern-time {
+    font-size: 0.7rem;
+    color: #6c757d;
+    margin-top: 5px;
+    text-align: center;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+}
+
+.discover-card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.discover-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.trending-topic-card {
+    border-left: 3px solid #007bff;
+    transition: all 0.3s ease;
+}
+
+.trending-topic-card.trend-up {
+    border-left-color: #28a745;
+}
+
+.trending-topic-card.trend-down {
+    border-left-color: #dc3545;
+}
+
+.trend-indicator {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.error-state, .connection-required {
+    text-align: center;
+    padding: 3rem 2rem;
+    color: #6c757d;
+}
+
+.error-state i, .connection-required i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+.error-state h3, .connection-required h3 {
+    margin-bottom: 1rem;
+    color: #495057;
+}
+
+.error-state p, .connection-required p {
+    margin-bottom: 1.5rem;
+    opacity: 0.8;
+}

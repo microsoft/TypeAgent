@@ -99,6 +99,9 @@ export async function handleKnowledgeAction(
         case "getPageIndexedKnowledge":
             return await getPageIndexedKnowledge(parameters, context);
 
+        case "getDiscoverInsights":
+            return await getDiscoverInsights(parameters, context);
+
         default:
             throw new Error(`Unknown knowledge action: ${actionName}`);
     }
@@ -1390,4 +1393,273 @@ export async function getPageIndexedKnowledge(
             error: "Failed to retrieve indexed knowledge",
         };
     }
+}
+
+export async function getDiscoverInsights(
+    parameters: {
+        limit?: number;
+        timeframe?: string;
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    trendingTopics: Array<{
+        topic: string;
+        count: number;
+        trend: "up" | "down" | "stable";
+        percentage: number;
+    }>;
+    readingPatterns: Array<{
+        timeframe: string;
+        activity: number;
+        peak: boolean;
+    }>;
+    popularPages: Array<{
+        url: string;
+        title: string;
+        visitCount: number;
+        isBookmarked: boolean;
+        domain: string;
+        lastVisited: string;
+    }>;
+    topDomains: Array<{
+        domain: string;
+        count: number;
+        favicon?: string;
+        trend: "up" | "down" | "stable";
+    }>;
+    success: boolean;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                trendingTopics: [],
+                readingPatterns: [],
+                popularPages: [],
+                topDomains: [],
+                success: false,
+            };
+        }
+
+        const websites = websiteCollection.messages.getAll();
+        const limit = parameters.limit || 10;
+        const timeframe = parameters.timeframe || "30d";
+
+        // Analyze trending topics from titles and knowledge entities
+        const trendingTopics = analyzeTrendingTopics(websites, limit);
+        
+        // Analyze reading patterns from temporal data
+        const readingPatterns = analyzeReadingPatterns(websites, timeframe);
+        
+        // Identify popular pages by activity metrics
+        const popularPages = analyzePopularPages(websites, limit);
+        
+        // Enhanced domain analysis with trends
+        const topDomains = analyzeTopDomains(websites, limit);
+
+        return {
+            trendingTopics,
+            readingPatterns,
+            popularPages,
+            topDomains,
+            success: true,
+        };
+    } catch (error) {
+        console.error("Error getting discover insights:", error);
+        return {
+            trendingTopics: [],
+            readingPatterns: [],
+            popularPages: [],
+            topDomains: [],
+            success: false,
+        };
+    }
+}
+
+function analyzeTrendingTopics(websites: any[], limit: number) {
+    const topicCounts = new Map<string, number>();
+    const recentTopicCounts = new Map<string, number>();
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    for (const site of websites) {
+        const metadata = site.metadata as any;
+        const title = metadata.title || "";
+        const knowledge = site.getKnowledge();
+        
+        // Extract topics from title words (basic implementation)
+        const titleWords = title
+            .toLowerCase()
+            .split(/\s+/)
+            .filter((word: string) => word.length > 3 && !['the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'had', 'her', 'was', 'one', 'our', 'out', 'day', 'get', 'has', 'him', 'his', 'how', 'its', 'may', 'new', 'now', 'old', 'see', 'two', 'way', 'who', 'boy', 'did', 'man', 'car', 'got', 'let', 'say', 'she', 'too', 'use'].includes(word));
+
+        titleWords.forEach((word: string) => {
+            topicCounts.set(word, (topicCounts.get(word) || 0) + 1);
+            
+            const visitDate = metadata.visitDate || metadata.bookmarkDate;
+            if (visitDate && new Date(visitDate) > thirtyDaysAgo) {
+                recentTopicCounts.set(word, (recentTopicCounts.get(word) || 0) + 1);
+            }
+        });
+
+        // Extract topics from knowledge entities
+        if (knowledge?.entities) {
+            knowledge.entities.forEach((entity: any) => {
+                const entityName = entity.name?.toLowerCase();
+                if (entityName && entityName.length > 2) {
+                    topicCounts.set(entityName, (topicCounts.get(entityName) || 0) + 1);
+                    
+                    const visitDate = metadata.visitDate || metadata.bookmarkDate;
+                    if (visitDate && new Date(visitDate) > thirtyDaysAgo) {
+                        recentTopicCounts.set(entityName, (recentTopicCounts.get(entityName) || 0) + 1);
+                    }
+                }
+            });
+        }
+    }
+
+    const sortedTopics = Array.from(topicCounts.entries())
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, limit);
+
+    return sortedTopics.map(([topic, count]) => {
+        const recentCount = recentTopicCounts.get(topic) || 0;
+        const historicalCount = count - recentCount;
+        let trend: "up" | "down" | "stable" = "stable";
+        
+        if (recentCount > historicalCount * 1.5) {
+            trend = "up";
+        } else if (recentCount < historicalCount * 0.5) {
+            trend = "down";
+        }
+
+        return {
+            topic,
+            count,
+            trend,
+            percentage: Math.round((count / websites.length) * 100),
+        };
+    });
+}
+
+function analyzeReadingPatterns(websites: any[], timeframe: string) {
+    const patterns = new Map<string, number>();
+    const dayOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    
+    for (const site of websites) {
+        const metadata = site.metadata as any;
+        const visitDate = metadata.visitDate || metadata.bookmarkDate;
+        
+        if (visitDate) {
+            const date = new Date(visitDate);
+            const day = dayOfWeek[date.getDay()];
+            patterns.set(day, (patterns.get(day) || 0) + 1);
+        }
+    }
+
+    const maxActivity = Math.max(...Array.from(patterns.values()));
+    
+    return dayOfWeek.map(day => ({
+        timeframe: day,
+        activity: patterns.get(day) || 0,
+        peak: (patterns.get(day) || 0) === maxActivity && maxActivity > 0,
+    }));
+}
+
+function analyzePopularPages(websites: any[], limit: number) {
+    const pageStats = new Map<string, {
+        url: string;
+        title: string;
+        visitCount: number;
+        isBookmarked: boolean;
+        domain: string;
+        lastVisited: string;
+    }>();
+
+    for (const site of websites) {
+        const metadata = site.metadata as any;
+        const url = metadata.url || "";
+        const title = metadata.title || url;
+        const domain = url ? new URL(url).hostname : "";
+        const isBookmarked = !!metadata.bookmarkDate;
+        const lastVisited = metadata.visitDate || metadata.bookmarkDate || new Date().toISOString();
+
+        if (url) {
+            const existing = pageStats.get(url);
+            if (existing) {
+                existing.visitCount++;
+                if (new Date(lastVisited) > new Date(existing.lastVisited)) {
+                    existing.lastVisited = lastVisited;
+                }
+                if (isBookmarked) {
+                    existing.isBookmarked = true;
+                }
+            } else {
+                pageStats.set(url, {
+                    url,
+                    title,
+                    visitCount: 1,
+                    isBookmarked,
+                    domain,
+                    lastVisited,
+                });
+            }
+        }
+    }
+
+    return Array.from(pageStats.values())
+        .sort((a, b) => {
+            // Prioritize bookmarked pages and visit count
+            const scoreA = (a.isBookmarked ? 10 : 0) + a.visitCount;
+            const scoreB = (b.isBookmarked ? 10 : 0) + b.visitCount;
+            return scoreB - scoreA;
+        })
+        .slice(0, limit);
+}
+
+function analyzeTopDomains(websites: any[], limit: number) {
+    const domainCounts = new Map<string, number>();
+    const recentDomainCounts = new Map<string, number>();
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    for (const site of websites) {
+        const metadata = site.metadata as any;
+        const url = metadata.url;
+        
+        if (url) {
+            try {
+                const domain = new URL(url).hostname;
+                domainCounts.set(domain, (domainCounts.get(domain) || 0) + 1);
+                
+                const visitDate = metadata.visitDate || metadata.bookmarkDate;
+                if (visitDate && new Date(visitDate) > thirtyDaysAgo) {
+                    recentDomainCounts.set(domain, (recentDomainCounts.get(domain) || 0) + 1);
+                }
+            } catch (error) {
+                // Invalid URL, skip
+            }
+        }
+    }
+
+    return Array.from(domainCounts.entries())
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, limit)
+        .map(([domain, count]) => {
+            const recentCount = recentDomainCounts.get(domain) || 0;
+            const historicalCount = count - recentCount;
+            let trend: "up" | "down" | "stable" = "stable";
+            
+            if (recentCount > historicalCount * 1.5) {
+                trend = "up";
+            } else if (recentCount < historicalCount * 0.5) {
+                trend = "down";
+            }
+
+            return {
+                domain,
+                count,
+                trend,
+                favicon: `https://www.google.com/s2/favicons?domain=${domain}`,
+            };
+        });
 }

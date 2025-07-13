@@ -793,6 +793,37 @@ export async function handleMessage(
             }
         }
 
+        case "getDiscoverInsights": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getDiscoverInsights",
+                    parameters: {
+                        limit: message.limit || 10,
+                        timeframe: message.timeframe || "30d",
+                    },
+                });
+
+                return {
+                    success: result.success || false,
+                    trendingTopics: result.trendingTopics || [],
+                    readingPatterns: result.readingPatterns || [],
+                    popularPages: result.popularPages || [],
+                    topDomains: result.topDomains || [],
+                };
+            } catch (error) {
+                console.error("Error getting discover insights:", error);
+                return {
+                    success: false,
+                    trendingTopics: [],
+                    readingPatterns: [],
+                    popularPages: [],
+                    topDomains: [],
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                };
+            }
+        }
+
         default:
             return null;
     }
