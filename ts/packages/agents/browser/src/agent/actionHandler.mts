@@ -49,7 +49,7 @@ import registerDebug from "debug";
 import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 import * as website from "website-memory";
 import { handleKnowledgeAction } from "./knowledge/knowledgeHandler.mjs";
-import { unifiedWebsiteSearch } from "./unifiedSearch.mjs";
+import { searchWebMemories } from "./searchWebMemories.mjs";
 
 import {
     loadAllowDynamicAgentDomains,
@@ -65,7 +65,6 @@ import {
     importWebsiteDataFromSession,
     importHtmlFolder,
     importHtmlFolderFromSession,
-    searchWebsites,
     getWebsiteStats,
 } from "./websiteMemory.mjs";
 import { CrosswordActions } from "./crossword/schema/userActions.mjs";
@@ -394,12 +393,10 @@ async function updateBrowserContext(
 
                         case "extractKnowledgeFromPage":
                         case "indexWebPageContent":
-                        case "queryWebKnowledge":
                         case "checkPageIndexStatus":
                         case "getPageIndexedKnowledge":
                         case "getKnowledgeIndexStats":
-                        case "clearKnowledgeIndex":
-                        case "exportKnowledgeData": {
+                        case "clearKnowledgeIndex": {
                             const knowledgeResult = await handleKnowledgeAction(
                                 data.method,
                                 data.params,
@@ -417,9 +414,8 @@ async function updateBrowserContext(
 
                         case "importWebsiteData":
                         case "importHtmlFolder":
-                        case "searchWebsites":
                         case "getWebsiteStats":
-                        case "unifiedWebsiteSearch": {
+                        case "searchWebMemories": {
                             const websiteResult = await handleWebsiteAction(
                                 data.method,
                                 data.params,
@@ -697,8 +693,6 @@ async function executeBrowserAction(
                     return importWebsiteData(context, action);
                 case "importHtmlFolder":
                     return importHtmlFolder(context, action);
-                case "searchWebsites":
-                    return searchWebsites(context, action);
                 case "getWebsiteStats":
                     return getWebsiteStats(context, action);
                 case "goForward":
@@ -1189,37 +1183,8 @@ async function handleWebsiteAction(
         case "importHtmlFolder":
             return await importHtmlFolderFromSession(parameters, context);
 
-        case "unifiedWebsiteSearch":
-            return await unifiedWebsiteSearch(parameters, context);
-
-        case "searchWebsites":
-            // Convert to ActionContext format for existing function
-            const searchAction = {
-                schemaName: "browser" as const,
-                actionName: "searchWebsites" as const,
-                parameters: parameters,
-            };
-            const mockActionContext: ActionContext<BrowserActionContext> = {
-                sessionContext: context,
-                actionIO: {
-                    setDisplay: () => {},
-                    appendDisplay: () => {},
-                    clearDisplay: () => {},
-                    setError: () => {},
-                } as any,
-                streamingContext: undefined,
-                activityContext: undefined,
-                queueToggleTransientAgent: async () => {},
-            };
-            const searchResult = await searchWebsites(
-                mockActionContext,
-                searchAction,
-            );
-            return {
-                success: !searchResult.error,
-                result: searchResult.literalText || "Search completed",
-                error: searchResult.error,
-            };
+        case "searchWebMemories":
+            return await searchWebMemories(parameters, context);
 
         case "getWebsiteStats":
             // Convert to ActionContext format for existing function

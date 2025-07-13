@@ -20,9 +20,8 @@ export type BrowserActions =
     | ReloadPage
     | ImportWebsiteData
     | ImportHtmlFolder
-    | SearchWebsites
     | GetWebsiteStats
-    | UnifiedWebsiteSearch;
+    | SearchWebMemories;
 
 export type WebPage = string;
 export type BrowserEntities = WebPage;
@@ -170,30 +169,7 @@ export type ImportHtmlFolder = {
     };
 };
 
-// Search through imported website data
-export type SearchWebsites = {
-    actionName: "searchWebsites";
-    parameters: {
-        // The original user request
-        originalUserRequest: string;
-        // Search query terms
-        query: string;
-        // Filter by domain
-        domain?: string;
-        // How to sort by time, if temporal intent present
-        temporalSort: "ascend" | "descend" | "none";
-        // How to sort by frequency of visit, if required
-        frequencySort: "ascend" | "descend" | "none";
-        // Filter by page type (news, commerce, social, etc.)
-        pageType?: string;
-        // Filter by source (bookmark, history)
-        source?: "bookmark" | "history";
-        // Maximum number of results
-        limit?: number;
-        // Minimum relevance score (0-1)
-        minScore?: number;
-    };
-};
+
 
 // Get statistics about imported website data
 export type GetWebsiteStats = {
@@ -206,9 +182,9 @@ export type GetWebsiteStats = {
     };
 };
 
-// Unified website search that replaces both queryWebKnowledge and searchWebsites
-export type UnifiedWebsiteSearch = {
-    actionName: "unifiedWebsiteSearch";
+// Search web memories (unified search replacing queryWebKnowledge and searchWebsites)
+export type SearchWebMemories = {
+    actionName: "searchWebMemories";
     parameters: {
         query: string;
         searchScope?: "current_page" | "all_indexed";

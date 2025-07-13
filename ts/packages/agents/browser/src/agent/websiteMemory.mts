@@ -10,11 +10,9 @@ import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import {
     ImportWebsiteData,
     ImportHtmlFolder,
-    SearchWebsites,
     GetWebsiteStats,
 } from "./actionsSchema.mjs";
 import { BrowserActionContext } from "./actionHandler.mjs";
-import { unifiedWebsiteSearch } from "./unifiedSearch.mjs";
 import * as website from "website-memory";
 import * as kp from "knowpro";
 import { openai as ai } from "aiclient";
@@ -1020,74 +1018,6 @@ function convertWebsiteDataToWebsite(data: WebsiteData): any {
         lastVisited: data.lastVisited,
         extractionResult: data.extractionResult,
     };
-}
-
-/**
- * Search through imported website data
- */
-export async function searchWebsites(
-    context: ActionContext<BrowserActionContext>,
-    action: TypeAgentAction<SearchWebsites>,
-) {
-    try {
-        const websiteCollection =
-            context.sessionContext.agentContext.websiteCollection;
-        if (!websiteCollection || websiteCollection.messages.length === 0) {
-            return createActionResult(
-                "No website data available. Please import website data first.",
-                true,
-            );
-        }
-
-        context.actionIO.setDisplay("Searching websites...");
-
-        const {
-            originalUserRequest,
-            domain,
-            source,
-            temporalSort,
-            frequencySort,
-            pageType,
-            limit = 10,
-            minScore = 0.5,
-        } = action.parameters;
-
-        // Use unified search for enhanced capabilities
-        const result = await unifiedWebsiteSearch({
-            query: originalUserRequest,
-            domain: domain,
-            source: source,
-            temporalSort: temporalSort,
-            frequencySort: frequencySort,
-            pageType: pageType,
-            limit: limit,
-            minScore: minScore,
-            generateAnswer: false,  // Discovery mode - skip answer generation
-            includeRelatedEntities: false,
-            enableAdvancedSearch: false  // Fast discovery mode
-        }, context.sessionContext);
-
-        if (result.websites.length === 0) {
-            return createActionResult(
-                "No websites found matching the search criteria.",
-            );
-        }
-
-        const resultText = result.websites
-            .map((site, i) => {
-                return `${i + 1}. ${site.title}\n   URL: ${site.url}\n   Domain: ${site.domain} | Type: ${site.pageType} | Source: ${site.source}\n`;
-            })
-            .join("\n");
-
-        return createActionResult(
-            `Found ${result.websites.length} websites:\n\n${resultText}`,
-        );
-    } catch (error: any) {
-        return createActionResult(
-            `Failed to search websites: ${error.message}`,
-            true,
-        );
-    }
 }
 
 /**

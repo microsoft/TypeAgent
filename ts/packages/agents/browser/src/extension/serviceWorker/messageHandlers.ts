@@ -37,9 +37,7 @@ export async function handleMessage(
             return await handleGetWebsiteLibraryStats();
         }
 
-        case "searchWebsites": {
-            return await handleSearchWebsitesUnified(message);
-        }
+
 
 
 
@@ -321,36 +319,11 @@ export async function handleMessage(
             }
         }
 
-        case "queryWebKnowledgeEnhanced": {
-            try {
-                const result = await sendActionToAgent({
-                    actionName: "queryWebKnowledgeEnhanced",
-                    parameters: {
-                        query: message.query,
-                        url: message.url,
-                        searchScope: message.searchScope || "all_indexed",
-                        filters: message.filters,
-                        maxResults: message.maxResults || 10,
-                    },
-                });
-
-                return result;
-            } catch (error) {
-                console.error("Enhanced query error:", error);
-                return {
-                    answer: "Error occurred during enhanced search.",
-                    sources: [],
-                    relatedEntities: [],
-                    metadata: {
-                        totalFound: 0,
-                        searchScope: "all_indexed",
-                        filtersApplied: [],
-                        suggestions: [],
-                        processingTime: 0,
-                    },
-                };
-            }
+        case "searchWebMemories": {
+            return await handleSearchWebMemories(message);
         }
+
+
 
         // Cross-page intelligence handlers
         case "discoverRelationships": {
@@ -534,9 +507,7 @@ export async function handleMessage(
             return await handleGetWebsiteLibraryStats();
         }
 
-        case "exportWebsiteLibrary": {
-            return await handleExportWebsiteLibrary();
-        }
+
 
         case "clearWebsiteLibrary": {
             return await handleClearWebsiteLibrary();
@@ -559,10 +530,7 @@ export async function handleMessage(
             return await handleCancelFileImport(message.importId);
         }
 
-        // Enhanced search message handlers
-        case "searchWebsitesEnhanced": {
-            return await handleSearchWebsitesEnhanced(message);
-        }
+        // Enhanced search message handlers (searchWebsitesEnhanced removed - was broken)
 
         case "getSearchSuggestions": {
             return await handleGetSearchSuggestions(message);
@@ -853,43 +821,7 @@ async function handleGetWebsiteLibraryStats() {
     }
 }
 
-async function handleExportWebsiteLibrary() {
-    try {
-        // Get all website data from the agent
-        const searchResult = await sendActionToAgent({
-            actionName: "searchWebsites",
-            parameters: {
-                originalUserRequest: "export all data",
-                query: "*",
-                limit: 10000,
-                minScore: 0,
-            },
-        });
 
-        const statsResult = await sendActionToAgent({
-            actionName: "exportKnowledgeData",
-            parameters: {},
-        });
-
-        const exportData = {
-            exportDate: new Date().toISOString(),
-            version: "1.0",
-            websites: searchResult.websites || [],
-            stats: parseWebsiteStatsFromText(statsResult.text || ""),
-        };
-
-        return {
-            success: true,
-            data: exportData,
-        };
-    } catch (error) {
-        console.error("Error exporting website library:", error);
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : "Unknown error",
-        };
-    }
-}
 
 async function handleClearWebsiteLibrary() {
     try {
@@ -1023,13 +955,13 @@ async function handleCancelFileImport(importId: string) {
 }
 
 // Enhanced search handlers
-async function handleSearchWebsitesUnified(message: any) {
+async function handleSearchWebMemories(message: any) {
     try {
         const startTime = Date.now();
 
         // Use the new unified search action
         const result = await sendActionToAgent({
-            actionName: "unifiedWebsiteSearch",
+            actionName: "searchWebMemories",
             parameters: {
                 query: message.parameters.query,
                 generateAnswer: true,  // Knowledge Library wants answers
@@ -1065,49 +997,7 @@ async function handleSearchWebsitesUnified(message: any) {
     }
 }
 
-async function handleSearchWebsitesEnhanced(message: any) {
-    try {
-        const startTime = Date.now();
 
-        // Perform the search using existing searchWebsites action
-        const searchResult = await sendActionToAgent({
-            actionName: "queryWebKnowledge",
-            parameters: {
-                originalUserRequest: message.parameters.query,
-                query: message.parameters.query,
-                limit: message.parameters.limit || 50,
-                minScore: message.parameters.filters?.minRelevance || 0,
-            },
-        });
-
-        const searchTime = Date.now() - startTime;
-
-        // Generate AI summary if requested
-        let summary = searchResult.answer;
-
-        return {
-            success: true,
-            results: {
-                websites: searchResult.sources || [],
-                summary: {
-                    text: summary || "",
-                    totalFound: searchResult.sources?.length || 0,
-                    searchTime: searchTime,
-                    sources: extractSources(searchResult.sources || []),
-                    entities: searchResult.relatedEntities || [],
-                },
-                query: message.parameters.query,
-                filters: message.parameters.filters || {},
-            },
-        };
-    } catch (error) {
-        console.error("Error in enhanced search:", error);
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : "Unknown error",
-        };
-    }
-}
 
 async function handleGetSearchSuggestions(message: any) {
     try {

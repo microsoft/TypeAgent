@@ -23,7 +23,7 @@ import {
 const debug = registerDebug("typeagent:browser:unified-search");
 
 // Core interfaces for unified search
-export interface UnifiedSearchRequest {
+export interface SearchWebMemoriesRequest {
     query: string;
     searchScope?: "current_page" | "all_indexed" | undefined;
     
@@ -93,7 +93,7 @@ export interface WebsiteResult {
     snippet?: string;
 }
 
-export interface UnifiedSearchResponse {
+export interface SearchWebMemoriesResponse {
     // Core results - always provided
     websites: WebsiteResult[];
     summary: SearchSummary;
@@ -125,10 +125,10 @@ export interface UnifiedSearchResponse {
  * Unified website search function that replaces both queryWebKnowledge and searchWebsites
  * while incorporating advanced search capabilities
  */
-export async function unifiedWebsiteSearch(
-    request: UnifiedSearchRequest,
+export async function searchWebMemories(
+    request: SearchWebMemoriesRequest,
     context: SessionContext<BrowserActionContext>,
-): Promise<UnifiedSearchResponse> {
+): Promise<SearchWebMemoriesResponse> {
     const startTime = Date.now();
     let timing = {
         parsing: 0,
@@ -294,7 +294,7 @@ export async function unifiedWebsiteSearch(
         debugContext.timing = timing;
 
         // Build response
-        const response: UnifiedSearchResponse = {
+        const response: SearchWebMemoriesResponse = {
             websites,
             summary: {
                 totalFound: filteredResults.length,
@@ -396,7 +396,7 @@ async function parseAndExpandQuery(
 }
 
 async function performAdvancedSearch(
-    request: UnifiedSearchRequest,
+    request: SearchWebMemoriesRequest,
     parsedQuery: ParsedQuery,
     websiteCollection: website.WebsiteCollection,
     context: SessionContext<BrowserActionContext>,
@@ -454,7 +454,7 @@ async function performAdvancedSearch(
 }
 
 function buildTemporalFilter(
-    request: UnifiedSearchRequest,
+    request: SearchWebMemoriesRequest,
     context: SessionContext<BrowserActionContext>
 ): kp.WhenFilter {
     // Return empty filter for now - could be enhanced with temporal logic
@@ -463,7 +463,7 @@ function buildTemporalFilter(
 
 async function applyDiscoveryFilters(
     results: website.Website[],
-    request: UnifiedSearchRequest,
+    request: SearchWebMemoriesRequest,
 ): Promise<website.Website[]> {
     let filtered = results;
 
@@ -496,7 +496,7 @@ async function applyDiscoveryFilters(
 
 function applySorting(
     results: website.Website[],
-    request: UnifiedSearchRequest,
+    request: SearchWebMemoriesRequest,
 ): website.Website[] {
     let sorted = [...results];
 
@@ -558,7 +558,7 @@ async function generateAnswerFromResults(
     query: string,
     results: website.Website[],
     parsedQuery: ParsedQuery,
-    request: UnifiedSearchRequest,
+    request: SearchWebMemoriesRequest,
 ): Promise<{
     answer: string;
     type: "direct" | "synthesized" | "noAnswer";
@@ -671,7 +671,7 @@ function createEmptyResponse(
     message: string,
     startTime: number,
     debugContext?: SearchDebugContext | undefined,
-): UnifiedSearchResponse {
+): SearchWebMemoriesResponse {
     return {
         websites: [],
         summary: {
@@ -693,7 +693,7 @@ function createErrorResponse(
     error: string,
     startTime: number,
     debugContext?: SearchDebugContext | undefined,
-): UnifiedSearchResponse {
+): SearchWebMemoriesResponse {
     return {
         websites: [],
         summary: {
