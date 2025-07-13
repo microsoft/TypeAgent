@@ -26,6 +26,34 @@
             <span class="status-indicator status-connected"></span>
             <span>Connected</span>
           </div>
+
+          <!-- Import Dropdown -->
+          <div class="dropdown import-dropdown">
+            <button
+              id="importButton"
+              class="import-btn"
+              title="Import"
+              data-bs-toggle="dropdown"
+              aria-expanded="false"
+            >
+              <i class="bi bi-download"></i>
+            </button>
+            <ul class="dropdown-menu">
+              <li>
+                <a class="dropdown-item" href="#" id="importWebActivityBtn">
+                  <i class="bi bi-download me-2"></i>
+                  Import Web Activity
+                </a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="#" id="importFromFileBtn">
+                  <i class="bi bi-file-earmark-arrow-up me-2"></i>
+                  Import from Files
+                </a>
+              </li>
+            </ul>
+          </div>
+
           <button id="settingsButton" class="settings-btn" title="Settings">
             <i class="bi bi-gear"></i>
           </button>
@@ -52,40 +80,6 @@
             <span>Analytics</span>
           </button>
         </nav>
-
-        <!-- Quick Actions -->
-        <div class="quick-actions">
-          <h3 class="section-title">Import Data</h3>
-          <div class="action-buttons">
-            <button
-              id="importWebActivityBtn"
-              class="action-btn import-web-activity-btn"
-            >
-              <i class="bi bi-download"></i>
-              <span>Import Web Activity</span>
-            </button>
-            <button id="importFromFileBtn" class="action-btn import-file-btn">
-              <i class="bi bi-file-earmark-arrow-up"></i>
-              <span>Import from Files</span>
-            </button>
-          </div>
-
-          <h3 class="section-title">Quick Actions</h3>
-          <div class="action-buttons">
-            <button class="action-btn" data-action="exploreRecentBookmarks">
-              <i class="bi bi-bookmark-star"></i>
-              <span>Recent Bookmarks</span>
-            </button>
-            <button class="action-btn" data-action="exploreMostVisited">
-              <i class="bi bi-graph-up"></i>
-              <span>Most Visited</span>
-            </button>
-            <button class="action-btn" data-action="exploreByDomain">
-              <i class="bi bi-globe"></i>
-              <span>Browse Domains</span>
-            </button>
-          </div>
-        </div>
       </aside>
 
       <!-- Main Content Area -->
@@ -364,19 +358,6 @@
                 <div class="stat-number" id="topDomains">0</div>
                 <div class="stat-label">Domains</div>
               </div>
-            </div>
-          </div>
-
-          <!-- Overview Stats -->
-          <div class="content-section">
-            <div class="section-header">
-              <h2 class="section-title">
-                <i class="bi bi-graph-up"></i>Overview Dashboard
-              </h2>
-            </div>
-
-            <div class="quick-stats" id="analyticsOverview">
-              <!-- Analytics overview will be populated here -->
             </div>
           </div>
 

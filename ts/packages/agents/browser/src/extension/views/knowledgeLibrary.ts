@@ -34,7 +34,14 @@ interface DiscoverInsights {
         activity: number;
         peak: boolean;
     }>;
-    popularPages: Website[];
+    popularPages: Array<{
+        url: string;
+        title: string;
+        visitCount: number;
+        isBookmarked: boolean;
+        domain: string;
+        lastVisited: string;
+    }>;
     topDomains: Array<{
         domain: string;
         count: number;
@@ -1383,6 +1390,12 @@ class WebsiteLibraryPanelFullPage {
     }
 
     private async initializeDiscoverPage() {
+        // Initially hide the empty state while loading
+        const emptyState = document.getElementById("discoverEmptyState");
+        if (emptyState) {
+            emptyState.style.display = "none";
+        }
+
         if (!this.discoverData) {
             await this.loadDiscoverData();
         }
@@ -1390,6 +1403,12 @@ class WebsiteLibraryPanelFullPage {
     }
 
     private async initializeAnalyticsPage() {
+        // Initially hide the empty state while loading
+        const emptyState = document.getElementById("analyticsEmptyState");
+        if (emptyState) {
+            emptyState.style.display = "none";
+        }
+
         this.clearPlaceholderContent();
 
         if (!this.analyticsData) {
@@ -1400,6 +1419,12 @@ class WebsiteLibraryPanelFullPage {
 
     private async loadDiscoverData() {
         if (!this.isConnected) {
+            // Show the empty state when there's no connection
+            const emptyState = document.getElementById("discoverEmptyState");
+            if (emptyState) {
+                emptyState.style.display = "block";
+            }
+
             const container = document.getElementById("discoverContent");
             if (container) {
                 container.innerHTML = `
@@ -1416,45 +1441,110 @@ class WebsiteLibraryPanelFullPage {
             return;
         }
 
-        // TODO: Implement actual API call to get discover data
-        // For now, return empty data
+        try {
+            const response =
+                await this.chromeExtensionService.getDiscoverInsights(
+                    10,
+                    "30d",
+                );
+
+            if (response.success) {
+                this.discoverData = {
+                    trendingTopics: response.trendingTopics || [],
+                    readingPatterns: response.readingPatterns || [],
+                    popularPages: response.popularPages || [],
+                    topDomains: response.topDomains || [],
+                };
+            } else {
+                this.handleDiscoverDataError(response.error);
+            }
+        } catch (error) {
+            this.handleDiscoverDataError(error);
+        }
+    }
+
+    private handleDiscoverDataError(error: any) {
+        console.error("Error loading discover data:", error);
         this.discoverData = {
             trendingTopics: [],
             readingPatterns: [],
             popularPages: [],
             topDomains: [],
         };
+
+        // Show the empty state when there's an error
+        const emptyState = document.getElementById("discoverEmptyState");
+        if (emptyState) {
+            emptyState.style.display = "block";
+        }
+
+        const container = document.getElementById("discoverContent");
+        if (container) {
+            container.innerHTML = `
+                <div class="error-state">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <h3>Unable to Load Discover Data</h3>
+                    <p>There was an error loading your discover insights. Please try again.</p>
+                    <button class="btn btn-primary" onclick="window.location.reload()">
+                        <i class="bi bi-arrow-repeat"></i> Retry
+                    </button>
+                </div>
+            `;
+        }
     }
 
     private renderDiscoverContent() {
         if (!this.discoverData) return;
 
-        this.renderTrendingContent();
-        this.renderReadingPatterns();
-        this.renderPopularPages();
+        // Check if we have any data to display
+        const hasData =
+            this.discoverData.trendingTopics.length > 0 ||
+            this.discoverData.readingPatterns.some((p) => p.activity > 0) ||
+            this.discoverData.popularPages.length > 0;
+
+        // Show/hide empty state based on data availability
+        const emptyState = document.getElementById("discoverEmptyState");
+        if (emptyState) {
+            emptyState.style.display = hasData ? "none" : "block";
+        }
+
+        // Only render content sections if we have data
+        if (hasData) {
+            this.renderTrendingContent();
+            this.renderReadingPatterns();
+            this.renderPopularPages();
+        }
     }
 
     private renderTrendingContent() {
         const container = document.getElementById("trendingContent");
         if (!container || !this.discoverData) return;
 
+        if (this.discoverData.trendingTopics.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="bi bi-graph-up-arrow"></i>
+                    <h6>No Trending Topics</h6>
+                    <p>Import more content to see trending topics.</p>
+                </div>
+            `;
+            return;
+        }
+
         container.innerHTML = this.discoverData.trendingTopics
             .map(
                 (topic) => `
-            <div class="card">
+            <div class="card trending-topic-card trend-${topic.trend} discover-card mb-2">
                 <div class="card-body">
-                    <h6 class="card-title">${topic.topic}</h6>
+                    <h6 class="card-title text-capitalize">${this.escapeHtml(topic.topic)}</h6>
                     <div class="d-flex align-items-center justify-content-between">
-                        <span class="text-muted">${topic.count} pages</span>
-                        <div class="d-flex align-items-center">
+                        <span class="text-muted">${topic.count} page${topic.count !== 1 ? "s" : ""}</span>
+                        <div class="trend-indicator">
                             <i class="bi bi-arrow-${topic.trend === "up" ? "up" : topic.trend === "down" ? "down" : "right"} 
                                text-${topic.trend === "up" ? "success" : topic.trend === "down" ? "danger" : "secondary"}"></i>
-                            ${
-                                topic.percentage > 0
-                                    ? `<span class="text-${topic.trend === "up" ? "success" : "danger"} small ms-1">
-                                ${topic.percentage}%</span>`
-                                    : ""
-                            }
+                            <span class="text-${topic.trend === "up" ? "success" : topic.trend === "down" ? "danger" : "secondary"} small">
+                                ${topic.percentage}%
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -1468,21 +1558,42 @@ class WebsiteLibraryPanelFullPage {
         const container = document.getElementById("readingPatterns");
         if (!container || !this.discoverData) return;
 
+        if (
+            this.discoverData.readingPatterns.length === 0 ||
+            this.discoverData.readingPatterns.every((p) => p.activity === 0)
+        ) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="bi bi-clock-history"></i>
+                    <h6>No Activity Patterns</h6>
+                    <p>Visit more pages to see your reading patterns.</p>
+                </div>
+            `;
+            return;
+        }
+
+        const maxActivity = Math.max(
+            ...this.discoverData.readingPatterns.map((p) => p.activity),
+        );
+
         container.innerHTML = `
-            <div class="card">
+            <div class="card discover-card">
                 <div class="card-body">
-                    <h6 class="card-title">Daily Activity Pattern</h6>
+                    <h6 class="card-title">Weekly Activity Pattern</h6>
                     <div class="reading-pattern-chart">
                         ${this.discoverData.readingPatterns
                             .map(
                                 (pattern) => `
                             <div class="pattern-item ${pattern.peak ? "peak" : ""}">
-                                <div class="pattern-bar" style="height: ${pattern.activity}%"></div>
-                                <div class="pattern-time">${pattern.timeframe}</div>
+                                <div class="pattern-bar" style="height: ${maxActivity > 0 ? (pattern.activity / maxActivity) * 80 + 10 : 2}px" title="${pattern.timeframe}: ${pattern.activity} visits"></div>
+                                <div class="pattern-time">${pattern.timeframe.substring(0, 3)}</div>
                             </div>
                         `,
                             )
                             .join("")}
+                    </div>
+                    <div class="text-center mt-2">
+                        <small class="text-muted">Most active day: ${this.discoverData.readingPatterns.find((p) => p.peak)?.timeframe || "None"}</small>
                     </div>
                 </div>
             </div>
@@ -1507,14 +1618,33 @@ class WebsiteLibraryPanelFullPage {
             return;
         }
 
-        // Render popular pages similar to search results
-        container.innerHTML = this.renderListView(
-            this.discoverData.popularPages,
-        );
+        // Convert popular pages to website format for rendering
+        const popularPagesAsWebsites: Website[] =
+            this.discoverData.popularPages.map((page) => ({
+                url: page.url,
+                title: page.title,
+                domain: page.domain,
+                visitCount: page.visitCount,
+                lastVisited: page.lastVisited,
+                source: page.isBookmarked ? "bookmarks" : "history",
+                score: page.visitCount,
+                knowledge: {
+                    hasKnowledge: false,
+                    status: "none" as const,
+                },
+            }));
+
+        container.innerHTML = this.renderListView(popularPagesAsWebsites);
     }
 
     private async loadAnalyticsData() {
         if (!this.isConnected) {
+            // Show the empty state when there's no connection
+            const emptyState = document.getElementById("analyticsEmptyState");
+            if (emptyState) {
+                emptyState.style.display = "block";
+            }
+
             const container = document.getElementById("analyticsContent");
             if (container) {
                 container.innerHTML = `
@@ -1582,6 +1712,12 @@ class WebsiteLibraryPanelFullPage {
                 trends: [],
                 insights: [],
             };
+
+            // Show the empty state when there's an error or no data
+            const emptyState = document.getElementById("analyticsEmptyState");
+            if (emptyState) {
+                emptyState.style.display = "block";
+            }
 
             // Update metric displays with zeros since no real data is available
             this.updateMetricDisplaysWithZeros();
@@ -1779,6 +1915,12 @@ class WebsiteLibraryPanelFullPage {
         }
     }
 
+    private escapeHtml(text: string): string {
+        const div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
     private async loadRecentKnowledgeItems(indexStats: any) {
         try {
             const response = await chrome.runtime.sendMessage({
@@ -1909,9 +2051,88 @@ class WebsiteLibraryPanelFullPage {
     private renderAnalyticsContent() {
         if (!this.analyticsData) return;
 
-        this.renderAnalyticsOverview();
-        this.renderActivityCharts();
-        this.renderKnowledgeInsights();
+        // Check if we have meaningful analytics data to display
+        const hasData =
+            this.analyticsData.overview.totalSites > 0 ||
+            this.analyticsData.overview.knowledgeExtracted > 0 ||
+            this.analyticsData.insights.some((insight) => insight.value > 0);
+
+        // Show/hide empty state based on data availability
+        const emptyState = document.getElementById("analyticsEmptyState");
+        if (emptyState) {
+            emptyState.style.display = hasData ? "none" : "block";
+        }
+
+        // Only render content sections if we have data
+        if (hasData) {
+            this.renderActivityCharts();
+            this.renderKnowledgeInsights();
+            this.renderTopDomains();
+        }
+    }
+
+    private async renderTopDomains() {
+        const container = document.getElementById("topDomainsList");
+        if (!container) return;
+
+        try {
+            // Show loading state
+            container.innerHTML = `
+                <div class="loading-message">
+                    <i class="bi bi-hourglass-split"></i>
+                    <span>Loading top domains...</span>
+                </div>
+            `;
+
+            // Fetch top domains data
+            const domainsData =
+                await this.chromeExtensionService.getTopDomains(10);
+
+            if (!domainsData.domains || domainsData.domains.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-message">
+                        <i class="bi bi-globe"></i>
+                        <span>No domain data available</span>
+                    </div>
+                `;
+                return;
+            }
+
+            // Render domain list
+            const domainsHtml = domainsData.domains
+                .map(
+                    (domain: any) => `
+                    <div class="domain-item">
+                        <div class="domain-info">
+                            <img src="https://www.google.com/s2/favicons?domain=${domain.domain}" 
+                                 class="domain-favicon" alt="Favicon" loading="lazy"
+                                 onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2216%22 height=%2216%22 fill=%22%23999%22><rect width=%2216%22 height=%2216%22 rx=%222%22/></svg>'">
+                            <div class="domain-details">
+                                <div class="domain-name">${domain.domain}</div>
+                                <div class="domain-stats">
+                                    <span class="site-count">${domain.count} sites</span>
+                                    <span class="percentage">${domain.percentage}%</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="domain-bar">
+                            <div class="bar-fill" style="width: ${Math.min(domain.percentage, 100)}%"></div>
+                        </div>
+                    </div>
+                `,
+                )
+                .join("");
+
+            container.innerHTML = domainsHtml;
+        } catch (error) {
+            console.error("Failed to render top domains:", error);
+            container.innerHTML = `
+                <div class="error-message">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <span>Failed to load domain data</span>
+                </div>
+            `;
+        }
     }
 
     private renderKnowledgeInsights() {
@@ -2153,48 +2374,135 @@ class WebsiteLibraryPanelFullPage {
         return tooltips[type as keyof typeof tooltips] || "";
     }
 
-    private renderAnalyticsOverview() {
-        const container = document.getElementById("analyticsOverview");
-        if (!container || !this.analyticsData) return;
-
-        const { overview } = this.analyticsData;
-        container.innerHTML = `
-            <div class="stat-item">
-                <div class="stat-number">${overview.totalSites}</div>
-                <div class="stat-label">Total Sites</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-number">${overview.totalBookmarks}</div>
-                <div class="stat-label">Bookmarks</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-number">${overview.totalHistory}</div>
-                <div class="stat-label">History Items</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-number">${overview.knowledgeExtracted}</div>
-                <div class="stat-label">Knowledge Extracted</div>
-            </div>
-        `;
-    }
-
-    private renderActivityCharts() {
+    private async renderActivityCharts() {
         const container = document.getElementById("activityCharts");
-        if (!container || !this.analyticsData) return;
+        if (!container) return;
 
-        container.innerHTML = `
-            <div class="card">
-                <div class="card-body">
-                    <h6 class="card-title">Activity Trends</h6>
-                    <div class="analytics-chart">
-                        <p class="text-muted">Activity trends chart would be displayed here</p>
-                        <div class="chart-placeholder" style="height: 200px; background: #f8f9fa; border-radius: 0.375rem; display: flex; align-items: center; justify-content: center;">
-                            <span class="text-muted">Chart visualization would appear here</span>
+        try {
+            // Show loading state
+            container.innerHTML = `
+                <div class="card">
+                    <div class="card-body">
+                        <h6 class="card-title">Activity Trends</h6>
+                        <div class="loading-message">
+                            <i class="bi bi-hourglass-split"></i>
+                            <span>Loading activity trends...</span>
                         </div>
                     </div>
                 </div>
-            </div>
-        `;
+            `;
+
+            // Fetch activity trends data
+            const trendsData =
+                await this.chromeExtensionService.getActivityTrends("30d");
+
+            if (!trendsData.trends || trendsData.trends.length === 0) {
+                container.innerHTML = `
+                    <div class="card">
+                        <div class="card-body">
+                            <h6 class="card-title">Activity Trends</h6>
+                            <div class="empty-message">
+                                <i class="bi bi-bar-chart"></i>
+                                <span>No activity data available</span>
+                                <small>Import bookmarks or browse websites to see trends</small>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            // Create bar chart visualization
+            const trends = trendsData.trends;
+            const maxActivity = Math.max(
+                ...trends.map((t: any) => t.visits + t.bookmarks),
+            );
+            const recentTrends = trends.slice(-14); // Show last 14 data points
+
+            const chartBars = recentTrends
+                .map((trend: any) => {
+                    const totalActivity = trend.visits + trend.bookmarks;
+                    const date = new Date(trend.date).toLocaleDateString(
+                        "en-US",
+                        {
+                            month: "short",
+                            day: "numeric",
+                        },
+                    );
+
+                    const visitsHeight =
+                        maxActivity > 0
+                            ? (trend.visits / maxActivity) * 100
+                            : 0;
+                    const bookmarksHeight =
+                        maxActivity > 0
+                            ? (trend.bookmarks / maxActivity) * 100
+                            : 0;
+
+                    return `
+                        <div class="chart-bar" title="${date}: ${totalActivity} activities">
+                            <div class="bar-segment visits" style="height: ${visitsHeight}%" title="Visits: ${trend.visits}"></div>
+                            <div class="bar-segment bookmarks" style="height: ${bookmarksHeight}%" title="Bookmarks: ${trend.bookmarks}"></div>
+                            <div class="bar-label">${date}</div>
+                        </div>
+                    `;
+                })
+                .join("");
+
+            const summary = trendsData.summary || {};
+
+            container.innerHTML = `
+                <div class="card">
+                    <div class="card-body">
+                        <h6 class="card-title">Activity Trends</h6>
+                        
+                        <div class="activity-summary mb-3">
+                            <div class="summary-stat">
+                                <span class="stat-label">Total Activity</span>
+                                <span class="stat-value">${summary.totalActivity || 0}</span>
+                            </div>
+                            <div class="summary-stat">
+                                <span class="stat-label">Daily Average</span>
+                                <span class="stat-value">${Math.round(summary.averagePerDay || 0)}</span>
+                            </div>
+                            <div class="summary-stat">
+                                <span class="stat-label">Peak Day</span>
+                                <span class="stat-value">${summary.peakDay ? new Date(summary.peakDay).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "N/A"}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="activity-chart">
+                            <div class="chart-container">
+                                ${chartBars}
+                            </div>
+                            <div class="chart-legend">
+                                <div class="legend-item">
+                                    <div class="legend-color visits"></div>
+                                    <span>Visits</span>
+                                </div>
+                                <div class="legend-item">
+                                    <div class="legend-color bookmarks"></div>
+                                    <span>Bookmarks</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } catch (error) {
+            console.error("Failed to render activity charts:", error);
+            container.innerHTML = `
+                <div class="card">
+                    <div class="card-body">
+                        <h6 class="card-title">Activity Trends</h6>
+                        <div class="error-message">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            <span>Failed to load activity data</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
     }
 
     private renderKnowledgeBadges(knowledge?: KnowledgeStatus): string {
@@ -2882,6 +3190,9 @@ interface ChromeExtensionService {
     getSearchSuggestions(query: string): Promise<string[]>;
     getRecentSearches(): Promise<string[]>;
     saveSearch(query: string, results: SearchResult): Promise<void>;
+    getTopDomains(limit?: number): Promise<any>;
+    getActivityTrends(timeRange?: string): Promise<any>;
+    getDiscoverInsights(limit?: number, timeframe?: string): Promise<any>;
 }
 
 // NotificationManager Implementation
@@ -3203,6 +3514,79 @@ class ChromeExtensionServiceImpl implements ChromeExtensionService {
             } catch (error) {
                 console.error("Failed to get recent searches:", error);
                 return [];
+            }
+        }
+        throw new Error("Chrome extension not available");
+    }
+
+    async getTopDomains(limit: number = 10): Promise<any> {
+        if (typeof chrome !== "undefined" && chrome.runtime) {
+            try {
+                const response = await chrome.runtime.sendMessage({
+                    type: "getTopDomains",
+                    limit,
+                });
+
+                if (response.success) {
+                    return response.domains;
+                } else {
+                    throw new Error(
+                        response.error || "Failed to get top domains",
+                    );
+                }
+            } catch (error) {
+                console.error("Failed to get top domains:", error);
+                throw error;
+            }
+        }
+        throw new Error("Chrome extension not available");
+    }
+
+    async getActivityTrends(timeRange: string = "30d"): Promise<any> {
+        if (typeof chrome !== "undefined" && chrome.runtime) {
+            try {
+                const response = await chrome.runtime.sendMessage({
+                    type: "getActivityTrends",
+                    timeRange,
+                });
+
+                if (response.success) {
+                    return response.trends;
+                } else {
+                    throw new Error(
+                        response.error || "Failed to get activity trends",
+                    );
+                }
+            } catch (error) {
+                console.error("Failed to get activity trends:", error);
+                throw error;
+            }
+        }
+        throw new Error("Chrome extension not available");
+    }
+
+    async getDiscoverInsights(
+        limit: number = 10,
+        timeframe: string = "30d",
+    ): Promise<any> {
+        if (typeof chrome !== "undefined" && chrome.runtime) {
+            try {
+                const response = await chrome.runtime.sendMessage({
+                    type: "getDiscoverInsights",
+                    limit,
+                    timeframe,
+                });
+
+                if (response.success) {
+                    return response;
+                } else {
+                    throw new Error(
+                        response.error || "Failed to get discover insights",
+                    );
+                }
+            } catch (error) {
+                console.error("Failed to get discover insights:", error);
+                throw error;
             }
         }
         throw new Error("Chrome extension not available");

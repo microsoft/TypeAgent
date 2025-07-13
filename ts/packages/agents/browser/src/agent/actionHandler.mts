@@ -395,6 +395,10 @@ async function updateBrowserContext(
                         case "indexWebPageContent":
                         case "checkPageIndexStatus":
                         case "getPageIndexedKnowledge":
+                        case "getRecentKnowledgeItems":
+                        case "getTopDomains":
+                        case "getActivityTrends":
+                        case "getDiscoverInsights":
                         case "getKnowledgeIndexStats":
                         case "clearKnowledgeIndex": {
                             const knowledgeResult = await handleKnowledgeAction(

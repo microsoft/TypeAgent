@@ -37,6 +37,65 @@ export async function handleMessage(
             return await handleGetWebsiteLibraryStats();
         }
 
+        case "getTopDomains": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getTopDomains",
+                    parameters: {
+                        limit: message.limit || 10,
+                    },
+                });
+
+                return {
+                    success: result.success || false,
+                    domains: {
+                        domains: result.domains || [],
+                        totalSites: result.totalSites || 0,
+                    },
+                };
+            } catch (error) {
+                console.error("Error getting top domains:", error);
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error",
+                    domains: { domains: [], totalSites: 0 },
+                };
+            }
+        }
+
+        case "getActivityTrends": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getActivityTrends",
+                    parameters: {
+                        timeRange: message.timeRange || "30d",
+                        granularity: message.granularity || "day",
+                    },
+                });
+
+                return {
+                    success: result.success || false,
+                    trends: {
+                        trends: result.trends || [],
+                        summary: result.summary || {},
+                    },
+                };
+            } catch (error) {
+                console.error("Error getting activity trends:", error);
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error",
+                    trends: { trends: [], summary: {} },
+                };
+            }
+        }
+
         case "getSearchSuggestions": {
             return await handleGetSearchSuggestions(message);
         }
@@ -734,6 +793,37 @@ export async function handleMessage(
                     success: false,
                     entities: [],
                     topics: [],
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                };
+            }
+        }
+
+        case "getDiscoverInsights": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getDiscoverInsights",
+                    parameters: {
+                        limit: message.limit || 10,
+                        timeframe: message.timeframe || "30d",
+                    },
+                });
+
+                return {
+                    success: result.success || false,
+                    trendingTopics: result.trendingTopics || [],
+                    readingPatterns: result.readingPatterns || [],
+                    popularPages: result.popularPages || [],
+                    topDomains: result.topDomains || [],
+                };
+            } catch (error) {
+                console.error("Error getting discover insights:", error);
+                return {
+                    success: false,
+                    trendingTopics: [],
+                    readingPatterns: [],
+                    popularPages: [],
+                    topDomains: [],
                     error:
                         error instanceof Error ? error.message : String(error),
                 };
