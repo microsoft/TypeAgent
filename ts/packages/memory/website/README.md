@@ -243,38 +243,6 @@ interface ExtractionResult {
 }
 ```
 
-## Migration Guide
-
-### From Old Browser Agent Unified System
-
-```typescript
-// OLD (browser agent unified package)
-import { UnifiedKnowledgeExtractor } from "../unified/unifiedExtractor.mjs";
-const extractor = new UnifiedKnowledgeExtractor(config);
-const result = await extractor.extractWithKnowledge(content, "content", "hybrid");
-
-// NEW (website-memory)
-import { ContentExtractor } from "website-memory";
-const extractor = new ContentExtractor({ mode: "content", knowledgeExtractor });
-const result = await extractor.extract(content, "content"); // Mode automatically determines strategy
-```
-
-### From Old Website-Memory API
-
-```typescript
-// OLD
-const extractor = new ContentExtractor({ enableKnowledgeExtraction: true });
-const content = await extractor.extractContent(url);
-
-// NEW (backward compatible)
-const extractor = new ContentExtractor(); // Still works
-const content = await extractor.extractContent(url); // Still works
-
-// NEW (recommended)
-const extractor = new ContentExtractor({ mode: "content", knowledgeExtractor });
-const result = await extractor.extract(input, "content");
-```
-
 ## Configuration
 
 ### Extraction Configuration
