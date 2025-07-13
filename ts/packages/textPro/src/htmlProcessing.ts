@@ -1,14 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 import * as cheerio from "cheerio";
-import {
-    createMdElement,
-    MdElement,
-    MdImageElement,
-    MdElementName,
-    MdWriterEvents,
-    mdToText,
-} from "./markdown.js";
 
 /**
  * Returns text from html. Only takes text from typically useful nodes, cleaning up
@@ -42,17 +34,8 @@ export function simplifyHtml(html: string): string {
  * @param rootTag Root tag at which to start conversion. Can be a JQuery like expression
  * @returns MD text
  */
-export function htmlToMd(
-    html: string,
-    eventHandler?: MdWriterEvents,
-    rootTag: string = "body",
-): string {
-    const dom = htmlToMdDom(html, rootTag);
-    return mdToText(dom, eventHandler);
-}
-
-export function htmlToMdDom(html: string, rootTag: string = "body"): MdElement {
-    const convertor = new HtmlToMarkdownDom(html);
+export function htmlToMd(html: string, rootTag: string = "body"): string {
+    const convertor = new HtmlToMdConvertor(html);
     return convertor.getMarkdown(rootTag);
 }
 
@@ -76,7 +59,7 @@ class HtmlEditor {
     }
 
     public getHtml(): string {
-        return this.$.root().html() ?? "";
+        return this.$.root().html();
     }
 
     public getText(): string {
@@ -288,15 +271,41 @@ function getRemovableAttrPrefixes(): string[] {
     ];
 }
 
-export class HtmlToMarkdownDom {
+export interface HtmlToMdConvertorEvents {
+    onBlockStart(convertor: HtmlToMdConvertor, tagName: string): void;
+    onHeading(
+        convertor: HtmlToMdConvertor,
+        tagName: string,
+        level: number,
+    ): void;
+    onLink(convertor: HtmlToMdConvertor, text: string, url: string): void;
+    onImg(convertor: HtmlToMdConvertor, text: string, url: string): void;
+    onBlockEnd(convertor: HtmlToMdConvertor): void;
+}
+
+/**
+ * Basic HTML to MD text convertor
+ *
+ * https://www.markdownguide.org/basic-syntax/
+ * https://www.markdownguide.org/extended-syntax/#tables
+ *
+ */
+export class HtmlToMdConvertor {
     private $: cheerio.CheerioAPI;
     private depth: number;
-    private root: MdElement;
-    public curElement: MdElement;
+    private maxBlockDepth: number;
+    private textBlocks: string[];
+    private prefix: string[];
+
+    private listStack: string[];
+    public curBlock: string;
 
     public tagsToIgnore: string[];
 
-    constructor(public html: string) {
+    constructor(
+        public html: string,
+        public eventHandler?: HtmlToMdConvertorEvents,
+    ) {
         html = removeExtraWhitespace(html);
         this.$ = cheerio.load(html);
         this.tagsToIgnore = [
@@ -316,24 +325,34 @@ export class HtmlToMarkdownDom {
             "clipboard",
             "notification",
         ];
-        this.root = createMdElement("p");
-        this.curElement = this.root;
+        this.textBlocks = [];
+        this.curBlock = "";
+        this.prefix = [];
         this.depth = 0;
+        this.maxBlockDepth = 1;
+
+        this.listStack = [];
     }
 
-    public getMarkdown(rootPath: string = "body"): MdElement {
+    public getMarkdown(rootPath = "body"): string {
+        return this.getMarkdownBlocks(rootPath).join("");
+    }
+
+    public getMarkdownBlocks(rootPath: string = "body"): string[] {
         this.start();
         const root: cheerio.AnyNode = this.$(rootPath)[0];
         if (root && root.type === "tag") {
             this.traverseChildren(root as cheerio.Element);
         }
-        return this.root;
+        return this.textBlocks;
     }
 
     private start(): void {
-        this.root = createMdElement("p");
-        this.curElement = this.root;
+        this.textBlocks = [];
+        this.curBlock = "";
+        this.prefix = [];
         this.depth = 0;
+        this.listStack = [];
     }
 
     private traverseChildren(element: cheerio.Element): void {
@@ -363,22 +382,27 @@ export class HtmlToMarkdownDom {
                         case "h4":
                         case "h5":
                         case "h6":
-                            this.beginElement(tagName);
-                            this.append(this.$(childElement).text());
-                            this.endElement();
+                            this.beginBlock(tagName);
+                            this.appendPrefix();
+                            this.appendHeading(
+                                this.$(childElement).text(),
+                                Number.parseInt(tagName[tagName.length - 1]),
+                            );
+                            this.endBlock();
                             break;
                         case "p":
-                        case "blockquote":
-                        case "code":
-                        case "ul":
-                        case "ol":
                             this.beginBlock(tagName);
+                            this.appendPrefix();
                             this.traverseChildren(childElement);
+                            this.append("\n");
+                            this.appendBlankLine();
                             this.endBlock();
                             break;
                         case "div":
+                            this.appendPrefix();
                             this.traverseChildren(childElement);
                             this.appendLineBreak();
+                            //this.append("\n");
                             break;
                         case "span":
                             this.traverseChildren(childElement);
@@ -387,39 +411,103 @@ export class HtmlToMarkdownDom {
                         case "section":
                             this.traverseChildren(childElement);
                             break;
+                        case "blockquote":
+                            this.beginBlock(tagName);
+                            this.appendBlankLine();
+
+                            this.appendPrefix();
+                            this.append("> ");
+
+                            this.prefix.push(">");
+                            this.traverseChildren(childElement);
+                            this.prefix.pop();
+
+                            this.append("\n");
+                            this.appendBlankLine();
+                            this.endBlock();
+                            break;
+                        case "code":
+                            this.beginBlock(tagName);
+                            this.appendPrefix();
+                            this.append("\t");
+                            this.traverseChildren(childElement);
+                            this.append("\n");
+                            this.endBlock();
+                            break;
+                        case "ul":
+                        case "ol":
+                            this.beginBlock(tagName);
+                            this.beginList(tagName);
+                            this.traverseChildren(childElement);
+                            this.endList();
+                            this.endBlock();
+                            break;
                         case "li":
+                            this.appendPrefix();
+                            if (this.listStack.length > 0) {
+                                if (
+                                    this.listStack[
+                                        this.listStack.length - 1
+                                    ] === "ul"
+                                ) {
+                                    this.append("- ");
+                                } else {
+                                    this.append("1. ");
+                                }
+                            }
+                            this.traverseChildren(childElement);
+                            this.append("\n");
+                            break;
                         case "table":
+                            this.beginBlock(tagName);
+                            this.traverseChildren(childElement);
+                            this.append("\n");
+                            this.endBlock();
+                            break;
                         case "tr":
+                            this.traverseChildren(childElement);
+                            this.append("|\n");
+                            if (this.isTableHeader(childElement)) {
+                                this.append(
+                                    "| ---".repeat(element.children.length),
+                                );
+                                this.append("|\n");
+                            }
+                            break;
                         case "th":
                         case "td":
-                            this.beginElement(tagName);
+                            this.append("|");
                             this.traverseChildren(childElement);
-                            this.endElement();
                             break;
                         case "strong":
                         case "b":
-                            this.beginElement("strong");
+                            this.append("**");
                             this.traverseChildren(childElement);
-                            this.endElement();
+                            this.append("**");
                             break;
                         case "em":
                         case "i":
-                            this.beginElement("em");
+                            this.append("__");
                             this.traverseChildren(childElement);
-                            this.endElement();
+                            this.append("__");
                             break;
                         case "a":
-                            const img: MdImageElement = {
-                                name: "a",
-                                text: "",
-                                href: childElement.attribs["href"],
-                                depth: this.depth,
-                            };
                             if (childElement.children.length > 0) {
-                                img.text =
-                                    this.getInnerText(childElement) ?? "";
+                                const text = this.getInnerText(childElement);
+                                if (text) {
+                                    const href = childElement.attribs["href"];
+                                    this.append(`[${text}](${href})`);
+                                    this.eventHandler?.onLink(this, text, href);
+                                }
                             }
-                            this.appendChild(img);
+                            break;
+                        case "img":
+                            const src = childElement.attribs["src"];
+                            if (src.length > 0) {
+                                const alt = childElement.attribs["alt"] ?? "";
+                                this.append(`![${alt}](${src})`);
+                                this.eventHandler?.onImg(this, alt, src);
+                            }
                             break;
                         case "br":
                             this.appendLineBreak();
@@ -462,43 +550,79 @@ export class HtmlToMarkdownDom {
         return undefined;
     }
 
-    private beginBlock(tag: MdElementName): void {
+    private beginBlock(name: string): void {
         this.depth++;
-        this.beginElement(tag);
-    }
-
-    private endBlock(): void {
-        this.endElement();
-        this.depth--;
-    }
-
-    private beginElement(tag: MdElementName): void {
-        const node = createMdElement(tag, "", this.depth);
-        this.appendChild(node);
-        this.curElement = node;
-    }
-
-    private endElement(): void {
-        if (this.curElement.parent) {
-            this.curElement = this.curElement.parent;
-        } else {
-            throw new Error(
-                `DOM corrupt: ${this.curElement.name}; [${this.depth}]`,
-            );
+        if (this.depth <= this.maxBlockDepth) {
+            this.endBlock(false);
+            this.eventHandler?.onBlockStart(this, name);
         }
     }
 
-    private appendChild(node: MdElement): void {
-        this.curElement.children ??= [];
-        this.curElement.children.push(node);
-        node.parent = this.curElement;
+    private endBlock(reduceDepth: boolean = true): void {
+        if (this.depth <= this.maxBlockDepth) {
+            if (this.curBlock.length > 0) {
+                this.textBlocks.push(this.curBlock);
+                this.eventHandler?.onBlockEnd(this);
+            }
+            this.curBlock = "";
+        }
+        if (this.depth > 0 && reduceDepth) {
+            this.depth--;
+        }
+    }
+
+    private beginList(tagName: string): void {
+        this.listStack.push(tagName);
+        if (this.listStack.length > 1) {
+            this.append("\n");
+            this.prefix.push("  ");
+        }
+    }
+
+    private endList(): void {
+        if (this.listStack.length > 1) {
+            this.prefix.pop();
+        }
+        this.listStack.pop();
+        this.append("\n");
+    }
+
+    private appendPrefix(): void {
+        for (let i = 0; i < this.prefix.length; ++i) {
+            this.curBlock += this.prefix[i];
+        }
     }
 
     private append(text: string): void {
-        this.curElement.text += text;
+        this.curBlock += text;
+    }
+
+    private appendBlankLine(): void {
+        this.appendPrefix();
+        this.append("\n");
     }
 
     private appendLineBreak(): void {
-        this.curElement.text += "  \n";
+        this.append("  ");
+    }
+
+    private appendHeading(text: string, level: number): void {
+        this.appendBlankLine();
+        this.append("#".repeat(level));
+        this.curBlock += " ";
+        this.append(text);
+        this.append("\n");
+
+        this.eventHandler?.onHeading(this, text, level);
+    }
+
+    private isTableHeader(element: cheerio.Element): boolean {
+        for (let i = 0; i < element.children.length; ++i) {
+            const child = element.children[i];
+            if (child.type === "tag" && child.tagName !== "th") {
+                return false;
+            }
+        }
+        return true;
     }
 }
