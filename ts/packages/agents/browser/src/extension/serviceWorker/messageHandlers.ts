@@ -439,6 +439,9 @@ export async function handleMessage(
                 const success = await indexPageContent(
                     targetTab,
                     message.showNotification !== false,
+                    {
+                        mode: message.mode,
+                    },
                 );
                 return { success };
             }
@@ -1237,6 +1240,7 @@ async function indexPageContent(
     options: {
         quality?: "fast" | "balanced" | "deep";
         textOnly?: boolean;
+        mode?: "basic" | "content" | "actions" | "full";
     } = {},
 ): Promise<boolean> {
     try {
@@ -1258,6 +1262,7 @@ async function indexPageContent(
                 timestamp: new Date().toISOString(),
                 quality: options.quality || "balanced",
                 textOnly: options.textOnly || false,
+                mode: options.mode || "content",
             },
         });
 
