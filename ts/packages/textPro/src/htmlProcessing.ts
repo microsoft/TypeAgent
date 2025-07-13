@@ -272,15 +272,11 @@ function getRemovableAttrPrefixes(): string[] {
 }
 
 export interface HtmlToMdConvertorEvents {
-    onBlockStart(convertor: HtmlToMdConvertor, tagName: string): void;
-    onHeading(
-        convertor: HtmlToMdConvertor,
-        tagName: string,
-        level: number,
-    ): void;
-    onLink(convertor: HtmlToMdConvertor, text: string, url: string): void;
-    onImg(convertor: HtmlToMdConvertor, text: string, url: string): void;
-    onBlockEnd(convertor: HtmlToMdConvertor): void;
+    onBlockStart(tagName: string): void;
+    onHeading(tagName: string, level: number): void;
+    onLink(text: string, url: string): void;
+    onImg(text: string, url: string): void;
+    onBlockEnd(): void;
 }
 
 /**
@@ -497,7 +493,7 @@ export class HtmlToMdConvertor {
                                 if (text) {
                                     const href = childElement.attribs["href"];
                                     this.append(`[${text}](${href})`);
-                                    this.eventHandler?.onLink(this, text, href);
+                                    this.eventHandler?.onLink(text, href);
                                 }
                             }
                             break;
@@ -506,7 +502,7 @@ export class HtmlToMdConvertor {
                             if (src.length > 0) {
                                 const alt = childElement.attribs["alt"] ?? "";
                                 this.append(`![${alt}](${src})`);
-                                this.eventHandler?.onImg(this, alt, src);
+                                this.eventHandler?.onImg(alt, src);
                             }
                             break;
                         case "br":
@@ -554,7 +550,7 @@ export class HtmlToMdConvertor {
         this.depth++;
         if (this.depth <= this.maxBlockDepth) {
             this.endBlock(false);
-            this.eventHandler?.onBlockStart(this, name);
+            this.eventHandler?.onBlockStart(name);
         }
     }
 
@@ -562,7 +558,7 @@ export class HtmlToMdConvertor {
         if (this.depth <= this.maxBlockDepth) {
             if (this.curBlock.length > 0) {
                 this.textBlocks.push(this.curBlock);
-                this.eventHandler?.onBlockEnd(this);
+                this.eventHandler?.onBlockEnd();
             }
             this.curBlock = "";
         }
@@ -613,7 +609,7 @@ export class HtmlToMdConvertor {
         this.append(text);
         this.append("\n");
 
-        this.eventHandler?.onHeading(this, text, level);
+        this.eventHandler?.onHeading(text, level);
     }
 
     private isTableHeader(element: cheerio.Element): boolean {

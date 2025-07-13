@@ -91,8 +91,8 @@ export async function createKnowproTestCommands(
         const destPath = changeFileExt(filePath, ".md");
         fs.writeFileSync(destPath, md);
 
-        md = tp.htmlToMd(html, undefined, namedArgs.rootTag);
-        context.printer.writeLineInColor(chalk.cyan, md);
+        let mdDom = tp.loadMarkdownFromHtml(html, namedArgs.rootTag);
+        context.printer.writeJsonInColor(chalk.cyan, mdDom);
     }
 
     function testHtmlPartsDef(): CommandMetadata {
