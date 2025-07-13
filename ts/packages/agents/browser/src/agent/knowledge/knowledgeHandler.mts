@@ -134,7 +134,7 @@ export async function extractKnowledgeFromPage(
     }
 
     try {
-        const unifiedMode = parameters.mode || "content";
+        const extractionMode = parameters.mode || "content";
 
         const extractor = new BrowserKnowledgeExtractor(context);
 
@@ -148,7 +148,7 @@ export async function extractKnowledgeFromPage(
 
         const extractionResult = await extractor.extractKnowledge(
             contentInput,
-            unifiedMode,
+            extractionMode,
         );
         const knowledge = extractionResult.knowledge;
 
@@ -186,7 +186,7 @@ export async function extractKnowledgeFromPage(
             );
         }
 
-        const summary = `Knowledge extracted using ${unifiedMode} mode: ${extractionResult.qualityMetrics.entityCount} entities, ${extractionResult.qualityMetrics.topicCount} topics, ${extractionResult.qualityMetrics.actionCount} actions found. Quality: ${Math.round(extractionResult.qualityMetrics.confidence * 100)}% confidence.`;
+        const summary = `Knowledge extracted using ${extractionMode} mode: ${extractionResult.qualityMetrics.entityCount} entities, ${extractionResult.qualityMetrics.topicCount} topics, ${extractionResult.qualityMetrics.actionCount} actions found. Quality: ${Math.round(extractionResult.qualityMetrics.confidence * 100)}% confidence.`;
 
         const contentMetrics = {
             readingTime: Math.ceil(textContent.split(/\s+/).length / 225),
@@ -242,7 +242,7 @@ export async function indexWebPageContent(
             .map((fragment) => fragment.text || "")
             .join("\n\n");
 
-        const unifiedMode = parameters.mode || "content";
+        const extractionMode = parameters.mode || "content";
 
         const extractor = new BrowserKnowledgeExtractor(context);
 
@@ -257,7 +257,7 @@ export async function indexWebPageContent(
 
         const extractionResult = await extractor.extractKnowledge(
             contentInput,
-            unifiedMode,
+            extractionMode,
         );
 
         const visitInfo: website.WebsiteVisitInfo = {
@@ -576,6 +576,7 @@ export async function discoverRelationships(
     }
 }
 
+
 // === TEMPORAL ANALYSIS FUNCTIONS ===
 
 export async function analyzeTemporalPatterns(
@@ -759,8 +760,8 @@ export async function getExtractionAnalytics(
                     basic: 0,
                     content: 0,
                     actions: 0,
-                    full: 0
-                }
+                    full: 0,
+                },
             },
         };
     } catch (error) {
@@ -792,8 +793,8 @@ export async function generateQualityReport(
                     excellent: 0,
                     good: 0,
                     fair: 0,
-                    poor: 0
-                }
+                    poor: 0,
+                },
             },
         };
     } catch (error) {

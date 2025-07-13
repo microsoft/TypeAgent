@@ -161,7 +161,9 @@ export class PatternResolver {
             try {
                 // Basic implementation: find actions associated with this pattern
                 // TODO: Implement proper pattern-to-action mapping
-                console.warn(`Pattern matching not fully implemented for pattern: ${pattern.pattern}`);
+                console.warn(
+                    `Pattern matching not fully implemented for pattern: ${pattern.pattern}`,
+                );
             } catch (error) {
                 console.warn(`Error processing exact pattern:`, error);
             }
@@ -188,7 +190,9 @@ export class PatternResolver {
             if (matchResult.pattern.type !== "exact") {
                 try {
                     // TODO: Implement proper pattern-to-action mapping
-                    console.warn(`Pattern matching not fully implemented for pattern: ${matchResult.pattern.pattern}`);
+                    console.warn(
+                        `Pattern matching not fully implemented for pattern: ${matchResult.pattern.pattern}`,
+                    );
                 } catch (error) {
                     console.warn(`Error processing pattern:`, error);
                 }

@@ -7,13 +7,11 @@ import {
     WebsiteMeta,
     importWebsiteVisit,
 } from "./websiteMeta.js";
+import { ExtractionMode } from "./contentExtractor.js";
 import {
-    ExtractionMode,
-} from "./contentExtractor.js";
-import { 
     ContentExtractor,
     ExtractionInput,
-    ExtractionResult
+    ExtractionResult,
 } from "./extraction/index.js";
 import { conversation as kpLib } from "knowledge-processor";
 import path from "path";
@@ -31,7 +29,7 @@ export interface ImportOptions {
     extractionMode?: ExtractionMode;
     contentTimeout?: number;
     maxConcurrent?: number;
-    
+
     // AI model for knowledge extraction
     knowledgeExtractor?: kpLib.KnowledgeExtractor;
 }
@@ -509,19 +507,19 @@ async function enhanceWithContent(
 ): Promise<Website[]> {
     // Use provided extraction mode or default to basic
     const extractionMode = options.extractionMode || "basic";
-    
+
     // Create unified content extractor
     const extractorConfig: any = {
         mode: extractionMode,
         timeout: options.contentTimeout || 10000,
-        maxContentLength: 20000
+        maxContentLength: 20000,
     };
-    
+
     // Only add knowledgeExtractor if it's provided
     if (options.knowledgeExtractor) {
         extractorConfig.knowledgeExtractor = options.knowledgeExtractor;
     }
-    
+
     const extractor = new ContentExtractor(extractorConfig);
 
     // TEMPORARY: Force batch size to 1 for debugging timeout issues
@@ -539,16 +537,13 @@ async function enhanceWithContent(
                     url: website.metadata.url,
                     title: website.metadata.title || website.metadata.url,
                     source: "import",
-                    timestamp: new Date().toISOString()
+                    timestamp: new Date().toISOString(),
                 };
-                
+
                 const result = await extractor.extract(input, extractionMode);
 
                 // Create enhanced website with content and knowledge
-                return createEnhancedWebsiteWithKnowledge(
-                    website,
-                    result,
-                );
+                return createEnhancedWebsiteWithKnowledge(website, result);
             } catch (error) {
                 console.warn(
                     `Content extraction failed for ${website.metadata.url}:`,
@@ -627,7 +622,8 @@ function createEnhancedWebsiteWithKnowledge(
     // Enhanced content
     if (extractionResult.pageContent)
         enhancedVisitInfo.pageContent = extractionResult.pageContent;
-    if (extractionResult.metaTags) enhancedVisitInfo.metaTags = extractionResult.metaTags;
+    if (extractionResult.metaTags)
+        enhancedVisitInfo.metaTags = extractionResult.metaTags;
     if (extractionResult.structuredData)
         enhancedVisitInfo.structuredData = extractionResult.structuredData;
     if (extractionResult.actions)

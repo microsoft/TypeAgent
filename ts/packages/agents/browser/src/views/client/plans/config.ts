@@ -86,7 +86,7 @@ const CONFIG: Config = {
         SCREENSHOT: "screenshot",
     },
 
-    // Node colors - Updated to lighter pastel colors for a more pleasant visualization
+    // Node colors
     COLORS: {
         START: "#8adfb2", // Light pastel green
         ACTION: "#80c5ff", // Light pastel blue

@@ -98,14 +98,17 @@ export async function processHtmlContent(
     fileMetadata?: FileMetadata,
 ): Promise<WebsiteData> {
     const config: any = {
-        mode: options.mode || "content"
+        mode: options.mode || "content",
     };
-    
+
     // Only add optional properties if they have values
-    if (options.contentTimeout !== undefined) config.timeout = options.contentTimeout;
-    if (options.maxContentLength !== undefined) config.maxContentLength = options.maxContentLength;
-    if (options.knowledgeExtractor) config.knowledgeExtractor = options.knowledgeExtractor;
-    
+    if (options.contentTimeout !== undefined)
+        config.timeout = options.contentTimeout;
+    if (options.maxContentLength !== undefined)
+        config.maxContentLength = options.maxContentLength;
+    if (options.knowledgeExtractor)
+        config.knowledgeExtractor = options.knowledgeExtractor;
+
     const extractor = new ContentExtractor(config);
 
     const url = fileMetadata?.fileUrl || sourceIdentifier;
@@ -113,7 +116,7 @@ export async function processHtmlContent(
         url,
         title: fileMetadata?.filename || url,
         htmlContent: html,
-        source: "direct"
+        source: "direct",
     };
 
     const result = await extractor.extract(input, options.mode || "content");
@@ -131,10 +134,7 @@ export async function processHtmlContent(
             parsedContent.title ||
             fileMetadata?.filename ||
             "Untitled",
-        content:
-            result.pageContent?.mainContent ||
-            parsedContent.content ||
-            "",
+        content: result.pageContent?.mainContent || parsedContent.content || "",
         domain,
         metadata: {
             websiteSource: fileMetadata ? "file_import" : "bookmark_import",
@@ -513,7 +513,9 @@ export function determinePageType(
     const title =
         extractionResult.pageContent?.title || parsedContent.title || "";
     const content =
-        extractionResult.pageContent?.mainContent || parsedContent.content || "";
+        extractionResult.pageContent?.mainContent ||
+        parsedContent.content ||
+        "";
     const metaTags = extractionResult.metaTags;
 
     // Check Open Graph type first
@@ -680,7 +682,8 @@ export function createWebsiteDataFromContent(
             importDate: new Date().toISOString(),
             lastModified: new Date(),
             originalMetadata: extractionResult.metaTags,
-            links: extractionResult.pageContent?.links?.map((l) => l.href) || [],
+            links:
+                extractionResult.pageContent?.links?.map((l) => l.href) || [],
             images: extractionResult.pageContent?.images || [],
             preserveStructure: true,
         },

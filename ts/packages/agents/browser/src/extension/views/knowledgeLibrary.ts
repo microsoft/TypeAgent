@@ -1390,7 +1390,6 @@ class WebsiteLibraryPanelFullPage {
     }
 
     private async initializeAnalyticsPage() {
-        // Clear placeholder content immediately to avoid showing misleading data
         this.clearPlaceholderContent();
 
         if (!this.analyticsData) {
@@ -1587,7 +1586,6 @@ class WebsiteLibraryPanelFullPage {
             // Update metric displays with zeros since no real data is available
             this.updateMetricDisplaysWithZeros();
 
-            // Clear placeholder content and show empty states since we couldn't load real data
             this.clearPlaceholderContent();
             this.updateRecentEntitiesDisplay([]);
             this.updateRecentTopicsDisplay([]);
@@ -1646,7 +1644,6 @@ class WebsiteLibraryPanelFullPage {
         // Update knowledge visualization cards with real data
         this.updateKnowledgeVisualizationCards(indexStats);
 
-        // Clear placeholder content and load real data or show empty states
         this.clearPlaceholderContent();
 
         // Load and display recent entities and topics
@@ -1689,10 +1686,9 @@ class WebsiteLibraryPanelFullPage {
     }
 
     private replaceVisualizationSampleData(indexStats: any) {
-        // Don't replace the breakdown content here since we'll populate it with recent items
         // Just update the metrics if needed
 
-        // Replace the actions breakdown with real data
+        // Update the actions breakdown with real data
         const actionBreakdown = document.querySelector(
             ".knowledge-card.actions .action-breakdown",
         );
@@ -1743,9 +1739,6 @@ class WebsiteLibraryPanelFullPage {
     }
 
     private clearPlaceholderContent() {
-        // Clear placeholder content from the HTML to ensure we only show real data
-
-        // Clear entities breakdown placeholder
         const entitiesBreakdown = document.querySelector(
             ".knowledge-card.entities .knowledge-breakdown",
         );
@@ -1760,7 +1753,6 @@ class WebsiteLibraryPanelFullPage {
             `;
         }
 
-        // Clear topics placeholder
         const topicCloud = document.querySelector(
             ".knowledge-card.topics .topic-cloud",
         );

@@ -5,9 +5,9 @@ export * from "./actionExtractor.js";
 export * from "./chunkingUtils.js";
 
 // Core types and interfaces (keep for external compatibility)
-export { 
+export {
     ExtractionMode,
-    EnhancedContent, 
+    EnhancedContent,
     PageContent,
     MetaTagCollection,
     ImageInfo,
@@ -26,12 +26,10 @@ export * from "./websiteDocPartMeta.js";
 export * from "./tables.js";
 export * from "./websiteMeta.js";
 
-// Unified extraction system - ContentExtractor is now the main extraction class
 export {
     AIModelManager,
     BatchProcessor,
     ContentExtractor,
-    // Types
     ExtractionConfig,
     ExtractionInput,
     ExtractionResult,

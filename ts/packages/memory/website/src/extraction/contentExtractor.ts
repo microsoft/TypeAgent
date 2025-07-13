@@ -12,7 +12,7 @@ import {
     ExtractionQualityMetrics,
     EXTRACTION_MODE_CONFIGS,
     AIModelRequiredError,
-    AIExtractionFailedError
+    AIExtractionFailedError,
 } from "./types.js";
 
 /**
@@ -23,28 +23,42 @@ export class ContentExtractor {
     private aiModelManager?: AIModelManager;
     private extractionConfig?: ExtractionConfig;
 
-    constructor(inputConfig?: ExtractionConfig & { knowledgeExtractor?: kpLib.KnowledgeExtractor }) {
+    constructor(
+        inputConfig?: ExtractionConfig & {
+            knowledgeExtractor?: kpLib.KnowledgeExtractor;
+        },
+    ) {
         if (inputConfig) {
             // Create a clean config object with only defined values
             const cleanConfig: ExtractionConfig = {
-                mode: inputConfig.mode
+                mode: inputConfig.mode,
             };
-            
+
             // Only add optional properties if they have values
-            if (inputConfig.timeout !== undefined) cleanConfig.timeout = inputConfig.timeout;
-            if (inputConfig.maxContentLength !== undefined) cleanConfig.maxContentLength = inputConfig.maxContentLength;
-            if (inputConfig.maxCharsPerChunk !== undefined) cleanConfig.maxCharsPerChunk = inputConfig.maxCharsPerChunk;
-            if (inputConfig.maxConcurrentExtractions !== undefined) cleanConfig.maxConcurrentExtractions = inputConfig.maxConcurrentExtractions;
-            if (inputConfig.qualityThreshold !== undefined) cleanConfig.qualityThreshold = inputConfig.qualityThreshold;
-            if (inputConfig.enableCrossChunkMerging !== undefined) cleanConfig.enableCrossChunkMerging = inputConfig.enableCrossChunkMerging;
-            
+            if (inputConfig.timeout !== undefined)
+                cleanConfig.timeout = inputConfig.timeout;
+            if (inputConfig.maxContentLength !== undefined)
+                cleanConfig.maxContentLength = inputConfig.maxContentLength;
+            if (inputConfig.maxCharsPerChunk !== undefined)
+                cleanConfig.maxCharsPerChunk = inputConfig.maxCharsPerChunk;
+            if (inputConfig.maxConcurrentExtractions !== undefined)
+                cleanConfig.maxConcurrentExtractions =
+                    inputConfig.maxConcurrentExtractions;
+            if (inputConfig.qualityThreshold !== undefined)
+                cleanConfig.qualityThreshold = inputConfig.qualityThreshold;
+            if (inputConfig.enableCrossChunkMerging !== undefined)
+                cleanConfig.enableCrossChunkMerging =
+                    inputConfig.enableCrossChunkMerging;
+
             this.extractionConfig = cleanConfig;
-            
+
             const modeConfig = EXTRACTION_MODE_CONFIGS[inputConfig.mode];
-            
+
             // Create AI model manager if AI is needed for this mode
             if (modeConfig.usesAI && inputConfig.knowledgeExtractor) {
-                this.aiModelManager = new AIModelManager(inputConfig.knowledgeExtractor);
+                this.aiModelManager = new AIModelManager(
+                    inputConfig.knowledgeExtractor,
+                );
             }
         }
     }
@@ -62,7 +76,7 @@ export class ContentExtractor {
      */
     async extract(
         content: ExtractionInput,
-        mode: ExtractionMode = "content"
+        mode: ExtractionMode = "content",
     ): Promise<ExtractionResult> {
         const startTime = Date.now();
         const modeConfig = EXTRACTION_MODE_CONFIGS[mode];
@@ -77,13 +91,16 @@ export class ContentExtractor {
             }
 
             // Extract content based on mode
-            const extractedContent = await this.extractContentByMode(content, mode);
+            const extractedContent = await this.extractContentByMode(
+                content,
+                mode,
+            );
 
             // Extract knowledge using automatic strategy
             const knowledge = await this.extractKnowledgeByMode(
                 content,
                 extractedContent,
-                mode
+                mode,
             );
 
             // Calculate quality metrics
@@ -91,34 +108,53 @@ export class ContentExtractor {
                 knowledge,
                 extractedContent,
                 modeConfig,
-                Date.now() - startTime
+                Date.now() - startTime,
             );
 
             const processingTime = Date.now() - startTime;
-            
+
             // Convert DetectedAction[] to ActionInfo[] for legacy compatibility
-            const actions = extractedContent.detectedActions?.map((da: any) => ({
-                type: da.actionType as "form" | "button" | "link",
-                action: da.selector,
-                method: da.method,
-                text: da.description
-            }));
-            
+            const actions = extractedContent.detectedActions?.map(
+                (da: any) => ({
+                    type: da.actionType as "form" | "button" | "link",
+                    action: da.selector,
+                    method: da.method,
+                    text: da.description,
+                }),
+            );
+
             // Create action summary from detected actions
             let actionSummary;
-            if (extractedContent.detectedActions && extractedContent.detectedActions.length > 0) {
-                const actionTypes = [...new Set(extractedContent.detectedActions.map((a: any) => a.actionType))];
-                const highConfidenceActions = extractedContent.detectedActions.filter((a: any) => a.confidence > 0.8).length;
-                const actionDistribution = extractedContent.detectedActions.reduce((acc: any, action: any) => {
-                    acc[action.actionType] = (acc[action.actionType] || 0) + 1;
-                    return acc;
-                }, {});
-                
+            if (
+                extractedContent.detectedActions &&
+                extractedContent.detectedActions.length > 0
+            ) {
+                const actionTypes = [
+                    ...new Set(
+                        extractedContent.detectedActions.map(
+                            (a: any) => a.actionType,
+                        ),
+                    ),
+                ];
+                const highConfidenceActions =
+                    extractedContent.detectedActions.filter(
+                        (a: any) => a.confidence > 0.8,
+                    ).length;
+                const actionDistribution =
+                    extractedContent.detectedActions.reduce(
+                        (acc: any, action: any) => {
+                            acc[action.actionType] =
+                                (acc[action.actionType] || 0) + 1;
+                            return acc;
+                        },
+                        {},
+                    );
+
                 actionSummary = {
                     totalActions: extractedContent.detectedActions.length,
                     actionTypes,
                     highConfidenceActions,
-                    actionDistribution
+                    actionDistribution,
                 };
             }
 
@@ -135,17 +171,19 @@ export class ContentExtractor {
                 success: true,
                 extractionTime: processingTime,
                 actions,
-                actionSummary
+                actionSummary,
             };
-
         } catch (error) {
-            if (error instanceof AIModelRequiredError || error instanceof AIExtractionFailedError) {
+            if (
+                error instanceof AIModelRequiredError ||
+                error instanceof AIExtractionFailedError
+            ) {
                 throw error; // Re-throw extraction-specific errors
             }
 
             // Wrap other errors with context
             throw new Error(
-                `Extraction failed for mode '${mode}': ${error instanceof Error ? error.message : String(error)}`
+                `Extraction failed for mode '${mode}': ${error instanceof Error ? error.message : String(error)}`,
             );
         }
     }
@@ -155,7 +193,7 @@ export class ContentExtractor {
      */
     private async extractContentByMode(
         content: ExtractionInput,
-        mode: ExtractionMode
+        mode: ExtractionMode,
     ): Promise<any> {
         const modeConfig = EXTRACTION_MODE_CONFIGS[mode];
 
@@ -174,7 +212,7 @@ export class ContentExtractor {
 
         // For content/actions/full modes, extract from HTML content
         const htmlContent = this.prepareHtmlContent(content);
-        
+
         if (!htmlContent) {
             return {
                 pageContent: {
@@ -182,14 +220,19 @@ export class ContentExtractor {
                     mainContent: content.textContent || "",
                     headings: [],
                     wordCount: (content.textContent || "").split(/\s+/).length,
-                    readingTime: Math.ceil((content.textContent || "").split(/\s+/).length / 200),
+                    readingTime: Math.ceil(
+                        (content.textContent || "").split(/\s+/).length / 200,
+                    ),
                 },
             };
         }
 
         // Basic HTML content extraction - implement essential features here
-        const pageContent = this.extractBasicPageContent(htmlContent, content.title);
-        
+        const pageContent = this.extractBasicPageContent(
+            htmlContent,
+            content.title,
+        );
+
         // Add detected actions if this mode supports them
         let detectedActions = undefined;
         if (modeConfig.extractsActions) {
@@ -209,14 +252,17 @@ export class ContentExtractor {
     private async extractKnowledgeByMode(
         content: ExtractionInput,
         extractedContent: any,
-        mode: ExtractionMode
+        mode: ExtractionMode,
     ): Promise<kpLib.KnowledgeResponse> {
         if (!this.aiModelManager) {
             // Basic knowledge extraction without AI
             return this.extractBasicKnowledgeLocal(content, extractedContent);
         }
 
-        const textContent = this.prepareTextForKnowledge(content, extractedContent);
+        const textContent = this.prepareTextForKnowledge(
+            content,
+            extractedContent,
+        );
         return await this.aiModelManager.extractKnowledge(textContent, mode);
     }
 
@@ -225,18 +271,19 @@ export class ContentExtractor {
      */
     private extractBasicKnowledgeLocal(
         content: ExtractionInput,
-        extractedContent: any
+        extractedContent: any,
     ): kpLib.KnowledgeResponse {
-        const title = content.title || extractedContent.pageContent?.title || "";
+        const title =
+            content.title || extractedContent.pageContent?.title || "";
         const headings = extractedContent.pageContent?.headings || [];
-        
+
         // Create basic entities from title and headings
         const entities: any[] = [];
         if (title) {
             entities.push({
                 name: title,
                 type: "title",
-                description: `Title of the webpage: ${title}`
+                description: `Title of the webpage: ${title}`,
             });
         }
 
@@ -245,7 +292,7 @@ export class ContentExtractor {
                 entities.push({
                     name: heading.text,
                     type: "heading",
-                    description: `Section heading (level ${heading.level}): ${heading.text}`
+                    description: `Section heading (level ${heading.level}): ${heading.text}`,
                 });
             }
         });
@@ -253,10 +300,10 @@ export class ContentExtractor {
         // Create basic topics from URL domain
         const topics: any[] = [];
         try {
-            const domain = new URL(content.url).hostname.replace('www.', '');
+            const domain = new URL(content.url).hostname.replace("www.", "");
             topics.push({
                 name: domain,
-                confidence: 0.5
+                confidence: 0.5,
             });
         } catch {
             // Invalid URL, skip domain topic
@@ -266,7 +313,7 @@ export class ContentExtractor {
             entities: entities.slice(0, 10), // Limit to 10 entities
             topics: topics,
             actions: [],
-            inverseActions: []
+            inverseActions: [],
         };
     }
 
@@ -275,34 +322,34 @@ export class ContentExtractor {
      */
     private prepareTextForKnowledge(
         content: ExtractionInput,
-        extractedContent: any
+        extractedContent: any,
     ): string {
         const parts: string[] = [];
-        
+
         // Add title
         if (content.title) {
             parts.push(`Title: ${content.title}`);
         }
-        
+
         // Add main content
         if (extractedContent.pageContent?.mainContent) {
             parts.push(extractedContent.pageContent.mainContent);
         } else if (content.textContent) {
             parts.push(content.textContent);
         }
-        
+
         // Add headings
         if (extractedContent.pageContent?.headings) {
             const headingText = extractedContent.pageContent.headings
                 .map((h: any) => h.text)
                 .filter((text: string) => text && text.length > 0)
-                .join('. ');
+                .join(". ");
             if (headingText) {
                 parts.push(`Headings: ${headingText}`);
             }
         }
 
-        return parts.join('\n\n');
+        return parts.join("\n\n");
     }
 
     /**
@@ -312,14 +359,16 @@ export class ContentExtractor {
         if (content.htmlContent) {
             return content.htmlContent;
         }
-        
+
         if (content.htmlFragments && content.htmlFragments.length > 0) {
             // Combine HTML fragments
             return content.htmlFragments
-                .map(frag => typeof frag === 'string' ? frag : frag.html || '')
-                .join('\n');
+                .map((frag) =>
+                    typeof frag === "string" ? frag : frag.html || "",
+                )
+                .join("\n");
         }
-        
+
         return null;
     }
 
@@ -330,7 +379,7 @@ export class ContentExtractor {
         knowledge: kpLib.KnowledgeResponse,
         extractedContent: any,
         modeConfig: any,
-        aiProcessingTime: number
+        aiProcessingTime: number,
     ): ExtractionQualityMetrics {
         const entityCount = knowledge.entities?.length || 0;
         const topicCount = knowledge.topics?.length || 0;
@@ -390,32 +439,35 @@ export class ContentExtractor {
         try {
             // Use cheerio for proper HTML parsing
             const $ = cheerio.load(html);
-            
+
             // Remove script and style elements
-            $('script, style, noscript').remove();
-            
+            $("script, style, noscript").remove();
+
             // Extract title if not provided
-            const extractedTitle = title || $('title').text().trim() || $('h1').first().text().trim();
-            
+            const extractedTitle =
+                title ||
+                $("title").text().trim() ||
+                $("h1").first().text().trim();
+
             // Extract main content from body or fall back to entire document
-            const bodyText = $('body').text() || $.text();
-            
+            const bodyText = $("body").text() || $.text();
+
             // Clean up whitespace
-            const mainContent = bodyText.replace(/\s+/g, ' ').trim();
-            
+            const mainContent = bodyText.replace(/\s+/g, " ").trim();
+
             // Extract headings
             const headings: string[] = [];
-            $('h1, h2, h3, h4, h5, h6').each((_, element) => {
+            $("h1, h2, h3, h4, h5, h6").each((_, element) => {
                 const heading = $(element).text().trim();
                 if (heading) {
                     headings.push(heading);
                 }
             });
-            
+
             // Basic word count and reading time calculation
             const words = mainContent.split(/\s+/).length;
             const readingTime = Math.max(1, Math.round(words / 200)); // ~200 words per minute
-            
+
             return {
                 pageContent: {
                     title: extractedTitle,
@@ -424,36 +476,44 @@ export class ContentExtractor {
                     wordCount: words,
                     readingTime,
                     images: [], // Basic extraction doesn't include images
-                    links: []   // Basic extraction doesn't include links
-                }
+                    links: [], // Basic extraction doesn't include links
+                },
             };
-            
         } catch (error) {
-            console.warn('Cheerio parsing failed, falling back to simple extraction:', error);
-            
+            console.warn(
+                "Cheerio parsing failed, falling back to simple extraction:",
+                error,
+            );
+
             // Fallback to simple string manipulation if cheerio fails
-            let textContent = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
-            textContent = textContent.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
-            textContent = textContent.replace(/<[^>]+>/g, ' ');
-            textContent = textContent.replace(/&nbsp;/g, ' ');
-            textContent = textContent.replace(/&amp;/g, '&');
-            textContent = textContent.replace(/&lt;/g, '<');
-            textContent = textContent.replace(/&gt;/g, '>');
+            let textContent = html.replace(
+                /<script[^>]*>[\s\S]*?<\/script>/gi,
+                "",
+            );
+            textContent = textContent.replace(
+                /<style[^>]*>[\s\S]*?<\/style>/gi,
+                "",
+            );
+            textContent = textContent.replace(/<[^>]+>/g, " ");
+            textContent = textContent.replace(/&nbsp;/g, " ");
+            textContent = textContent.replace(/&amp;/g, "&");
+            textContent = textContent.replace(/&lt;/g, "<");
+            textContent = textContent.replace(/&gt;/g, ">");
             textContent = textContent.replace(/&quot;/g, '"');
-            textContent = textContent.replace(/\s+/g, ' ').trim();
-            
+            textContent = textContent.replace(/\s+/g, " ").trim();
+
             const words = textContent.split(/\s+/).length;
-            
+
             return {
                 pageContent: {
-                    title: title || 'Untitled',
+                    title: title || "Untitled",
                     mainContent: textContent,
                     headings: [],
                     wordCount: words,
                     readingTime: Math.max(1, Math.round(words / 200)),
                     images: [],
-                    links: []
-                }
+                    links: [],
+                },
             };
         }
     }

@@ -5,7 +5,6 @@
  * Core data structures for the ActionsStore system
  */
 
-// DOM-related types for compatibility
 interface DOMRect {
     x: number;
     y: number;
@@ -110,8 +109,8 @@ export interface ActionMetadata {
 
     // Relationships
     relatedActions?: string[]; // Related action IDs
-    supersedes?: string; // Action this replaces
-    supersededBy?: string; // Action that replaces this
+    supersedes?: string;
+    supersededBy?: string;
 
     // Validation
     isValid: boolean; // Whether action is valid

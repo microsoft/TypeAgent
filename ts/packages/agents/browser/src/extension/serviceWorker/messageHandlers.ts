@@ -261,7 +261,7 @@ export async function handleMessage(
                             extractEntities: true,
                             extractRelationships: true,
                             suggestQuestions: true,
-                            mode: message.extractionSettings?.mode || "content", // Use unified mode parameter
+                            mode: message.extractionSettings?.mode || "content", // Use extraction mode parameter
                         },
                     });
 
@@ -635,8 +635,6 @@ export async function handleMessage(
             }
         }
 
-        // === NEW UNIFIED KNOWLEDGE HANDLERS ===
-
         case "checkAIModelAvailability": {
             try {
                 // Check if AI model is available by attempting a simple extraction
@@ -766,7 +764,7 @@ async function handleImportWebsiteDataWithProgress(message: any) {
                 limit: message.parameters.limit,
                 days: message.parameters.days,
                 folder: message.parameters.folder,
-                mode: message.parameters.mode || "basic", // Use unified mode parameter
+                mode: message.parameters.mode || "basic",
                 maxConcurrent: message.parameters.maxConcurrent,
                 contentTimeout: message.parameters.contentTimeout,
             },
@@ -866,7 +864,7 @@ async function handleImportHtmlFolder(message: any) {
             parameters: {
                 folderPath,
                 options: {
-                    mode: options?.mode || "basic", // Use unified mode parameter
+                    mode: options?.mode || "basic",
                     preserveStructure: options?.preserveStructure ?? true,
                     recursive: options?.recursive ?? true,
                     fileTypes: options?.fileTypes ?? [

@@ -1493,7 +1493,7 @@ export async function createKnowproWebsiteCommands(
             const input: website.ExtractionInput = {
                 url: namedArgs.url,
                 title: namedArgs.url,
-                source: "direct"
+                source: "direct",
             };
             const analysis = await extractor.extract(
                 input,
