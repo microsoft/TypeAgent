@@ -37,6 +37,32 @@ export async function handleMessage(
             return await handleGetWebsiteLibraryStats();
         }
 
+        case "getTopDomains": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getTopDomains",
+                    parameters: {
+                        limit: message.limit || 10
+                    },
+                });
+
+                return {
+                    success: result.success || false,
+                    domains: {
+                        domains: result.domains || [],
+                        totalSites: result.totalSites || 0
+                    }
+                };
+            } catch (error) {
+                console.error("Error getting top domains:", error);
+                return {
+                    success: false,
+                    error: error instanceof Error ? error.message : "Unknown error",
+                    domains: { domains: [], totalSites: 0 }
+                };
+            }
+        }
+
         case "getSearchSuggestions": {
             return await handleGetSearchSuggestions(message);
         }

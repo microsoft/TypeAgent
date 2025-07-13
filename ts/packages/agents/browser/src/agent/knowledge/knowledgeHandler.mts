@@ -90,6 +90,9 @@ export async function handleKnowledgeAction(
         case "getRecentKnowledgeItems":
             return await getRecentKnowledgeItems(parameters, context);
 
+        case "getTopDomains":
+            return await getTopDomains(parameters, context);
+
         case "getPageIndexedKnowledge":
             return await getPageIndexedKnowledge(parameters, context);
 
@@ -1065,6 +1068,69 @@ export async function getRecentKnowledgeItems(
         return {
             entities: [],
             topics: [],
+            success: false,
+        };
+    }
+}
+
+export async function getTopDomains(
+    parameters: {
+        limit?: number;
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    domains: Array<{
+        domain: string;
+        count: number;
+        percentage: number;
+    }>;
+    totalSites: number;
+    success: boolean;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                domains: [],
+                totalSites: 0,
+                success: false,
+            };
+        }
+
+        const websites = websiteCollection.messages.getAll();
+        const limit = parameters.limit || 10;
+        
+        // Count sites by domain
+        const domainCounts: { [domain: string]: number } = {};
+        let totalCount = websites.length;
+
+        for (const site of websites) {
+            const metadata = site.metadata as any;
+            const domain = metadata.domain || "unknown";
+            domainCounts[domain] = (domainCounts[domain] || 0) + 1;
+        }
+
+        // Sort by count and limit results
+        const sortedDomains = Object.entries(domainCounts)
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, limit)
+            .map(([domain, count]) => ({
+                domain,
+                count,
+                percentage: parseFloat(((count / totalCount) * 100).toFixed(1))
+            }));
+
+        return {
+            domains: sortedDomains,
+            totalSites: totalCount,
+            success: true,
+        };
+    } catch (error) {
+        console.error("Error getting top domains:", error);
+        return {
+            domains: [],
+            totalSites: 0,
             success: false,
         };
     }

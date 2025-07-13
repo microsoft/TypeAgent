@@ -1909,9 +1909,70 @@ class WebsiteLibraryPanelFullPage {
     private renderAnalyticsContent() {
         if (!this.analyticsData) return;
 
-        this.renderAnalyticsOverview();
         this.renderActivityCharts();
         this.renderKnowledgeInsights();
+        this.renderTopDomains();
+    }
+
+    private async renderTopDomains() {
+        const container = document.getElementById("topDomainsList");
+        if (!container) return;
+
+        try {
+            // Show loading state
+            container.innerHTML = `
+                <div class="loading-message">
+                    <i class="bi bi-hourglass-split"></i>
+                    <span>Loading top domains...</span>
+                </div>
+            `;
+
+            // Fetch top domains data
+            const domainsData = await this.chromeExtensionService.getTopDomains(10);
+            
+            if (!domainsData.domains || domainsData.domains.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-message">
+                        <i class="bi bi-globe"></i>
+                        <span>No domain data available</span>
+                    </div>
+                `;
+                return;
+            }
+
+            // Render domain list
+            const domainsHtml = domainsData.domains
+                .map((domain: any) => `
+                    <div class="domain-item">
+                        <div class="domain-info">
+                            <img src="https://www.google.com/s2/favicons?domain=${domain.domain}" 
+                                 class="domain-favicon" alt="Favicon" loading="lazy"
+                                 onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2216%22 height=%2216%22 fill=%22%23999%22><rect width=%2216%22 height=%2216%22 rx=%222%22/></svg>'">
+                            <div class="domain-details">
+                                <div class="domain-name">${domain.domain}</div>
+                                <div class="domain-stats">
+                                    <span class="site-count">${domain.count} sites</span>
+                                    <span class="percentage">${domain.percentage}%</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="domain-bar">
+                            <div class="bar-fill" style="width: ${Math.min(domain.percentage, 100)}%"></div>
+                        </div>
+                    </div>
+                `).join("");
+
+            container.innerHTML = domainsHtml;
+
+        } catch (error) {
+            console.error("Failed to render top domains:", error);
+            container.innerHTML = `
+                <div class="error-message">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <span>Failed to load domain data</span>
+                </div>
+            `;
+        }
     }
 
     private renderKnowledgeInsights() {
@@ -2882,6 +2943,7 @@ interface ChromeExtensionService {
     getSearchSuggestions(query: string): Promise<string[]>;
     getRecentSearches(): Promise<string[]>;
     saveSearch(query: string, results: SearchResult): Promise<void>;
+    getTopDomains(limit?: number): Promise<any>;
 }
 
 // NotificationManager Implementation
@@ -3203,6 +3265,27 @@ class ChromeExtensionServiceImpl implements ChromeExtensionService {
             } catch (error) {
                 console.error("Failed to get recent searches:", error);
                 return [];
+            }
+        }
+        throw new Error("Chrome extension not available");
+    }
+
+    async getTopDomains(limit: number = 10): Promise<any> {
+        if (typeof chrome !== "undefined" && chrome.runtime) {
+            try {
+                const response = await chrome.runtime.sendMessage({
+                    type: "getTopDomains",
+                    limit
+                });
+
+                if (response.success) {
+                    return response.domains;
+                } else {
+                    throw new Error(response.error || "Failed to get top domains");
+                }
+            } catch (error) {
+                console.error("Failed to get top domains:", error);
+                throw error;
             }
         }
         throw new Error("Chrome extension not available");

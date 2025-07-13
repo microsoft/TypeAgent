@@ -2814,3 +2814,103 @@ body {
 .knowledge-card .knowledge-breakdown::-webkit-scrollbar-thumb:hover {
   background: #a8a8a8;
 }
+
+/* Top Domains Styling */
+.loading-message, .error-message {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    color: #6c757d;
+    font-style: italic;
+}
+
+.loading-message i, .error-message i {
+    margin-right: 8px;
+    font-size: 1.1rem;
+}
+
+.error-message {
+    color: #dc3545;
+}
+
+.domain-item {
+    display: flex;
+    align-items: center;
+    padding: 12px;
+    border-bottom: 1px solid #e5e5e5;
+    transition: background-color 0.2s ease;
+}
+
+.domain-item:hover {
+    background-color: #f8f9fa;
+}
+
+.domain-item:last-child {
+    border-bottom: none;
+}
+
+.domain-info {
+    display: flex;
+    align-items: center;
+    flex-grow: 1;
+}
+
+.domain-favicon {
+    width: 16px;
+    height: 16px;
+    margin-right: 8px;
+    border-radius: 2px;
+}
+
+.domain-details {
+    flex-grow: 1;
+}
+
+.domain-name {
+    font-weight: 500;
+    margin-bottom: 2px;
+    color: #333;
+}
+
+.domain-stats {
+    font-size: 0.875rem;
+    color: #6c757d;
+    display: flex;
+    gap: 8px;
+}
+
+.site-count {
+    font-weight: 500;
+}
+
+.percentage {
+    color: #007bff;
+}
+
+.domain-bar {
+    width: 60px;
+    height: 4px;
+    background: #e9ecef;
+    border-radius: 2px;
+    margin-left: 12px;
+    overflow: hidden;
+}
+
+.bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #007bff, #28a745);
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+.domain-list {
+    background: white;
+    border-radius: 0.375rem;
+    border: 1px solid #e5e5e5;
+    overflow: hidden;
+}
+
+.top-domains {
+    margin-top: 16px;
+}
