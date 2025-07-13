@@ -3,17 +3,13 @@
 
 import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "../actionHandler.mjs";
-import { findRequestedWebsites } from "../websiteMemory.mjs";
+import { searchWebMemories } from "../searchWebMemories.mjs";
 import * as website from "website-memory";
 import {
     KnowledgeExtractionResult,
     EnhancedKnowledgeExtractionResult,
-    EnhancedQueryRequest,
-    EnhancedQueryResponse,
-    QuerySuggestion,
     Entity,
     Relationship,
-    WebPageReference,
 } from "./schema/knowledgeExtraction.mjs";
 import {
     RelationshipDiscovery,
@@ -21,7 +17,6 @@ import {
 } from "./relationshipDiscovery.js";
 import {
     TemporalQueryProcessor,
-    TemporalQuery,
     TemporalPattern,
 } from "./temporalQueryProcessor.js";
 import {
@@ -59,11 +54,8 @@ export async function handleKnowledgeAction(
         case "indexWebPageContent":
             return await indexWebPageContent(parameters, context);
 
-        case "queryWebKnowledge":
-            return await queryWebKnowledge(parameters, context);
-
-        case "queryWebKnowledgeEnhanced":
-            return await queryWebKnowledgeEnhanced(parameters, context);
+        case "searchWebMemories":
+            return await searchWebMemories(parameters, context);
 
         case "checkPageIndexStatus":
             return await checkPageIndexStatus(parameters, context);
@@ -73,9 +65,6 @@ export async function handleKnowledgeAction(
 
         case "clearKnowledgeIndex":
             return await clearKnowledgeIndex(parameters, context);
-
-        case "exportKnowledgeData":
-            return await exportKnowledgeData(parameters, context);
 
         case "discoverRelationships":
             return await discoverRelationships(parameters, context);
@@ -336,92 +325,6 @@ export async function indexWebPageContent(
     }
 }
 
-export async function queryWebKnowledge(
-    parameters: {
-        query: string;
-        url?: string;
-        searchScope: "current_page" | "all_indexed";
-    },
-    context: SessionContext<BrowserActionContext>,
-): Promise<{
-    answer: string;
-    sources: WebPageReference[];
-    relatedEntities: Entity[];
-}> {
-    try {
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection || websiteCollection.messages.length === 0) {
-            return {
-                answer: "No website data available. Please import website data first using the library panel.",
-                sources: [],
-                relatedEntities: [],
-            };
-        }
-
-        const searchResults = await findRequestedWebsites(
-            [parameters.query],
-            context.agentContext,
-            false,
-            0.3,
-        );
-
-        if (searchResults.length === 0) {
-            return {
-                answer: "No relevant information found in your website knowledge base. Try browsing more content or importing your browser history/bookmarks.",
-                sources: [],
-                relatedEntities: [],
-            };
-        }
-
-        const answer = await generateAnswerFromResults(
-            parameters.query,
-            searchResults,
-        );
-
-        const sources: WebPageReference[] = searchResults
-            .slice(0, 5)
-            .map((website: any) => ({
-                url: website.metadata.url,
-                title: website.metadata.title || website.metadata.url,
-                relevanceScore: 0.8,
-                lastIndexed:
-                    website.metadata.visitDate ||
-                    website.metadata.bookmarkDate ||
-                    new Date().toISOString(),
-            }));
-
-        const relatedEntities: Entity[] = [];
-        for (const site of searchResults.slice(0, 3)) {
-            const knowledge = site.getKnowledge();
-            if (knowledge?.entities) {
-                for (const entity of knowledge.entities.slice(0, 3)) {
-                    relatedEntities.push({
-                        name: entity.name,
-                        type: Array.isArray(entity.type)
-                            ? entity.type.join(", ")
-                            : entity.type,
-                        confidence: 0.7,
-                    });
-                }
-            }
-        }
-
-        return {
-            answer,
-            sources,
-            relatedEntities,
-        };
-    } catch (error) {
-        console.error("Error querying web knowledge:", error);
-        return {
-            answer: "An error occurred while searching your knowledge base. Please try again.",
-            sources: [],
-            relatedEntities: [],
-        };
-    }
-}
-
 export async function checkPageIndexStatus(
     parameters: { url: string },
     context: SessionContext<BrowserActionContext>,
@@ -566,93 +469,6 @@ export async function clearKnowledgeIndex(
     }
 }
 
-export async function exportKnowledgeData(
-    parameters: {},
-    context: SessionContext<BrowserActionContext>,
-): Promise<{ data: any; exportDate: string }> {
-    try {
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection) {
-            return {
-                data: { error: "No website collection found to export" },
-                exportDate: new Date().toISOString(),
-            };
-        }
-
-        const websites = websiteCollection.messages.getAll();
-
-        const exportData: any = {
-            metadata: {
-                exportDate: new Date().toISOString(),
-                version: "2.0",
-                totalPages: websites.length,
-            },
-            webPages: websites.map((site: any) => {
-                const knowledge = site.getKnowledge();
-                return {
-                    url: site.metadata.url,
-                    title: site.metadata.title,
-                    timestamp:
-                        site.metadata.visitDate || site.metadata.bookmarkDate,
-                    contentLength: site.textChunks?.join("").length || 0,
-                    entityCount: knowledge?.entities?.length || 0,
-                    relationshipCount: knowledge?.actions?.length || 0,
-                    keyTopics: knowledge?.topics || [],
-                    pageType: site.metadata.pageType,
-                    source: site.metadata.websiteSource,
-                };
-            }),
-            entities: websites.flatMap(
-                (site: any) => site.getKnowledge()?.entities || [],
-            ),
-            relationships: websites.flatMap(
-                (site: any) => site.getKnowledge()?.actions || [],
-            ),
-        };
-
-        return {
-            data: exportData,
-            exportDate: new Date().toISOString(),
-        };
-    } catch (error) {
-        console.error("Error exporting knowledge data:", error);
-        return {
-            data: { error: "Export failed" },
-            exportDate: new Date().toISOString(),
-        };
-    }
-}
-
-async function generateAnswerFromResults(
-    query: string,
-    results: any[],
-): Promise<string> {
-    if (results.length === 0) {
-        return "No relevant information found for your query.";
-    }
-
-    const topResult = results[0];
-    const resultCount = results.length;
-
-    const context = results
-        .slice(0, 3)
-        .map((site) => {
-            const knowledge = site.getKnowledge();
-            const topics = knowledge?.topics?.slice(0, 3).join(", ") || "";
-            return `${site.metadata.title}: ${topics}`;
-        })
-        .join("; ");
-
-    const answer =
-        `Based on your browsing history, I found ${resultCount} relevant result${resultCount > 1 ? "s" : ""} for "${query}". ` +
-        `The most relevant appears to be "${topResult.metadata.title}" (${topResult.metadata.url}). ` +
-        (context ? `Related topics include: ${context}. ` : "") +
-        `You can explore these results for more detailed information.`;
-
-    return answer;
-}
-
 // Enhanced suggested questions using content analysis and DataFrames
 async function generateSmartSuggestedQuestions(
     knowledge: any,
@@ -754,477 +570,6 @@ export async function discoverRelationships(
     }
 }
 
-// === ENHANCED QUERY PROCESSING ===
-
-export async function queryWebKnowledgeEnhanced(
-    parameters: EnhancedQueryRequest,
-    context: SessionContext<BrowserActionContext>,
-): Promise<EnhancedQueryResponse> {
-    const startTime = Date.now();
-
-    try {
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection || websiteCollection.messages.length === 0) {
-            return createEmptyEnhancedResponse(
-                "No website data available. Please import website data first using the library panel.",
-                startTime,
-            );
-        }
-
-        // Build enhanced search terms
-        const searchTerms = buildEnhancedSearchTerms(
-            parameters.query,
-            parameters.filters,
-        );
-
-        // Process temporal aspects of the query
-        const temporalProcessor = new TemporalQueryProcessor(context);
-        const temporalQuery = temporalProcessor.parseTemporalQuery(
-            parameters.query,
-        );
-        let temporalFilters: string[] = [];
-
-        // Apply temporal filtering if temporal terms were detected
-        if (temporalQuery.extractedTimeTerms.length > 0) {
-            temporalFilters = await temporalProcessor.applyTemporalFiltering(
-                temporalQuery,
-                websiteCollection,
-            );
-        }
-
-        // Apply metadata filters using available data
-        let filteredSources: string[] = [];
-        if (parameters.filters) {
-            filteredSources = await applyMetadataFilters(
-                parameters.filters,
-                websiteCollection,
-            );
-        }
-
-        // Combine temporal and metadata filters
-        if (temporalFilters.length > 0) {
-            if (filteredSources.length > 0) {
-                // Intersection of both filters
-                filteredSources = filteredSources.filter((url) =>
-                    temporalFilters.includes(url),
-                );
-            } else {
-                // Use only temporal filters
-                filteredSources = temporalFilters;
-            }
-        }
-
-        // Perform semantic search with KnowPro
-        const searchResults = await findRequestedWebsites(
-            searchTerms,
-            context.agentContext,
-            false,
-            0.3,
-        );
-
-        // Filter results by metadata if applicable
-        const filteredResults =
-            filteredSources.length > 0
-                ? searchResults.filter((result) =>
-                      filteredSources.includes(result.metadata.url),
-                  )
-                : searchResults;
-
-        // Limit results
-        const limitedResults = filteredResults.slice(
-            0,
-            parameters.maxResults || 10,
-        );
-
-        // Generate enhanced answer
-        const answer = await generateEnhancedAnswer(
-            parameters.query,
-            limitedResults,
-            parameters.filters,
-            temporalQuery,
-        );
-
-        // Extract sources and related entities
-        const sources = extractEnhancedSources(limitedResults);
-        const relatedEntities =
-            extractRelatedEntitiesFromResults(limitedResults);
-
-        // Generate query suggestions
-        const suggestions = await generateQuerySuggestions(
-            parameters,
-            limitedResults,
-            websiteCollection,
-            temporalQuery,
-        );
-
-        // Discover relationships for top results if requested
-        let relationships: any[] = [];
-        let temporalPatterns: TemporalPattern[] = [];
-
-        if (
-            limitedResults.length > 0 &&
-            parameters.searchScope !== "current_page"
-        ) {
-            try {
-                const relationshipDiscovery = new RelationshipDiscovery(
-                    context,
-                );
-                const topResult = limitedResults[0];
-                const knowledge = topResult.getKnowledge();
-                relationships =
-                    await relationshipDiscovery.discoverRelationships(
-                        topResult.metadata.url,
-                        knowledge,
-                        3,
-                    );
-            } catch (error) {
-                console.warn(
-                    "Error discovering relationships for query results:",
-                    error,
-                );
-            }
-        }
-
-        // Analyze temporal patterns if this is a temporal query
-        if (
-            temporalQuery.extractedTimeTerms.length > 0 &&
-            limitedResults.length > 1
-        ) {
-            try {
-                temporalPatterns =
-                    await temporalProcessor.analyzeTemporalPatterns(
-                        limitedResults,
-                    );
-            } catch (error) {
-                console.warn("Error analyzing temporal patterns:", error);
-            }
-        }
-
-        const processingTime = Date.now() - startTime;
-
-        return {
-            answer,
-            sources,
-            relatedEntities,
-            relationships,
-            temporalPatterns,
-            metadata: {
-                totalFound: filteredResults.length,
-                searchScope: parameters.searchScope,
-                filtersApplied: getAppliedFilters(parameters.filters),
-                suggestions,
-                processingTime,
-                temporalQuery:
-                    temporalQuery.extractedTimeTerms.length > 0
-                        ? {
-                              timeframe: temporalQuery.timeframe,
-                              queryType: temporalQuery.queryType,
-                              extractedTimeTerms:
-                                  temporalQuery.extractedTimeTerms,
-                          }
-                        : undefined,
-            },
-        };
-    } catch (error) {
-        console.error("Error in enhanced query processing:", error);
-        return createErrorEnhancedResponse(
-            error instanceof Error ? error.message : "Unknown error",
-            startTime,
-        );
-    }
-}
-
-// Helper functions for enhanced querying
-async function applyMetadataFilters(
-    filters: any,
-    websiteCollection: any,
-): Promise<string[]> {
-    const filteredUrls: string[] = [];
-
-    try {
-        const websites = websiteCollection.messages.getAll();
-
-        for (const website of websites) {
-            let includeWebsite = true;
-
-            // Domain filtering
-            if (filters.domain) {
-                const websiteDomain = extractDomainFromUrl(
-                    website.metadata.url,
-                );
-                if (websiteDomain !== filters.domain) {
-                    includeWebsite = false;
-                }
-            }
-
-            // Time range filtering
-            if (filters.timeRange && website.metadata.visitDate) {
-                const visitDate = new Date(website.metadata.visitDate);
-                const threshold = getTimeRangeThreshold(filters.timeRange);
-                if (visitDate < threshold) {
-                    includeWebsite = false;
-                }
-            }
-
-            if (includeWebsite) {
-                filteredUrls.push(website.metadata.url);
-            }
-        }
-    } catch (error) {
-        console.warn("Error applying metadata filters:", error);
-    }
-
-    return filteredUrls;
-}
-
-function buildEnhancedSearchTerms(query: string, filters?: any): string[] {
-    const terms = [query];
-
-    // Add filter-based search terms
-
-    return terms;
-}
-
-async function generateQuerySuggestions(
-    request: EnhancedQueryRequest,
-    results: any[],
-    websiteCollection: any,
-    temporalQuery?: TemporalQuery,
-): Promise<QuerySuggestion[]> {
-    const suggestions: QuerySuggestion[] = [];
-
-    // Refinement suggestions
-    if (results.length > 10) {
-        suggestions.push({
-            type: "refinement",
-            query: request.query,
-            explanation: "Too many results. Try adding filters to narrow down.",
-            filters: { timeRange: "month" },
-        });
-    }
-
-    // Expansion suggestions
-    if (results.length < 3) {
-        suggestions.push({
-            type: "expansion",
-            query: request.query,
-            explanation:
-                "Few results found. Try removing filters or using broader terms.",
-            filters: {},
-        });
-    }
-
-    // Enhanced temporal suggestions based on query type
-    if (!temporalQuery || temporalQuery.extractedTimeTerms.length === 0) {
-        // Add temporal context if not already present
-        suggestions.push({
-            type: "temporal",
-            query: `${request.query} from last month`,
-            explanation: "See recent content on this topic",
-            filters: { timeRange: "month" },
-        });
-
-        suggestions.push({
-            type: "temporal",
-            query: `What did I learn about ${request.query} recently?`,
-            explanation: "Focus on learning progression",
-            filters: { timeRange: "week" },
-        });
-    } else {
-        // Suggest different timeframes for temporal queries
-        const currentTimeframe = temporalQuery.timeframe;
-        if (currentTimeframe !== "week") {
-            suggestions.push({
-                type: "temporal",
-                query: request.query.replace(
-                    /last \w+|this \w+|recent|recently/gi,
-                    "last week",
-                ),
-                explanation: "Focus on more recent activity",
-                filters: { timeRange: "week" },
-            });
-        }
-        if (currentTimeframe !== "year") {
-            suggestions.push({
-                type: "temporal",
-                query: request.query.replace(
-                    /last \w+|this \w+|recent|recently/gi,
-                    "last year",
-                ),
-                explanation: "See longer-term patterns",
-                filters: { timeRange: "year" },
-            });
-        }
-    }
-
-    // Related topic suggestions
-    if (results.length > 0) {
-        const topResult = results[0];
-        const knowledge = topResult.getKnowledge();
-        if (knowledge?.topics && knowledge.topics.length > 0) {
-            const relatedTopic = knowledge.topics[0];
-            suggestions.push({
-                type: "related",
-                query: relatedTopic,
-                explanation: `Explore related topic: ${relatedTopic}`,
-                filters: {},
-            });
-        }
-    }
-
-    return suggestions.slice(0, 4);
-}
-
-async function generateEnhancedAnswer(
-    query: string,
-    results: any[],
-    filters?: any,
-    temporalQuery?: TemporalQuery,
-): Promise<string> {
-    if (results.length === 0) {
-        let message = `No results found for "${query}".`;
-        if (filters && Object.keys(filters).length > 0) {
-            message += " Try removing some filters to broaden your search.";
-        } else {
-            message +=
-                " Try using different search terms or browse more content to expand your knowledge base.";
-        }
-        return message;
-    }
-
-    const topResult = results[0];
-    const resultCount = results.length;
-
-    let answer = `Found ${resultCount} result${resultCount > 1 ? "s" : ""} for "${query}". `;
-
-    // Add temporal context if this is a temporal query
-    if (temporalQuery && temporalQuery.extractedTimeTerms.length > 0) {
-        const timeContext = temporalQuery.extractedTimeTerms.join(", ");
-        answer += `Time context: ${timeContext}. `;
-
-        // Add query type context
-        if (temporalQuery.queryType !== "visited") {
-            answer += `Focus: ${temporalQuery.queryType} content. `;
-        }
-    }
-
-    // Add filter context
-    if (filters && Object.keys(filters).length > 0) {
-        const appliedFilters = getAppliedFilters(filters);
-        if (appliedFilters.length > 0) {
-            answer += `Filtered by: ${appliedFilters.join(", ")}. `;
-        }
-    }
-
-    // Add top result information
-    answer += `The most relevant appears to be "${topResult.metadata.title}" (${topResult.metadata.url}). `;
-
-    // Add content context
-    const knowledge = topResult.getKnowledge();
-    if (knowledge?.topics && knowledge.topics.length > 0) {
-        answer += `Topics include: ${knowledge.topics.slice(0, 3).join(", ")}. `;
-    }
-
-    return answer;
-}
-
-function extractEnhancedSources(results: any[]): WebPageReference[] {
-    return results.slice(0, 5).map((website: any) => ({
-        url: website.metadata.url,
-        title: website.metadata.title || website.metadata.url,
-        relevanceScore: 0.8,
-        lastIndexed:
-            website.metadata.visitDate ||
-            website.metadata.bookmarkDate ||
-            new Date().toISOString(),
-    }));
-}
-
-function extractRelatedEntitiesFromResults(results: any[]): Entity[] {
-    const entities: Entity[] = [];
-    for (const site of results.slice(0, 3)) {
-        const knowledge = site.getKnowledge();
-        if (knowledge?.entities) {
-            for (const entity of knowledge.entities.slice(0, 3)) {
-                entities.push({
-                    name: entity.name,
-                    type: Array.isArray(entity.type)
-                        ? entity.type.join(", ")
-                        : entity.type,
-                    confidence: 0.7,
-                });
-            }
-        }
-    }
-    return entities;
-}
-
-function getTimeRangeThreshold(timeRange: string): Date {
-    const now = new Date();
-    const thresholds: { [key: string]: number } = {
-        week: 7,
-        month: 30,
-        quarter: 90,
-        year: 365,
-    };
-
-    const days = thresholds[timeRange] || 30;
-    return new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
-}
-
-function getAppliedFilters(filters?: any): string[] {
-    if (!filters) return [];
-
-    const applied: string[] = [];
-    if (filters.contentType)
-        applied.push(`Content Type: ${filters.contentType}`);
-    if (filters.timeRange) applied.push(`Time Range: ${filters.timeRange}`);
-    if (filters.domain) applied.push(`Domain: ${filters.domain}`);
-
-    return applied;
-}
-
-function createEmptyEnhancedResponse(
-    message: string,
-    startTime: number,
-): EnhancedQueryResponse {
-    return {
-        answer: message,
-        sources: [],
-        relatedEntities: [],
-        relationships: [],
-        temporalPatterns: [],
-        metadata: {
-            totalFound: 0,
-            searchScope: "all_indexed",
-            filtersApplied: [],
-            suggestions: [],
-            processingTime: Date.now() - startTime,
-        },
-    };
-}
-
-function createErrorEnhancedResponse(
-    error: string,
-    startTime: number,
-): EnhancedQueryResponse {
-    return {
-        answer: `Error occurred during search: ${error}`,
-        sources: [],
-        relatedEntities: [],
-        relationships: [],
-        temporalPatterns: [],
-        metadata: {
-            totalFound: 0,
-            searchScope: "all_indexed",
-            filtersApplied: [],
-            suggestions: [],
-            processingTime: Date.now() - startTime,
-        },
-    };
-}
-
 // === TEMPORAL ANALYSIS FUNCTIONS ===
 
 export async function analyzeTemporalPatterns(
@@ -1256,7 +601,18 @@ export async function analyzeTemporalPatterns(
         // Filter by timeframe if specified
         let filteredWebsites = websites;
         if (parameters.timeframe) {
-            const threshold = getTimeRangeThreshold(parameters.timeframe);
+            const now = new Date();
+            const thresholds: { [key: string]: number } = {
+                week: 7,
+                month: 30,
+                quarter: 90,
+                year: 365,
+            };
+            const days = thresholds[parameters.timeframe] || 30;
+            const threshold = new Date(
+                now.getTime() - days * 24 * 60 * 60 * 1000,
+            );
+
             filteredWebsites = websites.filter((site: any) => {
                 const visitDate =
                     site.metadata.visitDate || site.metadata.bookmarkDate;

@@ -760,13 +760,13 @@ class WebsiteLibraryPanelFullPage {
             let results: SearchResult;
 
             if (this.isConnected) {
-                results = await this.chromeExtensionService.searchWebsites(
+                results = await this.chromeExtensionService.searchWebMemories(
                     query,
                     filters,
                 );
                 await this.chromeExtensionService.saveSearch(query, results);
             } else {
-                results = await this.searchWebsites(query, filters);
+                results = await this.searchWebMemories(query, filters);
             }
 
             // Cache results for future use
@@ -860,7 +860,7 @@ class WebsiteLibraryPanelFullPage {
         }
     }
 
-    private async searchWebsites(
+    private async searchWebMemories(
         query: string,
         filters: SearchFilters,
     ): Promise<SearchResult> {
@@ -870,7 +870,7 @@ class WebsiteLibraryPanelFullPage {
         }
 
         try {
-            return await this.chromeExtensionService.searchWebsites(
+            return await this.chromeExtensionService.searchWebMemories(
                 query,
                 filters,
             );
@@ -2873,7 +2873,7 @@ interface UserPreferences {
 // Enhanced Chrome Extension Service for real-time data
 interface ChromeExtensionService {
     getLibraryStats(): Promise<LibraryStats>;
-    searchWebsites(
+    searchWebMemories(
         query: string,
         filters: SearchFilters,
     ): Promise<SearchResult>;
@@ -3093,24 +3093,47 @@ class ChromeExtensionServiceImpl implements ChromeExtensionService {
         throw new Error("Chrome extension not available");
     }
 
-    async searchWebsites(
+    async searchWebMemories(
         query: string,
         filters: SearchFilters,
     ): Promise<SearchResult> {
         if (typeof chrome !== "undefined" && chrome.runtime) {
             try {
                 const response = await chrome.runtime.sendMessage({
-                    type: "searchWebsites",
+                    type: "searchWebMemories",
                     parameters: {
                         query,
-                        filters,
-                        includeSummary: true,
-                        limit: 50,
+                        generateAnswer: true,
+                        includeRelatedEntities: true,
+                        enableAdvancedSearch: true,
+                        limit: 50, // Default limit since it's not in SearchFilters
+                        minScore: filters.minRelevance || 0.3,
+                        domain: filters.domain,
+                        source:
+                            filters.sourceType === "bookmarks"
+                                ? "bookmark"
+                                : filters.sourceType === "history"
+                                  ? "history"
+                                  : undefined,
+                        // Note: pageType, temporalSort, frequencySort not available in current SearchFilters interface
                     },
                 });
 
                 if (response.success) {
-                    return response.results;
+                    // Convert unified search response to SearchResult format
+                    return {
+                        websites: response.results.websites || [],
+                        summary: {
+                            text: response.results.summary.text || "",
+                            totalFound: response.results.websites?.length || 0,
+                            searchTime:
+                                response.results.summary?.searchTime || 0,
+                            sources: response.results.sources || [],
+                            entities: response.results.entities || [],
+                        },
+                        query: query,
+                        filters: filters,
+                    };
                 } else {
                     throw new Error(response.error || "Search failed");
                 }
@@ -3204,6 +3227,7 @@ class ChromeExtensionServiceImpl implements ChromeExtensionService {
 // INITIALIZATION
 // ===================================================================
 
+// Create global instance for compatibility
 let libraryPanelInstance: WebsiteLibraryPanelFullPage;
 let isInitialized = false;
 

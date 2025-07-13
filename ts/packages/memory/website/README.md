@@ -344,6 +344,101 @@ if (!extractor.isConfiguredForMode("content")) {
 
 MIT License - see LICENSE file for details.
 
+### Types
+
+Key interfaces for extraction:
+
+```typescript
+interface ExtractionInput {
+  url: string;
+  title: string;
+  htmlContent?: string;
+  textContent?: string;
+  source: "direct" | "index" | "bookmark" | "history" | "import";
+}
+
+interface ExtractionResult {
+  knowledge: KnowledgeResponse;
+  qualityMetrics: ExtractionQualityMetrics;
+  extractionMode: ExtractionMode;
+  aiProcessingUsed: boolean;
+  processingTime: number;
+  // ... additional fields
+}
+```
+
+## Configuration
+
+### Extraction Configuration
+
+```typescript
+interface ExtractionConfig {
+  mode: ExtractionMode;
+  timeout?: number;
+  maxContentLength?: number;
+  maxCharsPerChunk?: number;
+  maxConcurrentExtractions?: number;
+  qualityThreshold?: number;
+}
+```
+
+### AI Model Setup
+
+```typescript
+import { openai as ai } from "aiclient";
+import { conversation as kpLib } from "knowledge-processor";
+
+// Configure AI model
+const apiSettings = ai.azureApiSettingsFromEnv(ai.ModelType.Chat);
+const languageModel = ai.createChatModel(apiSettings);
+const knowledgeExtractor = kpLib.createKnowledgeExtractor(languageModel);
+
+// Use with extractor
+const extractor = new ContentExtractor({
+  mode: "content",
+  knowledgeExtractor,
+});
+```
+
+## Best Practices
+
+1. **Mode Selection**: Use `basic` for fast, non-AI extraction. Use `content`/`actions`/`full` when AI analysis is needed.
+
+2. **Error Handling**: Always handle `AIModelRequiredError` and provide fallback to `basic` mode.
+
+3. **Batch Processing**: Use `BatchProcessor` for multiple items to benefit from concurrency.
+
+4. **Performance**: Monitor processing times and adjust `maxConcurrentExtractions` based on system resources.
+
+5. **Capability Checking**: Use `isConfiguredForMode()` to check AI availability before extraction.
+
+## Troubleshooting
+
+### AI Model Not Available
+
+```typescript
+// Check if AI is configured
+if (!extractor.isConfiguredForMode("content")) {
+  console.warn("AI not available, falling back to basic mode");
+  result = await extractor.extract(content, "basic");
+}
+```
+
+### Performance Issues
+
+- Reduce `maxConcurrentExtractions` for memory-constrained environments
+- Use `basic` mode for bulk processing when AI analysis isn't needed
+- Monitor `qualityMetrics.extractionTime` to identify slow content
+
+### Memory Usage
+
+- Process large batches in smaller chunks
+- Monitor memory usage with batch processing
+
+## License
+
+MIT License - see LICENSE file for details.
+
 ## Trademarks
 
 This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft

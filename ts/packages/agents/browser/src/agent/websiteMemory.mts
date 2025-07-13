@@ -10,7 +10,6 @@ import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import {
     ImportWebsiteData,
     ImportHtmlFolder,
-    SearchWebsites,
     GetWebsiteStats,
 } from "./actionsSchema.mjs";
 import { BrowserActionContext } from "./actionHandler.mjs";
@@ -1017,80 +1016,6 @@ function convertWebsiteDataToWebsite(data: WebsiteData): any {
         lastVisited: data.lastVisited,
         extractionResult: data.extractionResult,
     };
-}
-
-/**
- * Search through imported website data
- */
-export async function searchWebsites(
-    context: ActionContext<BrowserActionContext>,
-    action: TypeAgentAction<SearchWebsites>,
-) {
-    try {
-        const websiteCollection =
-            context.sessionContext.agentContext.websiteCollection;
-        if (!websiteCollection || websiteCollection.messages.length === 0) {
-            return createActionResult(
-                "No website data available. Please import website data first.",
-                true,
-            );
-        }
-
-        context.actionIO.setDisplay("Searching websites...");
-
-        const {
-            originalUserRequest,
-            //query,
-            domain,
-            source,
-            limit = 10,
-            minScore = 0.5,
-        } = action.parameters;
-
-        // Build search filters
-        const searchFilters = [originalUserRequest];
-        if (domain) searchFilters.push(domain);
-
-        // Use the improved search function
-        let matchedWebsites = await findRequestedWebsites(
-            searchFilters,
-            context.sessionContext.agentContext,
-            false,
-            minScore,
-        );
-
-        // Apply additional filters
-        if (source) {
-            matchedWebsites = matchedWebsites.filter(
-                (site) => site.metadata.websiteSource === source,
-            );
-        }
-
-        // Limit results
-        matchedWebsites = matchedWebsites.slice(0, limit);
-
-        if (matchedWebsites.length === 0) {
-            return createActionResult(
-                "No websites found matching the search criteria.",
-            );
-        }
-
-        const resultText = matchedWebsites
-            .map((site, i) => {
-                const metadata = site.metadata;
-                return `${i + 1}. ${metadata.title || metadata.url}\n   URL: ${metadata.url}\n   Domain: ${metadata.domain} | Type: ${metadata.pageType} | Source: ${metadata.websiteSource}\n`;
-            })
-            .join("\n");
-
-        return createActionResult(
-            `Found ${matchedWebsites.length} websites:\n\n${resultText}`,
-        );
-    } catch (error: any) {
-        return createActionResult(
-            `Failed to search websites: ${error.message}`,
-            true,
-        );
-    }
 }
 
 /**

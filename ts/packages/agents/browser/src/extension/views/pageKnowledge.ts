@@ -3109,12 +3109,20 @@ class KnowledgePanel {
 
         try {
             const response = await chrome.runtime.sendMessage({
-                type: "queryWebKnowledgeEnhanced",
-                query: query,
-                url: this.currentUrl,
-                searchScope: "all_indexed",
-                filters: Object.keys(filters).length > 0 ? filters : undefined,
-                maxResults: 10,
+                type: "searchWebMemories",
+                parameters: {
+                    query: query,
+                    searchScope: "all_indexed",
+                    generateAnswer: true,
+                    includeRelatedEntities: true,
+                    enableAdvancedSearch: true,
+                    limit: 10,
+                    domain: filters.domain,
+                    source: filters.source,
+                    pageType: filters.pageType,
+                    temporalSort: filters.temporalSort,
+                    frequencySort: filters.frequencySort,
+                },
             });
 
             this.renderEnhancedQueryResults(response);
