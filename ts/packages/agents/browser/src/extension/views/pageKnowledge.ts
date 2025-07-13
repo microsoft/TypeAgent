@@ -156,7 +156,7 @@ class KnowledgePanel {
         await this.loadAutoIndexSetting();
         await this.loadIndexStats();
         await this.checkConnectionStatus();
-        await this.loadCachedKnowledge();
+        await this.loadFreshKnowledge();
         await this.loadExtractionSettings();
         await this.checkAIModelAvailability();
 
@@ -410,7 +410,6 @@ class KnowledgePanel {
                 button.classList.add("btn-success");
 
                 await this.renderKnowledgeResults(this.knowledgeData);
-                await this.cacheKnowledge(this.knowledgeData);
                 this.showExtractionInfo();
                 await this.updateQualityIndicator();
 
@@ -1529,44 +1528,59 @@ class KnowledgePanel {
     }
     private async onTabChange() {
         await this.loadCurrentPageInfo();
-        await this.loadCachedKnowledge();
+        await this.loadFreshKnowledge();
     }
 
-    private async loadCachedKnowledge() {
+    private async loadFreshKnowledge() {
         try {
-            // First check if the page is indexed
             const indexStatus = await chrome.runtime.sendMessage({
                 type: "getPageIndexStatus",
                 url: this.currentUrl,
             });
 
             if (indexStatus.isIndexed) {
-                // Page is indexed, try to load the indexed knowledge
                 await this.loadIndexedKnowledge();
-                return;
-            }
-
-            // Fallback to cached knowledge from local storage
-            const knowledgeKey = "knowledge_" + this.currentUrl;
-            const cached = await chrome.storage.local.get([knowledgeKey]);
-
-            if (cached[knowledgeKey]) {
-                this.knowledgeData = cached[knowledgeKey];
-                if (this.knowledgeData) {
-                    await this.renderKnowledgeResults(this.knowledgeData);
-                }
             } else {
-                const knowledgeSection =
-                    document.getElementById("knowledgeSection")!;
-                knowledgeSection.className = "d-none";
-
-                const questionsSection =
-                    document.getElementById("questionsSection")!;
-                questionsSection.className = "knowledge-card card d-none";
+                this.showNotIndexedState();
             }
         } catch (error) {
-            console.error("Error loading cached knowledge:", error);
+            console.error("Error loading fresh knowledge:", error);
+            this.showConnectionError();
         }
+    }
+
+    private showNotIndexedState() {
+        const knowledgeSection = document.getElementById("knowledgeSection")!;
+        knowledgeSection.className = "";
+        knowledgeSection.innerHTML = `
+            <div class="knowledge-card card">
+                <div class="card-body text-center">
+                    <i class="bi bi-info-circle text-info h3"></i>
+                    <p class="mb-0">This page is not indexed yet.</p>
+                    <small class="text-muted">Click "Extract" or "Index" to analyze this page.</small>
+                </div>
+            </div>
+        `;
+
+        const questionsSection = document.getElementById("questionsSection")!;
+        questionsSection.className = "knowledge-card card d-none";
+    }
+
+    private showConnectionError() {
+        const knowledgeSection = document.getElementById("knowledgeSection")!;
+        knowledgeSection.className = "";
+        knowledgeSection.innerHTML = `
+            <div class="knowledge-card card">
+                <div class="card-body text-center">
+                    <i class="bi bi-exclamation-triangle text-warning h3"></i>
+                    <p class="mb-0">Unable to connect to knowledge service.</p>
+                    <small class="text-muted">Check your connection and try again.</small>
+                </div>
+            </div>
+        `;
+
+        const questionsSection = document.getElementById("questionsSection")!;
+        questionsSection.className = "knowledge-card card d-none";
     }
 
     private async loadIndexedKnowledge() {
@@ -1580,51 +1594,18 @@ class KnowledgePanel {
                 this.knowledgeData = response.knowledge;
                 if (this.knowledgeData) {
                     await this.renderKnowledgeResults(this.knowledgeData);
-
-                    // Show indicator that this is indexed knowledge
                     this.showIndexedKnowledgeIndicator();
                 }
-            } else if (response.error) {
-                console.warn(
-                    "Error loading indexed knowledge:",
-                    response.error,
-                );
-                // Fall back to local cache or show empty state
-                await this.loadCachedKnowledgeFromStorage();
+            } else {
+                this.showNotIndexedState();
             }
         } catch (error) {
             console.error("Error loading indexed knowledge:", error);
-            // Fall back to local cache
-            await this.loadCachedKnowledgeFromStorage();
+            this.showConnectionError();
         }
     }
 
-    private async loadCachedKnowledgeFromStorage() {
-        try {
-            const knowledgeKey = "knowledge_" + this.currentUrl;
-            const cached = await chrome.storage.local.get([knowledgeKey]);
 
-            if (cached[knowledgeKey]) {
-                this.knowledgeData = cached[knowledgeKey];
-                if (this.knowledgeData) {
-                    await this.renderKnowledgeResults(this.knowledgeData);
-                }
-            } else {
-                const knowledgeSection =
-                    document.getElementById("knowledgeSection")!;
-                knowledgeSection.className = "d-none";
-
-                const questionsSection =
-                    document.getElementById("questionsSection")!;
-                questionsSection.className = "knowledge-card card d-none";
-            }
-        } catch (error) {
-            console.error(
-                "Error loading cached knowledge from storage:",
-                error,
-            );
-        }
-    }
 
     private showIndexedKnowledgeIndicator() {
         const knowledgeSection = document.getElementById("knowledgeSection")!;
@@ -1649,16 +1630,7 @@ class KnowledgePanel {
         }
     }
 
-    private async cacheKnowledge(knowledge: KnowledgeData) {
-        try {
-            const cacheKey = "knowledge_" + this.currentUrl;
-            const cacheObject: any = {};
-            cacheObject[cacheKey] = knowledge;
-            await chrome.storage.local.set(cacheObject);
-        } catch (error) {
-            console.error("Error caching knowledge:", error);
-        }
-    }
+
 
     private showTemporaryStatus(
         message: string,
