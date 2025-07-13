@@ -169,8 +169,6 @@ export type ImportHtmlFolder = {
     };
 };
 
-
-
 // Get statistics about imported website data
 export type GetWebsiteStats = {
     actionName: "getWebsiteStats";
@@ -188,31 +186,31 @@ export type SearchWebMemories = {
     parameters: {
         query: string;
         searchScope?: "current_page" | "all_indexed";
-        
+
         // Discovery filters
         domain?: string;
-        pageType?: string; 
+        pageType?: string;
         source?: "bookmark" | "history";
         temporalSort?: "ascend" | "descend" | "none";
         frequencySort?: "ascend" | "descend" | "none";
-        
+
         // Search configuration
         limit?: number;
         minScore?: number;
         exactMatch?: boolean;
-        
+
         // Processing options (consumer controls cost)
-        generateAnswer?: boolean;           // Default: true
-        includeRelatedEntities?: boolean;   // Default: true  
-        includeRelationships?: boolean;     // Default: false (expensive)
-        enableAdvancedSearch?: boolean;     // Use advanced patterns
-        
+        generateAnswer?: boolean; // Default: true
+        includeRelatedEntities?: boolean; // Default: true
+        includeRelationships?: boolean; // Default: false (expensive)
+        enableAdvancedSearch?: boolean; // Use advanced patterns
+
         // Advanced options
         knowledgeTopK?: number;
         chunking?: boolean;
         fastStop?: boolean;
         combineAnswers?: boolean;
-        choices?: string;  // Multiple choice (semicolon separated)
+        choices?: string; // Multiple choice (semicolon separated)
         debug?: boolean;
     };
 };

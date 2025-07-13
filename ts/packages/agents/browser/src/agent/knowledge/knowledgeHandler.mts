@@ -57,8 +57,6 @@ export async function handleKnowledgeAction(
         case "searchWebMemories":
             return await searchWebMemories(parameters, context);
 
-
-
         case "checkPageIndexStatus":
             return await checkPageIndexStatus(parameters, context);
 
@@ -67,8 +65,6 @@ export async function handleKnowledgeAction(
 
         case "clearKnowledgeIndex":
             return await clearKnowledgeIndex(parameters, context);
-
-
 
         case "discoverRelationships":
             return await discoverRelationships(parameters, context);
@@ -473,8 +469,6 @@ export async function clearKnowledgeIndex(
     }
 }
 
-
-
 // Enhanced suggested questions using content analysis and DataFrames
 async function generateSmartSuggestedQuestions(
     knowledge: any,
@@ -576,7 +570,6 @@ export async function discoverRelationships(
     }
 }
 
-
 // === TEMPORAL ANALYSIS FUNCTIONS ===
 
 export async function analyzeTemporalPatterns(
@@ -616,8 +609,10 @@ export async function analyzeTemporalPatterns(
                 year: 365,
             };
             const days = thresholds[parameters.timeframe] || 30;
-            const threshold = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
-            
+            const threshold = new Date(
+                now.getTime() - days * 24 * 60 * 60 * 1000,
+            );
+
             filteredWebsites = websites.filter((site: any) => {
                 const visitDate =
                     site.metadata.visitDate || site.metadata.bookmarkDate;

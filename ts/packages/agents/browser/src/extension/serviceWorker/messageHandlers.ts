@@ -37,10 +37,6 @@ export async function handleMessage(
             return await handleGetWebsiteLibraryStats();
         }
 
-
-
-
-
         case "getSearchSuggestions": {
             return await handleGetSearchSuggestions(message);
         }
@@ -323,8 +319,6 @@ export async function handleMessage(
             return await handleSearchWebMemories(message);
         }
 
-
-
         // Cross-page intelligence handlers
         case "discoverRelationships": {
             try {
@@ -506,8 +500,6 @@ export async function handleMessage(
         case "getWebsiteLibraryStats": {
             return await handleGetWebsiteLibraryStats();
         }
-
-
 
         case "clearWebsiteLibrary": {
             return await handleClearWebsiteLibrary();
@@ -819,8 +811,6 @@ async function handleGetWebsiteLibraryStats() {
     }
 }
 
-
-
 async function handleClearWebsiteLibrary() {
     try {
         await sendActionToAgent({
@@ -962,12 +952,12 @@ async function handleSearchWebMemories(message: any) {
             actionName: "searchWebMemories",
             parameters: {
                 query: message.parameters.query,
-                generateAnswer: true,  // Knowledge Library wants answers
+                generateAnswer: true, // Knowledge Library wants answers
                 includeRelatedEntities: true,
                 enableAdvancedSearch: true,
                 limit: message.parameters.limit || 20,
                 minScore: message.parameters.filters?.minRelevance || 0.3,
-                ...message.parameters.filters
+                ...message.parameters.filters,
             },
         });
 
@@ -978,7 +968,8 @@ async function handleSearchWebMemories(message: any) {
                 summary: {
                     text: result.answer || "",
                     totalFound: result.websites?.length || 0,
-                    searchTime: result.summary?.searchTime || (Date.now() - startTime),
+                    searchTime:
+                        result.summary?.searchTime || Date.now() - startTime,
                     sources: result.answerSources || [],
                     entities: result.relatedEntities || [],
                 },
@@ -988,14 +979,12 @@ async function handleSearchWebMemories(message: any) {
         };
     } catch (error) {
         console.error("Error in unified search:", error);
-        return { 
-            success: false, 
-            error: error instanceof Error ? error.message : "Unknown error"
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
         };
     }
 }
-
-
 
 async function handleGetSearchSuggestions(message: any) {
     try {

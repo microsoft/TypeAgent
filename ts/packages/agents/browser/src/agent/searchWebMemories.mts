@@ -26,31 +26,31 @@ const debug = registerDebug("typeagent:browser:unified-search");
 export interface SearchWebMemoriesRequest {
     query: string;
     searchScope?: "current_page" | "all_indexed" | undefined;
-    
+
     // Discovery filters
     domain?: string | undefined;
-    pageType?: string | undefined; 
+    pageType?: string | undefined;
     source?: "bookmark" | "history" | undefined;
     temporalSort?: "ascend" | "descend" | "none" | undefined;
     frequencySort?: "ascend" | "descend" | "none" | undefined;
-    
+
     // Search configuration
     limit?: number | undefined;
     minScore?: number | undefined;
     exactMatch?: boolean | undefined;
-    
+
     // Processing options (consumer controls cost)
-    generateAnswer?: boolean | undefined;           // Default: true
-    includeRelatedEntities?: boolean | undefined;   // Default: true  
-    includeRelationships?: boolean | undefined;     // Default: false (expensive)
-    enableAdvancedSearch?: boolean | undefined;     // Use advanced patterns
-    
+    generateAnswer?: boolean | undefined; // Default: true
+    includeRelatedEntities?: boolean | undefined; // Default: true
+    includeRelationships?: boolean | undefined; // Default: false (expensive)
+    enableAdvancedSearch?: boolean | undefined; // Use advanced patterns
+
     // Advanced options
     knowledgeTopK?: number | undefined;
     chunking?: boolean | undefined;
     fastStop?: boolean | undefined;
     combineAnswers?: boolean | undefined;
-    choices?: string | undefined;  // Multiple choice (semicolon separated)
+    choices?: string | undefined; // Multiple choice (semicolon separated)
     debug?: boolean | undefined;
 }
 
@@ -97,26 +97,26 @@ export interface SearchWebMemoriesResponse {
     // Core results - always provided
     websites: WebsiteResult[];
     summary: SearchSummary;
-    
+
     // Q&A results - when generateAnswer=true
     answer?: string | undefined;
     answerType?: "direct" | "synthesized" | "noAnswer" | undefined;
     answerSources?: WebPageReference[] | undefined;
     confidence?: number | undefined;
-    
+
     // Knowledge results - when includeRelatedEntities=true
     relatedEntities?: Entity[] | undefined;
     topTopics?: string[] | undefined;
-    
+
     // Advanced results - when includeRelationships=true
     relationships?: RelationshipResult[] | undefined;
     temporalPatterns?: TemporalPattern[] | undefined;
-    
+
     // Query understanding
     queryIntent?: "question" | "discovery" | "mixed" | undefined;
     parsedQuery?: ParsedQuery | undefined;
     suggestedFollowups?: string[] | undefined;
-    
+
     // Debug info - when debug=true
     debugContext?: SearchDebugContext | undefined;
 }
@@ -136,7 +136,7 @@ export async function searchWebMemories(
         processing: 0,
         total: 0,
     };
-    
+
     const debugContext: SearchDebugContext = {
         parsedQuery: {} as ParsedQuery,
         searchStrategies: [],
@@ -168,12 +168,14 @@ export async function searchWebMemories(
         timing.parsing = Date.now() - parseStart;
         debugContext.parsedQuery = parsedQuery;
 
-        debug(`Parsed query intent: ${parsedQuery.intent}, isQuestion: ${parsedQuery.isQuestion}`);
+        debug(
+            `Parsed query intent: ${parsedQuery.intent}, isQuestion: ${parsedQuery.isQuestion}`,
+        );
 
         // PHASE 2: Core search execution
         const searchStart = Date.now();
         let searchResults: website.Website[] = [];
-        
+
         // Strategy 1: Try advanced search if enabled
         if (request.enableAdvancedSearch) {
             try {
@@ -184,13 +186,17 @@ export async function searchWebMemories(
                     websiteCollection,
                     context,
                 );
-                
+
                 if (searchResults.length === 0) {
-                    debugContext.intermediateFallbacks.push("advanced-semantic -> basic-semantic");
+                    debugContext.intermediateFallbacks.push(
+                        "advanced-semantic -> basic-semantic",
+                    );
                 }
             } catch (error) {
                 debug(`Advanced search failed, falling back: ${error}`);
-                debugContext.intermediateFallbacks.push("advanced-semantic -> fallback");
+                debugContext.intermediateFallbacks.push(
+                    "advanced-semantic -> fallback",
+                );
             }
         }
 
@@ -210,11 +216,14 @@ export async function searchWebMemories(
 
         // PHASE 3: Apply discovery filters
         const processingStart = Date.now();
-        let filteredResults = await applyDiscoveryFilters(searchResults, request);
-        
+        let filteredResults = await applyDiscoveryFilters(
+            searchResults,
+            request,
+        );
+
         // Apply sorting
         filteredResults = applySorting(filteredResults, request);
-        
+
         // Apply limit
         const limitedResults = filteredResults.slice(0, request.limit || 20);
 
@@ -244,8 +253,12 @@ export async function searchWebMemories(
         let relatedEntities: Entity[] | undefined;
         let topTopics: string[] | undefined;
 
-        if (request.includeRelatedEntities !== false && limitedResults.length > 0) {
-            const knowledgeResult = await extractKnowledgeFromResults(limitedResults);
+        if (
+            request.includeRelatedEntities !== false &&
+            limitedResults.length > 0
+        ) {
+            const knowledgeResult =
+                await extractKnowledgeFromResults(limitedResults);
             relatedEntities = knowledgeResult.entities;
             topTopics = knowledgeResult.topics;
         }
@@ -256,14 +269,17 @@ export async function searchWebMemories(
 
         if (request.includeRelationships && limitedResults.length > 0) {
             try {
-                const relationshipDiscovery = new RelationshipDiscovery(context);
+                const relationshipDiscovery = new RelationshipDiscovery(
+                    context,
+                );
                 const topResult = limitedResults[0];
                 const knowledge = topResult.getKnowledge();
-                relationships = await relationshipDiscovery.discoverRelationships(
-                    topResult.metadata.url,
-                    knowledge,
-                    3,
-                );
+                relationships =
+                    await relationshipDiscovery.discoverRelationships(
+                        topResult.metadata.url,
+                        knowledge,
+                        3,
+                    );
             } catch (error) {
                 debug(`Relationship discovery failed: ${error}`);
             }
@@ -273,7 +289,10 @@ export async function searchWebMemories(
         if (parsedQuery.temporalTerms.length > 0 && limitedResults.length > 1) {
             try {
                 const temporalProcessor = new TemporalQueryProcessor(context);
-                temporalPatterns = await temporalProcessor.analyzeTemporalPatterns(limitedResults);
+                temporalPatterns =
+                    await temporalProcessor.analyzeTemporalPatterns(
+                        limitedResults,
+                    );
             } catch (error) {
                 debug(`Temporal analysis failed: ${error}`);
             }
@@ -332,13 +351,14 @@ export async function searchWebMemories(
             response.debugContext = debugContext;
         }
 
-        debug(`Unified search completed in ${timing.total}ms with ${websites.length} results`);
+        debug(
+            `Unified search completed in ${timing.total}ms with ${websites.length} results`,
+        );
         return response;
-
     } catch (error) {
         timing.total = Date.now() - startTime;
         debug(`Unified search failed: ${error}`);
-        
+
         return createErrorResponse(
             error instanceof Error ? error.message : "Unknown search error",
             startTime,
@@ -354,21 +374,43 @@ async function parseAndExpandQuery(
     context: SessionContext<BrowserActionContext>,
 ): Promise<ParsedQuery> {
     const queryLower = query.toLowerCase().trim();
-    
+
     // Detect if this is a question
-    const questionIndicators = ['what', 'how', 'why', 'when', 'where', 'who', 'which', 'is', 'are', 'can', 'could', 'should', 'would', 'do', 'does', 'did'];
-    const isQuestion = questionIndicators.some(indicator => 
-        queryLower.startsWith(indicator + ' ') || queryLower.includes('?')
+    const questionIndicators = [
+        "what",
+        "how",
+        "why",
+        "when",
+        "where",
+        "who",
+        "which",
+        "is",
+        "are",
+        "can",
+        "could",
+        "should",
+        "would",
+        "do",
+        "does",
+        "did",
+    ];
+    const isQuestion = questionIndicators.some(
+        (indicator) =>
+            queryLower.startsWith(indicator + " ") || queryLower.includes("?"),
     );
 
     // Extract search terms (simplified)
     const searchTerms = [query];
-    
+
     // Detect intent
     let intent: "question" | "discovery" | "mixed" = "discovery";
     if (isQuestion) {
         intent = "question";
-    } else if (queryLower.includes('find') || queryLower.includes('show') || queryLower.includes('search')) {
+    } else if (
+        queryLower.includes("find") ||
+        queryLower.includes("show") ||
+        queryLower.includes("search")
+    ) {
         intent = "mixed";
     }
 
@@ -379,8 +421,16 @@ async function parseAndExpandQuery(
 
     // Extract temporal terms
     const temporalTerms: string[] = [];
-    const temporalIndicators = ['today', 'yesterday', 'last week', 'last month', 'recently', 'this year', 'last year'];
-    temporalIndicators.forEach(term => {
+    const temporalIndicators = [
+        "today",
+        "yesterday",
+        "last week",
+        "last month",
+        "recently",
+        "this year",
+        "last year",
+    ];
+    temporalIndicators.forEach((term) => {
         if (queryLower.includes(term)) {
             temporalTerms.push(term);
         }
@@ -401,24 +451,27 @@ async function performAdvancedSearch(
     websiteCollection: website.WebsiteCollection,
     context: SessionContext<BrowserActionContext>,
 ): Promise<website.Website[]> {
-    
     // Build sophisticated search expression
     const searchSelectExpr: kp.SearchSelectExpr = {
         searchTermGroup: {
             booleanOp: parsedQuery.isQuestion ? "and" : "or",
-            terms: parsedQuery.searchTerms.map(term => ({ term: { text: term } }))
+            terms: parsedQuery.searchTerms.map((term) => ({
+                term: { text: term },
+            })),
         },
-        when: buildTemporalFilter(request, context)
+        when: buildTemporalFilter(request, context),
     };
 
-    debug(`Executing advanced search with expression: ${JSON.stringify(searchSelectExpr)}`);
+    debug(
+        `Executing advanced search with expression: ${JSON.stringify(searchSelectExpr)}`,
+    );
 
     // Execute knowpro semantic search
     const knowledgeMatches = await kp.searchConversationKnowledge(
         websiteCollection,
-        searchSelectExpr.searchTermGroup, 
+        searchSelectExpr.searchTermGroup,
         searchSelectExpr.when,
-        { exactMatch: request.exactMatch || false }
+        { exactMatch: request.exactMatch || false },
     );
 
     if (!knowledgeMatches || knowledgeMatches.size === 0) {
@@ -430,23 +483,32 @@ async function performAdvancedSearch(
     const processedMessages = new Set<number>();
 
     knowledgeMatches.forEach((match: kp.SemanticRefSearchResult) => {
-        match.semanticRefMatches.forEach((refMatch: kp.ScoredSemanticRefOrdinal) => {
-            if (refMatch.score >= (request.minScore || 0.3)) {
-                const semanticRef = websiteCollection.semanticRefs.get(refMatch.semanticRefOrdinal);
-                if (semanticRef) {
-                    const messageOrdinal = semanticRef.range.start.messageOrdinal;
-                    if (messageOrdinal !== undefined && !processedMessages.has(messageOrdinal)) {
-                        processedMessages.add(messageOrdinal);
-                        const docPart = websiteCollection.messages.get(messageOrdinal);
-                        if (docPart) {
-                            // Convert DocPart to Website-like object
-                            const websiteObj = docPart as any;
-                            results.push(websiteObj);
+        match.semanticRefMatches.forEach(
+            (refMatch: kp.ScoredSemanticRefOrdinal) => {
+                if (refMatch.score >= (request.minScore || 0.3)) {
+                    const semanticRef = websiteCollection.semanticRefs.get(
+                        refMatch.semanticRefOrdinal,
+                    );
+                    if (semanticRef) {
+                        const messageOrdinal =
+                            semanticRef.range.start.messageOrdinal;
+                        if (
+                            messageOrdinal !== undefined &&
+                            !processedMessages.has(messageOrdinal)
+                        ) {
+                            processedMessages.add(messageOrdinal);
+                            const docPart =
+                                websiteCollection.messages.get(messageOrdinal);
+                            if (docPart) {
+                                // Convert DocPart to Website-like object
+                                const websiteObj = docPart as any;
+                                results.push(websiteObj);
+                            }
                         }
                     }
                 }
-            }
-        });
+            },
+        );
     });
 
     debug(`Advanced search found ${results.length} results`);
@@ -455,7 +517,7 @@ async function performAdvancedSearch(
 
 function buildTemporalFilter(
     request: SearchWebMemoriesRequest,
-    context: SessionContext<BrowserActionContext>
+    context: SessionContext<BrowserActionContext>,
 ): kp.WhenFilter {
     // Return empty filter for now - could be enhanced with temporal logic
     return {};
@@ -469,7 +531,7 @@ async function applyDiscoveryFilters(
 
     // Apply domain filter
     if (request.domain) {
-        filtered = filtered.filter(site => {
+        filtered = filtered.filter((site) => {
             const metadata = site.metadata as any;
             return metadata.domain === request.domain;
         });
@@ -477,7 +539,7 @@ async function applyDiscoveryFilters(
 
     // Apply source filter
     if (request.source) {
-        filtered = filtered.filter(site => {
+        filtered = filtered.filter((site) => {
             const metadata = site.metadata as any;
             return metadata.websiteSource === request.source;
         });
@@ -485,7 +547,7 @@ async function applyDiscoveryFilters(
 
     // Apply page type filter
     if (request.pageType) {
-        filtered = filtered.filter(site => {
+        filtered = filtered.filter((site) => {
             const metadata = site.metadata as any;
             return metadata.pageType === request.pageType;
         });
@@ -505,26 +567,30 @@ function applySorting(
         sorted.sort((a, b) => {
             const aMetadata = a.metadata as any;
             const bMetadata = b.metadata as any;
-            
-            const aDate = new Date(aMetadata.visitDate || aMetadata.bookmarkDate || 0);
-            const bDate = new Date(bMetadata.visitDate || bMetadata.bookmarkDate || 0);
-            
-            return request.temporalSort === "ascend" 
+
+            const aDate = new Date(
+                aMetadata.visitDate || aMetadata.bookmarkDate || 0,
+            );
+            const bDate = new Date(
+                bMetadata.visitDate || bMetadata.bookmarkDate || 0,
+            );
+
+            return request.temporalSort === "ascend"
                 ? aDate.getTime() - bDate.getTime()
                 : bDate.getTime() - aDate.getTime();
         });
     }
 
-    // Apply frequency sorting  
+    // Apply frequency sorting
     if (request.frequencySort && request.frequencySort !== "none") {
         sorted.sort((a, b) => {
             const aMetadata = a.metadata as any;
             const bMetadata = b.metadata as any;
-            
+
             const aFreq = aMetadata.visitCount || 0;
             const bFreq = bMetadata.visitCount || 0;
-            
-            return request.frequencySort === "ascend" 
+
+            return request.frequencySort === "ascend"
                 ? aFreq - bFreq
                 : bFreq - aFreq;
         });
@@ -534,7 +600,7 @@ function applySorting(
 }
 
 function convertToWebsiteResults(websites: website.Website[]): WebsiteResult[] {
-    return websites.map(site => {
+    return websites.map((site) => {
         const metadata = site.metadata as any;
         return {
             url: metadata.url,
@@ -543,7 +609,8 @@ function convertToWebsiteResults(websites: website.Website[]): WebsiteResult[] {
             pageType: metadata.pageType || "general",
             source: metadata.websiteSource || "unknown",
             relevanceScore: 0.8, // Could be enhanced with actual scoring
-            lastVisited: metadata.visitDate || metadata.bookmarkDate || undefined,
+            lastVisited:
+                metadata.visitDate || metadata.bookmarkDate || undefined,
             snippet: extractSnippet(site),
         };
     });
@@ -551,7 +618,9 @@ function convertToWebsiteResults(websites: website.Website[]): WebsiteResult[] {
 
 function extractSnippet(website: website.Website): string {
     const textContent = website.textChunks?.join(" ") || "";
-    return textContent.substring(0, 200) + (textContent.length > 200 ? "..." : "");
+    return (
+        textContent.substring(0, 200) + (textContent.length > 200 ? "..." : "")
+    );
 }
 
 async function generateAnswerFromResults(
@@ -576,13 +645,13 @@ async function generateAnswerFromResults(
 
     const topResult = results[0];
     const metadata = topResult.metadata as any;
-    
+
     // Generate contextual answer
     let answer = "";
     if (parsedQuery.isQuestion) {
         answer = `Based on your browsing history, I found ${results.length} relevant result${results.length > 1 ? "s" : ""} for "${query}". `;
         answer += `The most relevant appears to be "${metadata.title}" (${metadata.url}). `;
-        
+
         // Add knowledge context if available
         const knowledge = topResult.getKnowledge();
         if (knowledge?.topics && knowledge.topics.length > 0) {
@@ -594,13 +663,14 @@ async function generateAnswerFromResults(
     }
 
     // Extract sources
-    const sources: WebPageReference[] = results.slice(0, 5).map(site => {
+    const sources: WebPageReference[] = results.slice(0, 5).map((site) => {
         const meta = site.metadata as any;
         return {
             url: meta.url,
             title: meta.title || meta.url,
             relevanceScore: 0.8,
-            lastIndexed: meta.visitDate || meta.bookmarkDate || new Date().toISOString(),
+            lastIndexed:
+                meta.visitDate || meta.bookmarkDate || new Date().toISOString(),
         };
     });
 
@@ -608,7 +678,7 @@ async function generateAnswerFromResults(
         answer,
         type: "synthesized",
         sources,
-        confidence: Math.min(0.9, 0.5 + (results.length * 0.1)),
+        confidence: Math.min(0.9, 0.5 + results.length * 0.1),
     };
 }
 
@@ -624,14 +694,16 @@ async function extractKnowledgeFromResults(
             for (const entity of knowledge.entities.slice(0, 3)) {
                 entities.push({
                     name: entity.name,
-                    type: Array.isArray(entity.type) ? entity.type.join(", ") : entity.type,
+                    type: Array.isArray(entity.type)
+                        ? entity.type.join(", ")
+                        : entity.type,
                     confidence: 0.7,
                 });
             }
         }
 
         if (knowledge?.topics) {
-            knowledge.topics.forEach(topic => topicsSet.add(topic));
+            knowledge.topics.forEach((topic) => topicsSet.add(topic));
         }
     }
 

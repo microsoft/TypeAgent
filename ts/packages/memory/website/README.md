@@ -350,20 +350,20 @@ Key interfaces for extraction:
 
 ```typescript
 interface ExtractionInput {
-    url: string;
-    title: string;
-    htmlContent?: string;
-    textContent?: string;
-    source: "direct" | "index" | "bookmark" | "history" | "import";
+  url: string;
+  title: string;
+  htmlContent?: string;
+  textContent?: string;
+  source: "direct" | "index" | "bookmark" | "history" | "import";
 }
 
 interface ExtractionResult {
-    knowledge: KnowledgeResponse;
-    qualityMetrics: ExtractionQualityMetrics;
-    extractionMode: ExtractionMode;
-    aiProcessingUsed: boolean;
-    processingTime: number;
-    // ... additional fields
+  knowledge: KnowledgeResponse;
+  qualityMetrics: ExtractionQualityMetrics;
+  extractionMode: ExtractionMode;
+  aiProcessingUsed: boolean;
+  processingTime: number;
+  // ... additional fields
 }
 ```
 
@@ -373,12 +373,12 @@ interface ExtractionResult {
 
 ```typescript
 interface ExtractionConfig {
-    mode: ExtractionMode;
-    timeout?: number;
-    maxContentLength?: number;
-    maxCharsPerChunk?: number;
-    maxConcurrentExtractions?: number;
-    qualityThreshold?: number;
+  mode: ExtractionMode;
+  timeout?: number;
+  maxContentLength?: number;
+  maxCharsPerChunk?: number;
+  maxConcurrentExtractions?: number;
+  qualityThreshold?: number;
 }
 ```
 
@@ -395,8 +395,8 @@ const knowledgeExtractor = kpLib.createKnowledgeExtractor(languageModel);
 
 // Use with extractor
 const extractor = new ContentExtractor({
-    mode: "content",
-    knowledgeExtractor
+  mode: "content",
+  knowledgeExtractor,
 });
 ```
 
@@ -419,8 +419,8 @@ const extractor = new ContentExtractor({
 ```typescript
 // Check if AI is configured
 if (!extractor.isConfiguredForMode("content")) {
-    console.warn("AI not available, falling back to basic mode");
-    result = await extractor.extract(content, "basic");
+  console.warn("AI not available, falling back to basic mode");
+  result = await extractor.extract(content, "basic");
 }
 ```
 
@@ -438,3 +438,11 @@ if (!extractor.isConfiguredForMode("content")) {
 ## License
 
 MIT License - see LICENSE file for details.
+
+## Trademarks
+
+This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft
+trademarks or logos is subject to and must follow
+[Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general).
+Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.
+Any use of third-party trademarks or logos are subject to those third-party's policies.

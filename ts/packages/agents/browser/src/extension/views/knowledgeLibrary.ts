@@ -3109,7 +3109,12 @@ class ChromeExtensionServiceImpl implements ChromeExtensionService {
                         limit: 50, // Default limit since it's not in SearchFilters
                         minScore: filters.minRelevance || 0.3,
                         domain: filters.domain,
-                        source: filters.sourceType === "bookmarks" ? "bookmark" : filters.sourceType === "history" ? "history" : undefined,
+                        source:
+                            filters.sourceType === "bookmarks"
+                                ? "bookmark"
+                                : filters.sourceType === "history"
+                                  ? "history"
+                                  : undefined,
                         // Note: pageType, temporalSort, frequencySort not available in current SearchFilters interface
                     },
                 });
@@ -3121,7 +3126,8 @@ class ChromeExtensionServiceImpl implements ChromeExtensionService {
                         summary: {
                             text: response.results.summary.text || "",
                             totalFound: response.results.websites?.length || 0,
-                            searchTime: response.results.summary?.searchTime || 0,
+                            searchTime:
+                                response.results.summary?.searchTime || 0,
                             sources: response.results.sources || [],
                             entities: response.results.entities || [],
                         },
