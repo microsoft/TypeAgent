@@ -82,7 +82,6 @@
     "ws": "^8.17.1"
   },
   "devDependencies": {
-    "@crxjs/vite-plugin": "^2.0.0-beta.18",
     "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
     "@fluidframework/build-tools": "^0.56.0",
     "@types/chrome": "^0.0.256",
