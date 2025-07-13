@@ -12,7 +12,7 @@ import {
     EXTRACTION_MODE_CONFIGS,
     BatchProgress,
     BatchError,
-    AIModelRequiredError
+    AIModelRequiredError,
 } from "./types.js";
 
 /**
@@ -31,7 +31,7 @@ export class BatchProcessor {
     async processBatch(
         items: ExtractionInput[],
         mode: ExtractionMode,
-        progressCallback?: (progress: BatchProgress) => void
+        progressCallback?: (progress: BatchProgress) => void,
     ): Promise<ExtractionResult[]> {
         const modeConfig = EXTRACTION_MODE_CONFIGS[mode];
         const totalItems = items.length;
@@ -41,7 +41,10 @@ export class BatchProcessor {
         this.errors = [];
 
         // Validate AI availability upfront for AI modes
-        if (modeConfig.usesAI && !this.contentExtractor.isConfiguredForMode(mode)) {
+        if (
+            modeConfig.usesAI &&
+            !this.contentExtractor.isConfiguredForMode(mode)
+        ) {
             throw new AIModelRequiredError(mode);
         }
 
@@ -52,7 +55,10 @@ export class BatchProcessor {
 
             const batchPromises = batch.map(async (item) => {
                 try {
-                    const result = await this.contentExtractor.extract(item, mode);
+                    const result = await this.contentExtractor.extract(
+                        item,
+                        mode,
+                    );
                     this.results.push(result);
                     processedItems++;
 
@@ -60,7 +66,9 @@ export class BatchProcessor {
                         progressCallback({
                             total: totalItems,
                             processed: processedItems,
-                            percentage: Math.round((processedItems / totalItems) * 100),
+                            percentage: Math.round(
+                                (processedItems / totalItems) * 100,
+                            ),
                             currentItem: item.url,
                             errors: this.errors.length,
                             mode,
@@ -71,7 +79,10 @@ export class BatchProcessor {
                 } catch (error) {
                     const batchError: BatchError = {
                         item,
-                        error: error instanceof Error ? error : new Error(String(error)),
+                        error:
+                            error instanceof Error
+                                ? error
+                                : new Error(String(error)),
                         timestamp: new Date().toISOString(),
                     };
 
@@ -82,7 +93,9 @@ export class BatchProcessor {
                         progressCallback({
                             total: totalItems,
                             processed: processedItems,
-                            percentage: Math.round((processedItems / totalItems) * 100),
+                            percentage: Math.round(
+                                (processedItems / totalItems) * 100,
+                            ),
                             currentItem: item.url,
                             errors: this.errors.length,
                             mode,
@@ -101,7 +114,9 @@ export class BatchProcessor {
             }
         }
 
-        return this.results.filter((result): result is ExtractionResult => result !== null);
+        return this.results.filter(
+            (result): result is ExtractionResult => result !== null,
+        );
     }
 
     /**
@@ -110,10 +125,10 @@ export class BatchProcessor {
     async processBatchToWebsiteDocParts(
         items: ExtractionInput[],
         mode: ExtractionMode,
-        progressCallback?: (progress: BatchProgress) => void
+        progressCallback?: (progress: BatchProgress) => void,
     ): Promise<WebsiteDocPart[]> {
         const results = await this.processBatch(items, mode, progressCallback);
-        return results.map(result => this.convertToWebsiteDocPart(result));
+        return results.map((result) => this.convertToWebsiteDocPart(result));
     }
 
     /**
@@ -146,7 +161,7 @@ export class BatchProcessor {
             // Simple chunking - could be enhanced with intelligent chunking
             const maxChunkSize = 2000;
             const content = result.pageContent.mainContent;
-            
+
             for (let i = 0; i < content.length; i += maxChunkSize) {
                 textChunks.push(content.substring(i, i + maxChunkSize));
             }
@@ -161,7 +176,7 @@ export class BatchProcessor {
             textChunks,
             [], // tags
             result.timestamp,
-            result.knowledge
+            result.knowledge,
         );
     }
 
@@ -192,11 +207,18 @@ export class BatchProcessor {
         const totalProcessed = this.results.length + this.errors.length;
         const successfulExtractions = this.results.length;
         const failedExtractions = this.errors.length;
-        const successRate = totalProcessed > 0 ? (successfulExtractions / totalProcessed) * 100 : 0;
-        
-        const averageProcessingTime = this.results.length > 0 
-            ? this.results.reduce((sum, result) => sum + result.processingTime, 0) / this.results.length
-            : 0;
+        const successRate =
+            totalProcessed > 0
+                ? (successfulExtractions / totalProcessed) * 100
+                : 0;
+
+        const averageProcessingTime =
+            this.results.length > 0
+                ? this.results.reduce(
+                      (sum, result) => sum + result.processingTime,
+                      0,
+                  ) / this.results.length
+                : 0;
 
         return {
             totalProcessed,
@@ -219,13 +241,15 @@ export class BatchProcessor {
      * Utility method to add delay between batches
      */
     private delay(ms: number): Promise<void> {
-        return new Promise(resolve => setTimeout(resolve, ms));
+        return new Promise((resolve) => setTimeout(resolve, ms));
     }
 
     /**
      * Create a batch processor with a configured content extractor
      */
-    static create(config: ExtractionConfig & { knowledgeExtractor?: any }): BatchProcessor {
+    static create(
+        config: ExtractionConfig & { knowledgeExtractor?: any },
+    ): BatchProcessor {
         const contentExtractor = new ContentExtractor(config);
         return new BatchProcessor(contentExtractor);
     }
@@ -233,7 +257,10 @@ export class BatchProcessor {
     /**
      * Calculate optimal batch size based on mode and total items
      */
-    private calculateOptimalBatchSize(mode: ExtractionMode, totalItems: number): number {
+    private calculateOptimalBatchSize(
+        mode: ExtractionMode,
+        totalItems: number,
+    ): number {
         const modeConfig = EXTRACTION_MODE_CONFIGS[mode];
         let baseBatchSize = modeConfig.defaultConcurrentExtractions;
 
@@ -247,10 +274,10 @@ export class BatchProcessor {
         }
 
         // Additional adjustments based on mode
-        if (mode === 'basic') {
+        if (mode === "basic") {
             // Basic mode can handle higher concurrency
             baseBatchSize = Math.min(baseBatchSize * 2, 20);
-        } else if (mode === 'full') {
+        } else if (mode === "full") {
             // Full mode needs more resources per item
             baseBatchSize = Math.max(1, Math.floor(baseBatchSize * 0.5));
         }
@@ -263,7 +290,7 @@ export class BatchProcessor {
      */
     async processSingle(
         item: ExtractionInput,
-        mode: ExtractionMode
+        mode: ExtractionMode,
     ): Promise<ExtractionResult | null> {
         const results = await this.processBatch([item], mode);
         return results.length > 0 ? results[0] : null;
@@ -274,8 +301,11 @@ export class BatchProcessor {
      */
     validateBatch(items: ExtractionInput[], mode: ExtractionMode): void {
         const modeConfig = EXTRACTION_MODE_CONFIGS[mode];
-        
-        if (modeConfig.usesAI && !this.contentExtractor.isConfiguredForMode(mode)) {
+
+        if (
+            modeConfig.usesAI &&
+            !this.contentExtractor.isConfiguredForMode(mode)
+        ) {
             throw new AIModelRequiredError(mode);
         }
 
@@ -283,7 +313,9 @@ export class BatchProcessor {
         // e.g., check for valid URLs, required fields, etc.
         for (const item of items) {
             if (!item.url || !item.title) {
-                throw new Error(`Invalid extraction input: missing required fields (url, title) for item: ${JSON.stringify(item)}`);
+                throw new Error(
+                    `Invalid extraction input: missing required fields (url, title) for item: ${JSON.stringify(item)}`,
+                );
             }
         }
     }

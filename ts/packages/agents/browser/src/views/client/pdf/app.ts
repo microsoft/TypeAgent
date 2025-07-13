@@ -224,7 +224,6 @@ export class TypeAgentPDFViewerApp {
     private setupScreenshotWorkflows(): void {
         if (!this.screenshotToolbar) return;
 
-        // Set up screenshot toolbar actions - these will replace the default placeholder actions
         const noteAction: ScreenshotAction = {
             id: "note",
             label: "Add Note",
@@ -245,7 +244,6 @@ export class TypeAgentPDFViewerApp {
             },
         };
 
-        // Replace the default actions with working implementations
         this.screenshotToolbar.addAction(noteAction);
         this.screenshotToolbar.addAction(questionAction);
     }
@@ -345,7 +343,6 @@ export class TypeAgentPDFViewerApp {
         selection: SelectionInfo,
         color: HighlightColor,
     ): Promise<void> {
-        // Use PDF.js highlight manager instead of custom annotation manager
         if (!this.pdfJSHighlightManager) {
             console.error("PDF.js highlight manager not initialized");
             return;

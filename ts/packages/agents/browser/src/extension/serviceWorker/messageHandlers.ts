@@ -41,8 +41,6 @@ export async function handleMessage(
             return await handleSearchWebsitesEnhanced(message);
         }
 
-
-
         case "getSearchSuggestions": {
             return await handleGetSearchSuggestions(message);
         }

@@ -3,11 +3,11 @@
 
 import { createHash } from "crypto";
 import { conversation as kpLib } from "knowledge-processor";
-import { 
-    ExtractionMode, 
-    EXTRACTION_MODE_CONFIGS, 
+import {
+    ExtractionMode,
+    EXTRACTION_MODE_CONFIGS,
     AIModelRequiredError,
-    AIExtractionFailedError 
+    AIExtractionFailedError,
 } from "./types.js";
 
 /**
@@ -40,10 +40,10 @@ export class AIModelManager {
      */
     async extractKnowledge(
         content: string,
-        mode: ExtractionMode
+        mode: ExtractionMode,
     ): Promise<kpLib.KnowledgeResponse> {
         const modeConfig = EXTRACTION_MODE_CONFIGS[mode];
-        
+
         // Route to appropriate strategy based on mode
         if (modeConfig.knowledgeStrategy === "basic") {
             return this.extractBasicKnowledge(content);
@@ -56,8 +56,11 @@ export class AIModelManager {
             }
 
             // Hybrid strategy: basic + AI with chunking (strict - no fallbacks)
-            const result = await this.extractHybridKnowledgeStrict(content, modeConfig);
-            
+            const result = await this.extractHybridKnowledgeStrict(
+                content,
+                modeConfig,
+            );
+
             // Cache the result
             this.putInCache(cacheKey, result);
             return result;
@@ -77,14 +80,18 @@ export class AIModelManager {
         };
 
         // Extract basic topics from obvious text patterns
-        const lines = content.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-        
+        const lines = content
+            .split("\n")
+            .map((line) => line.trim())
+            .filter((line) => line.length > 0);
+
         // Look for title-like content (short lines, likely headings)
-        const potentialTitles = lines.filter(line => 
-            line.length > 5 && 
-            line.length < 100 && 
-            !line.includes('.') &&
-            line.charAt(0) === line.charAt(0).toUpperCase()
+        const potentialTitles = lines.filter(
+            (line) =>
+                line.length > 5 &&
+                line.length < 100 &&
+                !line.includes(".") &&
+                line.charAt(0) === line.charAt(0).toUpperCase(),
         );
 
         // Add potential titles as topics
@@ -92,21 +99,25 @@ export class AIModelManager {
 
         // Look for common entity patterns (capitalized words)
         const words = content.split(/\s+/);
-        const capitalizedWords = words.filter(word => 
-            word.length > 2 && 
-            word.charAt(0) === word.charAt(0).toUpperCase() &&
-            /^[A-Za-z]+$/.test(word)
+        const capitalizedWords = words.filter(
+            (word) =>
+                word.length > 2 &&
+                word.charAt(0) === word.charAt(0).toUpperCase() &&
+                /^[A-Za-z]+$/.test(word),
         );
 
         // Create basic entities from capitalized words
-        const uniqueCapitalizedWords = [...new Set(capitalizedWords)].slice(0, 10);
-        knowledge.entities = uniqueCapitalizedWords.map(word => ({
+        const uniqueCapitalizedWords = [...new Set(capitalizedWords)].slice(
+            0,
+            10,
+        );
+        knowledge.entities = uniqueCapitalizedWords.map((word) => ({
             name: word,
             type: ["concept"],
             facets: [
                 { name: "source", value: "basic_extraction" },
-                { name: "confidence", value: 0.3 }
-            ]
+                { name: "confidence", value: 0.3 },
+            ],
         }));
 
         return knowledge;
@@ -117,26 +128,26 @@ export class AIModelManager {
      */
     private async extractHybridKnowledgeStrict(
         content: string,
-        modeConfig: any
+        modeConfig: any,
     ): Promise<kpLib.KnowledgeResponse> {
         try {
             // 1. Get basic knowledge first (fast, reliable foundation)
             const basicKnowledge = this.extractBasicKnowledge(content);
-            
+
             // 2. Get AI knowledge with chunking (required - no fallbacks)
             if (!this.knowledgeExtractor) {
                 throw new Error("AI model not available for hybrid extraction");
             }
 
             const aiKnowledge = await this.extractChunkedAIKnowledge(
-                content, 
-                modeConfig.defaultChunkSize
+                content,
+                modeConfig.defaultChunkSize,
             );
-            
+
             if (!aiKnowledge) {
                 throw new Error("AI knowledge extraction returned undefined");
             }
-            
+
             // 3. Merge basic + AI knowledge
             return this.mergeKnowledgeResults(basicKnowledge, aiKnowledge);
         } catch (error) {
@@ -150,7 +161,7 @@ export class AIModelManager {
      */
     private async extractChunkedAIKnowledge(
         content: string,
-        maxChunkSize: number
+        maxChunkSize: number,
     ): Promise<kpLib.KnowledgeResponse> {
         if (!this.knowledgeExtractor) {
             throw new Error("Knowledge extractor not available");
@@ -173,23 +184,28 @@ export class AIModelManager {
         const maxConcurrent = 3;
         for (let i = 0; i < chunks.length; i += maxConcurrent) {
             const batch = chunks.slice(i, i + maxConcurrent);
-            const batchPromises = batch.map(chunk => 
-                this.knowledgeExtractor!.extract(chunk)
+            const batchPromises = batch.map((chunk) =>
+                this.knowledgeExtractor!.extract(chunk),
             );
 
             const batchResults = await Promise.allSettled(batchPromises);
-            
+
             batchResults.forEach((result, index) => {
                 if (result.status === "fulfilled" && result.value) {
                     chunkResults.push(result.value);
                 } else {
-                    console.warn(`Chunk ${i + index} extraction failed:`, result.status === "rejected" ? result.reason : "undefined result");
+                    console.warn(
+                        `Chunk ${i + index} extraction failed:`,
+                        result.status === "rejected"
+                            ? result.reason
+                            : "undefined result",
+                    );
                 }
             });
 
             // Small delay between batches to be respectful to AI service
             if (i + maxConcurrent < chunks.length) {
-                await new Promise(resolve => setTimeout(resolve, 100));
+                await new Promise((resolve) => setTimeout(resolve, 100));
             }
         }
 
@@ -200,14 +216,19 @@ export class AIModelManager {
     /**
      * Intelligently chunk content preserving sentence/paragraph boundaries
      */
-    private intelligentChunking(content: string, maxChunkSize: number): string[] {
+    private intelligentChunking(
+        content: string,
+        maxChunkSize: number,
+    ): string[] {
         const chunks: string[] = [];
-        
+
         // First try to split by paragraphs
-        const paragraphs = content.split(/\n\s*\n/).filter(p => p.trim().length > 0);
-        
+        const paragraphs = content
+            .split(/\n\s*\n/)
+            .filter((p) => p.trim().length > 0);
+
         let currentChunk = "";
-        
+
         for (const paragraph of paragraphs) {
             if (currentChunk.length + paragraph.length <= maxChunkSize) {
                 currentChunk += (currentChunk ? "\n\n" : "") + paragraph;
@@ -216,23 +237,32 @@ export class AIModelManager {
                     chunks.push(currentChunk);
                     currentChunk = "";
                 }
-                
+
                 // If paragraph is too long, split by sentences
                 if (paragraph.length > maxChunkSize) {
-                    const sentences = paragraph.split(/[.!?]+/).filter(s => s.trim().length > 0);
-                    
+                    const sentences = paragraph
+                        .split(/[.!?]+/)
+                        .filter((s) => s.trim().length > 0);
+
                     for (const sentence of sentences) {
-                        if (currentChunk.length + sentence.length <= maxChunkSize) {
-                            currentChunk += (currentChunk ? ". " : "") + sentence.trim();
+                        if (
+                            currentChunk.length + sentence.length <=
+                            maxChunkSize
+                        ) {
+                            currentChunk +=
+                                (currentChunk ? ". " : "") + sentence.trim();
                         } else {
                             if (currentChunk) {
                                 chunks.push(currentChunk + ".");
                                 currentChunk = "";
                             }
-                            
+
                             // If even a single sentence is too long, truncate it
                             if (sentence.length > maxChunkSize) {
-                                chunks.push(sentence.substring(0, maxChunkSize - 3) + "...");
+                                chunks.push(
+                                    sentence.substring(0, maxChunkSize - 3) +
+                                        "...",
+                                );
                             } else {
                                 currentChunk = sentence.trim();
                             }
@@ -243,11 +273,11 @@ export class AIModelManager {
                 }
             }
         }
-        
+
         if (currentChunk) {
             chunks.push(currentChunk);
         }
-        
+
         return chunks;
     }
 
@@ -256,7 +286,7 @@ export class AIModelManager {
      */
     private mergeKnowledgeResults(
         basicKnowledge: kpLib.KnowledgeResponse,
-        aiKnowledge: kpLib.KnowledgeResponse
+        aiKnowledge: kpLib.KnowledgeResponse,
     ): kpLib.KnowledgeResponse {
         const merged: kpLib.KnowledgeResponse = {
             topics: [],
@@ -267,26 +297,30 @@ export class AIModelManager {
 
         // Merge topics (removing duplicates, prioritizing AI results)
         const allTopics = [...aiKnowledge.topics, ...basicKnowledge.topics];
-        merged.topics = [...new Set(allTopics.map(t => t.toLowerCase()))]
-            .map(normalizedTopic => {
+        merged.topics = [...new Set(allTopics.map((t) => t.toLowerCase()))]
+            .map((normalizedTopic) => {
                 // Find original casing, preferring AI result
-                return allTopics.find(t => t.toLowerCase() === normalizedTopic) || normalizedTopic;
+                return (
+                    allTopics.find(
+                        (t) => t.toLowerCase() === normalizedTopic,
+                    ) || normalizedTopic
+                );
             })
             .slice(0, 20);
 
         // Merge entities (removing duplicates by name, prioritizing AI results)
         const entityMap = new Map<string, kpLib.ConcreteEntity>();
-        
+
         // Add basic entities first
-        basicKnowledge.entities.forEach(entity => {
+        basicKnowledge.entities.forEach((entity) => {
             entityMap.set(entity.name.toLowerCase(), entity);
         });
-        
+
         // Add AI entities (overwriting basic ones with same name)
-        aiKnowledge.entities.forEach(entity => {
+        aiKnowledge.entities.forEach((entity) => {
             entityMap.set(entity.name.toLowerCase(), entity);
         });
-        
+
         merged.entities = Array.from(entityMap.values()).slice(0, 30);
 
         // Use AI actions directly (basic extraction doesn't produce actions)
@@ -299,7 +333,9 @@ export class AIModelManager {
     /**
      * Aggregate knowledge results from multiple chunks
      */
-    private aggregateChunkResults(chunkResults: kpLib.KnowledgeResponse[]): kpLib.KnowledgeResponse {
+    private aggregateChunkResults(
+        chunkResults: kpLib.KnowledgeResponse[],
+    ): kpLib.KnowledgeResponse {
         const aggregated: kpLib.KnowledgeResponse = {
             topics: [],
             entities: [],
@@ -308,18 +344,24 @@ export class AIModelManager {
         };
 
         const topicCounts = new Map<string, number>();
-        const entityMap = new Map<string, { entity: kpLib.ConcreteEntity; count: number }>();
+        const entityMap = new Map<
+            string,
+            { entity: kpLib.ConcreteEntity; count: number }
+        >();
         const allActions: kpLib.Action[] = [];
 
         // Aggregate topics with frequency counting
-        chunkResults.forEach(result => {
-            result.topics.forEach(topic => {
+        chunkResults.forEach((result) => {
+            result.topics.forEach((topic) => {
                 const normalized = topic.toLowerCase();
-                topicCounts.set(normalized, (topicCounts.get(normalized) || 0) + 1);
+                topicCounts.set(
+                    normalized,
+                    (topicCounts.get(normalized) || 0) + 1,
+                );
             });
 
             // Aggregate entities
-            result.entities.forEach(entity => {
+            result.entities.forEach((entity) => {
                 const normalized = entity.name.toLowerCase();
                 const existing = entityMap.get(normalized);
                 if (existing) {
@@ -343,7 +385,7 @@ export class AIModelManager {
         aggregated.entities = Array.from(entityMap.values())
             .sort((a, b) => b.count - a.count)
             .slice(0, 30)
-            .map(item => item.entity);
+            .map((item) => item.entity);
 
         // Deduplicate actions (simple approach - could be more sophisticated)
         aggregated.actions = allActions.slice(0, 15);
@@ -356,9 +398,9 @@ export class AIModelManager {
      * Generate cache key for content and mode
      */
     private getCacheKey(content: string, mode: ExtractionMode): string {
-        const contentHash = createHash('sha256')
+        const contentHash = createHash("sha256")
             .update(content)
-            .digest('hex')
+            .digest("hex")
             .substring(0, 12);
         return `${contentHash}:${mode}`;
     }
@@ -396,7 +438,7 @@ export class AIModelManager {
         this.responseCache.set(key, {
             response,
             expiresAt: Date.now() + this.cacheTTL,
-            cachedAt: Date.now()
+            cachedAt: Date.now(),
         });
     }
 
@@ -414,7 +456,7 @@ export class AIModelManager {
         return {
             size: this.responseCache.size,
             maxSize: this.cacheMaxSize,
-            hitRate: 0 // Would need hit/miss tracking
+            hitRate: 0, // Would need hit/miss tracking
         };
     }
 }

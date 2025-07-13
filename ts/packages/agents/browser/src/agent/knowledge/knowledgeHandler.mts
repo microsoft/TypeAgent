@@ -1399,8 +1399,8 @@ export async function getExtractionAnalytics(
                     basic: 0,
                     content: 0,
                     actions: 0,
-                    full: 0
-                }
+                    full: 0,
+                },
             },
         };
     } catch (error) {
@@ -1432,8 +1432,8 @@ export async function generateQualityReport(
                     excellent: 0,
                     good: 0,
                     fair: 0,
-                    poor: 0
-                }
+                    poor: 0,
+                },
             },
         };
     } catch (error) {

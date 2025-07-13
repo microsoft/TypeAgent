@@ -616,14 +616,17 @@ export async function importWebsiteDataFromSession(
                     }
                 };
 
-                const contentInputs: ExtractionInput[] = websites.map((site) => ({
-                    url: site.metadata.url,
-                    title: site.metadata.title || site.metadata.url,
-                    textContent: site.textChunks?.join("\n\n") || "",
-                    source: type === "bookmarks" ? "bookmark" : "history",
-                    timestamp:
-                        site.metadata.visitDate || site.metadata.bookmarkDate,
-                }));
+                const contentInputs: ExtractionInput[] = websites.map(
+                    (site) => ({
+                        url: site.metadata.url,
+                        title: site.metadata.title || site.metadata.url,
+                        textContent: site.textChunks?.join("\n\n") || "",
+                        source: type === "bookmarks" ? "bookmark" : "history",
+                        timestamp:
+                            site.metadata.visitDate ||
+                            site.metadata.bookmarkDate,
+                    }),
+                );
 
                 try {
                     const enhancedResults = await extractor.extractBatch(
@@ -929,7 +932,8 @@ export async function importHtmlFolderFromSession(
                 topicsIdentified: 0, // Topics extraction would need different logic
                 actionsDetected: websiteDataResults.reduce(
                     (sum, data) =>
-                        sum + (data.extractionResult?.detectedActions?.length || 0),
+                        sum +
+                        (data.extractionResult?.detectedActions?.length || 0),
                     0,
                 ),
             },
@@ -994,12 +998,6 @@ export async function importHtmlFolder(
     }
 }
 
-/**
- * Import HTML files from local file system (ActionContext version for regular actions)
- */
-/**
- * Helper function to convert HTML file data to website data format
- */
 /**
  * Helper function to convert WebsiteData to Website format for collection storage
  */

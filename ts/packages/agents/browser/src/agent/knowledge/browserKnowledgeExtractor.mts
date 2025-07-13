@@ -1,14 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { 
+import {
     ContentExtractor,
     BatchProcessor,
     ExtractionMode,
     ExtractionInput,
     BatchProgress,
     AIModelRequiredError,
-    AIExtractionFailedError 
+    AIExtractionFailedError,
 } from "website-memory";
 import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "../actionHandler.mjs";
@@ -17,8 +17,7 @@ import { openai as ai } from "aiclient";
 
 /**
  * Browser Knowledge Extractor that delegates to the website-memory package
- * This simplifies the browser agent by removing duplication
- */
+  */
 export class BrowserKnowledgeExtractor {
     private contentExtractor: ContentExtractor;
     private batchProcessor: BatchProcessor;
@@ -38,7 +37,7 @@ export class BrowserKnowledgeExtractor {
         const config: any = {
             mode: "content", // Default mode
         };
-        
+
         if (knowledgeExtractor) {
             config.knowledgeExtractor = knowledgeExtractor;
         }
@@ -52,17 +51,20 @@ export class BrowserKnowledgeExtractor {
      */
     async extractKnowledge(
         content: ExtractionInput,
-        mode: ExtractionMode = "content"
+        mode: ExtractionMode = "content",
     ) {
         try {
             // Simple delegation - mode automatically determines AI usage and knowledge strategy
             return await this.contentExtractor.extract(content, mode);
         } catch (error) {
-            if (error instanceof AIModelRequiredError || error instanceof AIExtractionFailedError) {
+            if (
+                error instanceof AIModelRequiredError ||
+                error instanceof AIExtractionFailedError
+            ) {
                 // Re-throw AI errors with context
                 throw new Error(
                     `Browser knowledge extraction failed: ${error.message}. ` +
-                    `Consider using 'basic' mode for non-AI extraction.`
+                        `Consider using 'basic' mode for non-AI extraction.`,
                 );
             }
             throw error;
@@ -75,15 +77,22 @@ export class BrowserKnowledgeExtractor {
     async extractBatch(
         contents: ExtractionInput[],
         mode: ExtractionMode = "content",
-        progressCallback?: (progress: BatchProgress) => void
+        progressCallback?: (progress: BatchProgress) => void,
     ) {
         try {
-            return await this.batchProcessor.processBatch(contents, mode, progressCallback);
+            return await this.batchProcessor.processBatch(
+                contents,
+                mode,
+                progressCallback,
+            );
         } catch (error) {
-            if (error instanceof AIModelRequiredError || error instanceof AIExtractionFailedError) {
+            if (
+                error instanceof AIModelRequiredError ||
+                error instanceof AIExtractionFailedError
+            ) {
                 throw new Error(
                     `Browser batch extraction failed: ${error.message}. ` +
-                    `Consider using 'basic' mode for non-AI extraction.`
+                        `Consider using 'basic' mode for non-AI extraction.`,
                 );
             }
             throw error;

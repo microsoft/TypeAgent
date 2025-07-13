@@ -152,7 +152,6 @@ export class RelationshipDiscovery {
             currentUrl,
         );
 
-        // Sort by enhanced quality score instead of just confidence
         return enhancedResults.sort(
             (a, b) =>
                 b.qualityScore * b.confidence - a.qualityScore * a.confidence,
