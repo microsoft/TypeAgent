@@ -284,12 +284,36 @@ export async function indexWebPageContent(
         }
 
         if (context.agentContext.websiteCollection) {
-            context.agentContext.websiteCollection.addWebsites([websiteObj]);
-
             if (parameters.extractKnowledge) {
-                await context.agentContext.websiteCollection.buildIndex();
+                try {
+                    const isNewPage = !checkPageExistsInIndex(parameters.url, context);
+                    
+                    if (isNewPage) {
+                        const docPart = website.WebsiteDocPart.fromWebsite(websiteObj);
+                        const result = await context.agentContext.websiteCollection.addWebsiteToIndex(docPart);
+                        if (hasIndexingErrors(result)) {
+                            console.warn("Incremental indexing failed, falling back to full rebuild");
+                            context.agentContext.websiteCollection.addWebsites([websiteObj]);
+                            await context.agentContext.websiteCollection.buildIndex();
+                        }
+                    } else {
+                        const docPart = website.WebsiteDocPart.fromWebsite(websiteObj);
+                        const result = await context.agentContext.websiteCollection.updateWebsiteInIndex(
+                            parameters.url, 
+                            docPart
+                        );
+                        if (hasIndexingErrors(result)) {
+                            console.warn("Update indexing failed, falling back to full rebuild");
+                            context.agentContext.websiteCollection.addWebsites([websiteObj]);
+                            await context.agentContext.websiteCollection.buildIndex();
+                        }
+                    }
+                } catch (error) {
+                    console.warn("Indexing error, falling back to full rebuild:", error);
+                    context.agentContext.websiteCollection.addWebsites([websiteObj]);
+                    await context.agentContext.websiteCollection.buildIndex();
+                }
 
-                // Persist the updated collection to disk
                 try {
                     if (context.agentContext.index?.path) {
                         await context.agentContext.websiteCollection.writeToFile(
@@ -1757,4 +1781,26 @@ function analyzeTopDomains(websites: any[], limit: number) {
                 favicon: `https://www.google.com/s2/favicons?domain=${domain}`,
             };
         });
+}
+
+function checkPageExistsInIndex(
+    url: string,
+    context: SessionContext<BrowserActionContext>
+): boolean {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+        if (!websiteCollection) {
+            return false;
+        }
+
+        const websites = websiteCollection.messages.getAll();
+        return websites.some((site: any) => site.metadata.url === url);
+    } catch (error) {
+        console.error("Error checking page existence:", error);
+        return false;
+    }
+}
+
+function hasIndexingErrors(result: any): boolean {
+    return !!(result?.semanticRefs?.error || result?.secondaryIndexResults?.error);
 }

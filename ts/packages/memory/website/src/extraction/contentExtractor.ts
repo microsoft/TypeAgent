@@ -366,7 +366,7 @@ export class ContentExtractor {
             // Combine HTML fragments
             return content.htmlFragments
                 .map((frag) =>
-                    typeof frag === "string" ? frag : frag.html || "",
+                    typeof frag === "string" ? frag : frag.content || "",
                 )
                 .join("\n");
         }

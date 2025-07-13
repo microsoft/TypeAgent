@@ -664,7 +664,13 @@ export async function importWebsiteDataFromSession(
         }
 
         context.agentContext.websiteCollection.addWebsites(websites);
-        await context.agentContext.websiteCollection.buildIndex();
+        
+        try {
+            await context.agentContext.websiteCollection.addToIndex();
+        } catch (error) {
+            debug(`Incremental indexing failed, falling back to full rebuild: ${error}`);
+            await context.agentContext.websiteCollection.buildIndex();
+        }
 
         // Persist the website collection to disk
         try {
@@ -881,7 +887,12 @@ export async function importHtmlFolderFromSession(
             );
             context.agentContext.websiteCollection.addWebsites(websites);
 
-            await context.agentContext.websiteCollection.buildIndex();
+            try {
+                await context.agentContext.websiteCollection.addToIndex();
+            } catch (error) {
+                debug(`Incremental indexing failed, falling back to full rebuild: ${error}`);
+                await context.agentContext.websiteCollection.buildIndex();
+            }
 
             try {
                 if (context.agentContext.index?.path) {
