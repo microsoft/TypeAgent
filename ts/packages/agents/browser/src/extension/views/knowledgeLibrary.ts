@@ -1442,7 +1442,11 @@ class WebsiteLibraryPanelFullPage {
         }
 
         try {
-            const response = await this.chromeExtensionService.getDiscoverInsights(10, "30d");
+            const response =
+                await this.chromeExtensionService.getDiscoverInsights(
+                    10,
+                    "30d",
+                );
 
             if (response.success) {
                 this.discoverData = {
@@ -1473,7 +1477,7 @@ class WebsiteLibraryPanelFullPage {
         if (emptyState) {
             emptyState.style.display = "block";
         }
-        
+
         const container = document.getElementById("discoverContent");
         if (container) {
             container.innerHTML = `
@@ -1493,9 +1497,10 @@ class WebsiteLibraryPanelFullPage {
         if (!this.discoverData) return;
 
         // Check if we have any data to display
-        const hasData = this.discoverData.trendingTopics.length > 0 || 
-                       this.discoverData.readingPatterns.some(p => p.activity > 0) || 
-                       this.discoverData.popularPages.length > 0;
+        const hasData =
+            this.discoverData.trendingTopics.length > 0 ||
+            this.discoverData.readingPatterns.some((p) => p.activity > 0) ||
+            this.discoverData.popularPages.length > 0;
 
         // Show/hide empty state based on data availability
         const emptyState = document.getElementById("discoverEmptyState");
@@ -1533,7 +1538,7 @@ class WebsiteLibraryPanelFullPage {
                 <div class="card-body">
                     <h6 class="card-title text-capitalize">${this.escapeHtml(topic.topic)}</h6>
                     <div class="d-flex align-items-center justify-content-between">
-                        <span class="text-muted">${topic.count} page${topic.count !== 1 ? 's' : ''}</span>
+                        <span class="text-muted">${topic.count} page${topic.count !== 1 ? "s" : ""}</span>
                         <div class="trend-indicator">
                             <i class="bi bi-arrow-${topic.trend === "up" ? "up" : topic.trend === "down" ? "down" : "right"} 
                                text-${topic.trend === "up" ? "success" : topic.trend === "down" ? "danger" : "secondary"}"></i>
@@ -1553,8 +1558,10 @@ class WebsiteLibraryPanelFullPage {
         const container = document.getElementById("readingPatterns");
         if (!container || !this.discoverData) return;
 
-        if (this.discoverData.readingPatterns.length === 0 || 
-            this.discoverData.readingPatterns.every(p => p.activity === 0)) {
+        if (
+            this.discoverData.readingPatterns.length === 0 ||
+            this.discoverData.readingPatterns.every((p) => p.activity === 0)
+        ) {
             container.innerHTML = `
                 <div class="empty-state">
                     <i class="bi bi-clock-history"></i>
@@ -1565,8 +1572,10 @@ class WebsiteLibraryPanelFullPage {
             return;
         }
 
-        const maxActivity = Math.max(...this.discoverData.readingPatterns.map(p => p.activity));
-        
+        const maxActivity = Math.max(
+            ...this.discoverData.readingPatterns.map((p) => p.activity),
+        );
+
         container.innerHTML = `
             <div class="card discover-card">
                 <div class="card-body">
@@ -1584,7 +1593,7 @@ class WebsiteLibraryPanelFullPage {
                             .join("")}
                     </div>
                     <div class="text-center mt-2">
-                        <small class="text-muted">Most active day: ${this.discoverData.readingPatterns.find(p => p.peak)?.timeframe || 'None'}</small>
+                        <small class="text-muted">Most active day: ${this.discoverData.readingPatterns.find((p) => p.peak)?.timeframe || "None"}</small>
                     </div>
                 </div>
             </div>
@@ -1610,19 +1619,20 @@ class WebsiteLibraryPanelFullPage {
         }
 
         // Convert popular pages to website format for rendering
-        const popularPagesAsWebsites: Website[] = this.discoverData.popularPages.map(page => ({
-            url: page.url,
-            title: page.title,
-            domain: page.domain,
-            visitCount: page.visitCount,
-            lastVisited: page.lastVisited,
-            source: page.isBookmarked ? "bookmarks" : "history",
-            score: page.visitCount,
-            knowledge: {
-                hasKnowledge: false,
-                status: "none" as const,
-            },
-        }));
+        const popularPagesAsWebsites: Website[] =
+            this.discoverData.popularPages.map((page) => ({
+                url: page.url,
+                title: page.title,
+                domain: page.domain,
+                visitCount: page.visitCount,
+                lastVisited: page.lastVisited,
+                source: page.isBookmarked ? "bookmarks" : "history",
+                score: page.visitCount,
+                knowledge: {
+                    hasKnowledge: false,
+                    status: "none" as const,
+                },
+            }));
 
         container.innerHTML = this.renderListView(popularPagesAsWebsites);
     }
@@ -1906,7 +1916,7 @@ class WebsiteLibraryPanelFullPage {
     }
 
     private escapeHtml(text: string): string {
-        const div = document.createElement('div');
+        const div = document.createElement("div");
         div.textContent = text;
         return div.innerHTML;
     }
@@ -2042,9 +2052,10 @@ class WebsiteLibraryPanelFullPage {
         if (!this.analyticsData) return;
 
         // Check if we have meaningful analytics data to display
-        const hasData = this.analyticsData.overview.totalSites > 0 || 
-                       this.analyticsData.overview.knowledgeExtracted > 0 ||
-                       this.analyticsData.insights.some(insight => insight.value > 0);
+        const hasData =
+            this.analyticsData.overview.totalSites > 0 ||
+            this.analyticsData.overview.knowledgeExtracted > 0 ||
+            this.analyticsData.insights.some((insight) => insight.value > 0);
 
         // Show/hide empty state based on data availability
         const emptyState = document.getElementById("analyticsEmptyState");
@@ -2074,8 +2085,9 @@ class WebsiteLibraryPanelFullPage {
             `;
 
             // Fetch top domains data
-            const domainsData = await this.chromeExtensionService.getTopDomains(10);
-            
+            const domainsData =
+                await this.chromeExtensionService.getTopDomains(10);
+
             if (!domainsData.domains || domainsData.domains.length === 0) {
                 container.innerHTML = `
                     <div class="empty-message">
@@ -2088,7 +2100,8 @@ class WebsiteLibraryPanelFullPage {
 
             // Render domain list
             const domainsHtml = domainsData.domains
-                .map((domain: any) => `
+                .map(
+                    (domain: any) => `
                     <div class="domain-item">
                         <div class="domain-info">
                             <img src="https://www.google.com/s2/favicons?domain=${domain.domain}" 
@@ -2106,10 +2119,11 @@ class WebsiteLibraryPanelFullPage {
                             <div class="bar-fill" style="width: ${Math.min(domain.percentage, 100)}%"></div>
                         </div>
                     </div>
-                `).join("");
+                `,
+                )
+                .join("");
 
             container.innerHTML = domainsHtml;
-
         } catch (error) {
             console.error("Failed to render top domains:", error);
             container.innerHTML = `
@@ -2379,8 +2393,9 @@ class WebsiteLibraryPanelFullPage {
             `;
 
             // Fetch activity trends data
-            const trendsData = await this.chromeExtensionService.getActivityTrends("30d");
-            
+            const trendsData =
+                await this.chromeExtensionService.getActivityTrends("30d");
+
             if (!trendsData.trends || trendsData.trends.length === 0) {
                 container.innerHTML = `
                     <div class="card">
@@ -2399,20 +2414,31 @@ class WebsiteLibraryPanelFullPage {
 
             // Create bar chart visualization
             const trends = trendsData.trends;
-            const maxActivity = Math.max(...trends.map((t: any) => t.visits + t.bookmarks));
+            const maxActivity = Math.max(
+                ...trends.map((t: any) => t.visits + t.bookmarks),
+            );
             const recentTrends = trends.slice(-14); // Show last 14 data points
 
             const chartBars = recentTrends
                 .map((trend: any) => {
                     const totalActivity = trend.visits + trend.bookmarks;
-                    const date = new Date(trend.date).toLocaleDateString('en-US', { 
-                        month: 'short', 
-                        day: 'numeric' 
-                    });
-                    
-                    const visitsHeight = maxActivity > 0 ? (trend.visits / maxActivity) * 100 : 0;
-                    const bookmarksHeight = maxActivity > 0 ? (trend.bookmarks / maxActivity) * 100 : 0;
-                    
+                    const date = new Date(trend.date).toLocaleDateString(
+                        "en-US",
+                        {
+                            month: "short",
+                            day: "numeric",
+                        },
+                    );
+
+                    const visitsHeight =
+                        maxActivity > 0
+                            ? (trend.visits / maxActivity) * 100
+                            : 0;
+                    const bookmarksHeight =
+                        maxActivity > 0
+                            ? (trend.bookmarks / maxActivity) * 100
+                            : 0;
+
                     return `
                         <div class="chart-bar" title="${date}: ${totalActivity} activities">
                             <div class="bar-segment visits" style="height: ${visitsHeight}%" title="Visits: ${trend.visits}"></div>
@@ -2420,10 +2446,11 @@ class WebsiteLibraryPanelFullPage {
                             <div class="bar-label">${date}</div>
                         </div>
                     `;
-                }).join('');
+                })
+                .join("");
 
             const summary = trendsData.summary || {};
-            
+
             container.innerHTML = `
                 <div class="card">
                     <div class="card-body">
@@ -2440,7 +2467,7 @@ class WebsiteLibraryPanelFullPage {
                             </div>
                             <div class="summary-stat">
                                 <span class="stat-label">Peak Day</span>
-                                <span class="stat-value">${summary.peakDay ? new Date(summary.peakDay).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'N/A'}</span>
+                                <span class="stat-value">${summary.peakDay ? new Date(summary.peakDay).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "N/A"}</span>
                             </div>
                         </div>
                         
@@ -2462,7 +2489,6 @@ class WebsiteLibraryPanelFullPage {
                     </div>
                 </div>
             `;
-
         } catch (error) {
             console.error("Failed to render activity charts:", error);
             container.innerHTML = `
@@ -3498,13 +3524,15 @@ class ChromeExtensionServiceImpl implements ChromeExtensionService {
             try {
                 const response = await chrome.runtime.sendMessage({
                     type: "getTopDomains",
-                    limit
+                    limit,
                 });
 
                 if (response.success) {
                     return response.domains;
                 } else {
-                    throw new Error(response.error || "Failed to get top domains");
+                    throw new Error(
+                        response.error || "Failed to get top domains",
+                    );
                 }
             } catch (error) {
                 console.error("Failed to get top domains:", error);
@@ -3519,13 +3547,15 @@ class ChromeExtensionServiceImpl implements ChromeExtensionService {
             try {
                 const response = await chrome.runtime.sendMessage({
                     type: "getActivityTrends",
-                    timeRange
+                    timeRange,
                 });
 
                 if (response.success) {
                     return response.trends;
                 } else {
-                    throw new Error(response.error || "Failed to get activity trends");
+                    throw new Error(
+                        response.error || "Failed to get activity trends",
+                    );
                 }
             } catch (error) {
                 console.error("Failed to get activity trends:", error);
@@ -3535,19 +3565,24 @@ class ChromeExtensionServiceImpl implements ChromeExtensionService {
         throw new Error("Chrome extension not available");
     }
 
-    async getDiscoverInsights(limit: number = 10, timeframe: string = "30d"): Promise<any> {
+    async getDiscoverInsights(
+        limit: number = 10,
+        timeframe: string = "30d",
+    ): Promise<any> {
         if (typeof chrome !== "undefined" && chrome.runtime) {
             try {
                 const response = await chrome.runtime.sendMessage({
                     type: "getDiscoverInsights",
                     limit,
-                    timeframe
+                    timeframe,
                 });
 
                 if (response.success) {
                     return response;
                 } else {
-                    throw new Error(response.error || "Failed to get discover insights");
+                    throw new Error(
+                        response.error || "Failed to get discover insights",
+                    );
                 }
             } catch (error) {
                 console.error("Failed to get discover insights:", error);

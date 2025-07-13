@@ -42,7 +42,7 @@ export async function handleMessage(
                 const result = await sendActionToAgent({
                     actionName: "getTopDomains",
                     parameters: {
-                        limit: message.limit || 10
+                        limit: message.limit || 10,
                     },
                 });
 
@@ -50,15 +50,18 @@ export async function handleMessage(
                     success: result.success || false,
                     domains: {
                         domains: result.domains || [],
-                        totalSites: result.totalSites || 0
-                    }
+                        totalSites: result.totalSites || 0,
+                    },
                 };
             } catch (error) {
                 console.error("Error getting top domains:", error);
                 return {
                     success: false,
-                    error: error instanceof Error ? error.message : "Unknown error",
-                    domains: { domains: [], totalSites: 0 }
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error",
+                    domains: { domains: [], totalSites: 0 },
                 };
             }
         }
@@ -69,7 +72,7 @@ export async function handleMessage(
                     actionName: "getActivityTrends",
                     parameters: {
                         timeRange: message.timeRange || "30d",
-                        granularity: message.granularity || "day"
+                        granularity: message.granularity || "day",
                     },
                 });
 
@@ -77,15 +80,18 @@ export async function handleMessage(
                     success: result.success || false,
                     trends: {
                         trends: result.trends || [],
-                        summary: result.summary || {}
-                    }
+                        summary: result.summary || {},
+                    },
                 };
             } catch (error) {
                 console.error("Error getting activity trends:", error);
                 return {
                     success: false,
-                    error: error instanceof Error ? error.message : "Unknown error",
-                    trends: { trends: [], summary: {} }
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error",
+                    trends: { trends: [], summary: {} },
                 };
             }
         }

@@ -3,6 +3,8 @@
 
 import { conversation as kpLib } from "knowledge-processor";
 import * as cheerio from "cheerio";
+import DOMPurify from "dompurify";
+import { JSDOM } from "jsdom";
 import { AIModelManager } from "./aiModelManager.js";
 import {
     ExtractionMode,
@@ -486,21 +488,10 @@ export class ContentExtractor {
             );
 
             // Fallback to simple string manipulation if cheerio fails
-            let textContent = html.replace(
-                /<script[^>]*>[\s\S]*?<\/script>/gi,
-                "",
-            );
-            textContent = textContent.replace(
-                /<style[^>]*>[\s\S]*?<\/style>/gi,
-                "",
-            );
-            textContent = textContent.replace(/<[^>]+>/g, " ");
-            textContent = textContent.replace(/&nbsp;/g, " ");
-            textContent = textContent.replace(/&amp;/g, "&");
-            textContent = textContent.replace(/&lt;/g, "<");
-            textContent = textContent.replace(/&gt;/g, ">");
-            textContent = textContent.replace(/&quot;/g, '"');
-            textContent = textContent.replace(/\s+/g, " ").trim();
+            const window = new JSDOM("").window;
+            const purify = DOMPurify(window);
+            const sanitizedContent = purify.sanitize(html);
+            const textContent = sanitizedContent.replace(/\s+/g, " ").trim();
 
             const words = textContent.split(/\s+/).length;
 

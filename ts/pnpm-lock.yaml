@@ -3033,9 +3033,15 @@ importers:
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
+      dompurify:
+        specifier: ^3.2.6
+        version: 3.2.6
       get-folder-size:
         specifier: ^5.0.0
         version: 5.0.0
+      jsdom:
+        specifier: ^26.1.0
+        version: 26.1.0
       knowledge-processor:
         specifier: workspace:*
         version: link:../../knowledgeProcessor
@@ -3064,6 +3070,9 @@ importers:
       '@types/jest':
         specifier: ^29.5.7
         version: 29.5.14
+      '@types/jsdom':
+        specifier: ^21.1.7
+        version: 21.1.7
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
@@ -16227,7 +16236,7 @@ snapshots:
     dependencies:
       '@types/node': 20.17.47
       '@types/tough-cookie': 4.0.5
-      parse5: 7.1.2
+      parse5: 7.3.0
 
   '@types/json-schema@7.0.15': {}
 

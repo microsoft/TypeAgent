@@ -1106,7 +1106,7 @@ export async function getTopDomains(
 
         const websites = websiteCollection.messages.getAll();
         const limit = parameters.limit || 10;
-        
+
         // Count sites by domain
         const domainCounts: { [domain: string]: number } = {};
         let totalCount = websites.length;
@@ -1124,7 +1124,7 @@ export async function getTopDomains(
             .map(([domain, count]) => ({
                 domain,
                 count,
-                percentage: parseFloat(((count / totalCount) * 100).toFixed(1))
+                percentage: parseFloat(((count / totalCount) * 100).toFixed(1)),
             }));
 
         return {
@@ -1180,40 +1180,56 @@ export async function getActivityTrends(
 
         const websites = websiteCollection.messages.getAll();
         const timeRange = parameters.timeRange || "30d";
-        
+
         // Calculate date range
         const endDate = new Date();
         const startDate = new Date();
         switch (timeRange) {
-            case "7d": startDate.setDate(endDate.getDate() - 7); break;
-            case "30d": startDate.setDate(endDate.getDate() - 30); break;
-            case "90d": startDate.setDate(endDate.getDate() - 90); break;
-            default: startDate.setDate(endDate.getDate() - 30);
+            case "7d":
+                startDate.setDate(endDate.getDate() - 7);
+                break;
+            case "30d":
+                startDate.setDate(endDate.getDate() - 30);
+                break;
+            case "90d":
+                startDate.setDate(endDate.getDate() - 90);
+                break;
+            default:
+                startDate.setDate(endDate.getDate() - 30);
         }
 
         // Extract activity data from websites
-        const activityMap = new Map<string, { visits: number; bookmarks: number }>();
-        
+        const activityMap = new Map<
+            string,
+            { visits: number; bookmarks: number }
+        >();
+
         for (const site of websites) {
             const metadata = site.metadata as any;
-            
+
             // Process visit dates
             if (metadata.visitDate) {
                 const visitDate = new Date(metadata.visitDate);
                 if (visitDate >= startDate && visitDate <= endDate) {
-                    const dateKey = visitDate.toISOString().split('T')[0];
-                    const current = activityMap.get(dateKey) || { visits: 0, bookmarks: 0 };
+                    const dateKey = visitDate.toISOString().split("T")[0];
+                    const current = activityMap.get(dateKey) || {
+                        visits: 0,
+                        bookmarks: 0,
+                    };
                     current.visits += metadata.visitCount || 1;
                     activityMap.set(dateKey, current);
                 }
             }
-            
+
             // Process bookmark dates
             if (metadata.bookmarkDate) {
                 const bookmarkDate = new Date(metadata.bookmarkDate);
                 if (bookmarkDate >= startDate && bookmarkDate <= endDate) {
-                    const dateKey = bookmarkDate.toISOString().split('T')[0];
-                    const current = activityMap.get(dateKey) || { visits: 0, bookmarks: 0 };
+                    const dateKey = bookmarkDate.toISOString().split("T")[0];
+                    const current = activityMap.get(dateKey) || {
+                        visits: 0,
+                        bookmarks: 0,
+                    };
                     current.bookmarks += 1;
                     activityMap.set(dateKey, current);
                 }
@@ -1222,19 +1238,23 @@ export async function getActivityTrends(
 
         // Convert to trends array
         const trends = Array.from(activityMap.entries())
-            .map(([date, activity]) => ({ 
-                date, 
-                visits: activity.visits, 
-                bookmarks: activity.bookmarks 
+            .map(([date, activity]) => ({
+                date,
+                visits: activity.visits,
+                bookmarks: activity.bookmarks,
             }))
             .sort((a, b) => a.date.localeCompare(b.date));
 
         // Calculate summary statistics
         const totalVisits = trends.reduce((sum, t) => sum + t.visits, 0);
         const totalBookmarks = trends.reduce((sum, t) => sum + t.bookmarks, 0);
-        const peakDay = trends.reduce((peak, current) => 
-            (current.visits + current.bookmarks) > (peak.visits + peak.bookmarks) ? current : peak, 
-            trends[0] || { date: null, visits: 0, bookmarks: 0 }
+        const peakDay = trends.reduce(
+            (peak, current) =>
+                current.visits + current.bookmarks >
+                peak.visits + peak.bookmarks
+                    ? current
+                    : peak,
+            trends[0] || { date: null, visits: 0, bookmarks: 0 },
         );
 
         return {
@@ -1242,7 +1262,10 @@ export async function getActivityTrends(
             summary: {
                 totalActivity: totalVisits + totalBookmarks,
                 peakDay: peakDay.date,
-                averagePerDay: trends.length > 0 ? (totalVisits + totalBookmarks) / trends.length : 0,
+                averagePerDay:
+                    trends.length > 0
+                        ? (totalVisits + totalBookmarks) / trends.length
+                        : 0,
                 timeRange,
             },
             success: true,
@@ -1448,13 +1471,13 @@ export async function getDiscoverInsights(
 
         // Analyze trending topics from titles and knowledge entities
         const trendingTopics = analyzeTrendingTopics(websites, limit);
-        
+
         // Analyze reading patterns from temporal data
         const readingPatterns = analyzeReadingPatterns(websites, timeframe);
-        
+
         // Identify popular pages by activity metrics
         const popularPages = analyzePopularPages(websites, limit);
-        
+
         // Enhanced domain analysis with trends
         const topDomains = analyzeTopDomains(websites, limit);
 
@@ -1486,19 +1509,67 @@ function analyzeTrendingTopics(websites: any[], limit: number) {
         const metadata = site.metadata as any;
         const title = metadata.title || "";
         const knowledge = site.getKnowledge();
-        
+
         // Extract topics from title words (basic implementation)
         const titleWords = title
             .toLowerCase()
             .split(/\s+/)
-            .filter((word: string) => word.length > 3 && !['the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'had', 'her', 'was', 'one', 'our', 'out', 'day', 'get', 'has', 'him', 'his', 'how', 'its', 'may', 'new', 'now', 'old', 'see', 'two', 'way', 'who', 'boy', 'did', 'man', 'car', 'got', 'let', 'say', 'she', 'too', 'use'].includes(word));
+            .filter(
+                (word: string) =>
+                    word.length > 3 &&
+                    ![
+                        "the",
+                        "and",
+                        "for",
+                        "are",
+                        "but",
+                        "not",
+                        "you",
+                        "all",
+                        "can",
+                        "had",
+                        "her",
+                        "was",
+                        "one",
+                        "our",
+                        "out",
+                        "day",
+                        "get",
+                        "has",
+                        "him",
+                        "his",
+                        "how",
+                        "its",
+                        "may",
+                        "new",
+                        "now",
+                        "old",
+                        "see",
+                        "two",
+                        "way",
+                        "who",
+                        "boy",
+                        "did",
+                        "man",
+                        "car",
+                        "got",
+                        "let",
+                        "say",
+                        "she",
+                        "too",
+                        "use",
+                    ].includes(word),
+            );
 
         titleWords.forEach((word: string) => {
             topicCounts.set(word, (topicCounts.get(word) || 0) + 1);
-            
+
             const visitDate = metadata.visitDate || metadata.bookmarkDate;
             if (visitDate && new Date(visitDate) > thirtyDaysAgo) {
-                recentTopicCounts.set(word, (recentTopicCounts.get(word) || 0) + 1);
+                recentTopicCounts.set(
+                    word,
+                    (recentTopicCounts.get(word) || 0) + 1,
+                );
             }
         });
 
@@ -1507,11 +1578,18 @@ function analyzeTrendingTopics(websites: any[], limit: number) {
             knowledge.entities.forEach((entity: any) => {
                 const entityName = entity.name?.toLowerCase();
                 if (entityName && entityName.length > 2) {
-                    topicCounts.set(entityName, (topicCounts.get(entityName) || 0) + 1);
-                    
-                    const visitDate = metadata.visitDate || metadata.bookmarkDate;
+                    topicCounts.set(
+                        entityName,
+                        (topicCounts.get(entityName) || 0) + 1,
+                    );
+
+                    const visitDate =
+                        metadata.visitDate || metadata.bookmarkDate;
                     if (visitDate && new Date(visitDate) > thirtyDaysAgo) {
-                        recentTopicCounts.set(entityName, (recentTopicCounts.get(entityName) || 0) + 1);
+                        recentTopicCounts.set(
+                            entityName,
+                            (recentTopicCounts.get(entityName) || 0) + 1,
+                        );
                     }
                 }
             });
@@ -1526,7 +1604,7 @@ function analyzeTrendingTopics(websites: any[], limit: number) {
         const recentCount = recentTopicCounts.get(topic) || 0;
         const historicalCount = count - recentCount;
         let trend: "up" | "down" | "stable" = "stable";
-        
+
         if (recentCount > historicalCount * 1.5) {
             trend = "up";
         } else if (recentCount < historicalCount * 0.5) {
@@ -1544,12 +1622,20 @@ function analyzeTrendingTopics(websites: any[], limit: number) {
 
 function analyzeReadingPatterns(websites: any[], timeframe: string) {
     const patterns = new Map<string, number>();
-    const dayOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    
+    const dayOfWeek = [
+        "Sunday",
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+    ];
+
     for (const site of websites) {
         const metadata = site.metadata as any;
         const visitDate = metadata.visitDate || metadata.bookmarkDate;
-        
+
         if (visitDate) {
             const date = new Date(visitDate);
             const day = dayOfWeek[date.getDay()];
@@ -1558,8 +1644,8 @@ function analyzeReadingPatterns(websites: any[], timeframe: string) {
     }
 
     const maxActivity = Math.max(...Array.from(patterns.values()));
-    
-    return dayOfWeek.map(day => ({
+
+    return dayOfWeek.map((day) => ({
         timeframe: day,
         activity: patterns.get(day) || 0,
         peak: (patterns.get(day) || 0) === maxActivity && maxActivity > 0,
@@ -1567,14 +1653,17 @@ function analyzeReadingPatterns(websites: any[], timeframe: string) {
 }
 
 function analyzePopularPages(websites: any[], limit: number) {
-    const pageStats = new Map<string, {
-        url: string;
-        title: string;
-        visitCount: number;
-        isBookmarked: boolean;
-        domain: string;
-        lastVisited: string;
-    }>();
+    const pageStats = new Map<
+        string,
+        {
+            url: string;
+            title: string;
+            visitCount: number;
+            isBookmarked: boolean;
+            domain: string;
+            lastVisited: string;
+        }
+    >();
 
     for (const site of websites) {
         const metadata = site.metadata as any;
@@ -1582,7 +1671,10 @@ function analyzePopularPages(websites: any[], limit: number) {
         const title = metadata.title || url;
         const domain = url ? new URL(url).hostname : "";
         const isBookmarked = !!metadata.bookmarkDate;
-        const lastVisited = metadata.visitDate || metadata.bookmarkDate || new Date().toISOString();
+        const lastVisited =
+            metadata.visitDate ||
+            metadata.bookmarkDate ||
+            new Date().toISOString();
 
         if (url) {
             const existing = pageStats.get(url);
@@ -1625,15 +1717,18 @@ function analyzeTopDomains(websites: any[], limit: number) {
     for (const site of websites) {
         const metadata = site.metadata as any;
         const url = metadata.url;
-        
+
         if (url) {
             try {
                 const domain = new URL(url).hostname;
                 domainCounts.set(domain, (domainCounts.get(domain) || 0) + 1);
-                
+
                 const visitDate = metadata.visitDate || metadata.bookmarkDate;
                 if (visitDate && new Date(visitDate) > thirtyDaysAgo) {
-                    recentDomainCounts.set(domain, (recentDomainCounts.get(domain) || 0) + 1);
+                    recentDomainCounts.set(
+                        domain,
+                        (recentDomainCounts.get(domain) || 0) + 1,
+                    );
                 }
             } catch (error) {
                 // Invalid URL, skip
@@ -1648,7 +1743,7 @@ function analyzeTopDomains(websites: any[], limit: number) {
             const recentCount = recentDomainCounts.get(domain) || 0;
             const historicalCount = count - recentCount;
             let trend: "up" | "down" | "stable" = "stable";
-            
+
             if (recentCount > historicalCount * 1.5) {
                 trend = "up";
             } else if (recentCount < historicalCount * 0.5) {
