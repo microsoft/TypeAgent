@@ -14,6 +14,7 @@ import {
     GetWebsiteStats,
 } from "./actionsSchema.mjs";
 import { BrowserActionContext } from "./actionHandler.mjs";
+import { unifiedWebsiteSearch } from "./unifiedSearch.mjs";
 import * as website from "website-memory";
 import * as kp from "knowpro";
 import { openai as ai } from "aiclient";
@@ -1042,50 +1043,44 @@ export async function searchWebsites(
 
         const {
             originalUserRequest,
-            //query,
             domain,
             source,
+            temporalSort,
+            frequencySort,
+            pageType,
             limit = 10,
             minScore = 0.5,
         } = action.parameters;
 
-        // Build search filters
-        const searchFilters = [originalUserRequest];
-        if (domain) searchFilters.push(domain);
+        // Use unified search for enhanced capabilities
+        const result = await unifiedWebsiteSearch({
+            query: originalUserRequest,
+            domain: domain,
+            source: source,
+            temporalSort: temporalSort,
+            frequencySort: frequencySort,
+            pageType: pageType,
+            limit: limit,
+            minScore: minScore,
+            generateAnswer: false,  // Discovery mode - skip answer generation
+            includeRelatedEntities: false,
+            enableAdvancedSearch: false  // Fast discovery mode
+        }, context.sessionContext);
 
-        // Use the improved search function
-        let matchedWebsites = await findRequestedWebsites(
-            searchFilters,
-            context.sessionContext.agentContext,
-            false,
-            minScore,
-        );
-
-        // Apply additional filters
-        if (source) {
-            matchedWebsites = matchedWebsites.filter(
-                (site) => site.metadata.websiteSource === source,
-            );
-        }
-
-        // Limit results
-        matchedWebsites = matchedWebsites.slice(0, limit);
-
-        if (matchedWebsites.length === 0) {
+        if (result.websites.length === 0) {
             return createActionResult(
                 "No websites found matching the search criteria.",
             );
         }
 
-        const resultText = matchedWebsites
+        const resultText = result.websites
             .map((site, i) => {
-                const metadata = site.metadata;
-                return `${i + 1}. ${metadata.title || metadata.url}\n   URL: ${metadata.url}\n   Domain: ${metadata.domain} | Type: ${metadata.pageType} | Source: ${metadata.websiteSource}\n`;
+                return `${i + 1}. ${site.title}\n   URL: ${site.url}\n   Domain: ${site.domain} | Type: ${site.pageType} | Source: ${site.source}\n`;
             })
             .join("\n");
 
         return createActionResult(
-            `Found ${matchedWebsites.length} websites:\n\n${resultText}`,
+            `Found ${result.websites.length} websites:\n\n${resultText}`,
         );
     } catch (error: any) {
         return createActionResult(

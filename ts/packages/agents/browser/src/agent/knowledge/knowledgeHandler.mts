@@ -4,6 +4,7 @@
 import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "../actionHandler.mjs";
 import { findRequestedWebsites } from "../websiteMemory.mjs";
+import { unifiedWebsiteSearch } from "../unifiedSearch.mjs";
 import * as website from "website-memory";
 import {
     KnowledgeExtractionResult,
@@ -61,6 +62,9 @@ export async function handleKnowledgeAction(
 
         case "queryWebKnowledge":
             return await queryWebKnowledge(parameters, context);
+
+        case "unifiedWebsiteSearch":
+            return await unifiedWebsiteSearch(parameters, context);
 
         case "queryWebKnowledgeEnhanced":
             return await queryWebKnowledgeEnhanced(parameters, context);
@@ -349,71 +353,22 @@ export async function queryWebKnowledge(
     relatedEntities: Entity[];
 }> {
     try {
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection || websiteCollection.messages.length === 0) {
-            return {
-                answer: "No website data available. Please import website data first using the library panel.",
-                sources: [],
-                relatedEntities: [],
-            };
-        }
-
-        const searchResults = await findRequestedWebsites(
-            [parameters.query],
-            context.agentContext,
-            false,
-            0.3,
-        );
-
-        if (searchResults.length === 0) {
-            return {
-                answer: "No relevant information found in your website knowledge base. Try browsing more content or importing your browser history/bookmarks.",
-                sources: [],
-                relatedEntities: [],
-            };
-        }
-
-        const answer = await generateAnswerFromResults(
-            parameters.query,
-            searchResults,
-        );
-
-        const sources: WebPageReference[] = searchResults
-            .slice(0, 5)
-            .map((website: any) => ({
-                url: website.metadata.url,
-                title: website.metadata.title || website.metadata.url,
-                relevanceScore: 0.8,
-                lastIndexed:
-                    website.metadata.visitDate ||
-                    website.metadata.bookmarkDate ||
-                    new Date().toISOString(),
-            }));
-
-        const relatedEntities: Entity[] = [];
-        for (const site of searchResults.slice(0, 3)) {
-            const knowledge = site.getKnowledge();
-            if (knowledge?.entities) {
-                for (const entity of knowledge.entities.slice(0, 3)) {
-                    relatedEntities.push({
-                        name: entity.name,
-                        type: Array.isArray(entity.type)
-                            ? entity.type.join(", ")
-                            : entity.type,
-                        confidence: 0.7,
-                    });
-                }
-            }
-        }
-
+        const result = await unifiedWebsiteSearch({
+            query: parameters.query,
+            searchScope: parameters.searchScope,
+            generateAnswer: true,
+            includeRelatedEntities: true,
+            enableAdvancedSearch: true,  // Use full advanced processing
+            knowledgeTopK: 50
+        }, context);
+        
         return {
-            answer,
-            sources,
-            relatedEntities,
+            answer: result.answer || "No relevant information found.",
+            sources: result.answerSources || [],
+            relatedEntities: result.relatedEntities || []
         };
     } catch (error) {
-        console.error("Error querying web knowledge:", error);
+        console.error("Error in unified web knowledge query:", error);
         return {
             answer: "An error occurred while searching your knowledge base. Please try again.",
             sources: [],
@@ -622,35 +577,6 @@ export async function exportKnowledgeData(
             exportDate: new Date().toISOString(),
         };
     }
-}
-
-async function generateAnswerFromResults(
-    query: string,
-    results: any[],
-): Promise<string> {
-    if (results.length === 0) {
-        return "No relevant information found for your query.";
-    }
-
-    const topResult = results[0];
-    const resultCount = results.length;
-
-    const context = results
-        .slice(0, 3)
-        .map((site) => {
-            const knowledge = site.getKnowledge();
-            const topics = knowledge?.topics?.slice(0, 3).join(", ") || "";
-            return `${site.metadata.title}: ${topics}`;
-        })
-        .join("; ");
-
-    const answer =
-        `Based on your browsing history, I found ${resultCount} relevant result${resultCount > 1 ? "s" : ""} for "${query}". ` +
-        `The most relevant appears to be "${topResult.metadata.title}" (${topResult.metadata.url}). ` +
-        (context ? `Related topics include: ${context}. ` : "") +
-        `You can explore these results for more detailed information.`;
-
-    return answer;
 }
 
 // Enhanced suggested questions using content analysis and DataFrames

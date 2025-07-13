@@ -49,6 +49,7 @@ import registerDebug from "debug";
 import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 import * as website from "website-memory";
 import { handleKnowledgeAction } from "./knowledge/knowledgeHandler.mjs";
+import { unifiedWebsiteSearch } from "./unifiedSearch.mjs";
 
 import {
     loadAllowDynamicAgentDomains,
@@ -417,7 +418,8 @@ async function updateBrowserContext(
                         case "importWebsiteData":
                         case "importHtmlFolder":
                         case "searchWebsites":
-                        case "getWebsiteStats": {
+                        case "getWebsiteStats":
+                        case "unifiedWebsiteSearch": {
                             const websiteResult = await handleWebsiteAction(
                                 data.method,
                                 data.params,
@@ -1186,6 +1188,9 @@ async function handleWebsiteAction(
 
         case "importHtmlFolder":
             return await importHtmlFolderFromSession(parameters, context);
+
+        case "unifiedWebsiteSearch":
+            return await unifiedWebsiteSearch(parameters, context);
 
         case "searchWebsites":
             // Convert to ActionContext format for existing function

@@ -21,7 +21,8 @@ export type BrowserActions =
     | ImportWebsiteData
     | ImportHtmlFolder
     | SearchWebsites
-    | GetWebsiteStats;
+    | GetWebsiteStats
+    | UnifiedWebsiteSearch;
 
 export type WebPage = string;
 export type BrowserEntities = WebPage;
@@ -202,5 +203,40 @@ export type GetWebsiteStats = {
         groupBy?: "domain" | "pageType" | "source";
         // Limit number of groups returned
         limit?: number;
+    };
+};
+
+// Unified website search that replaces both queryWebKnowledge and searchWebsites
+export type UnifiedWebsiteSearch = {
+    actionName: "unifiedWebsiteSearch";
+    parameters: {
+        query: string;
+        searchScope?: "current_page" | "all_indexed";
+        
+        // Discovery filters
+        domain?: string;
+        pageType?: string; 
+        source?: "bookmark" | "history";
+        temporalSort?: "ascend" | "descend" | "none";
+        frequencySort?: "ascend" | "descend" | "none";
+        
+        // Search configuration
+        limit?: number;
+        minScore?: number;
+        exactMatch?: boolean;
+        
+        // Processing options (consumer controls cost)
+        generateAnswer?: boolean;           // Default: true
+        includeRelatedEntities?: boolean;   // Default: true  
+        includeRelationships?: boolean;     // Default: false (expensive)
+        enableAdvancedSearch?: boolean;     // Use advanced patterns
+        
+        // Advanced options
+        knowledgeTopK?: number;
+        chunking?: boolean;
+        fastStop?: boolean;
+        combineAnswers?: boolean;
+        choices?: string;  // Multiple choice (semicolon separated)
+        debug?: boolean;
     };
 };

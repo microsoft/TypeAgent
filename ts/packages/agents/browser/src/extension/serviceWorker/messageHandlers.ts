@@ -38,7 +38,7 @@ export async function handleMessage(
         }
 
         case "searchWebsites": {
-            return await handleSearchWebsitesEnhanced(message);
+            return await handleSearchWebsitesUnified(message);
         }
 
 
@@ -1023,6 +1023,48 @@ async function handleCancelFileImport(importId: string) {
 }
 
 // Enhanced search handlers
+async function handleSearchWebsitesUnified(message: any) {
+    try {
+        const startTime = Date.now();
+
+        // Use the new unified search action
+        const result = await sendActionToAgent({
+            actionName: "unifiedWebsiteSearch",
+            parameters: {
+                query: message.parameters.query,
+                generateAnswer: true,  // Knowledge Library wants answers
+                includeRelatedEntities: true,
+                enableAdvancedSearch: true,
+                limit: message.parameters.limit || 20,
+                minScore: message.parameters.filters?.minRelevance || 0.3,
+                ...message.parameters.filters
+            },
+        });
+
+        return {
+            success: true,
+            results: {
+                websites: result.websites || [],
+                summary: {
+                    text: result.answer || "",
+                    totalFound: result.websites?.length || 0,
+                    searchTime: result.summary?.searchTime || (Date.now() - startTime),
+                    sources: result.answerSources || [],
+                    entities: result.relatedEntities || [],
+                },
+                query: message.parameters.query,
+                filters: message.parameters.filters || {},
+            },
+        };
+    } catch (error) {
+        console.error("Error in unified search:", error);
+        return { 
+            success: false, 
+            error: error instanceof Error ? error.message : "Unknown error"
+        };
+    }
+}
+
 async function handleSearchWebsitesEnhanced(message: any) {
     try {
         const startTime = Date.now();
