@@ -395,6 +395,7 @@ async function updateBrowserContext(
                         case "indexWebPageContent":
                         case "checkPageIndexStatus":
                         case "getPageIndexedKnowledge":
+                        case "getRecentKnowledgeItems":
                         case "getKnowledgeIndexStats":
                         case "clearKnowledgeIndex": {
                             const knowledgeResult = await handleKnowledgeAction(
