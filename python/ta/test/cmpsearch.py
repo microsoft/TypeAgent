@@ -11,6 +11,7 @@ import re
 from typing import TypedDict
 
 import black
+import colorama
 import numpy as np
 import typechat
 
@@ -47,6 +48,8 @@ class Context:
 
 
 def main():
+    colorama.init()  # So timelog behaves with non-tty stdout.
+
     # Parse arguments.
 
     default_qafile = "testdata/Episode_53_Answer_results.json"
