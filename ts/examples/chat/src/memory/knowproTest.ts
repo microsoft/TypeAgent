@@ -93,6 +93,22 @@ export async function createKnowproTestCommands(
 
         let mdDom = tp.loadMarkdownFromHtml(html, namedArgs.rootTag);
         context.printer.writeJsonInColor(chalk.cyan, mdDom);
+
+        const eventHandler: tp.MdChunkerEvents = {
+            onBlockStart(name) {
+                context.printer.writeLineInColor(chalk.green, name);
+            },
+            onBlockEnd() {},
+            onHeading(level) {
+                context.printer.writeLineInColor(
+                    chalk.green,
+                    `heading ${level}`,
+                );
+            },
+        };
+        const chunker = new tp.MdChunker(mdDom, eventHandler);
+        const blocks = chunker.getMarkdownBlocks();
+        context.printer.writeList(blocks, { type: "plain" });
     }
 
     function testHtmlPartsDef(): CommandMetadata {
