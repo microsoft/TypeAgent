@@ -115,6 +115,12 @@ def real_main():
         help="Number of Q/A pairs to print (0 means all)",
     )
     parser.add_argument(
+        "--start",
+        type=int,
+        default=0,
+        help="Do just this question (similar to --offset START-1 --limit 1)",
+    )
+    parser.add_argument(
         "--interactive",
         "-i",
         action="store_true",
@@ -122,6 +128,13 @@ def real_main():
         help="Run in interactive mode, waiting for user input before each question",
     )
     args = parser.parse_args()
+    if args.start:
+        if args.offset != 0:
+            print("Error: --start and --offset can't be both set", file=sys.stderr)
+            sys.exit(2)
+        args.offset = args.start - 1
+        if args.limit == 0:
+            args.limit = 1
 
     # Read evaluation data.
 
