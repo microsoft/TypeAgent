@@ -15,6 +15,7 @@ import {
 import { BrowserActionContext } from "./actionHandler.mjs";
 import * as website from "website-memory";
 import * as kp from "knowpro";
+import * as kpLib from "knowledge-processor";
 import { openai as ai } from "aiclient";
 import registerDebug from "debug";
 import * as path from "path";
@@ -512,12 +513,10 @@ export async function importWebsiteDataFromSession(
             total: number,
             item: string,
         ) => {
-            if (current % 100 === 0) {
-                const message = `Importing... ${current}/${total}: ${item.substring(0, 50)}...`;
-                debug(message);
-                if (displayProgress) {
-                    displayProgress(message);
-                }
+            const message = `Importing... ${current}/${total}: ${item.substring(0, 50)}...`;
+            debug(message);
+            if (displayProgress) {
+                displayProgress(message);
             }
         };
 
@@ -559,7 +558,7 @@ export async function importWebsiteDataFromSession(
             }
         }
 
-        // Create chat model for intelligent analysis if AI mode is enabled
+        // Create AI model for intelligent analysis if AI mode is enabled
         if (extractionMode !== "basic") {
             try {
                 const apiSettings = ai.azureApiSettingsFromEnv(
@@ -567,94 +566,115 @@ export async function importWebsiteDataFromSession(
                     undefined,
                     undefined, // Use default model
                 );
-                importOptions.model = ai.createChatModel(
+                const chatModel = ai.createChatModel(
                     apiSettings,
                     undefined,
                     undefined,
                     ["website-analysis"],
                 );
-                debug("Created chat model for intelligent analysis");
+
+                // Create knowledge extractor for ContentExtractor
+                importOptions.knowledgeExtractor =
+                    kpLib.conversation.createKnowledgeExtractor(chatModel);
+
+                debug(
+                    "Created chat model and knowledge extractor for intelligent analysis",
+                );
             } catch (error) {
                 debug(
                     "Failed to create chat model for intelligent analysis:",
                     error,
                 );
-                // Continue without intelligent analysis if model creation fails
+                throw new Error(
+                    `Cannot import with ${extractionMode} mode: AI model required but not available`,
+                );
             }
         }
 
-        let websites: any[];
-        if (extractionMode === "basic") {
-            // Use basic import for fast metadata-only import
-            websites = await website.importWebsites(
-                source,
-                type,
-                filePath,
-                importOptions,
-                progressCallback,
-            );
-        } else {
-            // Use basic import first, then enhance with extraction
-            websites = await website.importWebsites(
-                source,
-                type,
-                filePath,
-                { ...importOptions, extractContent: false },
-                progressCallback,
-            );
+        // Import websites using basic import first to get metadata
+        let websites: any[] = await website.importWebsites(
+            source,
+            type,
+            filePath,
+            importOptions,
+            progressCallback,
+        );
 
-            // Enhance with extraction if AI mode requested
-            if (websites.length > 0) {
-                const extractor = new BrowserKnowledgeExtractor(context);
+        // Enhance with HTML content fetching and AI analysis for non-basic modes
+        if (extractionMode !== "basic" && websites.length > 0) {
+            if (displayProgress) {
+                displayProgress(
+                    "Fetching webpage content and analyzing with AI...",
+                );
+            }
+
+            // Create inputs that will trigger HTML fetching in ContentExtractor
+            const contentInputs: ExtractionInput[] = websites.map((site) => ({
+                url: site.metadata.url,
+                title: site.metadata.title || site.metadata.url,
+                // NO textContent or htmlContent - let ContentExtractor fetch HTML
+                source: type === "bookmarks" ? "bookmark" : "history",
+                timestamp:
+                    site.metadata.visitDate || site.metadata.bookmarkDate,
+            }));
+
+            try {
+                // Create ContentExtractor with AI model
+                const extractor = new website.ContentExtractor({
+                    mode: extractionMode,
+                    knowledgeExtractor: importOptions.knowledgeExtractor,
+                    timeout: importOptions.contentTimeout || 10000,
+                    maxConcurrentExtractions: importOptions.maxConcurrent || 5,
+                });
+
+                // Use BatchProcessor for efficient processing
+                const batchProcessor = new website.BatchProcessor(extractor);
 
                 const enhancedProgressCallback = (progress: BatchProgress) => {
                     if (displayProgress) {
+                        const phase =
+                            progress.processed <= progress.total * 0.6
+                                ? "Fetching content"
+                                : "Analyzing with AI";
                         displayProgress(
-                            `Enhancing knowledge: ${progress.processed}/${progress.total} (${progress.percentage}%)`,
+                            `${phase}: ${progress.processed}/${progress.total} (${progress.percentage}%)`,
                         );
                     }
                 };
 
-                const contentInputs: ExtractionInput[] = websites.map(
-                    (site) => ({
-                        url: site.metadata.url,
-                        title: site.metadata.title || site.metadata.url,
-                        textContent: site.textChunks?.join("\n\n") || "",
-                        source: type === "bookmarks" ? "bookmark" : "history",
-                        timestamp:
-                            site.metadata.visitDate ||
-                            site.metadata.bookmarkDate,
-                    }),
+                const enhancedResults = await batchProcessor.processBatch(
+                    contentInputs,
+                    extractionMode,
+                    enhancedProgressCallback,
                 );
 
-                try {
-                    const enhancedResults = await extractor.extractBatch(
-                        contentInputs,
-                        extractionMode,
-                        enhancedProgressCallback,
-                    );
+                // Apply results back to websites
+                enhancedResults.forEach((result, index) => {
+                    if (websites[index] && result.knowledge) {
+                        websites[index].knowledge = result.knowledge;
 
-                    // Apply enhanced knowledge to websites
-                    enhancedResults.forEach((result, index) => {
-                        if (websites[index]) {
-                            websites[index].knowledge = result.knowledge;
+                        // Update textChunks with actual fetched content
+                        if (result.pageContent?.mainContent) {
+                            websites[index].textChunks = [
+                                result.pageContent.mainContent,
+                            ];
                         }
-                    });
+                    }
+                });
 
-                    if (displayProgress) {
-                        displayProgress(
-                            `Enhanced ${enhancedResults.length} items with ${extractionMode} mode extraction`,
-                        );
-                    }
-                } catch (error) {
-                    if (error instanceof AIModelRequiredError) {
-                        throw error;
-                    }
-                    console.warn(
-                        "Enhanced extraction failed, using basic import:",
-                        error,
+                if (displayProgress) {
+                    displayProgress(
+                        `Enhanced ${enhancedResults.length} items with ${extractionMode} mode extraction`,
                     );
                 }
+            } catch (error) {
+                if (error instanceof AIModelRequiredError) {
+                    throw error;
+                }
+                console.warn(
+                    "Enhanced extraction failed, using basic import:",
+                    error,
+                );
             }
         }
 
@@ -664,7 +684,15 @@ export async function importWebsiteDataFromSession(
         }
 
         context.agentContext.websiteCollection.addWebsites(websites);
-        await context.agentContext.websiteCollection.buildIndex();
+
+        try {
+            await context.agentContext.websiteCollection.addToIndex();
+        } catch (error) {
+            debug(
+                `Incremental indexing failed, falling back to full rebuild: ${error}`,
+            );
+            await context.agentContext.websiteCollection.buildIndex();
+        }
 
         // Persist the website collection to disk
         try {
@@ -881,7 +909,14 @@ export async function importHtmlFolderFromSession(
             );
             context.agentContext.websiteCollection.addWebsites(websites);
 
-            await context.agentContext.websiteCollection.buildIndex();
+            try {
+                await context.agentContext.websiteCollection.addToIndex();
+            } catch (error) {
+                debug(
+                    `Incremental indexing failed, falling back to full rebuild: ${error}`,
+                );
+                await context.agentContext.websiteCollection.buildIndex();
+            }
 
             try {
                 if (context.agentContext.index?.path) {

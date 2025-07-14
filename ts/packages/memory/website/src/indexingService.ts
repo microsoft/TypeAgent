@@ -115,12 +115,9 @@ if (
             incrementalBuildCheckPoint.lastBuildTimestamp - performance.now() >
                 incrementalBuildCheckPoint.timeout
         ) {
-            buildIndex(websites!);
+            buildIndexIncremental(websites!);
 
-            // update incremental build checkpoint
             incrementalBuildCheckPoint.websiteCount = index!.size;
-
-            // save timestamp
             incrementalBuildCheckPoint.lastBuildTimestamp = performance.now();
         }
 
@@ -205,15 +202,13 @@ if (
                 indexingProgress,
             );
 
-            // Add websites to collection
-            websites.addWebsites(importedWebsites);
+            await addWebsitesIncremental(websites, importedWebsites);
 
             debug(
                 `Imported ${importedWebsites.length} websites from ${browserType} ${sourceType}`,
             );
 
-            // build the index
-            buildIndex(websites, true);
+            await buildIndex(websites, true);
         } catch (error) {
             debug(`Error importing websites: ${error}`);
             index!.state = "error";
@@ -221,16 +216,77 @@ if (
         }
     }
 
-    async function buildIndex(
+    async function addWebsitesIncremental(
+        websiteCollection: WebsiteCollection,
+        newWebsites: any[],
+    ) {
+        for (const website of newWebsites) {
+            try {
+                const docPart = (
+                    await import("./websiteDocPart.js")
+                ).WebsiteDocPart.fromWebsite(website);
+                await websiteCollection.addWebsiteToIndex(docPart);
+            } catch (error) {
+                debug(
+                    `Error adding website incrementally: ${error}, falling back to batch add`,
+                );
+                websiteCollection.addWebsites([website]);
+            }
+        }
+    }
+
+    async function buildIndexIncremental(
         websites: WebsiteCollection,
         waitforPending: boolean = false,
     ) {
-        // wait for pending index building before rebuilding
         if (waitforPending && buildIndexPromise) {
             await Promise.resolve(buildIndexPromise);
         }
 
-        // if there's an index build in progress just ignore the incoming request
+        if (buildIndexPromise === undefined) {
+            buildIndexPromise = websites.addToIndex();
+
+            buildIndexPromise
+                .then(async (value: IndexingResults) => {
+                    debug(
+                        `Incremental index update completed for ${websites!.messages.length} websites`,
+                    );
+
+                    await websites?.writeToFile(index!.path, "index");
+                    debug(`Index saved to ${index!.path}`);
+
+                    buildIndexPromise = undefined;
+                })
+                .catch(async (error) => {
+                    debug(
+                        `Error in incremental indexing: ${error}, falling back to full rebuild`,
+                    );
+                    try {
+                        await websites.buildIndex();
+                        await websites?.writeToFile(index!.path, "index");
+                        debug(
+                            `Fallback full rebuild completed and saved to ${index!.path}`,
+                        );
+                    } catch (fallbackError) {
+                        debug(
+                            `Fallback full rebuild also failed: ${fallbackError}`,
+                        );
+                        index!.state = "error";
+                        sendIndexStatus();
+                    }
+                    buildIndexPromise = undefined;
+                });
+        }
+    }
+
+    async function buildIndex(
+        websites: WebsiteCollection,
+        waitforPending: boolean = false,
+    ) {
+        if (waitforPending && buildIndexPromise) {
+            await Promise.resolve(buildIndexPromise);
+        }
+
         if (buildIndexPromise === undefined) {
             buildIndexPromise = websites.buildIndex();
 

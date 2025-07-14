@@ -134,6 +134,7 @@ export class WebsiteImportUI {
         // Animate status text changes
         if (statusElement) {
             const phaseMessages: Record<string, string> = {
+                counting: "Counting items to import...",
                 initializing: "Preparing import...",
                 fetching: "Fetching browser data...",
                 processing: "Processing items...",

@@ -6,6 +6,7 @@ import * as cheerio from "cheerio";
 import DOMPurify from "dompurify";
 import { JSDOM } from "jsdom";
 import { AIModelManager } from "./aiModelManager.js";
+import { HtmlFetcher } from "../htmlFetcher.js";
 import {
     ExtractionMode,
     ExtractionConfig,
@@ -24,12 +25,16 @@ import {
 export class ContentExtractor {
     private aiModelManager?: AIModelManager;
     private extractionConfig?: ExtractionConfig;
+    private htmlFetcher: HtmlFetcher;
 
     constructor(
         inputConfig?: ExtractionConfig & {
             knowledgeExtractor?: kpLib.KnowledgeExtractor;
         },
     ) {
+        // Initialize HTML fetcher
+        this.htmlFetcher = new HtmlFetcher();
+
         if (inputConfig) {
             // Create a clean config object with only defined values
             const cleanConfig: ExtractionConfig = {
@@ -84,6 +89,26 @@ export class ContentExtractor {
         const modeConfig = EXTRACTION_MODE_CONFIGS[mode];
 
         try {
+            // Fetch HTML if needed and not provided
+            if (
+                mode !== "basic" &&
+                !content.htmlContent &&
+                !content.htmlFragments &&
+                content.url
+            ) {
+                const fetchResult = await this.htmlFetcher.fetchHtml(
+                    content.url,
+                );
+                if (fetchResult.html) {
+                    content.htmlContent = fetchResult.html;
+                } else if (fetchResult.error) {
+                    // Log the error but continue with title-only processing
+                    console.warn(
+                        `Failed to fetch ${content.url}: ${fetchResult.error}`,
+                    );
+                }
+            }
+
             // Validate AI availability for AI-powered modes
             if (modeConfig.usesAI) {
                 if (!this.aiModelManager) {
@@ -363,12 +388,25 @@ export class ContentExtractor {
         }
 
         if (content.htmlFragments && content.htmlFragments.length > 0) {
-            // Combine HTML fragments
-            return content.htmlFragments
-                .map((frag) =>
-                    typeof frag === "string" ? frag : frag.html || "",
-                )
-                .join("\n");
+            // Handle iframe fragments properly - each should maintain its context
+            if (content.htmlFragments.length === 1) {
+                // Single fragment (ideal case for iframe isolation)
+                const frag = content.htmlFragments[0];
+                return typeof frag === "string" ? frag : frag.content || "";
+            } else {
+                // Multiple fragments - preserve iframe boundaries with context markers
+                return content.htmlFragments
+                    .map((frag, index) => {
+                        const fragmentContent =
+                            typeof frag === "string"
+                                ? frag
+                                : frag.content || "";
+                        const frameId = frag.frameId || index;
+                        // Add iframe context markers to preserve boundaries
+                        return `<!-- IFRAME_START:${frameId} -->\n${fragmentContent}\n<!-- IFRAME_END:${frameId} -->`;
+                    })
+                    .join("\n\n");
+            }
         }
 
         return null;

@@ -26,6 +26,122 @@ import {
 } from "website-memory";
 import { BrowserKnowledgeExtractor } from "./browserKnowledgeExtractor.mjs";
 
+// Helper function to convert HTML fragments to ExtractionInput objects
+function createExtractionInputsFromFragments(
+    htmlFragments: any[],
+    url: string,
+    title: string,
+    source: "direct" | "index" | "bookmark" | "history" | "import",
+    timestamp?: string,
+): ExtractionInput[] {
+    return htmlFragments
+        .filter((fragment) => fragment.text && fragment.text.trim().length > 50) // Filter out empty/tiny fragments
+        .map((fragment, index) => ({
+            url: `${url}#iframe-${fragment.frameId || index}`, // Include frame context in URL
+            title: `${title} (Frame ${fragment.frameId || index})`,
+            htmlFragments: [fragment], // Keep individual fragment context
+            textContent: fragment.text.trim(),
+            source: source,
+            ...(timestamp && { timestamp }), // Only include timestamp if it exists
+            metadata: {
+                frameId: fragment.frameId,
+                isIframe: fragment.frameId !== 0, // Main frame is typically 0
+            },
+        }));
+}
+
+// Helper function to aggregate extraction results from multiple fragments
+function aggregateExtractionResults(results: any[]): {
+    entities: Entity[];
+    relationships: Relationship[];
+    keyTopics: string[];
+    suggestedQuestions: string[];
+    summary: string;
+    contentMetrics: any;
+} {
+    const allEntities: Entity[] = [];
+    const allRelationships: Relationship[] = [];
+    const allTopics: string[] = [];
+    const allQuestions: string[] = [];
+    const summaries: string[] = [];
+
+    let totalWordCount = 0;
+    let totalReadingTime = 0;
+
+    for (const result of results) {
+        if (result.knowledge) {
+            // Collect entities with frame context
+            if (result.knowledge.entities) {
+                allEntities.push(...result.knowledge.entities);
+            }
+
+            // Collect relationships
+            if (result.knowledge.relationships) {
+                allRelationships.push(...result.knowledge.relationships);
+            }
+
+            // Collect topics
+            if (result.knowledge.keyTopics) {
+                allTopics.push(...result.knowledge.keyTopics);
+            }
+
+            // Collect questions
+            if (result.knowledge.suggestedQuestions) {
+                allQuestions.push(...result.knowledge.suggestedQuestions);
+            }
+
+            // Collect summaries
+            if (result.knowledge.summary) {
+                summaries.push(result.knowledge.summary);
+            }
+        }
+
+        // Aggregate metrics
+        if (result.contentMetrics) {
+            totalWordCount += result.contentMetrics.wordCount || 0;
+            totalReadingTime += result.contentMetrics.readingTime || 0;
+        }
+    }
+
+    // Deduplicate entities by name and type
+    const uniqueEntities = allEntities.filter(
+        (entity, index, arr) =>
+            arr.findIndex(
+                (e) => e.name === entity.name && e.type === entity.type,
+            ) === index,
+    );
+
+    // Deduplicate relationships
+    const uniqueRelationships = allRelationships.filter(
+        (rel, index, arr) =>
+            arr.findIndex(
+                (r) =>
+                    r.from === rel.from &&
+                    r.relationship === rel.relationship &&
+                    r.to === rel.to,
+            ) === index,
+    );
+
+    // Deduplicate topics and questions
+    const uniqueTopics = [...new Set(allTopics)];
+    const uniqueQuestions = [...new Set(allQuestions)];
+
+    return {
+        entities: uniqueEntities,
+        relationships: uniqueRelationships,
+        keyTopics: uniqueTopics,
+        suggestedQuestions: uniqueQuestions,
+        summary:
+            summaries.length > 1
+                ? `Multi-frame content summary:\n${summaries.map((s, i) => `Frame ${i + 1}: ${s}`).join("\n\n")}`
+                : summaries[0] || "No content summary available.",
+        contentMetrics: {
+            wordCount: totalWordCount,
+            readingTime: totalReadingTime,
+        },
+    };
+}
+
 export interface WebPageDocument {
     url: string;
     title: string;
@@ -119,12 +235,15 @@ export async function extractKnowledgeFromPage(
     },
     context: SessionContext<BrowserActionContext>,
 ): Promise<EnhancedKnowledgeExtractionResult> {
-    const textContent = parameters.htmlFragments
-        .map((fragment) => fragment.text || "")
-        .join("\n\n")
-        .trim();
+    // Create individual extraction inputs for each HTML fragment
+    const extractionInputs = createExtractionInputsFromFragments(
+        parameters.htmlFragments,
+        parameters.url,
+        parameters.title,
+        "direct",
+    );
 
-    if (!textContent || textContent.length < 100) {
+    if (extractionInputs.length === 0) {
         return {
             entities: [],
             relationships: [],
@@ -140,89 +259,26 @@ export async function extractKnowledgeFromPage(
 
     try {
         const extractionMode = parameters.mode || "content";
-
         const extractor = new BrowserKnowledgeExtractor(context);
 
-        const contentInput: ExtractionInput = {
-            url: parameters.url,
-            title: parameters.title,
-            htmlFragments: parameters.htmlFragments,
-            textContent: textContent,
-            source: "direct",
-        };
-
-        const extractionResult = await extractor.extractKnowledge(
-            contentInput,
+        // Process each fragment individually using batch processing
+        const extractionResults = await extractor.extractBatch(
+            extractionInputs,
             extractionMode,
         );
-        const knowledge = extractionResult.knowledge;
 
-        const entities: Entity[] =
-            knowledge.entities?.map((entity: any) => ({
-                name: entity.name,
-                type: Array.isArray(entity.type)
-                    ? entity.type.join(", ")
-                    : entity.type,
-                description: entity.facets?.find(
-                    (f: any) => f.name === "description",
-                )?.value as string,
-                confidence: extractionResult.qualityMetrics.confidence,
-            })) || [];
-
-        const keyTopics: string[] = knowledge.topics || [];
-
-        const relationships: Relationship[] =
-            knowledge.actions?.map((action: any) => ({
-                from: action.subjectEntityName || "unknown",
-                relationship: action.verbs?.join(", ") || "related to",
-                to: action.objectEntityName || "unknown",
-                confidence: extractionResult.qualityMetrics.confidence,
-            })) || [];
-
-        const suggestedQuestions: string[] = [];
-        if (parameters.suggestQuestions && knowledge) {
-            suggestedQuestions.push(
-                ...(await generateSmartSuggestedQuestions(
-                    knowledge,
-                    null,
-                    parameters.url,
-                    context,
-                )),
-            );
-        }
-
-        const summary = `Knowledge extracted using ${extractionMode} mode: ${extractionResult.qualityMetrics.entityCount} entities, ${extractionResult.qualityMetrics.topicCount} topics, ${extractionResult.qualityMetrics.actionCount} actions found. Quality: ${Math.round(extractionResult.qualityMetrics.confidence * 100)}% confidence.`;
-
-        const contentMetrics = {
-            readingTime: Math.ceil(textContent.split(/\s+/).length / 225),
-            wordCount: textContent.split(/\s+/).length,
-        };
+        // Aggregate results from all fragments
+        const aggregatedResults = aggregateExtractionResults(extractionResults);
 
         return {
-            entities,
-            relationships,
-            keyTopics,
-            suggestedQuestions,
-            summary,
-            contentMetrics,
+            ...aggregatedResults,
+            // Enhanced content data - commented out due to type compatibility issues
+            // detectedActions: extractionResults.flatMap(r => r.detectedActions || []),
+            // actionSummary: extractionResults.find(r => r.actionSummary)?.actionSummary,
         };
     } catch (error) {
-        if (error instanceof AIModelRequiredError) {
-            throw error;
-        }
-
-        console.error("Error during knowledge extraction:", error);
-        return {
-            entities: [],
-            relationships: [],
-            keyTopics: [],
-            suggestedQuestions: [],
-            summary: "Error occurred during knowledge extraction.",
-            contentMetrics: {
-                readingTime: 0,
-                wordCount: 0,
-            },
-        };
+        console.error("Error extracting knowledge from fragments:", error);
+        throw error;
     }
 }
 
@@ -243,27 +299,31 @@ export async function indexWebPageContent(
     entityCount: number;
 }> {
     try {
-        const textContent = parameters.htmlFragments
-            .map((fragment) => fragment.text || "")
-            .join("\n\n");
+        // Create individual extraction inputs for each HTML fragment
+        const extractionInputs = createExtractionInputsFromFragments(
+            parameters.htmlFragments,
+            parameters.url,
+            parameters.title,
+            "index",
+            parameters.timestamp,
+        );
 
         const extractionMode = parameters.mode || "content";
-
         const extractor = new BrowserKnowledgeExtractor(context);
 
-        const contentInput: ExtractionInput = {
-            url: parameters.url,
-            title: parameters.title,
-            htmlFragments: parameters.htmlFragments,
-            textContent: textContent,
-            source: "index",
-            timestamp: parameters.timestamp,
-        };
-
-        const extractionResult = await extractor.extractKnowledge(
-            contentInput,
+        // Process each fragment individually using batch processing
+        const extractionResults = await extractor.extractBatch(
+            extractionInputs,
             extractionMode,
         );
+
+        // Aggregate results for indexing
+        const aggregatedResults = aggregateExtractionResults(extractionResults);
+
+        // Create combined text content for website memory indexing
+        const combinedTextContent = extractionInputs
+            .map((input) => input.textContent)
+            .join("\n\n");
 
         const visitInfo: website.WebsiteVisitInfo = {
             url: parameters.url,
@@ -277,19 +337,79 @@ export async function indexWebPageContent(
             parameters.title,
         );
 
-        const websiteObj = website.importWebsiteVisit(visitInfo, textContent);
+        const websiteObj = website.importWebsiteVisit(
+            visitInfo,
+            combinedTextContent,
+        );
 
-        if (extractionResult.knowledge) {
-            websiteObj.knowledge = extractionResult.knowledge;
+        if (aggregatedResults && aggregatedResults.entities.length > 0) {
+            // Set knowledge based on what the website-memory package expects
+            websiteObj.knowledge = {
+                entities: aggregatedResults.entities.map((entity) => ({
+                    ...entity,
+                    type: Array.isArray(entity.type)
+                        ? entity.type
+                        : [entity.type], // Ensure type is array
+                })),
+                topics: aggregatedResults.keyTopics,
+                actions: [], // Actions would need to be extracted separately if needed
+                inverseActions: [], // Required property
+            };
         }
 
         if (context.agentContext.websiteCollection) {
-            context.agentContext.websiteCollection.addWebsites([websiteObj]);
-
             if (parameters.extractKnowledge) {
-                await context.agentContext.websiteCollection.buildIndex();
+                try {
+                    const isNewPage = !checkPageExistsInIndex(
+                        parameters.url,
+                        context,
+                    );
 
-                // Persist the updated collection to disk
+                    if (isNewPage) {
+                        const docPart =
+                            website.WebsiteDocPart.fromWebsite(websiteObj);
+                        const result =
+                            await context.agentContext.websiteCollection.addWebsiteToIndex(
+                                docPart,
+                            );
+                        if (hasIndexingErrors(result)) {
+                            console.warn(
+                                "Incremental indexing failed, falling back to full rebuild",
+                            );
+                            context.agentContext.websiteCollection.addWebsites([
+                                websiteObj,
+                            ]);
+                            await context.agentContext.websiteCollection.buildIndex();
+                        }
+                    } else {
+                        const docPart =
+                            website.WebsiteDocPart.fromWebsite(websiteObj);
+                        const result =
+                            await context.agentContext.websiteCollection.updateWebsiteInIndex(
+                                parameters.url,
+                                docPart,
+                            );
+                        if (hasIndexingErrors(result)) {
+                            console.warn(
+                                "Update indexing failed, falling back to full rebuild",
+                            );
+                            context.agentContext.websiteCollection.addWebsites([
+                                websiteObj,
+                            ]);
+                            await context.agentContext.websiteCollection.buildIndex();
+                        }
+                    }
+                } catch (error) {
+                    console.warn(
+                        "Indexing error, falling back to full rebuild:",
+                        error,
+                    );
+                    context.agentContext.websiteCollection.addWebsites([
+                        websiteObj,
+                    ]);
+                    await context.agentContext.websiteCollection.buildIndex();
+                }
+
                 try {
                     if (context.agentContext.index?.path) {
                         await context.agentContext.websiteCollection.writeToFile(
@@ -313,7 +433,7 @@ export async function indexWebPageContent(
             }
         }
 
-        const entityCount = extractionResult.qualityMetrics.entityCount;
+        const entityCount = aggregatedResults.entities?.length || 0;
 
         return {
             indexed: true,
@@ -1757,4 +1877,28 @@ function analyzeTopDomains(websites: any[], limit: number) {
                 favicon: `https://www.google.com/s2/favicons?domain=${domain}`,
             };
         });
+}
+
+function checkPageExistsInIndex(
+    url: string,
+    context: SessionContext<BrowserActionContext>,
+): boolean {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+        if (!websiteCollection) {
+            return false;
+        }
+
+        const websites = websiteCollection.messages.getAll();
+        return websites.some((site: any) => site.metadata.url === url);
+    } catch (error) {
+        console.error("Error checking page existence:", error);
+        return false;
+    }
+}
+
+function hasIndexingErrors(result: any): boolean {
+    return !!(
+        result?.semanticRefs?.error || result?.secondaryIndexResults?.error
+    );
 }

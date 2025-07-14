@@ -214,10 +214,6 @@ class WebsiteLibraryPanelFullPage {
             await this.loadLibraryStats();
             await this.loadRecentSearches();
             this.showPage("search");
-
-            this.notificationManager.showSuccess(
-                "Website Library loaded successfully with enhanced features!",
-            );
         } catch (error) {
             console.error("Failed to initialize Website Library:", error);
             this.isInitialized = false; // Reset flag on error so retry is possible
@@ -334,6 +330,15 @@ class WebsiteLibraryPanelFullPage {
         window.addEventListener("cancelImport", () => {
             this.handleCancelImport();
         });
+
+        // Listen for progress messages from service worker
+        chrome.runtime.onMessage.addListener(
+            (message, sender, sendResponse) => {
+                if (message.type === "importProgress") {
+                    this.handleImportProgressMessage(message);
+                }
+            },
+        );
 
         // Setup import UI callbacks
         this.importUI.onProgressUpdate((progress: ImportProgress) => {
@@ -757,9 +762,6 @@ class WebsiteLibraryPanelFullPage {
             if (this.searchCache.has(cacheKey)) {
                 const cachedResults = this.searchCache.get(cacheKey)!;
                 this.showSearchResults(cachedResults);
-                this.notificationManager.showSuccess(
-                    "Results loaded from cache",
-                );
                 return;
             }
 
@@ -2883,14 +2885,21 @@ class WebsiteLibraryPanelFullPage {
         options: ImportOptions,
     ): Promise<void> {
         try {
-            this.importUI.showImportProgress({
-                importId: "web-activity-import",
-                phase: "initializing",
-                totalItems: 0,
-                processedItems: 0,
-                errors: [],
+            let isFirstProgress = true;
+
+            // Register progress callback BEFORE starting import
+            this.importManager.onProgressUpdate((progress: ImportProgress) => {
+                if (isFirstProgress) {
+                    // First progress update - transition to progress view
+                    this.importUI.showImportProgress(progress);
+                    isFirstProgress = false;
+                } else {
+                    // Subsequent updates - just update progress
+                    this.importUI.updateImportProgress(progress);
+                }
             });
 
+            // Start the import - let importManager handle progress updates
             const result =
                 await this.importManager.startWebActivityImport(options);
             this.importUI.showImportComplete(result);
@@ -2910,14 +2919,21 @@ class WebsiteLibraryPanelFullPage {
         options: FolderImportOptions,
     ): Promise<void> {
         try {
-            this.importUI.showImportProgress({
-                importId: "folder-import",
-                phase: "initializing",
-                totalItems: 0, // Will be updated when folder is enumerated
-                processedItems: 0,
-                errors: [],
+            let isFirstProgress = true;
+
+            // Register progress callback BEFORE starting import
+            this.importManager.onProgressUpdate((progress: ImportProgress) => {
+                if (isFirstProgress) {
+                    // First progress update - transition to progress view
+                    this.importUI.showImportProgress(progress);
+                    isFirstProgress = false;
+                } else {
+                    // Subsequent updates - just update progress
+                    this.importUI.updateImportProgress(progress);
+                }
             });
 
+            // Start the import - let importManager handle progress updates
             const result = await this.importManager.startFolderImport(options);
             this.importUI.showImportComplete(result);
         } catch (error) {
@@ -2929,6 +2945,14 @@ class WebsiteLibraryPanelFullPage {
                         : "Unknown error occurred",
                 timestamp: Date.now(),
             });
+        }
+    }
+
+    private handleImportProgressMessage(message: any) {
+        if (message.importId && message.progress) {
+            // Update the UI with the progress from service worker
+            // This should update the already-visible progress view
+            this.importUI.updateImportProgress(message.progress);
         }
     }
 

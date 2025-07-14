@@ -48,16 +48,16 @@ export class WebsiteImportManager {
 
             this.activeImports.set(importId, true);
 
-            // Initialize progress tracking
+            // Initialize progress tracking with counting phase
             this.updateProgress(importId, {
                 importId,
-                phase: "initializing",
+                phase: "counting",
                 totalItems: 0,
                 processedItems: 0,
                 errors: [],
             });
 
-            // Get browser data with options applied
+            // Get browser data with options applied to determine actual count
             this.updateProgress(importId, {
                 importId,
                 phase: "fetching",
@@ -68,6 +68,7 @@ export class WebsiteImportManager {
 
             const browserData = await this.getBrowserDataWithOptions(options);
 
+            // Update progress with actual count from browser data
             this.updateProgress(importId, {
                 importId,
                 phase: "processing",
@@ -87,6 +88,7 @@ export class WebsiteImportManager {
                 type: "importWebsiteDataWithProgress",
                 parameters: options,
                 importId,
+                totalItems: processedData.length, // Pass the actual count
             });
 
             const duration = Date.now() - startTime;
@@ -294,9 +296,18 @@ export class WebsiteImportManager {
      * Register progress update callback
      */
     onProgressUpdate(callback: ProgressCallback): void {
-        // Store callback for progress updates
-        // In a full implementation, this would be tied to specific import operations
+        // Store callback for progress updates - use a specific key per import
         this.progressCallbacks.set("global", callback);
+    }
+
+    /**
+     * Register progress update callback for a specific import
+     */
+    onProgressUpdateForImport(
+        importId: string,
+        callback: ProgressCallback,
+    ): void {
+        this.progressCallbacks.set(importId, callback);
     }
 
     /**
@@ -650,7 +661,11 @@ export class WebsiteImportManager {
     }
 
     private updateProgress(importId: string, progress: ImportProgress): void {
-        const callback = this.progressCallbacks.get("global");
+        // Try specific import callback first, then fall back to global
+        const specificCallback = this.progressCallbacks.get(importId);
+        const globalCallback = this.progressCallbacks.get("global");
+
+        const callback = specificCallback || globalCallback;
         if (callback) {
             callback(progress);
         }

@@ -36,6 +36,12 @@ export class DocPart extends Message<DocPartMeta> {
     }
 }
 
+export interface DocIndexingState {
+    lastMessageOrdinal: number;
+    lastSemanticRefOrdinal: number;
+    lastIndexed: Date;
+}
+
 export interface DocMemorySettings extends MemorySettings {}
 
 export function createTextMemorySettings(
@@ -55,6 +61,7 @@ export class DocMemory
     public semanticRefs: kp.SemanticRefCollection;
     public semanticRefIndex: kp.ConversationIndex;
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
+    public indexingState: DocIndexingState;
 
     constructor(
         nameTag: string = "",
@@ -75,6 +82,11 @@ export class DocMemory
         this.secondaryIndexes = new kp.ConversationSecondaryIndexes(
             this.settings.conversationSettings,
         );
+        this.indexingState = {
+            lastMessageOrdinal: -1,
+            lastSemanticRefOrdinal: -1,
+            lastIndexed: new Date(),
+        };
     }
 
     public override get conversation(): kp.IConversation<DocPart> {
@@ -86,14 +98,138 @@ export class DocMemory
     ): Promise<kp.IndexingResults> {
         this.beginIndexing();
         try {
-            return await kp.buildConversationIndex(
+            const result = await kp.buildConversationIndex(
                 this,
                 this.settings.conversationSettings,
                 eventHandler,
             );
+            this.updateIndexingState();
+            return result;
         } finally {
             this.endIndexing();
         }
+    }
+
+    public async addToIndex(
+        eventHandler?: kp.IndexingEventHandlers,
+    ): Promise<kp.IndexingResults> {
+        this.beginIndexing();
+        try {
+            const messageOrdinalStartAt =
+                this.indexingState.lastMessageOrdinal + 1;
+            if (messageOrdinalStartAt < this.messages.length) {
+                const result = await kp.addToConversationIndex(
+                    this,
+                    this.settings.conversationSettings,
+                    messageOrdinalStartAt,
+                    this.semanticRefs.length,
+                    eventHandler,
+                );
+                this.updateIndexingState();
+                return result;
+            }
+            return {};
+        } finally {
+            this.endIndexing();
+        }
+    }
+
+    public async addItemToIndex(
+        item: DocPart,
+        eventHandler?: kp.IndexingEventHandlers,
+    ): Promise<kp.IndexingResults> {
+        this.beginIndexing();
+        try {
+            this.messages.append(item);
+            const messageOrdinal = this.messages.length - 1;
+
+            const result = await kp.addToConversationIndex(
+                this,
+                this.settings.conversationSettings,
+                messageOrdinal,
+                this.semanticRefs.length,
+                eventHandler,
+            );
+            this.updateIndexingState();
+            return result;
+        } finally {
+            this.endIndexing();
+        }
+    }
+
+    public async updateItemInIndex(
+        messageOrdinal: number,
+        updatedItem: DocPart,
+        eventHandler?: kp.IndexingEventHandlers,
+    ): Promise<kp.IndexingResults> {
+        this.beginIndexing();
+        try {
+            this.removeSemanticRefsForMessage(messageOrdinal);
+            (this.messages as any).items[messageOrdinal] = updatedItem;
+
+            const result = await kp.addToConversationIndex(
+                this,
+                this.settings.conversationSettings,
+                messageOrdinal,
+                this.semanticRefs.length,
+                eventHandler,
+            );
+            this.updateIndexingState();
+            return result;
+        } finally {
+            this.endIndexing();
+        }
+    }
+
+    private removeSemanticRefsForMessage(messageOrdinal: number): void {
+        if (!this.semanticRefs || !this.semanticRefIndex) return;
+
+        const refsToRemove: number[] = [];
+        for (let i = 0; i < this.semanticRefs.length; i++) {
+            const ref = this.semanticRefs.get(i);
+            if (ref.range.start.messageOrdinal === messageOrdinal) {
+                refsToRemove.push(i);
+            }
+        }
+
+        refsToRemove.reverse().forEach((refIndex) => {
+            const ref = this.semanticRefs.get(refIndex);
+            this.removeSemanticRefFromIndex(ref, refIndex);
+        });
+
+        const items = (this.semanticRefs as any).items;
+        refsToRemove.reverse().forEach((refIndex) => {
+            items.splice(refIndex, 1);
+        });
+    }
+
+    private removeSemanticRefFromIndex(ref: any, refIndex: number): void {
+        if (!this.semanticRefIndex) return;
+
+        const knowledge = ref.knowledge;
+        if (knowledge) {
+            if (knowledge.name) {
+                this.semanticRefIndex.removeTerm(knowledge.name, refIndex);
+            }
+            if (knowledge.type) {
+                const types = Array.isArray(knowledge.type)
+                    ? knowledge.type
+                    : [knowledge.type];
+                types.forEach((type: string) => {
+                    this.semanticRefIndex.removeTerm(type, refIndex);
+                });
+            }
+            if (knowledge.text) {
+                this.semanticRefIndex.removeTerm(knowledge.text, refIndex);
+            }
+        }
+    }
+
+    private updateIndexingState(): void {
+        this.indexingState.lastMessageOrdinal = this.messages.length - 1;
+        this.indexingState.lastSemanticRefOrdinal =
+            this.semanticRefs.length - 1;
+        this.indexingState.lastIndexed = new Date();
     }
 
     public async serialize(): Promise<DocMemoryData> {
@@ -106,6 +242,7 @@ export class DocMemory
             relatedTermsIndexData:
                 this.secondaryIndexes.termToRelatedTermsIndex.serialize(),
             messageIndexData: this.secondaryIndexes.messageIndex?.serialize(),
+            indexingState: this.indexingState,
         };
         return data;
     }
@@ -139,7 +276,20 @@ export class DocMemory
                 docMemoryData.messageIndexData,
             );
         }
-        // Rebuild transient secondary indexes associated with the doc memory
+
+        if (docMemoryData.indexingState) {
+            this.indexingState = {
+                ...docMemoryData.indexingState,
+                lastIndexed: new Date(docMemoryData.indexingState.lastIndexed),
+            };
+        } else {
+            this.indexingState = {
+                lastMessageOrdinal: this.messages.length - 1,
+                lastSemanticRefOrdinal: this.semanticRefs.length - 1,
+                lastIndexed: new Date(),
+            };
+        }
+
         await kp.buildTransientSecondaryIndexes(
             this,
             this.settings.conversationSettings,
@@ -173,7 +323,9 @@ export class DocMemory
 }
 
 export interface DocMemoryData
-    extends kp.IConversationDataWithIndexes<DocPart> {}
+    extends kp.IConversationDataWithIndexes<DocPart> {
+    indexingState?: DocIndexingState;
+}
 
 export class DocPartSerializer implements kp.JsonSerializer<DocPart> {
     public serialize(value: DocPart): string {
