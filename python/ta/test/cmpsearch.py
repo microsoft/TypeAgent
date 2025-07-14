@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import difflib
 import json
 import re
+import sys
 from typing import TypedDict
 
 import black
@@ -48,6 +49,14 @@ class Context:
 
 
 def main():
+    try:
+        return real_main()
+    except KeyboardInterrupt:
+        print("\n")
+        sys.exit(1)
+
+
+def real_main():
     colorama.init()  # So timelog behaves with non-tty stdout.
 
     # Parse arguments.
@@ -307,20 +316,21 @@ async def compare_actual_to_expected(
                 list[searchlang.SearchQueryExpr], record["compiledQueryExpr"]
             )
             qr: list[RawSearchResult] = record["results"]
-            if debug_context.search_query and compare_and_print_diff(
-                qx,
-                debug_context.search_query,
-                "Search query from LLM does not match reference.",
-            ):
-                pass
-            if compare_and_print_diff(
-                qc,
-                debug_context.search_query_expr,
-                "Compiled search query expression from LLM does not match reference.",
-            ):
-                pass
-            if not compare_results(result.value, qr):
-                print("Warning: Search results from index do not match reference.")
+            if debug_context.search_query:
+                compare_and_print_diff(
+                    qx,
+                    debug_context.search_query,
+                    "Search query from LLM does not match reference.",
+                )
+            if debug_context.search_query_expr:
+                compare_and_print_diff(
+                    qc,
+                    debug_context.search_query_expr,
+                    "Compiled search query expression from LLM does not match reference.",
+                )
+            compare_results(
+                result.value, qr, "Search results from index do not match reference,"
+            )
         all_answers, combined_answer = await answers.generate_answers(
             context.answer_translator,
             result.value,
@@ -352,10 +362,28 @@ async def compare_actual_to_expected(
     return the_answer, score
 
 
+async def equality_score(context: Context, a: str, b: str) -> float:
+    a = a.strip()
+    b = b.strip()
+    if a == b:
+        return 1.0
+    if a.lower() == b.lower():
+        return 0.999
+    embeddings = await context.embedding_model.get_embeddings([a, b])
+    assert embeddings.shape[0] == 2, "Expected two embeddings"
+    return np.dot(embeddings[0], embeddings[1])
+
+
 def compare_results(
-    results: list[ConversationSearchResult], matches_records: list[RawSearchResult]
+    results: list[ConversationSearchResult],
+    matches_records: list[RawSearchResult],
+    message: str,
 ) -> bool:
     if len(results) != len(matches_records):
+        print(
+            f"Warning: {message} "
+            f"(Result sizes mismatch, {len(results)} != {len(matches_records)})"
+        )
         return False
     res = True
     for result, record in zip(results, matches_records):
@@ -401,8 +429,7 @@ def compare_message_ordinals(aa: list[ScoredMessageOrdinal], b: list[int]) -> bo
     if sorted(a) == sorted(b):
         return True
     print("Message ordinals do not match:")
-    print("  Actual:", sorted(a))
-    print("  Expected:", sorted(b))
+    utils.list_diff("  Expected:", b, "  Actual:", a, max_items=20)
     return False
 
 
@@ -412,22 +439,9 @@ def compare_semantic_ref_ordinals(
     a = [aai.semantic_ref_ordinal for aai in aa]
     if sorted(a) == sorted(b):
         return True
-    print(f"{label.title()} SemanticRef ordinals do not match:")
-    print("  Actual:", sorted(a))
-    print("  Expected:", sorted(b))
+    print(f"{label.capitalize()} SemanticRef ordinals do not match:")
+    utils.list_diff("  Expected:", b, "  Actual:", a, max_items=20)
     return False
-
-
-async def equality_score(context: Context, a: str, b: str) -> float:
-    a = a.strip()
-    b = b.strip()
-    if a == b:
-        return 1.0
-    if a.lower() == b.lower():
-        return 0.999
-    embeddings = await context.embedding_model.get_embeddings([a, b])
-    assert embeddings.shape[0] == 2, "Expected two embeddings"
-    return np.dot(embeddings[0], embeddings[1])
 
 
 def compare_and_print_diff(
