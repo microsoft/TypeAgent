@@ -44,7 +44,7 @@ def add_facet(
         if value is not None:
             # If the value is a float, we use .g format store it as a string.
             if isinstance(value, float) and value:
-                value = f"{value:.12g}"
+                value = f"{value:g}"
             property_index.add_property(
                 PropertyNames.FacetValue.value,
                 str(value),
