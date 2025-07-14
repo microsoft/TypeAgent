@@ -36,7 +36,13 @@ export class WebsiteImportUI {
      */
     public showWebActivityImportModal(): void {
         this.hideActiveModal();
-        this.createWebActivityModal();
+
+        // Only create modal if it doesn't exist to prevent duplicate event listeners
+        const existingModal = document.getElementById(this.webActivityModalId);
+        if (!existingModal) {
+            this.createWebActivityModal();
+        }
+
         this.showModal(this.webActivityModalId);
         this.activeModal = this.webActivityModalId;
     }
@@ -46,7 +52,13 @@ export class WebsiteImportUI {
      */
     public showFolderImportModal(): void {
         this.hideActiveModal();
-        this.createFolderImportModal();
+
+        // Only create modal if it doesn't exist to prevent duplicate event listeners
+        const existingModal = document.getElementById(this.folderImportModalId);
+        if (!existingModal) {
+            this.createFolderImportModal();
+        }
+
         this.showModal(this.folderImportModalId);
         this.activeModal = this.folderImportModalId;
     }
@@ -122,6 +134,7 @@ export class WebsiteImportUI {
         // Animate status text changes
         if (statusElement) {
             const phaseMessages: Record<string, string> = {
+                counting: "Counting items to import...",
                 initializing: "Preparing import...",
                 fetching: "Fetching browser data...",
                 processing: "Processing items...",
@@ -178,9 +191,9 @@ export class WebsiteImportUI {
             }
         }
 
-        if (this.progressCallback) {
-            this.progressCallback(progress);
-        }
+        // Note: Do not call this.progressCallback here to avoid infinite recursion
+        // The progress callback should only be triggered by external progress updates,
+        // not by internal UI updates like this method
     }
 
     /**
@@ -414,9 +427,6 @@ export class WebsiteImportUI {
         const intelligentAnalysisInput = modal.querySelector(
             "#enableIntelligentAnalysis",
         ) as HTMLInputElement;
-        const actionDetectionInput = modal.querySelector(
-            "#enableActionDetection",
-        ) as HTMLInputElement;
         const extractionModeInput = modal.querySelector(
             "#extractionMode",
         ) as HTMLSelectElement;
@@ -430,11 +440,7 @@ export class WebsiteImportUI {
         const options: ImportOptions = {
             source,
             type,
-            extractContent: extractContentInput?.checked ?? true,
-            enableIntelligentAnalysis:
-                intelligentAnalysisInput?.checked ?? true,
-            enableActionDetection: actionDetectionInput?.checked ?? false,
-            extractionMode: (extractionModeInput?.value as any) ?? "content",
+            mode: (extractionModeInput?.value as any) ?? "content",
             maxConcurrent: maxConcurrentInput?.value
                 ? parseInt(maxConcurrentInput.value)
                 : 5,
@@ -504,11 +510,7 @@ export class WebsiteImportUI {
 
         const options: FolderImportOptions = {
             folderPath: folderPathInput.value.trim(),
-            extractContent: extractContentInput?.checked ?? true,
-            enableIntelligentAnalysis:
-                intelligentAnalysisInput?.checked ?? true,
-            enableActionDetection: actionDetectionInput?.checked ?? false,
-            extractionMode: (extractionModeInput?.value as any) ?? "content",
+            mode: (extractionModeInput?.value as any) ?? "content",
             preserveStructure: preserveStructureInput?.checked ?? true,
             recursive: recursiveInput?.checked ?? true,
             fileTypes: [".html", ".htm", ".mhtml"],
@@ -810,16 +812,6 @@ export class WebsiteImportUI {
                                                 </label>
                                                 <small class="text-muted d-block ms-4">
                                                     Extract entities, topics, and insights using AI
-                                                </small>
-                                            </div>
-
-                                            <div class="form-check mb-3">
-                                                <input class="form-check-input" type="checkbox" id="enableActionDetection">
-                                                <label class="form-check-label" for="enableActionDetection">
-                                                    <i class="bi bi-lightning"></i> Action detection
-                                                </label>
-                                                <small class="text-muted d-block ms-4">
-                                                    Identify actionable elements (buy, download, etc.)
                                                 </small>
                                             </div>
 
@@ -1145,10 +1137,14 @@ export class WebsiteImportUI {
             });
         });
 
-        // Start import button
+        // Start import button - use replaceWith to remove any existing event listeners
         const startButton = modal.querySelector("#startWebActivityImport");
         if (startButton) {
-            startButton.addEventListener("click", () => {
+            // Clone the button to remove any existing event listeners
+            const newStartButton = startButton.cloneNode(true) as HTMLElement;
+            startButton.replaceWith(newStartButton);
+
+            newStartButton.addEventListener("click", () => {
                 const options = this.getWebActivityImportOptions();
                 if (options) {
                     window.dispatchEvent(
@@ -1289,9 +1285,13 @@ export class WebsiteImportUI {
             });
         });
 
-        // Start import button
+        // Start import button - use replaceWith to remove any existing event listeners
         if (startButton) {
-            startButton.addEventListener("click", () => {
+            // Clone the button to remove any existing event listeners
+            const newStartButton = startButton.cloneNode(true) as HTMLElement;
+            startButton.replaceWith(newStartButton);
+
+            newStartButton.addEventListener("click", () => {
                 const options = this.getFolderImportOptions();
                 if (options) {
                     window.dispatchEvent(

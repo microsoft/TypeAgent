@@ -21,9 +21,11 @@ export type HistoryContext = {
 };
 
 export function normalizeParamString(str: string) {
+    // Remove diacritical marks, and case replace any space characters with the normalized ' '.
     return str
         .normalize("NFD")
         .replace(/\p{Diacritic}/gu, "")
+        .replace(/\s/g, " ")
         .toLowerCase();
 }
 

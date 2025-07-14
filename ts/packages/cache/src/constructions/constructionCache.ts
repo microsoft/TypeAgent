@@ -264,8 +264,46 @@ export class ConstructionCache {
         return count;
     }
 
+    // For completion
+    public getPrefix(namespaceKeys?: string[]): string[] {
+        if (namespaceKeys?.length === 0) {
+            return [];
+        }
+        const prefix = new Set<string>();
+        const filter = namespaceKeys ? new Set(namespaceKeys) : undefined;
+        for (const [
+            name,
+            constructionNamespace,
+        ] of this.constructionNamespaces.entries()) {
+            const keys = getNamespaceKeys(name);
+            if (filter && keys.some((key) => !filter.has(key))) {
+                continue;
+            }
+
+            for (const construction of constructionNamespace.constructions) {
+                for (const part of construction.parts) {
+                    if (part.optional) {
+                        continue;
+                    }
+                    if (isMatchPart(part)) {
+                        // For match parts, we can use the match set name as the prefix
+                        for (const match of part.matchSet.matches.values()) {
+                            prefix.add(match);
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        return [...prefix.values()];
+    }
+
+    // For matching
     public match(request: string, options?: MatchOptions): MatchResult[] {
         const namespaceKeys = options?.namespaceKeys;
+        if (namespaceKeys?.length === 0) {
+            return [];
+        }
         const config = {
             enableWildcard: options?.wildcard ?? true, // default to true.
             rejectReferences: options?.rejectReferences ?? true, // default to true.
@@ -284,7 +322,7 @@ export class ConstructionCache {
             constructionNamespace,
         ] of this.constructionNamespaces.entries()) {
             const keys = getNamespaceKeys(name);
-            if (keys.some((key) => filter?.has(key) === false)) {
+            if (filter && keys.some((key) => !filter.has(key))) {
                 continue;
             }
 

@@ -1,5 +1,7 @@
 # TextPro
 
+(Work in progress)
+
 TextPro is **sample library code** for parsing and manipulating text data and documents.
 
 - MD

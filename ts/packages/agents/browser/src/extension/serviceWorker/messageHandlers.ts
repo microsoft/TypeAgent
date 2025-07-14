@@ -37,25 +37,63 @@ export async function handleMessage(
             return await handleGetWebsiteLibraryStats();
         }
 
-        case "searchWebsites": {
-            return await handleSearchWebsitesEnhanced(message);
+        case "getTopDomains": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getTopDomains",
+                    parameters: {
+                        limit: message.limit || 10,
+                    },
+                });
+
+                return {
+                    success: result.success || false,
+                    domains: {
+                        domains: result.domains || [],
+                        totalSites: result.totalSites || 0,
+                    },
+                };
+            } catch (error) {
+                console.error("Error getting top domains:", error);
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error",
+                    domains: { domains: [], totalSites: 0 },
+                };
+            }
         }
 
-        case "extractKnowledge": {
-            // TODO: Implement knowledge extraction
-            return {
-                hasKnowledge: false,
-                status: "none",
-                error: "Knowledge extraction not implemented",
-            };
-        }
+        case "getActivityTrends": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getActivityTrends",
+                    parameters: {
+                        timeRange: message.timeRange || "30d",
+                        granularity: message.granularity || "day",
+                    },
+                });
 
-        case "checkKnowledgeStatus": {
-            // TODO: Implement knowledge status check
-            return {
-                hasKnowledge: false,
-                status: "none",
-            };
+                return {
+                    success: result.success || false,
+                    trends: {
+                        trends: result.trends || [],
+                        summary: result.summary || {},
+                    },
+                };
+            } catch (error) {
+                console.error("Error getting activity trends:", error);
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error",
+                    trends: { trends: [], summary: {} },
+                };
+            }
         }
 
         case "getSearchSuggestions": {
@@ -278,19 +316,7 @@ export async function handleMessage(
                             extractEntities: true,
                             extractRelationships: true,
                             suggestQuestions: true,
-                            quality:
-                                message.extractionSettings?.quality ||
-                                "balanced",
-                            extractionSettings: {
-                                mode:
-                                    message.extractionSettings?.mode || "full",
-                                enableIntelligentAnalysis:
-                                    message.extractionSettings
-                                        ?.enableIntelligentAnalysis !== false,
-                                enableActionDetection:
-                                    message.extractionSettings
-                                        ?.enableActionDetection !== false,
-                            },
+                            mode: message.extractionSettings?.mode || "content", // Use extraction mode parameter
                         },
                     });
 
@@ -314,9 +340,6 @@ export async function handleMessage(
                             contentMetrics: knowledgeResult.contentMetrics || {
                                 readingTime: 0,
                                 wordCount: 0,
-                                hasCode: false,
-                                interactivity: "static",
-                                pageType: "other",
                             },
                         },
                     };
@@ -351,35 +374,8 @@ export async function handleMessage(
             }
         }
 
-        case "queryWebKnowledgeEnhanced": {
-            try {
-                const result = await sendActionToAgent({
-                    actionName: "queryWebKnowledgeEnhanced",
-                    parameters: {
-                        query: message.query,
-                        url: message.url,
-                        searchScope: message.searchScope || "all_indexed",
-                        filters: message.filters,
-                        maxResults: message.maxResults || 10,
-                    },
-                });
-
-                return result;
-            } catch (error) {
-                console.error("Enhanced query error:", error);
-                return {
-                    answer: "Error occurred during enhanced search.",
-                    sources: [],
-                    relatedEntities: [],
-                    metadata: {
-                        totalFound: 0,
-                        searchScope: "all_indexed",
-                        filtersApplied: [],
-                        suggestions: [],
-                        processingTime: 0,
-                    },
-                };
-            }
+        case "searchWebMemories": {
+            return await handleSearchWebMemories(message);
         }
 
         // Cross-page intelligence handlers
@@ -443,6 +439,9 @@ export async function handleMessage(
                 const success = await indexPageContent(
                     targetTab,
                     message.showNotification !== false,
+                    {
+                        mode: message.mode,
+                    },
                 );
                 return { success };
             }
@@ -478,6 +477,30 @@ export async function handleMessage(
             } catch (error) {
                 console.error("Error checking page index status:", error);
                 return { isIndexed: false, error: "Failed to check status" };
+            }
+        }
+
+        case "getPageIndexedKnowledge": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getPageIndexedKnowledge",
+                    parameters: {
+                        url: message.url,
+                    },
+                });
+
+                return {
+                    isIndexed: result.isIndexed || false,
+                    knowledge: result.knowledge || null,
+                    error: result.error || null,
+                };
+            } catch (error) {
+                console.error("Error getting page indexed knowledge:", error);
+                return {
+                    isIndexed: false,
+                    knowledge: null,
+                    error: "Failed to retrieve indexed knowledge",
+                };
             }
         }
 
@@ -540,10 +563,6 @@ export async function handleMessage(
             return await handleGetWebsiteLibraryStats();
         }
 
-        case "exportWebsiteLibrary": {
-            return await handleExportWebsiteLibrary();
-        }
-
         case "clearWebsiteLibrary": {
             return await handleClearWebsiteLibrary();
         }
@@ -565,10 +584,7 @@ export async function handleMessage(
             return await handleCancelFileImport(message.importId);
         }
 
-        // Enhanced search message handlers
-        case "searchWebsitesEnhanced": {
-            return await handleSearchWebsitesEnhanced(message);
-        }
+        // Enhanced search message handlers (searchWebsitesEnhanced removed - was broken)
 
         case "getSearchSuggestions": {
             return await handleGetSearchSuggestions(message);
@@ -673,6 +689,150 @@ export async function handleMessage(
             }
         }
 
+        case "checkAIModelAvailability": {
+            try {
+                // Check if AI model is available by attempting a simple extraction
+                const result = await sendActionToAgent({
+                    actionName: "extractKnowledgeFromPage",
+                    parameters: {
+                        url: "test://ai-check",
+                        title: "AI Availability Test",
+                        htmlFragments: [
+                            { text: "test content for AI availability check" },
+                        ],
+                        extractEntities: false,
+                        extractRelationships: false,
+                        suggestQuestions: false,
+                        mode: "basic",
+                    },
+                });
+
+                return {
+                    available: !result.error,
+                    version: result.version || "unknown",
+                    endpoint: result.endpoint || "unknown",
+                };
+            } catch (error) {
+                console.error("Error checking AI model availability:", error);
+                return {
+                    available: false,
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                };
+            }
+        }
+
+        case "getPageQualityMetrics": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getKnowledgeIndexStats",
+                    parameters: {
+                        url: message.url,
+                    },
+                });
+
+                // Extract quality metrics for the specific page
+                const pageStats = result.pageStats || {};
+
+                return {
+                    success: !result.error,
+                    quality: {
+                        score: pageStats.qualityScore || 0.5,
+                        entityCount: pageStats.entityCount || 0,
+                        topicCount: pageStats.topicCount || 0,
+                        actionCount: pageStats.actionCount || 0,
+                        extractionMode: pageStats.extractionMode || "unknown",
+                        lastUpdated: pageStats.lastUpdated || null,
+                    },
+                };
+            } catch (error) {
+                console.error("Error getting page quality metrics:", error);
+                return {
+                    success: false,
+                    quality: {
+                        score: 0,
+                        entityCount: 0,
+                        topicCount: 0,
+                        actionCount: 0,
+                        extractionMode: "unknown",
+                        lastUpdated: null,
+                    },
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                };
+            }
+        }
+
+        case "settingsUpdated": {
+            // Handle settings update notification
+            console.log("Settings updated:", message.settings);
+
+            // Store the new settings for use by other handlers
+            await chrome.storage.local.set({
+                knowledgeSettings: message.settings,
+            });
+
+            return { success: true };
+        }
+
+        case "getRecentKnowledgeItems": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getRecentKnowledgeItems",
+                    parameters: {
+                        limit: message.limit || 10,
+                        type: message.itemType || "both",
+                    },
+                });
+
+                return {
+                    success: result.success || false,
+                    entities: result.entities || [],
+                    topics: result.topics || [],
+                };
+            } catch (error) {
+                console.error("Error getting recent knowledge items:", error);
+                return {
+                    success: false,
+                    entities: [],
+                    topics: [],
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                };
+            }
+        }
+
+        case "getDiscoverInsights": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getDiscoverInsights",
+                    parameters: {
+                        limit: message.limit || 10,
+                        timeframe: message.timeframe || "30d",
+                    },
+                });
+
+                return {
+                    success: result.success || false,
+                    trendingTopics: result.trendingTopics || [],
+                    readingPatterns: result.readingPatterns || [],
+                    popularPages: result.popularPages || [],
+                    topDomains: result.topDomains || [],
+                };
+            } catch (error) {
+                console.error("Error getting discover insights:", error);
+                return {
+                    success: false,
+                    trendingTopics: [],
+                    readingPatterns: [],
+                    popularPages: [],
+                    topDomains: [],
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                };
+            }
+        }
+
         default:
             return null;
     }
@@ -680,37 +840,106 @@ export async function handleMessage(
 
 // Website Library Panel handlers
 async function handleImportWebsiteDataWithProgress(message: any) {
+    const importId = message.importId;
+    const totalItems = message.totalItems || 0;
+
     try {
+        // Send initial progress update
+        sendProgressToUI(importId, {
+            importId,
+            phase: "initializing",
+            totalItems: totalItems,
+            processedItems: 0,
+            errors: [],
+        });
+
+        const startTime = Date.now();
+
         const result = await sendActionToAgent({
-            actionName: "importWebsiteData",
+            actionName: "importWebsiteDataWithProgress",
             parameters: {
                 source: message.parameters.source,
                 type: message.parameters.type,
                 limit: message.parameters.limit,
                 days: message.parameters.days,
                 folder: message.parameters.folder,
-                // Enhancement options
-                extractContent: message.parameters.extractContent,
-                enableIntelligentAnalysis:
-                    message.parameters.enableIntelligentAnalysis,
-                enableActionDetection: message.parameters.enableActionDetection,
-                extractionMode: message.parameters.extractionMode,
+                mode: message.parameters.mode || "basic",
                 maxConcurrent: message.parameters.maxConcurrent,
                 contentTimeout: message.parameters.contentTimeout,
+                importId: importId,
+                totalItems: totalItems,
+                progressCallback: true,
             },
+        });
+
+        // Send completion progress
+        sendProgressToUI(importId, {
+            importId,
+            phase: "complete",
+            totalItems: totalItems,
+            processedItems: totalItems,
+            errors: [],
         });
 
         return {
             success: !result.error,
-            itemCount: result.itemCount || 0,
+            itemCount: result.itemCount || totalItems,
             error: result.error,
         };
     } catch (error) {
         console.error("Error importing website data:", error);
+
+        // Send error progress to UI
+        sendProgressToUI(importId, {
+            importId,
+            phase: "error",
+            totalItems: totalItems,
+            processedItems: 0,
+            errors: [
+                {
+                    type: "processing",
+                    message:
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error",
+                    timestamp: Date.now(),
+                },
+            ],
+        });
+
         return {
             success: false,
             error: error instanceof Error ? error.message : "Unknown error",
         };
+    }
+}
+
+function sendProgressToUI(importId: string, progress: any) {
+    // Ensure progress has required structure
+    const structuredProgress = {
+        importId: importId,
+        phase: progress.phase || "processing",
+        totalItems: progress.totalItems || 0,
+        processedItems: progress.processedItems || 0,
+        currentItem: progress.currentItem,
+        errors: progress.errors || [],
+        ...progress,
+    };
+
+    // Send to all connected library panels via runtime messaging
+    try {
+        chrome.runtime
+            .sendMessage({
+                type: "importProgress",
+                importId,
+                progress: structuredProgress,
+            })
+            .catch((error) => {
+                // Handle case where no listeners are available
+                console.log("No listeners for progress update:", error);
+            });
+    } catch (error) {
+        console.error("Failed to send progress to UI:", error);
     }
 }
 
@@ -742,44 +971,6 @@ async function handleGetWebsiteLibraryStats() {
         };
     } catch (error) {
         console.error("Error getting website library stats:", error);
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : "Unknown error",
-        };
-    }
-}
-
-async function handleExportWebsiteLibrary() {
-    try {
-        // Get all website data from the agent
-        const searchResult = await sendActionToAgent({
-            actionName: "searchWebsites",
-            parameters: {
-                originalUserRequest: "export all data",
-                query: "*",
-                limit: 10000,
-                minScore: 0,
-            },
-        });
-
-        const statsResult = await sendActionToAgent({
-            actionName: "exportKnowledgeData",
-            parameters: {},
-        });
-
-        const exportData = {
-            exportDate: new Date().toISOString(),
-            version: "1.0",
-            websites: searchResult.websites || [],
-            stats: parseWebsiteStatsFromText(statsResult.text || ""),
-        };
-
-        return {
-            success: true,
-            data: exportData,
-        };
-    } catch (error) {
-        console.error("Error exporting website library:", error);
         return {
             success: false,
             error: error instanceof Error ? error.message : "Unknown error",
@@ -830,12 +1021,7 @@ async function handleImportHtmlFolder(message: any) {
             parameters: {
                 folderPath,
                 options: {
-                    extractContent: options?.extractContent ?? true,
-                    enableIntelligentAnalysis:
-                        options?.enableIntelligentAnalysis ?? true,
-                    enableActionDetection:
-                        options?.enableActionDetection ?? false,
-                    extractionMode: options?.extractionMode ?? "content",
+                    mode: options?.mode || "basic",
                     preserveStructure: options?.preserveStructure ?? true,
                     recursive: options?.recursive ?? true,
                     fileTypes: options?.fileTypes ?? [
@@ -924,52 +1110,42 @@ async function handleCancelFileImport(importId: string) {
 }
 
 // Enhanced search handlers
-async function handleSearchWebsitesEnhanced(message: any) {
+async function handleSearchWebMemories(message: any) {
     try {
         const startTime = Date.now();
 
-        // Perform the search using existing searchWebsites action
-        const searchResult = await sendActionToAgent({
-            actionName: "queryWebKnowledge",
+        // Use the new unified search action
+        const result = await sendActionToAgent({
+            actionName: "searchWebMemories",
             parameters: {
-                originalUserRequest: message.parameters.query,
                 query: message.parameters.query,
-                limit: message.parameters.limit || 50,
-                minScore: message.parameters.filters?.minRelevance || 0,
+                generateAnswer: true, // Knowledge Library wants answers
+                includeRelatedEntities: true,
+                enableAdvancedSearch: true,
+                limit: message.parameters.limit || 20,
+                minScore: message.parameters.filters?.minRelevance || 0.3,
+                ...message.parameters.filters,
             },
         });
-
-        const searchTime = Date.now() - startTime;
-
-        // Generate AI summary if requested
-        let summary = null;
-        if (
-            message.parameters.includeSummary &&
-            searchResult.websites?.length > 0
-        ) {
-            summary = await generateSearchSummary(
-                searchResult.websites,
-                message.parameters.query,
-            );
-        }
 
         return {
             success: true,
             results: {
-                websites: searchResult.websites || [],
+                websites: result.websites || [],
                 summary: {
-                    text: summary || "",
-                    totalFound: searchResult.websites?.length || 0,
-                    searchTime: searchTime,
-                    sources: extractSources(searchResult.websites || []),
-                    entities: searchResult.entities || [],
+                    text: result.answer || "",
+                    totalFound: result.websites?.length || 0,
+                    searchTime:
+                        result.summary?.searchTime || Date.now() - startTime,
+                    sources: result.answerSources || [],
+                    entities: result.relatedEntities || [],
                 },
                 query: message.parameters.query,
                 filters: message.parameters.filters || {},
             },
         };
     } catch (error) {
-        console.error("Error in enhanced search:", error);
+        console.error("Error in unified search:", error);
         return {
             success: false,
             error: error instanceof Error ? error.message : "Unknown error",
@@ -1138,6 +1314,7 @@ async function indexPageContent(
     options: {
         quality?: "fast" | "balanced" | "deep";
         textOnly?: boolean;
+        mode?: "basic" | "content" | "actions" | "full";
     } = {},
 ): Promise<boolean> {
     try {
@@ -1159,6 +1336,7 @@ async function indexPageContent(
                 timestamp: new Date().toISOString(),
                 quality: options.quality || "balanced",
                 textOnly: options.textOnly || false,
+                mode: options.mode || "content",
             },
         });
 
@@ -1387,7 +1565,7 @@ function extractSources(websites: any[]): any[] {
     return websites.slice(0, 10).map((site) => ({
         url: site.url,
         title: site.title || site.url,
-        relevance: site.score || 0.5,
+        relevance: site.relevanceScore || 0.5,
     }));
 }
 

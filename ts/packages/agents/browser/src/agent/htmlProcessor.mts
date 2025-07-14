@@ -9,46 +9,40 @@
 import * as cheerio from "cheerio";
 import {
     ContentExtractor,
+    ExtractionInput,
+    ExtractionResult,
     ExtractionMode,
-    EnhancedContent,
     PageContent,
     MetaTagCollection,
     ImageInfo,
     LinkInfo,
     ActionInfo,
     StructuredDataCollection,
-    type EnhancedContentWithKnowledge,
-    type KnowledgeExtractionMode,
 } from "website-memory";
 
 // Re-export types for consumers
 export type {
     ExtractionMode,
-    EnhancedContent,
+    ExtractionResult,
     PageContent,
     MetaTagCollection,
     ImageInfo,
     LinkInfo,
     ActionInfo,
     StructuredDataCollection,
-    EnhancedContentWithKnowledge,
-    KnowledgeExtractionMode,
 };
 
 /**
  * Processing options for HTML content processing
  */
 export interface ProcessingOptions {
-    extractContent?: boolean;
-    extractionMode?: ExtractionMode;
-    enableIntelligentAnalysis?: boolean;
-    enableActionDetection?: boolean;
+    mode?: ExtractionMode;
     contentTimeout?: number;
     maxContentLength?: number;
     maxConcurrent?: number;
     userAgent?: string;
-    knowledgeMode?: KnowledgeExtractionMode;
     maxCharsPerChunk?: number;
+    knowledgeExtractor?: any; // AI model for knowledge extraction
 }
 
 export interface ParsedHtmlContent {
@@ -94,7 +88,7 @@ export interface WebsiteData {
     };
     visitCount: number;
     lastVisited: Date;
-    enhancedContent?: EnhancedContent;
+    extractionResult?: ExtractionResult;
 }
 
 export async function processHtmlContent(
@@ -103,71 +97,67 @@ export async function processHtmlContent(
     options: ProcessingOptions = {},
     fileMetadata?: FileMetadata,
 ): Promise<WebsiteData> {
-    const extractorOptions: any = {};
+    const config: any = {
+        mode: options.mode || "content",
+    };
+
+    // Only add optional properties if they have values
     if (options.contentTimeout !== undefined)
-        extractorOptions.timeout = options.contentTimeout;
-    if (options.userAgent !== undefined)
-        extractorOptions.userAgent = options.userAgent;
+        config.timeout = options.contentTimeout;
     if (options.maxContentLength !== undefined)
-        extractorOptions.maxContentLength = options.maxContentLength;
-    if (options.enableActionDetection !== undefined)
-        extractorOptions.enableActionDetection = options.enableActionDetection;
-    if (options.enableIntelligentAnalysis !== undefined)
-        extractorOptions.enableKnowledgeExtraction =
-            options.enableIntelligentAnalysis;
-    if (options.knowledgeMode !== undefined)
-        extractorOptions.knowledgeMode = options.knowledgeMode;
-    if (options.maxCharsPerChunk !== undefined)
-        extractorOptions.maxCharsPerChunk = options.maxCharsPerChunk;
+        config.maxContentLength = options.maxContentLength;
+    if (options.knowledgeExtractor)
+        config.knowledgeExtractor = options.knowledgeExtractor;
 
-    const extractor = new ContentExtractor(extractorOptions);
+    const extractor = new ContentExtractor(config);
 
-    const enhancedContent = (await extractor.extractFromHtml(
-        html,
-        options.extractionMode || "content",
-    )) as EnhancedContent;
+    const url = fileMetadata?.fileUrl || sourceIdentifier;
+    const input: ExtractionInput = {
+        url,
+        title: fileMetadata?.filename || url,
+        htmlContent: html,
+        source: "direct",
+    };
+
+    const result = await extractor.extract(input, options.mode || "content");
 
     const parsedContent = await parseHtmlStructure(html);
 
     const publishedDate = await extractPublishedDate(html);
 
-    const url = fileMetadata?.fileUrl || sourceIdentifier;
     const domain = extractDomainFromUrl(url);
 
     const websiteData: WebsiteData = {
         url,
         title:
-            enhancedContent.pageContent?.title ||
+            result.pageContent?.title ||
             parsedContent.title ||
             fileMetadata?.filename ||
             "Untitled",
-        content:
-            enhancedContent.pageContent?.mainContent ||
-            parsedContent.content ||
-            "",
+        content: result.pageContent?.mainContent || parsedContent.content || "",
         domain,
         metadata: {
             websiteSource: fileMetadata ? "file_import" : "bookmark_import",
             url,
             title:
-                enhancedContent.pageContent?.title ||
+                result.pageContent?.title ||
                 parsedContent.title ||
                 fileMetadata?.filename ||
                 "Untitled",
             domain,
-            pageType: determinePageType(enhancedContent, parsedContent),
+            pageType: determinePageType(result, parsedContent),
             importDate: new Date().toISOString(),
             lastModified: fileMetadata?.lastModified || new Date(),
-            originalMetadata: enhancedContent.metaTags,
+            originalMetadata: result.metaTags,
             links:
-                enhancedContent.pageContent?.links?.map((l) => l.href) ||
+                result.pageContent?.links?.map((l) => l.href) ||
                 parsedContent.links,
-            images: enhancedContent.pageContent?.images || [],
+            images: result.pageContent?.images || [],
             preserveStructure: true,
         },
         visitCount: 1,
         lastVisited: publishedDate || fileMetadata?.lastModified || new Date(),
-        enhancedContent,
+        extractionResult: result,
     };
 
     if (fileMetadata) {
@@ -516,15 +506,17 @@ export function extractDomainFromUrl(url: string): string {
 }
 
 export function determinePageType(
-    enhancedContent: Partial<EnhancedContent>,
+    extractionResult: ExtractionResult,
     parsedContent: ParsedHtmlContent,
 ): string {
     // Check for common page type indicators
     const title =
-        enhancedContent.pageContent?.title || parsedContent.title || "";
+        extractionResult.pageContent?.title || parsedContent.title || "";
     const content =
-        enhancedContent.pageContent?.mainContent || parsedContent.content || "";
-    const metaTags = enhancedContent.metaTags;
+        extractionResult.pageContent?.mainContent ||
+        parsedContent.content ||
+        "";
+    const metaTags = extractionResult.metaTags;
 
     // Check Open Graph type first
     if (metaTags?.ogType) {
@@ -664,16 +656,16 @@ export async function extractMetadata(
 }
 
 /**
- * Create website data from enhanced content (for bookmark import compatibility)
+ * Create website data from extraction result (for import compatibility)
  */
 export function createWebsiteDataFromContent(
-    enhancedContent: EnhancedContent,
+    extractionResult: ExtractionResult,
     url: string,
     sourceType: "bookmark" | "history" | "file" = "bookmark",
 ): WebsiteData {
     const domain = extractDomainFromUrl(url);
-    const title = enhancedContent.pageContent?.title || "Untitled";
-    const content = enhancedContent.pageContent?.mainContent || "";
+    const title = extractionResult.pageContent?.title || "Untitled";
+    const content = extractionResult.pageContent?.mainContent || "";
 
     return {
         url,
@@ -686,17 +678,18 @@ export function createWebsiteDataFromContent(
             url,
             title,
             domain,
-            pageType: enhancedContent.metaTags?.ogType || "document",
+            pageType: extractionResult.metaTags?.ogType || "document",
             importDate: new Date().toISOString(),
             lastModified: new Date(),
-            originalMetadata: enhancedContent.metaTags,
-            links: enhancedContent.pageContent?.links?.map((l) => l.href) || [],
-            images: enhancedContent.pageContent?.images || [],
+            originalMetadata: extractionResult.metaTags,
+            links:
+                extractionResult.pageContent?.links?.map((l) => l.href) || [],
+            images: extractionResult.pageContent?.images || [],
             preserveStructure: true,
         },
         visitCount: 1,
         lastVisited: new Date(),
-        enhancedContent,
+        extractionResult,
     };
 }
 

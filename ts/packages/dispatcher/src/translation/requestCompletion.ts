@@ -12,7 +12,7 @@ const debugCompletionError = registerDebug(
     "typeagent:request:completion:error",
 );
 export async function requestCompletion(
-    requestPrefix: string,
+    requestPrefix: string | undefined,
     context: CommandHandlerContext,
 ): Promise<CompletionGroup[]> {
     const constructionStore = context.agentCache.constructionStore;
@@ -23,11 +23,26 @@ export async function requestCompletion(
     debugCompletion(`Request completion for prefix '${requestPrefix}'`);
     const config = context.session.getConfig();
     const activeSchemaNames = context.agents.getActiveSchemas();
+    const namespaceKeys =
+        context.agentCache.getNamespaceKeys(activeSchemaNames);
+    if (!requestPrefix) {
+        const completions = constructionStore.getPrefix(namespaceKeys);
+
+        return completions.length > 0
+            ? [
+                  {
+                      name: "Request Completions",
+                      completions,
+                      needQuotes: false, // Request completions are partial, no quotes needed
+                  },
+              ]
+            : [];
+    }
     const results = constructionStore.match(requestPrefix, {
         partial: true,
         wildcard: config.cache.matchWildcard,
         rejectReferences: config.explainer.filter.reference.list,
-        namespaceKeys: context.agentCache.getNamespaceKeys(activeSchemaNames),
+        namespaceKeys,
         history: getHistoryContextForTranslation(context),
     });
 

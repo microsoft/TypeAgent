@@ -6,7 +6,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Extension Options</title>
+    <title>TypeAgent Knowledge Settings</title>
     <link rel="stylesheet" href="../vendor/bootstrap/bootstrap.min.css" />
     <link
       rel="stylesheet"
@@ -14,49 +14,328 @@
     />
     <style>
       body {
-        padding: 15px;
-        width: 350px;
+        padding: 20px;
+        width: 500px;
+        background-color: #f8f9fa;
       }
       .container {
         width: 100%;
+        background: white;
+        border-radius: 8px;
+        padding: 24px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
       }
       .header {
-        margin-bottom: 20px;
+        margin-bottom: 24px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid #e9ecef;
       }
-      .actions {
-        margin-top: 20px;
+      .section {
+        margin-bottom: 24px;
+      }
+      .section-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin-bottom: 12px;
+        color: #495057;
+      }
+      .mode-option {
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        padding: 12px;
+        margin-bottom: 8px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+      .mode-option:hover {
+        border-color: #0d6efd;
+        box-shadow: 0 2px 4px rgba(13, 110, 253, 0.1);
+      }
+      .mode-option.selected {
+        border-color: #0d6efd;
+        background-color: #e7f3ff;
+      }
+      .mode-title {
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+      .mode-description {
+        font-size: 0.875rem;
+        color: #6c757d;
+        margin-bottom: 8px;
+      }
+      .mode-features {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .feature-badge {
+        font-size: 0.75rem;
+        padding: 2px 8px;
+        border-radius: 12px;
+        background-color: #f8f9fa;
+        color: #495057;
+        border: 1px solid #dee2e6;
+      }
+      .ai-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 0.875rem;
+      }
+      .ai-available {
+        background-color: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+      }
+      .ai-unavailable {
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+      }
+      .ai-checking {
+        background-color: #fff3cd;
+        color: #856404;
+        border: 1px solid #ffeaa7;
+      }
+      .quality-indicator {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 8px;
+      }
+      .btn-group-vertical .btn {
+        border-radius: 0;
+      }
+      .btn-group-vertical .btn:first-child {
+        border-top-left-radius: 0.375rem;
+        border-top-right-radius: 0.375rem;
+      }
+      .btn-group-vertical .btn:last-child {
+        border-bottom-left-radius: 0.375rem;
+        border-bottom-right-radius: 0.375rem;
       }
     </style>
   </head>
   <body>
     <div class="container">
       <div class="header">
-        <h4>Extension Settings</h4>
+        <h4><i class="bi bi-gear me-2"></i>TypeAgent Knowledge Settings</h4>
+        <p class="text-muted mb-0">
+          Configure how TypeAgent extracts and processes knowledge from web
+          pages
+        </p>
       </div>
 
       <form id="optionsForm">
-        <div class="mb-3">
-          <label for="websocketHost" class="form-label">WebSocket Host</label>
-          <input
-            type="text"
-            class="form-control"
-            id="websocketHost"
-            placeholder="ws://localhost:8080"
-          />
-          <div class="form-text">
-            Specify the WebSocket host address for connection
+        <!-- AI Model Configuration -->
+        <div class="section">
+          <div class="section-title">
+            <i class="bi bi-robot me-2"></i>AI Model Configuration
+          </div>
+
+          <div id="aiStatusContainer" class="mb-3">
+            <div id="aiStatus" class="ai-status ai-checking">
+              <i class="bi bi-hourglass-split"></i>
+              <span>Checking AI model availability...</span>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label for="websocketHost" class="form-label">WebSocket Host</label>
+            <input
+              type="text"
+              class="form-control"
+              id="websocketHost"
+              placeholder="ws://localhost:8080"
+            />
+            <div class="form-text">
+              Specify the WebSocket host address for TypeAgent connection
+            </div>
           </div>
         </div>
 
-        <div class="actions d-flex justify-content-between">
+        <!-- Default Extraction Mode -->
+        <div class="section">
+          <div class="section-title">
+            <i class="bi bi-cpu me-2"></i>Default Extraction Mode
+          </div>
+          <p class="text-muted small mb-3">
+            Choose the default mode for knowledge extraction operations
+          </p>
+
+          <div id="modeOptions">
+            <div class="mode-option" data-mode="basic">
+              <div class="d-flex justify-content-between align-items-start">
+                <div class="flex-grow-1">
+                  <div class="mode-title">
+                    <i class="bi bi-lightning-charge text-warning me-2"></i
+                    >Basic Mode
+                  </div>
+                  <div class="mode-description">
+                    Fast metadata extraction without AI - perfect for bulk
+                    operations
+                  </div>
+                  <div class="mode-features">
+                    <span class="feature-badge">URL Analysis</span>
+                    <span class="feature-badge">Domain Classification</span>
+                    <span class="feature-badge">Basic Topics</span>
+                  </div>
+                </div>
+                <input
+                  type="radio"
+                  name="defaultMode"
+                  value="basic"
+                  class="form-check-input mt-1"
+                />
+              </div>
+            </div>
+
+            <div class="mode-option" data-mode="content">
+              <div class="d-flex justify-content-between align-items-start">
+                <div class="flex-grow-1">
+                  <div class="mode-title">
+                    <i class="bi bi-robot text-primary me-2"></i>Content Mode
+                  </div>
+                  <div class="mode-description">
+                    AI-powered content analysis with entity and topic extraction
+                  </div>
+                  <div class="mode-features">
+                    <span class="feature-badge">AI Content Analysis</span>
+                    <span class="feature-badge">Entity Extraction</span>
+                    <span class="feature-badge">Topic Identification</span>
+                  </div>
+                </div>
+                <input
+                  type="radio"
+                  name="defaultMode"
+                  value="content"
+                  class="form-check-input mt-1"
+                  checked
+                />
+              </div>
+            </div>
+
+            <div class="mode-option" data-mode="actions">
+              <div class="d-flex justify-content-between align-items-start">
+                <div class="flex-grow-1">
+                  <div class="mode-title">
+                    <i class="bi bi-cursor text-success me-2"></i>Actions Mode
+                  </div>
+                  <div class="mode-description">
+                    AI analysis plus interaction detection for dynamic pages
+                  </div>
+                  <div class="mode-features">
+                    <span class="feature-badge">AI Content Analysis</span>
+                    <span class="feature-badge">Action Detection</span>
+                    <span class="feature-badge">Interactive Elements</span>
+                  </div>
+                </div>
+                <input
+                  type="radio"
+                  name="defaultMode"
+                  value="actions"
+                  class="form-check-input mt-1"
+                />
+              </div>
+            </div>
+
+            <div class="mode-option" data-mode="full">
+              <div class="d-flex justify-content-between align-items-start">
+                <div class="flex-grow-1">
+                  <div class="mode-title">
+                    <i class="bi bi-gem text-info me-2"></i>Full Mode
+                  </div>
+                  <div class="mode-description">
+                    Complete AI analysis with relationships and cross-references
+                  </div>
+                  <div class="mode-features">
+                    <span class="feature-badge">Full AI Analysis</span>
+                    <span class="feature-badge">Relationship Extraction</span>
+                    <span class="feature-badge">Cross-references</span>
+                  </div>
+                </div>
+                <input
+                  type="radio"
+                  name="defaultMode"
+                  value="full"
+                  class="form-check-input mt-1"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Batch Processing Settings -->
+        <div class="section">
+          <div class="section-title">
+            <i class="bi bi-collection me-2"></i>Batch Processing
+          </div>
+
+          <div class="mb-3">
+            <label for="maxConcurrentExtractions" class="form-label">
+              Max Concurrent Extractions
+            </label>
+            <input
+              type="range"
+              class="form-range"
+              id="maxConcurrentExtractions"
+              min="1"
+              max="10"
+              value="3"
+            />
+            <div class="d-flex justify-content-between">
+              <small class="text-muted">1 (Slower)</small>
+              <small class="text-muted" id="concurrencyValue">3</small>
+              <small class="text-muted">10 (Faster)</small>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label for="qualityThreshold" class="form-label">
+              Quality Threshold
+            </label>
+            <input
+              type="range"
+              class="form-range"
+              id="qualityThreshold"
+              min="0.1"
+              max="1.0"
+              step="0.1"
+              value="0.3"
+            />
+            <div class="d-flex justify-content-between">
+              <small class="text-muted">0.1 (Permissive)</small>
+              <small class="text-muted" id="thresholdValue">0.3</small>
+              <small class="text-muted">1.0 (Strict)</small>
+            </div>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="d-flex justify-content-between align-items-center">
           <button
-            type="submit"
-            id="saveOptions"
-            class="btn btn-sm btn-outline-primary"
-            title="Save Settings"
+            type="button"
+            id="resetToDefaults"
+            class="btn btn-outline-secondary"
           >
-            <i class="bi bi-floppy"></i> Save
+            <i class="bi bi-arrow-clockwise me-2"></i>Reset to Defaults
           </button>
+          <div>
+            <button
+              type="button"
+              id="exportSettings"
+              class="btn btn-outline-info me-2"
+            >
+              <i class="bi bi-download me-2"></i>Export
+            </button>
+            <button type="submit" id="saveOptions" class="btn btn-primary">
+              <i class="bi bi-check-lg me-2"></i>Save Settings
+            </button>
+          </div>
         </div>
       </form>
 
@@ -65,6 +344,7 @@
       </div>
     </div>
 
+    <script src="../vendor/bootstrap/bootstrap.bundle.min.js"></script>
     <script src="options.js"></script>
   </body>
 </html>

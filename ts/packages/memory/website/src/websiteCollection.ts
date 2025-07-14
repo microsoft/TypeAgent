@@ -381,14 +381,270 @@ export class WebsiteCollection
     public override async buildIndex(
         eventHandler?: IndexingEventHandlers,
     ): Promise<IndexingResults> {
-        // Call the base class buildIndex first
         const result = await super.buildIndex(eventHandler);
 
-        // Add our website-specific metadata processing
         this.addMetadataToIndex();
         this.addMetadataToDataFrames();
 
         return result;
+    }
+
+    public override async addToIndex(
+        eventHandler?: IndexingEventHandlers,
+    ): Promise<IndexingResults> {
+        const result = await super.addToIndex(eventHandler);
+
+        if (result && !this.hasErrors(result)) {
+            this.addMetadataToIndexIncremental();
+            this.addMetadataToDataFramesIncremental();
+        }
+
+        return result;
+    }
+
+    public async addWebsiteToIndex(
+        website: WebsiteDocPart,
+        eventHandler?: IndexingEventHandlers,
+    ): Promise<IndexingResults> {
+        const result = await super.addItemToIndex(website, eventHandler);
+
+        if (result && !this.hasErrors(result)) {
+            const messageOrdinal = this.messages.length - 1;
+            const sourceRef: dataFrame.RowSourceRef = {
+                range: {
+                    start: {
+                        messageOrdinal,
+                        chunkOrdinal: 0,
+                    },
+                },
+            };
+            this.addWebsiteToDataFrames(website, sourceRef, messageOrdinal);
+        }
+
+        return result;
+    }
+
+    public async updateWebsiteInIndex(
+        url: string,
+        updatedWebsite: WebsiteDocPart,
+        eventHandler?: IndexingEventHandlers,
+    ): Promise<IndexingResults> {
+        const messageOrdinal = this.findWebsiteMessageOrdinal(url);
+        if (messageOrdinal === -1) {
+            throw new Error(`Website with URL ${url} not found in index`);
+        }
+
+        this.removeWebsiteFromDataFrames(messageOrdinal);
+
+        const result = await super.updateItemInIndex(
+            messageOrdinal,
+            updatedWebsite,
+            eventHandler,
+        );
+
+        if (result && !this.hasErrors(result)) {
+            const sourceRef: dataFrame.RowSourceRef = {
+                range: {
+                    start: {
+                        messageOrdinal,
+                        chunkOrdinal: 0,
+                    },
+                },
+            };
+            this.addWebsiteToDataFrames(
+                updatedWebsite,
+                sourceRef,
+                messageOrdinal,
+            );
+        }
+
+        return result;
+    }
+
+    private findWebsiteMessageOrdinal(url: string): number {
+        const websites = this.messages.getAll();
+        for (let i = 0; i < websites.length; i++) {
+            const website = websites[i] as WebsiteDocPart;
+            if (website.url === url) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private removeWebsiteFromDataFrames(messageOrdinal: number): void {
+        this.removeFromDataFrameByMessageOrdinal(
+            this.websiteCategories,
+            messageOrdinal,
+        );
+        this.removeFromDataFrameByMessageOrdinal(
+            this.bookmarkFolders,
+            messageOrdinal,
+        );
+        this.removeFromDataFrameByMessageOrdinal(
+            this.knowledgeEntities,
+            messageOrdinal,
+        );
+        this.removeFromDataFrameByMessageOrdinal(
+            this.knowledgeTopics,
+            messageOrdinal,
+        );
+        this.removeFromDataFrameByMessageOrdinal(
+            this.actionKnowledgeCorrelations,
+            messageOrdinal,
+        );
+    }
+
+    private removeFromDataFrameByMessageOrdinal(
+        dataFrame: dataFrame.IDataFrame | undefined,
+        messageOrdinal: number,
+    ): void {
+        if (!dataFrame) return;
+
+        const frameImpl = dataFrame as any;
+        if (frameImpl.rows) {
+            frameImpl.rows = frameImpl.rows.filter(
+                (row: dataFrame.DataFrameRow) =>
+                    row.sourceRef?.range?.start?.messageOrdinal !==
+                    messageOrdinal,
+            );
+        }
+    }
+
+    private hasErrors(result: IndexingResults): boolean {
+        if (result.semanticRefs?.error) {
+            return true;
+        }
+        if (result.secondaryIndexResults) {
+            const secondary = result.secondaryIndexResults;
+            return !!(
+                secondary.properties?.error ||
+                secondary.timestamps?.error ||
+                secondary.relatedTerms?.error ||
+                secondary.message?.error
+            );
+        }
+        return false;
+    }
+
+    private addMetadataToIndexIncremental(): void {
+        // The base class handles knowledge indexing automatically
+    }
+
+    private addMetadataToDataFramesIncremental(): void {
+        if (!this.semanticRefIndex) return;
+
+        const startOrdinal = this.indexingState.lastMessageOrdinal + 1;
+        const endOrdinal = this.messages.length - 1;
+
+        for (let index = startOrdinal; index <= endOrdinal; index++) {
+            const websitePart = this.messages.get(index) as WebsiteDocPart;
+            const sourceRef: dataFrame.RowSourceRef = {
+                range: {
+                    start: {
+                        messageOrdinal: index,
+                        chunkOrdinal: 0,
+                    },
+                },
+            };
+
+            this.addWebsiteToDataFrames(websitePart, sourceRef, index);
+        }
+    }
+
+    private addWebsiteToDataFrames(
+        websitePart: WebsiteDocPart,
+        sourceRef: dataFrame.RowSourceRef,
+        index: number,
+    ): void {
+        if (this.websiteCategories && websitePart.pageType) {
+            const categoryRow: dataFrame.DataFrameRow = {
+                sourceRef,
+                record: {
+                    domain: websitePart.domain || websitePart.url,
+                    category: websitePart.pageType,
+                    confidence: 0.8,
+                },
+            };
+            this.websiteCategories.addRows(categoryRow);
+        }
+
+        if (
+            this.bookmarkFolders &&
+            websitePart.websiteSource === "bookmark" &&
+            websitePart.folder
+        ) {
+            const folderRow: dataFrame.DataFrameRow = {
+                sourceRef,
+                record: {
+                    folderPath: websitePart.folder,
+                    url: websitePart.url,
+                    title: websitePart.title || "",
+                    dateAdded:
+                        websitePart.bookmarkDate || new Date().toISOString(),
+                },
+            };
+            this.bookmarkFolders.addRows(folderRow);
+        }
+
+        const knowledge = websitePart.getKnowledge();
+        if (knowledge) {
+            const extractionDate = new Date().toISOString();
+
+            if (this.knowledgeEntities && knowledge.entities) {
+                for (const entity of knowledge.entities) {
+                    const entityRow: dataFrame.DataFrameRow = {
+                        sourceRef,
+                        record: {
+                            url: websitePart.url,
+                            domain: websitePart.domain || websitePart.url,
+                            entityName: entity.name,
+                            entityType: Array.isArray(entity.type)
+                                ? entity.type.join(", ")
+                                : entity.type || "unknown",
+                            confidence: 0.8,
+                            extractionDate,
+                        },
+                    };
+                    this.knowledgeEntities.addRows(entityRow);
+                }
+            }
+
+            if (this.knowledgeTopics && knowledge.topics) {
+                for (const topic of knowledge.topics) {
+                    const topicRow: dataFrame.DataFrameRow = {
+                        sourceRef,
+                        record: {
+                            url: websitePart.url,
+                            domain: websitePart.domain || websitePart.url,
+                            topic: topic,
+                            confidence: 0.8,
+                            extractionDate,
+                        },
+                    };
+                    this.knowledgeTopics.addRows(topicRow);
+                }
+            }
+
+            if (this.actionKnowledgeCorrelations && knowledge.actions) {
+                for (const action of knowledge.actions) {
+                    const actionRow: dataFrame.DataFrameRow = {
+                        sourceRef,
+                        record: {
+                            url: websitePart.url,
+                            domain: websitePart.domain || websitePart.url,
+                            actionSubject:
+                                action.subjectEntityName || "unknown",
+                            actionVerb: action.verbs?.join(", ") || "unknown",
+                            actionObject: action.objectEntityName || "unknown",
+                            confidence: 0.8,
+                            extractionDate,
+                        },
+                    };
+                    this.actionKnowledgeCorrelations.addRows(actionRow);
+                }
+            }
+        }
     }
 
     public override async serialize(): Promise<WebsiteCollectionData> {

@@ -157,10 +157,16 @@ export class PatternResolver {
 
         const actions: ResolvedAction[] = [];
 
-        for (const _pattern of exactPatterns) {
-            // Find actions that use this exact pattern
-            // This would need integration with action-pattern mapping
-            // For now, this is a placeholder for future implementation
+        for (const pattern of exactPatterns) {
+            try {
+                // Basic implementation: find actions associated with this pattern
+                // TODO: Implement proper pattern-to-action mapping
+                console.warn(
+                    `Pattern matching not fully implemented for pattern: ${pattern.pattern}`,
+                );
+            } catch (error) {
+                console.warn(`Error processing exact pattern:`, error);
+            }
         }
 
         return actions;
@@ -180,11 +186,16 @@ export class PatternResolver {
         );
         const actions: ResolvedAction[] = [];
 
-        for (const _matchResult of matchingPatterns) {
-            if (_matchResult.pattern.type !== "exact") {
-                // Find actions that use this pattern
-                // This would need integration with action-pattern mapping
-                // For now, this is a placeholder for future implementation
+        for (const matchResult of matchingPatterns) {
+            if (matchResult.pattern.type !== "exact") {
+                try {
+                    // TODO: Implement proper pattern-to-action mapping
+                    console.warn(
+                        `Pattern matching not fully implemented for pattern: ${matchResult.pattern.pattern}`,
+                    );
+                } catch (error) {
+                    console.warn(`Error processing pattern:`, error);
+                }
             }
         }
 

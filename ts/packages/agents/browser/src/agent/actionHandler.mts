@@ -49,6 +49,7 @@ import registerDebug from "debug";
 import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 import * as website from "website-memory";
 import { handleKnowledgeAction } from "./knowledge/knowledgeHandler.mjs";
+import { searchWebMemories } from "./searchWebMemories.mjs";
 
 import {
     loadAllowDynamicAgentDomains,
@@ -64,7 +65,6 @@ import {
     importWebsiteDataFromSession,
     importHtmlFolder,
     importHtmlFolderFromSession,
-    searchWebsites,
     getWebsiteStats,
 } from "./websiteMemory.mjs";
 import { CrosswordActions } from "./crossword/schema/userActions.mjs";
@@ -174,71 +174,83 @@ async function updateBrowserContext(
 
         // Load the website index from disk
         if (!context.agentContext.websiteCollection) {
-            const websiteIndexes = await context.indexes("website");
+            try {
+                const websiteIndexes = await context.indexes("website");
 
-            if (websiteIndexes.length > 0) {
-                context.agentContext.index = websiteIndexes[0];
-                context.agentContext.websiteCollection =
-                    await website.WebsiteCollection.readFromFile(
-                        websiteIndexes[0].path,
-                        "index",
+                if (websiteIndexes.length > 0) {
+                    context.agentContext.index = websiteIndexes[0];
+                    context.agentContext.websiteCollection =
+                        await website.WebsiteCollection.readFromFile(
+                            websiteIndexes[0].path,
+                            "index",
+                        );
+                    debug(
+                        `Loaded website index with ${context.agentContext.websiteCollection?.messages.length || 0} websites`,
                     );
-                debug(
-                    `Loaded website index with ${context.agentContext.websiteCollection?.messages.length || 0} websites`,
-                );
-            } else {
-                debug(
-                    "No existing website index found, creating new index for data persistence",
-                );
+                } else {
+                    debug(
+                        "No existing website index found, creating new index for data persistence",
+                    );
 
-                // Create empty collection as fallback
-                context.agentContext.websiteCollection =
-                    new website.WebsiteCollection();
+                    // Create empty collection as fallback
+                    context.agentContext.websiteCollection =
+                        new website.WebsiteCollection();
 
-                try {
-                    const sessionDir = await getSessionFolderPath(context);
+                    try {
+                        const sessionDir = await getSessionFolderPath(context);
 
-                    if (sessionDir) {
-                        // Create index path following IndexManager pattern: sessionDir/indexes/website-index
-                        const indexPath = path.join(
-                            sessionDir,
-                            "indexes",
-                            "website-index",
-                        );
-                        fs.mkdirSync(indexPath, { recursive: true });
+                        if (sessionDir) {
+                            // Create index path following IndexManager pattern: sessionDir/indexes/website-index
+                            const indexPath = path.join(
+                                sessionDir,
+                                "indexes",
+                                "website-index",
+                            );
+                            fs.mkdirSync(indexPath, { recursive: true });
 
-                        // Create proper IndexData object
-                        context.agentContext.index = {
-                            source: "website",
-                            name: "website-index",
-                            location: "browser-agent",
-                            size: 0,
-                            path: indexPath,
-                            state: "new",
-                            progress: 0,
-                            sizeOnDisk: 0,
-                        };
+                            // Create proper IndexData object
+                            context.agentContext.index = {
+                                source: "website",
+                                name: "website-index",
+                                location: "browser-agent",
+                                size: 0,
+                                path: indexPath,
+                                state: "new",
+                                progress: 0,
+                                sizeOnDisk: 0,
+                            };
 
+                            debug(
+                                `Created website index with sessionStorage-based path: ${indexPath}`,
+                            );
+                        } else {
+                            debug(
+                                "Warning: Could not determine session directory path",
+                            );
+                            // Set index to undefined to prevent path access errors
+                            context.agentContext.index = undefined;
+                        }
+                    } catch (error) {
                         debug(
-                            `Created website index with sessionStorage-based path: ${indexPath}`,
+                            `Error during sessionStorage path discovery: ${error}`,
                         );
-                    } else {
+                        // Set index to undefined to prevent path access errors
+                        context.agentContext.index = undefined;
+                    }
+
+                    // If index creation failed, log that data will be in-memory only
+                    if (!context.agentContext.index) {
                         debug(
-                            "Warning: Could not determine session directory path",
+                            "Website collection created without persistent index - data will be in-memory only",
                         );
                     }
-                } catch (error) {
-                    debug(
-                        `Error during sessionStorage path discovery: ${error}`,
-                    );
                 }
-
-                // If index creation failed, log that data will be in-memory only
-                if (!context.agentContext.index) {
-                    debug(
-                        "Website collection created without persistent index - data will be in-memory only",
-                    );
-                }
+            } catch (error) {
+                debug("Error initializing website collection:", error);
+                // Fallback to empty collection without index
+                context.agentContext.websiteCollection =
+                    new website.WebsiteCollection();
+                context.agentContext.index = undefined;
             }
         }
 
@@ -381,11 +393,14 @@ async function updateBrowserContext(
 
                         case "extractKnowledgeFromPage":
                         case "indexWebPageContent":
-                        case "queryWebKnowledge":
                         case "checkPageIndexStatus":
+                        case "getPageIndexedKnowledge":
+                        case "getRecentKnowledgeItems":
+                        case "getTopDomains":
+                        case "getActivityTrends":
+                        case "getDiscoverInsights":
                         case "getKnowledgeIndexStats":
-                        case "clearKnowledgeIndex":
-                        case "exportKnowledgeData": {
+                        case "clearKnowledgeIndex": {
                             const knowledgeResult = await handleKnowledgeAction(
                                 data.method,
                                 data.params,
@@ -402,9 +417,10 @@ async function updateBrowserContext(
                         }
 
                         case "importWebsiteData":
+                        case "importWebsiteDataWithProgress":
                         case "importHtmlFolder":
-                        case "searchWebsites":
-                        case "getWebsiteStats": {
+                        case "getWebsiteStats":
+                        case "searchWebMemories": {
                             const websiteResult = await handleWebsiteAction(
                                 data.method,
                                 data.params,
@@ -682,8 +698,6 @@ async function executeBrowserAction(
                     return importWebsiteData(context, action);
                 case "importHtmlFolder":
                     return importHtmlFolder(context, action);
-                case "searchWebsites":
-                    return searchWebsites(context, action);
                 case "getWebsiteStats":
                     return getWebsiteStats(context, action);
                 case "goForward":
@@ -885,6 +899,42 @@ async function handleTabIndexActions(
         throw new Error("No websocket connection.");
     }
     return undefined;
+}
+
+/**
+ * Progress update helper function
+ */
+function sendProgressUpdateViaWebSocket(
+    webSocket: WebSocket | undefined,
+    importId: string,
+    progress: any,
+) {
+    try {
+        if (webSocket && webSocket.readyState === WebSocket.OPEN) {
+            // Send progress update message via WebSocket
+            const progressMessage = {
+                method: "importProgress",
+                params: {
+                    importId: importId,
+                    progress: progress,
+                },
+                source: "browserAgent",
+            };
+
+            webSocket.send(JSON.stringify(progressMessage));
+            debug(
+                `Progress Update [${importId}] sent via WebSocket:`,
+                progress,
+            );
+        } else {
+            debug(
+                `Progress Update [${importId}] (WebSocket not available):`,
+                progress,
+            );
+        }
+    } catch (error) {
+        console.error("Failed to send progress update via WebSocket:", error);
+    }
 }
 
 /**
@@ -1171,37 +1221,47 @@ async function handleWebsiteAction(
         case "importWebsiteData":
             return await importWebsiteDataFromSession(parameters, context);
 
+        case "importWebsiteDataWithProgress":
+            // Create progress callback using closure to capture webSocket context
+            const progressCallback = (message: string) => {
+                // Extract progress info from message if possible
+                const progressMatch = message.match(/(\d+)\/(\d+).*?:\s*(.+)/);
+                let current = 0,
+                    total = 0,
+                    item = "";
+
+                if (progressMatch) {
+                    current = parseInt(progressMatch[1]);
+                    total = parseInt(progressMatch[2]);
+                    item = progressMatch[3];
+                }
+
+                // Send structured progress update via WebSocket (captured in closure)
+                sendProgressUpdateViaWebSocket(
+                    context.agentContext.webSocket,
+                    parameters.importId,
+                    {
+                        phase: "processing",
+                        totalItems: total || parameters.totalItems || 0,
+                        processedItems: current || 0,
+                        currentItem: item,
+                        importId: parameters.importId,
+                        errors: [],
+                    },
+                );
+            };
+
+            return await importWebsiteDataFromSession(
+                parameters,
+                context,
+                progressCallback,
+            );
+
         case "importHtmlFolder":
             return await importHtmlFolderFromSession(parameters, context);
 
-        case "searchWebsites":
-            // Convert to ActionContext format for existing function
-            const searchAction = {
-                schemaName: "browser" as const,
-                actionName: "searchWebsites" as const,
-                parameters: parameters,
-            };
-            const mockActionContext: ActionContext<BrowserActionContext> = {
-                sessionContext: context,
-                actionIO: {
-                    setDisplay: () => {},
-                    appendDisplay: () => {},
-                    clearDisplay: () => {},
-                    setError: () => {},
-                } as any,
-                streamingContext: undefined,
-                activityContext: undefined,
-                queueToggleTransientAgent: async () => {},
-            };
-            const searchResult = await searchWebsites(
-                mockActionContext,
-                searchAction,
-            );
-            return {
-                success: !searchResult.error,
-                result: searchResult.literalText || "Search completed",
-                error: searchResult.error,
-            };
+        case "searchWebMemories":
+            return await searchWebMemories(parameters, context);
 
         case "getWebsiteStats":
             // Convert to ActionContext format for existing function
