@@ -1,6 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { 
+    notificationManager, 
+    chromeExtensionService, 
+    TemplateHelpers, 
+    FormatUtils,
+    EventManager
+} from './knowledgeUtilities';
+
 interface KnowledgeData {
     entities: Entity[];
     relationships: Relationship[];
@@ -198,10 +206,9 @@ class KnowledgePanel {
         document
             .getElementById("openSettings")!
             .addEventListener("click", () => {
-                chrome.runtime.openOptionsPage();
+                chromeExtensionService.openOptionsPage();
             });
 
-        // Extraction mode selection
         document
             .getElementById("extractionMode")!
             .addEventListener("change", (e) => {
@@ -209,25 +216,15 @@ class KnowledgePanel {
                 this.updateExtractionMode(select.value as any);
             });
 
-        chrome.tabs.onActivated.addListener(() => {
+        EventManager.setupTabListeners(() => {
             this.onTabChange();
-        });
-
-        chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-            if (changeInfo.status === "complete") {
-                this.onTabChange();
-            }
         });
     }
 
     private async loadCurrentPageInfo() {
         try {
-            const tabs = await chrome.tabs.query({
-                active: true,
-                currentWindow: true,
-            });
-            if (tabs.length > 0) {
-                const tab = tabs[0];
+            const tab = await chromeExtensionService.getCurrentTab();
+            if (tab) {
                 this.currentUrl = tab.url || "";
 
                 const pageInfo = document.getElementById("currentPageInfo")!;
@@ -247,10 +244,7 @@ class KnowledgePanel {
 
     private async getPageIndexStatus(retryCount: number = 0): Promise<string> {
         try {
-            const response = await chrome.runtime.sendMessage({
-                type: "getPageIndexStatus",
-                url: this.currentUrl,
-            });
+            const response = await chromeExtensionService.getPageIndexStatus(this.currentUrl);
 
             if (response.isIndexed) {
                 const lastIndexedDate = response.lastIndexed
@@ -301,12 +295,8 @@ class KnowledgePanel {
 
     private async refreshPageStatusAfterIndexing() {
         try {
-            const tabs = await chrome.tabs.query({
-                active: true,
-                currentWindow: true,
-            });
-            if (tabs.length > 0) {
-                const tab = tabs[0];
+            const tab = await chromeExtensionService.getCurrentTab();
+            if (tab) {
                 this.currentUrl = tab.url || "";
 
                 const pageInfo = document.getElementById("currentPageInfo")!;
@@ -335,11 +325,11 @@ class KnowledgePanel {
 
     private async loadAutoIndexSetting() {
         try {
-            const settings = await chrome.storage.sync.get(["autoIndexing"]);
+            const enabled = await chromeExtensionService.getAutoIndexSetting();
             const toggle = document.getElementById(
                 "autoIndexToggle",
             ) as HTMLInputElement;
-            toggle.checked = settings.autoIndexing || false;
+            toggle.checked = enabled;
         } catch (error) {
             console.error("Error loading auto-index setting:", error);
         }
@@ -347,19 +337,16 @@ class KnowledgePanel {
 
     private async toggleAutoIndex(enabled: boolean) {
         try {
-            await chrome.storage.sync.set({ autoIndexing: enabled });
+            await chromeExtensionService.setAutoIndexSetting(enabled);
 
             // Update status indicator
             const statusText = enabled
                 ? "Auto-indexing enabled"
                 : "Auto-indexing disabled";
-            this.showTemporaryStatus(statusText, enabled ? "success" : "info");
+            notificationManager.showTemporaryStatus(statusText, enabled ? "success" : "info");
 
             // Notify background script
-            chrome.runtime.sendMessage({
-                type: "autoIndexSettingChanged",
-                enabled: enabled,
-            });
+            await chromeExtensionService.notifyAutoIndexSettingChanged(enabled);
         } catch (error) {
             console.error("Error toggling auto-index:", error);
         }
@@ -392,12 +379,11 @@ class KnowledgePanel {
 
             const startTime = Date.now();
 
-            const response = await chrome.runtime.sendMessage({
-                type: "extractPageKnowledge",
-                url: this.currentUrl,
-                mode: this.extractionSettings.mode,
-                extractionSettings: this.extractionSettings,
-            });
+            const response = await chromeExtensionService.extractPageKnowledge(
+                this.currentUrl,
+                this.extractionSettings.mode,
+                this.extractionSettings,
+            );
 
             const processingTime = Date.now() - startTime;
 
@@ -419,7 +405,7 @@ class KnowledgePanel {
                 const relationshipCount =
                     this.knowledgeData.relationships?.length || 0;
 
-                this.showEnhancedNotification(
+                notificationManager.showEnhancedNotification(
                     "success",
                     "Knowledge Extracted Successfully!",
                     `Found ${entityCount} entities, ${topicCount} topics, ${relationshipCount} relationships using ${this.extractionSettings.mode} mode in ${Math.round(processingTime / 1000)}s`,
@@ -489,11 +475,10 @@ class KnowledgePanel {
 
             const startTime = Date.now();
 
-            const response = await chrome.runtime.sendMessage({
-                type: "indexPageContentDirect",
-                url: this.currentUrl,
-                mode: this.extractionSettings.mode,
-            });
+            const response = await chromeExtensionService.indexPageContent(
+                this.currentUrl,
+                this.extractionSettings.mode,
+            );
 
             const processingTime = Date.now() - startTime;
 
@@ -505,7 +490,7 @@ class KnowledgePanel {
 
             // Show detailed success notification
             const entityCount = response.entityCount || 0;
-            this.showEnhancedNotification(
+            notificationManager.showEnhancedNotification(
                 "success",
                 "Page Indexed Successfully!",
                 `Extracted ${entityCount} entities using ${this.extractionSettings.mode} mode in ${Math.round(processingTime / 1000)}s`,
@@ -570,26 +555,23 @@ class KnowledgePanel {
             await this.submitEnhancedQuery(query);
         } else {
             // Use existing basic query logic
-            queryResults.innerHTML = this.createSearchLoadingState();
+            queryResults.innerHTML = TemplateHelpers.createSearchLoadingState();
 
             try {
-                const response = await chrome.runtime.sendMessage({
-                    type: "queryKnowledge",
-                    parameters: {
-                        query: query,
-                        url: this.currentUrl,
-                        searchScope: "current_page",
-                    },
+                const response = await chromeExtensionService.queryKnowledge({
+                    query: query,
+                    url: this.currentUrl,
+                    searchScope: "current_page",
                 });
 
-                queryResults.innerHTML = this.createQueryAnswer(
+                queryResults.innerHTML = TemplateHelpers.createQueryAnswer(
                     response.answer,
                     response.sources,
                 );
                 queryInput.value = "";
             } catch (error) {
                 console.error("Error querying knowledge:", error);
-                queryResults.innerHTML = this.createAlert(
+                queryResults.innerHTML = TemplateHelpers.createAlert(
                     "danger",
                     "bi bi-exclamation-triangle",
                     "Error processing query. Please try again.",
@@ -1247,7 +1229,7 @@ class KnowledgePanel {
                     }, 300);
 
                     // Open the page in a new tab
-                    chrome.tabs.create({ url: url, active: false });
+                    chromeExtensionService.createTab(url, false);
                 }
             }
 
@@ -1269,7 +1251,7 @@ class KnowledgePanel {
                     }, 300);
 
                     // Open the source in a new tab
-                    chrome.tabs.create({ url: url, active: false });
+                    chromeExtensionService.createTab(url, false);
                 }
             }
 
@@ -1334,9 +1316,7 @@ class KnowledgePanel {
 
     private async loadIndexStats() {
         try {
-            const response = await chrome.runtime.sendMessage({
-                type: "getIndexStats",
-            });
+            const response = await chromeExtensionService.getIndexStats();
 
             document.getElementById("totalPages")!.textContent =
                 response.totalPages.toString();
@@ -1351,10 +1331,7 @@ class KnowledgePanel {
 
     private async loadPageSourceInfo() {
         try {
-            const response = await chrome.runtime.sendMessage({
-                type: "getPageSourceInfo",
-                url: this.currentUrl,
-            });
+            const response = await chromeExtensionService.getPageSourceInfo(this.currentUrl);
 
             this.pageSourceInfo = response.sourceInfo;
             this.updatePageSourceDisplay();
@@ -1398,13 +1375,11 @@ class KnowledgePanel {
 
     private async loadExtractionSettings() {
         try {
-            const settings = await chrome.storage.sync.get([
-                "extractionSettings",
-            ]);
-            if (settings.extractionSettings) {
+            const settings = await chromeExtensionService.getExtractionSettings();
+            if (settings) {
                 this.extractionSettings = {
                     ...this.extractionSettings,
-                    ...settings.extractionSettings,
+                    ...settings,
                 };
                 // Sync with modern dropdown
                 const modernSelect = document.getElementById(
@@ -1496,9 +1471,7 @@ class KnowledgePanel {
 
     private async checkConnectionStatus() {
         try {
-            const response = await chrome.runtime.sendMessage({
-                type: "checkConnection",
-            });
+            const response = await chromeExtensionService.checkConnection();
 
             this.isConnected = response.connected;
             this.updateConnectionStatus();
@@ -1533,10 +1506,7 @@ class KnowledgePanel {
 
     private async loadFreshKnowledge() {
         try {
-            const indexStatus = await chrome.runtime.sendMessage({
-                type: "getPageIndexStatus",
-                url: this.currentUrl,
-            });
+            const indexStatus = await chromeExtensionService.getPageIndexStatus(this.currentUrl);
 
             if (indexStatus.isIndexed) {
                 await this.loadIndexedKnowledge();
@@ -1585,10 +1555,7 @@ class KnowledgePanel {
 
     private async loadIndexedKnowledge() {
         try {
-            const response = await chrome.runtime.sendMessage({
-                type: "getPageIndexedKnowledge",
-                url: this.currentUrl,
-            });
+            const response = await chromeExtensionService.getPageIndexedKnowledge(this.currentUrl);
 
             if (response.isIndexed && response.knowledge) {
                 this.knowledgeData = response.knowledge;
@@ -2488,7 +2455,7 @@ class KnowledgePanel {
 
                 if (url) {
                     // Open the page in a new tab
-                    chrome.tabs.create({ url });
+                    chromeExtensionService.createTab(url, true);
                 }
             }
 
@@ -2513,12 +2480,11 @@ class KnowledgePanel {
     // Load related content using relationship discovery
     private async loadRelatedContent(knowledge: KnowledgeData) {
         try {
-            const response = await chrome.runtime.sendMessage({
-                type: "discoverRelationships",
-                url: this.currentUrl,
-                knowledge: knowledge,
-                maxResults: 10,
-            });
+            const response = await chromeExtensionService.discoverRelationships(
+                this.currentUrl,
+                knowledge,
+                10,
+            );
 
             if (response.success && response.relationships.length > 0) {
                 this.renderRelatedContent(response.relationships);
@@ -2533,10 +2499,7 @@ class KnowledgePanel {
 
     private async loadTemporalSuggestions() {
         try {
-            const response = await chrome.runtime.sendMessage({
-                type: "generateTemporalSuggestions",
-                maxSuggestions: 6,
-            });
+            const response = await chromeExtensionService.generateTemporalSuggestions(6);
 
             if (response.success && response.suggestions.length > 0) {
                 this.addTemporalSuggestions(
@@ -2661,7 +2624,7 @@ class KnowledgePanel {
         const groupedRelationships =
             this.groupRelationshipsByType(relationships);
 
-        container.innerHTML = Object.entries(groupedRelationships)
+        container.innerHTML = Array.from(groupedRelationships)
             .map(
                 ([type, typeRelationships]) => `
                 <div class="relationship-type-group mb-3">
@@ -2782,12 +2745,11 @@ class KnowledgePanel {
         try {
             const entityNames = entities.slice(0, 5).map((e) => e.name); // Limit to top 5 entities
 
-            const response = await chrome.runtime.sendMessage({
-                type: "searchByEntities",
-                entities: entityNames,
-                url: this.currentUrl, // Exclude current page
-                maxResults: 5,
-            });
+            const response = await chromeExtensionService.searchByEntities(
+                entityNames,
+                this.currentUrl,
+                5,
+            );
 
             if (response.success && response.results) {
                 return response.results.map((result: any) => ({
@@ -2810,12 +2772,11 @@ class KnowledgePanel {
         try {
             const topTopics = topics.slice(0, 3); // Limit to top 3 topics
 
-            const response = await chrome.runtime.sendMessage({
-                type: "searchByTopics",
-                topics: topTopics,
-                url: this.currentUrl, // Exclude current page
-                maxResults: 5,
-            });
+            const response = await chromeExtensionService.searchByTopics(
+                topTopics,
+                this.currentUrl,
+                5,
+            );
 
             if (response.success && response.results) {
                 return response.results.map((result: any) => ({
@@ -2841,12 +2802,11 @@ class KnowledgePanel {
             // Use first 200 characters of summary for hybrid search
             const searchQuery = summary.substring(0, 200);
 
-            const response = await chrome.runtime.sendMessage({
-                type: "hybridSearch",
-                query: searchQuery,
-                url: this.currentUrl, // Exclude current page
-                maxResults: 3,
-            });
+            const response = await chromeExtensionService.hybridSearch(
+                searchQuery,
+                this.currentUrl,
+                3,
+            );
 
             if (response.success && response.results) {
                 return response.results.map((result: any) => ({
@@ -3076,21 +3036,18 @@ class KnowledgePanel {
         queryResults.innerHTML = this.createEnhancedSearchLoadingState();
 
         try {
-            const response = await chrome.runtime.sendMessage({
-                type: "searchWebMemories",
-                parameters: {
-                    query: query,
-                    searchScope: "all_indexed",
-                    generateAnswer: true,
-                    includeRelatedEntities: true,
-                    enableAdvancedSearch: true,
-                    limit: 10,
-                    domain: filters.domain,
-                    source: filters.source,
-                    pageType: filters.pageType,
-                    temporalSort: filters.temporalSort,
-                    frequencySort: filters.frequencySort,
-                },
+            const response = await chromeExtensionService.searchWebMemoriesAdvanced({
+                query: query,
+                searchScope: "all_indexed",
+                generateAnswer: true,
+                includeRelatedEntities: true,
+                enableAdvancedSearch: true,
+                limit: 10,
+                domain: filters.domain,
+                source: filters.source,
+                pageType: filters.pageType,
+                temporalSort: filters.temporalSort,
+                frequencySort: filters.frequencySort,
             });
 
             this.renderEnhancedQueryResults(response);
@@ -3391,12 +3348,8 @@ class KnowledgePanel {
     }
 
     private async checkAIModelAvailability() {
-        // Don't show checking notification - keep it hidden by default
-
         try {
-            const response = await chrome.runtime.sendMessage({
-                type: "checkAIModelAvailability",
-            });
+            const response = await chromeExtensionService.checkAIModelAvailability();
 
             this.aiModelAvailable = response.available || false;
         } catch (error) {
@@ -3422,7 +3375,7 @@ class KnowledgePanel {
                         <button class="btn btn-primary btn-sm" onclick="switchToBasicMode()">
                             <i class="bi bi-lightning me-2"></i>Switch to Basic Mode
                         </button>
-                        <button class="btn btn-outline-secondary btn-sm" onclick="chrome.runtime.openOptionsPage()">
+                        <button class="btn btn-outline-secondary btn-sm" onclick="chromeExtensionService.openOptionsPage()">
                             <i class="bi bi-gear me-2"></i>Configure AI Model
                         </button>
                     </div>
@@ -3443,10 +3396,7 @@ class KnowledgePanel {
 
     private async updateQualityIndicator() {
         try {
-            const response = await chrome.runtime.sendMessage({
-                type: "getPageQualityMetrics",
-                url: this.currentUrl,
-            });
+            const response = await chromeExtensionService.getPageQualityMetrics(this.currentUrl);
 
             const indicator = document.getElementById("qualityIndicator");
             if (indicator && response.quality) {
@@ -3480,10 +3430,7 @@ class KnowledgePanel {
 
     private async saveExtractionSettings() {
         try {
-            await chrome.storage.sync.set({
-                extractionMode: this.extractionSettings.mode,
-                suggestQuestions: this.extractionSettings.suggestQuestions,
-            });
+            await chromeExtensionService.saveExtractionSettings(this.extractionSettings);
         } catch (error) {
             console.warn("Could not save extraction settings:", error);
         }
