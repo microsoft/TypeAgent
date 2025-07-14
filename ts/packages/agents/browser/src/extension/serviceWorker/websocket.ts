@@ -113,6 +113,25 @@ export async function ensureWebsocketConnected(): Promise<
                 return;
             }
 
+            if (data.method === "importProgress") {
+                // Handle progress updates from the agent
+                if (data.source === "browserAgent" && data.params) {
+                    // Forward progress update to UI
+                    try {
+                        chrome.runtime.sendMessage({
+                            type: "importProgress",
+                            importId: data.params.importId,
+                            progress: data.params.progress,
+                        }).catch(error => {
+                            console.log("No listeners for progress update:", error);
+                        });
+                    } catch (error) {
+                        console.error("Failed to forward progress update:", error);
+                    }
+                }
+                return;
+            }
+
             if (data.method && data.method.indexOf("/") > 0) {
                 const [schema, actionName] = data.method?.split("/");
 

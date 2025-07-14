@@ -417,6 +417,7 @@ async function updateBrowserContext(
                         }
 
                         case "importWebsiteData":
+                        case "importWebsiteDataWithProgress":                            
                         case "importHtmlFolder":
                         case "getWebsiteStats":
                         case "searchWebMemories": {
@@ -901,6 +902,32 @@ async function handleTabIndexActions(
 }
 
 /**
+ * Progress update helper function
+ */
+function sendProgressUpdateViaWebSocket(webSocket: WebSocket | undefined, importId: string, progress: any) {
+    try {
+        if (webSocket && webSocket.readyState === WebSocket.OPEN) {
+            // Send progress update message via WebSocket
+            const progressMessage = {
+                method: "importProgress",
+                params: {
+                    importId: importId,
+                    progress: progress,
+                },
+                source: "browserAgent",
+            };
+            
+            webSocket.send(JSON.stringify(progressMessage));
+            debug(`Progress Update [${importId}] sent via WebSocket:`, progress);
+        } else {
+            debug(`Progress Update [${importId}] (WebSocket not available):`, progress);
+        }
+    } catch (error) {
+        console.error('Failed to send progress update via WebSocket:', error);
+    }
+}
+
+/**
  * Setup IPC communication with view service for action retrieval
  */
 function setupViewServiceIPC(
@@ -1183,6 +1210,36 @@ async function handleWebsiteAction(
     switch (actionName) {
         case "importWebsiteData":
             return await importWebsiteDataFromSession(parameters, context);
+
+        case "importWebsiteDataWithProgress":
+            // Create progress callback using closure to capture webSocket context
+            const progressCallback = (message: string) => {
+                // Extract progress info from message if possible
+                const progressMatch = message.match(/(\d+)\/(\d+).*?:\s*(.+)/);
+                let current = 0, total = 0, item = '';
+                
+                if (progressMatch) {
+                    current = parseInt(progressMatch[1]);
+                    total = parseInt(progressMatch[2]);
+                    item = progressMatch[3];
+                }
+                
+                // Send structured progress update via WebSocket (captured in closure)
+                sendProgressUpdateViaWebSocket(
+                    context.agentContext.webSocket,
+                    parameters.importId,
+                    {
+                        phase: "processing",
+                        totalItems: total || parameters.totalItems || 0,
+                        processedItems: current || 0,
+                        currentItem: item,
+                        importId: parameters.importId,
+                        errors: [],
+                    }
+                );
+            };
+            
+            return await importWebsiteDataFromSession(parameters, context, progressCallback);
 
         case "importHtmlFolder":
             return await importHtmlFolderFromSession(parameters, context);

@@ -34,6 +34,7 @@ export interface FolderImportOptions {
 export interface ImportProgress {
     importId: string;
     phase:
+        | "counting"
         | "initializing"
         | "fetching"
         | "processing"

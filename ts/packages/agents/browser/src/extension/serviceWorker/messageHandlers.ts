@@ -840,9 +840,23 @@ export async function handleMessage(
 
 // Website Library Panel handlers
 async function handleImportWebsiteDataWithProgress(message: any) {
+    const importId = message.importId;
+    const totalItems = message.totalItems || 0;
+    
     try {
+        // Send initial progress update
+        sendProgressToUI(importId, {
+            importId,
+            phase: "initializing",
+            totalItems: totalItems,
+            processedItems: 0,
+            errors: [],
+        });
+
+        const startTime = Date.now();
+        
         const result = await sendActionToAgent({
-            actionName: "importWebsiteData",
+            actionName: "importWebsiteDataWithProgress",
             parameters: {
                 source: message.parameters.source,
                 type: message.parameters.type,
@@ -852,20 +866,73 @@ async function handleImportWebsiteDataWithProgress(message: any) {
                 mode: message.parameters.mode || "basic",
                 maxConcurrent: message.parameters.maxConcurrent,
                 contentTimeout: message.parameters.contentTimeout,
+                importId: importId,
+                totalItems: totalItems,
+                progressCallback: true,
             },
+        });
+
+        // Send completion progress
+        sendProgressToUI(importId, {
+            importId,
+            phase: "complete",
+            totalItems: totalItems,
+            processedItems: totalItems,
+            errors: [],
         });
 
         return {
             success: !result.error,
-            itemCount: result.itemCount || 0,
+            itemCount: result.itemCount || totalItems,
             error: result.error,
         };
     } catch (error) {
         console.error("Error importing website data:", error);
+        
+        // Send error progress to UI
+        sendProgressToUI(importId, { 
+            importId,
+            phase: "error", 
+            totalItems: totalItems,
+            processedItems: 0,
+            errors: [{
+                type: "processing",
+                message: error instanceof Error ? error.message : "Unknown error",
+                timestamp: Date.now(),
+            }],
+        });
+        
         return {
             success: false,
             error: error instanceof Error ? error.message : "Unknown error",
         };
+    }
+}
+
+function sendProgressToUI(importId: string, progress: any) {
+    // Ensure progress has required structure
+    const structuredProgress = {
+        importId: importId,
+        phase: progress.phase || "processing",
+        totalItems: progress.totalItems || 0,
+        processedItems: progress.processedItems || 0,
+        currentItem: progress.currentItem,
+        errors: progress.errors || [],
+        ...progress,
+    };
+
+    // Send to all connected library panels via runtime messaging
+    try {
+        chrome.runtime.sendMessage({
+            type: "importProgress",
+            importId,
+            progress: structuredProgress,
+        }).catch(error => {
+            // Handle case where no listeners are available
+            console.log("No listeners for progress update:", error);
+        });
+    } catch (error) {
+        console.error("Failed to send progress to UI:", error);
     }
 }
 

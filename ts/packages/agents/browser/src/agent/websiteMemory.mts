@@ -512,12 +512,10 @@ export async function importWebsiteDataFromSession(
             total: number,
             item: string,
         ) => {
-            if (current % 100 === 0) {
-                const message = `Importing... ${current}/${total}: ${item.substring(0, 50)}...`;
-                debug(message);
-                if (displayProgress) {
-                    displayProgress(message);
-                }
+            const message = `Importing... ${current}/${total}: ${item.substring(0, 50)}...`;
+            debug(message);
+            if (displayProgress) {
+                displayProgress(message);
             }
         };
 
