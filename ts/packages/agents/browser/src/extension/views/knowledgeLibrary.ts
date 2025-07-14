@@ -904,6 +904,16 @@ class WebsiteLibraryPanelFullPage {
             emptyState.style.display = "none";
         }
 
+        // Hide AI summary and entities sections
+        const aiSummary = document.getElementById("aiSummary");
+        const entitiesSection = document.getElementById("entitiesSection");
+        if (aiSummary) {
+            aiSummary.style.display = "none";
+        }
+        if (entitiesSection) {
+            entitiesSection.style.display = "none";
+        }
+
         // Show loading state (create if it doesn't exist)
         if (!loadingState) {
             this.createSearchLoadingState();
@@ -982,6 +992,11 @@ class WebsiteLibraryPanelFullPage {
         // Show AI summary if available
         if (results.summary.text) {
             this.showAISummary(results.summary.text);
+        }
+
+        // Show related entities if available
+        if (results.summary.entities && results.summary.entities.length > 0) {
+            this.showEntities(results.summary.entities);
         }
     }
 
@@ -1281,6 +1296,34 @@ class WebsiteLibraryPanelFullPage {
         }
     }
 
+    private showEntities(entities: EntityMatch[]) {
+        const entitiesSection = document.getElementById("entitiesSection");
+        const entitiesContent = document.getElementById("entitiesContent");
+
+        if (entitiesSection && entitiesContent && entities.length > 0) {
+            // Sort entities by count descending
+            const sortedEntities = entities.sort((a, b) => b.count - a.count);
+            
+            // Create entity tags HTML
+            const entityTagsHtml = sortedEntities.map(entity => `
+                <div class="entity-tag" title="${entity.type}: found ${entity.count} time${entity.count !== 1 ? 's' : ''}">
+                    <span>${entity.entity}</span>
+                    <span class="entity-count">${entity.count}</span>
+                </div>
+            `).join('');
+
+            entitiesContent.innerHTML = `
+                <div class="entity-tags">
+                    ${entityTagsHtml}
+                </div>
+            `;
+            
+            entitiesSection.style.display = "block";
+        } else if (entitiesSection) {
+            entitiesSection.style.display = "none";
+        }
+    }
+
     private showSearchError(message: string) {
         const resultsContainer = document.getElementById("searchResults");
         const emptyState = document.getElementById("searchEmptyState");
@@ -1294,6 +1337,16 @@ class WebsiteLibraryPanelFullPage {
         // Hide empty state
         if (emptyState) {
             emptyState.style.display = "none";
+        }
+
+        // Hide AI summary and entities sections
+        const aiSummary = document.getElementById("aiSummary");
+        const entitiesSection = document.getElementById("entitiesSection");
+        if (aiSummary) {
+            aiSummary.style.display = "none";
+        }
+        if (entitiesSection) {
+            entitiesSection.style.display = "none";
         }
 
         // Show error in results container without destroying its structure
