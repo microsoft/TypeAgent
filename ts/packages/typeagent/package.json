@@ -1,7 +1,7 @@
 {
   "name": "typeagent",
   "version": "0.0.1",
-  "description": "Typeagent is a library for working with Agents from the Microsoft AI Systems team.",
+  "description": "Sample library code intended only for the example agents and apps in the TypeAgent project",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",

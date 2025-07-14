@@ -16,6 +16,7 @@ import { argDestFile, argSourceFile } from "../common.js";
 import * as kp from "knowpro";
 import * as kpTest from "knowpro-test";
 import * as cm from "conversation-memory";
+import * as tp from "textpro";
 import {
     changeFileExt,
     getAbsolutePath,
@@ -89,6 +90,9 @@ export async function createKnowproTestCommands(
 
         const destPath = changeFileExt(filePath, ".md");
         fs.writeFileSync(destPath, md);
+
+        let mdDom = tp.loadMarkdownFromHtml(html, namedArgs.rootTag);
+        context.printer.writeJsonInColor(chalk.cyan, mdDom);
     }
 
     function testHtmlPartsDef(): CommandMetadata {

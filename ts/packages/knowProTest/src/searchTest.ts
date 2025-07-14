@@ -6,8 +6,9 @@ import { dateTime, readJsonFile, writeJsonFile } from "typeagent";
 import { error, Result, success } from "typechat";
 import { BatchCallback, Comparison } from "./types.js";
 import {
-    compareArray,
+    compareNumberArray,
     compareObject,
+    compareStringArray,
     dateRangeToTimeRange,
     getCommandArgs,
     queryError,
@@ -260,19 +261,23 @@ function compareLangSearchResult(
     lr1: LangSearchResult,
     lr2: LangSearchResult,
 ): string | undefined {
-    let error = compareArray("message", lr1.messageMatches, lr2.messageMatches);
+    let error = compareNumberArray(
+        lr1.messageMatches,
+        lr2.messageMatches,
+        "message",
+    );
     if (error !== undefined) {
         return error;
     }
-    error = compareArray("entity", lr1.entityMatches, lr2.entityMatches);
+    error = compareNumberArray(lr1.entityMatches, lr2.entityMatches, "entity");
     if (error !== undefined) {
         return error;
     }
-    error = compareArray("topic", lr1.topicMatches, lr2.topicMatches);
+    error = compareNumberArray(lr1.topicMatches, lr2.topicMatches, "topic");
     if (error !== undefined) {
         return error;
     }
-    error = compareArray("action", lr1.actionMatches, lr2.actionMatches);
+    error = compareNumberArray(lr1.actionMatches, lr2.actionMatches, "action");
     if (error !== undefined) {
         return error;
     }
@@ -322,7 +327,11 @@ function compareSearchExpr(
         if (error !== undefined) {
             return error;
         }
-        error = compareObject(f1.searchTerms, f2.searchTerms, "searchTerms");
+        error = compareStringArray(
+            f1.searchTerms,
+            f2.searchTerms,
+            "searchTerms",
+        );
         if (error !== undefined) {
             return error;
         }
@@ -341,7 +350,11 @@ function compareActionTerm(
     if (x === undefined && y === undefined) {
         return undefined;
     }
-    let error = compareObject(x?.actionVerbs, y?.actionVerbs, "verbs");
+    let error = compareStringArray(
+        x?.actionVerbs?.words,
+        y?.actionVerbs?.words,
+        "verbs",
+    );
     if (error !== undefined) {
         return error;
     }

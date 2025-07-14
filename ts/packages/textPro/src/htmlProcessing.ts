@@ -3,42 +3,12 @@
 import * as cheerio from "cheerio";
 
 /**
- * Extract all text from the given html.
- * @param html raw html
- * @param nodeQuery A JQuery like list of node types to extract text from. By default, p, div and span
- * @returns text
- */
-export function htmlToText(html: string, nodeQuery?: string): string {
-    //nodeQuery ??= "*:not(iframe, script, style, noscript)"; // "body, p, div, span, li, tr, td, h1, h2, h3, h4, h5, h6, a";
-    nodeQuery ??=
-        "a, p, div, span, em, strong, li, tr, td, h1, h2, h3, h4, h5, h6, article, section, header, footer";
-    const $ = cheerio.load(html);
-    const query = $(nodeQuery);
-    return query
-        .contents()
-        .filter(function () {
-            return (
-                this.nodeType === 3 ||
-                (this.nodeType === 1 && this.name === "a")
-            );
-        })
-        .map(function () {
-            return $(this).text().trim();
-        })
-        .filter(function () {
-            return this.length > 0;
-        })
-        .get()
-        .join(" ");
-}
-
-/**
  * Returns text from html. Only takes text from typically useful nodes, cleaning up
  * whitespace etc.
  * @param html Html to extract text from
  * @returns raw text
  */
-export function simplifyText(html: string): string {
+export function htmlToText(html: string): string {
     const editor = new HtmlEditor(html);
     editor.simplify();
     return editor.getText().trim();
@@ -302,14 +272,11 @@ function getRemovableAttrPrefixes(): string[] {
 }
 
 export interface HtmlToMdConvertorEvents {
-    onBlockStart(convertor: HtmlToMdConvertor, tagName: string): void;
-    onHeading(
-        convertor: HtmlToMdConvertor,
-        tagName: string,
-        level: number,
-    ): void;
-    onLink(convertor: HtmlToMdConvertor, text: string, url: string): void;
-    onBlockEnd(convertor: HtmlToMdConvertor): void;
+    onBlockStart(tagName: string): void;
+    onHeading(tagName: string, level: number): void;
+    onLink(text: string, url: string): void;
+    onImg(text: string, url: string): void;
+    onBlockEnd(): void;
 }
 
 /**
@@ -526,8 +493,16 @@ export class HtmlToMdConvertor {
                                 if (text) {
                                     const href = childElement.attribs["href"];
                                     this.append(`[${text}](${href})`);
-                                    this.eventHandler?.onLink(this, text, href);
+                                    this.eventHandler?.onLink(text, href);
                                 }
+                            }
+                            break;
+                        case "img":
+                            const src = childElement.attribs["src"];
+                            if (src.length > 0) {
+                                const alt = childElement.attribs["alt"] ?? "";
+                                this.append(`![${alt}](${src})`);
+                                this.eventHandler?.onImg(alt, src);
                             }
                             break;
                         case "br":
@@ -575,7 +550,7 @@ export class HtmlToMdConvertor {
         this.depth++;
         if (this.depth <= this.maxBlockDepth) {
             this.endBlock(false);
-            this.eventHandler?.onBlockStart(this, name);
+            this.eventHandler?.onBlockStart(name);
         }
     }
 
@@ -583,7 +558,7 @@ export class HtmlToMdConvertor {
         if (this.depth <= this.maxBlockDepth) {
             if (this.curBlock.length > 0) {
                 this.textBlocks.push(this.curBlock);
-                this.eventHandler?.onBlockEnd(this);
+                this.eventHandler?.onBlockEnd();
             }
             this.curBlock = "";
         }
@@ -634,7 +609,7 @@ export class HtmlToMdConvertor {
         this.append(text);
         this.append("\n");
 
-        this.eventHandler?.onHeading(this, text, level);
+        this.eventHandler?.onHeading(text, level);
     }
 
     private isTableHeader(element: cheerio.Element): boolean {
