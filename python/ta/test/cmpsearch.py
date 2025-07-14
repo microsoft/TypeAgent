@@ -310,13 +310,13 @@ async def compare_actual_to_expected(
                 "Search query from LLM does not match reference.",
             ):
                 pass
-            elif compare_and_print_diff(
+            if compare_and_print_diff(
                 qc,
                 debug_context.search_query_expr,
                 "Compiled search query expression from LLM does not match reference.",
             ):
                 pass
-            elif not compare_results(result.value, qr):
+            if not compare_results(result.value, qr):
                 print("Warning: Search results from index do not match reference.")
         all_answers, combined_answer = await answers.generate_answers(
             context.answer_translator,
@@ -354,11 +354,12 @@ def compare_results(
 ) -> bool:
     if len(results) != len(matches_records):
         return False
+    res = True
     for result, record in zip(results, matches_records):
         if not compare_message_ordinals(
             result.message_matches, record["messageMatches"]
         ):
-            return False
+            res = False
         if not compare_semantic_ref_ordinals(
             (
                 []
@@ -368,7 +369,7 @@ def compare_results(
             record.get("entityMatches", []),
             "entity",
         ):
-            return False
+            res = False
         if not compare_semantic_ref_ordinals(
             (
                 []
@@ -378,7 +379,7 @@ def compare_results(
             record.get("actionMatches", []),
             "action",
         ):
-            return False
+            res = False
         if not compare_semantic_ref_ordinals(
             (
                 []
@@ -388,8 +389,8 @@ def compare_results(
             record.get("topicMatches", []),
             "topic",
         ):
-            return False
-    return True
+            res = False
+    return res
 
 
 def compare_message_ordinals(aa: list[ScoredMessageOrdinal], b: list[int]) -> bool:
