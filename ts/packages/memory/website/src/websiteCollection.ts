@@ -435,8 +435,12 @@ export class WebsiteCollection
         }
 
         this.removeWebsiteFromDataFrames(messageOrdinal);
-        
-        const result = await super.updateItemInIndex(messageOrdinal, updatedWebsite, eventHandler);
+
+        const result = await super.updateItemInIndex(
+            messageOrdinal,
+            updatedWebsite,
+            eventHandler,
+        );
 
         if (result && !this.hasErrors(result)) {
             const sourceRef: dataFrame.RowSourceRef = {
@@ -447,7 +451,11 @@ export class WebsiteCollection
                     },
                 },
             };
-            this.addWebsiteToDataFrames(updatedWebsite, sourceRef, messageOrdinal);
+            this.addWebsiteToDataFrames(
+                updatedWebsite,
+                sourceRef,
+                messageOrdinal,
+            );
         }
 
         return result;
@@ -465,11 +473,26 @@ export class WebsiteCollection
     }
 
     private removeWebsiteFromDataFrames(messageOrdinal: number): void {
-        this.removeFromDataFrameByMessageOrdinal(this.websiteCategories, messageOrdinal);
-        this.removeFromDataFrameByMessageOrdinal(this.bookmarkFolders, messageOrdinal);
-        this.removeFromDataFrameByMessageOrdinal(this.knowledgeEntities, messageOrdinal);
-        this.removeFromDataFrameByMessageOrdinal(this.knowledgeTopics, messageOrdinal);
-        this.removeFromDataFrameByMessageOrdinal(this.actionKnowledgeCorrelations, messageOrdinal);
+        this.removeFromDataFrameByMessageOrdinal(
+            this.websiteCategories,
+            messageOrdinal,
+        );
+        this.removeFromDataFrameByMessageOrdinal(
+            this.bookmarkFolders,
+            messageOrdinal,
+        );
+        this.removeFromDataFrameByMessageOrdinal(
+            this.knowledgeEntities,
+            messageOrdinal,
+        );
+        this.removeFromDataFrameByMessageOrdinal(
+            this.knowledgeTopics,
+            messageOrdinal,
+        );
+        this.removeFromDataFrameByMessageOrdinal(
+            this.actionKnowledgeCorrelations,
+            messageOrdinal,
+        );
     }
 
     private removeFromDataFrameByMessageOrdinal(
@@ -480,8 +503,10 @@ export class WebsiteCollection
 
         const frameImpl = dataFrame as any;
         if (frameImpl.rows) {
-            frameImpl.rows = frameImpl.rows.filter((row: dataFrame.DataFrameRow) => 
-                row.sourceRef?.range?.start?.messageOrdinal !== messageOrdinal
+            frameImpl.rows = frameImpl.rows.filter(
+                (row: dataFrame.DataFrameRow) =>
+                    row.sourceRef?.range?.start?.messageOrdinal !==
+                    messageOrdinal,
             );
         }
     }
@@ -556,8 +581,7 @@ export class WebsiteCollection
                     url: websitePart.url,
                     title: websitePart.title || "",
                     dateAdded:
-                        websitePart.bookmarkDate ||
-                        new Date().toISOString(),
+                        websitePart.bookmarkDate || new Date().toISOString(),
                 },
             };
             this.bookmarkFolders.addRows(folderRow);
@@ -573,8 +597,7 @@ export class WebsiteCollection
                         sourceRef,
                         record: {
                             url: websitePart.url,
-                            domain:
-                                websitePart.domain || websitePart.url,
+                            domain: websitePart.domain || websitePart.url,
                             entityName: entity.name,
                             entityType: Array.isArray(entity.type)
                                 ? entity.type.join(", ")
@@ -593,8 +616,7 @@ export class WebsiteCollection
                         sourceRef,
                         record: {
                             url: websitePart.url,
-                            domain:
-                                websitePart.domain || websitePart.url,
+                            domain: websitePart.domain || websitePart.url,
                             topic: topic,
                             confidence: 0.8,
                             extractionDate,
@@ -610,9 +632,9 @@ export class WebsiteCollection
                         sourceRef,
                         record: {
                             url: websitePart.url,
-                            domain:
-                                websitePart.domain || websitePart.url,
-                            actionSubject: action.subjectEntityName || "unknown",
+                            domain: websitePart.domain || websitePart.url,
+                            actionSubject:
+                                action.subjectEntityName || "unknown",
                             actionVerb: action.verbs?.join(", ") || "unknown",
                             actionObject: action.objectEntityName || "unknown",
                             confidence: 0.8,

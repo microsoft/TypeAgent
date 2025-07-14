@@ -34,7 +34,7 @@ export class ContentExtractor {
     ) {
         // Initialize HTML fetcher
         this.htmlFetcher = new HtmlFetcher();
-        
+
         if (inputConfig) {
             // Create a clean config object with only defined values
             const cleanConfig: ExtractionConfig = {
@@ -90,13 +90,22 @@ export class ContentExtractor {
 
         try {
             // Fetch HTML if needed and not provided
-            if (mode !== "basic" && !content.htmlContent && !content.htmlFragments && content.url) {
-                const fetchResult = await this.htmlFetcher.fetchHtml(content.url);
+            if (
+                mode !== "basic" &&
+                !content.htmlContent &&
+                !content.htmlFragments &&
+                content.url
+            ) {
+                const fetchResult = await this.htmlFetcher.fetchHtml(
+                    content.url,
+                );
                 if (fetchResult.html) {
                     content.htmlContent = fetchResult.html;
                 } else if (fetchResult.error) {
                     // Log the error but continue with title-only processing
-                    console.warn(`Failed to fetch ${content.url}: ${fetchResult.error}`);
+                    console.warn(
+                        `Failed to fetch ${content.url}: ${fetchResult.error}`,
+                    );
                 }
             }
 
@@ -388,7 +397,10 @@ export class ContentExtractor {
                 // Multiple fragments - preserve iframe boundaries with context markers
                 return content.htmlFragments
                     .map((frag, index) => {
-                        const fragmentContent = typeof frag === "string" ? frag : frag.content || "";
+                        const fragmentContent =
+                            typeof frag === "string"
+                                ? frag
+                                : frag.content || "";
                         const frameId = frag.frameId || index;
                         // Add iframe context markers to preserve boundaries
                         return `<!-- IFRAME_START:${frameId} -->\n${fragmentContent}\n<!-- IFRAME_END:${frameId} -->`;

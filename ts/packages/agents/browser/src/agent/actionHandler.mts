@@ -417,7 +417,7 @@ async function updateBrowserContext(
                         }
 
                         case "importWebsiteData":
-                        case "importWebsiteDataWithProgress":                            
+                        case "importWebsiteDataWithProgress":
                         case "importHtmlFolder":
                         case "getWebsiteStats":
                         case "searchWebMemories": {
@@ -904,7 +904,11 @@ async function handleTabIndexActions(
 /**
  * Progress update helper function
  */
-function sendProgressUpdateViaWebSocket(webSocket: WebSocket | undefined, importId: string, progress: any) {
+function sendProgressUpdateViaWebSocket(
+    webSocket: WebSocket | undefined,
+    importId: string,
+    progress: any,
+) {
     try {
         if (webSocket && webSocket.readyState === WebSocket.OPEN) {
             // Send progress update message via WebSocket
@@ -916,14 +920,20 @@ function sendProgressUpdateViaWebSocket(webSocket: WebSocket | undefined, import
                 },
                 source: "browserAgent",
             };
-            
+
             webSocket.send(JSON.stringify(progressMessage));
-            debug(`Progress Update [${importId}] sent via WebSocket:`, progress);
+            debug(
+                `Progress Update [${importId}] sent via WebSocket:`,
+                progress,
+            );
         } else {
-            debug(`Progress Update [${importId}] (WebSocket not available):`, progress);
+            debug(
+                `Progress Update [${importId}] (WebSocket not available):`,
+                progress,
+            );
         }
     } catch (error) {
-        console.error('Failed to send progress update via WebSocket:', error);
+        console.error("Failed to send progress update via WebSocket:", error);
     }
 }
 
@@ -1216,14 +1226,16 @@ async function handleWebsiteAction(
             const progressCallback = (message: string) => {
                 // Extract progress info from message if possible
                 const progressMatch = message.match(/(\d+)\/(\d+).*?:\s*(.+)/);
-                let current = 0, total = 0, item = '';
-                
+                let current = 0,
+                    total = 0,
+                    item = "";
+
                 if (progressMatch) {
                     current = parseInt(progressMatch[1]);
                     total = parseInt(progressMatch[2]);
                     item = progressMatch[3];
                 }
-                
+
                 // Send structured progress update via WebSocket (captured in closure)
                 sendProgressUpdateViaWebSocket(
                     context.agentContext.webSocket,
@@ -1235,11 +1247,15 @@ async function handleWebsiteAction(
                         currentItem: item,
                         importId: parameters.importId,
                         errors: [],
-                    }
+                    },
                 );
             };
-            
-            return await importWebsiteDataFromSession(parameters, context, progressCallback);
+
+            return await importWebsiteDataFromSession(
+                parameters,
+                context,
+                progressCallback,
+            );
 
         case "importHtmlFolder":
             return await importHtmlFolderFromSession(parameters, context);

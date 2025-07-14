@@ -303,7 +303,10 @@ export class WebsiteImportManager {
     /**
      * Register progress update callback for a specific import
      */
-    onProgressUpdateForImport(importId: string, callback: ProgressCallback): void {
+    onProgressUpdateForImport(
+        importId: string,
+        callback: ProgressCallback,
+    ): void {
         this.progressCallbacks.set(importId, callback);
     }
 
@@ -661,7 +664,7 @@ export class WebsiteImportManager {
         // Try specific import callback first, then fall back to global
         const specificCallback = this.progressCallbacks.get(importId);
         const globalCallback = this.progressCallbacks.get("global");
-        
+
         const callback = specificCallback || globalCallback;
         if (callback) {
             callback(progress);

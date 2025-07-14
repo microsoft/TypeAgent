@@ -332,11 +332,13 @@ class WebsiteLibraryPanelFullPage {
         });
 
         // Listen for progress messages from service worker
-        chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-            if (message.type === "importProgress") {
-                this.handleImportProgressMessage(message);
-            }
-        });
+        chrome.runtime.onMessage.addListener(
+            (message, sender, sendResponse) => {
+                if (message.type === "importProgress") {
+                    this.handleImportProgressMessage(message);
+                }
+            },
+        );
 
         // Setup import UI callbacks
         this.importUI.onProgressUpdate((progress: ImportProgress) => {
@@ -2884,7 +2886,7 @@ class WebsiteLibraryPanelFullPage {
     ): Promise<void> {
         try {
             let isFirstProgress = true;
-            
+
             // Register progress callback BEFORE starting import
             this.importManager.onProgressUpdate((progress: ImportProgress) => {
                 if (isFirstProgress) {
@@ -2918,7 +2920,7 @@ class WebsiteLibraryPanelFullPage {
     ): Promise<void> {
         try {
             let isFirstProgress = true;
-            
+
             // Register progress callback BEFORE starting import
             this.importManager.onProgressUpdate((progress: ImportProgress) => {
                 if (isFirstProgress) {

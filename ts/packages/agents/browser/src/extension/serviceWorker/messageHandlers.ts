@@ -842,7 +842,7 @@ export async function handleMessage(
 async function handleImportWebsiteDataWithProgress(message: any) {
     const importId = message.importId;
     const totalItems = message.totalItems || 0;
-    
+
     try {
         // Send initial progress update
         sendProgressToUI(importId, {
@@ -854,7 +854,7 @@ async function handleImportWebsiteDataWithProgress(message: any) {
         });
 
         const startTime = Date.now();
-        
+
         const result = await sendActionToAgent({
             actionName: "importWebsiteDataWithProgress",
             parameters: {
@@ -888,20 +888,25 @@ async function handleImportWebsiteDataWithProgress(message: any) {
         };
     } catch (error) {
         console.error("Error importing website data:", error);
-        
+
         // Send error progress to UI
-        sendProgressToUI(importId, { 
+        sendProgressToUI(importId, {
             importId,
-            phase: "error", 
+            phase: "error",
             totalItems: totalItems,
             processedItems: 0,
-            errors: [{
-                type: "processing",
-                message: error instanceof Error ? error.message : "Unknown error",
-                timestamp: Date.now(),
-            }],
+            errors: [
+                {
+                    type: "processing",
+                    message:
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error",
+                    timestamp: Date.now(),
+                },
+            ],
         });
-        
+
         return {
             success: false,
             error: error instanceof Error ? error.message : "Unknown error",
@@ -923,14 +928,16 @@ function sendProgressToUI(importId: string, progress: any) {
 
     // Send to all connected library panels via runtime messaging
     try {
-        chrome.runtime.sendMessage({
-            type: "importProgress",
-            importId,
-            progress: structuredProgress,
-        }).catch(error => {
-            // Handle case where no listeners are available
-            console.log("No listeners for progress update:", error);
-        });
+        chrome.runtime
+            .sendMessage({
+                type: "importProgress",
+                importId,
+                progress: structuredProgress,
+            })
+            .catch((error) => {
+                // Handle case where no listeners are available
+                console.log("No listeners for progress update:", error);
+            });
     } catch (error) {
         console.error("Failed to send progress to UI:", error);
     }

@@ -222,10 +222,14 @@ if (
     ) {
         for (const website of newWebsites) {
             try {
-                const docPart = (await import("./websiteDocPart.js")).WebsiteDocPart.fromWebsite(website);
+                const docPart = (
+                    await import("./websiteDocPart.js")
+                ).WebsiteDocPart.fromWebsite(website);
                 await websiteCollection.addWebsiteToIndex(docPart);
             } catch (error) {
-                debug(`Error adding website incrementally: ${error}, falling back to batch add`);
+                debug(
+                    `Error adding website incrementally: ${error}, falling back to batch add`,
+                );
                 websiteCollection.addWebsites([website]);
             }
         }
@@ -244,21 +248,29 @@ if (
 
             buildIndexPromise
                 .then(async (value: IndexingResults) => {
-                    debug(`Incremental index update completed for ${websites!.messages.length} websites`);
-                    
+                    debug(
+                        `Incremental index update completed for ${websites!.messages.length} websites`,
+                    );
+
                     await websites?.writeToFile(index!.path, "index");
                     debug(`Index saved to ${index!.path}`);
 
                     buildIndexPromise = undefined;
                 })
                 .catch(async (error) => {
-                    debug(`Error in incremental indexing: ${error}, falling back to full rebuild`);
+                    debug(
+                        `Error in incremental indexing: ${error}, falling back to full rebuild`,
+                    );
                     try {
                         await websites.buildIndex();
                         await websites?.writeToFile(index!.path, "index");
-                        debug(`Fallback full rebuild completed and saved to ${index!.path}`);
+                        debug(
+                            `Fallback full rebuild completed and saved to ${index!.path}`,
+                        );
                     } catch (fallbackError) {
-                        debug(`Fallback full rebuild also failed: ${fallbackError}`);
+                        debug(
+                            `Fallback full rebuild also failed: ${fallbackError}`,
+                        );
                         index!.state = "error";
                         sendIndexStatus();
                     }

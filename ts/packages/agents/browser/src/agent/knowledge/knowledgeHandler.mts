@@ -64,7 +64,7 @@ function aggregateExtractionResults(results: any[]): {
     const allTopics: string[] = [];
     const allQuestions: string[] = [];
     const summaries: string[] = [];
-    
+
     let totalWordCount = 0;
     let totalReadingTime = 0;
 
@@ -74,28 +74,28 @@ function aggregateExtractionResults(results: any[]): {
             if (result.knowledge.entities) {
                 allEntities.push(...result.knowledge.entities);
             }
-            
+
             // Collect relationships
             if (result.knowledge.relationships) {
                 allRelationships.push(...result.knowledge.relationships);
             }
-            
+
             // Collect topics
             if (result.knowledge.keyTopics) {
                 allTopics.push(...result.knowledge.keyTopics);
             }
-            
+
             // Collect questions
             if (result.knowledge.suggestedQuestions) {
                 allQuestions.push(...result.knowledge.suggestedQuestions);
             }
-            
+
             // Collect summaries
             if (result.knowledge.summary) {
                 summaries.push(result.knowledge.summary);
             }
         }
-        
+
         // Aggregate metrics
         if (result.contentMetrics) {
             totalWordCount += result.contentMetrics.wordCount || 0;
@@ -104,13 +104,22 @@ function aggregateExtractionResults(results: any[]): {
     }
 
     // Deduplicate entities by name and type
-    const uniqueEntities = allEntities.filter((entity, index, arr) => 
-        arr.findIndex(e => e.name === entity.name && e.type === entity.type) === index
+    const uniqueEntities = allEntities.filter(
+        (entity, index, arr) =>
+            arr.findIndex(
+                (e) => e.name === entity.name && e.type === entity.type,
+            ) === index,
     );
 
-    // Deduplicate relationships 
-    const uniqueRelationships = allRelationships.filter((rel, index, arr) => 
-        arr.findIndex(r => r.from === rel.from && r.relationship === rel.relationship && r.to === rel.to) === index
+    // Deduplicate relationships
+    const uniqueRelationships = allRelationships.filter(
+        (rel, index, arr) =>
+            arr.findIndex(
+                (r) =>
+                    r.from === rel.from &&
+                    r.relationship === rel.relationship &&
+                    r.to === rel.to,
+            ) === index,
     );
 
     // Deduplicate topics and questions
@@ -122,9 +131,10 @@ function aggregateExtractionResults(results: any[]): {
         relationships: uniqueRelationships,
         keyTopics: uniqueTopics,
         suggestedQuestions: uniqueQuestions,
-        summary: summaries.length > 1 
-            ? `Multi-frame content summary:\n${summaries.map((s, i) => `Frame ${i + 1}: ${s}`).join('\n\n')}`
-            : summaries[0] || "No content summary available.",
+        summary:
+            summaries.length > 1
+                ? `Multi-frame content summary:\n${summaries.map((s, i) => `Frame ${i + 1}: ${s}`).join("\n\n")}`
+                : summaries[0] || "No content summary available.",
         contentMetrics: {
             wordCount: totalWordCount,
             readingTime: totalReadingTime,
@@ -309,10 +319,10 @@ export async function indexWebPageContent(
 
         // Aggregate results for indexing
         const aggregatedResults = aggregateExtractionResults(extractionResults);
-        
+
         // Create combined text content for website memory indexing
         const combinedTextContent = extractionInputs
-            .map(input => input.textContent)
+            .map((input) => input.textContent)
             .join("\n\n");
 
         const visitInfo: website.WebsiteVisitInfo = {
@@ -327,14 +337,19 @@ export async function indexWebPageContent(
             parameters.title,
         );
 
-        const websiteObj = website.importWebsiteVisit(visitInfo, combinedTextContent);
+        const websiteObj = website.importWebsiteVisit(
+            visitInfo,
+            combinedTextContent,
+        );
 
         if (aggregatedResults && aggregatedResults.entities.length > 0) {
             // Set knowledge based on what the website-memory package expects
             websiteObj.knowledge = {
-                entities: aggregatedResults.entities.map(entity => ({
+                entities: aggregatedResults.entities.map((entity) => ({
                     ...entity,
-                    type: Array.isArray(entity.type) ? entity.type : [entity.type], // Ensure type is array
+                    type: Array.isArray(entity.type)
+                        ? entity.type
+                        : [entity.type], // Ensure type is array
                 })),
                 topics: aggregatedResults.keyTopics,
                 actions: [], // Actions would need to be extracted separately if needed
@@ -345,31 +360,53 @@ export async function indexWebPageContent(
         if (context.agentContext.websiteCollection) {
             if (parameters.extractKnowledge) {
                 try {
-                    const isNewPage = !checkPageExistsInIndex(parameters.url, context);
-                    
+                    const isNewPage = !checkPageExistsInIndex(
+                        parameters.url,
+                        context,
+                    );
+
                     if (isNewPage) {
-                        const docPart = website.WebsiteDocPart.fromWebsite(websiteObj);
-                        const result = await context.agentContext.websiteCollection.addWebsiteToIndex(docPart);
+                        const docPart =
+                            website.WebsiteDocPart.fromWebsite(websiteObj);
+                        const result =
+                            await context.agentContext.websiteCollection.addWebsiteToIndex(
+                                docPart,
+                            );
                         if (hasIndexingErrors(result)) {
-                            console.warn("Incremental indexing failed, falling back to full rebuild");
-                            context.agentContext.websiteCollection.addWebsites([websiteObj]);
+                            console.warn(
+                                "Incremental indexing failed, falling back to full rebuild",
+                            );
+                            context.agentContext.websiteCollection.addWebsites([
+                                websiteObj,
+                            ]);
                             await context.agentContext.websiteCollection.buildIndex();
                         }
                     } else {
-                        const docPart = website.WebsiteDocPart.fromWebsite(websiteObj);
-                        const result = await context.agentContext.websiteCollection.updateWebsiteInIndex(
-                            parameters.url, 
-                            docPart
-                        );
+                        const docPart =
+                            website.WebsiteDocPart.fromWebsite(websiteObj);
+                        const result =
+                            await context.agentContext.websiteCollection.updateWebsiteInIndex(
+                                parameters.url,
+                                docPart,
+                            );
                         if (hasIndexingErrors(result)) {
-                            console.warn("Update indexing failed, falling back to full rebuild");
-                            context.agentContext.websiteCollection.addWebsites([websiteObj]);
+                            console.warn(
+                                "Update indexing failed, falling back to full rebuild",
+                            );
+                            context.agentContext.websiteCollection.addWebsites([
+                                websiteObj,
+                            ]);
                             await context.agentContext.websiteCollection.buildIndex();
                         }
                     }
                 } catch (error) {
-                    console.warn("Indexing error, falling back to full rebuild:", error);
-                    context.agentContext.websiteCollection.addWebsites([websiteObj]);
+                    console.warn(
+                        "Indexing error, falling back to full rebuild:",
+                        error,
+                    );
+                    context.agentContext.websiteCollection.addWebsites([
+                        websiteObj,
+                    ]);
                     await context.agentContext.websiteCollection.buildIndex();
                 }
 
@@ -1844,7 +1881,7 @@ function analyzeTopDomains(websites: any[], limit: number) {
 
 function checkPageExistsInIndex(
     url: string,
-    context: SessionContext<BrowserActionContext>
+    context: SessionContext<BrowserActionContext>,
 ): boolean {
     try {
         const websiteCollection = context.agentContext.websiteCollection;
@@ -1861,5 +1898,7 @@ function checkPageExistsInIndex(
 }
 
 function hasIndexingErrors(result: any): boolean {
-    return !!(result?.semanticRefs?.error || result?.secondaryIndexResults?.error);
+    return !!(
+        result?.semanticRefs?.error || result?.secondaryIndexResults?.error
+    );
 }

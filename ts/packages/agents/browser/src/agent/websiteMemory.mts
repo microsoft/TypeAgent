@@ -572,17 +572,22 @@ export async function importWebsiteDataFromSession(
                     undefined,
                     ["website-analysis"],
                 );
-                
+
                 // Create knowledge extractor for ContentExtractor
-                importOptions.knowledgeExtractor = kpLib.conversation.createKnowledgeExtractor(chatModel);
-                
-                debug("Created chat model and knowledge extractor for intelligent analysis");
+                importOptions.knowledgeExtractor =
+                    kpLib.conversation.createKnowledgeExtractor(chatModel);
+
+                debug(
+                    "Created chat model and knowledge extractor for intelligent analysis",
+                );
             } catch (error) {
                 debug(
                     "Failed to create chat model for intelligent analysis:",
                     error,
                 );
-                throw new Error(`Cannot import with ${extractionMode} mode: AI model required but not available`);
+                throw new Error(
+                    `Cannot import with ${extractionMode} mode: AI model required but not available`,
+                );
             }
         }
 
@@ -598,7 +603,9 @@ export async function importWebsiteDataFromSession(
         // Enhance with HTML content fetching and AI analysis for non-basic modes
         if (extractionMode !== "basic" && websites.length > 0) {
             if (displayProgress) {
-                displayProgress("Fetching webpage content and analyzing with AI...");
+                displayProgress(
+                    "Fetching webpage content and analyzing with AI...",
+                );
             }
 
             // Create inputs that will trigger HTML fetching in ContentExtractor
@@ -607,7 +614,8 @@ export async function importWebsiteDataFromSession(
                 title: site.metadata.title || site.metadata.url,
                 // NO textContent or htmlContent - let ContentExtractor fetch HTML
                 source: type === "bookmarks" ? "bookmark" : "history",
-                timestamp: site.metadata.visitDate || site.metadata.bookmarkDate,
+                timestamp:
+                    site.metadata.visitDate || site.metadata.bookmarkDate,
             }));
 
             try {
@@ -621,12 +629,15 @@ export async function importWebsiteDataFromSession(
 
                 // Use BatchProcessor for efficient processing
                 const batchProcessor = new website.BatchProcessor(extractor);
-                
+
                 const enhancedProgressCallback = (progress: BatchProgress) => {
                     if (displayProgress) {
-                        const phase = progress.processed <= progress.total * 0.6 ? "Fetching content" : "Analyzing with AI";
+                        const phase =
+                            progress.processed <= progress.total * 0.6
+                                ? "Fetching content"
+                                : "Analyzing with AI";
                         displayProgress(
-                            `${phase}: ${progress.processed}/${progress.total} (${progress.percentage}%)`
+                            `${phase}: ${progress.processed}/${progress.total} (${progress.percentage}%)`,
                         );
                     }
                 };
@@ -641,17 +652,19 @@ export async function importWebsiteDataFromSession(
                 enhancedResults.forEach((result, index) => {
                     if (websites[index] && result.knowledge) {
                         websites[index].knowledge = result.knowledge;
-                        
+
                         // Update textChunks with actual fetched content
                         if (result.pageContent?.mainContent) {
-                            websites[index].textChunks = [result.pageContent.mainContent];
+                            websites[index].textChunks = [
+                                result.pageContent.mainContent,
+                            ];
                         }
                     }
                 });
 
                 if (displayProgress) {
                     displayProgress(
-                        `Enhanced ${enhancedResults.length} items with ${extractionMode} mode extraction`
+                        `Enhanced ${enhancedResults.length} items with ${extractionMode} mode extraction`,
                     );
                 }
             } catch (error) {
@@ -671,11 +684,13 @@ export async function importWebsiteDataFromSession(
         }
 
         context.agentContext.websiteCollection.addWebsites(websites);
-        
+
         try {
             await context.agentContext.websiteCollection.addToIndex();
         } catch (error) {
-            debug(`Incremental indexing failed, falling back to full rebuild: ${error}`);
+            debug(
+                `Incremental indexing failed, falling back to full rebuild: ${error}`,
+            );
             await context.agentContext.websiteCollection.buildIndex();
         }
 
@@ -897,7 +912,9 @@ export async function importHtmlFolderFromSession(
             try {
                 await context.agentContext.websiteCollection.addToIndex();
             } catch (error) {
-                debug(`Incremental indexing failed, falling back to full rebuild: ${error}`);
+                debug(
+                    `Incremental indexing failed, falling back to full rebuild: ${error}`,
+                );
                 await context.agentContext.websiteCollection.buildIndex();
             }
 

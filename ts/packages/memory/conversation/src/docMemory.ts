@@ -115,7 +115,8 @@ export class DocMemory
     ): Promise<kp.IndexingResults> {
         this.beginIndexing();
         try {
-            const messageOrdinalStartAt = this.indexingState.lastMessageOrdinal + 1;
+            const messageOrdinalStartAt =
+                this.indexingState.lastMessageOrdinal + 1;
             if (messageOrdinalStartAt < this.messages.length) {
                 const result = await kp.addToConversationIndex(
                     this,
@@ -141,7 +142,7 @@ export class DocMemory
         try {
             this.messages.append(item);
             const messageOrdinal = this.messages.length - 1;
-            
+
             const result = await kp.addToConversationIndex(
                 this,
                 this.settings.conversationSettings,
@@ -165,7 +166,7 @@ export class DocMemory
         try {
             this.removeSemanticRefsForMessage(messageOrdinal);
             (this.messages as any).items[messageOrdinal] = updatedItem;
-            
+
             const result = await kp.addToConversationIndex(
                 this,
                 this.settings.conversationSettings,
@@ -191,13 +192,13 @@ export class DocMemory
             }
         }
 
-        refsToRemove.reverse().forEach(refIndex => {
+        refsToRemove.reverse().forEach((refIndex) => {
             const ref = this.semanticRefs.get(refIndex);
             this.removeSemanticRefFromIndex(ref, refIndex);
         });
 
         const items = (this.semanticRefs as any).items;
-        refsToRemove.reverse().forEach(refIndex => {
+        refsToRemove.reverse().forEach((refIndex) => {
             items.splice(refIndex, 1);
         });
     }
@@ -211,7 +212,9 @@ export class DocMemory
                 this.semanticRefIndex.removeTerm(knowledge.name, refIndex);
             }
             if (knowledge.type) {
-                const types = Array.isArray(knowledge.type) ? knowledge.type : [knowledge.type];
+                const types = Array.isArray(knowledge.type)
+                    ? knowledge.type
+                    : [knowledge.type];
                 types.forEach((type: string) => {
                     this.semanticRefIndex.removeTerm(type, refIndex);
                 });
@@ -224,7 +227,8 @@ export class DocMemory
 
     private updateIndexingState(): void {
         this.indexingState.lastMessageOrdinal = this.messages.length - 1;
-        this.indexingState.lastSemanticRefOrdinal = this.semanticRefs.length - 1;
+        this.indexingState.lastSemanticRefOrdinal =
+            this.semanticRefs.length - 1;
         this.indexingState.lastIndexed = new Date();
     }
 
@@ -272,7 +276,7 @@ export class DocMemory
                 docMemoryData.messageIndexData,
             );
         }
-        
+
         if (docMemoryData.indexingState) {
             this.indexingState = {
                 ...docMemoryData.indexingState,
@@ -285,7 +289,7 @@ export class DocMemory
                 lastIndexed: new Date(),
             };
         }
-        
+
         await kp.buildTransientSecondaryIndexes(
             this,
             this.settings.conversationSettings,

@@ -60,7 +60,9 @@ export async function addMessagesToCollection(
             try {
                 await collection.addToIndex();
             } catch (error) {
-                console.warn(`Incremental indexing failed, falling back to full rebuild: ${error}`);
+                console.warn(
+                    `Incremental indexing failed, falling back to full rebuild: ${error}`,
+                );
                 await collection.buildIndex();
             }
         }

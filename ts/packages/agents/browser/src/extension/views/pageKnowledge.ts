@@ -1605,8 +1605,6 @@ class KnowledgePanel {
         }
     }
 
-
-
     private showIndexedKnowledgeIndicator() {
         const knowledgeSection = document.getElementById("knowledgeSection")!;
         const firstCard = knowledgeSection.querySelector(".knowledge-card");
@@ -1629,8 +1627,6 @@ class KnowledgePanel {
             knowledgeSection.insertBefore(indicatorDiv, firstCard);
         }
     }
-
-
 
     private showTemporaryStatus(
         message: string,
