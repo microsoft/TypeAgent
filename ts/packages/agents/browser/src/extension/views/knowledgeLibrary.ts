@@ -2662,102 +2662,6 @@ class WebsiteLibraryPanelFullPage {
         }
     }
 
-    // Enhanced knowledge extraction
-    private async extractKnowledgeForAllResults() {
-        if (this.currentResults.length === 0) {
-            notificationManager.showWarning(
-                "No search results to extract knowledge from",
-            );
-            return;
-        }
-
-        const unextractedSites = this.currentResults.filter(
-            (site) =>
-                !site.knowledge?.hasKnowledge ||
-                site.knowledge.status !== "extracted",
-        );
-
-        if (unextractedSites.length === 0) {
-            notificationManager.showSuccess(
-                "Knowledge already extracted for all results",
-            );
-            return;
-        }
-
-        notificationManager.showProgress(
-            `Extracting knowledge from ${unextractedSites.length} websites...`,
-            0,
-        );
-
-        try {
-            for (let i = 0; i < unextractedSites.length; i++) {
-                const site = unextractedSites[i];
-                const progress = Math.round(
-                    ((i + 1) / unextractedSites.length) * 100,
-                );
-
-                notificationManager.showProgress(
-                    `Processing ${site.domain}... (${i + 1}/${unextractedSites.length})`,
-                    progress,
-                );
-
-                await this.extractKnowledgeForSite(site);
-
-                // Small delay to prevent overwhelming the system
-                await new Promise((resolve) => setTimeout(resolve, 100));
-            }
-
-            notificationManager.showSuccess(
-                `Knowledge extracted from ${unextractedSites.length} websites`,
-            );
-
-            // Refresh the results display
-            this.renderSearchResults(this.currentResults);
-        } catch (error) {
-            console.error("Bulk knowledge extraction failed:", error);
-            notificationManager.showError(
-                "Failed to extract knowledge from some websites",
-            );
-        }
-    }
-
-    private async extractKnowledgeForSite(website: Website) {
-        try {
-            if (this.isConnected) {
-                const knowledge =
-                    await chromeExtensionService.extractKnowledge(
-                        website.url,
-                    );
-                website.knowledge = knowledge;
-                this.knowledgeCache.set(website.url, knowledge);
-            } else {
-                // No connection - cannot extract knowledge
-                website.knowledge = {
-                    hasKnowledge: false,
-                    status: "error",
-                    confidence: 0,
-                };
-                notificationManager.showError(
-                    "Connection required to extract knowledge",
-                );
-            }
-        } catch (error) {
-            console.error(
-                `Failed to extract knowledge for ${website.url}:`,
-                error,
-            );
-            if (website.knowledge) {
-                website.knowledge.status = "error";
-            } else {
-                website.knowledge = {
-                    hasKnowledge: false,
-                    status: "error",
-                    confidence: 0,
-                };
-            }
-        }
-    }
-
     // User preferences management
     private loadUserPreferences(): UserPreferences {
         try {
@@ -3085,29 +2989,6 @@ class WebsiteLibraryPanelFullPage {
     }
 }
 
-// ===================================================================
-// ENHANCED FEATURES: Real-time Integration & Advanced Features
-// ===================================================================
-
-// Enhanced interfaces for advanced features
-interface NotificationManager {
-    showSuccess(message: string, actions?: NotificationAction[]): void;
-    showError(message: string, retry?: () => void): void;
-    showWarning(message: string): void;
-    showInfo(message: string): void;
-    showProgress(message: string, progress?: number): void;
-    hide(id: string): void;
-    clear(): void;
-    handleNotificationAction(id: string, actionLabel: string): void;
-    hideNotification(id: string): void;
-}
-
-interface NotificationAction {
-    label: string;
-    action: () => void;
-    style?: "primary" | "secondary" | "success" | "danger";
-}
-
 interface SearchSuggestion {
     text: string;
     type: "recent" | "entity" | "topic" | "domain" | "auto";
@@ -3126,22 +3007,6 @@ interface UserPreferences {
     theme: "light" | "dark" | "auto";
 }
 
-// Enhanced Chrome Extension Service for real-time data
-interface ChromeExtensionService {
-    getLibraryStats(): Promise<LibraryStats>;
-    searchWebMemories(
-        query: string,
-        filters: SearchFilters,
-    ): Promise<SearchResult>;
-    extractKnowledge(url: string): Promise<KnowledgeStatus>;
-    checkKnowledgeStatus(url: string): Promise<KnowledgeStatus>;
-    getSearchSuggestions(query: string): Promise<string[]>;
-    getRecentSearches(): Promise<string[]>;
-    saveSearch(query: string, results: SearchResult): Promise<void>;
-    getTopDomains(limit?: number): Promise<any>;
-    getActivityTrends(timeRange?: string): Promise<any>;
-    getDiscoverInsights(limit?: number, timeframe?: string): Promise<any>;
-}
 
 // ===================================================================
 // INITIALIZATION
