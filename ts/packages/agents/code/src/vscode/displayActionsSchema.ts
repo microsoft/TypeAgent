@@ -8,7 +8,6 @@ export type CodeDisplayActions =
     | ShowExplorerPane
     | ShowTextSearchAction
     | ShowSourceControlAction
-    | ShowExtensionsAction
     | ShowOutputPanelAction
     | ToggleSearchDetailsAction
     | ReplaceInFilesAction
@@ -47,11 +46,6 @@ export type ShowTextSearchAction = {
 // Show source control
 export type ShowSourceControlAction = {
     actionName: "showSourceControl";
-};
-
-// Show the extensions panel
-export type ShowExtensionsAction = {
-    actionName: "showExtensions";
 };
 
 // Show output panel

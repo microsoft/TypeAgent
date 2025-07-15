@@ -5,6 +5,7 @@ import * as vscode from "vscode";
 import { ActionResult } from "./helpers";
 import { handleWorkbenchActions } from "./handleWorkBenchActions";
 import { handleDebugActions } from "./handleDebugActions";
+import { handleExtensionActions } from "./handleExtensionActions";
 
 async function execChangeEditorColumns(actionData: any): Promise<ActionResult> {
     let actionResult: ActionResult = {
@@ -101,11 +102,6 @@ export async function handleDisplayKBActions(
         case "showSourceControl": {
             vscode.commands.executeCommand("workbench.view.scm");
             actionResult.message = "Showing source control";
-            break;
-        }
-        case "showExtensions": {
-            vscode.commands.executeCommand("workbench.view.extensions");
-            actionResult.message = "Showing extensions";
             break;
         }
         case "showOutputPanel": {
@@ -366,6 +362,7 @@ export async function handleVSCodeActions(action: any) {
             handleDisplayKBActions,
             handleDebugActions,
             handleWorkbenchActions,
+            handleExtensionActions,
         ];
 
         const results = await Promise.all(
