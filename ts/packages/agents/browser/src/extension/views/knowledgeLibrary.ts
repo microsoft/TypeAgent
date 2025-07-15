@@ -16,14 +16,14 @@ import {
     ImportProgress,
     ImportResult,
 } from "../interfaces/websiteImport.types";
-import { 
-    notificationManager, 
-    chromeExtensionService, 
-    TemplateHelpers, 
+import {
+    notificationManager,
+    chromeExtensionService,
+    TemplateHelpers,
     FormatUtils,
     EventManager,
-    ConnectionManager
-} from './knowledgeUtilities';
+    ConnectionManager,
+} from "./knowledgeUtilities";
 
 interface FullPageNavigation {
     currentPage: "search" | "discover" | "analytics";
@@ -205,7 +205,7 @@ class WebsiteLibraryPanelFullPage {
     private searchDebounceTimer: number | null = null;
     private recentSearches: string[] = [];
     private currentQuery: string = "";
-    
+
     // Data storage
     private libraryStats: LibraryStats = {
         totalWebsites: 0,
@@ -369,13 +369,11 @@ class WebsiteLibraryPanelFullPage {
         });
 
         // Listen for progress messages from service worker
-        EventManager.setupMessageListener(
-            (message, sender, sendResponse) => {
-                if (message.type === "importProgress") {
-                    this.handleImportProgressMessage(message);
-                }
-            },
-        );
+        EventManager.setupMessageListener((message, sender, sendResponse) => {
+            if (message.type === "importProgress") {
+                this.handleImportProgressMessage(message);
+            }
+        });
 
         // Setup import UI callbacks
         this.importUI.onProgressUpdate((progress: ImportProgress) => {
@@ -398,7 +396,8 @@ class WebsiteLibraryPanelFullPage {
 
     private async checkConnectionStatus(): Promise<boolean> {
         try {
-            const response = await chromeExtensionService.checkWebSocketConnection();
+            const response =
+                await chromeExtensionService.checkWebSocketConnection();
             this.isConnected = response?.connected === true;
             return this.isConnected;
         } catch (error) {
@@ -636,14 +635,18 @@ class WebsiteLibraryPanelFullPage {
 
         // Listen for knowledge extraction events to invalidate cache
         EventManager.setupMessageListener((message, sender, sendResponse) => {
-            if (message.type === "knowledgeExtracted" || 
+            if (
+                message.type === "knowledgeExtracted" ||
                 message.type === "importComplete" ||
-                message.type === "contentIndexed") {
+                message.type === "contentIndexed"
+            ) {
                 // Reload analytics data when new knowledge is extracted
                 if (this.navigation.currentPage === "analytics") {
-                    this.loadAnalyticsData().then(() => {
-                        return this.renderAnalyticsContent();
-                    }).catch(console.error);
+                    this.loadAnalyticsData()
+                        .then(() => {
+                            return this.renderAnalyticsContent();
+                        })
+                        .catch(console.error);
                 }
             }
         });
@@ -730,16 +733,28 @@ class WebsiteLibraryPanelFullPage {
         try {
             // Check cache first for improved performance
             const filters: SearchFilters = {};
-            
-            const dateFrom = (document.getElementById("dateFrom") as HTMLInputElement)?.value;
-            const dateTo = (document.getElementById("dateTo") as HTMLInputElement)?.value;
-            const sourceType = (document.getElementById("sourceFilter") as HTMLSelectElement)?.value;
-            const domain = (document.getElementById("domainFilter") as HTMLInputElement)?.value;
-            const minRelevance = parseInt((document.getElementById("relevanceFilter") as HTMLInputElement)?.value || "0");
+
+            const dateFrom = (
+                document.getElementById("dateFrom") as HTMLInputElement
+            )?.value;
+            const dateTo = (
+                document.getElementById("dateTo") as HTMLInputElement
+            )?.value;
+            const sourceType = (
+                document.getElementById("sourceFilter") as HTMLSelectElement
+            )?.value;
+            const domain = (
+                document.getElementById("domainFilter") as HTMLInputElement
+            )?.value;
+            const minRelevance = parseInt(
+                (document.getElementById("relevanceFilter") as HTMLInputElement)
+                    ?.value || "0",
+            );
 
             if (dateFrom) filters.dateFrom = dateFrom;
             if (dateTo) filters.dateTo = dateTo;
-            if (sourceType) filters.sourceType = sourceType as "bookmarks" | "history";
+            if (sourceType)
+                filters.sourceType = sourceType as "bookmarks" | "history";
             if (domain) filters.domain = domain;
             if (minRelevance > 0) filters.minRelevance = minRelevance;
 
@@ -1260,21 +1275,25 @@ class WebsiteLibraryPanelFullPage {
         if (entitiesSection && entitiesContent && entities.length > 0) {
             // Sort entities by count descending
             const sortedEntities = entities.sort((a, b) => b.count - a.count);
-            
+
             // Create entity tags HTML
-            const entityTagsHtml = sortedEntities.map(entity => `
-                <div class="entity-tag" title="${entity.type}: found ${entity.count} time${entity.count !== 1 ? 's' : ''}">
+            const entityTagsHtml = sortedEntities
+                .map(
+                    (entity) => `
+                <div class="entity-tag" title="${entity.type}: found ${entity.count} time${entity.count !== 1 ? "s" : ""}">
                     <span>${entity.entity}</span>
                     <span class="entity-count">${entity.count}</span>
                 </div>
-            `).join('');
+            `,
+                )
+                .join("");
 
             entitiesContent.innerHTML = `
                 <div class="entity-tags">
                     ${entityTagsHtml}
                 </div>
             `;
-            
+
             entitiesSection.style.display = "block";
         } else if (entitiesSection) {
             entitiesSection.style.display = "none";
@@ -1450,11 +1469,10 @@ class WebsiteLibraryPanelFullPage {
         }
 
         try {
-            const response =
-                await chromeExtensionService.getDiscoverInsights(
-                    10,
-                    "30d",
-                );
+            const response = await chromeExtensionService.getDiscoverInsights(
+                10,
+                "30d",
+            );
 
             if (response.success) {
                 this.discoverData = {
@@ -1653,29 +1671,36 @@ class WebsiteLibraryPanelFullPage {
 
         try {
             // Single call to get all analytics data
-            const analyticsResponse = await chromeExtensionService.getAnalyticsData({
-                timeRange: "30d",
-                includeQuality: true,
-                includeProgress: true,
-                topDomainsLimit: 10,
-                activityGranularity: "day"
-            });
+            const analyticsResponse =
+                await chromeExtensionService.getAnalyticsData({
+                    timeRange: "30d",
+                    includeQuality: true,
+                    includeProgress: true,
+                    topDomainsLimit: 10,
+                    activityGranularity: "day",
+                });
 
             if (analyticsResponse.success) {
                 // Transform to internal format
                 this.analyticsData = {
                     overview: analyticsResponse.analytics.overview,
                     trends: analyticsResponse.analytics.activity.trends,
-                    insights: this.transformKnowledgeInsights(analyticsResponse.analytics.knowledge),
+                    insights: this.transformKnowledgeInsights(
+                        analyticsResponse.analytics.knowledge,
+                    ),
                     domains: analyticsResponse.analytics.domains,
                     knowledge: analyticsResponse.analytics.knowledge,
-                    activity: analyticsResponse.analytics.activity
+                    activity: analyticsResponse.analytics.activity,
                 };
 
                 // Cache for knowledge visualization
-                this.updateKnowledgeVisualizationData(analyticsResponse.analytics.knowledge);
+                this.updateKnowledgeVisualizationData(
+                    analyticsResponse.analytics.knowledge,
+                );
             } else {
-                throw new Error(analyticsResponse.error || "Failed to get analytics data");
+                throw new Error(
+                    analyticsResponse.error || "Failed to get analytics data",
+                );
             }
         } catch (error) {
             console.error("Failed to load analytics data:", error);
@@ -1712,7 +1737,7 @@ class WebsiteLibraryPanelFullPage {
                 change: 0,
             },
             {
-                category: "Relationships", 
+                category: "Relationships",
                 value: knowledge.totalRelationships || 0,
                 change: 0,
             },
@@ -1769,14 +1794,17 @@ class WebsiteLibraryPanelFullPage {
 
     private calculateKnowledgeQualityFromData(knowledge: any): number {
         if (!knowledge || !knowledge.qualityDistribution) return 0;
-        
-        const { highQuality, mediumQuality, lowQuality } = knowledge.qualityDistribution;
+
+        const { highQuality, mediumQuality, lowQuality } =
+            knowledge.qualityDistribution;
         const total = highQuality + mediumQuality + lowQuality;
-        
+
         if (total === 0) return 0;
-        
+
         // Weighted score: high=100%, medium=60%, low=20%
-        return Math.round(((highQuality * 100) + (mediumQuality * 60) + (lowQuality * 20)) / total);
+        return Math.round(
+            (highQuality * 100 + mediumQuality * 60 + lowQuality * 20) / total,
+        );
     }
 
     private updateKnowledgeVisualizationData(knowledge: any) {
@@ -1936,7 +1964,8 @@ class WebsiteLibraryPanelFullPage {
 
     private async loadRecentKnowledgeItems(knowledge: any) {
         try {
-            const response = await chromeExtensionService.getRecentKnowledgeItems(10);
+            const response =
+                await chromeExtensionService.getRecentKnowledgeItems(10);
 
             if (response && response.success) {
                 this.updateRecentEntitiesDisplay(response.entities || []);
@@ -1949,7 +1978,6 @@ class WebsiteLibraryPanelFullPage {
                 this.updateRecentEntitiesDisplay([]);
                 this.updateRecentTopicsDisplay([]);
             }
-        
         } catch (error) {
             console.error("Failed to load recent knowledge items:", error);
             // Update with empty arrays to show appropriate "no data" messages
@@ -2120,8 +2148,8 @@ class WebsiteLibraryPanelFullPage {
                         </div>
                     </div>
                 `,
-                )
-                .join("");
+            )
+            .join("");
 
         container.innerHTML = domainsHtml;
     }
@@ -2374,22 +2402,15 @@ class WebsiteLibraryPanelFullPage {
         const chartBars = recentTrends
             .map((trend: any) => {
                 const totalActivity = trend.visits + trend.bookmarks;
-                const date = new Date(trend.date).toLocaleDateString(
-                    "en-US",
-                    {
-                        month: "short",
-                        day: "numeric",
-                    },
-                );
+                const date = new Date(trend.date).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                });
 
                 const visitsHeight =
-                    maxActivity > 0
-                        ? (trend.visits / maxActivity) * 100
-                        : 0;
+                    maxActivity > 0 ? (trend.visits / maxActivity) * 100 : 0;
                 const bookmarksHeight =
-                    maxActivity > 0
-                        ? (trend.bookmarks / maxActivity) * 100
-                        : 0;
+                    maxActivity > 0 ? (trend.bookmarks / maxActivity) * 100 : 0;
 
                 return `
                     <div class="chart-bar" title="${date}: ${totalActivity} activities">
@@ -2541,9 +2562,7 @@ class WebsiteLibraryPanelFullPage {
 
             if (this.isConnected) {
                 const suggestionTexts =
-                    await chromeExtensionService.getSearchSuggestions(
-                        query,
-                    );
+                    await chromeExtensionService.getSearchSuggestions(query);
                 suggestions = suggestionTexts.map((text) => ({
                     text,
                     type: "auto" as const,
@@ -3014,7 +3033,6 @@ interface UserPreferences {
     enableNotifications: boolean;
     theme: "light" | "dark" | "auto";
 }
-
 
 // ===================================================================
 // INITIALIZATION

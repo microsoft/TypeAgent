@@ -114,7 +114,7 @@ export class NotificationManager {
         type: "success" | "danger" | "info" | "warning",
         title: string,
         message: string,
-        icon: string = "bi-info-circle"
+        icon: string = "bi-info-circle",
     ): void {
         const notification = document.createElement("div");
         notification.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
@@ -154,7 +154,10 @@ export class NotificationManager {
         }, 6000);
     }
 
-    showTemporaryStatus(message: string, type: "success" | "danger" | "info"): void {
+    showTemporaryStatus(
+        message: string,
+        type: "success" | "danger" | "info",
+    ): void {
         const alertClass = "alert-" + type;
         const iconClass =
             type === "success"
@@ -165,7 +168,8 @@ export class NotificationManager {
 
         const statusDiv = document.createElement("div");
         statusDiv.className = `alert ${alertClass} alert-dismissible fade show position-fixed`;
-        statusDiv.style.cssText = "top: 1rem; right: 1rem; z-index: 1050; min-width: 250px;";
+        statusDiv.style.cssText =
+            "top: 1rem; right: 1rem; z-index: 1050; min-width: 250px;";
         statusDiv.innerHTML = `
             <i class="${iconClass} me-2"></i>
             ${message}
@@ -200,7 +204,7 @@ export class NotificationManager {
         type: string,
         message: string,
         actions?: NotificationAction[],
-        progress?: number
+        progress?: number,
     ): string {
         const id = `notification-${++this.notificationCounter}`;
         // Simplified implementation for now
@@ -233,7 +237,7 @@ export class ChromeExtensionService {
         includeQuality?: boolean;
         includeProgress?: boolean;
         topDomainsLimit?: number;
-        activityGranularity?: 'day' | 'week' | 'month';
+        activityGranularity?: "day" | "week" | "month";
     }): Promise<any> {
         return this.sendMessage({
             type: "getAnalyticsData",
@@ -241,11 +245,14 @@ export class ChromeExtensionService {
             includeQuality: options?.includeQuality !== false,
             includeProgress: options?.includeProgress !== false,
             topDomainsLimit: options?.topDomainsLimit || 10,
-            activityGranularity: options?.activityGranularity || "day"
+            activityGranularity: options?.activityGranularity || "day",
         });
     }
 
-    async searchWebMemories(query: string, filters: SearchFilters): Promise<SearchResult> {
+    async searchWebMemories(
+        query: string,
+        filters: SearchFilters,
+    ): Promise<SearchResult> {
         return this.sendMessage({
             type: "searchWebMemories",
             parameters: {
@@ -262,7 +269,10 @@ export class ChromeExtensionService {
 
     async getCurrentTab(): Promise<chrome.tabs.Tab | null> {
         try {
-            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+            const tabs = await chrome.tabs.query({
+                active: true,
+                currentWindow: true,
+            });
             return tabs.length > 0 ? tabs[0] : null;
         } catch (error) {
             console.error("Failed to get current tab:", error);
@@ -285,7 +295,11 @@ export class ChromeExtensionService {
         });
     }
 
-    async extractPageKnowledge(url: string, mode: string, extractionSettings: any): Promise<any> {
+    async extractPageKnowledge(
+        url: string,
+        mode: string,
+        extractionSettings: any,
+    ): Promise<any> {
         return this.sendMessage({
             type: "extractPageKnowledge",
             url,
@@ -328,7 +342,9 @@ export class ChromeExtensionService {
 
     async getExtractionSettings(): Promise<any> {
         try {
-            const settings = await chrome.storage.sync.get(["extractionSettings"]);
+            const settings = await chrome.storage.sync.get([
+                "extractionSettings",
+            ]);
             return settings.extractionSettings || null;
         } catch (error) {
             console.error("Failed to get extraction settings:", error);
@@ -357,7 +373,10 @@ export class ChromeExtensionService {
         }
     }
 
-    async createTab(url: string, active: boolean = true): Promise<chrome.tabs.Tab> {
+    async createTab(
+        url: string,
+        active: boolean = true,
+    ): Promise<chrome.tabs.Tab> {
         try {
             return await chrome.tabs.create({ url, active });
         } catch (error) {
@@ -386,7 +405,11 @@ export class ChromeExtensionService {
         });
     }
 
-    async discoverRelationships(url: string, knowledge: any, maxResults: number): Promise<any> {
+    async discoverRelationships(
+        url: string,
+        knowledge: any,
+        maxResults: number,
+    ): Promise<any> {
         return this.sendMessage({
             type: "discoverRelationships",
             url,
@@ -402,7 +425,11 @@ export class ChromeExtensionService {
         });
     }
 
-    async searchByEntities(entities: string[], url: string, maxResults: number): Promise<any> {
+    async searchByEntities(
+        entities: string[],
+        url: string,
+        maxResults: number,
+    ): Promise<any> {
         return this.sendMessage({
             type: "searchByEntities",
             entities,
@@ -411,7 +438,11 @@ export class ChromeExtensionService {
         });
     }
 
-    async searchByTopics(topics: string[], url: string, maxResults: number): Promise<any> {
+    async searchByTopics(
+        topics: string[],
+        url: string,
+        maxResults: number,
+    ): Promise<any> {
         return this.sendMessage({
             type: "searchByTopics",
             topics,
@@ -420,7 +451,11 @@ export class ChromeExtensionService {
         });
     }
 
-    async hybridSearch(query: string, url: string, maxResults: number): Promise<any> {
+    async hybridSearch(
+        query: string,
+        url: string,
+        maxResults: number,
+    ): Promise<any> {
         return this.sendMessage({
             type: "hybridSearch",
             query,
@@ -490,7 +525,10 @@ export class ChromeExtensionService {
         });
     }
 
-    async getDiscoverInsights(limit: number = 10, timeframe: string = "30d"): Promise<any> {
+    async getDiscoverInsights(
+        limit: number = 10,
+        timeframe: string = "30d",
+    ): Promise<any> {
         return this.sendMessage({
             type: "getDiscoverInsights",
             limit,
@@ -573,7 +611,9 @@ export class KnowledgeTemplateHelpers {
     }
 
     static createLoadingState(message: string, subtext?: string): string {
-        const subtextHtml = subtext ? `<small class="text-muted">${subtext}</small>` : "";
+        const subtextHtml = subtext
+            ? `<small class="text-muted">${subtext}</small>`
+            : "";
         return `
             <div class="knowledge-card card">
                 <div class="card-body text-center">
@@ -587,8 +627,15 @@ export class KnowledgeTemplateHelpers {
         `;
     }
 
-    static createCard(title: string, content: string, icon: string, badge?: string): string {
-        const badgeHtml = badge ? `<span id="${badge}" class="badge bg-secondary ms-2">0</span>` : "";
+    static createCard(
+        title: string,
+        content: string,
+        icon: string,
+        badge?: string,
+    ): string {
+        const badgeHtml = badge
+            ? `<span id="${badge}" class="badge bg-secondary ms-2">0</span>`
+            : "";
         return `
             <div class="knowledge-card card">
                 <div class="card-header">
@@ -612,9 +659,10 @@ export class KnowledgeTemplateHelpers {
     }
 
     static createQueryAnswer(answer: string, sources: any[]): string {
-        const sourcesHtml = sources && sources.length > 0
-            ? `<hr class="my-2"><small class="text-muted"><strong>Sources:</strong> ${sources.map((s: any) => s.title).join(", ")}</small>`
-            : "";
+        const sourcesHtml =
+            sources && sources.length > 0
+                ? `<hr class="my-2"><small class="text-muted"><strong>Sources:</strong> ${sources.map((s: any) => s.title).join(", ")}</small>`
+                : "";
 
         const content = `
             <div class="fw-semibold">Answer:</div>
@@ -661,7 +709,8 @@ export class KnowledgeConnectionManager {
                     indicator.className = "status-indicator status-connected";
                     text.textContent = "Connected";
                 } else {
-                    indicator.className = "status-indicator status-disconnected";
+                    indicator.className =
+                        "status-indicator status-disconnected";
                     text.textContent = "Disconnected";
                 }
             }
@@ -690,7 +739,9 @@ export class ChromeEventManager {
         }
     }
 
-    static setupMessageListener(callback: (message: any, sender: any, sendResponse: any) => void): void {
+    static setupMessageListener(
+        callback: (message: any, sender: any, sendResponse: any) => void,
+    ): void {
         try {
             chrome.runtime.onMessage.addListener(callback);
         } catch (error) {
@@ -706,9 +757,9 @@ export class ChromeEventManager {
 export const notificationManager = new NotificationManager();
 export const chromeExtensionService = new ChromeExtensionService();
 
-export { 
+export {
     KnowledgeTemplateHelpers as TemplateHelpers,
     KnowledgeFormatUtils as FormatUtils,
     KnowledgeConnectionManager as ConnectionManager,
-    ChromeEventManager as EventManager
+    ChromeEventManager as EventManager,
 };

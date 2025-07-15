@@ -302,14 +302,14 @@ export interface DetailedKnowledgeStats extends KnowledgeStats {
     /** Knowledge extraction progress percentages */
     extractionProgress: {
         entityProgress: number;
-        topicProgress: number; 
+        topicProgress: number;
         actionProgress: number;
     };
     /** Quality distribution metrics */
     qualityDistribution: {
-        highQuality: number;    // >=80% confidence
-        mediumQuality: number;  // 50-79% confidence  
-        lowQuality: number;     // <50% confidence
+        highQuality: number; // >=80% confidence
+        mediumQuality: number; // 50-79% confidence
+        lowQuality: number; // <50% confidence
     };
     /** Extraction completion rates */
     completionRates: {

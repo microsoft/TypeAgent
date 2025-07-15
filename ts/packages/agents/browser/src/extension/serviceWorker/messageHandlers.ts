@@ -783,7 +783,8 @@ export async function handleMessage(
                         includeQuality: message.includeQuality !== false,
                         includeProgress: message.includeProgress !== false,
                         topDomainsLimit: message.topDomainsLimit || 10,
-                        activityGranularity: message.activityGranularity || "day"
+                        activityGranularity:
+                            message.activityGranularity || "day",
                     },
                 });
 
@@ -796,7 +797,10 @@ export async function handleMessage(
                 console.error("Error getting analytics data:", error);
                 return {
                     success: false,
-                    error: error instanceof Error ? error.message : "Unknown error",
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error",
                 };
             }
         }

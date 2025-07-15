@@ -1,13 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { 
-    notificationManager, 
-    chromeExtensionService, 
-    TemplateHelpers, 
+import {
+    notificationManager,
+    chromeExtensionService,
+    TemplateHelpers,
     FormatUtils,
-    EventManager
-} from './knowledgeUtilities';
+    EventManager,
+} from "./knowledgeUtilities";
 
 interface KnowledgeData {
     entities: Entity[];
@@ -246,7 +246,9 @@ class KnowledgePanel {
 
     private async getPageIndexStatus(retryCount: number = 0): Promise<string> {
         try {
-            const response = await chromeExtensionService.getPageIndexStatus(this.currentUrl);
+            const response = await chromeExtensionService.getPageIndexStatus(
+                this.currentUrl,
+            );
 
             if (response.isIndexed) {
                 const lastIndexedDate = response.lastIndexed
@@ -345,7 +347,10 @@ class KnowledgePanel {
             const statusText = enabled
                 ? "Auto-indexing enabled"
                 : "Auto-indexing disabled";
-            notificationManager.showTemporaryStatus(statusText, enabled ? "success" : "info");
+            notificationManager.showTemporaryStatus(
+                statusText,
+                enabled ? "success" : "info",
+            );
 
             // Notify background script
             await chromeExtensionService.notifyAutoIndexSettingChanged(enabled);
@@ -374,10 +379,12 @@ class KnowledgePanel {
             if (this.extractionSettings.mode !== "basic") {
                 // Defensive check: ensure AI availability is properly determined
                 if (this.aiModelAvailable === undefined) {
-                    console.log("AI availability not yet determined, checking now...");
+                    console.log(
+                        "AI availability not yet determined, checking now...",
+                    );
                     await this.checkAIModelAvailability();
                 }
-                
+
                 if (!this.aiModelAvailable) {
                     this.showAIRequiredError();
                     return;
@@ -475,10 +482,12 @@ class KnowledgePanel {
             if (this.extractionSettings.mode !== "basic") {
                 // Defensive check: ensure AI availability is properly determined
                 if (this.aiModelAvailable === undefined) {
-                    console.log("AI availability not yet determined, checking now...");
+                    console.log(
+                        "AI availability not yet determined, checking now...",
+                    );
                     await this.checkAIModelAvailability();
                 }
-                
+
                 if (!this.aiModelAvailable) {
                     this.showAIRequiredError();
                     return;
@@ -504,17 +513,23 @@ class KnowledgePanel {
             let actualEntityCount = 0;
             let attempts = 0;
             const maxAttempts = 10;
-            
+
             while (attempts < maxAttempts) {
-                await new Promise(resolve => setTimeout(resolve, 500));
+                await new Promise((resolve) => setTimeout(resolve, 500));
                 try {
-                    const status = await chromeExtensionService.getPageIndexStatus(this.currentUrl);
+                    const status =
+                        await chromeExtensionService.getPageIndexStatus(
+                            this.currentUrl,
+                        );
                     if (status.isIndexed && status.entityCount !== undefined) {
                         actualEntityCount = status.entityCount;
                         break;
                     }
                 } catch (error) {
-                    console.warn("Error checking index status during entity count polling:", error);
+                    console.warn(
+                        "Error checking index status during entity count polling:",
+                        error,
+                    );
                 }
                 attempts++;
             }
@@ -937,32 +952,35 @@ class KnowledgePanel {
         }
 
         // Add any other categories that didn't fit the main ones
-        Array.from(categoryMap.entries()).forEach(([categoryName, questions]) => {
-            if (
-                ![
-                    "relationship",
-                    "learning",
-                    "technical",
-                    "discovery",
-                    "content",
-                    "temporal",
-                ].includes(categoryName)
-            ) {
-                categories.push({
-                    name:
-                        categoryName.charAt(0).toUpperCase() +
-                        categoryName.slice(1),
-                    icon: "bi-question-circle",
-                    color: "light",
-                    questions: questions.sort(
-                        (a, b) =>
-                            this.getQuestionScore(b) - this.getQuestionScore(a),
-                    ),
-                    priority: 6,
-                    count: questions.length,
-                });
-            }
-        });
+        Array.from(categoryMap.entries()).forEach(
+            ([categoryName, questions]) => {
+                if (
+                    ![
+                        "relationship",
+                        "learning",
+                        "technical",
+                        "discovery",
+                        "content",
+                        "temporal",
+                    ].includes(categoryName)
+                ) {
+                    categories.push({
+                        name:
+                            categoryName.charAt(0).toUpperCase() +
+                            categoryName.slice(1),
+                        icon: "bi-question-circle",
+                        color: "light",
+                        questions: questions.sort(
+                            (a, b) =>
+                                this.getQuestionScore(b) -
+                                this.getQuestionScore(a),
+                        ),
+                        priority: 6,
+                        count: questions.length,
+                    });
+                }
+            },
+        );
 
         return categories.sort((a, b) => a.priority - b.priority);
     }
@@ -1362,7 +1380,9 @@ class KnowledgePanel {
 
     private async loadPageSourceInfo() {
         try {
-            const response = await chromeExtensionService.getPageSourceInfo(this.currentUrl);
+            const response = await chromeExtensionService.getPageSourceInfo(
+                this.currentUrl,
+            );
 
             this.pageSourceInfo = response.sourceInfo;
             this.updatePageSourceDisplay();
@@ -1406,7 +1426,8 @@ class KnowledgePanel {
 
     private async loadExtractionSettings() {
         try {
-            const settings = await chromeExtensionService.getExtractionSettings();
+            const settings =
+                await chromeExtensionService.getExtractionSettings();
             if (settings) {
                 this.extractionSettings = {
                     ...this.extractionSettings,
@@ -1537,7 +1558,9 @@ class KnowledgePanel {
 
     private async loadFreshKnowledge() {
         try {
-            const indexStatus = await chromeExtensionService.getPageIndexStatus(this.currentUrl);
+            const indexStatus = await chromeExtensionService.getPageIndexStatus(
+                this.currentUrl,
+            );
 
             if (indexStatus.isIndexed) {
                 await this.loadIndexedKnowledge();
@@ -1586,7 +1609,10 @@ class KnowledgePanel {
 
     private async loadIndexedKnowledge() {
         try {
-            const response = await chromeExtensionService.getPageIndexedKnowledge(this.currentUrl);
+            const response =
+                await chromeExtensionService.getPageIndexedKnowledge(
+                    this.currentUrl,
+                );
 
             if (response.isIndexed && response.knowledge) {
                 this.knowledgeData = response.knowledge;
@@ -1671,7 +1697,11 @@ class KnowledgePanel {
                 "No topics identified yet",
             ),
         );
-        return TemplateHelpers.createCard("Key Topics", content, "bi bi-bookmark");
+        return TemplateHelpers.createCard(
+            "Key Topics",
+            content,
+            "bi bi-bookmark",
+        );
     }
 
     // Template utility functions for knowledge panel
@@ -1729,7 +1759,10 @@ class KnowledgePanel {
     private renderActionsCard(): string {
         const content = this.createContainer(
             "detectedActionsContainer",
-            TemplateHelpers.createEmptyState("bi bi-info-circle", "No actions detected"),
+            TemplateHelpers.createEmptyState(
+                "bi bi-info-circle",
+                "No actions detected",
+            ),
         );
         return TemplateHelpers.createCard(
             "Detected Actions",
@@ -2356,7 +2389,8 @@ class KnowledgePanel {
 
     private async loadTemporalSuggestions() {
         try {
-            const response = await chromeExtensionService.generateTemporalSuggestions(6);
+            const response =
+                await chromeExtensionService.generateTemporalSuggestions(6);
 
             if (response.success && response.suggestions.length > 0) {
                 this.addTemporalSuggestions(
@@ -2893,19 +2927,20 @@ class KnowledgePanel {
         queryResults.innerHTML = this.createEnhancedSearchLoadingState();
 
         try {
-            const response = await chromeExtensionService.searchWebMemoriesAdvanced({
-                query: query,
-                searchScope: "all_indexed",
-                generateAnswer: true,
-                includeRelatedEntities: true,
-                enableAdvancedSearch: true,
-                limit: 10,
-                domain: filters.domain,
-                source: filters.source,
-                pageType: filters.pageType,
-                temporalSort: filters.temporalSort,
-                frequencySort: filters.frequencySort,
-            });
+            const response =
+                await chromeExtensionService.searchWebMemoriesAdvanced({
+                    query: query,
+                    searchScope: "all_indexed",
+                    generateAnswer: true,
+                    includeRelatedEntities: true,
+                    enableAdvancedSearch: true,
+                    limit: 10,
+                    domain: filters.domain,
+                    source: filters.source,
+                    pageType: filters.pageType,
+                    temporalSort: filters.temporalSort,
+                    frequencySort: filters.frequencySort,
+                });
 
             this.renderEnhancedQueryResults(response);
 
@@ -3206,7 +3241,8 @@ class KnowledgePanel {
 
     private async checkAIModelAvailability() {
         try {
-            const response = await chromeExtensionService.checkAIModelAvailability();
+            const response =
+                await chromeExtensionService.checkAIModelAvailability();
 
             this.aiModelAvailable = response.available || false;
         } catch (error) {
@@ -3253,7 +3289,9 @@ class KnowledgePanel {
 
     private async updateQualityIndicator() {
         try {
-            const response = await chromeExtensionService.getPageQualityMetrics(this.currentUrl);
+            const response = await chromeExtensionService.getPageQualityMetrics(
+                this.currentUrl,
+            );
 
             const indicator = document.getElementById("qualityIndicator");
             if (indicator && response.quality) {
@@ -3287,7 +3325,9 @@ class KnowledgePanel {
 
     private async saveExtractionSettings() {
         try {
-            await chromeExtensionService.saveExtractionSettings(this.extractionSettings);
+            await chromeExtensionService.saveExtractionSettings(
+                this.extractionSettings,
+            );
         } catch (error) {
             console.warn("Could not save extraction settings:", error);
         }

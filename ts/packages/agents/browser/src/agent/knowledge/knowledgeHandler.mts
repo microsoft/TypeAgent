@@ -1963,7 +1963,6 @@ function hasIndexingErrors(result: any): boolean {
     );
 }
 
-
 export async function getDetailedKnowledgeStats(
     parameters: {
         includeQuality?: boolean;
@@ -1973,31 +1972,32 @@ export async function getDetailedKnowledgeStats(
     context: SessionContext<BrowserActionContext>,
 ): Promise<DetailedKnowledgeStats> {
     const websiteCollection = context.agentContext.websiteCollection;
-    
+
     if (!websiteCollection) {
         return createEmptyKnowledgeStats();
     }
 
     const websites = websiteCollection.messages.getAll();
-    
+
     // Calculate base stats
     const baseStats = await calculateBaseStats(websites);
-    
-    // Calculate extraction progress  
+
+    // Calculate extraction progress
     const extractionProgress = calculateExtractionProgress(websites);
-    
+
     // Calculate quality distribution
-    const qualityDistribution = parameters.includeQuality !== false
-        ? calculateQualityDistribution(websites)
-        : { highQuality: 0, mediumQuality: 0, lowQuality: 0 };
-    
+    const qualityDistribution =
+        parameters.includeQuality !== false
+            ? calculateQualityDistribution(websites)
+            : { highQuality: 0, mediumQuality: 0, lowQuality: 0 };
+
     // Calculate completion rates
     const completionRates = calculateCompletionRates(websites);
-    
+
     return {
         ...baseStats,
         extractionProgress,
-        qualityDistribution, 
+        qualityDistribution,
         completionRates,
     };
 }
@@ -2062,13 +2062,16 @@ async function calculateBaseStats(websites: any[]): Promise<{
         try {
             const knowledge = site.getKnowledge();
             const metadata = site.metadata as website.WebsiteDocPartMeta;
-            
+
             // Extract domain from URL
             if (metadata?.url) {
                 try {
                     const domain = new URL(metadata.url).hostname;
                     domains.add(domain);
-                    domainCounts.set(domain, (domainCounts.get(domain) || 0) + 1);
+                    domainCounts.set(
+                        domain,
+                        (domainCounts.get(domain) || 0) + 1,
+                    );
                 } catch (error) {
                     // Invalid URL, skip domain extraction
                 }
@@ -2079,8 +2082,11 @@ async function calculateBaseStats(websites: any[]): Promise<{
                 if (knowledge.entities?.length > 0) {
                     totalEntities += knowledge.entities.length;
                     knowledge.entities.forEach((entity: any) => {
-                        const type = entity.type || 'Unknown';
-                        entityTypeCounts.set(type, (entityTypeCounts.get(type) || 0) + 1);
+                        const type = entity.type || "Unknown";
+                        entityTypeCounts.set(
+                            type,
+                            (entityTypeCounts.get(type) || 0) + 1,
+                        );
                     });
                 }
 
@@ -2124,7 +2130,7 @@ async function calculateBaseStats(websites: any[]): Promise<{
         storageSize: {
             totalBytes: totalContent,
             entitiesBytes: Math.round(totalContent * 0.3), // Estimate
-            contentBytes: Math.round(totalContent * 0.6),  // Estimate
+            contentBytes: Math.round(totalContent * 0.6), // Estimate
             metadataBytes: Math.round(totalContent * 0.1), // Estimate
         },
     };
@@ -2132,14 +2138,14 @@ async function calculateBaseStats(websites: any[]): Promise<{
 
 function calculateExtractionProgress(websites: any[]): {
     entityProgress: number;
-    topicProgress: number; 
+    topicProgress: number;
     actionProgress: number;
 } {
     let pagesWithEntities = 0;
     let pagesWithTopics = 0;
     let pagesWithActions = 0;
-    
-    websites.forEach(site => {
+
+    websites.forEach((site) => {
         try {
             const knowledge = site.getKnowledge();
             if (knowledge) {
@@ -2151,9 +2157,9 @@ function calculateExtractionProgress(websites: any[]): {
             // Skip sites with knowledge extraction errors
         }
     });
-    
+
     const total = websites.length || 1; // Prevent division by zero
-    
+
     return {
         entityProgress: Math.round((pagesWithEntities / total) * 100),
         topicProgress: Math.round((pagesWithTopics / total) * 100),
@@ -2166,23 +2172,27 @@ function calculateQualityDistribution(websites: any[]): {
     mediumQuality: number;
     lowQuality: number;
 } {
-    let high = 0, medium = 0, low = 0;
+    let high = 0,
+        medium = 0,
+        low = 0;
     let totalPagesWithKnowledge = 0;
-    
-    websites.forEach(site => {
+
+    websites.forEach((site) => {
         try {
             const knowledge = site.getKnowledge();
             if (knowledge && knowledge.entities?.length > 0) {
                 totalPagesWithKnowledge++;
-                
+
                 // Calculate average confidence across entities
                 const confidences = knowledge.entities
                     .map((e: any) => e.confidence || 0)
                     .filter((c: number) => c > 0);
-                    
+
                 if (confidences.length > 0) {
-                    const avgConfidence = confidences.reduce((a: number, b: number) => a + b) / confidences.length;
-                    
+                    const avgConfidence =
+                        confidences.reduce((a: number, b: number) => a + b) /
+                        confidences.length;
+
                     if (avgConfidence >= 0.8) high++;
                     else if (avgConfidence >= 0.5) medium++;
                     else low++;
@@ -2195,12 +2205,12 @@ function calculateQualityDistribution(websites: any[]): {
             // Skip sites with knowledge extraction errors
         }
     });
-    
+
     const total = totalPagesWithKnowledge || 1;
-    
+
     return {
         highQuality: Math.round((high / total) * 100),
-        mediumQuality: Math.round((medium / total) * 100), 
+        mediumQuality: Math.round((medium / total) * 100),
         lowQuality: Math.round((low / total) * 100),
     };
 }
@@ -2214,8 +2224,8 @@ function calculateCompletionRates(websites: any[]): {
     let pagesWithEntities = 0;
     let pagesWithTopics = 0;
     let pagesWithActions = 0;
-    
-    websites.forEach(site => {
+
+    websites.forEach((site) => {
         try {
             const knowledge = site.getKnowledge();
             if (knowledge) {
@@ -2227,7 +2237,7 @@ function calculateCompletionRates(websites: any[]): {
             // Skip sites with knowledge extraction errors
         }
     });
-    
+
     return {
         pagesWithEntities,
         pagesWithTopics,
@@ -2236,37 +2246,42 @@ function calculateCompletionRates(websites: any[]): {
     };
 }
 
-function generateRecentActivity(websites: any[]): Array<{ date: string; pagesIndexed: number }> {
+function generateRecentActivity(
+    websites: any[],
+): Array<{ date: string; pagesIndexed: number }> {
     const activityMap = new Map<string, number>();
     const now = new Date();
-    
+
     // Initialize last 7 days with 0
     for (let i = 6; i >= 0; i--) {
         const date = new Date(now);
         date.setDate(date.getDate() - i);
-        const dateStr = date.toISOString().split('T')[0];
+        const dateStr = date.toISOString().split("T")[0];
         activityMap.set(dateStr, 0);
     }
-    
+
     // Count pages by date
-    websites.forEach(site => {
+    websites.forEach((site) => {
         try {
             const metadata = site.metadata as website.WebsiteDocPartMeta;
             const siteDate = metadata?.visitDate || metadata?.bookmarkDate;
-            
+
             if (siteDate) {
                 const date = new Date(siteDate);
-                const dateStr = date.toISOString().split('T')[0];
-                
+                const dateStr = date.toISOString().split("T")[0];
+
                 if (activityMap.has(dateStr)) {
-                    activityMap.set(dateStr, (activityMap.get(dateStr) || 0) + 1);
+                    activityMap.set(
+                        dateStr,
+                        (activityMap.get(dateStr) || 0) + 1,
+                    );
                 }
             }
         } catch (error) {
             // Skip sites with invalid dates
         }
     });
-    
+
     return Array.from(activityMap.entries())
         .map(([date, pagesIndexed]) => ({ date, pagesIndexed }))
         .sort((a, b) => a.date.localeCompare(b.date));
@@ -2278,9 +2293,9 @@ export async function getAnalyticsData(
         includeQuality?: boolean;
         includeProgress?: boolean;
         topDomainsLimit?: number;
-        activityGranularity?: 'day' | 'week' | 'month';
+        activityGranularity?: "day" | "week" | "month";
     },
-    context: SessionContext<BrowserActionContext>
+    context: SessionContext<BrowserActionContext>,
 ): Promise<AnalyticsDataResponse> {
     try {
         // Single coordinated data collection using Promise.all for efficiency
@@ -2288,23 +2303,35 @@ export async function getAnalyticsData(
             knowledgeStats,
             topDomains,
             activityTrends,
-            extractionAnalytics
+            extractionAnalytics,
         ] = await Promise.all([
-            getDetailedKnowledgeStats({
-                includeQuality: parameters.includeQuality !== false,
-                includeProgress: parameters.includeProgress !== false,
-                timeRange: 30
-            }, context),
-            getTopDomains({ 
-                limit: parameters.topDomainsLimit || 10 
-            }, context),
-            getActivityTrends({
-                timeRange: parameters.timeRange || '30d',
-                granularity: parameters.activityGranularity || 'day'
-            }, context),
-            getExtractionAnalytics({
-                timeRange: parameters.timeRange || '30d'
-            }, context)
+            getDetailedKnowledgeStats(
+                {
+                    includeQuality: parameters.includeQuality !== false,
+                    includeProgress: parameters.includeProgress !== false,
+                    timeRange: 30,
+                },
+                context,
+            ),
+            getTopDomains(
+                {
+                    limit: parameters.topDomainsLimit || 10,
+                },
+                context,
+            ),
+            getActivityTrends(
+                {
+                    timeRange: parameters.timeRange || "30d",
+                    granularity: parameters.activityGranularity || "day",
+                },
+                context,
+            ),
+            getExtractionAnalytics(
+                {
+                    timeRange: parameters.timeRange || "30d",
+                },
+                context,
+            ),
         ]);
 
         // Get basic website statistics from websiteCollection
@@ -2316,9 +2343,9 @@ export async function getAnalyticsData(
         if (websiteCollection) {
             const websites = websiteCollection.messages.getAll();
             totalSites = websites.length;
-            
+
             // Count bookmarks vs history
-            websites.forEach(site => {
+            websites.forEach((site) => {
                 const metadata = site.metadata as website.WebsiteDocPartMeta;
                 if (metadata?.bookmarkDate) {
                     totalBookmarks++;
@@ -2334,28 +2361,28 @@ export async function getAnalyticsData(
                 totalBookmarks,
                 totalHistory,
                 topDomains: topDomains.domains?.length || 0,
-                knowledgeExtracted: knowledgeStats.totalPages || 0
+                knowledgeExtracted: knowledgeStats.totalPages || 0,
             },
             knowledge: {
                 extractionProgress: knowledgeStats.extractionProgress || {
                     entityProgress: 0,
                     topicProgress: 0,
-                    actionProgress: 0
+                    actionProgress: 0,
                 },
                 qualityDistribution: knowledgeStats.qualityDistribution || {
                     highQuality: 0,
                     mediumQuality: 0,
-                    lowQuality: 0
+                    lowQuality: 0,
                 },
                 totalEntities: knowledgeStats.totalEntities || 0,
                 totalTopics: knowledgeStats.topEntityTypes?.length || 0,
                 totalActions: 0, // Actions not tracked in current schema
                 totalRelationships: knowledgeStats.totalRelationships || 0,
-                recentItems: knowledgeStats.recentActivity || []
+                recentItems: knowledgeStats.recentActivity || [],
             },
             domains: {
                 topDomains: topDomains.domains || [],
-                totalSites: topDomains.totalSites || 0
+                totalSites: topDomains.totalSites || 0,
             },
             activity: {
                 trends: activityTrends.trends || [],
@@ -2363,13 +2390,13 @@ export async function getAnalyticsData(
                     totalActivity: 0,
                     peakDay: null,
                     averagePerDay: 0,
-                    timeRange: parameters.timeRange || '30d'
-                }
+                    timeRange: parameters.timeRange || "30d",
+                },
             },
             analytics: {
                 extractionMetrics: extractionAnalytics.analytics || {},
-                qualityReport: extractionAnalytics.analytics || {}
-            }
+                qualityReport: extractionAnalytics.analytics || {},
+            },
         };
     } catch (error) {
         console.error("Error aggregating analytics data:", error);
@@ -2380,28 +2407,28 @@ export async function getAnalyticsData(
                 totalBookmarks: 0,
                 totalHistory: 0,
                 topDomains: 0,
-                knowledgeExtracted: 0
+                knowledgeExtracted: 0,
             },
             knowledge: {
                 extractionProgress: {
                     entityProgress: 0,
                     topicProgress: 0,
-                    actionProgress: 0
+                    actionProgress: 0,
                 },
                 qualityDistribution: {
                     highQuality: 0,
                     mediumQuality: 0,
-                    lowQuality: 0
+                    lowQuality: 0,
                 },
                 totalEntities: 0,
                 totalTopics: 0,
                 totalActions: 0,
                 totalRelationships: 0,
-                recentItems: []
+                recentItems: [],
             },
             domains: {
                 topDomains: [],
-                totalSites: 0
+                totalSites: 0,
             },
             activity: {
                 trends: [],
@@ -2409,13 +2436,13 @@ export async function getAnalyticsData(
                     totalActivity: 0,
                     peakDay: null,
                     averagePerDay: 0,
-                    timeRange: parameters.timeRange || '30d'
-                }
+                    timeRange: parameters.timeRange || "30d",
+                },
             },
             analytics: {
                 extractionMetrics: {},
-                qualityReport: {}
-            }
+                qualityReport: {},
+            },
         };
     }
 }
