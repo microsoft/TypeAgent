@@ -228,13 +228,6 @@ export class ChromeExtensionService {
         });
     }
 
-    async getKnowledgeStats(timeRange?: number): Promise<any> {
-        return this.sendMessage({
-            type: "getKnowledgeStats",
-            timeRange: timeRange || 30,
-        });
-    }
-
     async getAnalyticsData(options?: {
         timeRange?: string;
         includeQuality?: boolean;
@@ -494,20 +487,6 @@ export class ChromeExtensionService {
     async getRecentSearches(): Promise<string[]> {
         return this.sendMessage({
             action: "getRecentSearches",
-        });
-    }
-
-    async getTopDomains(limit: number = 10): Promise<any> {
-        return this.sendMessage({
-            type: "getTopDomains",
-            limit,
-        });
-    }
-
-    async getActivityTrends(timeRange: string = "30d"): Promise<any> {
-        return this.sendMessage({
-            type: "getActivityTrends",
-            timeRange,
         });
     }
 
