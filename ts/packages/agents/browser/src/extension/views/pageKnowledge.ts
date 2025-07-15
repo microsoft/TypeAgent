@@ -158,6 +158,9 @@ class KnowledgePanel {
     async initialize() {
         console.log("Initializing Enhanced Knowledge Panel");
 
+        // Check AI availability first to prevent race conditions
+        await this.checkAIModelAvailability();
+
         this.setupEventListeners();
         await this.loadCurrentPageInfo();
         await this.loadPageSourceInfo();
@@ -166,7 +169,6 @@ class KnowledgePanel {
         await this.checkConnectionStatus();
         await this.loadFreshKnowledge();
         await this.loadExtractionSettings();
-        await this.checkAIModelAvailability();
 
         this.setupAdvancedQueryControls();
     }
@@ -368,13 +370,18 @@ class KnowledgePanel {
         this.showKnowledgeLoading();
 
         try {
-            // Validate mode selection before extraction
-            if (
-                this.extractionSettings.mode !== "basic" &&
-                !this.aiModelAvailable
-            ) {
-                this.showAIRequiredError();
-                return;
+            // Validate mode selection before extraction with defensive check
+            if (this.extractionSettings.mode !== "basic") {
+                // Defensive check: ensure AI availability is properly determined
+                if (this.aiModelAvailable === undefined) {
+                    console.log("AI availability not yet determined, checking now...");
+                    await this.checkAIModelAvailability();
+                }
+                
+                if (!this.aiModelAvailable) {
+                    this.showAIRequiredError();
+                    return;
+                }
             }
 
             const startTime = Date.now();
@@ -464,13 +471,18 @@ class KnowledgePanel {
         button.classList.remove("btn-outline-primary");
 
         try {
-            // Validate mode selection before indexing
-            if (
-                this.extractionSettings.mode !== "basic" &&
-                !this.aiModelAvailable
-            ) {
-                this.showAIRequiredError();
-                return;
+            // Validate mode selection before indexing with defensive check
+            if (this.extractionSettings.mode !== "basic") {
+                // Defensive check: ensure AI availability is properly determined
+                if (this.aiModelAvailable === undefined) {
+                    console.log("AI availability not yet determined, checking now...");
+                    await this.checkAIModelAvailability();
+                }
+                
+                if (!this.aiModelAvailable) {
+                    this.showAIRequiredError();
+                    return;
+                }
             }
 
             const startTime = Date.now();
@@ -488,21 +500,40 @@ class KnowledgePanel {
             button.classList.remove("btn-warning");
             button.classList.add("btn-success");
 
-            // Show detailed success notification
-            const entityCount = response.entityCount || 0;
+            // Wait for backend to complete processing and get accurate entity count
+            let actualEntityCount = 0;
+            let attempts = 0;
+            const maxAttempts = 10;
+            
+            while (attempts < maxAttempts) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+                try {
+                    const status = await chromeExtensionService.getPageIndexStatus(this.currentUrl);
+                    if (status.isIndexed && status.entityCount !== undefined) {
+                        actualEntityCount = status.entityCount;
+                        break;
+                    }
+                } catch (error) {
+                    console.warn("Error checking index status during entity count polling:", error);
+                }
+                attempts++;
+            }
+
+            // Show detailed success notification with accurate count
             notificationManager.showEnhancedNotification(
                 "success",
                 "Page Indexed Successfully!",
-                `Extracted ${entityCount} entities using ${this.extractionSettings.mode} mode in ${Math.round(processingTime / 1000)}s`,
+                `Extracted ${actualEntityCount} entities using ${this.extractionSettings.mode} mode in ${Math.round(processingTime / 1000)}s`,
                 "bi-database-check",
             );
 
-            // Brief delay to show success state and allow backend to update
-            await new Promise((resolve) => setTimeout(resolve, 1500));
+            // Brief delay to show success state
+            await new Promise((resolve) => setTimeout(resolve, 500));
 
-            // Update all relevant UI components after the delay to ensure backend has processed
+            // Update all relevant UI components after successful indexing
             await this.refreshPageStatusAfterIndexing();
             await this.loadIndexStats();
+            await this.loadFreshKnowledge(); // Load and display the newly indexed knowledge data
             await this.updateQualityIndicator();
         } catch (error) {
             console.error("Error indexing page:", error);
