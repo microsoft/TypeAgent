@@ -134,6 +134,11 @@ async def resolve_related_terms(
     ensure_single_occurrence: bool = True,
     should_resolve_fuzzy: Callable[[SearchTerm], bool] | None = None,
 ) -> None:
+    """
+     * Give searchTerms, resolves related terms for those searchTerms that don't already have them
+     * Optionally ensures that related terms are not duplicated across search terms because this can
+     * skew how semantic references are scored during search (over-counting)
+    """
     all_search_terms = [term for ct in compiled_terms for term in ct.terms]
     searchable_terms = TermSet()
     search_terms_needing_related: list[SearchTerm] = []
