@@ -87,7 +87,7 @@ export class PDFJSHighlightManager {
                 coordinates,
                 pageNumber: selection.pageNumber,
                 text: selection.text,
-                creationScale: this.pdfViewer.currentScale || 1, // Store scale at creation time
+                coordinateScale: coordinates.coordinateScale, // Store the scale at which coordinates were calculated
             };
 
             // Store highlight
@@ -169,7 +169,7 @@ export class PDFJSHighlightManager {
     }
 
     /**
-     * Convert selection to coordinates using PDF.js viewport
+     * Convert selection to coordinates using PDF.js text layer
      */
     private convertSelectionToCoordinates(
         selection: SelectionInfo,
@@ -186,27 +186,39 @@ export class PDFJSHighlightManager {
                 return null;
             }
 
-            const viewport = pageView.viewport;
             const pageElement = pageView.div;
-
             if (!pageElement) {
                 console.error("Page element not found");
                 return null;
             }
 
-            const pageRect = pageElement.getBoundingClientRect();
+            // Find the text layer within the page
+            const textLayer = pageElement.querySelector('.textLayer');
+            if (!textLayer) {
+                console.error("Text layer not found for page:", selection.pageNumber);
+                return null;
+            }
 
-            // Calculate bounds from selection rectangles relative to page
+            const textLayerRect = textLayer.getBoundingClientRect();
+            const currentScale = this.pdfViewer.currentScale || 1;
+
+            console.log("🔍 Text layer rect:", textLayerRect);
+            console.log("🔍 Current scale:", currentScale);
+
+            // Calculate bounds from selection rectangles relative to text layer
             let minLeft = Infinity;
             let maxRight = -Infinity;
             let minTop = Infinity;
             let maxBottom = -Infinity;
 
             for (const rect of selection.rects) {
-                const relativeLeft = rect.left - pageRect.left;
-                const relativeTop = rect.top - pageRect.top;
-                const relativeRight = rect.right - pageRect.left;
-                const relativeBottom = rect.bottom - pageRect.top;
+                console.log("🔍 Selection rect:", rect);
+                
+                // Calculate position relative to text layer
+                const relativeLeft = rect.left - textLayerRect.left;
+                const relativeTop = rect.top - textLayerRect.top;
+                const relativeRight = rect.right - textLayerRect.left;
+                const relativeBottom = rect.bottom - textLayerRect.top;
 
                 minLeft = Math.min(minLeft, relativeLeft);
                 maxRight = Math.max(maxRight, relativeRight);
@@ -214,16 +226,22 @@ export class PDFJSHighlightManager {
                 maxBottom = Math.max(maxBottom, relativeBottom);
             }
 
-            return {
+            const coordinates = {
                 x: minLeft,
                 y: minTop,
                 width: maxRight - minLeft,
                 height: maxBottom - minTop,
                 pageRect: {
-                    width: pageRect.width,
-                    height: pageRect.height,
+                    width: textLayerRect.width,
+                    height: textLayerRect.height,
                 },
+                // Store coordinates are relative to text layer at current scale
+                coordinateScale: currentScale,
+                coordinateSystem: 'textLayer' // Mark that these coordinates are relative to text layer
             };
+
+            console.log("🔍 Calculated coordinates:", coordinates);
+            return coordinates;
         } catch (error) {
             console.error("Failed to convert selection to coordinates:", error);
             return null;
@@ -231,7 +249,7 @@ export class PDFJSHighlightManager {
     }
 
     /**
-     * Render highlight on the page using DOM overlay with scale-aware positioning
+     * Render highlight on the page using text layer positioning
      */
     private renderHighlight(highlightData: any): void {
         try {
@@ -245,10 +263,15 @@ export class PDFJSHighlightManager {
 
             const pageElement = pageView.div;
 
-            // Create or get highlight layer
-            let highlightLayer = pageElement.querySelector(
-                ".pdfjs-highlight-layer",
-            );
+            // Find the text layer within the page
+            const textLayer = pageElement.querySelector('.textLayer');
+            if (!textLayer) {
+                console.error("Text layer not found for rendering highlight");
+                return;
+            }
+
+            // Create or get highlight layer within the text layer
+            let highlightLayer = textLayer.querySelector(".pdfjs-highlight-layer");
             if (!highlightLayer) {
                 highlightLayer = document.createElement("div");
                 highlightLayer.className = "pdfjs-highlight-layer";
@@ -261,7 +284,7 @@ export class PDFJSHighlightManager {
                     pointer-events: none;
                     z-index: 1;
                 `;
-                pageElement.appendChild(highlightLayer);
+                textLayer.appendChild(highlightLayer);
             }
 
             // Create highlight element
@@ -272,28 +295,41 @@ export class PDFJSHighlightManager {
                 highlightData.id,
             );
 
-            // Get current scale and calculate scaled coordinates
-            const currentScale = this.pdfViewer.currentScale || 1;
-            const creationScale = highlightData.creationScale || 1;
             const coords = highlightData.coordinates;
-
-            // Scale the coordinates: (original coordinates / creation scale) * current scale
-            const scaleRatio = currentScale / creationScale;
-            const scaledCoords = {
-                x: coords.x * scaleRatio,
-                y: coords.y * scaleRatio,
-                width: coords.width * scaleRatio,
-                height: coords.height * scaleRatio,
+            const currentScale = this.pdfViewer.currentScale || 1;
+            
+            // For text layer coordinates, we don't need to apply additional scaling
+            // since the text layer itself scales with PDF.js
+            let finalCoords = {
+                x: coords.x,
+                y: coords.y,
+                width: coords.width,
+                height: coords.height,
             };
+
+            // Only apply scaling if coordinates were stored with a different coordinate system
+            if (coords.coordinateSystem !== 'textLayer') {
+                // Legacy coordinates or coordinates from page-relative system
+                const coordinateScale = coords.coordinateScale || highlightData.coordinateScale || 1;
+                const scaleRatio = currentScale / coordinateScale;
+                finalCoords = {
+                    x: coords.x * scaleRatio,
+                    y: coords.y * scaleRatio,
+                    width: coords.width * scaleRatio,
+                    height: coords.height * scaleRatio,
+                };
+            }
+
+            console.log("🎨 Rendering highlight with coords:", finalCoords);
 
             highlightElement.style.cssText = `
                 position: absolute;
-                left: ${scaledCoords.x}px;
-                top: ${scaledCoords.y}px;
-                width: ${scaledCoords.width}px;
-                height: ${scaledCoords.height}px;
+                left: ${finalCoords.x}px;
+                top: ${finalCoords.y}px;
+                width: ${finalCoords.width}px;
+                height: ${finalCoords.height}px;
                 background-color: ${highlightData.color};
-                opacity: 0.3;
+                opacity: 0.8;
                 pointer-events: auto;
                 border-radius: 2px;
                 transition: opacity 0.15s ease;
@@ -301,11 +337,11 @@ export class PDFJSHighlightManager {
 
             // Add hover effect
             highlightElement.addEventListener("mouseenter", () => {
-                highlightElement.style.opacity = "0.5";
+                highlightElement.style.opacity = "1";
             });
 
             highlightElement.addEventListener("mouseleave", () => {
-                highlightElement.style.opacity = "0.3";
+                highlightElement.style.opacity = "0.8";
             });
 
             // Add click handler for highlight interaction
@@ -381,9 +417,11 @@ export class PDFJSHighlightManager {
                     y: highlightData.coordinates.y,
                     width: highlightData.coordinates.width,
                     height: highlightData.coordinates.height,
+                    coordinateScale: highlightData.coordinates.coordinateScale,
+                    coordinateSystem: highlightData.coordinates.coordinateSystem || 'textLayer',
                 },
                 color: highlightData.color,
-                opacity: 0.3,
+                opacity: 0.8,
                 content: highlightData.text,
                 storage: "pdfjs" as const,
                 createdAt: new Date().toISOString(),
@@ -404,10 +442,15 @@ export class PDFJSHighlightManager {
         return {
             id: apiAnnotation.id,
             color: apiAnnotation.color,
-            coordinates: apiAnnotation.coordinates,
+            coordinates: {
+                ...apiAnnotation.coordinates,
+                // For legacy data without coordinateSystem, assume page-based coordinates
+                coordinateSystem: apiAnnotation.coordinates?.coordinateSystem || 'page',
+                coordinateScale: apiAnnotation.coordinates?.coordinateScale || 1,
+            },
             pageNumber: apiAnnotation.page,
             text: apiAnnotation.content || "",
-            creationScale: 1, // Assume existing highlights were created at 1x scale
+            coordinateScale: apiAnnotation.coordinates?.coordinateScale || 1,
         };
     }
 
