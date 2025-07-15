@@ -1,13 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// ===================================================================
-// MAIN CLASS DEFINITION
-// ===================================================================
-
-// Full-page Website Library implementation
-// Extends the existing interfaces and functionality for full-page layout
-
 import { WebsiteImportManager } from "./websiteImportManager";
 import { WebsiteImportUI } from "./websiteImportUI";
 import {
@@ -1772,6 +1765,7 @@ class WebsiteLibraryPanelFullPage {
         this.clearPlaceholderContent();
         this.updateRecentEntitiesDisplay([]);
         this.updateRecentTopicsDisplay([]);
+        this.updateRecentActionsDisplay([]);
     }
 
     private calculateKnowledgeQuality(indexStats: any): number {
@@ -1970,6 +1964,7 @@ class WebsiteLibraryPanelFullPage {
             if (response && response.success) {
                 this.updateRecentEntitiesDisplay(response.entities || []);
                 this.updateRecentTopicsDisplay(response.topics || []);
+                this.updateRecentActionsDisplay(response.actions || []);
             } else {
                 // API call succeeded but returned no data or failed
                 console.warn(
@@ -1977,12 +1972,14 @@ class WebsiteLibraryPanelFullPage {
                 );
                 this.updateRecentEntitiesDisplay([]);
                 this.updateRecentTopicsDisplay([]);
+                this.updateRecentActionsDisplay([]);
             }
         } catch (error) {
             console.error("Failed to load recent knowledge items:", error);
             // Update with empty arrays to show appropriate "no data" messages
             this.updateRecentEntitiesDisplay([]);
             this.updateRecentTopicsDisplay([]);
+            this.updateRecentActionsDisplay([]);
         }
     }
 
@@ -2083,6 +2080,72 @@ class WebsiteLibraryPanelFullPage {
             <div class="topic-tags-container">
                 ${topicTags}
             </div>
+        `;
+    }
+
+    private updateRecentActionsDisplay(
+        actions: Array<{
+            type: string;
+            element: string;
+            text?: string;
+            confidence: number;
+            fromPage: string;
+            extractedAt: string;
+        }>,
+    ) {
+        const actionsBreakdown = document.querySelector(
+            ".knowledge-card.actions .knowledge-breakdown",
+        );
+        if (!actionsBreakdown) return;
+
+        if (actions.length === 0) {
+            actionsBreakdown.innerHTML = `
+                <div class="text-muted text-center py-3">
+                    <i class="bi bi-lightning me-2"></i>
+                    No actions detected yet. Visit interactive websites to start detecting actions.
+                </div>
+            `;
+            return;
+        }
+
+        const recentActionsList = actions
+            .slice(0, 10)
+            .map((action) => {
+                const shortPageTitle =
+                    action.fromPage.length > 30
+                        ? action.fromPage.substring(0, 30) + "..."
+                        : action.fromPage;
+                const confidencePercentage = Math.round(
+                    action.confidence * 100,
+                );
+
+                return `
+                <div class="breakdown-item">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <span class="breakdown-type" title="${action.text || `${action.type} on ${action.element}`}">
+                            ${action.type}
+                            <span class="badge bg-secondary ms-1">${action.element}</span>
+                        </span>
+                        <span class="confidence-badge" title="Confidence: ${confidencePercentage}%">
+                            ${confidencePercentage}%
+                        </span>
+                    </div>
+                    <span class="breakdown-count small text-muted" title="From: ${action.fromPage}">
+                        ${shortPageTitle}
+                    </span>
+                </div>
+            `;
+            })
+            .join("");
+
+        actionsBreakdown.innerHTML = `
+            <div class="mb-2">
+                <small class="text-muted d-flex align-items-center">
+                    <i class="bi bi-clock-history me-2"></i>
+                    10 Most Recent Actions
+                </small>
+            </div>
+            ${recentActionsList}
         `;
     }
 

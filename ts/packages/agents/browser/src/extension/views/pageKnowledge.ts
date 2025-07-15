@@ -8,6 +8,7 @@ import {
     FormatUtils,
     EventManager,
 } from "./knowledgeUtilities";
+import { conversation as kpLib } from "knowledge-processor";
 
 interface KnowledgeData {
     entities: Entity[];
@@ -15,6 +16,7 @@ interface KnowledgeData {
     keyTopics: string[];
     suggestedQuestions: string[];
     summary: string;
+    contentActions?: kpLib.Action[];
     // Enhanced content data
     detectedActions?: DetectedAction[];
     actionSummary?: ActionSummary;
@@ -403,6 +405,32 @@ class KnowledgePanel {
 
             this.knowledgeData = response.knowledge;
             if (this.knowledgeData) {
+                // Check for insufficient content case
+                const isInsufficientContent = this.checkInsufficientContent(
+                    this.knowledgeData,
+                );
+
+                if (isInsufficientContent) {
+                    // Show error state for insufficient content
+                    button.innerHTML =
+                        '<i class="bi bi-exclamation-triangle me-2"></i>Insufficient Content';
+                    button.classList.remove("btn-warning");
+                    button.classList.add("btn-warning");
+
+                    this.showInsufficientContentError();
+
+                    notificationManager.showEnhancedNotification(
+                        "warning",
+                        "Insufficient Content",
+                        "This page doesn't have enough content to extract meaningful knowledge or its content is not available. Try refreshing the page.",
+                        "bi-exclamation-triangle",
+                    );
+
+                    // Brief delay to show warning state
+                    await new Promise((resolve) => setTimeout(resolve, 2000));
+                    return; // Don't render empty knowledge modules
+                }
+
                 // Show success state briefly
                 button.innerHTML =
                     '<i class="bi bi-check-circle me-2"></i>Extracted!';
@@ -648,6 +676,65 @@ class KnowledgePanel {
         `;
     }
 
+    private checkInsufficientContent(knowledge: KnowledgeData): boolean {
+        // Check for the specific insufficient content case
+        const hasInsufficientSummary =
+            knowledge.summary === "Insufficient content to extract knowledge.";
+        const hasNoMetrics =
+            knowledge.contentMetrics?.wordCount === 0 &&
+            knowledge.contentMetrics?.readingTime === 0;
+        const hasNoEntities =
+            !knowledge.entities || knowledge.entities.length === 0;
+        const hasNoTopics =
+            !knowledge.keyTopics || knowledge.keyTopics.length === 0;
+        const hasNoRelationships =
+            !knowledge.relationships || knowledge.relationships.length === 0;
+        const hasNoQuestions =
+            !knowledge.suggestedQuestions ||
+            knowledge.suggestedQuestions.length === 0;
+
+        // Consider it insufficient if summary indicates it AND we have no meaningful content
+        return (
+            hasInsufficientSummary &&
+            hasNoMetrics &&
+            hasNoEntities &&
+            hasNoTopics &&
+            hasNoRelationships &&
+            hasNoQuestions
+        );
+    }
+
+    private showInsufficientContentError() {
+        const knowledgeSection = document.getElementById("knowledgeSection")!;
+        knowledgeSection.className = "";
+        knowledgeSection.innerHTML = `
+            <div class="knowledge-card card">
+                <div class="card-body text-center py-5">
+                    <i class="bi bi-file-earmark-x text-warning h1 mb-3"></i>
+                    <h5 class="text-warning mb-3">Insufficient Content</h5>
+                    <p class="text-muted mb-3">
+                        This page doesn't have enough readable content to extract meaningful knowledge.
+                    </p>
+                    <div class="text-start">
+                        <small class="text-muted">
+                            <strong>Possible reasons:</strong><br>
+                            • Page content is behind authentication<br>
+                            • Content is loaded dynamically with JavaScript<br>
+                            • Page has mostly images or media with little text<br>
+                            • Page is still loading or has errors<br>
+                        </small>
+                    </div>
+                    <div class="mt-4">
+                        <button class="btn btn-outline-primary btn-sm" onclick="window.location.reload()">
+                            <i class="bi bi-arrow-repeat me-1"></i>
+                            Try Again
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
     private async renderKnowledgeResults(knowledge: KnowledgeData) {
         const knowledgeSection = document.getElementById("knowledgeSection")!;
         knowledgeSection.className = "";
@@ -657,7 +744,7 @@ class KnowledgePanel {
             ${this.renderEntitiesCard()}
             ${this.renderRelationshipsCard()}
             ${this.renderTopicsCard()}
-            ${knowledge.detectedActions && knowledge.detectedActions.length > 0 ? this.renderActionsCard() : ""}
+            ${knowledge.detectedActions && knowledge.detectedActions.length > 0 ? this.renderUserActionsCard() : ""}
         `;
 
         if (knowledge.contentMetrics) {
@@ -673,6 +760,7 @@ class KnowledgePanel {
                 knowledge.actionSummary,
             );
         }
+
         this.renderSuggestedQuestions(knowledge.suggestedQuestions);
 
         // Auto-load cross-page intelligence
@@ -1756,16 +1844,16 @@ class KnowledgePanel {
             "relatedContentCount",
         );
     }
-    private renderActionsCard(): string {
+    private renderUserActionsCard(): string {
         const content = this.createContainer(
             "detectedActionsContainer",
             TemplateHelpers.createEmptyState(
                 "bi bi-info-circle",
-                "No actions detected",
+                "No user actions detected",
             ),
         );
         return TemplateHelpers.createCard(
-            "Detected Actions",
+            "User Actions",
             content,
             "bi bi-lightning",
             "actionsCount",

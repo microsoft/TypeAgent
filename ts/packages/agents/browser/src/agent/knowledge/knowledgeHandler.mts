@@ -112,12 +112,17 @@ function aggregateExtractionResults(results: any[]): {
     suggestedQuestions: string[];
     summary: string;
     contentMetrics: any;
+    detectedActions?: any[];
+    actionSummary?: any;
+    contentActions?: any[];
 } {
     const allEntities: Entity[] = [];
     const allRelationships: Relationship[] = [];
     const allTopics: string[] = [];
     const allQuestions: string[] = [];
     const summaries: string[] = [];
+    const allDetectedActions: any[] = [];
+    const allContentActions: any[] = [];
 
     let totalWordCount = 0;
     let totalReadingTime = 0;
@@ -135,8 +140,8 @@ function aggregateExtractionResults(results: any[]): {
             }
 
             // Collect topics
-            if (result.knowledge.keyTopics) {
-                allTopics.push(...result.knowledge.keyTopics);
+            if (result.knowledge.topics) {
+                allTopics.push(...result.knowledge.topics);
             }
 
             // Collect questions
@@ -148,6 +153,29 @@ function aggregateExtractionResults(results: any[]): {
             if (result.knowledge.summary) {
                 summaries.push(result.knowledge.summary);
             }
+
+            // collect content actions
+            if (
+                result.knowledge.actions &&
+                Array.isArray(result.knowledge.actions)
+            ) {
+                allContentActions.push(...result.knowledge.actions);
+
+                const actionRelationships =
+                    result.knowledge.actions?.map((action: any) => ({
+                        from: action.subjectEntityName || "unknown",
+                        relationship: action.verbs?.join(", ") || "related to",
+                        to: action.objectEntityName || "unknown",
+                        confidence: 0.8, // Default confidence for indexed content
+                    })) || [];
+
+                allRelationships.push(...actionRelationships);
+            }
+        }
+
+        // Collect detected actions from enhanced results
+        if (result.detectedActions && Array.isArray(result.detectedActions)) {
+            allDetectedActions.push(...result.detectedActions);
         }
 
         // Aggregate metrics
@@ -176,11 +204,44 @@ function aggregateExtractionResults(results: any[]): {
             ) === index,
     );
 
+    // Deduplicate actions by type and element
+    const uniqueDetectedActions = allDetectedActions.filter(
+        (action, index, arr) =>
+            arr.findIndex(
+                (a) => a.type === action.type && a.element === action.element,
+            ) === index,
+    );
+
+    // Create action summary if we have detected actions
+    let actionSummary;
+    if (uniqueDetectedActions.length > 0) {
+        const actionTypes = [
+            ...new Set(uniqueDetectedActions.map((a) => a.type)),
+        ];
+        const highConfidenceActions = uniqueDetectedActions.filter(
+            (a) => a.confidence > 0.8,
+        ).length;
+        const actionDistribution = uniqueDetectedActions.reduce(
+            (acc: any, action) => {
+                acc[action.type] = (acc[action.type] || 0) + 1;
+                return acc;
+            },
+            {},
+        );
+
+        actionSummary = {
+            totalActions: uniqueDetectedActions.length,
+            actionTypes,
+            highConfidenceActions,
+            actionDistribution,
+        };
+    }
+
     // Deduplicate topics and questions
     const uniqueTopics = [...new Set(allTopics)];
     const uniqueQuestions = [...new Set(allQuestions)];
 
-    return {
+    const aggregatedResult: any = {
         entities: uniqueEntities,
         relationships: uniqueRelationships,
         keyTopics: uniqueTopics,
@@ -194,6 +255,18 @@ function aggregateExtractionResults(results: any[]): {
             readingTime: totalReadingTime,
         },
     };
+
+    // Only include action-related fields if we have actions
+    if (uniqueDetectedActions.length > 0) {
+        aggregatedResult.detectedActions = uniqueDetectedActions;
+        aggregatedResult.actionSummary = actionSummary;
+    }
+
+    if (allContentActions.length > 0) {
+        aggregatedResult.contentActions = allContentActions;
+    }
+
+    return aggregatedResult;
 }
 
 export interface WebPageDocument {
@@ -259,6 +332,9 @@ export async function handleKnowledgeAction(
 
         case "checkAIModelStatus":
             return await checkAIModelStatus(parameters, context);
+
+        case "checkActionDetectionStatus":
+            return await checkActionDetectionStatus(parameters, context);
 
         case "getRecentKnowledgeItems":
             return await getRecentKnowledgeItems(parameters, context);
@@ -332,9 +408,8 @@ export async function extractKnowledgeFromPage(
 
         return {
             ...aggregatedResults,
-            // Enhanced content data - commented out due to type compatibility issues
-            // detectedActions: extractionResults.flatMap(r => r.detectedActions || []),
-            // actionSummary: extractionResults.find(r => r.actionSummary)?.actionSummary,
+            // Enhanced action data is now properly included in aggregatedResults
+            // detectedActions and actionSummary are included if actions were detected
         };
     } catch (error) {
         console.error("Error extracting knowledge from fragments:", error);
@@ -1124,10 +1199,39 @@ export async function checkAIModelStatus(
     }
 }
 
+export async function checkActionDetectionStatus(
+    parameters: {},
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    available: boolean;
+    capabilities?: any;
+    error?: string;
+}> {
+    try {
+        const extractor = new BrowserKnowledgeExtractor(context);
+
+        const capabilities = extractor.getActionDetectionCapabilities();
+        const isAvailable = extractor.isActionDetectionAvailable();
+
+        return {
+            available: isAvailable,
+            capabilities: capabilities,
+        };
+    } catch (error) {
+        return {
+            available: false,
+            error:
+                error instanceof Error
+                    ? error.message
+                    : "Unknown action detection error",
+        };
+    }
+}
+
 export async function getRecentKnowledgeItems(
     parameters: {
         limit?: number;
-        type?: "entities" | "topics" | "both";
+        type?: "entities" | "topics" | "actions" | "all";
     },
     context: SessionContext<BrowserActionContext>,
 ): Promise<{
@@ -1138,6 +1242,14 @@ export async function getRecentKnowledgeItems(
         extractedAt: string;
     }>;
     topics: Array<{ name: string; fromPage: string; extractedAt: string }>;
+    actions: Array<{
+        type: string;
+        element: string;
+        text?: string;
+        confidence: number;
+        fromPage: string;
+        extractedAt: string;
+    }>;
     success: boolean;
 }> {
     try {
@@ -1147,13 +1259,14 @@ export async function getRecentKnowledgeItems(
             return {
                 entities: [],
                 topics: [],
+                actions: [],
                 success: false,
             };
         }
 
         const websites = websiteCollection.messages.getAll();
         const limit = parameters.limit || 10;
-        const type = parameters.type || "both";
+        const type = parameters.type || "all";
 
         const recentEntities: Array<{
             name: string;
@@ -1163,6 +1276,14 @@ export async function getRecentKnowledgeItems(
         }> = [];
         const recentTopics: Array<{
             name: string;
+            fromPage: string;
+            extractedAt: string;
+        }> = [];
+        const recentActions: Array<{
+            type: string;
+            element: string;
+            text?: string;
+            confidence: number;
             fromPage: string;
             extractedAt: string;
         }> = [];
@@ -1180,7 +1301,7 @@ export async function getRecentKnowledgeItems(
             if (knowledge) {
                 // Extract entities
                 if (
-                    (type === "entities" || type === "both") &&
+                    (type === "entities" || type === "all") &&
                     knowledge.entities
                 ) {
                     for (const entity of knowledge.entities) {
@@ -1196,16 +1317,53 @@ export async function getRecentKnowledgeItems(
                 }
 
                 // Extract topics
-                if (
-                    (type === "topics" || type === "both") &&
-                    knowledge.topics
-                ) {
+                if ((type === "topics" || type === "all") && knowledge.topics) {
                     for (const topic of knowledge.topics) {
                         recentTopics.push({
                             name: topic,
                             fromPage: pageTitle,
                             extractedAt: extractedAt,
                         });
+                    }
+                }
+
+                // Extract actions (if available)
+                // Note: Actions might not be available in current website-memory structure
+                if (type === "actions" || type === "all") {
+                    // Try to get actions from various possible sources in the knowledge object
+                    const actions =
+                        (knowledge as any).actions ||
+                        (knowledge as any).detectedActions ||
+                        [];
+
+                    if (Array.isArray(actions)) {
+                        for (const action of actions) {
+                            // Handle different action object structures gracefully
+                            const actionType =
+                                (action as any).actionType ||
+                                (action as any).type ||
+                                "unknown";
+                            const actionElement =
+                                (action as any).target?.name ||
+                                (action as any).name ||
+                                (action as any).element ||
+                                "element";
+                            const actionText =
+                                (action as any).name ||
+                                (action as any).text ||
+                                (action as any).target?.name;
+                            const actionConfidence =
+                                (action as any).confidence || 0.8;
+
+                            recentActions.push({
+                                type: actionType,
+                                element: actionElement,
+                                text: actionText,
+                                confidence: actionConfidence,
+                                fromPage: pageTitle,
+                                extractedAt: extractedAt,
+                            });
+                        }
                     }
                 }
             }
@@ -1218,6 +1376,11 @@ export async function getRecentKnowledgeItems(
                 new Date(a.extractedAt).getTime(),
         );
         recentTopics.sort(
+            (a, b) =>
+                new Date(b.extractedAt).getTime() -
+                new Date(a.extractedAt).getTime(),
+        );
+        recentActions.sort(
             (a, b) =>
                 new Date(b.extractedAt).getTime() -
                 new Date(a.extractedAt).getTime(),
@@ -1244,9 +1407,22 @@ export async function getRecentKnowledgeItems(
             )
             .slice(0, limit);
 
+        const uniqueActions = recentActions
+            .filter(
+                (action, index, arr) =>
+                    arr.findIndex(
+                        (a) =>
+                            a.type === action.type &&
+                            a.element === action.element &&
+                            a.fromPage === action.fromPage,
+                    ) === index,
+            )
+            .slice(0, limit);
+
         return {
             entities: uniqueEntities,
             topics: uniqueTopics,
+            actions: uniqueActions,
             success: true,
         };
     } catch (error) {
@@ -1254,6 +1430,7 @@ export async function getRecentKnowledgeItems(
         return {
             entities: [],
             topics: [],
+            actions: [],
             success: false,
         };
     }
@@ -1505,6 +1682,7 @@ export async function getPageIndexedKnowledge(
                         entities: [],
                         relationships: [],
                         keyTopics: [],
+                        detectedActions: [],
                         suggestedQuestions: [],
                         summary:
                             "Page is indexed but no knowledge was extracted.",
@@ -1514,6 +1692,14 @@ export async function getPageIndexedKnowledge(
                         },
                     },
                 };
+            }
+
+            let detectedActions: any[] = [];
+            if (
+                (knowledge as any).detectedActions &&
+                Array.isArray((knowledge as any).detectedActions)
+            ) {
+                detectedActions.push(...(knowledge as any).detectedAction);
             }
 
             // Convert the stored knowledge to the expected format
@@ -1531,13 +1717,24 @@ export async function getPageIndexedKnowledge(
 
             const keyTopics: string[] = knowledge.topics || [];
 
-            const relationships: Relationship[] =
+            const allRelationships: Relationship[] =
                 knowledge.actions?.map((action) => ({
                     from: action.subjectEntityName || "unknown",
                     relationship: action.verbs?.join(", ") || "related to",
                     to: action.objectEntityName || "unknown",
                     confidence: 0.8, // Default confidence for indexed content
                 })) || [];
+
+            // Deduplicate relationships
+            const relationships = allRelationships.filter(
+                (rel, index, arr) =>
+                    arr.findIndex(
+                        (r) =>
+                            r.from === rel.from &&
+                            r.relationship === rel.relationship &&
+                            r.to === rel.to,
+                    ) === index,
+            );
 
             // Generate contextual questions for indexed content
             const suggestedQuestions: string[] =
@@ -1564,6 +1761,7 @@ export async function getPageIndexedKnowledge(
                     entities,
                     relationships,
                     keyTopics,
+                    detectedActions,
                     suggestedQuestions,
                     summary,
                     contentMetrics,
@@ -1580,6 +1778,7 @@ export async function getPageIndexedKnowledge(
                     entities: [],
                     relationships: [],
                     keyTopics: [],
+                    detectedActions: [],
                     suggestedQuestions: [],
                     summary: "Page is indexed but knowledge extraction failed.",
                     contentMetrics: {
