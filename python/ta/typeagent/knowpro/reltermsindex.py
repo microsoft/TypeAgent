@@ -27,19 +27,20 @@ from .query import CompiledSearchTerm, CompiledTermGroup
 
 class TermToRelatedTermsMap(ITermToRelatedTerms):
     def __init__(self):
-        self.map: dict[str, set[Term]] = {}
+        # The inner dict represents a set of terms disregarding their weights.
+        self.map: dict[str, dict[str, Term]] = {}
 
     def add_related_term(self, text: str, related_terms: Term | list[Term]) -> None:
         if not isinstance(related_terms, list):
             related_terms = [related_terms]
+        terms: dict[str, Term] = self.map.setdefault(text, {})
         for related in related_terms:
-            terms = self.map.setdefault(text, set())
-            terms.add(related)
+            terms.setdefault(related.text, related)
 
     def lookup_term(self, text: str) -> list[Term] | None:
         result = self.map.get(text)
         if result:
-            return list(result)
+            return list(result.values())
         else:
             return None
 
@@ -55,7 +56,7 @@ class TermToRelatedTermsMap(ITermToRelatedTerms):
             related_terms.append(
                 TermsToRelatedTermsDataItem(
                     termText=key,
-                    relatedTerms=[term.serialize() for term in value],
+                    relatedTerms=[term.serialize() for term in value.values()],
                 )
             )
         return TermToRelatedTermsData(relatedTerms=related_terms)
