@@ -284,6 +284,9 @@ export class TypeAgentPDFViewerApp {
     ): void {
         console.log("🎯 Highlight clicked:", highlightId);
 
+        // Prevent selection manager from closing toolbar immediately after we open it
+        this.selectionManager?.ignoreSelectionChangesFor(300);
+
         // Create a fake selection for the highlight area
         const fakeSelection: SelectionInfo = {
             text: highlightData.text || "Highlighted text",

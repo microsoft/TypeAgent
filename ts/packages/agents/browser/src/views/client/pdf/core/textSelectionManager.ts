@@ -31,10 +31,19 @@ export class TextSelectionManager {
     private selectionTimeout: number | null = null;
     private pdfViewer: any;
     private contextualToolbar: any = null;
+    private ignoreSelectionChangeUntil: number = 0; // Timestamp to ignore selection changes until
 
     constructor(pdfViewer: any) {
         this.pdfViewer = pdfViewer;
         this.setupEventListeners();
+    }
+
+    /**
+     * Temporarily ignore selection changes (used when highlight click opens toolbar)
+     */
+    ignoreSelectionChangesFor(durationMs: number = 300): void {
+        this.ignoreSelectionChangeUntil = Date.now() + durationMs;
+        console.log("🔇 Ignoring selection changes for", durationMs, "ms");
     }
 
     /**
@@ -180,6 +189,12 @@ export class TextSelectionManager {
      * Process the current selection and update state
      */
     private processSelectionChange(): void {
+        // Check if we should ignore selection changes (e.g., after highlight click)
+        if (Date.now() < this.ignoreSelectionChangeUntil) {
+            console.log("🔇 Ignoring selection change due to recent highlight click");
+            return;
+        }
+
         const selection = window.getSelection();
 
         if (!selection || selection.rangeCount === 0) {

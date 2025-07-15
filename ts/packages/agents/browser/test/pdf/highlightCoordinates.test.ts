@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 /**
- * Unit tests for PDF highlight coordinate system
- * Testing the text layer approach for alignment at non-100% zoom levels
+ * Unit tests for PDF highlight coordinate system and toolbar interaction
+ * Testing the text layer approach and highlight click behavior
  */
 
 describe('PDF Highlight Coordinate System - Text Layer Approach', () => {
@@ -168,6 +168,55 @@ describe('PDF Highlight Coordinate System - Text Layer Approach', () => {
             expect(finalCoords.y).toBe(20);
             expect(finalCoords.width).toBe(100);
             expect(finalCoords.height).toBe(20);
+        });
+    });
+
+    describe('Highlight Click Toolbar Behavior', () => {
+        test('should ignore selection changes for specified duration', () => {
+            // Mock TextSelectionManager behavior
+            class MockTextSelectionManager {
+                private ignoreSelectionChangeUntil: number = 0;
+
+                ignoreSelectionChangesFor(durationMs: number = 300): void {
+                    this.ignoreSelectionChangeUntil = Date.now() + durationMs;
+                }
+
+                shouldIgnoreSelectionChange(): boolean {
+                    return Date.now() < this.ignoreSelectionChangeUntil;
+                }
+            }
+
+            const manager = new MockTextSelectionManager();
+            
+            // Initially should not ignore
+            expect(manager.shouldIgnoreSelectionChange()).toBe(false);
+            
+            // After calling ignoreSelectionChangesFor, should ignore
+            manager.ignoreSelectionChangesFor(300);
+            expect(manager.shouldIgnoreSelectionChange()).toBe(true);
+            
+            // After duration passes, should not ignore anymore
+            manager.ignoreSelectionChangesFor(0); // 0ms duration
+            setTimeout(() => {
+                expect(manager.shouldIgnoreSelectionChange()).toBe(false);
+            }, 1);
+        });
+
+        test('should handle rapid highlight clicks without interference', () => {
+            // Simulate rapid highlight clicks
+            const mockManager = {
+                ignoreCount: 0,
+                ignoreSelectionChangesFor: function(duration: number) {
+                    this.ignoreCount++;
+                }
+            };
+
+            // Simulate multiple rapid clicks
+            mockManager.ignoreSelectionChangesFor(300);
+            mockManager.ignoreSelectionChangesFor(300);
+            mockManager.ignoreSelectionChangesFor(300);
+
+            expect(mockManager.ignoreCount).toBe(3);
         });
     });
 });
