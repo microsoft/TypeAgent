@@ -37,65 +37,6 @@ export async function handleMessage(
             return await handleGetWebsiteLibraryStats();
         }
 
-        case "getTopDomains": {
-            try {
-                const result = await sendActionToAgent({
-                    actionName: "getTopDomains",
-                    parameters: {
-                        limit: message.limit || 10,
-                    },
-                });
-
-                return {
-                    success: result.success || false,
-                    domains: {
-                        domains: result.domains || [],
-                        totalSites: result.totalSites || 0,
-                    },
-                };
-            } catch (error) {
-                console.error("Error getting top domains:", error);
-                return {
-                    success: false,
-                    error:
-                        error instanceof Error
-                            ? error.message
-                            : "Unknown error",
-                    domains: { domains: [], totalSites: 0 },
-                };
-            }
-        }
-
-        case "getActivityTrends": {
-            try {
-                const result = await sendActionToAgent({
-                    actionName: "getActivityTrends",
-                    parameters: {
-                        timeRange: message.timeRange || "30d",
-                        granularity: message.granularity || "day",
-                    },
-                });
-
-                return {
-                    success: result.success || false,
-                    trends: {
-                        trends: result.trends || [],
-                        summary: result.summary || {},
-                    },
-                };
-            } catch (error) {
-                console.error("Error getting activity trends:", error);
-                return {
-                    success: false,
-                    error:
-                        error instanceof Error
-                            ? error.message
-                            : "Unknown error",
-                    trends: { trends: [], summary: {} },
-                };
-            }
-        }
-
         case "getSearchSuggestions": {
             return await handleGetSearchSuggestions(message);
         }
@@ -333,6 +274,8 @@ export async function handleMessage(
                             suggestedQuestions:
                                 knowledgeResult.suggestedQuestions || [],
                             summary: knowledgeResult.summary || "",
+                            contentActions:
+                                knowledgeResult.contentActions || [],
                             // Enhanced content data
                             detectedActions:
                                 knowledgeResult.detectedActions || [],
@@ -833,6 +776,37 @@ export async function handleMessage(
             }
         }
 
+        case "getAnalyticsData": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getAnalyticsData",
+                    parameters: {
+                        timeRange: message.timeRange || "30d",
+                        includeQuality: message.includeQuality !== false,
+                        includeProgress: message.includeProgress !== false,
+                        topDomainsLimit: message.topDomainsLimit || 10,
+                        activityGranularity:
+                            message.activityGranularity || "day",
+                    },
+                });
+
+                return {
+                    success: !result.error,
+                    analytics: result,
+                    error: result.error,
+                };
+            } catch (error) {
+                console.error("Error getting analytics data:", error);
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error",
+                };
+            }
+        }
+
         default:
             return null;
     }
@@ -966,14 +940,20 @@ async function handleGetWebsiteLibraryStats() {
         );
 
         return {
-            success: true,
-            stats: stats,
+            totalWebsites: stats.totalWebsites,
+            totalBookmarks: stats.totalBookmarks,
+            totalHistory: stats.totalHistory,
+            topDomains: stats.topDomains,
         };
     } catch (error) {
         console.error("Error getting website library stats:", error);
         return {
             success: false,
             error: error instanceof Error ? error.message : "Unknown error",
+            totalWebsites: 0,
+            totalBookmarks: 0,
+            totalHistory: 0,
+            topDomains: 0,
         };
     }
 }

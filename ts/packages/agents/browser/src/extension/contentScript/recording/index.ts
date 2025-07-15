@@ -126,7 +126,7 @@ export function observeDOMChanges(): void {
 
             // Optional: Send message to background script
             chrome.runtime.sendMessage({
-                action: "spaNavigationDetected",
+                type: "spaNavigationDetected",
                 url: currentUrl,
             });
 
