@@ -9,7 +9,7 @@ export type UnifiedAction = {
     directObject: string;
     // Human-readable short description (e.g., "user can buy groceries for delivery")
     shortDescription: string;
-    // Confidence score for this action detection (0-1) 
+    // Confidence score for this action detection (0-1)
     confidence: number;
     // Source of detection: "page_summary", "candidate_actions", or "unified"
     source: "page_summary" | "candidate_actions" | "unified";
