@@ -439,6 +439,76 @@ export class ChromeExtensionService {
         });
     }
 
+    async getRecentKnowledgeItems(limit: number = 10): Promise<any> {
+        return this.sendMessage({
+            type: "getRecentKnowledgeItems",
+            limit,
+        });
+    }
+
+    async extractKnowledge(url: string): Promise<any> {
+        return this.sendMessage({
+            type: "extractKnowledge",
+            url,
+        });
+    }
+
+    async checkKnowledgeStatus(url: string): Promise<any> {
+        return this.sendMessage({
+            action: "checkKnowledgeStatus",
+            url,
+        });
+    }
+
+    async getSearchSuggestions(query: string): Promise<string[]> {
+        return this.sendMessage({
+            type: "getSearchSuggestions",
+            query,
+        });
+    }
+
+    async getRecentSearches(): Promise<string[]> {
+        return this.sendMessage({
+            action: "getRecentSearches",
+        });
+    }
+
+    async getTopDomains(limit: number = 10): Promise<any> {
+        return this.sendMessage({
+            type: "getTopDomains",
+            limit,
+        });
+    }
+
+    async getActivityTrends(timeRange: string = "30d"): Promise<any> {
+        return this.sendMessage({
+            type: "getActivityTrends",
+            timeRange,
+        });
+    }
+
+    async getDiscoverInsights(limit: number = 10, timeframe: string = "30d"): Promise<any> {
+        return this.sendMessage({
+            type: "getDiscoverInsights",
+            limit,
+            timeframe,
+        });
+    }
+
+    async saveSearch(query: string, results: any): Promise<void> {
+        return this.sendMessage({
+            type: "saveSearch",
+            query,
+            results,
+        });
+    }
+
+    async checkWebSocketConnection(): Promise<any> {
+        return this.sendMessage({
+            type: "checkWebSocketConnection",
+        });
+    }
+
     private async sendMessage<T>(message: any): Promise<T> {
         if (typeof chrome !== "undefined" && chrome.runtime) {
             try {
@@ -551,6 +621,15 @@ export class KnowledgeTemplateHelpers {
 
         return this.createAlert("info", "bi bi-lightbulb", content);
     }
+
+    static createEmptyState(icon: string, message: string): string {
+        return `
+            <div class="text-muted text-center">
+                <i class="${icon}"></i>
+                ${message}
+            </div>
+        `;
+    }
 }
 
 export class KnowledgeConnectionManager {
@@ -605,6 +684,14 @@ export class ChromeEventManager {
             });
         } catch (error) {
             console.error("Failed to setup tab listeners:", error);
+        }
+    }
+
+    static setupMessageListener(callback: (message: any, sender: any, sendResponse: any) => void): void {
+        try {
+            chrome.runtime.onMessage.addListener(callback);
+        } catch (error) {
+            console.error("Failed to setup message listener:", error);
         }
     }
 }

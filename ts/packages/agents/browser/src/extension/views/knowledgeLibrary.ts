@@ -16,6 +16,14 @@ import {
     ImportProgress,
     ImportResult,
 } from "../interfaces/websiteImport.types";
+import { 
+    notificationManager, 
+    chromeExtensionService, 
+    TemplateHelpers, 
+    FormatUtils,
+    EventManager,
+    ConnectionManager
+} from './knowledgeUtilities';
 
 interface FullPageNavigation {
     currentPage: "search" | "discover" | "analytics";
@@ -170,8 +178,6 @@ class WebsiteLibraryPanelFullPage {
     private analyticsData: AnalyticsData | null = null;
 
     // Enhanced services and managers
-    private notificationManager: NotificationManager;
-    private chromeExtensionService: ChromeExtensionService;
     private userPreferences: UserPreferences;
     private searchSuggestions: SearchSuggestion[] = [];
     private suggestionDropdown: HTMLElement | null = null;
@@ -183,8 +189,6 @@ class WebsiteLibraryPanelFullPage {
     private importUI: WebsiteImportUI;
 
     constructor() {
-        this.notificationManager = new NotificationManagerImpl();
-        this.chromeExtensionService = new ChromeExtensionServiceImpl();
         this.userPreferences = this.loadUserPreferences();
 
         // Initialize import components
@@ -206,8 +210,6 @@ class WebsiteLibraryPanelFullPage {
             this.setupNavigation();
             this.setupSearchInterface();
             this.setupEventListeners();
-            this.setupKnowledgeInteractions();
-            this.setupNotificationSystem();
             this.setupImportFunctionality();
 
             await this.checkConnectionStatus();
@@ -217,7 +219,7 @@ class WebsiteLibraryPanelFullPage {
         } catch (error) {
             console.error("Failed to initialize Website Library:", error);
             this.isInitialized = false; // Reset flag on error so retry is possible
-            this.notificationManager.showError(
+            notificationManager.showError(
                 "Failed to load Website Library. Please refresh the page.",
                 () => window.location.reload(),
             );
@@ -284,11 +286,6 @@ class WebsiteLibraryPanelFullPage {
         this.setupFilterControls();
     }
 
-    private setupNotificationSystem() {
-        // Notification system is already set up in the NotificationManagerImpl
-        console.log("Notification system initialized");
-    }
-
     private setupImportFunctionality() {
         // Setup import navigation buttons
         const importWebActivityBtn = document.getElementById(
@@ -332,7 +329,7 @@ class WebsiteLibraryPanelFullPage {
         });
 
         // Listen for progress messages from service worker
-        chrome.runtime.onMessage.addListener(
+        EventManager.setupMessageListener(
             (message, sender, sendResponse) => {
                 if (message.type === "importProgress") {
                     this.handleImportProgressMessage(message);
@@ -353,28 +350,15 @@ class WebsiteLibraryPanelFullPage {
             // Handle the error without calling showImportError again to avoid infinite recursion
             // showImportError is already called from within the import process
             console.error("Import error:", error);
-            this.notificationManager.showError(
+            notificationManager.showError(
                 `Import failed: ${error.message || "Unknown error"}`,
             );
         });
     }
 
-    private setupKnowledgeInteractions() {
-        // Knowledge interactions are handled through the enhanced features
-        console.log("Knowledge interactions initialized");
-    }
-
     private async checkConnectionStatus(): Promise<boolean> {
         try {
-            if (typeof chrome === "undefined" || !chrome.runtime) {
-                this.isConnected = false;
-                return false;
-            }
-
-            const response = await chrome.runtime.sendMessage({
-                type: "checkWebSocketConnection",
-            });
-
+            const response = await chromeExtensionService.checkWebSocketConnection();
             this.isConnected = response?.connected === true;
             return this.isConnected;
         } catch (error) {
@@ -422,15 +406,15 @@ class WebsiteLibraryPanelFullPage {
     }
 
     private async reconnect() {
-        this.notificationManager.showInfo("Attempting to reconnect...");
+        notificationManager.showInfo("Attempting to reconnect...");
         const connected = await this.checkConnectionStatus();
 
         if (connected) {
-            this.notificationManager.showSuccess("Reconnected successfully!");
+            notificationManager.showSuccess("Reconnected successfully!");
             await this.loadLibraryStats();
             await this.performSearch();
         } else {
-            this.notificationManager.showError(
+            notificationManager.showError(
                 "Failed to reconnect. Please check your connection.",
                 () => this.reconnect(),
             );
@@ -444,12 +428,11 @@ class WebsiteLibraryPanelFullPage {
         }
 
         try {
-            this.libraryStats =
-                await this.chromeExtensionService.getLibraryStats();
+            this.libraryStats = await chromeExtensionService.getLibraryStats();
             this.updateStatsDisplay();
         } catch (error) {
             console.error("Failed to load library stats:", error);
-            this.notificationManager.showError(
+            notificationManager.showError(
                 "Failed to load library statistics",
                 () => this.loadLibraryStats(),
             );
@@ -484,7 +467,7 @@ class WebsiteLibraryPanelFullPage {
         // Load page-specific data
         switch (page) {
             case "search":
-                this.initializeSearchPage();
+                // Search page is already initialized in setupSearchInterface
                 break;
             case "discover":
                 this.initializeDiscoverPage();
@@ -636,21 +619,6 @@ class WebsiteLibraryPanelFullPage {
         }
     }
 
-    private handleQuickAction(button: Element) {
-        const onclick = button.getAttribute("onclick");
-        if (onclick) {
-            if (onclick.includes("showImportModal")) {
-                this.showImportModal();
-            } else if (onclick.includes("exploreRecentBookmarks")) {
-                this.exploreRecentBookmarks();
-            } else if (onclick.includes("exploreMostVisited")) {
-                this.exploreMostVisited();
-            } else if (onclick.includes("exploreByDomain")) {
-                this.exploreByDomain();
-            }
-        }
-    }
-
     private setViewMode(view: "list" | "grid" | "timeline" | "domain") {
         if (this.currentViewMode === view) return;
 
@@ -659,9 +627,9 @@ class WebsiteLibraryPanelFullPage {
         // Update UI with smooth transition
         this.updateViewModeButtons();
 
-        // Animate the transition if results are visible
+        // Re-render results with new view mode (simplified - no animation)
         if (this.currentResults.length > 0) {
-            this.animateViewModeTransition(view);
+            this.renderSearchResults(this.currentResults);
         }
     }
 
@@ -676,55 +644,6 @@ class WebsiteLibraryPanelFullPage {
         if (activeBtn) {
             activeBtn.classList.add("active");
         }
-    }
-
-    private async animateViewModeTransition(
-        newView: "list" | "grid" | "timeline" | "domain",
-    ) {
-        const container = document.getElementById("resultsContainer");
-        if (!container) return;
-
-        // Add transitioning class to prevent interactions
-        container.classList.add("transitioning");
-
-        // Get current content
-        const currentContent = container.querySelector(".results-content");
-        if (currentContent) {
-            // Fade out current content
-            currentContent.classList.add("fade-out");
-
-            // Wait for fade out animation
-            await new Promise((resolve) => setTimeout(resolve, 200));
-        }
-
-        // Update view class on container
-        container.className = "results-container";
-        container.classList.add(`${newView}-view`, "transitioning");
-
-        // Render new content
-        this.renderSearchResults(this.currentResults);
-
-        // Get new content and animate in
-        const newContent = container.querySelector(".results-content");
-        if (newContent) {
-            newContent.classList.add("fade-out"); // Start hidden
-
-            // Force layout
-            (newContent as HTMLElement).offsetHeight;
-
-            // Fade in new content
-            newContent.classList.remove("fade-out");
-            newContent.classList.add("fade-in");
-
-            // Wait for fade in animation
-            await new Promise((resolve) => setTimeout(resolve, 200));
-
-            // Clean up classes
-            newContent.classList.remove("fade-in");
-        }
-
-        // Remove transitioning class
-        container.classList.remove("transitioning");
     }
 
     private handleSearchInput(query: string) {
@@ -756,7 +675,20 @@ class WebsiteLibraryPanelFullPage {
 
         try {
             // Check cache first for improved performance
-            const filters = this.getSearchFilters();
+            const filters: SearchFilters = {};
+            
+            const dateFrom = (document.getElementById("dateFrom") as HTMLInputElement)?.value;
+            const dateTo = (document.getElementById("dateTo") as HTMLInputElement)?.value;
+            const sourceType = (document.getElementById("sourceFilter") as HTMLSelectElement)?.value;
+            const domain = (document.getElementById("domainFilter") as HTMLInputElement)?.value;
+            const minRelevance = parseInt((document.getElementById("relevanceFilter") as HTMLInputElement)?.value || "0");
+
+            if (dateFrom) filters.dateFrom = dateFrom;
+            if (dateTo) filters.dateTo = dateTo;
+            if (sourceType) filters.sourceType = sourceType as "bookmarks" | "history";
+            if (domain) filters.domain = domain;
+            if (minRelevance > 0) filters.minRelevance = minRelevance;
+
             const cacheKey = `${query}-${JSON.stringify(filters)}`;
 
             if (this.searchCache.has(cacheKey)) {
@@ -769,11 +701,11 @@ class WebsiteLibraryPanelFullPage {
             let results: SearchResult;
 
             if (this.isConnected) {
-                results = await this.chromeExtensionService.searchWebMemories(
+                results = await chromeExtensionService.searchWebMemories(
                     query,
                     filters,
                 );
-                await this.chromeExtensionService.saveSearch(query, results);
+                await chromeExtensionService.saveSearch(query, results);
             } else {
                 results = await this.searchWebMemories(query, filters);
             }
@@ -790,7 +722,7 @@ class WebsiteLibraryPanelFullPage {
             this.showSearchError(
                 "Search failed. Please check your connection and try again.",
             );
-            this.notificationManager.showError("Search failed", () =>
+            notificationManager.showError("Search failed", () =>
                 this.performSearch(),
             );
         }
@@ -809,7 +741,7 @@ class WebsiteLibraryPanelFullPage {
                 // Get fresh knowledge status
                 if (this.isConnected) {
                     const knowledge =
-                        await this.chromeExtensionService.checkKnowledgeStatus(
+                        await chromeExtensionService.checkKnowledgeStatus(
                             website.url,
                         );
                     website.knowledge = knowledge;
@@ -833,35 +765,6 @@ class WebsiteLibraryPanelFullPage {
         await Promise.allSettled(knowledgePromises);
     }
 
-    private getSearchFilters(): SearchFilters {
-        const filters: SearchFilters = {};
-
-        const dateFrom = (
-            document.getElementById("dateFrom") as HTMLInputElement
-        )?.value;
-        const dateTo = (document.getElementById("dateTo") as HTMLInputElement)
-            ?.value;
-        const sourceType = (
-            document.getElementById("sourceFilter") as HTMLSelectElement
-        )?.value;
-        const domain = (
-            document.getElementById("domainFilter") as HTMLInputElement
-        )?.value;
-        const minRelevance = parseInt(
-            (document.getElementById("relevanceFilter") as HTMLInputElement)
-                ?.value || "0",
-        );
-
-        if (dateFrom) filters.dateFrom = dateFrom;
-        if (dateTo) filters.dateTo = dateTo;
-        if (sourceType)
-            filters.sourceType = sourceType as "bookmarks" | "history";
-        if (domain) filters.domain = domain;
-        if (minRelevance > 0) filters.minRelevance = minRelevance;
-
-        return filters;
-    }
-
     private updateSearchFilters() {
         // If there's an active search, re-run it with new filters
         if (this.currentQuery && this.currentResults.length > 0) {
@@ -879,7 +782,7 @@ class WebsiteLibraryPanelFullPage {
         }
 
         try {
-            return await this.chromeExtensionService.searchWebMemories(
+            return await chromeExtensionService.searchWebMemories(
                 query,
                 filters,
             );
@@ -1440,10 +1343,6 @@ class WebsiteLibraryPanelFullPage {
     }
 
     // Page initialization methods
-    private async initializeSearchPage() {
-        // Already initialized in setupSearchInterface
-    }
-
     private async initializeDiscoverPage() {
         // Initially hide the empty state while loading
         const emptyState = document.getElementById("discoverEmptyState");
@@ -1498,7 +1397,7 @@ class WebsiteLibraryPanelFullPage {
 
         try {
             const response =
-                await this.chromeExtensionService.getDiscoverInsights(
+                await chromeExtensionService.getDiscoverInsights(
                     10,
                     "30d",
                 );
@@ -1591,7 +1490,7 @@ class WebsiteLibraryPanelFullPage {
                 (topic) => `
             <div class="card trending-topic-card trend-${topic.trend} discover-card mb-2">
                 <div class="card-body">
-                    <h6 class="card-title text-capitalize">${this.escapeHtml(topic.topic)}</h6>
+                    <h6 class="card-title text-capitalize">${FormatUtils.escapeHtml(topic.topic)}</h6>
                     <div class="d-flex align-items-center justify-content-between">
                         <span class="text-muted">${topic.count} page${topic.count !== 1 ? "s" : ""}</span>
                         <div class="trend-indicator">
@@ -1718,13 +1617,10 @@ class WebsiteLibraryPanelFullPage {
 
         try {
             // Get real knowledge index statistics
-            const indexStats = await chrome.runtime.sendMessage({
-                type: "getIndexStats",
-            });
+            const indexStats = await chromeExtensionService.getIndexStats();
 
             // Get library stats for total counts
-            const libraryStats =
-                await this.chromeExtensionService.getLibraryStats();
+            const libraryStats = await chromeExtensionService.getLibraryStats();
 
             this.analyticsData = {
                 overview: {
@@ -1903,7 +1799,7 @@ class WebsiteLibraryPanelFullPage {
                 <div class="action-type">
                     <i class="bi bi-clock-history"></i>
                     <span>Last Updated</span>
-                    <span class="action-count">${this.formatDate(indexStats.lastIndexed)}</span>
+                    <span class="action-count">${FormatUtils.formatDate(indexStats.lastIndexed)}</span>
                 </div>
             `;
         }
@@ -1959,30 +1855,9 @@ class WebsiteLibraryPanelFullPage {
         }
     }
 
-    private formatDate(dateString: string): string {
-        if (!dateString || dateString === "Never") return "Never";
-
-        try {
-            const date = new Date(dateString);
-            return date.toLocaleDateString();
-        } catch {
-            return "Unknown";
-        }
-    }
-
-    private escapeHtml(text: string): string {
-        const div = document.createElement("div");
-        div.textContent = text;
-        return div.innerHTML;
-    }
-
     private async loadRecentKnowledgeItems(indexStats: any) {
         try {
-            const response = await chrome.runtime.sendMessage({
-                type: "getRecentKnowledgeItems",
-                limit: 10,
-                itemType: "both",
-            });
+            const response = await chromeExtensionService.getRecentKnowledgeItems(10);
 
             if (response && response.success) {
                 this.updateRecentEntitiesDisplay(response.entities || []);
@@ -2086,7 +1961,7 @@ class WebsiteLibraryPanelFullPage {
                         ? topic.fromPage.substring(0, 30) + "..."
                         : topic.fromPage;
 
-                return `<span class="topic-tag ${sizeClass}" title="From: ${topic.fromPage} (${this.formatDate(topic.extractedAt)})">${topic.name}</span>`;
+                return `<span class="topic-tag ${sizeClass}" title="From: ${topic.fromPage} (${FormatUtils.formatDate(topic.extractedAt)})">${topic.name}</span>`;
             })
             .join("");
 
@@ -2141,7 +2016,7 @@ class WebsiteLibraryPanelFullPage {
 
             // Fetch top domains data
             const domainsData =
-                await this.chromeExtensionService.getTopDomains(10);
+                await chromeExtensionService.getTopDomains(10);
 
             if (!domainsData.domains || domainsData.domains.length === 0) {
                 container.innerHTML = `
@@ -2449,7 +2324,7 @@ class WebsiteLibraryPanelFullPage {
 
             // Fetch activity trends data
             const trendsData =
-                await this.chromeExtensionService.getActivityTrends("30d");
+                await chromeExtensionService.getActivityTrends("30d");
 
             if (!trendsData.trends || trendsData.trends.length === 0) {
                 container.innerHTML = `
@@ -2658,7 +2533,7 @@ class WebsiteLibraryPanelFullPage {
 
             if (this.isConnected) {
                 const suggestionTexts =
-                    await this.chromeExtensionService.getSearchSuggestions(
+                    await chromeExtensionService.getSearchSuggestions(
                         query,
                     );
                 suggestions = suggestionTexts.map((text) => ({
@@ -2724,9 +2599,20 @@ class WebsiteLibraryPanelFullPage {
         this.suggestionDropdown
             .querySelectorAll(".suggestion-item")
             .forEach((item) => {
-                item.addEventListener("click", () =>
-                    this.selectSuggestion(item as HTMLElement),
-                );
+                item.addEventListener("click", () => {
+                    const text = item.textContent?.trim();
+                    if (text) {
+                        const searchInput = document.getElementById(
+                            "searchInput",
+                        ) as HTMLInputElement;
+                        if (searchInput) {
+                            searchInput.value = text;
+                            this.currentQuery = text;
+                            this.hideSearchSuggestions();
+                            this.performSearch();
+                        }
+                    }
+                });
             });
     }
 
@@ -2769,21 +2655,6 @@ class WebsiteLibraryPanelFullPage {
         return "";
     }
 
-    private selectSuggestion(suggestionElement: HTMLElement) {
-        const text = suggestionElement.textContent?.trim();
-        if (text) {
-            const searchInput = document.getElementById(
-                "searchInput",
-            ) as HTMLInputElement;
-            if (searchInput) {
-                searchInput.value = text;
-                this.currentQuery = text;
-                this.hideSearchSuggestions();
-                this.performSearch();
-            }
-        }
-    }
-
     private hideSearchSuggestions() {
         if (this.suggestionDropdown) {
             this.suggestionDropdown.style.display = "none";
@@ -2794,7 +2665,7 @@ class WebsiteLibraryPanelFullPage {
     // Enhanced knowledge extraction
     private async extractKnowledgeForAllResults() {
         if (this.currentResults.length === 0) {
-            this.notificationManager.showWarning(
+            notificationManager.showWarning(
                 "No search results to extract knowledge from",
             );
             return;
@@ -2807,13 +2678,13 @@ class WebsiteLibraryPanelFullPage {
         );
 
         if (unextractedSites.length === 0) {
-            this.notificationManager.showSuccess(
+            notificationManager.showSuccess(
                 "Knowledge already extracted for all results",
             );
             return;
         }
 
-        this.notificationManager.showProgress(
+        notificationManager.showProgress(
             `Extracting knowledge from ${unextractedSites.length} websites...`,
             0,
         );
@@ -2825,7 +2696,7 @@ class WebsiteLibraryPanelFullPage {
                     ((i + 1) / unextractedSites.length) * 100,
                 );
 
-                this.notificationManager.showProgress(
+                notificationManager.showProgress(
                     `Processing ${site.domain}... (${i + 1}/${unextractedSites.length})`,
                     progress,
                 );
@@ -2836,7 +2707,7 @@ class WebsiteLibraryPanelFullPage {
                 await new Promise((resolve) => setTimeout(resolve, 100));
             }
 
-            this.notificationManager.showSuccess(
+            notificationManager.showSuccess(
                 `Knowledge extracted from ${unextractedSites.length} websites`,
             );
 
@@ -2844,7 +2715,7 @@ class WebsiteLibraryPanelFullPage {
             this.renderSearchResults(this.currentResults);
         } catch (error) {
             console.error("Bulk knowledge extraction failed:", error);
-            this.notificationManager.showError(
+            notificationManager.showError(
                 "Failed to extract knowledge from some websites",
             );
         }
@@ -2854,7 +2725,7 @@ class WebsiteLibraryPanelFullPage {
         try {
             if (this.isConnected) {
                 const knowledge =
-                    await this.chromeExtensionService.extractKnowledge(
+                    await chromeExtensionService.extractKnowledge(
                         website.url,
                     );
                 website.knowledge = knowledge;
@@ -2866,7 +2737,7 @@ class WebsiteLibraryPanelFullPage {
                     status: "error",
                     confidence: 0,
                 };
-                this.notificationManager.showError(
+                notificationManager.showError(
                     "Connection required to extract knowledge",
                 );
             }
@@ -2912,11 +2783,11 @@ class WebsiteLibraryPanelFullPage {
 
     // Global notification action handlers
     public handleNotificationAction(id: string, actionLabel: string): void {
-        this.notificationManager.handleNotificationAction(id, actionLabel);
+        notificationManager.handleNotificationAction(id, actionLabel);
     }
 
     public hideNotification(id: string): void {
-        this.notificationManager.hideNotification(id);
+        notificationManager.hideNotification(id);
     }
 
     // Quick action methods
@@ -3029,7 +2900,7 @@ class WebsiteLibraryPanelFullPage {
         }
 
         // Show success notification
-        this.notificationManager.showSuccess(
+        notificationManager.showSuccess(
             `Successfully imported ${result.itemCount} items!`,
         );
     }
@@ -3194,7 +3065,7 @@ class WebsiteLibraryPanelFullPage {
                 "websiteLibrary_userPreferences",
                 JSON.stringify(this.userPreferences),
             );
-            this.notificationManager.showSuccess("Settings saved successfully");
+            notificationManager.showSuccess("Settings saved successfully");
 
             // Apply preferences immediately
             this.setViewMode(this.userPreferences.viewMode as any);
@@ -3209,7 +3080,7 @@ class WebsiteLibraryPanelFullPage {
             }
         } catch (error) {
             console.error("Failed to save user preferences:", error);
-            this.notificationManager.showError("Failed to save settings");
+            notificationManager.showError("Failed to save settings");
         }
     }
 }
@@ -3270,418 +3141,6 @@ interface ChromeExtensionService {
     getTopDomains(limit?: number): Promise<any>;
     getActivityTrends(timeRange?: string): Promise<any>;
     getDiscoverInsights(limit?: number, timeframe?: string): Promise<any>;
-}
-
-// NotificationManager Implementation
-class NotificationManagerImpl implements NotificationManager {
-    private notifications: Map<string, HTMLElement> = new Map();
-    private notificationCounter = 0;
-
-    showSuccess(message: string, actions?: NotificationAction[]): void {
-        this.showNotification("success", message, actions);
-    }
-
-    showError(message: string, retry?: () => void): void {
-        const actions = retry
-            ? [{ label: "Retry", action: retry, style: "primary" as const }]
-            : undefined;
-        this.showNotification("danger", message, actions);
-    }
-
-    showWarning(message: string): void {
-        this.showNotification("warning", message);
-    }
-
-    showInfo(message: string): void {
-        this.showNotification("info", message);
-    }
-
-    showProgress(message: string, progress?: number): void {
-        const id = this.showNotification("info", message, undefined, progress);
-
-        // Auto-update progress if provided
-        if (progress !== undefined) {
-            const notification = this.notifications.get(id);
-            if (notification) {
-                const progressBar = notification.querySelector(
-                    ".progress-bar",
-                ) as HTMLElement;
-                if (progressBar) {
-                    progressBar.style.width = `${progress}%`;
-                    progressBar.textContent = `${progress}%`;
-                }
-            }
-        }
-    }
-
-    hide(id: string): void {
-        const notification = this.notifications.get(id);
-        if (notification) {
-            notification.classList.add("fade-out");
-            setTimeout(() => {
-                notification.remove();
-                this.notifications.delete(id);
-            }, 300);
-        }
-    }
-
-    clear(): void {
-        this.notifications.forEach((notification) => {
-            notification.remove();
-        });
-        this.notifications.clear();
-    }
-
-    private showNotification(
-        type: string,
-        message: string,
-        actions?: NotificationAction[],
-        progress?: number,
-    ): string {
-        const id = `notification-${++this.notificationCounter}`;
-
-        // Create notification container if it doesn't exist
-        let container = document.getElementById("notificationContainer");
-        if (!container) {
-            container = document.createElement("div");
-            container.id = "notificationContainer";
-            container.className = "notification-container";
-            container.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                z-index: 1050;
-                max-width: 350px;
-            `;
-            document.body.appendChild(container);
-        }
-
-        const actionsHtml = actions
-            ? actions
-                  .map(
-                      (action) =>
-                          `<button class="btn btn-sm btn-${action.style || "secondary"} me-2" 
-                     data-notification-id="${id}" data-action="${action.label}">${action.label}</button>`,
-                  )
-                  .join("")
-            : "";
-
-        const progressHtml =
-            progress !== undefined
-                ? `
-            <div class="progress mt-2" style="height: 4px;">
-                <div class="progress-bar" style="width: ${progress}%"></div>
-            </div>
-        `
-                : "";
-
-        const notificationHtml = `
-            <div class="alert alert-${type} alert-dismissible fade show notification-item" 
-                 data-id="${id}" style="margin-bottom: 10px;">
-                <div class="d-flex align-items-start">
-                    <div class="flex-grow-1">
-                        <div class="notification-message">${message}</div>
-                        ${progressHtml}
-                        ${actionsHtml ? `<div class="mt-2">${actionsHtml}</div>` : ""}
-                    </div>
-                    <button type="button" class="btn-close" data-notification-id="${id}" data-action="close"></button>
-                </div>
-            </div>
-        `;
-
-        container.insertAdjacentHTML("afterbegin", notificationHtml);
-
-        const notification = container.querySelector(
-            `[data-id="${id}"]`,
-        ) as HTMLElement;
-        if (notification) {
-            this.notifications.set(id, notification);
-
-            // Add event listeners for notification actions
-            notification.querySelectorAll("[data-action]").forEach((button) => {
-                button.addEventListener("click", (e) => {
-                    const target = e.target as HTMLElement;
-                    const action = target.getAttribute("data-action");
-                    const notificationId = target.getAttribute(
-                        "data-notification-id",
-                    );
-
-                    if (action === "close" && notificationId) {
-                        this.hide(notificationId);
-                    } else if (action && notificationId && actions) {
-                        const actionHandler = actions.find(
-                            (a) => a.label === action,
-                        );
-                        if (actionHandler) {
-                            actionHandler.action();
-                        }
-                    }
-                });
-            });
-
-            // Store action handlers for later use
-            if (actions) {
-                (notification as any)._actionHandlers = actions.reduce(
-                    (acc, action) => {
-                        acc[action.label] = action.action;
-                        return acc;
-                    },
-                    {} as Record<string, () => void>,
-                );
-            }
-
-            // Auto-hide success/warning notifications after 5 seconds
-            if (type === "success" || type === "warning") {
-                setTimeout(() => this.hide(id), 5000);
-            }
-        }
-
-        return id;
-    }
-
-    // Public methods for notification actions
-    public handleNotificationAction(id: string, actionLabel: string): void {
-        const notification = this.notifications.get(id);
-        if (notification && (notification as any)._actionHandlers) {
-            const handler = (notification as any)._actionHandlers[actionLabel];
-            if (handler) {
-                handler();
-                this.hide(id);
-            }
-        }
-    }
-
-    public hideNotification(id: string): void {
-        this.hide(id);
-    }
-}
-
-// Chrome Extension Service Implementation
-class ChromeExtensionServiceImpl implements ChromeExtensionService {
-    async getLibraryStats(): Promise<LibraryStats> {
-        if (typeof chrome !== "undefined" && chrome.runtime) {
-            try {
-                const response = await chrome.runtime.sendMessage({
-                    type: "getLibraryStats",
-                    includeKnowledge: true,
-                });
-
-                if (response.success) {
-                    return response.stats;
-                } else {
-                    throw new Error(
-                        response.error || "Failed to get library stats",
-                    );
-                }
-            } catch (error) {
-                console.error("Chrome extension not available:", error);
-                throw error;
-            }
-        }
-        throw new Error("Chrome extension not available");
-    }
-
-    async searchWebMemories(
-        query: string,
-        filters: SearchFilters,
-    ): Promise<SearchResult> {
-        if (typeof chrome !== "undefined" && chrome.runtime) {
-            try {
-                const response = await chrome.runtime.sendMessage({
-                    type: "searchWebMemories",
-                    parameters: {
-                        query,
-                        generateAnswer: true,
-                        includeRelatedEntities: true,
-                        enableAdvancedSearch: true,
-                        limit: 50, // Default limit since it's not in SearchFilters
-                        minScore: filters.minRelevance || 0.3,
-                        domain: filters.domain,
-                        source:
-                            filters.sourceType === "bookmarks"
-                                ? "bookmark"
-                                : filters.sourceType === "history"
-                                  ? "history"
-                                  : undefined,
-                        // Note: pageType, temporalSort, frequencySort not available in current SearchFilters interface
-                    },
-                });
-
-                if (response.success) {
-                    // Convert unified search response to SearchResult format
-                    return {
-                        websites: response.results.websites || [],
-                        summary: {
-                            text: response.results.summary.text || "",
-                            totalFound: response.results.websites?.length || 0,
-                            searchTime:
-                                response.results.summary?.searchTime || 0,
-                            sources: response.results.sources || [],
-                            entities: response.results.entities || [],
-                        },
-                        query: query,
-                        filters: filters,
-                    };
-                } else {
-                    throw new Error(response.error || "Search failed");
-                }
-            } catch (error) {
-                console.error("Search request failed:", error);
-                throw error;
-            }
-        }
-        throw new Error("Chrome extension not available");
-    }
-
-    async extractKnowledge(url: string): Promise<KnowledgeStatus> {
-        if (typeof chrome !== "undefined" && chrome.runtime) {
-            try {
-                const response = await chrome.runtime.sendMessage({
-                    type: "extractKnowledge",
-                    url,
-                });
-                return response;
-            } catch (error) {
-                console.error("Knowledge extraction failed:", error);
-                throw error;
-            }
-        }
-        throw new Error("Chrome extension not available");
-    }
-
-    async checkKnowledgeStatus(url: string): Promise<KnowledgeStatus> {
-        if (typeof chrome !== "undefined" && chrome.runtime) {
-            try {
-                const response = await chrome.runtime.sendMessage({
-                    action: "checkKnowledgeStatus",
-                    url,
-                });
-                return response;
-            } catch (error) {
-                console.error("Knowledge status check failed:", error);
-                throw error;
-            }
-        }
-        throw new Error("Chrome extension not available");
-    }
-
-    async getSearchSuggestions(query: string): Promise<string[]> {
-        if (typeof chrome !== "undefined" && chrome.runtime) {
-            try {
-                const response = await chrome.runtime.sendMessage({
-                    type: "getSearchSuggestions",
-                    query,
-                });
-                return response || [];
-            } catch (error) {
-                console.error("Failed to get search suggestions:", error);
-                return [];
-            }
-        }
-        throw new Error("Chrome extension not available");
-    }
-
-    async getRecentSearches(): Promise<string[]> {
-        if (typeof chrome !== "undefined" && chrome.runtime) {
-            try {
-                const response = await chrome.runtime.sendMessage({
-                    action: "getRecentSearches",
-                });
-                return response || [];
-            } catch (error) {
-                console.error("Failed to get recent searches:", error);
-                return [];
-            }
-        }
-        throw new Error("Chrome extension not available");
-    }
-
-    async getTopDomains(limit: number = 10): Promise<any> {
-        if (typeof chrome !== "undefined" && chrome.runtime) {
-            try {
-                const response = await chrome.runtime.sendMessage({
-                    type: "getTopDomains",
-                    limit,
-                });
-
-                if (response.success) {
-                    return response.domains;
-                } else {
-                    throw new Error(
-                        response.error || "Failed to get top domains",
-                    );
-                }
-            } catch (error) {
-                console.error("Failed to get top domains:", error);
-                throw error;
-            }
-        }
-        throw new Error("Chrome extension not available");
-    }
-
-    async getActivityTrends(timeRange: string = "30d"): Promise<any> {
-        if (typeof chrome !== "undefined" && chrome.runtime) {
-            try {
-                const response = await chrome.runtime.sendMessage({
-                    type: "getActivityTrends",
-                    timeRange,
-                });
-
-                if (response.success) {
-                    return response.trends;
-                } else {
-                    throw new Error(
-                        response.error || "Failed to get activity trends",
-                    );
-                }
-            } catch (error) {
-                console.error("Failed to get activity trends:", error);
-                throw error;
-            }
-        }
-        throw new Error("Chrome extension not available");
-    }
-
-    async getDiscoverInsights(
-        limit: number = 10,
-        timeframe: string = "30d",
-    ): Promise<any> {
-        if (typeof chrome !== "undefined" && chrome.runtime) {
-            try {
-                const response = await chrome.runtime.sendMessage({
-                    type: "getDiscoverInsights",
-                    limit,
-                    timeframe,
-                });
-
-                if (response.success) {
-                    return response;
-                } else {
-                    throw new Error(
-                        response.error || "Failed to get discover insights",
-                    );
-                }
-            } catch (error) {
-                console.error("Failed to get discover insights:", error);
-                throw error;
-            }
-        }
-        throw new Error("Chrome extension not available");
-    }
-
-    async saveSearch(query: string, results: SearchResult): Promise<void> {
-        if (typeof chrome !== "undefined" && chrome.runtime) {
-            try {
-                await chrome.runtime.sendMessage({
-                    type: "saveSearch",
-                    query,
-                    results,
-                });
-            } catch (error) {
-                console.error("Failed to save search:", error);
-            }
-        }
-    }
 }
 
 // ===================================================================

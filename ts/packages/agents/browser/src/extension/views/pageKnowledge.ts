@@ -430,7 +430,7 @@ class KnowledgePanel {
                 this.showKnowledgeError(
                     "Failed to extract knowledge. Please check your connection.",
                 );
-                this.showEnhancedNotification(
+                notificationManager.showEnhancedNotification(
                     "danger",
                     "Knowledge Extraction Failed",
                     (error as Error).message ||
@@ -516,7 +516,7 @@ class KnowledgePanel {
             if ((error as Error).message?.includes("AI model required")) {
                 this.showAIRequiredError();
             } else {
-                this.showEnhancedNotification(
+                notificationManager.showEnhancedNotification(
                     "danger",
                     "Indexing Failed",
                     (error as Error).message || "Failed to index page",
@@ -583,7 +583,7 @@ class KnowledgePanel {
     private showKnowledgeLoading() {
         const knowledgeSection = document.getElementById("knowledgeSection")!;
         knowledgeSection.className = "";
-        knowledgeSection.innerHTML = this.createLoadingState(
+        knowledgeSection.innerHTML = TemplateHelpers.createLoadingState(
             "Extracting knowledge from page...",
             "This may take a few seconds",
         );
@@ -906,7 +906,7 @@ class KnowledgePanel {
         }
 
         // Add any other categories that didn't fit the main ones
-        for (const [categoryName, questions] of categoryMap.entries()) {
+        Array.from(categoryMap.entries()).forEach(([categoryName, questions]) => {
             if (
                 ![
                     "relationship",
@@ -931,7 +931,7 @@ class KnowledgePanel {
                     count: questions.length,
                 });
             }
-        }
+        });
 
         return categories.sort((a, b) => a.priority - b.priority);
     }
@@ -1595,116 +1595,6 @@ class KnowledgePanel {
         }
     }
 
-    private showTemporaryStatus(
-        message: string,
-        type: "success" | "danger" | "info",
-    ) {
-        const alertClass = "alert-" + type;
-        const iconClass =
-            type === "success"
-                ? "bi-check-circle"
-                : type === "danger"
-                  ? "bi-exclamation-triangle"
-                  : "bi-info-circle";
-
-        const statusDiv = document.createElement("div");
-        statusDiv.className = `alert ${alertClass} alert-dismissible fade show position-fixed`;
-        statusDiv.style.cssText =
-            "top: 1rem; right: 1rem; z-index: 1050; min-width: 250px;";
-        statusDiv.innerHTML = `
-            <i class="${iconClass} me-2"></i>
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        `;
-
-        document.body.appendChild(statusDiv);
-
-        setTimeout(() => {
-            if (statusDiv.parentNode) {
-                statusDiv.remove();
-            }
-        }, 3000);
-    }
-
-    private showEnhancedNotification(
-        type: "success" | "danger" | "info" | "warning",
-        title: string,
-        message: string,
-        icon: string = "bi-info-circle",
-    ) {
-        const notification = document.createElement("div");
-        notification.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
-        notification.style.cssText = `
-            top: 20px; 
-            right: 20px; 
-            z-index: 9999; 
-            min-width: 350px; 
-            max-width: 400px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            border: none;
-            border-radius: 8px;
-        `;
-
-        notification.innerHTML = `
-            <div class="d-flex align-items-start">
-                <i class="${icon} me-3 mt-1" style="font-size: 1.2rem;"></i>
-                <div class="flex-grow-1">
-                    <div class="fw-bold mb-1">${title}</div>
-                    <div class="small">${message}</div>
-                </div>
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-        `;
-
-        document.body.appendChild(notification);
-
-        // Auto-remove after 6 seconds for enhanced notifications
-        setTimeout(() => {
-            if (notification.parentNode) {
-                notification.classList.remove("show");
-                setTimeout(() => {
-                    if (notification.parentNode) {
-                        notification.parentNode.removeChild(notification);
-                    }
-                }, 300);
-            }
-        }, 6000);
-    }
-
-    // Template utility functions for knowledge panel
-    private createCard(
-        title: string,
-        content: string,
-        icon: string,
-        badge?: string,
-    ): string {
-        const badgeHtml = badge
-            ? `<span id="${badge}" class="badge bg-secondary ms-2">0</span>`
-            : "";
-        return `
-            <div class="knowledge-card card">
-                <div class="card-header">
-                    <h6 class="mb-0">
-                        <i class="${icon}"></i> ${title}
-                        ${badgeHtml}
-                    </h6>
-                </div>
-                <div class="card-body">
-                    ${content}
-                </div>
-            </div>
-        `;
-    }
-
-    private createEmptyState(icon: string, message: string): string {
-        return `
-            <div class="text-muted text-center">
-                <i class="${icon}"></i>
-                ${message}
-            </div>
-        `;
-    }
-
     private createContainer(id: string, defaultContent: string): string {
         return `<div id="${id}">${defaultContent}</div>`;
     }
@@ -1713,12 +1603,12 @@ class KnowledgePanel {
     private renderEntitiesCard(): string {
         const content = this.createContainer(
             "entitiesContainer",
-            this.createEmptyState(
+            TemplateHelpers.createEmptyState(
                 "bi bi-info-circle",
                 "No entities extracted yet",
             ),
         );
-        return this.createCard(
+        return TemplateHelpers.createCard(
             "Entities",
             content,
             "bi bi-tags",
@@ -1729,12 +1619,12 @@ class KnowledgePanel {
     private renderRelationshipsCard(): string {
         const content = this.createContainer(
             "relationshipsContainer",
-            this.createEmptyState(
+            TemplateHelpers.createEmptyState(
                 "bi bi-info-circle",
                 "No relationships found yet",
             ),
         );
-        return this.createCard(
+        return TemplateHelpers.createCard(
             "Relationships",
             content,
             "bi bi-diagram-3",
@@ -1745,76 +1635,12 @@ class KnowledgePanel {
     private renderTopicsCard(): string {
         const content = this.createContainer(
             "topicsContainer",
-            this.createEmptyState(
+            TemplateHelpers.createEmptyState(
                 "bi bi-info-circle",
                 "No topics identified yet",
             ),
         );
-        return this.createCard("Key Topics", content, "bi bi-bookmark");
-    }
-
-    // Alert and loading state utilities
-    private createAlert(
-        type: "info" | "danger",
-        icon: string,
-        content: string,
-    ): string {
-        return `
-            <div class="alert alert-${type} mb-0">
-                <div class="d-flex align-items-start">
-                    <i class="${icon} me-2 mt-1"></i>
-                    <div class="flex-grow-1">
-                        ${content}
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-
-    private createLoadingState(message: string, subtext?: string): string {
-        const subtextHtml = subtext
-            ? `<small class="text-muted">${subtext}</small>`
-            : "";
-        return `
-            <div class="knowledge-card card">
-                <div class="card-body text-center">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                    <p class="mt-3 mb-0">${message}</p>
-                    ${subtextHtml}
-                </div>
-            </div>
-        `;
-    }
-
-    private createSearchLoadingState(): string {
-        return `
-            <div class="d-flex align-items-center text-muted">
-                <div class="spinner-border spinner-border-sm me-2" role="status"></div>
-                <span>Searching knowledge...</span>
-            </div>
-        `;
-    }
-
-    private createQueryAnswer(answer: string, sources: any[]): string {
-        const sourcesHtml =
-            sources && sources.length > 0
-                ? `
-            <hr class="my-2">
-            <small class="text-muted">
-                <strong>Sources:</strong> ${sources.map((s: any) => s.title).join(", ")}
-            </small>
-        `
-                : "";
-
-        const content = `
-            <div class="fw-semibold">Answer:</div>
-            <p class="mb-2">${answer}</p>
-            ${sourcesHtml}
-        `;
-
-        return this.createAlert("info", "bi bi-lightbulb", content);
+        return TemplateHelpers.createCard("Key Topics", content, "bi bi-bookmark");
     }
 
     // Template utility functions for knowledge panel
@@ -1841,12 +1667,12 @@ class KnowledgePanel {
     private renderContentMetricsCard(): string {
         const content = this.createContainer(
             "contentMetricsContainer",
-            this.createEmptyState(
+            TemplateHelpers.createEmptyState(
                 "bi bi-info-circle",
                 "No content metrics available",
             ),
         );
-        return this.createCard(
+        return TemplateHelpers.createCard(
             "Content Analysis",
             content,
             "bi bi-bar-chart-line",
@@ -1857,12 +1683,12 @@ class KnowledgePanel {
     private renderRelatedContentCard(): string {
         const content = this.createContainer(
             "relatedContentContainer",
-            this.createEmptyState(
+            TemplateHelpers.createEmptyState(
                 "bi bi-info-circle",
                 "No related content found",
             ),
         );
-        return this.createCard(
+        return TemplateHelpers.createCard(
             "Related Content",
             content,
             "bi bi-link-45deg",
@@ -1872,9 +1698,9 @@ class KnowledgePanel {
     private renderActionsCard(): string {
         const content = this.createContainer(
             "detectedActionsContainer",
-            this.createEmptyState("bi bi-info-circle", "No actions detected"),
+            TemplateHelpers.createEmptyState("bi bi-info-circle", "No actions detected"),
         );
-        return this.createCard(
+        return TemplateHelpers.createCard(
             "Detected Actions",
             content,
             "bi bi-lightning",
@@ -2624,7 +2450,7 @@ class KnowledgePanel {
         const groupedRelationships =
             this.groupRelationshipsByType(relationships);
 
-        container.innerHTML = Array.from(groupedRelationships)
+        container.innerHTML = Object.entries(groupedRelationships)
             .map(
                 ([type, typeRelationships]) => `
                 <div class="relationship-type-group mb-3">
@@ -3058,7 +2884,7 @@ class KnowledgePanel {
             }
         } catch (error) {
             console.error("Error querying enhanced knowledge:", error);
-            queryResults.innerHTML = this.createAlert(
+            queryResults.innerHTML = TemplateHelpers.createAlert(
                 "danger",
                 "bi bi-exclamation-triangle",
                 "Failed to search knowledge base. Please try again.",
