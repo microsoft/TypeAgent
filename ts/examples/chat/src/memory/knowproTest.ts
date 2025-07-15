@@ -105,6 +105,15 @@ export async function createKnowproTestCommands(
                     `heading ${level}`,
                 );
             },
+            onToken(name: string, text: string) {
+                context.printer.writeLineInColor(chalk.cyan, name);
+            },
+            onLink(text: string, url: string) {
+                context.printer.writeLineInColor(
+                    chalk.green,
+                    `[${text}](${url})`,
+                );
+            },
         };
         const chunker = new tp.MdChunker(mdDom, eventHandler);
         const blocks = chunker.getMarkdownBlocks();

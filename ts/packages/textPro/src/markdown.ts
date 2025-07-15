@@ -19,6 +19,8 @@ export function loadMarkdownFromHtml(
 export interface MdChunkerEvents {
     onBlockStart(name: string): void;
     onHeading(level: number): void;
+    onLink(text: string, url: string): void;
+    onToken(name: string, text: string): void;
     onBlockEnd(): void;
 }
 
@@ -72,20 +74,35 @@ export class MdChunker {
     private collectText(token: md.Token): void {
         switch (token.type) {
             default:
+                /*
                 const text = (token as any).text;
                 this.append(text !== undefined ? text : token.raw);
+                */
+                this.append(token.raw);
+                let text = (token as any).text;
+                this.eventHandler?.onToken(token.type, text ?? token.raw);
                 break;
             case "paragraph":
+            case "blockquote":
+            case "codespan":
                 this.beginBlock(token.type);
-                this.append(token.text);
+                this.append(token.raw);
                 this.endBlock();
                 break;
             case "heading":
                 this.beginBlock(token.type);
-                this.eventHandler?.onHeading(token.depth);
                 this.append(token.raw);
+                this.eventHandler?.onHeading(token.depth);
                 this.endBlock();
                 break;
+            case "link":
+                this.append(token.raw);
+                this.eventHandler?.onLink(token.text, token.href);
+                break;
+        }
+        let children: md.Token[] = (token as any).tokens;
+        if (children !== undefined && children.length > 0) {
+            this.traverseTokenList(children);
         }
     }
 
