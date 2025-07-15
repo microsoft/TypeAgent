@@ -398,6 +398,7 @@ async function updateBrowserContext(
                         case "getRecentKnowledgeItems":
                         case "getTopDomains":
                         case "getActivityTrends":
+                        case "getAnalyticsData":
                         case "getDiscoverInsights":
                         case "getKnowledgeIndexStats":
                         case "getKnowledgeStats":

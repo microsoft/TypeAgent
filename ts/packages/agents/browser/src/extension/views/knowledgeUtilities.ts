@@ -235,6 +235,23 @@ export class ChromeExtensionService {
         });
     }
 
+    async getAnalyticsData(options?: {
+        timeRange?: string;
+        includeQuality?: boolean;
+        includeProgress?: boolean;
+        topDomainsLimit?: number;
+        activityGranularity?: 'day' | 'week' | 'month';
+    }): Promise<any> {
+        return this.sendMessage({
+            type: "getAnalyticsData",
+            timeRange: options?.timeRange || "30d",
+            includeQuality: options?.includeQuality !== false,
+            includeProgress: options?.includeProgress !== false,
+            topDomainsLimit: options?.topDomainsLimit || 10,
+            activityGranularity: options?.activityGranularity || "day"
+        });
+    }
+
     async searchWebMemories(query: string, filters: SearchFilters): Promise<SearchResult> {
         return this.sendMessage({
             type: "searchWebMemories",

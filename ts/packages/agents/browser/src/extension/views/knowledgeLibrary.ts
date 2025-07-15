@@ -74,6 +74,44 @@ interface AnalyticsData {
         value: number;
         change: number;
     }>;
+    domains?: {
+        topDomains: Array<{
+            domain: string;
+            count: number;
+            percentage: number;
+        }>;
+        totalSites: number;
+    };
+    knowledge?: {
+        extractionProgress?: {
+            entityProgress: number;
+            topicProgress: number;
+            actionProgress: number;
+        };
+        qualityDistribution?: {
+            highQuality: number;
+            mediumQuality: number;
+            lowQuality: number;
+        };
+        totalEntities?: number;
+        totalTopics?: number;
+        totalActions?: number;
+        totalRelationships?: number;
+        recentItems?: any[];
+    };
+    activity?: {
+        trends: Array<{
+            date: string;
+            visits: number;
+            bookmarks: number;
+        }>;
+        summary: {
+            totalActivity: number;
+            peakDay: string | null;
+            averagePerDay: number;
+            timeRange: string;
+        };
+    };
 }
 
 // Import existing interfaces
@@ -167,12 +205,6 @@ class WebsiteLibraryPanelFullPage {
     private searchDebounceTimer: number | null = null;
     private recentSearches: string[] = [];
     private currentQuery: string = "";
-    
-    // Cache for knowledge stats
-    private knowledgeStatsCache: {
-        data: any;
-        timestamp: number;
-    } | null = null;
     
     // Data storage
     private libraryStats: LibraryStats = {
@@ -607,12 +639,11 @@ class WebsiteLibraryPanelFullPage {
             if (message.type === "knowledgeExtracted" || 
                 message.type === "importComplete" ||
                 message.type === "contentIndexed") {
-                // Invalidate stats cache when new knowledge is extracted
-                this.invalidateKnowledgeStatsCache();
-                
-                // Re-render analytics if currently on analytics page
+                // Reload analytics data when new knowledge is extracted
                 if (this.navigation.currentPage === "analytics") {
-                    this.renderKnowledgeInsights().catch(console.error);
+                    this.loadAnalyticsData().then(() => {
+                        return this.renderAnalyticsContent();
+                    }).catch(console.error);
                 }
             }
         });
@@ -1616,90 +1647,106 @@ class WebsiteLibraryPanelFullPage {
 
     private async loadAnalyticsData() {
         if (!this.isConnected) {
-            // Show the empty state when there's no connection
-            const emptyState = document.getElementById("analyticsEmptyState");
-            if (emptyState) {
-                emptyState.style.display = "block";
-            }
-
-            const container = document.getElementById("analyticsContent");
-            if (container) {
-                container.innerHTML = `
-                    <div class="connection-required">
-                        <i class="bi bi-wifi-off"></i>
-                        <h3>Connection Required</h3>
-                        <p>The Analytics page requires an active connection to the TypeAgent service.</p>
-                        <button class="btn btn-primary" data-action="reconnect">
-                            <i class="bi bi-arrow-repeat"></i> Reconnect
-                        </button>
-                    </div>
-                `;
-            }
+            this.showAnalyticsConnectionError();
             return;
         }
 
         try {
-            // Get real knowledge index statistics
-            const indexStats = await chromeExtensionService.getIndexStats();
+            // Single call to get all analytics data
+            const analyticsResponse = await chromeExtensionService.getAnalyticsData({
+                timeRange: "30d",
+                includeQuality: true,
+                includeProgress: true,
+                topDomainsLimit: 10,
+                activityGranularity: "day"
+            });
 
-            // Get library stats for total counts
-            const libraryStats = await chromeExtensionService.getLibraryStats();
+            if (analyticsResponse.success) {
+                // Transform to internal format
+                this.analyticsData = {
+                    overview: analyticsResponse.analytics.overview,
+                    trends: analyticsResponse.analytics.activity.trends,
+                    insights: this.transformKnowledgeInsights(analyticsResponse.analytics.knowledge),
+                    domains: analyticsResponse.analytics.domains,
+                    knowledge: analyticsResponse.analytics.knowledge,
+                    activity: analyticsResponse.analytics.activity
+                };
 
-            this.analyticsData = {
-                overview: {
-                    totalSites: indexStats.totalPages || 0,
-                    totalBookmarks: libraryStats.totalBookmarks || 0,
-                    totalHistory: libraryStats.totalHistory || 0,
-                    knowledgeExtracted: indexStats.totalPages || 0,
-                },
-                trends: [],
-                insights: [
-                    {
-                        category: "Entities",
-                        value: indexStats.totalEntities || 0,
-                        change: 0,
-                    },
-                    {
-                        category: "Relationships",
-                        value: indexStats.totalRelationships || 0,
-                        change: 0,
-                    },
-                    {
-                        category: "Knowledge Quality",
-                        value: this.calculateKnowledgeQuality(indexStats),
-                        change: 0,
-                    },
-                ],
-            };
-
-            // Store the actual statistics for the visualization section
-            this.updateKnowledgeVisualizationData(indexStats);
+                // Cache for knowledge visualization
+                this.updateKnowledgeVisualizationData(analyticsResponse.analytics.knowledge);
+            } else {
+                throw new Error(analyticsResponse.error || "Failed to get analytics data");
+            }
         } catch (error) {
             console.error("Failed to load analytics data:", error);
-            this.analyticsData = {
-                overview: {
-                    totalSites: this.libraryStats.totalWebsites,
-                    totalBookmarks: this.libraryStats.totalBookmarks,
-                    totalHistory: this.libraryStats.totalHistory,
-                    knowledgeExtracted: 0,
-                },
-                trends: [],
-                insights: [],
-            };
-
-            // Show the empty state when there's an error or no data
-            const emptyState = document.getElementById("analyticsEmptyState");
-            if (emptyState) {
-                emptyState.style.display = "block";
-            }
-
-            // Update metric displays with zeros since no real data is available
-            this.updateMetricDisplaysWithZeros();
-
-            this.clearPlaceholderContent();
-            this.updateRecentEntitiesDisplay([]);
-            this.updateRecentTopicsDisplay([]);
+            this.handleAnalyticsDataError(error);
         }
+    }
+
+    private showAnalyticsConnectionError() {
+        const emptyState = document.getElementById("analyticsEmptyState");
+        if (emptyState) {
+            emptyState.style.display = "block";
+        }
+
+        const container = document.getElementById("analyticsContent");
+        if (container) {
+            container.innerHTML = `
+                <div class="connection-required">
+                    <i class="bi bi-wifi-off"></i>
+                    <h3>Connection Required</h3>
+                    <p>The Analytics page requires an active connection to the TypeAgent service.</p>
+                    <button class="btn btn-primary" data-action="reconnect">
+                        <i class="bi bi-arrow-repeat"></i> Reconnect
+                    </button>
+                </div>
+            `;
+        }
+    }
+
+    private transformKnowledgeInsights(knowledge: any): any[] {
+        return [
+            {
+                category: "Entities",
+                value: knowledge.totalEntities || 0,
+                change: 0,
+            },
+            {
+                category: "Relationships", 
+                value: knowledge.totalRelationships || 0,
+                change: 0,
+            },
+            {
+                category: "Knowledge Quality",
+                value: this.calculateKnowledgeQualityFromData(knowledge),
+                change: 0,
+            },
+        ];
+    }
+
+    private handleAnalyticsDataError(error: any) {
+        this.analyticsData = {
+            overview: {
+                totalSites: this.libraryStats.totalWebsites,
+                totalBookmarks: this.libraryStats.totalBookmarks,
+                totalHistory: this.libraryStats.totalHistory,
+                knowledgeExtracted: 0,
+            },
+            trends: [],
+            insights: [],
+        };
+
+        // Show the empty state when there's an error or no data
+        const emptyState = document.getElementById("analyticsEmptyState");
+        if (emptyState) {
+            emptyState.style.display = "block";
+        }
+
+        // Update metric displays with zeros since no real data is available
+        this.updateMetricDisplaysWithZeros();
+        this.clearPlaceholderContent();
+        this.updateRecentEntitiesDisplay([]);
+        this.updateRecentTopicsDisplay([]);
     }
 
     private calculateKnowledgeQuality(indexStats: any): number {
@@ -1720,7 +1767,19 @@ class WebsiteLibraryPanelFullPage {
         return Math.round(quality);
     }
 
-    private updateKnowledgeVisualizationData(indexStats: any) {
+    private calculateKnowledgeQualityFromData(knowledge: any): number {
+        if (!knowledge || !knowledge.qualityDistribution) return 0;
+        
+        const { highQuality, mediumQuality, lowQuality } = knowledge.qualityDistribution;
+        const total = highQuality + mediumQuality + lowQuality;
+        
+        if (total === 0) return 0;
+        
+        // Weighted score: high=100%, medium=60%, low=20%
+        return Math.round(((highQuality * 100) + (mediumQuality * 60) + (lowQuality * 20)) / total);
+    }
+
+    private updateKnowledgeVisualizationData(knowledge: any) {
         // Update AI Insights section with real data
         const knowledgeExtractedElement =
             document.getElementById("knowledgeExtracted");
@@ -1730,54 +1789,51 @@ class WebsiteLibraryPanelFullPage {
 
         if (knowledgeExtractedElement) {
             knowledgeExtractedElement.textContent = (
-                indexStats.totalPages || 0
+                knowledge.totalEntities || 0
             ).toString();
         }
         if (totalEntitiesElement) {
             totalEntitiesElement.textContent = (
-                indexStats.totalEntities || 0
+                knowledge.totalEntities || 0
             ).toString();
         }
         if (totalTopicsElement) {
-            // Estimate topics from entities (rough approximation)
-            const estimatedTopics = Math.round(
-                (indexStats.totalEntities || 0) * 0.6,
-            );
-            totalTopicsElement.textContent = estimatedTopics.toString();
+            totalTopicsElement.textContent = (
+                knowledge.totalTopics || 0
+            ).toString();
         }
         if (totalActionsElement) {
             totalActionsElement.textContent = (
-                indexStats.totalRelationships || 0
+                knowledge.totalActions || 0
             ).toString();
         }
 
         // Update knowledge visualization cards with real data
-        this.updateKnowledgeVisualizationCards(indexStats);
+        this.updateKnowledgeVisualizationCards(knowledge);
 
         this.clearPlaceholderContent();
 
         // Load and display recent entities and topics
-        this.loadRecentKnowledgeItems(indexStats);
+        this.loadRecentKnowledgeItems(knowledge);
     }
 
-    private updateKnowledgeVisualizationCards(indexStats: any) {
+    private updateKnowledgeVisualizationCards(knowledge: any) {
         // Update total entities metric
         const totalEntitiesMetric = document.getElementById(
             "totalEntitiesMetric",
         );
         if (totalEntitiesMetric) {
             totalEntitiesMetric.textContent = (
-                indexStats.totalEntities || 0
+                knowledge.totalEntities || 0
             ).toString();
         }
 
-        // Update total topics metric (estimate based on entities)
+        // Update total topics metric
         const totalTopicsMetric = document.getElementById("totalTopicsMetric");
         if (totalTopicsMetric) {
-            const estimatedTopics = Math.round(
-                (indexStats.totalEntities || 0) * 0.6,
-            );
-            totalTopicsMetric.textContent = estimatedTopics.toString();
+            totalTopicsMetric.textContent = (
+                knowledge.totalTopics || 0
+            ).toString();
         }
 
         // Update total actions metric
@@ -1785,44 +1841,44 @@ class WebsiteLibraryPanelFullPage {
             document.getElementById("totalActionsMetric");
         if (totalActionsMetric) {
             totalActionsMetric.textContent = (
-                indexStats.totalRelationships || 0
+                knowledge.totalActions || 0
             ).toString();
         }
 
         // If we have real data, hide the sample breakdown and show a message about real data
-        if (indexStats.totalEntities > 0) {
-            this.replaceVisualizationSampleData(indexStats);
+        if (knowledge.totalEntities > 0) {
+            this.replaceVisualizationSampleData(knowledge);
         }
     }
 
-    private replaceVisualizationSampleData(indexStats: any) {
+    private replaceVisualizationSampleData(knowledge: any) {
         // Just update the metrics if needed
 
         // Update the actions breakdown with real data
         const actionBreakdown = document.querySelector(
             ".knowledge-card.actions .action-breakdown",
         );
-        if (actionBreakdown && indexStats.totalRelationships > 0) {
+        if (actionBreakdown && knowledge.totalRelationships > 0) {
             actionBreakdown.innerHTML = `
                 <div class="action-type">
                     <i class="bi bi-diagram-2"></i>
                     <span>Relationships Found</span>
-                    <span class="action-count">${indexStats.totalRelationships}</span>
+                    <span class="action-count">${knowledge.totalRelationships}</span>
                 </div>
                 <div class="action-type">
                     <i class="bi bi-link-45deg"></i>
                     <span>Cross-references</span>
-                    <span class="action-count">${Math.round(indexStats.totalRelationships * 0.7)}</span>
+                    <span class="action-count">${Math.round(knowledge.totalRelationships * 0.7)}</span>
                 </div>
                 <div class="action-type">
                     <i class="bi bi-search"></i>
                     <span>Searchable Items</span>
-                    <span class="action-count">${indexStats.totalEntities + indexStats.totalRelationships}</span>
+                    <span class="action-count">${knowledge.totalEntities + knowledge.totalRelationships}</span>
                 </div>
                 <div class="action-type">
                     <i class="bi bi-clock-history"></i>
                     <span>Last Updated</span>
-                    <span class="action-count">${FormatUtils.formatDate(indexStats.lastIndexed)}</span>
+                    <span class="action-count">Recently</span>
                 </div>
             `;
         }
@@ -1878,7 +1934,7 @@ class WebsiteLibraryPanelFullPage {
         }
     }
 
-    private async loadRecentKnowledgeItems(indexStats: any) {
+    private async loadRecentKnowledgeItems(knowledge: any) {
         try {
             const response = await chromeExtensionService.getRecentKnowledgeItems(10);
 
@@ -1893,6 +1949,7 @@ class WebsiteLibraryPanelFullPage {
                 this.updateRecentEntitiesDisplay([]);
                 this.updateRecentTopicsDisplay([]);
             }
+        
         } catch (error) {
             console.error("Failed to load recent knowledge items:", error);
             // Update with empty arrays to show appropriate "no data" messages
@@ -2026,35 +2083,25 @@ class WebsiteLibraryPanelFullPage {
 
     private async renderTopDomains() {
         const container = document.getElementById("topDomainsList");
-        if (!container) return;
+        if (!container || !this.analyticsData?.domains) return;
 
-        try {
-            // Show loading state
+        // Use cached data instead of making new API call
+        const domainsData = this.analyticsData.domains;
+
+        if (!domainsData.topDomains || domainsData.topDomains.length === 0) {
             container.innerHTML = `
-                <div class="loading-message">
-                    <i class="bi bi-hourglass-split"></i>
-                    <span>Loading top domains...</span>
+                <div class="empty-message">
+                    <i class="bi bi-globe"></i>
+                    <span>No domain data available</span>
                 </div>
             `;
+            return;
+        }
 
-            // Fetch top domains data
-            const domainsData =
-                await chromeExtensionService.getTopDomains(10);
-
-            if (!domainsData.domains || domainsData.domains.length === 0) {
-                container.innerHTML = `
-                    <div class="empty-message">
-                        <i class="bi bi-globe"></i>
-                        <span>No domain data available</span>
-                    </div>
-                `;
-                return;
-            }
-
-            // Render domain list
-            const domainsHtml = domainsData.domains
-                .map(
-                    (domain: any) => `
+        // Render domain list using cached data
+        const domainsHtml = domainsData.topDomains
+            .map(
+                (domain: any) => `
                     <div class="domain-item">
                         <div class="domain-info">
                             <img src="https://www.google.com/s2/favicons?domain=${domain.domain}" 
@@ -2076,38 +2123,15 @@ class WebsiteLibraryPanelFullPage {
                 )
                 .join("");
 
-            container.innerHTML = domainsHtml;
-        } catch (error) {
-            console.error("Failed to render top domains:", error);
-            container.innerHTML = `
-                <div class="error-message">
-                    <i class="bi bi-exclamation-triangle"></i>
-                    <span>Failed to load domain data</span>
-                </div>
-            `;
-        }
+        container.innerHTML = domainsHtml;
     }
 
     private async renderKnowledgeInsights() {
         const container = document.getElementById("knowledgeInsights");
-        if (!container || !this.analyticsData) return;
+        if (!container || !this.analyticsData?.knowledge) return;
 
-        // Show loading state while fetching stats
-        container.innerHTML = `
-            <div class="knowledge-loading">
-                <div class="card">
-                    <div class="card-body text-center">
-                        <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Loading knowledge stats...</span>
-                        </div>
-                        <p class="mt-3 mb-0">Calculating knowledge metrics...</p>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        // Fetch real stats
-        const knowledgeStats = await this.calculateKnowledgeStats();
+        // Use cached knowledge data instead of calling calculateKnowledgeStats()
+        const knowledgeStats = this.analyticsData.knowledge;
 
         container.innerHTML = `
             <div class="card">
@@ -2121,9 +2145,9 @@ class WebsiteLibraryPanelFullPage {
                             </div>
                             <div class="progress-bar-container">
                                 <div class="progress-bar">
-                                    <div class="progress-fill" style="width: ${knowledgeStats.entityProgress}%; background: linear-gradient(90deg, #17a2b8, #20c997);"></div>
+                                    <div class="progress-fill" style="width: ${knowledgeStats.extractionProgress?.entityProgress || 0}%; background: linear-gradient(90deg, #17a2b8, #20c997);"></div>
                                 </div>
-                                <span class="progress-percentage">${knowledgeStats.entityProgress}%</span>
+                                <span class="progress-percentage">${knowledgeStats.extractionProgress?.entityProgress || 0}%</span>
                             </div>
                         </div>
                         
@@ -2134,9 +2158,9 @@ class WebsiteLibraryPanelFullPage {
                             </div>
                             <div class="progress-bar-container">
                                 <div class="progress-bar">
-                                    <div class="progress-fill" style="width: ${knowledgeStats.topicProgress}%; background: linear-gradient(90deg, #6f42c1, #e83e8c);"></div>
+                                    <div class="progress-fill" style="width: ${knowledgeStats.extractionProgress?.topicProgress || 0}%; background: linear-gradient(90deg, #6f42c1, #e83e8c);"></div>
                                 </div>
-                                <span class="progress-percentage">${knowledgeStats.topicProgress}%</span>
+                                <span class="progress-percentage">${knowledgeStats.extractionProgress?.topicProgress || 0}%</span>
                             </div>
                         </div>
                         
@@ -2147,9 +2171,9 @@ class WebsiteLibraryPanelFullPage {
                             </div>
                             <div class="progress-bar-container">
                                 <div class="progress-bar">
-                                    <div class="progress-fill" style="width: ${knowledgeStats.actionProgress}%; background: linear-gradient(90deg, #fd7e14, #ffc107);"></div>
+                                    <div class="progress-fill" style="width: ${knowledgeStats.extractionProgress?.actionProgress || 0}%; background: linear-gradient(90deg, #fd7e14, #ffc107);"></div>
                                 </div>
-                                <span class="progress-percentage">${knowledgeStats.actionProgress}%</span>
+                                <span class="progress-percentage">${knowledgeStats.extractionProgress?.actionProgress || 0}%</span>
                             </div>
                         </div>
                     </div>
@@ -2160,13 +2184,13 @@ class WebsiteLibraryPanelFullPage {
                 <div class="card-body">
                     <h6 class="card-title">Knowledge Quality Distribution</h6>
                     <div class="quality-distribution">
-                        <div class="quality-segment high" style="width: ${knowledgeStats.highQuality}%;" title="High Quality: ${knowledgeStats.highQuality}%">
+                        <div class="quality-segment high" style="width: ${knowledgeStats.qualityDistribution?.highQuality || 0}%;" title="High Quality: ${knowledgeStats.qualityDistribution?.highQuality || 0}%">
                             <span class="quality-label">High</span>
                         </div>
-                        <div class="quality-segment medium" style="width: ${knowledgeStats.mediumQuality}%;" title="Medium Quality: ${knowledgeStats.mediumQuality}%">
+                        <div class="quality-segment medium" style="width: ${knowledgeStats.qualityDistribution?.mediumQuality || 0}%;" title="Medium Quality: ${knowledgeStats.qualityDistribution?.mediumQuality || 0}%">
                             <span class="quality-label">Medium</span>
                         </div>
-                        <div class="quality-segment low" style="width: ${knowledgeStats.lowQuality}%;" title="Low Quality: ${knowledgeStats.lowQuality}%">
+                        <div class="quality-segment low" style="width: ${knowledgeStats.qualityDistribution?.lowQuality || 0}%;" title="Low Quality: ${knowledgeStats.qualityDistribution?.lowQuality || 0}%">
                             <span class="quality-label">Low</span>
                         </div>
                     </div>
@@ -2187,69 +2211,6 @@ class WebsiteLibraryPanelFullPage {
                 </div>
             </div>
         `;
-    }
-
-    private async calculateKnowledgeStats() {
-        // Return default values when not connected
-        if (!this.isConnected) {
-            return {
-                entityProgress: 0,
-                topicProgress: 0,
-                actionProgress: 0,
-                highQuality: 0,
-                mediumQuality: 0,
-                lowQuality: 0,
-            };
-        }
-
-        // Check cache first (30 second TTL)
-        if (this.knowledgeStatsCache && 
-            Date.now() - this.knowledgeStatsCache.timestamp < 30000) {
-            return this.knowledgeStatsCache.data;
-        }
-
-        try {
-            const response = await chromeExtensionService.getKnowledgeStats();
-            
-            if (response.success && response.stats) {
-                const stats = response.stats;
-                const result = {
-                    entityProgress: stats.extractionProgress?.entityProgress || 0,
-                    topicProgress: stats.extractionProgress?.topicProgress || 0,
-                    actionProgress: stats.extractionProgress?.actionProgress || 0,
-                    highQuality: stats.qualityDistribution?.highQuality || 0,
-                    mediumQuality: stats.qualityDistribution?.mediumQuality || 0,
-                    lowQuality: stats.qualityDistribution?.lowQuality || 0,
-                };
-
-                // Cache the results
-                this.knowledgeStatsCache = {
-                    data: result,
-                    timestamp: Date.now()
-                };
-
-                return result;
-            }
-        } catch (error) {
-            console.error("Failed to get knowledge stats:", error);
-            notificationManager.showError("Failed to load knowledge statistics");
-        }
-
-        // Fallback to zeros on error
-        const fallback = {
-            entityProgress: 0,
-            topicProgress: 0,
-            actionProgress: 0,
-            highQuality: 0,
-            mediumQuality: 0,
-            lowQuality: 0,
-        };
-
-        return fallback;
-    }
-
-    private invalidateKnowledgeStatsCache() {
-        this.knowledgeStatsCache = null;
     }
 
     private handleKnowledgeBadgeClick(badge: HTMLElement) {

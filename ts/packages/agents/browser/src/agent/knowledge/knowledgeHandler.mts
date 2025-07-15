@@ -27,6 +27,59 @@ import {
 import { BrowserKnowledgeExtractor } from "./browserKnowledgeExtractor.mjs";
 import { DetailedKnowledgeStats } from "../browserKnowledgeSchema.js";
 
+// Analytics Data Response Interface
+interface AnalyticsDataResponse {
+    overview: {
+        totalSites: number;
+        totalBookmarks: number;
+        totalHistory: number;
+        topDomains: number;
+        knowledgeExtracted: number;
+    };
+    knowledge: {
+        extractionProgress: {
+            entityProgress: number;
+            topicProgress: number;
+            actionProgress: number;
+        };
+        qualityDistribution: {
+            highQuality: number;
+            mediumQuality: number;
+            lowQuality: number;
+        };
+        totalEntities: number;
+        totalTopics: number;
+        totalActions: number;
+        totalRelationships: number;
+        recentItems?: any[];
+    };
+    domains: {
+        topDomains: Array<{
+            domain: string;
+            count: number;
+            percentage: number;
+        }>;
+        totalSites: number;
+    };
+    activity: {
+        trends: Array<{
+            date: string;
+            visits: number;
+            bookmarks: number;
+        }>;
+        summary: {
+            totalActivity: number;
+            peakDay: string | null;
+            averagePerDay: number;
+            timeRange: string;
+        };
+    };
+    analytics: {
+        extractionMetrics: any;
+        qualityReport: any;
+    };
+}
+
 // Helper function to convert HTML fragments to ExtractionInput objects
 function createExtractionInputsFromFragments(
     htmlFragments: any[],
@@ -221,6 +274,9 @@ export async function handleKnowledgeAction(
 
         case "getDiscoverInsights":
             return await getDiscoverInsights(parameters, context);
+
+        case "getAnalyticsData":
+            return await getAnalyticsData(parameters, context);
 
         default:
             throw new Error(`Unknown knowledge action: ${actionName}`);
@@ -2214,4 +2270,152 @@ function generateRecentActivity(websites: any[]): Array<{ date: string; pagesInd
     return Array.from(activityMap.entries())
         .map(([date, pagesIndexed]) => ({ date, pagesIndexed }))
         .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+export async function getAnalyticsData(
+    parameters: {
+        timeRange?: string;
+        includeQuality?: boolean;
+        includeProgress?: boolean;
+        topDomainsLimit?: number;
+        activityGranularity?: 'day' | 'week' | 'month';
+    },
+    context: SessionContext<BrowserActionContext>
+): Promise<AnalyticsDataResponse> {
+    try {
+        // Single coordinated data collection using Promise.all for efficiency
+        const [
+            knowledgeStats,
+            topDomains,
+            activityTrends,
+            extractionAnalytics
+        ] = await Promise.all([
+            getDetailedKnowledgeStats({
+                includeQuality: parameters.includeQuality !== false,
+                includeProgress: parameters.includeProgress !== false,
+                timeRange: 30
+            }, context),
+            getTopDomains({ 
+                limit: parameters.topDomainsLimit || 10 
+            }, context),
+            getActivityTrends({
+                timeRange: parameters.timeRange || '30d',
+                granularity: parameters.activityGranularity || 'day'
+            }, context),
+            getExtractionAnalytics({
+                timeRange: parameters.timeRange || '30d'
+            }, context)
+        ]);
+
+        // Get basic website statistics from websiteCollection
+        const websiteCollection = context.agentContext.websiteCollection;
+        let totalSites = 0;
+        let totalBookmarks = 0;
+        let totalHistory = 0;
+
+        if (websiteCollection) {
+            const websites = websiteCollection.messages.getAll();
+            totalSites = websites.length;
+            
+            // Count bookmarks vs history
+            websites.forEach(site => {
+                const metadata = site.metadata as website.WebsiteDocPartMeta;
+                if (metadata?.bookmarkDate) {
+                    totalBookmarks++;
+                } else {
+                    totalHistory++;
+                }
+            });
+        }
+
+        return {
+            overview: {
+                totalSites,
+                totalBookmarks,
+                totalHistory,
+                topDomains: topDomains.domains?.length || 0,
+                knowledgeExtracted: knowledgeStats.totalPages || 0
+            },
+            knowledge: {
+                extractionProgress: knowledgeStats.extractionProgress || {
+                    entityProgress: 0,
+                    topicProgress: 0,
+                    actionProgress: 0
+                },
+                qualityDistribution: knowledgeStats.qualityDistribution || {
+                    highQuality: 0,
+                    mediumQuality: 0,
+                    lowQuality: 0
+                },
+                totalEntities: knowledgeStats.totalEntities || 0,
+                totalTopics: knowledgeStats.topEntityTypes?.length || 0,
+                totalActions: 0, // Actions not tracked in current schema
+                totalRelationships: knowledgeStats.totalRelationships || 0,
+                recentItems: knowledgeStats.recentActivity || []
+            },
+            domains: {
+                topDomains: topDomains.domains || [],
+                totalSites: topDomains.totalSites || 0
+            },
+            activity: {
+                trends: activityTrends.trends || [],
+                summary: activityTrends.summary || {
+                    totalActivity: 0,
+                    peakDay: null,
+                    averagePerDay: 0,
+                    timeRange: parameters.timeRange || '30d'
+                }
+            },
+            analytics: {
+                extractionMetrics: extractionAnalytics.analytics || {},
+                qualityReport: extractionAnalytics.analytics || {}
+            }
+        };
+    } catch (error) {
+        console.error("Error aggregating analytics data:", error);
+        // Return empty analytics data on error
+        return {
+            overview: {
+                totalSites: 0,
+                totalBookmarks: 0,
+                totalHistory: 0,
+                topDomains: 0,
+                knowledgeExtracted: 0
+            },
+            knowledge: {
+                extractionProgress: {
+                    entityProgress: 0,
+                    topicProgress: 0,
+                    actionProgress: 0
+                },
+                qualityDistribution: {
+                    highQuality: 0,
+                    mediumQuality: 0,
+                    lowQuality: 0
+                },
+                totalEntities: 0,
+                totalTopics: 0,
+                totalActions: 0,
+                totalRelationships: 0,
+                recentItems: []
+            },
+            domains: {
+                topDomains: [],
+                totalSites: 0
+            },
+            activity: {
+                trends: [],
+                summary: {
+                    totalActivity: 0,
+                    peakDay: null,
+                    averagePerDay: 0,
+                    timeRange: parameters.timeRange || '30d'
+                }
+            },
+            analytics: {
+                extractionMetrics: {},
+                qualityReport: {}
+            }
+        };
+    }
 }

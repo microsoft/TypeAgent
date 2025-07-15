@@ -858,6 +858,33 @@ export async function handleMessage(
             }
         }
 
+        case "getAnalyticsData": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getAnalyticsData",
+                    parameters: {
+                        timeRange: message.timeRange || "30d",
+                        includeQuality: message.includeQuality !== false,
+                        includeProgress: message.includeProgress !== false,
+                        topDomainsLimit: message.topDomainsLimit || 10,
+                        activityGranularity: message.activityGranularity || "day"
+                    },
+                });
+
+                return {
+                    success: !result.error,
+                    analytics: result,
+                    error: result.error,
+                };
+            } catch (error) {
+                console.error("Error getting analytics data:", error);
+                return {
+                    success: false,
+                    error: error instanceof Error ? error.message : "Unknown error",
+                };
+            }
+        }
+
         default:
             return null;
     }
