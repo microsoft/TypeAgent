@@ -136,6 +136,7 @@ export type MarkdownKnowledgeBlock = {
 
 export class MarkdownKnowledgeCollector implements MarkdownBlockVisitor {
     public knowledgeBlocks: MarkdownKnowledgeBlock[];
+
     private headingsInScope: Map<number, string>;
     private linksInScope: Map<string, string>;
     private knowledgeBlock: MarkdownKnowledgeBlock;
@@ -173,6 +174,14 @@ export class MarkdownKnowledgeCollector implements MarkdownBlockVisitor {
                     });
                 }
                 break;
+            case "table":
+                this.knowledgeBlock.tags.push(blockName);
+                if (this.lastTokenName === "heading") {
+                    this.knowledgeBlock.knowledge.entities.push({
+                        name: this.lastTokenText,
+                        type: ["table"],
+                    });
+                }
                 break;
         }
     }
