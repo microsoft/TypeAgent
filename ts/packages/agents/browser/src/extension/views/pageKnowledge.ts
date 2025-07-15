@@ -745,7 +745,6 @@ class KnowledgePanel {
             ${this.renderRelationshipsCard()}
             ${this.renderTopicsCard()}
             ${knowledge.detectedActions && knowledge.detectedActions.length > 0 ? this.renderUserActionsCard() : ""}
-            ${knowledge.contentActions && knowledge.contentActions.length > 0 ? this.renderEntityActionsCard() : ""}
         `;
 
         if (knowledge.contentMetrics) {
@@ -761,9 +760,7 @@ class KnowledgePanel {
                 knowledge.actionSummary,
             );
         }
-        if (knowledge.contentActions && knowledge.contentActions.length > 0) {
-            this.renderEntityActions(knowledge.contentActions);
-        }
+
         this.renderSuggestedQuestions(knowledge.suggestedQuestions);
 
         // Auto-load cross-page intelligence
@@ -1863,22 +1860,6 @@ class KnowledgePanel {
         );
     }
 
-    private renderEntityActionsCard(): string {
-        const content = this.createContainer(
-            "entityActionsContainer",
-            TemplateHelpers.createEmptyState(
-                "bi bi-info-circle",
-                "No entity actions found",
-            ),
-        );
-        return TemplateHelpers.createCard(
-            "Entity Actions",
-            content,
-            "bi bi-gear",
-            "entityActionsCount",
-        );
-    }
-
     // Render enhanced content metrics with visual indicators
     private renderContentMetrics(metrics: any) {
         const container = document.getElementById("contentMetricsContainer")!;
@@ -2000,62 +1981,6 @@ class KnowledgePanel {
             .join("");
 
         container.innerHTML = summaryHtml + actionsHtml;
-    }
-
-    // Render entity actions from knowledge-processor
-    private renderEntityActions(actions: any[]) {
-        const container = document.getElementById("entityActionsContainer")!;
-        const countBadge = document.getElementById("entityActionsCount");
-
-        if (countBadge) {
-            countBadge.textContent = actions.length.toString();
-        }
-
-        if (actions.length === 0) {
-            container.innerHTML = `
-                <div class="text-muted text-center">
-                    <i class="bi bi-info-circle"></i>
-                    No entity actions found in knowledge
-                </div>
-            `;
-            return;
-        }
-
-        const actionsHtml = actions
-            .slice(0, 10)
-            .map((action) => {
-                // Handle different action object structures from knowledge-processor
-                const actionVerb = action.verbs[0] || "Action";
-                const actionTense = action.verbTense || "present";
-                const actionObject =
-                    action.objectEntityName || action.target || "entity";
-                const actionSubject = action.subjectEntityName || "entity";
-                const actionDescription =
-                    action.description ||
-                    ` ${actionSubject} ${actionVerb} ${actionObject} `;
-
-                return `
-                <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded">
-                    <div>
-                        <span class="fw-semibold">${actionVerb}</span>
-                        <span class="badge bg-info ms-2">${actionTense}</span>
-                        <br><small class="text-muted">${actionDescription}</small>
-                        ${action.entity ? `<br><small class="text-primary">Entity: ${action.entity}</small>` : ""}
-                    </div>
-                </div>
-            `;
-            })
-            .join("");
-
-        container.innerHTML = `
-            <div class="mb-3 p-2 bg-light rounded">
-                <small class="text-muted d-flex align-items-center">
-                    <i class="bi bi-gear me-2"></i>
-                    Entity actions extracted from knowledge processing
-                </small>
-            </div>
-            ${actionsHtml}
-        `;
     }
 
     // Helper methods for enhanced content metrics

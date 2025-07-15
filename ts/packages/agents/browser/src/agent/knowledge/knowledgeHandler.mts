@@ -160,6 +160,16 @@ function aggregateExtractionResults(results: any[]): {
                 Array.isArray(result.knowledge.actions)
             ) {
                 allContentActions.push(...result.knowledge.actions);
+
+                const actionRelationships =
+                    result.knowledge.actions?.map((action: any) => ({
+                        from: action.subjectEntityName || "unknown",
+                        relationship: action.verbs?.join(", ") || "related to",
+                        to: action.objectEntityName || "unknown",
+                        confidence: 0.8, // Default confidence for indexed content
+                    })) || [];
+
+                allRelationships.push(...actionRelationships);
             }
         }
 
@@ -1672,6 +1682,7 @@ export async function getPageIndexedKnowledge(
                         entities: [],
                         relationships: [],
                         keyTopics: [],
+                        detectedActions: [],
                         suggestedQuestions: [],
                         summary:
                             "Page is indexed but no knowledge was extracted.",
@@ -1681,6 +1692,14 @@ export async function getPageIndexedKnowledge(
                         },
                     },
                 };
+            }
+
+            let detectedActions: any[] = [];
+            if (
+                (knowledge as any).detectedActions &&
+                Array.isArray((knowledge as any).detectedActions)
+            ) {
+                detectedActions.push(...(knowledge as any).detectedAction);
             }
 
             // Convert the stored knowledge to the expected format
@@ -1698,13 +1717,24 @@ export async function getPageIndexedKnowledge(
 
             const keyTopics: string[] = knowledge.topics || [];
 
-            const relationships: Relationship[] =
+            const allRelationships: Relationship[] =
                 knowledge.actions?.map((action) => ({
                     from: action.subjectEntityName || "unknown",
                     relationship: action.verbs?.join(", ") || "related to",
                     to: action.objectEntityName || "unknown",
                     confidence: 0.8, // Default confidence for indexed content
                 })) || [];
+
+            // Deduplicate relationships
+            const relationships = allRelationships.filter(
+                (rel, index, arr) =>
+                    arr.findIndex(
+                        (r) =>
+                            r.from === rel.from &&
+                            r.relationship === rel.relationship &&
+                            r.to === rel.to,
+                    ) === index,
+            );
 
             // Generate contextual questions for indexed content
             const suggestedQuestions: string[] =
@@ -1731,6 +1761,7 @@ export async function getPageIndexedKnowledge(
                     entities,
                     relationships,
                     keyTopics,
+                    detectedActions,
                     suggestedQuestions,
                     summary,
                     contentMetrics,
@@ -1747,6 +1778,7 @@ export async function getPageIndexedKnowledge(
                     entities: [],
                     relationships: [],
                     keyTopics: [],
+                    detectedActions: [],
                     suggestedQuestions: [],
                     summary: "Page is indexed but knowledge extraction failed.",
                     contentMetrics: {
