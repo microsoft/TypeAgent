@@ -89,7 +89,7 @@ export class MarkdownBlockCollector {
             case "heading":
                 this.beginBlock(token.type);
                 this.append(token.raw);
-                this.visitor?.onHeading(token.raw, token.depth);
+                this.visitor?.onHeading(token.text, token.depth);
                 this.endBlock();
                 break;
             case "link":
