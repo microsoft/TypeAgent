@@ -155,7 +155,10 @@ function aggregateExtractionResults(results: any[]): {
             }
 
             // collect content actions
-            if (result.knowledge.actions && Array.isArray(result.knowledge.actions)) {
+            if (
+                result.knowledge.actions &&
+                Array.isArray(result.knowledge.actions)
+            ) {
                 allContentActions.push(...result.knowledge.actions);
             }
         }
@@ -202,18 +205,25 @@ function aggregateExtractionResults(results: any[]): {
     // Create action summary if we have detected actions
     let actionSummary;
     if (uniqueDetectedActions.length > 0) {
-        const actionTypes = [...new Set(uniqueDetectedActions.map(a => a.type))];
-        const highConfidenceActions = uniqueDetectedActions.filter(a => a.confidence > 0.8).length;
-        const actionDistribution = uniqueDetectedActions.reduce((acc: any, action) => {
-            acc[action.type] = (acc[action.type] || 0) + 1;
-            return acc;
-        }, {});
+        const actionTypes = [
+            ...new Set(uniqueDetectedActions.map((a) => a.type)),
+        ];
+        const highConfidenceActions = uniqueDetectedActions.filter(
+            (a) => a.confidence > 0.8,
+        ).length;
+        const actionDistribution = uniqueDetectedActions.reduce(
+            (acc: any, action) => {
+                acc[action.type] = (acc[action.type] || 0) + 1;
+                return acc;
+            },
+            {},
+        );
 
         actionSummary = {
             totalActions: uniqueDetectedActions.length,
             actionTypes,
             highConfidenceActions,
-            actionDistribution
+            actionDistribution,
         };
     }
 
@@ -242,7 +252,7 @@ function aggregateExtractionResults(results: any[]): {
         aggregatedResult.actionSummary = actionSummary;
     }
 
-    if(allContentActions.length > 0){
+    if (allContentActions.length > 0) {
         aggregatedResult.contentActions = allContentActions;
     }
 
@@ -1189,7 +1199,7 @@ export async function checkActionDetectionStatus(
 }> {
     try {
         const extractor = new BrowserKnowledgeExtractor(context);
-        
+
         const capabilities = extractor.getActionDetectionCapabilities();
         const isAvailable = extractor.isActionDetectionAvailable();
 
@@ -1200,7 +1210,10 @@ export async function checkActionDetectionStatus(
     } catch (error) {
         return {
             available: false,
-            error: error instanceof Error ? error.message : "Unknown action detection error",
+            error:
+                error instanceof Error
+                    ? error.message
+                    : "Unknown action detection error",
         };
     }
 }
@@ -1294,10 +1307,7 @@ export async function getRecentKnowledgeItems(
                 }
 
                 // Extract topics
-                if (
-                    (type === "topics" || type === "all") &&
-                    knowledge.topics
-                ) {
+                if ((type === "topics" || type === "all") && knowledge.topics) {
                     for (const topic of knowledge.topics) {
                         recentTopics.push({
                             name: topic,
@@ -1311,16 +1321,30 @@ export async function getRecentKnowledgeItems(
                 // Note: Actions might not be available in current website-memory structure
                 if (type === "actions" || type === "all") {
                     // Try to get actions from various possible sources in the knowledge object
-                    const actions = (knowledge as any).actions || (knowledge as any).detectedActions || [];
-                    
+                    const actions =
+                        (knowledge as any).actions ||
+                        (knowledge as any).detectedActions ||
+                        [];
+
                     if (Array.isArray(actions)) {
                         for (const action of actions) {
                             // Handle different action object structures gracefully
-                            const actionType = (action as any).actionType || (action as any).type || "unknown";
-                            const actionElement = (action as any).target?.name || (action as any).name || (action as any).element || "element";
-                            const actionText = (action as any).name || (action as any).text || (action as any).target?.name;
-                            const actionConfidence = (action as any).confidence || 0.8;
-                            
+                            const actionType =
+                                (action as any).actionType ||
+                                (action as any).type ||
+                                "unknown";
+                            const actionElement =
+                                (action as any).target?.name ||
+                                (action as any).name ||
+                                (action as any).element ||
+                                "element";
+                            const actionText =
+                                (action as any).name ||
+                                (action as any).text ||
+                                (action as any).target?.name;
+                            const actionConfidence =
+                                (action as any).confidence || 0.8;
+
                             recentActions.push({
                                 type: actionType,
                                 element: actionElement,
@@ -1378,7 +1402,7 @@ export async function getRecentKnowledgeItems(
                 (action, index, arr) =>
                     arr.findIndex(
                         (a) =>
-                            a.type === action.type && 
+                            a.type === action.type &&
                             a.element === action.element &&
                             a.fromPage === action.fromPage,
                     ) === index,

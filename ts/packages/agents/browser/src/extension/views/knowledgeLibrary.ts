@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-
 import { WebsiteImportManager } from "./websiteImportManager";
 import { WebsiteImportUI } from "./websiteImportUI";
 import {
@@ -2085,13 +2084,13 @@ class WebsiteLibraryPanelFullPage {
     }
 
     private updateRecentActionsDisplay(
-        actions: Array<{ 
-            type: string; 
-            element: string; 
-            text?: string; 
+        actions: Array<{
+            type: string;
+            element: string;
+            text?: string;
             confidence: number;
-            fromPage: string; 
-            extractedAt: string; 
+            fromPage: string;
+            extractedAt: string;
         }>,
     ) {
         const actionsBreakdown = document.querySelector(
@@ -2116,8 +2115,10 @@ class WebsiteLibraryPanelFullPage {
                     action.fromPage.length > 30
                         ? action.fromPage.substring(0, 30) + "..."
                         : action.fromPage;
-                const confidencePercentage = Math.round(action.confidence * 100);
-                
+                const confidencePercentage = Math.round(
+                    action.confidence * 100,
+                );
+
                 return `
                 <div class="breakdown-item">
                     <div class="d-flex align-items-center justify-content-between">

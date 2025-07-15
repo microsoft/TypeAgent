@@ -406,8 +406,10 @@ class KnowledgePanel {
             this.knowledgeData = response.knowledge;
             if (this.knowledgeData) {
                 // Check for insufficient content case
-                const isInsufficientContent = this.checkInsufficientContent(this.knowledgeData);
-                
+                const isInsufficientContent = this.checkInsufficientContent(
+                    this.knowledgeData,
+                );
+
                 if (isInsufficientContent) {
                     // Show error state for insufficient content
                     button.innerHTML =
@@ -416,7 +418,7 @@ class KnowledgePanel {
                     button.classList.add("btn-warning");
 
                     this.showInsufficientContentError();
-                    
+
                     notificationManager.showEnhancedNotification(
                         "warning",
                         "Insufficient Content",
@@ -676,15 +678,30 @@ class KnowledgePanel {
 
     private checkInsufficientContent(knowledge: KnowledgeData): boolean {
         // Check for the specific insufficient content case
-        const hasInsufficientSummary = knowledge.summary === "Insufficient content to extract knowledge.";
-        const hasNoMetrics = knowledge.contentMetrics?.wordCount === 0 && knowledge.contentMetrics?.readingTime === 0;
-        const hasNoEntities = !knowledge.entities || knowledge.entities.length === 0;
-        const hasNoTopics = !knowledge.keyTopics || knowledge.keyTopics.length === 0;
-        const hasNoRelationships = !knowledge.relationships || knowledge.relationships.length === 0;
-        const hasNoQuestions = !knowledge.suggestedQuestions || knowledge.suggestedQuestions.length === 0;
-        
+        const hasInsufficientSummary =
+            knowledge.summary === "Insufficient content to extract knowledge.";
+        const hasNoMetrics =
+            knowledge.contentMetrics?.wordCount === 0 &&
+            knowledge.contentMetrics?.readingTime === 0;
+        const hasNoEntities =
+            !knowledge.entities || knowledge.entities.length === 0;
+        const hasNoTopics =
+            !knowledge.keyTopics || knowledge.keyTopics.length === 0;
+        const hasNoRelationships =
+            !knowledge.relationships || knowledge.relationships.length === 0;
+        const hasNoQuestions =
+            !knowledge.suggestedQuestions ||
+            knowledge.suggestedQuestions.length === 0;
+
         // Consider it insufficient if summary indicates it AND we have no meaningful content
-        return hasInsufficientSummary && hasNoMetrics && hasNoEntities && hasNoTopics && hasNoRelationships && hasNoQuestions;
+        return (
+            hasInsufficientSummary &&
+            hasNoMetrics &&
+            hasNoEntities &&
+            hasNoTopics &&
+            hasNoRelationships &&
+            hasNoQuestions
+        );
     }
 
     private showInsufficientContentError() {
@@ -2010,10 +2027,13 @@ class KnowledgePanel {
                 // Handle different action object structures from knowledge-processor
                 const actionVerb = action.verbs[0] || "Action";
                 const actionTense = action.verbTense || "present";
-                const actionObject = action.objectEntityName || action.target || "entity";
+                const actionObject =
+                    action.objectEntityName || action.target || "entity";
                 const actionSubject = action.subjectEntityName || "entity";
-                const actionDescription = action.description || ` ${actionSubject} ${actionVerb} ${actionObject} `;
-                
+                const actionDescription =
+                    action.description ||
+                    ` ${actionSubject} ${actionVerb} ${actionObject} `;
+
                 return `
                 <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded">
                     <div>

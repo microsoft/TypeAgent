@@ -46,7 +46,7 @@ export class BrowserKnowledgeExtractor {
 
         this.contentExtractor = new ContentExtractor(config);
         this.batchProcessor = new BatchProcessor(this.contentExtractor);
-        
+
         // Initialize action detection adapter
         this.actionDetectionAdapter = new ActionDetectionAdapter();
     }
@@ -93,8 +93,12 @@ export class BrowserKnowledgeExtractor {
             );
 
             // Add enhanced action detection for appropriate modes
-            if (mode === 'actions' || mode === 'full') {
-                await this.enhanceWithActionDetection(extractionResults, contents, mode);
+            if (mode === "actions" || mode === "full") {
+                await this.enhanceWithActionDetection(
+                    extractionResults,
+                    contents,
+                    mode,
+                );
             }
 
             return extractionResults;
@@ -121,54 +125,75 @@ export class BrowserKnowledgeExtractor {
         mode: ExtractionMode,
     ): Promise<void> {
         try {
-            console.log(`Enhancing ${extractionResults.length} results with action detection`);
-            if(extractionResults.length !== contents.length){
-                throw new Error(`Mismatch in input lenght. extractionResults has length ${extractionResults.length}  while content has lenght ${contents.length}.`); 
+            console.log(
+                `Enhancing ${extractionResults.length} results with action detection`,
+            );
+            if (extractionResults.length !== contents.length) {
+                throw new Error(
+                    `Mismatch in input lenght. extractionResults has length ${extractionResults.length}  while content has lenght ${contents.length}.`,
+                );
             }
 
             for (let i = 0; i < extractionResults.length; i++) {
                 const result = extractionResults[i];
                 const targetContent = contents[i];
-            
+
                 // Check if this content has HTML fragments for action detection
-                if (targetContent.htmlFragments && targetContent.htmlFragments.length > 0) {
-                    console.log(`Processing action detection for result with ${targetContent.htmlFragments.length} fragments`);
-                   
-                    // Use action detection adapter to get enhanced actions
-                    const detectedActions = await this.actionDetectionAdapter.detectActions(
-                        targetContent.htmlFragments,
-                        mode,
+                if (
+                    targetContent.htmlFragments &&
+                    targetContent.htmlFragments.length > 0
+                ) {
+                    console.log(
+                        `Processing action detection for result with ${targetContent.htmlFragments.length} fragments`,
                     );
-                    
+
+                    // Use action detection adapter to get enhanced actions
+                    const detectedActions =
+                        await this.actionDetectionAdapter.detectActions(
+                            targetContent.htmlFragments,
+                            mode,
+                        );
+
                     // Add detected actions to the result
                     if (detectedActions && detectedActions.length > 0) {
                         result.detectedActions = detectedActions;
-                        console.log(`Added ${detectedActions.length} detected actions to result`);
-                        
+                        console.log(
+                            `Added ${detectedActions.length} detected actions to result`,
+                        );
+
                         // Create action summary
-                        const actionTypes = [...new Set(detectedActions.map(a => a.type))];
-                        const highConfidenceActions = detectedActions.filter(a => a.confidence > 0.8).length;
-                        const actionDistribution = detectedActions.reduce((acc: any, action) => {
-                            acc[action.type] = (acc[action.type] || 0) + 1;
-                            return acc;
-                        }, {});
-                        
+                        const actionTypes = [
+                            ...new Set(detectedActions.map((a) => a.type)),
+                        ];
+                        const highConfidenceActions = detectedActions.filter(
+                            (a) => a.confidence > 0.8,
+                        ).length;
+                        const actionDistribution = detectedActions.reduce(
+                            (acc: any, action) => {
+                                acc[action.type] = (acc[action.type] || 0) + 1;
+                                return acc;
+                            },
+                            {},
+                        );
+
                         result.actionSummary = {
                             totalActions: detectedActions.length,
                             actionTypes,
                             highConfidenceActions,
-                            actionDistribution
+                            actionDistribution,
                         };
                     } else {
                         console.log("No actions detected for this result");
                         result.detectedActions = [];
                     }
                 } else {
-                    console.log("No HTML fragments available for action detection");
+                    console.log(
+                        "No HTML fragments available for action detection",
+                    );
                     result.detectedActions = [];
                 }
             }
-            
+
             console.log("Action detection enhancement complete");
         } catch (error) {
             console.warn("Action detection enhancement failed:", error);

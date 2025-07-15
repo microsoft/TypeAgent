@@ -17,7 +17,6 @@ import { SchemaDiscoveryActions } from "./schema/discoveryActions.mjs";
 import { PageDescription } from "./schema/pageSummary.mjs";
 import { UserActionsList } from "./schema/userActionsPool.mjs";
 
-
 export type HtmlFragments = {
     frameId: string;
     content: string;
@@ -350,7 +349,8 @@ export class SchemaDiscoveryAgent<T extends object> {
         fragments?: HtmlFragments[],
         screenshots?: string[],
     ) {
-        const unifiedActionsSchema = await getSchemaFileContents("unifiedActions.mts");
+        const unifiedActionsSchema =
+            await getSchemaFileContents("unifiedActions.mts");
         const bootstrapTranslator = this.getBootstrapTranslator(
             "UnifiedActionsList",
             unifiedActionsSchema,

@@ -106,10 +106,7 @@ export class RelationshipDiscovery {
         }
 
         // 2. Topic-based relationships
-        if (
-            currentKnowledge.topics &&
-            currentKnowledge.topics.length > 0
-        ) {
+        if (currentKnowledge.topics && currentKnowledge.topics.length > 0) {
             const topicResults = await this.findTopicBasedRelationships(
                 currentKnowledge.topics,
                 currentUrl,
