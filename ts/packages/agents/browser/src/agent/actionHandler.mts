@@ -400,6 +400,7 @@ async function updateBrowserContext(
                         case "getActivityTrends":
                         case "getDiscoverInsights":
                         case "getKnowledgeIndexStats":
+                        case "getKnowledgeStats":
                         case "clearKnowledgeIndex": {
                             const knowledgeResult = await handleKnowledgeAction(
                                 data.method,

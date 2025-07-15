@@ -25,6 +25,7 @@ import {
     AIModelRequiredError,
 } from "website-memory";
 import { BrowserKnowledgeExtractor } from "./browserKnowledgeExtractor.mjs";
+import { DetailedKnowledgeStats } from "../browserKnowledgeSchema.js";
 
 // Helper function to convert HTML fragments to ExtractionInput objects
 function createExtractionInputsFromFragments(
@@ -178,6 +179,9 @@ export async function handleKnowledgeAction(
 
         case "getKnowledgeIndexStats":
             return await getKnowledgeIndexStats(parameters, context);
+
+        case "getKnowledgeStats":
+            return await getDetailedKnowledgeStats(parameters, context);
 
         case "clearKnowledgeIndex":
             return await clearKnowledgeIndex(parameters, context);
@@ -1901,4 +1905,313 @@ function hasIndexingErrors(result: any): boolean {
     return !!(
         result?.semanticRefs?.error || result?.secondaryIndexResults?.error
     );
+}
+
+
+export async function getDetailedKnowledgeStats(
+    parameters: {
+        includeQuality?: boolean;
+        includeProgress?: boolean;
+        timeRange?: number;
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<DetailedKnowledgeStats> {
+    const websiteCollection = context.agentContext.websiteCollection;
+    
+    if (!websiteCollection) {
+        return createEmptyKnowledgeStats();
+    }
+
+    const websites = websiteCollection.messages.getAll();
+    
+    // Calculate base stats
+    const baseStats = await calculateBaseStats(websites);
+    
+    // Calculate extraction progress  
+    const extractionProgress = calculateExtractionProgress(websites);
+    
+    // Calculate quality distribution
+    const qualityDistribution = parameters.includeQuality !== false
+        ? calculateQualityDistribution(websites)
+        : { highQuality: 0, mediumQuality: 0, lowQuality: 0 };
+    
+    // Calculate completion rates
+    const completionRates = calculateCompletionRates(websites);
+    
+    return {
+        ...baseStats,
+        extractionProgress,
+        qualityDistribution, 
+        completionRates,
+    };
+}
+
+function createEmptyKnowledgeStats(): DetailedKnowledgeStats {
+    return {
+        totalPages: 0,
+        totalEntities: 0,
+        totalRelationships: 0,
+        uniqueDomains: 0,
+        topEntityTypes: [],
+        topDomains: [],
+        recentActivity: [],
+        storageSize: {
+            totalBytes: 0,
+            entitiesBytes: 0,
+            contentBytes: 0,
+            metadataBytes: 0,
+        },
+        extractionProgress: {
+            entityProgress: 0,
+            topicProgress: 0,
+            actionProgress: 0,
+        },
+        qualityDistribution: {
+            highQuality: 0,
+            mediumQuality: 0,
+            lowQuality: 0,
+        },
+        completionRates: {
+            pagesWithEntities: 0,
+            pagesWithTopics: 0,
+            pagesWithActions: 0,
+            totalProcessedPages: 0,
+        },
+    };
+}
+
+async function calculateBaseStats(websites: any[]): Promise<{
+    totalPages: number;
+    totalEntities: number;
+    totalRelationships: number;
+    uniqueDomains: number;
+    topEntityTypes: Array<{ type: string; count: number }>;
+    topDomains: Array<{ domain: string; pageCount: number }>;
+    recentActivity: Array<{ date: string; pagesIndexed: number }>;
+    storageSize: {
+        totalBytes: number;
+        entitiesBytes: number;
+        contentBytes: number;
+        metadataBytes: number;
+    };
+}> {
+    let totalEntities = 0;
+    let totalRelationships = 0;
+    const domains = new Set<string>();
+    const entityTypeCounts = new Map<string, number>();
+    const domainCounts = new Map<string, number>();
+    let totalContent = 0;
+
+    for (const site of websites) {
+        try {
+            const knowledge = site.getKnowledge();
+            const metadata = site.metadata as website.WebsiteDocPartMeta;
+            
+            // Extract domain from URL
+            if (metadata?.url) {
+                try {
+                    const domain = new URL(metadata.url).hostname;
+                    domains.add(domain);
+                    domainCounts.set(domain, (domainCounts.get(domain) || 0) + 1);
+                } catch (error) {
+                    // Invalid URL, skip domain extraction
+                }
+            }
+
+            if (knowledge) {
+                // Count entities and their types
+                if (knowledge.entities?.length > 0) {
+                    totalEntities += knowledge.entities.length;
+                    knowledge.entities.forEach((entity: any) => {
+                        const type = entity.type || 'Unknown';
+                        entityTypeCounts.set(type, (entityTypeCounts.get(type) || 0) + 1);
+                    });
+                }
+
+                // Count relationships/actions
+                if (knowledge.actions?.length > 0) {
+                    totalRelationships += knowledge.actions.length;
+                }
+            }
+
+            // Calculate content size
+            const textContent = site.textChunks?.join("") || "";
+            totalContent += textContent.length;
+        } catch (error) {
+            console.warn("Error processing site for stats:", error);
+        }
+    }
+
+    // Convert entity types to sorted array
+    const topEntityTypes = Array.from(entityTypeCounts.entries())
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 10)
+        .map(([type, count]) => ({ type, count }));
+
+    // Convert domains to sorted array
+    const topDomains = Array.from(domainCounts.entries())
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 10)
+        .map(([domain, pageCount]) => ({ domain, pageCount }));
+
+    // Simple recent activity (last 7 days)
+    const recentActivity = generateRecentActivity(websites);
+
+    return {
+        totalPages: websites.length,
+        totalEntities,
+        totalRelationships,
+        uniqueDomains: domains.size,
+        topEntityTypes,
+        topDomains,
+        recentActivity,
+        storageSize: {
+            totalBytes: totalContent,
+            entitiesBytes: Math.round(totalContent * 0.3), // Estimate
+            contentBytes: Math.round(totalContent * 0.6),  // Estimate
+            metadataBytes: Math.round(totalContent * 0.1), // Estimate
+        },
+    };
+}
+
+function calculateExtractionProgress(websites: any[]): {
+    entityProgress: number;
+    topicProgress: number; 
+    actionProgress: number;
+} {
+    let pagesWithEntities = 0;
+    let pagesWithTopics = 0;
+    let pagesWithActions = 0;
+    
+    websites.forEach(site => {
+        try {
+            const knowledge = site.getKnowledge();
+            if (knowledge) {
+                if (knowledge.entities?.length > 0) pagesWithEntities++;
+                if (knowledge.keyTopics?.length > 0) pagesWithTopics++;
+                if (knowledge.actions?.length > 0) pagesWithActions++;
+            }
+        } catch (error) {
+            // Skip sites with knowledge extraction errors
+        }
+    });
+    
+    const total = websites.length || 1; // Prevent division by zero
+    
+    return {
+        entityProgress: Math.round((pagesWithEntities / total) * 100),
+        topicProgress: Math.round((pagesWithTopics / total) * 100),
+        actionProgress: Math.round((pagesWithActions / total) * 100),
+    };
+}
+
+function calculateQualityDistribution(websites: any[]): {
+    highQuality: number;
+    mediumQuality: number;
+    lowQuality: number;
+} {
+    let high = 0, medium = 0, low = 0;
+    let totalPagesWithKnowledge = 0;
+    
+    websites.forEach(site => {
+        try {
+            const knowledge = site.getKnowledge();
+            if (knowledge && knowledge.entities?.length > 0) {
+                totalPagesWithKnowledge++;
+                
+                // Calculate average confidence across entities
+                const confidences = knowledge.entities
+                    .map((e: any) => e.confidence || 0)
+                    .filter((c: number) => c > 0);
+                    
+                if (confidences.length > 0) {
+                    const avgConfidence = confidences.reduce((a: number, b: number) => a + b) / confidences.length;
+                    
+                    if (avgConfidence >= 0.8) high++;
+                    else if (avgConfidence >= 0.5) medium++;
+                    else low++;
+                } else {
+                    // No confidence scores, assume medium quality
+                    medium++;
+                }
+            }
+        } catch (error) {
+            // Skip sites with knowledge extraction errors
+        }
+    });
+    
+    const total = totalPagesWithKnowledge || 1;
+    
+    return {
+        highQuality: Math.round((high / total) * 100),
+        mediumQuality: Math.round((medium / total) * 100), 
+        lowQuality: Math.round((low / total) * 100),
+    };
+}
+
+function calculateCompletionRates(websites: any[]): {
+    pagesWithEntities: number;
+    pagesWithTopics: number;
+    pagesWithActions: number;
+    totalProcessedPages: number;
+} {
+    let pagesWithEntities = 0;
+    let pagesWithTopics = 0;
+    let pagesWithActions = 0;
+    
+    websites.forEach(site => {
+        try {
+            const knowledge = site.getKnowledge();
+            if (knowledge) {
+                if (knowledge.entities?.length > 0) pagesWithEntities++;
+                if (knowledge.keyTopics?.length > 0) pagesWithTopics++;
+                if (knowledge.actions?.length > 0) pagesWithActions++;
+            }
+        } catch (error) {
+            // Skip sites with knowledge extraction errors
+        }
+    });
+    
+    return {
+        pagesWithEntities,
+        pagesWithTopics,
+        pagesWithActions,
+        totalProcessedPages: websites.length,
+    };
+}
+
+function generateRecentActivity(websites: any[]): Array<{ date: string; pagesIndexed: number }> {
+    const activityMap = new Map<string, number>();
+    const now = new Date();
+    
+    // Initialize last 7 days with 0
+    for (let i = 6; i >= 0; i--) {
+        const date = new Date(now);
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split('T')[0];
+        activityMap.set(dateStr, 0);
+    }
+    
+    // Count pages by date
+    websites.forEach(site => {
+        try {
+            const metadata = site.metadata as website.WebsiteDocPartMeta;
+            const siteDate = metadata?.visitDate || metadata?.bookmarkDate;
+            
+            if (siteDate) {
+                const date = new Date(siteDate);
+                const dateStr = date.toISOString().split('T')[0];
+                
+                if (activityMap.has(dateStr)) {
+                    activityMap.set(dateStr, (activityMap.get(dateStr) || 0) + 1);
+                }
+            }
+        } catch (error) {
+            // Skip sites with invalid dates
+        }
+    });
+    
+    return Array.from(activityMap.entries())
+        .map(([date, pagesIndexed]) => ({ date, pagesIndexed }))
+        .sort((a, b) => a.date.localeCompare(b.date));
 }

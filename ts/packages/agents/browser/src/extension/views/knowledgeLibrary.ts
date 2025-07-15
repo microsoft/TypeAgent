@@ -167,6 +167,13 @@ class WebsiteLibraryPanelFullPage {
     private searchDebounceTimer: number | null = null;
     private recentSearches: string[] = [];
     private currentQuery: string = "";
+    
+    // Cache for knowledge stats
+    private knowledgeStatsCache: {
+        data: any;
+        timestamp: number;
+    } | null = null;
+    
     // Data storage
     private libraryStats: LibraryStats = {
         totalWebsites: 0,
@@ -236,7 +243,8 @@ class WebsiteLibraryPanelFullPage {
                     | "discover"
                     | "analytics";
                 if (page) {
-                    this.navigateToPage(page);
+                    // Fire and forget async call
+                    this.navigateToPage(page).catch(console.error);
                 }
             });
         });
@@ -455,7 +463,7 @@ class WebsiteLibraryPanelFullPage {
         });
     }
 
-    private navigateToPage(page: "search" | "discover" | "analytics") {
+    private async navigateToPage(page: "search" | "discover" | "analytics") {
         // Update navigation state
         this.navigation.previousPage = this.navigation.currentPage;
         this.navigation.currentPage = page;
@@ -473,7 +481,7 @@ class WebsiteLibraryPanelFullPage {
                 this.initializeDiscoverPage();
                 break;
             case "analytics":
-                this.initializeAnalyticsPage();
+                await this.initializeAnalyticsPage();
                 break;
         }
     }
@@ -591,6 +599,21 @@ class WebsiteLibraryPanelFullPage {
                 e.preventDefault();
                 const action = actionButton.getAttribute("data-action");
                 this.handleAction(action, actionButton);
+            }
+        });
+
+        // Listen for knowledge extraction events to invalidate cache
+        EventManager.setupMessageListener((message, sender, sendResponse) => {
+            if (message.type === "knowledgeExtracted" || 
+                message.type === "importComplete" ||
+                message.type === "contentIndexed") {
+                // Invalidate stats cache when new knowledge is extracted
+                this.invalidateKnowledgeStatsCache();
+                
+                // Re-render analytics if currently on analytics page
+                if (this.navigation.currentPage === "analytics") {
+                    this.renderKnowledgeInsights().catch(console.error);
+                }
             }
         });
     }
@@ -1368,7 +1391,7 @@ class WebsiteLibraryPanelFullPage {
         if (!this.analyticsData) {
             await this.loadAnalyticsData();
         }
-        this.renderAnalyticsContent();
+        await this.renderAnalyticsContent();
     }
 
     private async loadDiscoverData() {
@@ -1978,7 +2001,7 @@ class WebsiteLibraryPanelFullPage {
         `;
     }
 
-    private renderAnalyticsContent() {
+    private async renderAnalyticsContent() {
         if (!this.analyticsData) return;
 
         // Check if we have meaningful analytics data to display
@@ -1996,7 +2019,7 @@ class WebsiteLibraryPanelFullPage {
         // Only render content sections if we have data
         if (hasData) {
             this.renderActivityCharts();
-            this.renderKnowledgeInsights();
+            await this.renderKnowledgeInsights();
             this.renderTopDomains();
         }
     }
@@ -2065,12 +2088,26 @@ class WebsiteLibraryPanelFullPage {
         }
     }
 
-    private renderKnowledgeInsights() {
+    private async renderKnowledgeInsights() {
         const container = document.getElementById("knowledgeInsights");
         if (!container || !this.analyticsData) return;
 
-        // Enhanced knowledge insights with visualizations
-        const knowledgeStats = this.calculateKnowledgeStats();
+        // Show loading state while fetching stats
+        container.innerHTML = `
+            <div class="knowledge-loading">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading knowledge stats...</span>
+                        </div>
+                        <p class="mt-3 mb-0">Calculating knowledge metrics...</p>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Fetch real stats
+        const knowledgeStats = await this.calculateKnowledgeStats();
 
         container.innerHTML = `
             <div class="card">
@@ -2152,7 +2189,7 @@ class WebsiteLibraryPanelFullPage {
         `;
     }
 
-    private calculateKnowledgeStats() {
+    private async calculateKnowledgeStats() {
         // Return default values when not connected
         if (!this.isConnected) {
             return {
@@ -2165,8 +2202,41 @@ class WebsiteLibraryPanelFullPage {
             };
         }
 
-        // TODO: Implement actual calculation based on real data
-        return {
+        // Check cache first (30 second TTL)
+        if (this.knowledgeStatsCache && 
+            Date.now() - this.knowledgeStatsCache.timestamp < 30000) {
+            return this.knowledgeStatsCache.data;
+        }
+
+        try {
+            const response = await chromeExtensionService.getKnowledgeStats();
+            
+            if (response.success && response.stats) {
+                const stats = response.stats;
+                const result = {
+                    entityProgress: stats.extractionProgress?.entityProgress || 0,
+                    topicProgress: stats.extractionProgress?.topicProgress || 0,
+                    actionProgress: stats.extractionProgress?.actionProgress || 0,
+                    highQuality: stats.qualityDistribution?.highQuality || 0,
+                    mediumQuality: stats.qualityDistribution?.mediumQuality || 0,
+                    lowQuality: stats.qualityDistribution?.lowQuality || 0,
+                };
+
+                // Cache the results
+                this.knowledgeStatsCache = {
+                    data: result,
+                    timestamp: Date.now()
+                };
+
+                return result;
+            }
+        } catch (error) {
+            console.error("Failed to get knowledge stats:", error);
+            notificationManager.showError("Failed to load knowledge statistics");
+        }
+
+        // Fallback to zeros on error
+        const fallback = {
             entityProgress: 0,
             topicProgress: 0,
             actionProgress: 0,
@@ -2174,6 +2244,12 @@ class WebsiteLibraryPanelFullPage {
             mediumQuality: 0,
             lowQuality: 0,
         };
+
+        return fallback;
+    }
+
+    private invalidateKnowledgeStatsCache() {
+        this.knowledgeStatsCache = null;
     }
 
     private handleKnowledgeBadgeClick(badge: HTMLElement) {
@@ -2204,7 +2280,7 @@ class WebsiteLibraryPanelFullPage {
                 searchInput.value = topic;
                 this.currentQuery = topic;
                 this.performSearch();
-                this.navigateToPage("search");
+                this.navigateToPage("search").catch(console.error);
             }
         }
     }

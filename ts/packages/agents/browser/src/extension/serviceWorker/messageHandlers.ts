@@ -530,6 +530,31 @@ export async function handleMessage(
             }
         }
 
+        case "getKnowledgeStats": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getKnowledgeStats", 
+                    parameters: {
+                        includeQuality: true,
+                        includeProgress: true,
+                        timeRange: message.timeRange || 30,
+                    },
+                });
+
+                return {
+                    success: !result.error,
+                    stats: result,
+                    error: result.error,
+                };
+            } catch (error) {
+                console.error("Error getting knowledge stats:", error);
+                return {
+                    success: false,
+                    error: error instanceof Error ? error.message : "Unknown error",
+                };
+            }
+        }
+
         case "checkConnection": {
             const webSocket = getWebSocket();
             return {
@@ -966,14 +991,20 @@ async function handleGetWebsiteLibraryStats() {
         );
 
         return {
-            success: true,
-            stats: stats,
+            totalWebsites: stats.totalWebsites,
+            totalBookmarks: stats.totalBookmarks,
+            totalHistory: stats.totalHistory,
+            topDomains: stats.topDomains,
         };
     } catch (error) {
         console.error("Error getting website library stats:", error);
         return {
             success: false,
             error: error instanceof Error ? error.message : "Unknown error",
+            totalWebsites: 0,
+            totalBookmarks: 0,
+            totalHistory: 0,
+            topDomains: 0,
         };
     }
 }

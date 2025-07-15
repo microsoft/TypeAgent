@@ -228,6 +228,13 @@ export class ChromeExtensionService {
         });
     }
 
+    async getKnowledgeStats(timeRange?: number): Promise<any> {
+        return this.sendMessage({
+            type: "getKnowledgeStats",
+            timeRange: timeRange || 30,
+        });
+    }
+
     async searchWebMemories(query: string, filters: SearchFilters): Promise<SearchResult> {
         return this.sendMessage({
             type: "searchWebMemories",
