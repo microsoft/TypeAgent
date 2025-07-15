@@ -114,6 +114,7 @@ function aggregateExtractionResults(results: any[]): {
     contentMetrics: any;
     detectedActions?: any[];
     actionSummary?: any;
+    contentActions?: any[];
 } {
     const allEntities: Entity[] = [];
     const allRelationships: Relationship[] = [];
@@ -121,6 +122,7 @@ function aggregateExtractionResults(results: any[]): {
     const allQuestions: string[] = [];
     const summaries: string[] = [];
     const allDetectedActions: any[] = [];
+    const allContentActions: any[] = [];
 
     let totalWordCount = 0;
     let totalReadingTime = 0;
@@ -138,8 +140,8 @@ function aggregateExtractionResults(results: any[]): {
             }
 
             // Collect topics
-            if (result.knowledge.keyTopics) {
-                allTopics.push(...result.knowledge.keyTopics);
+            if (result.knowledge.topics) {
+                allTopics.push(...result.knowledge.topics);
             }
 
             // Collect questions
@@ -150,6 +152,11 @@ function aggregateExtractionResults(results: any[]): {
             // Collect summaries
             if (result.knowledge.summary) {
                 summaries.push(result.knowledge.summary);
+            }
+
+            // collect content actions
+            if (result.knowledge.actions && Array.isArray(result.knowledge.actions)) {
+                allContentActions.push(...result.knowledge.actions);
             }
         }
 
@@ -233,6 +240,10 @@ function aggregateExtractionResults(results: any[]): {
     if (uniqueDetectedActions.length > 0) {
         aggregatedResult.detectedActions = uniqueDetectedActions;
         aggregatedResult.actionSummary = actionSummary;
+    }
+
+    if(allContentActions.length > 0){
+        aggregatedResult.contentActions = allContentActions;
     }
 
     return aggregatedResult;

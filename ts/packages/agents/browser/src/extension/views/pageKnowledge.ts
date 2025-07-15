@@ -13,10 +13,10 @@ import { conversation as kpLib } from "knowledge-processor";
 interface KnowledgeData {
     entities: Entity[];
     relationships: Relationship[];
-    topics: string[];
+    keyTopics: string[];
     suggestedQuestions: string[];
     summary: string;
-    actions?: kpLib.Action[];
+    contentActions?: kpLib.Action[];
     // Enhanced content data
     detectedActions?: DetectedAction[];
     actionSummary?: ActionSummary;
@@ -417,7 +417,7 @@ class KnowledgePanel {
 
                 // Show detailed success notification
                 const entityCount = this.knowledgeData.entities?.length || 0;
-                const topicCount = this.knowledgeData.topics?.length || 0;
+                const topicCount = this.knowledgeData.keyTopics?.length || 0;
                 const relationshipCount =
                     this.knowledgeData.relationships?.length || 0;
 
@@ -659,7 +659,8 @@ class KnowledgePanel {
             ${this.renderEntitiesCard()}
             ${this.renderRelationshipsCard()}
             ${this.renderTopicsCard()}
-            ${knowledge.detectedActions && knowledge.detectedActions.length > 0 ? this.renderActionsCard() : ""}
+            ${knowledge.detectedActions && knowledge.detectedActions.length > 0 ? this.renderUserActionsCard() : ""}
+            ${knowledge.contentActions && knowledge.contentActions.length > 0 ? this.renderEntityActionsCard() : ""}
         `;
 
         if (knowledge.contentMetrics) {
@@ -668,12 +669,15 @@ class KnowledgePanel {
         this.renderRelatedContent(knowledge);
         this.renderEntities(knowledge.entities);
         this.renderRelationships(knowledge.relationships);
-        this.renderKeyTopics(knowledge.topics);
+        this.renderKeyTopics(knowledge.keyTopics);
         if (knowledge.detectedActions && knowledge.detectedActions.length > 0) {
             this.renderDetectedActions(
                 knowledge.detectedActions,
                 knowledge.actionSummary,
             );
+        }
+        if (knowledge.contentActions && knowledge.contentActions.length > 0) {
+            this.renderEntityActions(knowledge.contentActions);
         }
         this.renderSuggestedQuestions(knowledge.suggestedQuestions);
 
@@ -1006,8 +1010,8 @@ class KnowledgePanel {
             this.knowledgeData?.detectedActions &&
             this.knowledgeData.detectedActions.length > 0;
         const hasTopics =
-            this.knowledgeData?.topics &&
-            this.knowledgeData.topics.length > 0;
+            this.knowledgeData?.keyTopics &&
+            this.knowledgeData.keyTopics.length > 0;
 
         // Learning-related questions (highest priority for enhanced features)
         if (
@@ -1486,7 +1490,7 @@ class KnowledgePanel {
                         <small class="text-muted">Relations</small>
                     </div>
                     <div class="col-4 text-center">
-                        <div class="fw-semibold text-${qualityMetrics.topics.color}">${this.knowledgeData.topics?.length || 0}</div>
+                        <div class="fw-semibold text-${qualityMetrics.topics.color}">${this.knowledgeData.keyTopics?.length || 0}</div>
                         <small class="text-muted">Topics</small>
                     </div>
                 </div>
@@ -1758,19 +1762,35 @@ class KnowledgePanel {
             "relatedContentCount",
         );
     }
-    private renderActionsCard(): string {
+    private renderUserActionsCard(): string {
         const content = this.createContainer(
             "detectedActionsContainer",
             TemplateHelpers.createEmptyState(
                 "bi bi-info-circle",
-                "No actions detected",
+                "No user actions detected",
             ),
         );
         return TemplateHelpers.createCard(
-            "Detected Actions",
+            "User Actions",
             content,
             "bi bi-lightning",
             "actionsCount",
+        );
+    }
+
+    private renderEntityActionsCard(): string {
+        const content = this.createContainer(
+            "entityActionsContainer",
+            TemplateHelpers.createEmptyState(
+                "bi bi-info-circle",
+                "No entity actions found",
+            ),
+        );
+        return TemplateHelpers.createCard(
+            "Entity Actions",
+            content,
+            "bi bi-gear",
+            "entityActionsCount",
         );
     }
 
@@ -1897,6 +1917,59 @@ class KnowledgePanel {
         container.innerHTML = summaryHtml + actionsHtml;
     }
 
+    // Render entity actions from knowledge-processor
+    private renderEntityActions(actions: any[]) {
+        const container = document.getElementById("entityActionsContainer")!;
+        const countBadge = document.getElementById("entityActionsCount");
+
+        if (countBadge) {
+            countBadge.textContent = actions.length.toString();
+        }
+
+        if (actions.length === 0) {
+            container.innerHTML = `
+                <div class="text-muted text-center">
+                    <i class="bi bi-info-circle"></i>
+                    No entity actions found in knowledge
+                </div>
+            `;
+            return;
+        }
+
+        const actionsHtml = actions
+            .slice(0, 10)
+            .map((action) => {
+                // Handle different action object structures from knowledge-processor
+                const actionVerb = action.verbs[0] || "Action";
+                const actionTense = action.verbTense || "present";
+                const actionObject = action.objectEntityName || action.target || "entity";
+                const actionSubject = action.subjectEntityName || "entity";
+                const actionDescription = action.description || ` ${actionSubject} ${actionVerb} ${actionObject} `;
+                
+                return `
+                <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded">
+                    <div>
+                        <span class="fw-semibold">${actionVerb}</span>
+                        <span class="badge bg-info ms-2">${actionTense}</span>
+                        <br><small class="text-muted">${actionDescription}</small>
+                        ${action.entity ? `<br><small class="text-primary">Entity: ${action.entity}</small>` : ""}
+                    </div>
+                </div>
+            `;
+            })
+            .join("");
+
+        container.innerHTML = `
+            <div class="mb-3 p-2 bg-light rounded">
+                <small class="text-muted d-flex align-items-center">
+                    <i class="bi bi-gear me-2"></i>
+                    Entity actions extracted from knowledge processing
+                </small>
+            </div>
+            ${actionsHtml}
+        `;
+    }
+
     // Helper methods for enhanced content metrics
     private getReadingTimeCategory(readingTime: number) {
         if (readingTime <= 2) {
@@ -1980,9 +2053,9 @@ class KnowledgePanel {
             }
 
             // 2. Topic-based relationship discovery
-            if (knowledge.topics && knowledge.topics.length > 0) {
+            if (knowledge.keyTopics && knowledge.keyTopics.length > 0) {
                 const topicResults = await this.discoverTopicRelationships(
-                    knowledge.topics,
+                    knowledge.keyTopics,
                 );
                 relatedContent.push(...topicResults);
             }
@@ -2079,8 +2152,8 @@ class KnowledgePanel {
         }
 
         // Generate topic-based suggestions from knowledge
-        if (knowledge.topics && knowledge.topics.length > 0) {
-            knowledge.topics.slice(0, 3).forEach((topic) => {
+        if (knowledge.keyTopics && knowledge.keyTopics.length > 0) {
+            knowledge.keyTopics.slice(0, 3).forEach((topic) => {
                 relatedContent.push({
                     url: "#",
                     title: `More content about "${topic}"`,
@@ -2747,7 +2820,7 @@ class KnowledgePanel {
     private calculateKnowledgeQuality(knowledge: KnowledgeData) {
         const entityCount = knowledge.entities?.length || 0;
         const relationshipCount = knowledge.relationships?.length || 0;
-        const topicCount = knowledge.topics?.length || 0;
+        const topicCount = knowledge.keyTopics?.length || 0;
         const actionCount = knowledge.detectedActions?.length || 0;
 
         // Calculate component scores

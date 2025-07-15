@@ -274,6 +274,8 @@ export async function handleMessage(
                             suggestedQuestions:
                                 knowledgeResult.suggestedQuestions || [],
                             summary: knowledgeResult.summary || "",
+                            contentActions:
+                                knowledgeResult.contentActions || [],
                             // Enhanced content data
                             detectedActions:
                                 knowledgeResult.detectedActions || [],
