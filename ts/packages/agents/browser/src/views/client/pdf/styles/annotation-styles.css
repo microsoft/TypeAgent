@@ -32,7 +32,7 @@
 }
 
 .pdfjs-highlight:hover {
-  opacity: 1.0 !important;
+  opacity: 1 !important;
 }
 
 /* Custom Highlight Annotations */

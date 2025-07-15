@@ -191,7 +191,9 @@ export class TextSelectionManager {
     private processSelectionChange(): void {
         // Check if we should ignore selection changes (e.g., after highlight click)
         if (Date.now() < this.ignoreSelectionChangeUntil) {
-            console.log("🔇 Ignoring selection change due to recent highlight click");
+            console.log(
+                "🔇 Ignoring selection change due to recent highlight click",
+            );
             return;
         }
 

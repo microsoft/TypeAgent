@@ -6,7 +6,7 @@
  * Testing the text layer approach and highlight click behavior
  */
 
-describe('PDF Highlight Coordinate System - Text Layer Approach', () => {
+describe("PDF Highlight Coordinate System - Text Layer Approach", () => {
     // Mock text layer element and PDF.js structures
     const mockTextLayerElement = {
         getBoundingClientRect: () => ({
@@ -15,10 +15,10 @@ describe('PDF Highlight Coordinate System - Text Layer Approach', () => {
             right: 720,
             bottom: 930,
             width: 600,
-            height: 800
+            height: 800,
         }),
         querySelector: () => null,
-        appendChild: jest.fn()
+        appendChild: jest.fn(),
     };
 
     const mockPageElement = {
@@ -28,26 +28,26 @@ describe('PDF Highlight Coordinate System - Text Layer Approach', () => {
             right: 700,
             bottom: 900,
             width: 600,
-            height: 800
+            height: 800,
         }),
         querySelector: (selector: string) => {
-            if (selector === '.textLayer') {
+            if (selector === ".textLayer") {
                 return mockTextLayerElement;
             }
             return null;
-        }
+        },
     };
 
     const mockPageView = {
         div: mockPageElement,
         viewport: {
-            scale: 1.0
-        }
+            scale: 1.0,
+        },
     };
 
     const mockPdfViewer = {
         currentScale: 1.0,
-        getPageView: (pageIndex: number) => mockPageView
+        getPageView: (pageIndex: number) => mockPageView,
     };
 
     // Mock selection rectangles at different zoom levels
@@ -58,7 +58,7 @@ describe('PDF Highlight Coordinate System - Text Layer Approach', () => {
             right: 400,
             bottom: 170,
             width: 100,
-            height: 20
+            height: 20,
         };
 
         return {
@@ -66,19 +66,19 @@ describe('PDF Highlight Coordinate System - Text Layer Approach', () => {
             pageNumber: 1,
             rects: [baseRect as DOMRect],
             range: document.createRange(),
-            isValid: true
+            isValid: true,
         };
     };
 
-    describe('Text Layer Coordinate Calculation', () => {
-        test('should calculate correct coordinates relative to text layer at 100% zoom', () => {
+    describe("Text Layer Coordinate Calculation", () => {
+        test("should calculate correct coordinates relative to text layer at 100% zoom", () => {
             mockPdfViewer.currentScale = 1.0;
             const selection = createMockSelection(1.0);
-            
+
             // Simulate the text layer coordinate calculation logic
             const textLayerRect = mockTextLayerElement.getBoundingClientRect();
             const rect = selection.rects[0];
-            
+
             const relativeLeft = rect.left - textLayerRect.left;
             const relativeTop = rect.top - textLayerRect.top;
             const relativeRight = rect.right - textLayerRect.left;
@@ -90,25 +90,25 @@ describe('PDF Highlight Coordinate System - Text Layer Approach', () => {
                 width: relativeRight - relativeLeft,
                 height: relativeBottom - relativeTop,
                 coordinateScale: 1.0,
-                coordinateSystem: 'textLayer'
+                coordinateSystem: "textLayer",
             };
 
             expect(coordinates.x).toBe(180); // 300 - 120 (text layer offset)
-            expect(coordinates.y).toBe(20);  // 150 - 130 (text layer offset)
+            expect(coordinates.y).toBe(20); // 150 - 130 (text layer offset)
             expect(coordinates.width).toBe(100);
             expect(coordinates.height).toBe(20);
             expect(coordinates.coordinateScale).toBe(1.0);
-            expect(coordinates.coordinateSystem).toBe('textLayer');
+            expect(coordinates.coordinateSystem).toBe("textLayer");
         });
 
-        test('should calculate correct coordinates relative to text layer at 120% zoom', () => {
+        test("should calculate correct coordinates relative to text layer at 120% zoom", () => {
             mockPdfViewer.currentScale = 1.2;
             const selection = createMockSelection(1.2);
-            
+
             // Simulate the text layer coordinate calculation logic
             const textLayerRect = mockTextLayerElement.getBoundingClientRect();
             const rect = selection.rects[0];
-            
+
             const relativeLeft = rect.left - textLayerRect.left;
             const relativeTop = rect.top - textLayerRect.top;
             const relativeRight = rect.right - textLayerRect.left;
@@ -120,31 +120,31 @@ describe('PDF Highlight Coordinate System - Text Layer Approach', () => {
                 width: relativeRight - relativeLeft,
                 height: relativeBottom - relativeTop,
                 coordinateScale: 1.2,
-                coordinateSystem: 'textLayer'
+                coordinateSystem: "textLayer",
             };
 
             expect(coordinates.x).toBe(180); // 300 - 120 (same relative position)
-            expect(coordinates.y).toBe(20);  // 150 - 130 (same relative position)
+            expect(coordinates.y).toBe(20); // 150 - 130 (same relative position)
             expect(coordinates.width).toBe(100); // Same width relative to text layer
-            expect(coordinates.height).toBe(20);  // Same height relative to text layer
+            expect(coordinates.height).toBe(20); // Same height relative to text layer
             expect(coordinates.coordinateScale).toBe(1.2);
-            expect(coordinates.coordinateSystem).toBe('textLayer');
+            expect(coordinates.coordinateSystem).toBe("textLayer");
         });
     });
 
-    describe('Text Layer Highlight Rendering', () => {
-        test('should not apply additional scaling for text layer coordinates', () => {
+    describe("Text Layer Highlight Rendering", () => {
+        test("should not apply additional scaling for text layer coordinates", () => {
             const coordinates = {
                 x: 180,
                 y: 20,
                 width: 100,
                 height: 20,
                 coordinateScale: 1.2,
-                coordinateSystem: 'textLayer'
+                coordinateSystem: "textLayer",
             };
 
             const currentScale = 1.5;
-            
+
             // For text layer coordinates, no additional scaling needed
             let finalCoords = {
                 x: coordinates.x,
@@ -154,7 +154,7 @@ describe('PDF Highlight Coordinate System - Text Layer Approach', () => {
             };
 
             // Only apply scaling if not text layer system
-            if (coordinates.coordinateSystem !== 'textLayer') {
+            if (coordinates.coordinateSystem !== "textLayer") {
                 const scaleRatio = currentScale / coordinates.coordinateScale;
                 finalCoords = {
                     x: coordinates.x * scaleRatio,
@@ -171,8 +171,8 @@ describe('PDF Highlight Coordinate System - Text Layer Approach', () => {
         });
     });
 
-    describe('Highlight Click Toolbar Behavior', () => {
-        test('should ignore selection changes for specified duration', () => {
+    describe("Highlight Click Toolbar Behavior", () => {
+        test("should ignore selection changes for specified duration", () => {
             // Mock TextSelectionManager behavior
             class MockTextSelectionManager {
                 private ignoreSelectionChangeUntil: number = 0;
@@ -187,14 +187,14 @@ describe('PDF Highlight Coordinate System - Text Layer Approach', () => {
             }
 
             const manager = new MockTextSelectionManager();
-            
+
             // Initially should not ignore
             expect(manager.shouldIgnoreSelectionChange()).toBe(false);
-            
+
             // After calling ignoreSelectionChangesFor, should ignore
             manager.ignoreSelectionChangesFor(300);
             expect(manager.shouldIgnoreSelectionChange()).toBe(true);
-            
+
             // After duration passes, should not ignore anymore
             manager.ignoreSelectionChangesFor(0); // 0ms duration
             setTimeout(() => {
@@ -202,13 +202,13 @@ describe('PDF Highlight Coordinate System - Text Layer Approach', () => {
             }, 1);
         });
 
-        test('should handle rapid highlight clicks without interference', () => {
+        test("should handle rapid highlight clicks without interference", () => {
             // Simulate rapid highlight clicks
             const mockManager = {
                 ignoreCount: 0,
-                ignoreSelectionChangesFor: function(duration: number) {
+                ignoreSelectionChangesFor: function (duration: number) {
                     this.ignoreCount++;
-                }
+                },
             };
 
             // Simulate multiple rapid clicks

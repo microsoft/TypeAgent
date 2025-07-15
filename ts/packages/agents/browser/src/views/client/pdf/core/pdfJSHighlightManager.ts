@@ -193,9 +193,12 @@ export class PDFJSHighlightManager {
             }
 
             // Find the text layer within the page
-            const textLayer = pageElement.querySelector('.textLayer');
+            const textLayer = pageElement.querySelector(".textLayer");
             if (!textLayer) {
-                console.error("Text layer not found for page:", selection.pageNumber);
+                console.error(
+                    "Text layer not found for page:",
+                    selection.pageNumber,
+                );
                 return null;
             }
 
@@ -213,7 +216,7 @@ export class PDFJSHighlightManager {
 
             for (const rect of selection.rects) {
                 console.log("🔍 Selection rect:", rect);
-                
+
                 // Calculate position relative to text layer
                 const relativeLeft = rect.left - textLayerRect.left;
                 const relativeTop = rect.top - textLayerRect.top;
@@ -237,7 +240,7 @@ export class PDFJSHighlightManager {
                 },
                 // Store coordinates are relative to text layer at current scale
                 coordinateScale: currentScale,
-                coordinateSystem: 'textLayer' // Mark that these coordinates are relative to text layer
+                coordinateSystem: "textLayer", // Mark that these coordinates are relative to text layer
             };
 
             console.log("🔍 Calculated coordinates:", coordinates);
@@ -264,14 +267,16 @@ export class PDFJSHighlightManager {
             const pageElement = pageView.div;
 
             // Find the text layer within the page
-            const textLayer = pageElement.querySelector('.textLayer');
+            const textLayer = pageElement.querySelector(".textLayer");
             if (!textLayer) {
                 console.error("Text layer not found for rendering highlight");
                 return;
             }
 
             // Create or get highlight layer within the text layer
-            let highlightLayer = textLayer.querySelector(".pdfjs-highlight-layer");
+            let highlightLayer = textLayer.querySelector(
+                ".pdfjs-highlight-layer",
+            );
             if (!highlightLayer) {
                 highlightLayer = document.createElement("div");
                 highlightLayer.className = "pdfjs-highlight-layer";
@@ -297,7 +302,7 @@ export class PDFJSHighlightManager {
 
             const coords = highlightData.coordinates;
             const currentScale = this.pdfViewer.currentScale || 1;
-            
+
             // For text layer coordinates, we don't need to apply additional scaling
             // since the text layer itself scales with PDF.js
             let finalCoords = {
@@ -308,9 +313,12 @@ export class PDFJSHighlightManager {
             };
 
             // Only apply scaling if coordinates were stored with a different coordinate system
-            if (coords.coordinateSystem !== 'textLayer') {
+            if (coords.coordinateSystem !== "textLayer") {
                 // Legacy coordinates or coordinates from page-relative system
-                const coordinateScale = coords.coordinateScale || highlightData.coordinateScale || 1;
+                const coordinateScale =
+                    coords.coordinateScale ||
+                    highlightData.coordinateScale ||
+                    1;
                 const scaleRatio = currentScale / coordinateScale;
                 finalCoords = {
                     x: coords.x * scaleRatio,
@@ -418,7 +426,9 @@ export class PDFJSHighlightManager {
                     width: highlightData.coordinates.width,
                     height: highlightData.coordinates.height,
                     coordinateScale: highlightData.coordinates.coordinateScale,
-                    coordinateSystem: highlightData.coordinates.coordinateSystem || 'textLayer',
+                    coordinateSystem:
+                        highlightData.coordinates.coordinateSystem ||
+                        "textLayer",
                 },
                 color: highlightData.color,
                 opacity: 0.8,
@@ -445,8 +455,10 @@ export class PDFJSHighlightManager {
             coordinates: {
                 ...apiAnnotation.coordinates,
                 // For legacy data without coordinateSystem, assume page-based coordinates
-                coordinateSystem: apiAnnotation.coordinates?.coordinateSystem || 'page',
-                coordinateScale: apiAnnotation.coordinates?.coordinateScale || 1,
+                coordinateSystem:
+                    apiAnnotation.coordinates?.coordinateSystem || "page",
+                coordinateScale:
+                    apiAnnotation.coordinates?.coordinateScale || 1,
             },
             pageNumber: apiAnnotation.page,
             text: apiAnnotation.content || "",
