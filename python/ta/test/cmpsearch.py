@@ -465,8 +465,8 @@ def compare_and_print_diff(
     if a_repr == b_repr:
         return False
     # Shorten floats so slight differences in score etc. don't cause false positives.
-    a_repr = re.sub(r"\b\d\.\d\d+", lambda m: f"{float(m.group()):.1f}", a_repr)
-    b_repr = re.sub(r"\b\d\.\d\d+", lambda m: f"{float(m.group()):.1f}", b_repr)
+    a_repr = re.sub(r"\b\d\.\d\d+", lambda m: f"{float(m.group()):.3f}", a_repr)
+    b_repr = re.sub(r"\b\d\.\d\d+", lambda m: f"{float(m.group()):.3f}", b_repr)
     if a_repr == b_repr:
         return False
     print("Warning:", message)
