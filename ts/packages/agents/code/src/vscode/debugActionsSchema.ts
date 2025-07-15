@@ -84,5 +84,5 @@ export type RemoveBreakpointAction = {
 
 export type RemoveAllBreakpointsAction = {
     actionName: "removeAllBreakpoints";
-    parameters?: {}; // No input needed
+    parameters?: {};
 };
