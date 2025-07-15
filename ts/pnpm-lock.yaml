@@ -3305,6 +3305,9 @@ importers:
       cheerio:
         specifier: 1.0.0-rc.12
         version: 1.0.0-rc.12
+      knowledge-processor:
+        specifier: workspace:*
+        version: link:../knowledgeProcessor
       marked:
         specifier: 16.0.0
         version: 16.0.0

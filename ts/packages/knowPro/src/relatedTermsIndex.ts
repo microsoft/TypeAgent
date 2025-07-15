@@ -181,6 +181,7 @@ export async function addToRelatedTermsIndex(
  * skew how semantic references are scored during search (over-counting)
  * @param relatedTermsIndex
  * @param searchTerms
+ * @param ensureSingleOccurrence
  */
 export async function resolveRelatedTerms(
     relatedTermsIndex: ITermToRelatedTermsIndex,
