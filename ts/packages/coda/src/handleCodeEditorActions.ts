@@ -4,6 +4,8 @@
 import * as vscode from "vscode";
 import { ActionResult } from "./helpers";
 import { handleWorkbenchActions } from "./handleWorkBenchActions";
+import { handleDebugActions } from "./handleDebugActions";
+import { handleExtensionActions } from "./handleExtensionActions";
 
 async function execChangeEditorColumns(actionData: any): Promise<ActionResult> {
     let actionResult: ActionResult = {
@@ -41,70 +43,6 @@ async function execChangeEditorColumns(actionData: any): Promise<ActionResult> {
 
     actionResult.message = "Did not understand the request!";
     actionResult.handled = false;
-    return actionResult;
-}
-
-export async function handleDebugActions(action: any): Promise<ActionResult> {
-    let actionResult: ActionResult = {
-        handled: true,
-        message: "Ok",
-    };
-
-    const actionName =
-        action.actionName ?? action.fullActionName.split(".").at(-1);
-
-    switch (actionName) {
-        case "showDebugPanel": {
-            vscode.commands.executeCommand("workbench.view.debug");
-            actionResult.message = "Showing debug panel";
-            break;
-        }
-        case "startDebugging": {
-            vscode.commands.executeCommand("workbench.action.debug.start");
-            actionResult.message = "Started debugging";
-            break;
-        }
-        case "stopDebugging": {
-            vscode.commands.executeCommand("workbench.action.debug.stop");
-            actionResult.message = "Stopped debugging";
-            break;
-        }
-        case "toggleBreakpoint": {
-            vscode.commands.executeCommand(
-                "editor.debug.action.toggleBreakpoint",
-            );
-            actionResult.message = "Toggled breakpoint";
-            break;
-        }
-        case "step": {
-            if (action.parameters.stepType === "into") {
-                vscode.commands.executeCommand("editor.debug.action.stepInto");
-                actionResult.message = "Stepped into";
-            } else if (action.parameters.stepType === "out") {
-                vscode.commands.executeCommand("editor.debug.action.stepOut");
-                actionResult.message = "Stepped out";
-            } else if (action.parameters.stepType === "over") {
-                vscode.commands.executeCommand("editor.debug.action.stepOver");
-                actionResult.message = "Stepped over";
-            } else {
-                actionResult.message = "Did not understand the step type";
-                actionResult.handled = false;
-            }
-            break;
-        }
-        case "showHover": {
-            vscode.commands.executeCommand(
-                "editor.debug.action.showDebugHover",
-            );
-            actionResult.message = "Showing hover";
-            break;
-        }
-        default: {
-            actionResult.message = `Did not understand the request for action: "${actionName}"`;
-            actionResult.handled = false;
-        }
-    }
-
     return actionResult;
 }
 
@@ -164,11 +102,6 @@ export async function handleDisplayKBActions(
         case "showSourceControl": {
             vscode.commands.executeCommand("workbench.view.scm");
             actionResult.message = "Showing source control";
-            break;
-        }
-        case "showExtensions": {
-            vscode.commands.executeCommand("workbench.view.extensions");
-            actionResult.message = "Showing extensions";
             break;
         }
         case "showOutputPanel": {
@@ -429,6 +362,7 @@ export async function handleVSCodeActions(action: any) {
             handleDisplayKBActions,
             handleDebugActions,
             handleWorkbenchActions,
+            handleExtensionActions,
         ];
 
         const results = await Promise.all(
