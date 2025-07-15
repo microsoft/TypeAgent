@@ -14,6 +14,9 @@ import fs from "fs";
 import { openai as ai } from "aiclient";
 import { fileURLToPath } from "node:url";
 import { SchemaDiscoveryActions } from "./schema/discoveryActions.mjs";
+import { PageDescription } from "./schema/pageSummary.mjs";
+import { UserActionsList } from "./schema/userActionsPool.mjs";
+
 
 export type HtmlFragments = {
     frameId: string;
@@ -329,6 +332,71 @@ export class SchemaDiscoveryAgent<T extends object> {
         `,
             },
             ...requestSection,
+            ...suffixSection,
+        ];
+
+        const response = await bootstrapTranslator.translate("", [
+            {
+                role: "user",
+                content: promptSections as MultimodalPromptContent[],
+            },
+        ]);
+        return response;
+    }
+
+    async unifyUserActions(
+        candidateActions: UserActionsList,
+        pageDescription?: PageDescription,
+        fragments?: HtmlFragments[],
+        screenshots?: string[],
+    ) {
+        const unifiedActionsSchema = await getSchemaFileContents("unifiedActions.mts");
+        const bootstrapTranslator = this.getBootstrapTranslator(
+            "UnifiedActionsList",
+            unifiedActionsSchema,
+        );
+
+        const screenshotSection = getScreenshotPromptSection(
+            screenshots,
+            fragments,
+        );
+        const htmlSection = getHtmlPromptSection(fragments);
+        const prefixSection = getPrefixPromptSection();
+        const suffixSection = getSuffixPromptSection();
+
+        const promptSections = [
+            ...prefixSection,
+            ...screenshotSection,
+            ...htmlSection,
+            {
+                type: "text",
+                text: `
+        You need to create a unified, de-duplicated list of user actions from two sources:
+        
+        1. Page Summary Actions (high-level user capabilities):
+        '''
+        ${JSON.stringify(pageDescription?.possibleUserAction, null, 2)}
+        '''
+        
+        2. Candidate Actions (detailed schema-based actions):
+        '''
+        ${JSON.stringify(candidateActions.actions, null, 2)}
+        '''
+        
+        Create a de-duplicated list combining these inputs. Rules for deduplication:
+        - Combine similar actions (e.g., "purchase item" and "buy product" → "buy product")
+        - Prefer more specific descriptions from candidate actions
+        - If page summary has high-level action like "order food" and candidate has "add item to cart", 
+          create unified action "add food to cart" that captures both intents
+        - Include originalCount (total from both sources) and finalCount (after deduplication)
+        
+        Generate a SINGLE "${bootstrapTranslator.validator.getTypeName()}" response using the typescript schema below.
+        
+        '''
+        ${bootstrapTranslator.validator.getSchemaText()}
+        '''
+        `,
+            },
             ...suffixSection,
         ];
 

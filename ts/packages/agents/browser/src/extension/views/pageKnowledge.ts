@@ -8,13 +8,15 @@ import {
     FormatUtils,
     EventManager,
 } from "./knowledgeUtilities";
+import { conversation as kpLib } from "knowledge-processor";
 
 interface KnowledgeData {
     entities: Entity[];
     relationships: Relationship[];
-    keyTopics: string[];
+    topics: string[];
     suggestedQuestions: string[];
     summary: string;
+    actions?: kpLib.Action[];
     // Enhanced content data
     detectedActions?: DetectedAction[];
     actionSummary?: ActionSummary;
@@ -415,7 +417,7 @@ class KnowledgePanel {
 
                 // Show detailed success notification
                 const entityCount = this.knowledgeData.entities?.length || 0;
-                const topicCount = this.knowledgeData.keyTopics?.length || 0;
+                const topicCount = this.knowledgeData.topics?.length || 0;
                 const relationshipCount =
                     this.knowledgeData.relationships?.length || 0;
 
@@ -666,7 +668,7 @@ class KnowledgePanel {
         this.renderRelatedContent(knowledge);
         this.renderEntities(knowledge.entities);
         this.renderRelationships(knowledge.relationships);
-        this.renderKeyTopics(knowledge.keyTopics);
+        this.renderKeyTopics(knowledge.topics);
         if (knowledge.detectedActions && knowledge.detectedActions.length > 0) {
             this.renderDetectedActions(
                 knowledge.detectedActions,
@@ -1004,8 +1006,8 @@ class KnowledgePanel {
             this.knowledgeData?.detectedActions &&
             this.knowledgeData.detectedActions.length > 0;
         const hasTopics =
-            this.knowledgeData?.keyTopics &&
-            this.knowledgeData.keyTopics.length > 0;
+            this.knowledgeData?.topics &&
+            this.knowledgeData.topics.length > 0;
 
         // Learning-related questions (highest priority for enhanced features)
         if (
@@ -1484,7 +1486,7 @@ class KnowledgePanel {
                         <small class="text-muted">Relations</small>
                     </div>
                     <div class="col-4 text-center">
-                        <div class="fw-semibold text-${qualityMetrics.topics.color}">${this.knowledgeData.keyTopics?.length || 0}</div>
+                        <div class="fw-semibold text-${qualityMetrics.topics.color}">${this.knowledgeData.topics?.length || 0}</div>
                         <small class="text-muted">Topics</small>
                     </div>
                 </div>
@@ -1978,9 +1980,9 @@ class KnowledgePanel {
             }
 
             // 2. Topic-based relationship discovery
-            if (knowledge.keyTopics && knowledge.keyTopics.length > 0) {
+            if (knowledge.topics && knowledge.topics.length > 0) {
                 const topicResults = await this.discoverTopicRelationships(
-                    knowledge.keyTopics,
+                    knowledge.topics,
                 );
                 relatedContent.push(...topicResults);
             }
@@ -2077,8 +2079,8 @@ class KnowledgePanel {
         }
 
         // Generate topic-based suggestions from knowledge
-        if (knowledge.keyTopics && knowledge.keyTopics.length > 0) {
-            knowledge.keyTopics.slice(0, 3).forEach((topic) => {
+        if (knowledge.topics && knowledge.topics.length > 0) {
+            knowledge.topics.slice(0, 3).forEach((topic) => {
                 relatedContent.push({
                     url: "#",
                     title: `More content about "${topic}"`,
@@ -2745,7 +2747,7 @@ class KnowledgePanel {
     private calculateKnowledgeQuality(knowledge: KnowledgeData) {
         const entityCount = knowledge.entities?.length || 0;
         const relationshipCount = knowledge.relationships?.length || 0;
-        const topicCount = knowledge.keyTopics?.length || 0;
+        const topicCount = knowledge.topics?.length || 0;
         const actionCount = knowledge.detectedActions?.length || 0;
 
         // Calculate component scores
