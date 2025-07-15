@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+import { conversation as kpLib } from "knowledge-processor";
 
 export interface KnowledgeExtractionResult {
     entities: Entity[];
@@ -11,6 +12,7 @@ export interface KnowledgeExtractionResult {
 
 export interface EnhancedKnowledgeExtractionResult
     extends KnowledgeExtractionResult {
+    contentActions?: kpLib.Action[];
     detectedActions?: DetectedAction[];
     actionSummary?: ActionSummary;
     contentMetrics: {

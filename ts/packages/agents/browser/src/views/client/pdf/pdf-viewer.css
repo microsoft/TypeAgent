@@ -154,9 +154,14 @@ body {
   height: 100%;
 }
 
-/* PDF.js viewer container - positioned by JavaScript below toolbar */
+/* PDF.js viewer container - must be absolutely positioned for PDF.js */
 #viewerContainer {
-  /* Position will be set dynamically by JavaScript */
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: auto;
 }
 
 #viewer {

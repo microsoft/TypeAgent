@@ -284,6 +284,9 @@ export class TypeAgentPDFViewerApp {
     ): void {
         console.log("🎯 Highlight clicked:", highlightId);
 
+        // Prevent selection manager from closing toolbar immediately after we open it
+        this.selectionManager?.ignoreSelectionChangesFor(300);
+
         // Create a fake selection for the highlight area
         const fakeSelection: SelectionInfo = {
             text: highlightData.text || "Highlighted text",
@@ -799,8 +802,15 @@ export class TypeAgentPDFViewerApp {
         const toolbar = document.querySelector(".toolbar") as HTMLElement;
         const toolbarHeight = toolbar ? toolbar.offsetHeight : 56;
 
+        // Set container positioning - PDF.js requires absolute positioning
         viewerContainer.style.cssText = `
-            position: relative; top: 0; left: 0; right: 0; height: calc(100vh - ${toolbarHeight}px); overflow: auto;
+            position: absolute; 
+            top: ${toolbar ? toolbarHeight : 0}px; 
+            left: 0; 
+            right: 0; 
+            bottom: 0; 
+            overflow: auto;
+            background: #323639;
         `;
 
         const linkService = new window.pdfjsViewer.PDFLinkService({

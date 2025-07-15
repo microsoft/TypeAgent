@@ -64,7 +64,7 @@ export class PDFInterceptor {
     private async performConnectionCheck(): Promise<boolean> {
         try {
             const response = await chrome.runtime.sendMessage({
-                action: "checkWebSocketConnection",
+                type: "checkWebSocketConnection",
             });
             this.isWebSocketConnected = response?.connected || false;
             debug(`WebSocket connection status: ${this.isWebSocketConnected}`);

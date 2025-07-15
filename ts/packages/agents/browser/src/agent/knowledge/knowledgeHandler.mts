@@ -25,6 +25,60 @@ import {
     AIModelRequiredError,
 } from "website-memory";
 import { BrowserKnowledgeExtractor } from "./browserKnowledgeExtractor.mjs";
+import { DetailedKnowledgeStats } from "../browserKnowledgeSchema.js";
+
+// Analytics Data Response Interface
+interface AnalyticsDataResponse {
+    overview: {
+        totalSites: number;
+        totalBookmarks: number;
+        totalHistory: number;
+        topDomains: number;
+        knowledgeExtracted: number;
+    };
+    knowledge: {
+        extractionProgress: {
+            entityProgress: number;
+            topicProgress: number;
+            actionProgress: number;
+        };
+        qualityDistribution: {
+            highQuality: number;
+            mediumQuality: number;
+            lowQuality: number;
+        };
+        totalEntities: number;
+        totalTopics: number;
+        totalActions: number;
+        totalRelationships: number;
+        recentItems?: any[];
+    };
+    domains: {
+        topDomains: Array<{
+            domain: string;
+            count: number;
+            percentage: number;
+        }>;
+        totalSites: number;
+    };
+    activity: {
+        trends: Array<{
+            date: string;
+            visits: number;
+            bookmarks: number;
+        }>;
+        summary: {
+            totalActivity: number;
+            peakDay: string | null;
+            averagePerDay: number;
+            timeRange: string;
+        };
+    };
+    analytics: {
+        extractionMetrics: any;
+        qualityReport: any;
+    };
+}
 
 // Helper function to convert HTML fragments to ExtractionInput objects
 function createExtractionInputsFromFragments(
@@ -58,12 +112,17 @@ function aggregateExtractionResults(results: any[]): {
     suggestedQuestions: string[];
     summary: string;
     contentMetrics: any;
+    detectedActions?: any[];
+    actionSummary?: any;
+    contentActions?: any[];
 } {
     const allEntities: Entity[] = [];
     const allRelationships: Relationship[] = [];
     const allTopics: string[] = [];
     const allQuestions: string[] = [];
     const summaries: string[] = [];
+    const allDetectedActions: any[] = [];
+    const allContentActions: any[] = [];
 
     let totalWordCount = 0;
     let totalReadingTime = 0;
@@ -81,8 +140,8 @@ function aggregateExtractionResults(results: any[]): {
             }
 
             // Collect topics
-            if (result.knowledge.keyTopics) {
-                allTopics.push(...result.knowledge.keyTopics);
+            if (result.knowledge.topics) {
+                allTopics.push(...result.knowledge.topics);
             }
 
             // Collect questions
@@ -94,6 +153,29 @@ function aggregateExtractionResults(results: any[]): {
             if (result.knowledge.summary) {
                 summaries.push(result.knowledge.summary);
             }
+
+            // collect content actions
+            if (
+                result.knowledge.actions &&
+                Array.isArray(result.knowledge.actions)
+            ) {
+                allContentActions.push(...result.knowledge.actions);
+
+                const actionRelationships =
+                    result.knowledge.actions?.map((action: any) => ({
+                        from: action.subjectEntityName || "unknown",
+                        relationship: action.verbs?.join(", ") || "related to",
+                        to: action.objectEntityName || "unknown",
+                        confidence: 0.8, // Default confidence for indexed content
+                    })) || [];
+
+                allRelationships.push(...actionRelationships);
+            }
+        }
+
+        // Collect detected actions from enhanced results
+        if (result.detectedActions && Array.isArray(result.detectedActions)) {
+            allDetectedActions.push(...result.detectedActions);
         }
 
         // Aggregate metrics
@@ -122,11 +204,44 @@ function aggregateExtractionResults(results: any[]): {
             ) === index,
     );
 
+    // Deduplicate actions by type and element
+    const uniqueDetectedActions = allDetectedActions.filter(
+        (action, index, arr) =>
+            arr.findIndex(
+                (a) => a.type === action.type && a.element === action.element,
+            ) === index,
+    );
+
+    // Create action summary if we have detected actions
+    let actionSummary;
+    if (uniqueDetectedActions.length > 0) {
+        const actionTypes = [
+            ...new Set(uniqueDetectedActions.map((a) => a.type)),
+        ];
+        const highConfidenceActions = uniqueDetectedActions.filter(
+            (a) => a.confidence > 0.8,
+        ).length;
+        const actionDistribution = uniqueDetectedActions.reduce(
+            (acc: any, action) => {
+                acc[action.type] = (acc[action.type] || 0) + 1;
+                return acc;
+            },
+            {},
+        );
+
+        actionSummary = {
+            totalActions: uniqueDetectedActions.length,
+            actionTypes,
+            highConfidenceActions,
+            actionDistribution,
+        };
+    }
+
     // Deduplicate topics and questions
     const uniqueTopics = [...new Set(allTopics)];
     const uniqueQuestions = [...new Set(allQuestions)];
 
-    return {
+    const aggregatedResult: any = {
         entities: uniqueEntities,
         relationships: uniqueRelationships,
         keyTopics: uniqueTopics,
@@ -140,6 +255,18 @@ function aggregateExtractionResults(results: any[]): {
             readingTime: totalReadingTime,
         },
     };
+
+    // Only include action-related fields if we have actions
+    if (uniqueDetectedActions.length > 0) {
+        aggregatedResult.detectedActions = uniqueDetectedActions;
+        aggregatedResult.actionSummary = actionSummary;
+    }
+
+    if (allContentActions.length > 0) {
+        aggregatedResult.contentActions = allContentActions;
+    }
+
+    return aggregatedResult;
 }
 
 export interface WebPageDocument {
@@ -179,6 +306,9 @@ export async function handleKnowledgeAction(
         case "getKnowledgeIndexStats":
             return await getKnowledgeIndexStats(parameters, context);
 
+        case "getKnowledgeStats":
+            return await getDetailedKnowledgeStats(parameters, context);
+
         case "clearKnowledgeIndex":
             return await clearKnowledgeIndex(parameters, context);
 
@@ -203,6 +333,9 @@ export async function handleKnowledgeAction(
         case "checkAIModelStatus":
             return await checkAIModelStatus(parameters, context);
 
+        case "checkActionDetectionStatus":
+            return await checkActionDetectionStatus(parameters, context);
+
         case "getRecentKnowledgeItems":
             return await getRecentKnowledgeItems(parameters, context);
 
@@ -217,6 +350,9 @@ export async function handleKnowledgeAction(
 
         case "getDiscoverInsights":
             return await getDiscoverInsights(parameters, context);
+
+        case "getAnalyticsData":
+            return await getAnalyticsData(parameters, context);
 
         default:
             throw new Error(`Unknown knowledge action: ${actionName}`);
@@ -272,9 +408,8 @@ export async function extractKnowledgeFromPage(
 
         return {
             ...aggregatedResults,
-            // Enhanced content data - commented out due to type compatibility issues
-            // detectedActions: extractionResults.flatMap(r => r.detectedActions || []),
-            // actionSummary: extractionResults.find(r => r.actionSummary)?.actionSummary,
+            // Enhanced action data is now properly included in aggregatedResults
+            // detectedActions and actionSummary are included if actions were detected
         };
     } catch (error) {
         console.error("Error extracting knowledge from fragments:", error);
@@ -1064,10 +1199,39 @@ export async function checkAIModelStatus(
     }
 }
 
+export async function checkActionDetectionStatus(
+    parameters: {},
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    available: boolean;
+    capabilities?: any;
+    error?: string;
+}> {
+    try {
+        const extractor = new BrowserKnowledgeExtractor(context);
+
+        const capabilities = extractor.getActionDetectionCapabilities();
+        const isAvailable = extractor.isActionDetectionAvailable();
+
+        return {
+            available: isAvailable,
+            capabilities: capabilities,
+        };
+    } catch (error) {
+        return {
+            available: false,
+            error:
+                error instanceof Error
+                    ? error.message
+                    : "Unknown action detection error",
+        };
+    }
+}
+
 export async function getRecentKnowledgeItems(
     parameters: {
         limit?: number;
-        type?: "entities" | "topics" | "both";
+        type?: "entities" | "topics" | "actions" | "all";
     },
     context: SessionContext<BrowserActionContext>,
 ): Promise<{
@@ -1078,6 +1242,14 @@ export async function getRecentKnowledgeItems(
         extractedAt: string;
     }>;
     topics: Array<{ name: string; fromPage: string; extractedAt: string }>;
+    actions: Array<{
+        type: string;
+        element: string;
+        text?: string;
+        confidence: number;
+        fromPage: string;
+        extractedAt: string;
+    }>;
     success: boolean;
 }> {
     try {
@@ -1087,13 +1259,14 @@ export async function getRecentKnowledgeItems(
             return {
                 entities: [],
                 topics: [],
+                actions: [],
                 success: false,
             };
         }
 
         const websites = websiteCollection.messages.getAll();
         const limit = parameters.limit || 10;
-        const type = parameters.type || "both";
+        const type = parameters.type || "all";
 
         const recentEntities: Array<{
             name: string;
@@ -1103,6 +1276,14 @@ export async function getRecentKnowledgeItems(
         }> = [];
         const recentTopics: Array<{
             name: string;
+            fromPage: string;
+            extractedAt: string;
+        }> = [];
+        const recentActions: Array<{
+            type: string;
+            element: string;
+            text?: string;
+            confidence: number;
             fromPage: string;
             extractedAt: string;
         }> = [];
@@ -1120,7 +1301,7 @@ export async function getRecentKnowledgeItems(
             if (knowledge) {
                 // Extract entities
                 if (
-                    (type === "entities" || type === "both") &&
+                    (type === "entities" || type === "all") &&
                     knowledge.entities
                 ) {
                     for (const entity of knowledge.entities) {
@@ -1136,16 +1317,53 @@ export async function getRecentKnowledgeItems(
                 }
 
                 // Extract topics
-                if (
-                    (type === "topics" || type === "both") &&
-                    knowledge.topics
-                ) {
+                if ((type === "topics" || type === "all") && knowledge.topics) {
                     for (const topic of knowledge.topics) {
                         recentTopics.push({
                             name: topic,
                             fromPage: pageTitle,
                             extractedAt: extractedAt,
                         });
+                    }
+                }
+
+                // Extract actions (if available)
+                // Note: Actions might not be available in current website-memory structure
+                if (type === "actions" || type === "all") {
+                    // Try to get actions from various possible sources in the knowledge object
+                    const actions =
+                        (knowledge as any).actions ||
+                        (knowledge as any).detectedActions ||
+                        [];
+
+                    if (Array.isArray(actions)) {
+                        for (const action of actions) {
+                            // Handle different action object structures gracefully
+                            const actionType =
+                                (action as any).actionType ||
+                                (action as any).type ||
+                                "unknown";
+                            const actionElement =
+                                (action as any).target?.name ||
+                                (action as any).name ||
+                                (action as any).element ||
+                                "element";
+                            const actionText =
+                                (action as any).name ||
+                                (action as any).text ||
+                                (action as any).target?.name;
+                            const actionConfidence =
+                                (action as any).confidence || 0.8;
+
+                            recentActions.push({
+                                type: actionType,
+                                element: actionElement,
+                                text: actionText,
+                                confidence: actionConfidence,
+                                fromPage: pageTitle,
+                                extractedAt: extractedAt,
+                            });
+                        }
                     }
                 }
             }
@@ -1158,6 +1376,11 @@ export async function getRecentKnowledgeItems(
                 new Date(a.extractedAt).getTime(),
         );
         recentTopics.sort(
+            (a, b) =>
+                new Date(b.extractedAt).getTime() -
+                new Date(a.extractedAt).getTime(),
+        );
+        recentActions.sort(
             (a, b) =>
                 new Date(b.extractedAt).getTime() -
                 new Date(a.extractedAt).getTime(),
@@ -1184,9 +1407,22 @@ export async function getRecentKnowledgeItems(
             )
             .slice(0, limit);
 
+        const uniqueActions = recentActions
+            .filter(
+                (action, index, arr) =>
+                    arr.findIndex(
+                        (a) =>
+                            a.type === action.type &&
+                            a.element === action.element &&
+                            a.fromPage === action.fromPage,
+                    ) === index,
+            )
+            .slice(0, limit);
+
         return {
             entities: uniqueEntities,
             topics: uniqueTopics,
+            actions: uniqueActions,
             success: true,
         };
     } catch (error) {
@@ -1194,6 +1430,7 @@ export async function getRecentKnowledgeItems(
         return {
             entities: [],
             topics: [],
+            actions: [],
             success: false,
         };
     }
@@ -1445,6 +1682,7 @@ export async function getPageIndexedKnowledge(
                         entities: [],
                         relationships: [],
                         keyTopics: [],
+                        detectedActions: [],
                         suggestedQuestions: [],
                         summary:
                             "Page is indexed but no knowledge was extracted.",
@@ -1454,6 +1692,14 @@ export async function getPageIndexedKnowledge(
                         },
                     },
                 };
+            }
+
+            let detectedActions: any[] = [];
+            if (
+                (knowledge as any).detectedActions &&
+                Array.isArray((knowledge as any).detectedActions)
+            ) {
+                detectedActions.push(...(knowledge as any).detectedAction);
             }
 
             // Convert the stored knowledge to the expected format
@@ -1471,13 +1717,24 @@ export async function getPageIndexedKnowledge(
 
             const keyTopics: string[] = knowledge.topics || [];
 
-            const relationships: Relationship[] =
+            const allRelationships: Relationship[] =
                 knowledge.actions?.map((action) => ({
                     from: action.subjectEntityName || "unknown",
                     relationship: action.verbs?.join(", ") || "related to",
                     to: action.objectEntityName || "unknown",
                     confidence: 0.8, // Default confidence for indexed content
                 })) || [];
+
+            // Deduplicate relationships
+            const relationships = allRelationships.filter(
+                (rel, index, arr) =>
+                    arr.findIndex(
+                        (r) =>
+                            r.from === rel.from &&
+                            r.relationship === rel.relationship &&
+                            r.to === rel.to,
+                    ) === index,
+            );
 
             // Generate contextual questions for indexed content
             const suggestedQuestions: string[] =
@@ -1504,6 +1761,7 @@ export async function getPageIndexedKnowledge(
                     entities,
                     relationships,
                     keyTopics,
+                    detectedActions,
                     suggestedQuestions,
                     summary,
                     contentMetrics,
@@ -1520,6 +1778,7 @@ export async function getPageIndexedKnowledge(
                     entities: [],
                     relationships: [],
                     keyTopics: [],
+                    detectedActions: [],
                     suggestedQuestions: [],
                     summary: "Page is indexed but knowledge extraction failed.",
                     contentMetrics: {
@@ -1901,4 +2160,488 @@ function hasIndexingErrors(result: any): boolean {
     return !!(
         result?.semanticRefs?.error || result?.secondaryIndexResults?.error
     );
+}
+
+export async function getDetailedKnowledgeStats(
+    parameters: {
+        includeQuality?: boolean;
+        includeProgress?: boolean;
+        timeRange?: number;
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<DetailedKnowledgeStats> {
+    const websiteCollection = context.agentContext.websiteCollection;
+
+    if (!websiteCollection) {
+        return createEmptyKnowledgeStats();
+    }
+
+    const websites = websiteCollection.messages.getAll();
+
+    // Calculate base stats
+    const baseStats = await calculateBaseStats(websites);
+
+    // Calculate extraction progress
+    const extractionProgress = calculateExtractionProgress(websites);
+
+    // Calculate quality distribution
+    const qualityDistribution =
+        parameters.includeQuality !== false
+            ? calculateQualityDistribution(websites)
+            : { highQuality: 0, mediumQuality: 0, lowQuality: 0 };
+
+    // Calculate completion rates
+    const completionRates = calculateCompletionRates(websites);
+
+    return {
+        ...baseStats,
+        extractionProgress,
+        qualityDistribution,
+        completionRates,
+    };
+}
+
+function createEmptyKnowledgeStats(): DetailedKnowledgeStats {
+    return {
+        totalPages: 0,
+        totalEntities: 0,
+        totalRelationships: 0,
+        uniqueDomains: 0,
+        topEntityTypes: [],
+        topDomains: [],
+        recentActivity: [],
+        storageSize: {
+            totalBytes: 0,
+            entitiesBytes: 0,
+            contentBytes: 0,
+            metadataBytes: 0,
+        },
+        extractionProgress: {
+            entityProgress: 0,
+            topicProgress: 0,
+            actionProgress: 0,
+        },
+        qualityDistribution: {
+            highQuality: 0,
+            mediumQuality: 0,
+            lowQuality: 0,
+        },
+        completionRates: {
+            pagesWithEntities: 0,
+            pagesWithTopics: 0,
+            pagesWithActions: 0,
+            totalProcessedPages: 0,
+        },
+    };
+}
+
+async function calculateBaseStats(websites: any[]): Promise<{
+    totalPages: number;
+    totalEntities: number;
+    totalRelationships: number;
+    uniqueDomains: number;
+    topEntityTypes: Array<{ type: string; count: number }>;
+    topDomains: Array<{ domain: string; pageCount: number }>;
+    recentActivity: Array<{ date: string; pagesIndexed: number }>;
+    storageSize: {
+        totalBytes: number;
+        entitiesBytes: number;
+        contentBytes: number;
+        metadataBytes: number;
+    };
+}> {
+    let totalEntities = 0;
+    let totalRelationships = 0;
+    const domains = new Set<string>();
+    const entityTypeCounts = new Map<string, number>();
+    const domainCounts = new Map<string, number>();
+    let totalContent = 0;
+
+    for (const site of websites) {
+        try {
+            const knowledge = site.getKnowledge();
+            const metadata = site.metadata as website.WebsiteDocPartMeta;
+
+            // Extract domain from URL
+            if (metadata?.url) {
+                try {
+                    const domain = new URL(metadata.url).hostname;
+                    domains.add(domain);
+                    domainCounts.set(
+                        domain,
+                        (domainCounts.get(domain) || 0) + 1,
+                    );
+                } catch (error) {
+                    // Invalid URL, skip domain extraction
+                }
+            }
+
+            if (knowledge) {
+                // Count entities and their types
+                if (knowledge.entities?.length > 0) {
+                    totalEntities += knowledge.entities.length;
+                    knowledge.entities.forEach((entity: any) => {
+                        const type = entity.type || "Unknown";
+                        entityTypeCounts.set(
+                            type,
+                            (entityTypeCounts.get(type) || 0) + 1,
+                        );
+                    });
+                }
+
+                // Count relationships/actions
+                if (knowledge.actions?.length > 0) {
+                    totalRelationships += knowledge.actions.length;
+                }
+            }
+
+            // Calculate content size
+            const textContent = site.textChunks?.join("") || "";
+            totalContent += textContent.length;
+        } catch (error) {
+            console.warn("Error processing site for stats:", error);
+        }
+    }
+
+    // Convert entity types to sorted array
+    const topEntityTypes = Array.from(entityTypeCounts.entries())
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 10)
+        .map(([type, count]) => ({ type, count }));
+
+    // Convert domains to sorted array
+    const topDomains = Array.from(domainCounts.entries())
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 10)
+        .map(([domain, pageCount]) => ({ domain, pageCount }));
+
+    // Simple recent activity (last 7 days)
+    const recentActivity = generateRecentActivity(websites);
+
+    return {
+        totalPages: websites.length,
+        totalEntities,
+        totalRelationships,
+        uniqueDomains: domains.size,
+        topEntityTypes,
+        topDomains,
+        recentActivity,
+        storageSize: {
+            totalBytes: totalContent,
+            entitiesBytes: Math.round(totalContent * 0.3), // Estimate
+            contentBytes: Math.round(totalContent * 0.6), // Estimate
+            metadataBytes: Math.round(totalContent * 0.1), // Estimate
+        },
+    };
+}
+
+function calculateExtractionProgress(websites: any[]): {
+    entityProgress: number;
+    topicProgress: number;
+    actionProgress: number;
+} {
+    let pagesWithEntities = 0;
+    let pagesWithTopics = 0;
+    let pagesWithActions = 0;
+
+    websites.forEach((site) => {
+        try {
+            const knowledge = site.getKnowledge();
+            if (knowledge) {
+                if (knowledge.entities?.length > 0) pagesWithEntities++;
+                if (knowledge.keyTopics?.length > 0) pagesWithTopics++;
+                if (knowledge.actions?.length > 0) pagesWithActions++;
+            }
+        } catch (error) {
+            // Skip sites with knowledge extraction errors
+        }
+    });
+
+    const total = websites.length || 1; // Prevent division by zero
+
+    return {
+        entityProgress: Math.round((pagesWithEntities / total) * 100),
+        topicProgress: Math.round((pagesWithTopics / total) * 100),
+        actionProgress: Math.round((pagesWithActions / total) * 100),
+    };
+}
+
+function calculateQualityDistribution(websites: any[]): {
+    highQuality: number;
+    mediumQuality: number;
+    lowQuality: number;
+} {
+    let high = 0,
+        medium = 0,
+        low = 0;
+    let totalPagesWithKnowledge = 0;
+
+    websites.forEach((site) => {
+        try {
+            const knowledge = site.getKnowledge();
+            if (knowledge && knowledge.entities?.length > 0) {
+                totalPagesWithKnowledge++;
+
+                // Calculate average confidence across entities
+                const confidences = knowledge.entities
+                    .map((e: any) => e.confidence || 0)
+                    .filter((c: number) => c > 0);
+
+                if (confidences.length > 0) {
+                    const avgConfidence =
+                        confidences.reduce((a: number, b: number) => a + b) /
+                        confidences.length;
+
+                    if (avgConfidence >= 0.8) high++;
+                    else if (avgConfidence >= 0.5) medium++;
+                    else low++;
+                } else {
+                    // No confidence scores, assume medium quality
+                    medium++;
+                }
+            }
+        } catch (error) {
+            // Skip sites with knowledge extraction errors
+        }
+    });
+
+    const total = totalPagesWithKnowledge || 1;
+
+    return {
+        highQuality: Math.round((high / total) * 100),
+        mediumQuality: Math.round((medium / total) * 100),
+        lowQuality: Math.round((low / total) * 100),
+    };
+}
+
+function calculateCompletionRates(websites: any[]): {
+    pagesWithEntities: number;
+    pagesWithTopics: number;
+    pagesWithActions: number;
+    totalProcessedPages: number;
+} {
+    let pagesWithEntities = 0;
+    let pagesWithTopics = 0;
+    let pagesWithActions = 0;
+
+    websites.forEach((site) => {
+        try {
+            const knowledge = site.getKnowledge();
+            if (knowledge) {
+                if (knowledge.entities?.length > 0) pagesWithEntities++;
+                if (knowledge.keyTopics?.length > 0) pagesWithTopics++;
+                if (knowledge.actions?.length > 0) pagesWithActions++;
+            }
+        } catch (error) {
+            // Skip sites with knowledge extraction errors
+        }
+    });
+
+    return {
+        pagesWithEntities,
+        pagesWithTopics,
+        pagesWithActions,
+        totalProcessedPages: websites.length,
+    };
+}
+
+function generateRecentActivity(
+    websites: any[],
+): Array<{ date: string; pagesIndexed: number }> {
+    const activityMap = new Map<string, number>();
+    const now = new Date();
+
+    // Initialize last 7 days with 0
+    for (let i = 6; i >= 0; i--) {
+        const date = new Date(now);
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split("T")[0];
+        activityMap.set(dateStr, 0);
+    }
+
+    // Count pages by date
+    websites.forEach((site) => {
+        try {
+            const metadata = site.metadata as website.WebsiteDocPartMeta;
+            const siteDate = metadata?.visitDate || metadata?.bookmarkDate;
+
+            if (siteDate) {
+                const date = new Date(siteDate);
+                const dateStr = date.toISOString().split("T")[0];
+
+                if (activityMap.has(dateStr)) {
+                    activityMap.set(
+                        dateStr,
+                        (activityMap.get(dateStr) || 0) + 1,
+                    );
+                }
+            }
+        } catch (error) {
+            // Skip sites with invalid dates
+        }
+    });
+
+    return Array.from(activityMap.entries())
+        .map(([date, pagesIndexed]) => ({ date, pagesIndexed }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+export async function getAnalyticsData(
+    parameters: {
+        timeRange?: string;
+        includeQuality?: boolean;
+        includeProgress?: boolean;
+        topDomainsLimit?: number;
+        activityGranularity?: "day" | "week" | "month";
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<AnalyticsDataResponse> {
+    try {
+        // Single coordinated data collection using Promise.all for efficiency
+        const [
+            knowledgeStats,
+            topDomains,
+            activityTrends,
+            extractionAnalytics,
+        ] = await Promise.all([
+            getDetailedKnowledgeStats(
+                {
+                    includeQuality: parameters.includeQuality !== false,
+                    includeProgress: parameters.includeProgress !== false,
+                    timeRange: 30,
+                },
+                context,
+            ),
+            getTopDomains(
+                {
+                    limit: parameters.topDomainsLimit || 10,
+                },
+                context,
+            ),
+            getActivityTrends(
+                {
+                    timeRange: parameters.timeRange || "30d",
+                    granularity: parameters.activityGranularity || "day",
+                },
+                context,
+            ),
+            getExtractionAnalytics(
+                {
+                    timeRange: parameters.timeRange || "30d",
+                },
+                context,
+            ),
+        ]);
+
+        // Get basic website statistics from websiteCollection
+        const websiteCollection = context.agentContext.websiteCollection;
+        let totalSites = 0;
+        let totalBookmarks = 0;
+        let totalHistory = 0;
+
+        if (websiteCollection) {
+            const websites = websiteCollection.messages.getAll();
+            totalSites = websites.length;
+
+            // Count bookmarks vs history
+            websites.forEach((site) => {
+                const metadata = site.metadata as website.WebsiteDocPartMeta;
+                if (metadata?.bookmarkDate) {
+                    totalBookmarks++;
+                } else {
+                    totalHistory++;
+                }
+            });
+        }
+
+        return {
+            overview: {
+                totalSites,
+                totalBookmarks,
+                totalHistory,
+                topDomains: topDomains.domains?.length || 0,
+                knowledgeExtracted: knowledgeStats.totalPages || 0,
+            },
+            knowledge: {
+                extractionProgress: knowledgeStats.extractionProgress || {
+                    entityProgress: 0,
+                    topicProgress: 0,
+                    actionProgress: 0,
+                },
+                qualityDistribution: knowledgeStats.qualityDistribution || {
+                    highQuality: 0,
+                    mediumQuality: 0,
+                    lowQuality: 0,
+                },
+                totalEntities: knowledgeStats.totalEntities || 0,
+                totalTopics: knowledgeStats.topEntityTypes?.length || 0,
+                totalActions: 0, // Actions not tracked in current schema
+                totalRelationships: knowledgeStats.totalRelationships || 0,
+                recentItems: knowledgeStats.recentActivity || [],
+            },
+            domains: {
+                topDomains: topDomains.domains || [],
+                totalSites: topDomains.totalSites || 0,
+            },
+            activity: {
+                trends: activityTrends.trends || [],
+                summary: activityTrends.summary || {
+                    totalActivity: 0,
+                    peakDay: null,
+                    averagePerDay: 0,
+                    timeRange: parameters.timeRange || "30d",
+                },
+            },
+            analytics: {
+                extractionMetrics: extractionAnalytics.analytics || {},
+                qualityReport: extractionAnalytics.analytics || {},
+            },
+        };
+    } catch (error) {
+        console.error("Error aggregating analytics data:", error);
+        // Return empty analytics data on error
+        return {
+            overview: {
+                totalSites: 0,
+                totalBookmarks: 0,
+                totalHistory: 0,
+                topDomains: 0,
+                knowledgeExtracted: 0,
+            },
+            knowledge: {
+                extractionProgress: {
+                    entityProgress: 0,
+                    topicProgress: 0,
+                    actionProgress: 0,
+                },
+                qualityDistribution: {
+                    highQuality: 0,
+                    mediumQuality: 0,
+                    lowQuality: 0,
+                },
+                totalEntities: 0,
+                totalTopics: 0,
+                totalActions: 0,
+                totalRelationships: 0,
+                recentItems: [],
+            },
+            domains: {
+                topDomains: [],
+                totalSites: 0,
+            },
+            activity: {
+                trends: [],
+                summary: {
+                    totalActivity: 0,
+                    peakDay: null,
+                    averagePerDay: 0,
+                    timeRange: parameters.timeRange || "30d",
+                },
+            },
+            analytics: {
+                extractionMetrics: {},
+                qualityReport: {},
+            },
+        };
+    }
 }
