@@ -16,6 +16,14 @@ import {
     ImportProgress,
     ImportResult,
 } from "../interfaces/websiteImport.types";
+import {
+    notificationManager,
+    chromeExtensionService,
+    TemplateHelpers,
+    FormatUtils,
+    EventManager,
+    ConnectionManager,
+} from "./knowledgeUtilities";
 
 interface FullPageNavigation {
     currentPage: "search" | "discover" | "analytics";
@@ -66,6 +74,44 @@ interface AnalyticsData {
         value: number;
         change: number;
     }>;
+    domains?: {
+        topDomains: Array<{
+            domain: string;
+            count: number;
+            percentage: number;
+        }>;
+        totalSites: number;
+    };
+    knowledge?: {
+        extractionProgress?: {
+            entityProgress: number;
+            topicProgress: number;
+            actionProgress: number;
+        };
+        qualityDistribution?: {
+            highQuality: number;
+            mediumQuality: number;
+            lowQuality: number;
+        };
+        totalEntities?: number;
+        totalTopics?: number;
+        totalActions?: number;
+        totalRelationships?: number;
+        recentItems?: any[];
+    };
+    activity?: {
+        trends: Array<{
+            date: string;
+            visits: number;
+            bookmarks: number;
+        }>;
+        summary: {
+            totalActivity: number;
+            peakDay: string | null;
+            averagePerDay: number;
+            timeRange: string;
+        };
+    };
 }
 
 // Import existing interfaces
@@ -159,6 +205,7 @@ class WebsiteLibraryPanelFullPage {
     private searchDebounceTimer: number | null = null;
     private recentSearches: string[] = [];
     private currentQuery: string = "";
+
     // Data storage
     private libraryStats: LibraryStats = {
         totalWebsites: 0,
@@ -170,8 +217,6 @@ class WebsiteLibraryPanelFullPage {
     private analyticsData: AnalyticsData | null = null;
 
     // Enhanced services and managers
-    private notificationManager: NotificationManager;
-    private chromeExtensionService: ChromeExtensionService;
     private userPreferences: UserPreferences;
     private searchSuggestions: SearchSuggestion[] = [];
     private suggestionDropdown: HTMLElement | null = null;
@@ -183,8 +228,6 @@ class WebsiteLibraryPanelFullPage {
     private importUI: WebsiteImportUI;
 
     constructor() {
-        this.notificationManager = new NotificationManagerImpl();
-        this.chromeExtensionService = new ChromeExtensionServiceImpl();
         this.userPreferences = this.loadUserPreferences();
 
         // Initialize import components
@@ -206,8 +249,6 @@ class WebsiteLibraryPanelFullPage {
             this.setupNavigation();
             this.setupSearchInterface();
             this.setupEventListeners();
-            this.setupKnowledgeInteractions();
-            this.setupNotificationSystem();
             this.setupImportFunctionality();
 
             await this.checkConnectionStatus();
@@ -217,7 +258,7 @@ class WebsiteLibraryPanelFullPage {
         } catch (error) {
             console.error("Failed to initialize Website Library:", error);
             this.isInitialized = false; // Reset flag on error so retry is possible
-            this.notificationManager.showError(
+            notificationManager.showError(
                 "Failed to load Website Library. Please refresh the page.",
                 () => window.location.reload(),
             );
@@ -234,7 +275,8 @@ class WebsiteLibraryPanelFullPage {
                     | "discover"
                     | "analytics";
                 if (page) {
-                    this.navigateToPage(page);
+                    // Fire and forget async call
+                    this.navigateToPage(page).catch(console.error);
                 }
             });
         });
@@ -284,11 +326,6 @@ class WebsiteLibraryPanelFullPage {
         this.setupFilterControls();
     }
 
-    private setupNotificationSystem() {
-        // Notification system is already set up in the NotificationManagerImpl
-        console.log("Notification system initialized");
-    }
-
     private setupImportFunctionality() {
         // Setup import navigation buttons
         const importWebActivityBtn = document.getElementById(
@@ -332,13 +369,11 @@ class WebsiteLibraryPanelFullPage {
         });
 
         // Listen for progress messages from service worker
-        chrome.runtime.onMessage.addListener(
-            (message, sender, sendResponse) => {
-                if (message.type === "importProgress") {
-                    this.handleImportProgressMessage(message);
-                }
-            },
-        );
+        EventManager.setupMessageListener((message, sender, sendResponse) => {
+            if (message.type === "importProgress") {
+                this.handleImportProgressMessage(message);
+            }
+        });
 
         // Setup import UI callbacks
         this.importUI.onProgressUpdate((progress: ImportProgress) => {
@@ -353,28 +388,16 @@ class WebsiteLibraryPanelFullPage {
             // Handle the error without calling showImportError again to avoid infinite recursion
             // showImportError is already called from within the import process
             console.error("Import error:", error);
-            this.notificationManager.showError(
+            notificationManager.showError(
                 `Import failed: ${error.message || "Unknown error"}`,
             );
         });
     }
 
-    private setupKnowledgeInteractions() {
-        // Knowledge interactions are handled through the enhanced features
-        console.log("Knowledge interactions initialized");
-    }
-
     private async checkConnectionStatus(): Promise<boolean> {
         try {
-            if (typeof chrome === "undefined" || !chrome.runtime) {
-                this.isConnected = false;
-                return false;
-            }
-
-            const response = await chrome.runtime.sendMessage({
-                type: "checkWebSocketConnection",
-            });
-
+            const response =
+                await chromeExtensionService.checkWebSocketConnection();
             this.isConnected = response?.connected === true;
             return this.isConnected;
         } catch (error) {
@@ -422,15 +445,15 @@ class WebsiteLibraryPanelFullPage {
     }
 
     private async reconnect() {
-        this.notificationManager.showInfo("Attempting to reconnect...");
+        notificationManager.showInfo("Attempting to reconnect...");
         const connected = await this.checkConnectionStatus();
 
         if (connected) {
-            this.notificationManager.showSuccess("Reconnected successfully!");
+            notificationManager.showSuccess("Reconnected successfully!");
             await this.loadLibraryStats();
             await this.performSearch();
         } else {
-            this.notificationManager.showError(
+            notificationManager.showError(
                 "Failed to reconnect. Please check your connection.",
                 () => this.reconnect(),
             );
@@ -444,12 +467,11 @@ class WebsiteLibraryPanelFullPage {
         }
 
         try {
-            this.libraryStats =
-                await this.chromeExtensionService.getLibraryStats();
+            this.libraryStats = await chromeExtensionService.getLibraryStats();
             this.updateStatsDisplay();
         } catch (error) {
             console.error("Failed to load library stats:", error);
-            this.notificationManager.showError(
+            notificationManager.showError(
                 "Failed to load library statistics",
                 () => this.loadLibraryStats(),
             );
@@ -472,7 +494,7 @@ class WebsiteLibraryPanelFullPage {
         });
     }
 
-    private navigateToPage(page: "search" | "discover" | "analytics") {
+    private async navigateToPage(page: "search" | "discover" | "analytics") {
         // Update navigation state
         this.navigation.previousPage = this.navigation.currentPage;
         this.navigation.currentPage = page;
@@ -484,13 +506,13 @@ class WebsiteLibraryPanelFullPage {
         // Load page-specific data
         switch (page) {
             case "search":
-                this.initializeSearchPage();
+                // Search page is already initialized in setupSearchInterface
                 break;
             case "discover":
                 this.initializeDiscoverPage();
                 break;
             case "analytics":
-                this.initializeAnalyticsPage();
+                await this.initializeAnalyticsPage();
                 break;
         }
     }
@@ -610,6 +632,24 @@ class WebsiteLibraryPanelFullPage {
                 this.handleAction(action, actionButton);
             }
         });
+
+        // Listen for knowledge extraction events to invalidate cache
+        EventManager.setupMessageListener((message, sender, sendResponse) => {
+            if (
+                message.type === "knowledgeExtracted" ||
+                message.type === "importComplete" ||
+                message.type === "contentIndexed"
+            ) {
+                // Reload analytics data when new knowledge is extracted
+                if (this.navigation.currentPage === "analytics") {
+                    this.loadAnalyticsData()
+                        .then(() => {
+                            return this.renderAnalyticsContent();
+                        })
+                        .catch(console.error);
+                }
+            }
+        });
     }
 
     private handleAction(action: string | null, button: HTMLElement) {
@@ -636,21 +676,6 @@ class WebsiteLibraryPanelFullPage {
         }
     }
 
-    private handleQuickAction(button: Element) {
-        const onclick = button.getAttribute("onclick");
-        if (onclick) {
-            if (onclick.includes("showImportModal")) {
-                this.showImportModal();
-            } else if (onclick.includes("exploreRecentBookmarks")) {
-                this.exploreRecentBookmarks();
-            } else if (onclick.includes("exploreMostVisited")) {
-                this.exploreMostVisited();
-            } else if (onclick.includes("exploreByDomain")) {
-                this.exploreByDomain();
-            }
-        }
-    }
-
     private setViewMode(view: "list" | "grid" | "timeline" | "domain") {
         if (this.currentViewMode === view) return;
 
@@ -659,9 +684,9 @@ class WebsiteLibraryPanelFullPage {
         // Update UI with smooth transition
         this.updateViewModeButtons();
 
-        // Animate the transition if results are visible
+        // Re-render results with new view mode (simplified - no animation)
         if (this.currentResults.length > 0) {
-            this.animateViewModeTransition(view);
+            this.renderSearchResults(this.currentResults);
         }
     }
 
@@ -676,55 +701,6 @@ class WebsiteLibraryPanelFullPage {
         if (activeBtn) {
             activeBtn.classList.add("active");
         }
-    }
-
-    private async animateViewModeTransition(
-        newView: "list" | "grid" | "timeline" | "domain",
-    ) {
-        const container = document.getElementById("resultsContainer");
-        if (!container) return;
-
-        // Add transitioning class to prevent interactions
-        container.classList.add("transitioning");
-
-        // Get current content
-        const currentContent = container.querySelector(".results-content");
-        if (currentContent) {
-            // Fade out current content
-            currentContent.classList.add("fade-out");
-
-            // Wait for fade out animation
-            await new Promise((resolve) => setTimeout(resolve, 200));
-        }
-
-        // Update view class on container
-        container.className = "results-container";
-        container.classList.add(`${newView}-view`, "transitioning");
-
-        // Render new content
-        this.renderSearchResults(this.currentResults);
-
-        // Get new content and animate in
-        const newContent = container.querySelector(".results-content");
-        if (newContent) {
-            newContent.classList.add("fade-out"); // Start hidden
-
-            // Force layout
-            (newContent as HTMLElement).offsetHeight;
-
-            // Fade in new content
-            newContent.classList.remove("fade-out");
-            newContent.classList.add("fade-in");
-
-            // Wait for fade in animation
-            await new Promise((resolve) => setTimeout(resolve, 200));
-
-            // Clean up classes
-            newContent.classList.remove("fade-in");
-        }
-
-        // Remove transitioning class
-        container.classList.remove("transitioning");
     }
 
     private handleSearchInput(query: string) {
@@ -756,7 +732,32 @@ class WebsiteLibraryPanelFullPage {
 
         try {
             // Check cache first for improved performance
-            const filters = this.getSearchFilters();
+            const filters: SearchFilters = {};
+
+            const dateFrom = (
+                document.getElementById("dateFrom") as HTMLInputElement
+            )?.value;
+            const dateTo = (
+                document.getElementById("dateTo") as HTMLInputElement
+            )?.value;
+            const sourceType = (
+                document.getElementById("sourceFilter") as HTMLSelectElement
+            )?.value;
+            const domain = (
+                document.getElementById("domainFilter") as HTMLInputElement
+            )?.value;
+            const minRelevance = parseInt(
+                (document.getElementById("relevanceFilter") as HTMLInputElement)
+                    ?.value || "0",
+            );
+
+            if (dateFrom) filters.dateFrom = dateFrom;
+            if (dateTo) filters.dateTo = dateTo;
+            if (sourceType)
+                filters.sourceType = sourceType as "bookmarks" | "history";
+            if (domain) filters.domain = domain;
+            if (minRelevance > 0) filters.minRelevance = minRelevance;
+
             const cacheKey = `${query}-${JSON.stringify(filters)}`;
 
             if (this.searchCache.has(cacheKey)) {
@@ -769,11 +770,11 @@ class WebsiteLibraryPanelFullPage {
             let results: SearchResult;
 
             if (this.isConnected) {
-                results = await this.chromeExtensionService.searchWebMemories(
+                results = await chromeExtensionService.searchWebMemories(
                     query,
                     filters,
                 );
-                await this.chromeExtensionService.saveSearch(query, results);
+                await chromeExtensionService.saveSearch(query, results);
             } else {
                 results = await this.searchWebMemories(query, filters);
             }
@@ -790,7 +791,7 @@ class WebsiteLibraryPanelFullPage {
             this.showSearchError(
                 "Search failed. Please check your connection and try again.",
             );
-            this.notificationManager.showError("Search failed", () =>
+            notificationManager.showError("Search failed", () =>
                 this.performSearch(),
             );
         }
@@ -809,7 +810,7 @@ class WebsiteLibraryPanelFullPage {
                 // Get fresh knowledge status
                 if (this.isConnected) {
                     const knowledge =
-                        await this.chromeExtensionService.checkKnowledgeStatus(
+                        await chromeExtensionService.checkKnowledgeStatus(
                             website.url,
                         );
                     website.knowledge = knowledge;
@@ -833,35 +834,6 @@ class WebsiteLibraryPanelFullPage {
         await Promise.allSettled(knowledgePromises);
     }
 
-    private getSearchFilters(): SearchFilters {
-        const filters: SearchFilters = {};
-
-        const dateFrom = (
-            document.getElementById("dateFrom") as HTMLInputElement
-        )?.value;
-        const dateTo = (document.getElementById("dateTo") as HTMLInputElement)
-            ?.value;
-        const sourceType = (
-            document.getElementById("sourceFilter") as HTMLSelectElement
-        )?.value;
-        const domain = (
-            document.getElementById("domainFilter") as HTMLInputElement
-        )?.value;
-        const minRelevance = parseInt(
-            (document.getElementById("relevanceFilter") as HTMLInputElement)
-                ?.value || "0",
-        );
-
-        if (dateFrom) filters.dateFrom = dateFrom;
-        if (dateTo) filters.dateTo = dateTo;
-        if (sourceType)
-            filters.sourceType = sourceType as "bookmarks" | "history";
-        if (domain) filters.domain = domain;
-        if (minRelevance > 0) filters.minRelevance = minRelevance;
-
-        return filters;
-    }
-
     private updateSearchFilters() {
         // If there's an active search, re-run it with new filters
         if (this.currentQuery && this.currentResults.length > 0) {
@@ -879,7 +851,7 @@ class WebsiteLibraryPanelFullPage {
         }
 
         try {
-            return await this.chromeExtensionService.searchWebMemories(
+            return await chromeExtensionService.searchWebMemories(
                 query,
                 filters,
             );
@@ -902,6 +874,16 @@ class WebsiteLibraryPanelFullPage {
         // Hide empty state
         if (emptyState) {
             emptyState.style.display = "none";
+        }
+
+        // Hide AI summary and entities sections
+        const aiSummary = document.getElementById("aiSummary");
+        const entitiesSection = document.getElementById("entitiesSection");
+        if (aiSummary) {
+            aiSummary.style.display = "none";
+        }
+        if (entitiesSection) {
+            entitiesSection.style.display = "none";
         }
 
         // Show loading state (create if it doesn't exist)
@@ -982,6 +964,11 @@ class WebsiteLibraryPanelFullPage {
         // Show AI summary if available
         if (results.summary.text) {
             this.showAISummary(results.summary.text);
+        }
+
+        // Show related entities if available
+        if (results.summary.entities && results.summary.entities.length > 0) {
+            this.showEntities(results.summary.entities);
         }
     }
 
@@ -1281,6 +1268,38 @@ class WebsiteLibraryPanelFullPage {
         }
     }
 
+    private showEntities(entities: EntityMatch[]) {
+        const entitiesSection = document.getElementById("entitiesSection");
+        const entitiesContent = document.getElementById("entitiesContent");
+
+        if (entitiesSection && entitiesContent && entities.length > 0) {
+            // Sort entities by count descending
+            const sortedEntities = entities.sort((a, b) => b.count - a.count);
+
+            // Create entity tags HTML
+            const entityTagsHtml = sortedEntities
+                .map(
+                    (entity) => `
+                <div class="entity-tag" title="${entity.type}: found ${entity.count} time${entity.count !== 1 ? "s" : ""}">
+                    <span>${entity.entity}</span>
+                    <span class="entity-count">${entity.count}</span>
+                </div>
+            `,
+                )
+                .join("");
+
+            entitiesContent.innerHTML = `
+                <div class="entity-tags">
+                    ${entityTagsHtml}
+                </div>
+            `;
+
+            entitiesSection.style.display = "block";
+        } else if (entitiesSection) {
+            entitiesSection.style.display = "none";
+        }
+    }
+
     private showSearchError(message: string) {
         const resultsContainer = document.getElementById("searchResults");
         const emptyState = document.getElementById("searchEmptyState");
@@ -1294,6 +1313,16 @@ class WebsiteLibraryPanelFullPage {
         // Hide empty state
         if (emptyState) {
             emptyState.style.display = "none";
+        }
+
+        // Hide AI summary and entities sections
+        const aiSummary = document.getElementById("aiSummary");
+        const entitiesSection = document.getElementById("entitiesSection");
+        if (aiSummary) {
+            aiSummary.style.display = "none";
+        }
+        if (entitiesSection) {
+            entitiesSection.style.display = "none";
         }
 
         // Show error in results container without destroying its structure
@@ -1387,10 +1416,6 @@ class WebsiteLibraryPanelFullPage {
     }
 
     // Page initialization methods
-    private async initializeSearchPage() {
-        // Already initialized in setupSearchInterface
-    }
-
     private async initializeDiscoverPage() {
         // Initially hide the empty state while loading
         const emptyState = document.getElementById("discoverEmptyState");
@@ -1416,7 +1441,7 @@ class WebsiteLibraryPanelFullPage {
         if (!this.analyticsData) {
             await this.loadAnalyticsData();
         }
-        this.renderAnalyticsContent();
+        await this.renderAnalyticsContent();
     }
 
     private async loadDiscoverData() {
@@ -1444,11 +1469,10 @@ class WebsiteLibraryPanelFullPage {
         }
 
         try {
-            const response =
-                await this.chromeExtensionService.getDiscoverInsights(
-                    10,
-                    "30d",
-                );
+            const response = await chromeExtensionService.getDiscoverInsights(
+                10,
+                "30d",
+            );
 
             if (response.success) {
                 this.discoverData = {
@@ -1538,7 +1562,7 @@ class WebsiteLibraryPanelFullPage {
                 (topic) => `
             <div class="card trending-topic-card trend-${topic.trend} discover-card mb-2">
                 <div class="card-body">
-                    <h6 class="card-title text-capitalize">${this.escapeHtml(topic.topic)}</h6>
+                    <h6 class="card-title text-capitalize">${FormatUtils.escapeHtml(topic.topic)}</h6>
                     <div class="d-flex align-items-center justify-content-between">
                         <span class="text-muted">${topic.count} page${topic.count !== 1 ? "s" : ""}</span>
                         <div class="trend-indicator">
@@ -1641,93 +1665,113 @@ class WebsiteLibraryPanelFullPage {
 
     private async loadAnalyticsData() {
         if (!this.isConnected) {
-            // Show the empty state when there's no connection
-            const emptyState = document.getElementById("analyticsEmptyState");
-            if (emptyState) {
-                emptyState.style.display = "block";
-            }
-
-            const container = document.getElementById("analyticsContent");
-            if (container) {
-                container.innerHTML = `
-                    <div class="connection-required">
-                        <i class="bi bi-wifi-off"></i>
-                        <h3>Connection Required</h3>
-                        <p>The Analytics page requires an active connection to the TypeAgent service.</p>
-                        <button class="btn btn-primary" data-action="reconnect">
-                            <i class="bi bi-arrow-repeat"></i> Reconnect
-                        </button>
-                    </div>
-                `;
-            }
+            this.showAnalyticsConnectionError();
             return;
         }
 
         try {
-            // Get real knowledge index statistics
-            const indexStats = await chrome.runtime.sendMessage({
-                type: "getIndexStats",
-            });
+            // Single call to get all analytics data
+            const analyticsResponse =
+                await chromeExtensionService.getAnalyticsData({
+                    timeRange: "30d",
+                    includeQuality: true,
+                    includeProgress: true,
+                    topDomainsLimit: 10,
+                    activityGranularity: "day",
+                });
 
-            // Get library stats for total counts
-            const libraryStats =
-                await this.chromeExtensionService.getLibraryStats();
+            if (analyticsResponse.success) {
+                // Transform to internal format
+                this.analyticsData = {
+                    overview: analyticsResponse.analytics.overview,
+                    trends: analyticsResponse.analytics.activity.trends,
+                    insights: this.transformKnowledgeInsights(
+                        analyticsResponse.analytics.knowledge,
+                    ),
+                    domains: analyticsResponse.analytics.domains,
+                    knowledge: analyticsResponse.analytics.knowledge,
+                    activity: analyticsResponse.analytics.activity,
+                };
 
-            this.analyticsData = {
-                overview: {
-                    totalSites: indexStats.totalPages || 0,
-                    totalBookmarks: libraryStats.totalBookmarks || 0,
-                    totalHistory: libraryStats.totalHistory || 0,
-                    knowledgeExtracted: indexStats.totalPages || 0,
-                },
-                trends: [],
-                insights: [
-                    {
-                        category: "Entities",
-                        value: indexStats.totalEntities || 0,
-                        change: 0,
-                    },
-                    {
-                        category: "Relationships",
-                        value: indexStats.totalRelationships || 0,
-                        change: 0,
-                    },
-                    {
-                        category: "Knowledge Quality",
-                        value: this.calculateKnowledgeQuality(indexStats),
-                        change: 0,
-                    },
-                ],
-            };
-
-            // Store the actual statistics for the visualization section
-            this.updateKnowledgeVisualizationData(indexStats);
+                // Cache for knowledge visualization
+                this.updateKnowledgeVisualizationData(
+                    analyticsResponse.analytics.knowledge,
+                );
+            } else {
+                throw new Error(
+                    analyticsResponse.error || "Failed to get analytics data",
+                );
+            }
         } catch (error) {
             console.error("Failed to load analytics data:", error);
-            this.analyticsData = {
-                overview: {
-                    totalSites: this.libraryStats.totalWebsites,
-                    totalBookmarks: this.libraryStats.totalBookmarks,
-                    totalHistory: this.libraryStats.totalHistory,
-                    knowledgeExtracted: 0,
-                },
-                trends: [],
-                insights: [],
-            };
-
-            // Show the empty state when there's an error or no data
-            const emptyState = document.getElementById("analyticsEmptyState");
-            if (emptyState) {
-                emptyState.style.display = "block";
-            }
-
-            // Update metric displays with zeros since no real data is available
-            this.updateMetricDisplaysWithZeros();
-
-            this.clearPlaceholderContent();
-            this.updateRecentEntitiesDisplay([]);
-            this.updateRecentTopicsDisplay([]);
+            this.handleAnalyticsDataError(error);
         }
+    }
+
+    private showAnalyticsConnectionError() {
+        const emptyState = document.getElementById("analyticsEmptyState");
+        if (emptyState) {
+            emptyState.style.display = "block";
+        }
+
+        const container = document.getElementById("analyticsContent");
+        if (container) {
+            container.innerHTML = `
+                <div class="connection-required">
+                    <i class="bi bi-wifi-off"></i>
+                    <h3>Connection Required</h3>
+                    <p>The Analytics page requires an active connection to the TypeAgent service.</p>
+                    <button class="btn btn-primary" data-action="reconnect">
+                        <i class="bi bi-arrow-repeat"></i> Reconnect
+                    </button>
+                </div>
+            `;
+        }
+    }
+
+    private transformKnowledgeInsights(knowledge: any): any[] {
+        return [
+            {
+                category: "Entities",
+                value: knowledge.totalEntities || 0,
+                change: 0,
+            },
+            {
+                category: "Relationships",
+                value: knowledge.totalRelationships || 0,
+                change: 0,
+            },
+            {
+                category: "Knowledge Quality",
+                value: this.calculateKnowledgeQualityFromData(knowledge),
+                change: 0,
+            },
+        ];
+    }
+
+    private handleAnalyticsDataError(error: any) {
+        this.analyticsData = {
+            overview: {
+                totalSites: this.libraryStats.totalWebsites,
+                totalBookmarks: this.libraryStats.totalBookmarks,
+                totalHistory: this.libraryStats.totalHistory,
+                knowledgeExtracted: 0,
+            },
+            trends: [],
+            insights: [],
+        };
+
+        // Show the empty state when there's an error or no data
+        const emptyState = document.getElementById("analyticsEmptyState");
+        if (emptyState) {
+            emptyState.style.display = "block";
+        }
+
+        // Update metric displays with zeros since no real data is available
+        this.updateMetricDisplaysWithZeros();
+        this.clearPlaceholderContent();
+        this.updateRecentEntitiesDisplay([]);
+        this.updateRecentTopicsDisplay([]);
     }
 
     private calculateKnowledgeQuality(indexStats: any): number {
@@ -1748,7 +1792,22 @@ class WebsiteLibraryPanelFullPage {
         return Math.round(quality);
     }
 
-    private updateKnowledgeVisualizationData(indexStats: any) {
+    private calculateKnowledgeQualityFromData(knowledge: any): number {
+        if (!knowledge || !knowledge.qualityDistribution) return 0;
+
+        const { highQuality, mediumQuality, lowQuality } =
+            knowledge.qualityDistribution;
+        const total = highQuality + mediumQuality + lowQuality;
+
+        if (total === 0) return 0;
+
+        // Weighted score: high=100%, medium=60%, low=20%
+        return Math.round(
+            (highQuality * 100 + mediumQuality * 60 + lowQuality * 20) / total,
+        );
+    }
+
+    private updateKnowledgeVisualizationData(knowledge: any) {
         // Update AI Insights section with real data
         const knowledgeExtractedElement =
             document.getElementById("knowledgeExtracted");
@@ -1758,54 +1817,51 @@ class WebsiteLibraryPanelFullPage {
 
         if (knowledgeExtractedElement) {
             knowledgeExtractedElement.textContent = (
-                indexStats.totalPages || 0
+                knowledge.totalEntities || 0
             ).toString();
         }
         if (totalEntitiesElement) {
             totalEntitiesElement.textContent = (
-                indexStats.totalEntities || 0
+                knowledge.totalEntities || 0
             ).toString();
         }
         if (totalTopicsElement) {
-            // Estimate topics from entities (rough approximation)
-            const estimatedTopics = Math.round(
-                (indexStats.totalEntities || 0) * 0.6,
-            );
-            totalTopicsElement.textContent = estimatedTopics.toString();
+            totalTopicsElement.textContent = (
+                knowledge.totalTopics || 0
+            ).toString();
         }
         if (totalActionsElement) {
             totalActionsElement.textContent = (
-                indexStats.totalRelationships || 0
+                knowledge.totalActions || 0
             ).toString();
         }
 
         // Update knowledge visualization cards with real data
-        this.updateKnowledgeVisualizationCards(indexStats);
+        this.updateKnowledgeVisualizationCards(knowledge);
 
         this.clearPlaceholderContent();
 
         // Load and display recent entities and topics
-        this.loadRecentKnowledgeItems(indexStats);
+        this.loadRecentKnowledgeItems(knowledge);
     }
 
-    private updateKnowledgeVisualizationCards(indexStats: any) {
+    private updateKnowledgeVisualizationCards(knowledge: any) {
         // Update total entities metric
         const totalEntitiesMetric = document.getElementById(
             "totalEntitiesMetric",
         );
         if (totalEntitiesMetric) {
             totalEntitiesMetric.textContent = (
-                indexStats.totalEntities || 0
+                knowledge.totalEntities || 0
             ).toString();
         }
 
-        // Update total topics metric (estimate based on entities)
+        // Update total topics metric
         const totalTopicsMetric = document.getElementById("totalTopicsMetric");
         if (totalTopicsMetric) {
-            const estimatedTopics = Math.round(
-                (indexStats.totalEntities || 0) * 0.6,
-            );
-            totalTopicsMetric.textContent = estimatedTopics.toString();
+            totalTopicsMetric.textContent = (
+                knowledge.totalTopics || 0
+            ).toString();
         }
 
         // Update total actions metric
@@ -1813,44 +1869,44 @@ class WebsiteLibraryPanelFullPage {
             document.getElementById("totalActionsMetric");
         if (totalActionsMetric) {
             totalActionsMetric.textContent = (
-                indexStats.totalRelationships || 0
+                knowledge.totalActions || 0
             ).toString();
         }
 
         // If we have real data, hide the sample breakdown and show a message about real data
-        if (indexStats.totalEntities > 0) {
-            this.replaceVisualizationSampleData(indexStats);
+        if (knowledge.totalEntities > 0) {
+            this.replaceVisualizationSampleData(knowledge);
         }
     }
 
-    private replaceVisualizationSampleData(indexStats: any) {
+    private replaceVisualizationSampleData(knowledge: any) {
         // Just update the metrics if needed
 
         // Update the actions breakdown with real data
         const actionBreakdown = document.querySelector(
             ".knowledge-card.actions .action-breakdown",
         );
-        if (actionBreakdown && indexStats.totalRelationships > 0) {
+        if (actionBreakdown && knowledge.totalRelationships > 0) {
             actionBreakdown.innerHTML = `
                 <div class="action-type">
                     <i class="bi bi-diagram-2"></i>
                     <span>Relationships Found</span>
-                    <span class="action-count">${indexStats.totalRelationships}</span>
+                    <span class="action-count">${knowledge.totalRelationships}</span>
                 </div>
                 <div class="action-type">
                     <i class="bi bi-link-45deg"></i>
                     <span>Cross-references</span>
-                    <span class="action-count">${Math.round(indexStats.totalRelationships * 0.7)}</span>
+                    <span class="action-count">${Math.round(knowledge.totalRelationships * 0.7)}</span>
                 </div>
                 <div class="action-type">
                     <i class="bi bi-search"></i>
                     <span>Searchable Items</span>
-                    <span class="action-count">${indexStats.totalEntities + indexStats.totalRelationships}</span>
+                    <span class="action-count">${knowledge.totalEntities + knowledge.totalRelationships}</span>
                 </div>
                 <div class="action-type">
                     <i class="bi bi-clock-history"></i>
                     <span>Last Updated</span>
-                    <span class="action-count">${this.formatDate(indexStats.lastIndexed)}</span>
+                    <span class="action-count">Recently</span>
                 </div>
             `;
         }
@@ -1906,30 +1962,10 @@ class WebsiteLibraryPanelFullPage {
         }
     }
 
-    private formatDate(dateString: string): string {
-        if (!dateString || dateString === "Never") return "Never";
-
+    private async loadRecentKnowledgeItems(knowledge: any) {
         try {
-            const date = new Date(dateString);
-            return date.toLocaleDateString();
-        } catch {
-            return "Unknown";
-        }
-    }
-
-    private escapeHtml(text: string): string {
-        const div = document.createElement("div");
-        div.textContent = text;
-        return div.innerHTML;
-    }
-
-    private async loadRecentKnowledgeItems(indexStats: any) {
-        try {
-            const response = await chrome.runtime.sendMessage({
-                type: "getRecentKnowledgeItems",
-                limit: 10,
-                itemType: "both",
-            });
+            const response =
+                await chromeExtensionService.getRecentKnowledgeItems(10);
 
             if (response && response.success) {
                 this.updateRecentEntitiesDisplay(response.entities || []);
@@ -2033,7 +2069,7 @@ class WebsiteLibraryPanelFullPage {
                         ? topic.fromPage.substring(0, 30) + "..."
                         : topic.fromPage;
 
-                return `<span class="topic-tag ${sizeClass}" title="From: ${topic.fromPage} (${this.formatDate(topic.extractedAt)})">${topic.name}</span>`;
+                return `<span class="topic-tag ${sizeClass}" title="From: ${topic.fromPage} (${FormatUtils.formatDate(topic.extractedAt)})">${topic.name}</span>`;
             })
             .join("");
 
@@ -2050,7 +2086,7 @@ class WebsiteLibraryPanelFullPage {
         `;
     }
 
-    private renderAnalyticsContent() {
+    private async renderAnalyticsContent() {
         if (!this.analyticsData) return;
 
         // Check if we have meaningful analytics data to display
@@ -2068,42 +2104,32 @@ class WebsiteLibraryPanelFullPage {
         // Only render content sections if we have data
         if (hasData) {
             this.renderActivityCharts();
-            this.renderKnowledgeInsights();
+            await this.renderKnowledgeInsights();
             this.renderTopDomains();
         }
     }
 
     private async renderTopDomains() {
         const container = document.getElementById("topDomainsList");
-        if (!container) return;
+        if (!container || !this.analyticsData?.domains) return;
 
-        try {
-            // Show loading state
+        // Use cached data instead of making new API call
+        const domainsData = this.analyticsData.domains;
+
+        if (!domainsData.topDomains || domainsData.topDomains.length === 0) {
             container.innerHTML = `
-                <div class="loading-message">
-                    <i class="bi bi-hourglass-split"></i>
-                    <span>Loading top domains...</span>
+                <div class="empty-message">
+                    <i class="bi bi-globe"></i>
+                    <span>No domain data available</span>
                 </div>
             `;
+            return;
+        }
 
-            // Fetch top domains data
-            const domainsData =
-                await this.chromeExtensionService.getTopDomains(10);
-
-            if (!domainsData.domains || domainsData.domains.length === 0) {
-                container.innerHTML = `
-                    <div class="empty-message">
-                        <i class="bi bi-globe"></i>
-                        <span>No domain data available</span>
-                    </div>
-                `;
-                return;
-            }
-
-            // Render domain list
-            const domainsHtml = domainsData.domains
-                .map(
-                    (domain: any) => `
+        // Render domain list using cached data
+        const domainsHtml = domainsData.topDomains
+            .map(
+                (domain: any) => `
                     <div class="domain-item">
                         <div class="domain-info">
                             <img src="https://www.google.com/s2/favicons?domain=${domain.domain}" 
@@ -2122,27 +2148,18 @@ class WebsiteLibraryPanelFullPage {
                         </div>
                     </div>
                 `,
-                )
-                .join("");
+            )
+            .join("");
 
-            container.innerHTML = domainsHtml;
-        } catch (error) {
-            console.error("Failed to render top domains:", error);
-            container.innerHTML = `
-                <div class="error-message">
-                    <i class="bi bi-exclamation-triangle"></i>
-                    <span>Failed to load domain data</span>
-                </div>
-            `;
-        }
+        container.innerHTML = domainsHtml;
     }
 
-    private renderKnowledgeInsights() {
+    private async renderKnowledgeInsights() {
         const container = document.getElementById("knowledgeInsights");
-        if (!container || !this.analyticsData) return;
+        if (!container || !this.analyticsData?.knowledge) return;
 
-        // Enhanced knowledge insights with visualizations
-        const knowledgeStats = this.calculateKnowledgeStats();
+        // Use cached knowledge data instead of calling calculateKnowledgeStats()
+        const knowledgeStats = this.analyticsData.knowledge;
 
         container.innerHTML = `
             <div class="card">
@@ -2156,9 +2173,9 @@ class WebsiteLibraryPanelFullPage {
                             </div>
                             <div class="progress-bar-container">
                                 <div class="progress-bar">
-                                    <div class="progress-fill" style="width: ${knowledgeStats.entityProgress}%; background: linear-gradient(90deg, #17a2b8, #20c997);"></div>
+                                    <div class="progress-fill" style="width: ${knowledgeStats.extractionProgress?.entityProgress || 0}%; background: linear-gradient(90deg, #17a2b8, #20c997);"></div>
                                 </div>
-                                <span class="progress-percentage">${knowledgeStats.entityProgress}%</span>
+                                <span class="progress-percentage">${knowledgeStats.extractionProgress?.entityProgress || 0}%</span>
                             </div>
                         </div>
                         
@@ -2169,9 +2186,9 @@ class WebsiteLibraryPanelFullPage {
                             </div>
                             <div class="progress-bar-container">
                                 <div class="progress-bar">
-                                    <div class="progress-fill" style="width: ${knowledgeStats.topicProgress}%; background: linear-gradient(90deg, #6f42c1, #e83e8c);"></div>
+                                    <div class="progress-fill" style="width: ${knowledgeStats.extractionProgress?.topicProgress || 0}%; background: linear-gradient(90deg, #6f42c1, #e83e8c);"></div>
                                 </div>
-                                <span class="progress-percentage">${knowledgeStats.topicProgress}%</span>
+                                <span class="progress-percentage">${knowledgeStats.extractionProgress?.topicProgress || 0}%</span>
                             </div>
                         </div>
                         
@@ -2182,9 +2199,9 @@ class WebsiteLibraryPanelFullPage {
                             </div>
                             <div class="progress-bar-container">
                                 <div class="progress-bar">
-                                    <div class="progress-fill" style="width: ${knowledgeStats.actionProgress}%; background: linear-gradient(90deg, #fd7e14, #ffc107);"></div>
+                                    <div class="progress-fill" style="width: ${knowledgeStats.extractionProgress?.actionProgress || 0}%; background: linear-gradient(90deg, #fd7e14, #ffc107);"></div>
                                 </div>
-                                <span class="progress-percentage">${knowledgeStats.actionProgress}%</span>
+                                <span class="progress-percentage">${knowledgeStats.extractionProgress?.actionProgress || 0}%</span>
                             </div>
                         </div>
                     </div>
@@ -2195,13 +2212,13 @@ class WebsiteLibraryPanelFullPage {
                 <div class="card-body">
                     <h6 class="card-title">Knowledge Quality Distribution</h6>
                     <div class="quality-distribution">
-                        <div class="quality-segment high" style="width: ${knowledgeStats.highQuality}%;" title="High Quality: ${knowledgeStats.highQuality}%">
+                        <div class="quality-segment high" style="width: ${knowledgeStats.qualityDistribution?.highQuality || 0}%;" title="High Quality: ${knowledgeStats.qualityDistribution?.highQuality || 0}%">
                             <span class="quality-label">High</span>
                         </div>
-                        <div class="quality-segment medium" style="width: ${knowledgeStats.mediumQuality}%;" title="Medium Quality: ${knowledgeStats.mediumQuality}%">
+                        <div class="quality-segment medium" style="width: ${knowledgeStats.qualityDistribution?.mediumQuality || 0}%;" title="Medium Quality: ${knowledgeStats.qualityDistribution?.mediumQuality || 0}%">
                             <span class="quality-label">Medium</span>
                         </div>
-                        <div class="quality-segment low" style="width: ${knowledgeStats.lowQuality}%;" title="Low Quality: ${knowledgeStats.lowQuality}%">
+                        <div class="quality-segment low" style="width: ${knowledgeStats.qualityDistribution?.lowQuality || 0}%;" title="Low Quality: ${knowledgeStats.qualityDistribution?.lowQuality || 0}%">
                             <span class="quality-label">Low</span>
                         </div>
                     </div>
@@ -2222,30 +2239,6 @@ class WebsiteLibraryPanelFullPage {
                 </div>
             </div>
         `;
-    }
-
-    private calculateKnowledgeStats() {
-        // Return default values when not connected
-        if (!this.isConnected) {
-            return {
-                entityProgress: 0,
-                topicProgress: 0,
-                actionProgress: 0,
-                highQuality: 0,
-                mediumQuality: 0,
-                lowQuality: 0,
-            };
-        }
-
-        // TODO: Implement actual calculation based on real data
-        return {
-            entityProgress: 0,
-            topicProgress: 0,
-            actionProgress: 0,
-            highQuality: 0,
-            mediumQuality: 0,
-            lowQuality: 0,
-        };
     }
 
     private handleKnowledgeBadgeClick(badge: HTMLElement) {
@@ -2276,7 +2269,7 @@ class WebsiteLibraryPanelFullPage {
                 searchInput.value = topic;
                 this.currentQuery = topic;
                 this.performSearch();
-                this.navigateToPage("search");
+                this.navigateToPage("search").catch(console.error);
             }
         }
     }
@@ -2378,133 +2371,97 @@ class WebsiteLibraryPanelFullPage {
 
     private async renderActivityCharts() {
         const container = document.getElementById("activityCharts");
-        if (!container) return;
+        if (!container || !this.analyticsData?.activity) return;
 
-        try {
-            // Show loading state
+        // Use cached activity data instead of making API call
+        const activityData = this.analyticsData.activity;
+
+        if (!activityData.trends || activityData.trends.length === 0) {
             container.innerHTML = `
                 <div class="card">
                     <div class="card-body">
                         <h6 class="card-title">Activity Trends</h6>
-                        <div class="loading-message">
-                            <i class="bi bi-hourglass-split"></i>
-                            <span>Loading activity trends...</span>
+                        <div class="empty-message">
+                            <i class="bi bi-bar-chart"></i>
+                            <span>No activity data available</span>
+                            <small>Import bookmarks or browse websites to see trends</small>
                         </div>
                     </div>
                 </div>
             `;
+            return;
+        }
 
-            // Fetch activity trends data
-            const trendsData =
-                await this.chromeExtensionService.getActivityTrends("30d");
+        // Create bar chart visualization
+        const trends = activityData.trends;
+        const maxActivity = Math.max(
+            ...trends.map((t: any) => t.visits + t.bookmarks),
+        );
+        const recentTrends = trends.slice(-14); // Show last 14 data points
 
-            if (!trendsData.trends || trendsData.trends.length === 0) {
-                container.innerHTML = `
-                    <div class="card">
-                        <div class="card-body">
-                            <h6 class="card-title">Activity Trends</h6>
-                            <div class="empty-message">
-                                <i class="bi bi-bar-chart"></i>
-                                <span>No activity data available</span>
-                                <small>Import bookmarks or browse websites to see trends</small>
-                            </div>
-                        </div>
+        const chartBars = recentTrends
+            .map((trend: any) => {
+                const totalActivity = trend.visits + trend.bookmarks;
+                const date = new Date(trend.date).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                });
+
+                const visitsHeight =
+                    maxActivity > 0 ? (trend.visits / maxActivity) * 100 : 0;
+                const bookmarksHeight =
+                    maxActivity > 0 ? (trend.bookmarks / maxActivity) * 100 : 0;
+
+                return `
+                    <div class="chart-bar" title="${date}: ${totalActivity} activities">
+                        <div class="bar-segment visits" style="height: ${visitsHeight}%" title="Visits: ${trend.visits}"></div>
+                        <div class="bar-segment bookmarks" style="height: ${bookmarksHeight}%" title="Bookmarks: ${trend.bookmarks}"></div>
+                        <div class="bar-label">${date}</div>
                     </div>
                 `;
-                return;
-            }
+            })
+            .join("");
 
-            // Create bar chart visualization
-            const trends = trendsData.trends;
-            const maxActivity = Math.max(
-                ...trends.map((t: any) => t.visits + t.bookmarks),
-            );
-            const recentTrends = trends.slice(-14); // Show last 14 data points
+        const summary = activityData.summary || {};
 
-            const chartBars = recentTrends
-                .map((trend: any) => {
-                    const totalActivity = trend.visits + trend.bookmarks;
-                    const date = new Date(trend.date).toLocaleDateString(
-                        "en-US",
-                        {
-                            month: "short",
-                            day: "numeric",
-                        },
-                    );
-
-                    const visitsHeight =
-                        maxActivity > 0
-                            ? (trend.visits / maxActivity) * 100
-                            : 0;
-                    const bookmarksHeight =
-                        maxActivity > 0
-                            ? (trend.bookmarks / maxActivity) * 100
-                            : 0;
-
-                    return `
-                        <div class="chart-bar" title="${date}: ${totalActivity} activities">
-                            <div class="bar-segment visits" style="height: ${visitsHeight}%" title="Visits: ${trend.visits}"></div>
-                            <div class="bar-segment bookmarks" style="height: ${bookmarksHeight}%" title="Bookmarks: ${trend.bookmarks}"></div>
-                            <div class="bar-label">${date}</div>
+        container.innerHTML = `
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-title">Activity Trends</h6>
+                    
+                    <div class="activity-summary mb-3">
+                        <div class="summary-stat">
+                            <span class="stat-label">Total Activity</span>
+                            <span class="stat-value">${summary.totalActivity || 0}</span>
                         </div>
-                    `;
-                })
-                .join("");
-
-            const summary = trendsData.summary || {};
-
-            container.innerHTML = `
-                <div class="card">
-                    <div class="card-body">
-                        <h6 class="card-title">Activity Trends</h6>
-                        
-                        <div class="activity-summary mb-3">
-                            <div class="summary-stat">
-                                <span class="stat-label">Total Activity</span>
-                                <span class="stat-value">${summary.totalActivity || 0}</span>
-                            </div>
-                            <div class="summary-stat">
-                                <span class="stat-label">Daily Average</span>
-                                <span class="stat-value">${Math.round(summary.averagePerDay || 0)}</span>
-                            </div>
-                            <div class="summary-stat">
-                                <span class="stat-label">Peak Day</span>
-                                <span class="stat-value">${summary.peakDay ? new Date(summary.peakDay).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "N/A"}</span>
-                            </div>
+                        <div class="summary-stat">
+                            <span class="stat-label">Daily Average</span>
+                            <span class="stat-value">${Math.round(summary.averagePerDay || 0)}</span>
                         </div>
-                        
-                        <div class="activity-chart">
-                            <div class="chart-container">
-                                ${chartBars}
+                        <div class="summary-stat">
+                            <span class="stat-label">Peak Day</span>
+                            <span class="stat-value">${summary.peakDay ? new Date(summary.peakDay).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "N/A"}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="activity-chart">
+                        <div class="chart-container">
+                            ${chartBars}
+                        </div>
+                        <div class="chart-legend">
+                            <div class="legend-item">
+                                <div class="legend-color visits"></div>
+                                <span>Visits</span>
                             </div>
-                            <div class="chart-legend">
-                                <div class="legend-item">
-                                    <div class="legend-color visits"></div>
-                                    <span>Visits</span>
-                                </div>
-                                <div class="legend-item">
-                                    <div class="legend-color bookmarks"></div>
-                                    <span>Bookmarks</span>
-                                </div>
+                            <div class="legend-item">
+                                <div class="legend-color bookmarks"></div>
+                                <span>Bookmarks</span>
                             </div>
                         </div>
                     </div>
                 </div>
-            `;
-        } catch (error) {
-            console.error("Failed to render activity charts:", error);
-            container.innerHTML = `
-                <div class="card">
-                    <div class="card-body">
-                        <h6 class="card-title">Activity Trends</h6>
-                        <div class="error-message">
-                            <i class="bi bi-exclamation-triangle"></i>
-                            <span>Failed to load activity data</span>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
+            </div>
+        `;
     }
 
     private renderKnowledgeBadges(knowledge?: KnowledgeStatus): string {
@@ -2605,9 +2562,7 @@ class WebsiteLibraryPanelFullPage {
 
             if (this.isConnected) {
                 const suggestionTexts =
-                    await this.chromeExtensionService.getSearchSuggestions(
-                        query,
-                    );
+                    await chromeExtensionService.getSearchSuggestions(query);
                 suggestions = suggestionTexts.map((text) => ({
                     text,
                     type: "auto" as const,
@@ -2671,9 +2626,20 @@ class WebsiteLibraryPanelFullPage {
         this.suggestionDropdown
             .querySelectorAll(".suggestion-item")
             .forEach((item) => {
-                item.addEventListener("click", () =>
-                    this.selectSuggestion(item as HTMLElement),
-                );
+                item.addEventListener("click", () => {
+                    const text = item.textContent?.trim();
+                    if (text) {
+                        const searchInput = document.getElementById(
+                            "searchInput",
+                        ) as HTMLInputElement;
+                        if (searchInput) {
+                            searchInput.value = text;
+                            this.currentQuery = text;
+                            this.hideSearchSuggestions();
+                            this.performSearch();
+                        }
+                    }
+                });
             });
     }
 
@@ -2716,121 +2682,10 @@ class WebsiteLibraryPanelFullPage {
         return "";
     }
 
-    private selectSuggestion(suggestionElement: HTMLElement) {
-        const text = suggestionElement.textContent?.trim();
-        if (text) {
-            const searchInput = document.getElementById(
-                "searchInput",
-            ) as HTMLInputElement;
-            if (searchInput) {
-                searchInput.value = text;
-                this.currentQuery = text;
-                this.hideSearchSuggestions();
-                this.performSearch();
-            }
-        }
-    }
-
     private hideSearchSuggestions() {
         if (this.suggestionDropdown) {
             this.suggestionDropdown.style.display = "none";
             this.suggestionDropdown.innerHTML = "";
-        }
-    }
-
-    // Enhanced knowledge extraction
-    private async extractKnowledgeForAllResults() {
-        if (this.currentResults.length === 0) {
-            this.notificationManager.showWarning(
-                "No search results to extract knowledge from",
-            );
-            return;
-        }
-
-        const unextractedSites = this.currentResults.filter(
-            (site) =>
-                !site.knowledge?.hasKnowledge ||
-                site.knowledge.status !== "extracted",
-        );
-
-        if (unextractedSites.length === 0) {
-            this.notificationManager.showSuccess(
-                "Knowledge already extracted for all results",
-            );
-            return;
-        }
-
-        this.notificationManager.showProgress(
-            `Extracting knowledge from ${unextractedSites.length} websites...`,
-            0,
-        );
-
-        try {
-            for (let i = 0; i < unextractedSites.length; i++) {
-                const site = unextractedSites[i];
-                const progress = Math.round(
-                    ((i + 1) / unextractedSites.length) * 100,
-                );
-
-                this.notificationManager.showProgress(
-                    `Processing ${site.domain}... (${i + 1}/${unextractedSites.length})`,
-                    progress,
-                );
-
-                await this.extractKnowledgeForSite(site);
-
-                // Small delay to prevent overwhelming the system
-                await new Promise((resolve) => setTimeout(resolve, 100));
-            }
-
-            this.notificationManager.showSuccess(
-                `Knowledge extracted from ${unextractedSites.length} websites`,
-            );
-
-            // Refresh the results display
-            this.renderSearchResults(this.currentResults);
-        } catch (error) {
-            console.error("Bulk knowledge extraction failed:", error);
-            this.notificationManager.showError(
-                "Failed to extract knowledge from some websites",
-            );
-        }
-    }
-
-    private async extractKnowledgeForSite(website: Website) {
-        try {
-            if (this.isConnected) {
-                const knowledge =
-                    await this.chromeExtensionService.extractKnowledge(
-                        website.url,
-                    );
-                website.knowledge = knowledge;
-                this.knowledgeCache.set(website.url, knowledge);
-            } else {
-                // No connection - cannot extract knowledge
-                website.knowledge = {
-                    hasKnowledge: false,
-                    status: "error",
-                    confidence: 0,
-                };
-                this.notificationManager.showError(
-                    "Connection required to extract knowledge",
-                );
-            }
-        } catch (error) {
-            console.error(
-                `Failed to extract knowledge for ${website.url}:`,
-                error,
-            );
-            if (website.knowledge) {
-                website.knowledge.status = "error";
-            } else {
-                website.knowledge = {
-                    hasKnowledge: false,
-                    status: "error",
-                    confidence: 0,
-                };
-            }
         }
     }
 
@@ -2859,11 +2714,11 @@ class WebsiteLibraryPanelFullPage {
 
     // Global notification action handlers
     public handleNotificationAction(id: string, actionLabel: string): void {
-        this.notificationManager.handleNotificationAction(id, actionLabel);
+        notificationManager.handleNotificationAction(id, actionLabel);
     }
 
     public hideNotification(id: string): void {
-        this.notificationManager.hideNotification(id);
+        notificationManager.hideNotification(id);
     }
 
     // Quick action methods
@@ -2976,7 +2831,7 @@ class WebsiteLibraryPanelFullPage {
         }
 
         // Show success notification
-        this.notificationManager.showSuccess(
+        notificationManager.showSuccess(
             `Successfully imported ${result.itemCount} items!`,
         );
     }
@@ -3141,7 +2996,7 @@ class WebsiteLibraryPanelFullPage {
                 "websiteLibrary_userPreferences",
                 JSON.stringify(this.userPreferences),
             );
-            this.notificationManager.showSuccess("Settings saved successfully");
+            notificationManager.showSuccess("Settings saved successfully");
 
             // Apply preferences immediately
             this.setViewMode(this.userPreferences.viewMode as any);
@@ -3156,32 +3011,9 @@ class WebsiteLibraryPanelFullPage {
             }
         } catch (error) {
             console.error("Failed to save user preferences:", error);
-            this.notificationManager.showError("Failed to save settings");
+            notificationManager.showError("Failed to save settings");
         }
     }
-}
-
-// ===================================================================
-// ENHANCED FEATURES: Real-time Integration & Advanced Features
-// ===================================================================
-
-// Enhanced interfaces for advanced features
-interface NotificationManager {
-    showSuccess(message: string, actions?: NotificationAction[]): void;
-    showError(message: string, retry?: () => void): void;
-    showWarning(message: string): void;
-    showInfo(message: string): void;
-    showProgress(message: string, progress?: number): void;
-    hide(id: string): void;
-    clear(): void;
-    handleNotificationAction(id: string, actionLabel: string): void;
-    hideNotification(id: string): void;
-}
-
-interface NotificationAction {
-    label: string;
-    action: () => void;
-    style?: "primary" | "secondary" | "success" | "danger";
 }
 
 interface SearchSuggestion {
@@ -3200,435 +3032,6 @@ interface UserPreferences {
     showConfidenceScores: boolean;
     enableNotifications: boolean;
     theme: "light" | "dark" | "auto";
-}
-
-// Enhanced Chrome Extension Service for real-time data
-interface ChromeExtensionService {
-    getLibraryStats(): Promise<LibraryStats>;
-    searchWebMemories(
-        query: string,
-        filters: SearchFilters,
-    ): Promise<SearchResult>;
-    extractKnowledge(url: string): Promise<KnowledgeStatus>;
-    checkKnowledgeStatus(url: string): Promise<KnowledgeStatus>;
-    getSearchSuggestions(query: string): Promise<string[]>;
-    getRecentSearches(): Promise<string[]>;
-    saveSearch(query: string, results: SearchResult): Promise<void>;
-    getTopDomains(limit?: number): Promise<any>;
-    getActivityTrends(timeRange?: string): Promise<any>;
-    getDiscoverInsights(limit?: number, timeframe?: string): Promise<any>;
-}
-
-// NotificationManager Implementation
-class NotificationManagerImpl implements NotificationManager {
-    private notifications: Map<string, HTMLElement> = new Map();
-    private notificationCounter = 0;
-
-    showSuccess(message: string, actions?: NotificationAction[]): void {
-        this.showNotification("success", message, actions);
-    }
-
-    showError(message: string, retry?: () => void): void {
-        const actions = retry
-            ? [{ label: "Retry", action: retry, style: "primary" as const }]
-            : undefined;
-        this.showNotification("danger", message, actions);
-    }
-
-    showWarning(message: string): void {
-        this.showNotification("warning", message);
-    }
-
-    showInfo(message: string): void {
-        this.showNotification("info", message);
-    }
-
-    showProgress(message: string, progress?: number): void {
-        const id = this.showNotification("info", message, undefined, progress);
-
-        // Auto-update progress if provided
-        if (progress !== undefined) {
-            const notification = this.notifications.get(id);
-            if (notification) {
-                const progressBar = notification.querySelector(
-                    ".progress-bar",
-                ) as HTMLElement;
-                if (progressBar) {
-                    progressBar.style.width = `${progress}%`;
-                    progressBar.textContent = `${progress}%`;
-                }
-            }
-        }
-    }
-
-    hide(id: string): void {
-        const notification = this.notifications.get(id);
-        if (notification) {
-            notification.classList.add("fade-out");
-            setTimeout(() => {
-                notification.remove();
-                this.notifications.delete(id);
-            }, 300);
-        }
-    }
-
-    clear(): void {
-        this.notifications.forEach((notification) => {
-            notification.remove();
-        });
-        this.notifications.clear();
-    }
-
-    private showNotification(
-        type: string,
-        message: string,
-        actions?: NotificationAction[],
-        progress?: number,
-    ): string {
-        const id = `notification-${++this.notificationCounter}`;
-
-        // Create notification container if it doesn't exist
-        let container = document.getElementById("notificationContainer");
-        if (!container) {
-            container = document.createElement("div");
-            container.id = "notificationContainer";
-            container.className = "notification-container";
-            container.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                z-index: 1050;
-                max-width: 350px;
-            `;
-            document.body.appendChild(container);
-        }
-
-        const actionsHtml = actions
-            ? actions
-                  .map(
-                      (action) =>
-                          `<button class="btn btn-sm btn-${action.style || "secondary"} me-2" 
-                     data-notification-id="${id}" data-action="${action.label}">${action.label}</button>`,
-                  )
-                  .join("")
-            : "";
-
-        const progressHtml =
-            progress !== undefined
-                ? `
-            <div class="progress mt-2" style="height: 4px;">
-                <div class="progress-bar" style="width: ${progress}%"></div>
-            </div>
-        `
-                : "";
-
-        const notificationHtml = `
-            <div class="alert alert-${type} alert-dismissible fade show notification-item" 
-                 data-id="${id}" style="margin-bottom: 10px;">
-                <div class="d-flex align-items-start">
-                    <div class="flex-grow-1">
-                        <div class="notification-message">${message}</div>
-                        ${progressHtml}
-                        ${actionsHtml ? `<div class="mt-2">${actionsHtml}</div>` : ""}
-                    </div>
-                    <button type="button" class="btn-close" data-notification-id="${id}" data-action="close"></button>
-                </div>
-            </div>
-        `;
-
-        container.insertAdjacentHTML("afterbegin", notificationHtml);
-
-        const notification = container.querySelector(
-            `[data-id="${id}"]`,
-        ) as HTMLElement;
-        if (notification) {
-            this.notifications.set(id, notification);
-
-            // Add event listeners for notification actions
-            notification.querySelectorAll("[data-action]").forEach((button) => {
-                button.addEventListener("click", (e) => {
-                    const target = e.target as HTMLElement;
-                    const action = target.getAttribute("data-action");
-                    const notificationId = target.getAttribute(
-                        "data-notification-id",
-                    );
-
-                    if (action === "close" && notificationId) {
-                        this.hide(notificationId);
-                    } else if (action && notificationId && actions) {
-                        const actionHandler = actions.find(
-                            (a) => a.label === action,
-                        );
-                        if (actionHandler) {
-                            actionHandler.action();
-                        }
-                    }
-                });
-            });
-
-            // Store action handlers for later use
-            if (actions) {
-                (notification as any)._actionHandlers = actions.reduce(
-                    (acc, action) => {
-                        acc[action.label] = action.action;
-                        return acc;
-                    },
-                    {} as Record<string, () => void>,
-                );
-            }
-
-            // Auto-hide success/warning notifications after 5 seconds
-            if (type === "success" || type === "warning") {
-                setTimeout(() => this.hide(id), 5000);
-            }
-        }
-
-        return id;
-    }
-
-    // Public methods for notification actions
-    public handleNotificationAction(id: string, actionLabel: string): void {
-        const notification = this.notifications.get(id);
-        if (notification && (notification as any)._actionHandlers) {
-            const handler = (notification as any)._actionHandlers[actionLabel];
-            if (handler) {
-                handler();
-                this.hide(id);
-            }
-        }
-    }
-
-    public hideNotification(id: string): void {
-        this.hide(id);
-    }
-}
-
-// Chrome Extension Service Implementation
-class ChromeExtensionServiceImpl implements ChromeExtensionService {
-    async getLibraryStats(): Promise<LibraryStats> {
-        if (typeof chrome !== "undefined" && chrome.runtime) {
-            try {
-                const response = await chrome.runtime.sendMessage({
-                    type: "getLibraryStats",
-                    includeKnowledge: true,
-                });
-
-                if (response.success) {
-                    return response.stats;
-                } else {
-                    throw new Error(
-                        response.error || "Failed to get library stats",
-                    );
-                }
-            } catch (error) {
-                console.error("Chrome extension not available:", error);
-                throw error;
-            }
-        }
-        throw new Error("Chrome extension not available");
-    }
-
-    async searchWebMemories(
-        query: string,
-        filters: SearchFilters,
-    ): Promise<SearchResult> {
-        if (typeof chrome !== "undefined" && chrome.runtime) {
-            try {
-                const response = await chrome.runtime.sendMessage({
-                    type: "searchWebMemories",
-                    parameters: {
-                        query,
-                        generateAnswer: true,
-                        includeRelatedEntities: true,
-                        enableAdvancedSearch: true,
-                        limit: 50, // Default limit since it's not in SearchFilters
-                        minScore: filters.minRelevance || 0.3,
-                        domain: filters.domain,
-                        source:
-                            filters.sourceType === "bookmarks"
-                                ? "bookmark"
-                                : filters.sourceType === "history"
-                                  ? "history"
-                                  : undefined,
-                        // Note: pageType, temporalSort, frequencySort not available in current SearchFilters interface
-                    },
-                });
-
-                if (response.success) {
-                    // Convert unified search response to SearchResult format
-                    return {
-                        websites: response.results.websites || [],
-                        summary: {
-                            text: response.results.summary.text || "",
-                            totalFound: response.results.websites?.length || 0,
-                            searchTime:
-                                response.results.summary?.searchTime || 0,
-                            sources: response.results.sources || [],
-                            entities: response.results.entities || [],
-                        },
-                        query: query,
-                        filters: filters,
-                    };
-                } else {
-                    throw new Error(response.error || "Search failed");
-                }
-            } catch (error) {
-                console.error("Search request failed:", error);
-                throw error;
-            }
-        }
-        throw new Error("Chrome extension not available");
-    }
-
-    async extractKnowledge(url: string): Promise<KnowledgeStatus> {
-        if (typeof chrome !== "undefined" && chrome.runtime) {
-            try {
-                const response = await chrome.runtime.sendMessage({
-                    type: "extractKnowledge",
-                    url,
-                });
-                return response;
-            } catch (error) {
-                console.error("Knowledge extraction failed:", error);
-                throw error;
-            }
-        }
-        throw new Error("Chrome extension not available");
-    }
-
-    async checkKnowledgeStatus(url: string): Promise<KnowledgeStatus> {
-        if (typeof chrome !== "undefined" && chrome.runtime) {
-            try {
-                const response = await chrome.runtime.sendMessage({
-                    action: "checkKnowledgeStatus",
-                    url,
-                });
-                return response;
-            } catch (error) {
-                console.error("Knowledge status check failed:", error);
-                throw error;
-            }
-        }
-        throw new Error("Chrome extension not available");
-    }
-
-    async getSearchSuggestions(query: string): Promise<string[]> {
-        if (typeof chrome !== "undefined" && chrome.runtime) {
-            try {
-                const response = await chrome.runtime.sendMessage({
-                    type: "getSearchSuggestions",
-                    query,
-                });
-                return response || [];
-            } catch (error) {
-                console.error("Failed to get search suggestions:", error);
-                return [];
-            }
-        }
-        throw new Error("Chrome extension not available");
-    }
-
-    async getRecentSearches(): Promise<string[]> {
-        if (typeof chrome !== "undefined" && chrome.runtime) {
-            try {
-                const response = await chrome.runtime.sendMessage({
-                    action: "getRecentSearches",
-                });
-                return response || [];
-            } catch (error) {
-                console.error("Failed to get recent searches:", error);
-                return [];
-            }
-        }
-        throw new Error("Chrome extension not available");
-    }
-
-    async getTopDomains(limit: number = 10): Promise<any> {
-        if (typeof chrome !== "undefined" && chrome.runtime) {
-            try {
-                const response = await chrome.runtime.sendMessage({
-                    type: "getTopDomains",
-                    limit,
-                });
-
-                if (response.success) {
-                    return response.domains;
-                } else {
-                    throw new Error(
-                        response.error || "Failed to get top domains",
-                    );
-                }
-            } catch (error) {
-                console.error("Failed to get top domains:", error);
-                throw error;
-            }
-        }
-        throw new Error("Chrome extension not available");
-    }
-
-    async getActivityTrends(timeRange: string = "30d"): Promise<any> {
-        if (typeof chrome !== "undefined" && chrome.runtime) {
-            try {
-                const response = await chrome.runtime.sendMessage({
-                    type: "getActivityTrends",
-                    timeRange,
-                });
-
-                if (response.success) {
-                    return response.trends;
-                } else {
-                    throw new Error(
-                        response.error || "Failed to get activity trends",
-                    );
-                }
-            } catch (error) {
-                console.error("Failed to get activity trends:", error);
-                throw error;
-            }
-        }
-        throw new Error("Chrome extension not available");
-    }
-
-    async getDiscoverInsights(
-        limit: number = 10,
-        timeframe: string = "30d",
-    ): Promise<any> {
-        if (typeof chrome !== "undefined" && chrome.runtime) {
-            try {
-                const response = await chrome.runtime.sendMessage({
-                    type: "getDiscoverInsights",
-                    limit,
-                    timeframe,
-                });
-
-                if (response.success) {
-                    return response;
-                } else {
-                    throw new Error(
-                        response.error || "Failed to get discover insights",
-                    );
-                }
-            } catch (error) {
-                console.error("Failed to get discover insights:", error);
-                throw error;
-            }
-        }
-        throw new Error("Chrome extension not available");
-    }
-
-    async saveSearch(query: string, results: SearchResult): Promise<void> {
-        if (typeof chrome !== "undefined" && chrome.runtime) {
-            try {
-                await chrome.runtime.sendMessage({
-                    type: "saveSearch",
-                    query,
-                    results,
-                });
-            } catch (error) {
-                console.error("Failed to save search:", error);
-            }
-        }
-    }
 }
 
 // ===================================================================

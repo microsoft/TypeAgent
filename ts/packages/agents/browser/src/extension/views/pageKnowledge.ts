@@ -1,6 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import {
+    notificationManager,
+    chromeExtensionService,
+    TemplateHelpers,
+    FormatUtils,
+    EventManager,
+} from "./knowledgeUtilities";
+
 interface KnowledgeData {
     entities: Entity[];
     relationships: Relationship[];
@@ -150,6 +158,9 @@ class KnowledgePanel {
     async initialize() {
         console.log("Initializing Enhanced Knowledge Panel");
 
+        // Check AI availability first to prevent race conditions
+        await this.checkAIModelAvailability();
+
         this.setupEventListeners();
         await this.loadCurrentPageInfo();
         await this.loadPageSourceInfo();
@@ -158,7 +169,6 @@ class KnowledgePanel {
         await this.checkConnectionStatus();
         await this.loadFreshKnowledge();
         await this.loadExtractionSettings();
-        await this.checkAIModelAvailability();
 
         this.setupAdvancedQueryControls();
     }
@@ -198,10 +208,9 @@ class KnowledgePanel {
         document
             .getElementById("openSettings")!
             .addEventListener("click", () => {
-                chrome.runtime.openOptionsPage();
+                chromeExtensionService.openOptionsPage();
             });
 
-        // Extraction mode selection
         document
             .getElementById("extractionMode")!
             .addEventListener("change", (e) => {
@@ -209,25 +218,15 @@ class KnowledgePanel {
                 this.updateExtractionMode(select.value as any);
             });
 
-        chrome.tabs.onActivated.addListener(() => {
+        EventManager.setupTabListeners(() => {
             this.onTabChange();
-        });
-
-        chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-            if (changeInfo.status === "complete") {
-                this.onTabChange();
-            }
         });
     }
 
     private async loadCurrentPageInfo() {
         try {
-            const tabs = await chrome.tabs.query({
-                active: true,
-                currentWindow: true,
-            });
-            if (tabs.length > 0) {
-                const tab = tabs[0];
+            const tab = await chromeExtensionService.getCurrentTab();
+            if (tab) {
                 this.currentUrl = tab.url || "";
 
                 const pageInfo = document.getElementById("currentPageInfo")!;
@@ -247,10 +246,9 @@ class KnowledgePanel {
 
     private async getPageIndexStatus(retryCount: number = 0): Promise<string> {
         try {
-            const response = await chrome.runtime.sendMessage({
-                type: "getPageIndexStatus",
-                url: this.currentUrl,
-            });
+            const response = await chromeExtensionService.getPageIndexStatus(
+                this.currentUrl,
+            );
 
             if (response.isIndexed) {
                 const lastIndexedDate = response.lastIndexed
@@ -301,12 +299,8 @@ class KnowledgePanel {
 
     private async refreshPageStatusAfterIndexing() {
         try {
-            const tabs = await chrome.tabs.query({
-                active: true,
-                currentWindow: true,
-            });
-            if (tabs.length > 0) {
-                const tab = tabs[0];
+            const tab = await chromeExtensionService.getCurrentTab();
+            if (tab) {
                 this.currentUrl = tab.url || "";
 
                 const pageInfo = document.getElementById("currentPageInfo")!;
@@ -335,11 +329,11 @@ class KnowledgePanel {
 
     private async loadAutoIndexSetting() {
         try {
-            const settings = await chrome.storage.sync.get(["autoIndexing"]);
+            const enabled = await chromeExtensionService.getAutoIndexSetting();
             const toggle = document.getElementById(
                 "autoIndexToggle",
             ) as HTMLInputElement;
-            toggle.checked = settings.autoIndexing || false;
+            toggle.checked = enabled;
         } catch (error) {
             console.error("Error loading auto-index setting:", error);
         }
@@ -347,19 +341,19 @@ class KnowledgePanel {
 
     private async toggleAutoIndex(enabled: boolean) {
         try {
-            await chrome.storage.sync.set({ autoIndexing: enabled });
+            await chromeExtensionService.setAutoIndexSetting(enabled);
 
             // Update status indicator
             const statusText = enabled
                 ? "Auto-indexing enabled"
                 : "Auto-indexing disabled";
-            this.showTemporaryStatus(statusText, enabled ? "success" : "info");
+            notificationManager.showTemporaryStatus(
+                statusText,
+                enabled ? "success" : "info",
+            );
 
             // Notify background script
-            chrome.runtime.sendMessage({
-                type: "autoIndexSettingChanged",
-                enabled: enabled,
-            });
+            await chromeExtensionService.notifyAutoIndexSettingChanged(enabled);
         } catch (error) {
             console.error("Error toggling auto-index:", error);
         }
@@ -381,23 +375,29 @@ class KnowledgePanel {
         this.showKnowledgeLoading();
 
         try {
-            // Validate mode selection before extraction
-            if (
-                this.extractionSettings.mode !== "basic" &&
-                !this.aiModelAvailable
-            ) {
-                this.showAIRequiredError();
-                return;
+            // Validate mode selection before extraction with defensive check
+            if (this.extractionSettings.mode !== "basic") {
+                // Defensive check: ensure AI availability is properly determined
+                if (this.aiModelAvailable === undefined) {
+                    console.log(
+                        "AI availability not yet determined, checking now...",
+                    );
+                    await this.checkAIModelAvailability();
+                }
+
+                if (!this.aiModelAvailable) {
+                    this.showAIRequiredError();
+                    return;
+                }
             }
 
             const startTime = Date.now();
 
-            const response = await chrome.runtime.sendMessage({
-                type: "extractPageKnowledge",
-                url: this.currentUrl,
-                mode: this.extractionSettings.mode,
-                extractionSettings: this.extractionSettings,
-            });
+            const response = await chromeExtensionService.extractPageKnowledge(
+                this.currentUrl,
+                this.extractionSettings.mode,
+                this.extractionSettings,
+            );
 
             const processingTime = Date.now() - startTime;
 
@@ -419,7 +419,7 @@ class KnowledgePanel {
                 const relationshipCount =
                     this.knowledgeData.relationships?.length || 0;
 
-                this.showEnhancedNotification(
+                notificationManager.showEnhancedNotification(
                     "success",
                     "Knowledge Extracted Successfully!",
                     `Found ${entityCount} entities, ${topicCount} topics, ${relationshipCount} relationships using ${this.extractionSettings.mode} mode in ${Math.round(processingTime / 1000)}s`,
@@ -444,7 +444,7 @@ class KnowledgePanel {
                 this.showKnowledgeError(
                     "Failed to extract knowledge. Please check your connection.",
                 );
-                this.showEnhancedNotification(
+                notificationManager.showEnhancedNotification(
                     "danger",
                     "Knowledge Extraction Failed",
                     (error as Error).message ||
@@ -478,22 +478,28 @@ class KnowledgePanel {
         button.classList.remove("btn-outline-primary");
 
         try {
-            // Validate mode selection before indexing
-            if (
-                this.extractionSettings.mode !== "basic" &&
-                !this.aiModelAvailable
-            ) {
-                this.showAIRequiredError();
-                return;
+            // Validate mode selection before indexing with defensive check
+            if (this.extractionSettings.mode !== "basic") {
+                // Defensive check: ensure AI availability is properly determined
+                if (this.aiModelAvailable === undefined) {
+                    console.log(
+                        "AI availability not yet determined, checking now...",
+                    );
+                    await this.checkAIModelAvailability();
+                }
+
+                if (!this.aiModelAvailable) {
+                    this.showAIRequiredError();
+                    return;
+                }
             }
 
             const startTime = Date.now();
 
-            const response = await chrome.runtime.sendMessage({
-                type: "indexPageContentDirect",
-                url: this.currentUrl,
-                mode: this.extractionSettings.mode,
-            });
+            const response = await chromeExtensionService.indexPageContent(
+                this.currentUrl,
+                this.extractionSettings.mode,
+            );
 
             const processingTime = Date.now() - startTime;
 
@@ -503,21 +509,46 @@ class KnowledgePanel {
             button.classList.remove("btn-warning");
             button.classList.add("btn-success");
 
-            // Show detailed success notification
-            const entityCount = response.entityCount || 0;
-            this.showEnhancedNotification(
+            // Wait for backend to complete processing and get accurate entity count
+            let actualEntityCount = 0;
+            let attempts = 0;
+            const maxAttempts = 10;
+
+            while (attempts < maxAttempts) {
+                await new Promise((resolve) => setTimeout(resolve, 500));
+                try {
+                    const status =
+                        await chromeExtensionService.getPageIndexStatus(
+                            this.currentUrl,
+                        );
+                    if (status.isIndexed && status.entityCount !== undefined) {
+                        actualEntityCount = status.entityCount;
+                        break;
+                    }
+                } catch (error) {
+                    console.warn(
+                        "Error checking index status during entity count polling:",
+                        error,
+                    );
+                }
+                attempts++;
+            }
+
+            // Show detailed success notification with accurate count
+            notificationManager.showEnhancedNotification(
                 "success",
                 "Page Indexed Successfully!",
-                `Extracted ${entityCount} entities using ${this.extractionSettings.mode} mode in ${Math.round(processingTime / 1000)}s`,
+                `Extracted ${actualEntityCount} entities using ${this.extractionSettings.mode} mode in ${Math.round(processingTime / 1000)}s`,
                 "bi-database-check",
             );
 
-            // Brief delay to show success state and allow backend to update
-            await new Promise((resolve) => setTimeout(resolve, 1500));
+            // Brief delay to show success state
+            await new Promise((resolve) => setTimeout(resolve, 500));
 
-            // Update all relevant UI components after the delay to ensure backend has processed
+            // Update all relevant UI components after successful indexing
             await this.refreshPageStatusAfterIndexing();
             await this.loadIndexStats();
+            await this.loadFreshKnowledge(); // Load and display the newly indexed knowledge data
             await this.updateQualityIndicator();
         } catch (error) {
             console.error("Error indexing page:", error);
@@ -531,7 +562,7 @@ class KnowledgePanel {
             if ((error as Error).message?.includes("AI model required")) {
                 this.showAIRequiredError();
             } else {
-                this.showEnhancedNotification(
+                notificationManager.showEnhancedNotification(
                     "danger",
                     "Indexing Failed",
                     (error as Error).message || "Failed to index page",
@@ -570,26 +601,23 @@ class KnowledgePanel {
             await this.submitEnhancedQuery(query);
         } else {
             // Use existing basic query logic
-            queryResults.innerHTML = this.createSearchLoadingState();
+            queryResults.innerHTML = TemplateHelpers.createSearchLoadingState();
 
             try {
-                const response = await chrome.runtime.sendMessage({
-                    type: "queryKnowledge",
-                    parameters: {
-                        query: query,
-                        url: this.currentUrl,
-                        searchScope: "current_page",
-                    },
+                const response = await chromeExtensionService.queryKnowledge({
+                    query: query,
+                    url: this.currentUrl,
+                    searchScope: "current_page",
                 });
 
-                queryResults.innerHTML = this.createQueryAnswer(
+                queryResults.innerHTML = TemplateHelpers.createQueryAnswer(
                     response.answer,
                     response.sources,
                 );
                 queryInput.value = "";
             } catch (error) {
                 console.error("Error querying knowledge:", error);
-                queryResults.innerHTML = this.createAlert(
+                queryResults.innerHTML = TemplateHelpers.createAlert(
                     "danger",
                     "bi bi-exclamation-triangle",
                     "Error processing query. Please try again.",
@@ -601,7 +629,7 @@ class KnowledgePanel {
     private showKnowledgeLoading() {
         const knowledgeSection = document.getElementById("knowledgeSection")!;
         knowledgeSection.className = "";
-        knowledgeSection.innerHTML = this.createLoadingState(
+        knowledgeSection.innerHTML = TemplateHelpers.createLoadingState(
             "Extracting knowledge from page...",
             "This may take a few seconds",
         );
@@ -924,32 +952,35 @@ class KnowledgePanel {
         }
 
         // Add any other categories that didn't fit the main ones
-        for (const [categoryName, questions] of categoryMap.entries()) {
-            if (
-                ![
-                    "relationship",
-                    "learning",
-                    "technical",
-                    "discovery",
-                    "content",
-                    "temporal",
-                ].includes(categoryName)
-            ) {
-                categories.push({
-                    name:
-                        categoryName.charAt(0).toUpperCase() +
-                        categoryName.slice(1),
-                    icon: "bi-question-circle",
-                    color: "light",
-                    questions: questions.sort(
-                        (a, b) =>
-                            this.getQuestionScore(b) - this.getQuestionScore(a),
-                    ),
-                    priority: 6,
-                    count: questions.length,
-                });
-            }
-        }
+        Array.from(categoryMap.entries()).forEach(
+            ([categoryName, questions]) => {
+                if (
+                    ![
+                        "relationship",
+                        "learning",
+                        "technical",
+                        "discovery",
+                        "content",
+                        "temporal",
+                    ].includes(categoryName)
+                ) {
+                    categories.push({
+                        name:
+                            categoryName.charAt(0).toUpperCase() +
+                            categoryName.slice(1),
+                        icon: "bi-question-circle",
+                        color: "light",
+                        questions: questions.sort(
+                            (a, b) =>
+                                this.getQuestionScore(b) -
+                                this.getQuestionScore(a),
+                        ),
+                        priority: 6,
+                        count: questions.length,
+                    });
+                }
+            },
+        );
 
         return categories.sort((a, b) => a.priority - b.priority);
     }
@@ -1247,7 +1278,7 @@ class KnowledgePanel {
                     }, 300);
 
                     // Open the page in a new tab
-                    chrome.tabs.create({ url: url, active: false });
+                    chromeExtensionService.createTab(url, false);
                 }
             }
 
@@ -1269,7 +1300,7 @@ class KnowledgePanel {
                     }, 300);
 
                     // Open the source in a new tab
-                    chrome.tabs.create({ url: url, active: false });
+                    chromeExtensionService.createTab(url, false);
                 }
             }
 
@@ -1334,9 +1365,7 @@ class KnowledgePanel {
 
     private async loadIndexStats() {
         try {
-            const response = await chrome.runtime.sendMessage({
-                type: "getIndexStats",
-            });
+            const response = await chromeExtensionService.getIndexStats();
 
             document.getElementById("totalPages")!.textContent =
                 response.totalPages.toString();
@@ -1351,10 +1380,9 @@ class KnowledgePanel {
 
     private async loadPageSourceInfo() {
         try {
-            const response = await chrome.runtime.sendMessage({
-                type: "getPageSourceInfo",
-                url: this.currentUrl,
-            });
+            const response = await chromeExtensionService.getPageSourceInfo(
+                this.currentUrl,
+            );
 
             this.pageSourceInfo = response.sourceInfo;
             this.updatePageSourceDisplay();
@@ -1398,13 +1426,12 @@ class KnowledgePanel {
 
     private async loadExtractionSettings() {
         try {
-            const settings = await chrome.storage.sync.get([
-                "extractionSettings",
-            ]);
-            if (settings.extractionSettings) {
+            const settings =
+                await chromeExtensionService.getExtractionSettings();
+            if (settings) {
                 this.extractionSettings = {
                     ...this.extractionSettings,
-                    ...settings.extractionSettings,
+                    ...settings,
                 };
                 // Sync with modern dropdown
                 const modernSelect = document.getElementById(
@@ -1496,9 +1523,7 @@ class KnowledgePanel {
 
     private async checkConnectionStatus() {
         try {
-            const response = await chrome.runtime.sendMessage({
-                type: "checkConnection",
-            });
+            const response = await chromeExtensionService.checkConnection();
 
             this.isConnected = response.connected;
             this.updateConnectionStatus();
@@ -1533,10 +1558,9 @@ class KnowledgePanel {
 
     private async loadFreshKnowledge() {
         try {
-            const indexStatus = await chrome.runtime.sendMessage({
-                type: "getPageIndexStatus",
-                url: this.currentUrl,
-            });
+            const indexStatus = await chromeExtensionService.getPageIndexStatus(
+                this.currentUrl,
+            );
 
             if (indexStatus.isIndexed) {
                 await this.loadIndexedKnowledge();
@@ -1585,10 +1609,10 @@ class KnowledgePanel {
 
     private async loadIndexedKnowledge() {
         try {
-            const response = await chrome.runtime.sendMessage({
-                type: "getPageIndexedKnowledge",
-                url: this.currentUrl,
-            });
+            const response =
+                await chromeExtensionService.getPageIndexedKnowledge(
+                    this.currentUrl,
+                );
 
             if (response.isIndexed && response.knowledge) {
                 this.knowledgeData = response.knowledge;
@@ -1628,116 +1652,6 @@ class KnowledgePanel {
         }
     }
 
-    private showTemporaryStatus(
-        message: string,
-        type: "success" | "danger" | "info",
-    ) {
-        const alertClass = "alert-" + type;
-        const iconClass =
-            type === "success"
-                ? "bi-check-circle"
-                : type === "danger"
-                  ? "bi-exclamation-triangle"
-                  : "bi-info-circle";
-
-        const statusDiv = document.createElement("div");
-        statusDiv.className = `alert ${alertClass} alert-dismissible fade show position-fixed`;
-        statusDiv.style.cssText =
-            "top: 1rem; right: 1rem; z-index: 1050; min-width: 250px;";
-        statusDiv.innerHTML = `
-            <i class="${iconClass} me-2"></i>
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        `;
-
-        document.body.appendChild(statusDiv);
-
-        setTimeout(() => {
-            if (statusDiv.parentNode) {
-                statusDiv.remove();
-            }
-        }, 3000);
-    }
-
-    private showEnhancedNotification(
-        type: "success" | "danger" | "info" | "warning",
-        title: string,
-        message: string,
-        icon: string = "bi-info-circle",
-    ) {
-        const notification = document.createElement("div");
-        notification.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
-        notification.style.cssText = `
-            top: 20px; 
-            right: 20px; 
-            z-index: 9999; 
-            min-width: 350px; 
-            max-width: 400px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            border: none;
-            border-radius: 8px;
-        `;
-
-        notification.innerHTML = `
-            <div class="d-flex align-items-start">
-                <i class="${icon} me-3 mt-1" style="font-size: 1.2rem;"></i>
-                <div class="flex-grow-1">
-                    <div class="fw-bold mb-1">${title}</div>
-                    <div class="small">${message}</div>
-                </div>
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-        `;
-
-        document.body.appendChild(notification);
-
-        // Auto-remove after 6 seconds for enhanced notifications
-        setTimeout(() => {
-            if (notification.parentNode) {
-                notification.classList.remove("show");
-                setTimeout(() => {
-                    if (notification.parentNode) {
-                        notification.parentNode.removeChild(notification);
-                    }
-                }, 300);
-            }
-        }, 6000);
-    }
-
-    // Template utility functions for knowledge panel
-    private createCard(
-        title: string,
-        content: string,
-        icon: string,
-        badge?: string,
-    ): string {
-        const badgeHtml = badge
-            ? `<span id="${badge}" class="badge bg-secondary ms-2">0</span>`
-            : "";
-        return `
-            <div class="knowledge-card card">
-                <div class="card-header">
-                    <h6 class="mb-0">
-                        <i class="${icon}"></i> ${title}
-                        ${badgeHtml}
-                    </h6>
-                </div>
-                <div class="card-body">
-                    ${content}
-                </div>
-            </div>
-        `;
-    }
-
-    private createEmptyState(icon: string, message: string): string {
-        return `
-            <div class="text-muted text-center">
-                <i class="${icon}"></i>
-                ${message}
-            </div>
-        `;
-    }
-
     private createContainer(id: string, defaultContent: string): string {
         return `<div id="${id}">${defaultContent}</div>`;
     }
@@ -1746,12 +1660,12 @@ class KnowledgePanel {
     private renderEntitiesCard(): string {
         const content = this.createContainer(
             "entitiesContainer",
-            this.createEmptyState(
+            TemplateHelpers.createEmptyState(
                 "bi bi-info-circle",
                 "No entities extracted yet",
             ),
         );
-        return this.createCard(
+        return TemplateHelpers.createCard(
             "Entities",
             content,
             "bi bi-tags",
@@ -1762,12 +1676,12 @@ class KnowledgePanel {
     private renderRelationshipsCard(): string {
         const content = this.createContainer(
             "relationshipsContainer",
-            this.createEmptyState(
+            TemplateHelpers.createEmptyState(
                 "bi bi-info-circle",
                 "No relationships found yet",
             ),
         );
-        return this.createCard(
+        return TemplateHelpers.createCard(
             "Relationships",
             content,
             "bi bi-diagram-3",
@@ -1778,76 +1692,16 @@ class KnowledgePanel {
     private renderTopicsCard(): string {
         const content = this.createContainer(
             "topicsContainer",
-            this.createEmptyState(
+            TemplateHelpers.createEmptyState(
                 "bi bi-info-circle",
                 "No topics identified yet",
             ),
         );
-        return this.createCard("Key Topics", content, "bi bi-bookmark");
-    }
-
-    // Alert and loading state utilities
-    private createAlert(
-        type: "info" | "danger",
-        icon: string,
-        content: string,
-    ): string {
-        return `
-            <div class="alert alert-${type} mb-0">
-                <div class="d-flex align-items-start">
-                    <i class="${icon} me-2 mt-1"></i>
-                    <div class="flex-grow-1">
-                        ${content}
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-
-    private createLoadingState(message: string, subtext?: string): string {
-        const subtextHtml = subtext
-            ? `<small class="text-muted">${subtext}</small>`
-            : "";
-        return `
-            <div class="knowledge-card card">
-                <div class="card-body text-center">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                    <p class="mt-3 mb-0">${message}</p>
-                    ${subtextHtml}
-                </div>
-            </div>
-        `;
-    }
-
-    private createSearchLoadingState(): string {
-        return `
-            <div class="d-flex align-items-center text-muted">
-                <div class="spinner-border spinner-border-sm me-2" role="status"></div>
-                <span>Searching knowledge...</span>
-            </div>
-        `;
-    }
-
-    private createQueryAnswer(answer: string, sources: any[]): string {
-        const sourcesHtml =
-            sources && sources.length > 0
-                ? `
-            <hr class="my-2">
-            <small class="text-muted">
-                <strong>Sources:</strong> ${sources.map((s: any) => s.title).join(", ")}
-            </small>
-        `
-                : "";
-
-        const content = `
-            <div class="fw-semibold">Answer:</div>
-            <p class="mb-2">${answer}</p>
-            ${sourcesHtml}
-        `;
-
-        return this.createAlert("info", "bi bi-lightbulb", content);
+        return TemplateHelpers.createCard(
+            "Key Topics",
+            content,
+            "bi bi-bookmark",
+        );
     }
 
     // Template utility functions for knowledge panel
@@ -1874,12 +1728,12 @@ class KnowledgePanel {
     private renderContentMetricsCard(): string {
         const content = this.createContainer(
             "contentMetricsContainer",
-            this.createEmptyState(
+            TemplateHelpers.createEmptyState(
                 "bi bi-info-circle",
                 "No content metrics available",
             ),
         );
-        return this.createCard(
+        return TemplateHelpers.createCard(
             "Content Analysis",
             content,
             "bi bi-bar-chart-line",
@@ -1890,12 +1744,12 @@ class KnowledgePanel {
     private renderRelatedContentCard(): string {
         const content = this.createContainer(
             "relatedContentContainer",
-            this.createEmptyState(
+            TemplateHelpers.createEmptyState(
                 "bi bi-info-circle",
                 "No related content found",
             ),
         );
-        return this.createCard(
+        return TemplateHelpers.createCard(
             "Related Content",
             content,
             "bi bi-link-45deg",
@@ -1905,9 +1759,12 @@ class KnowledgePanel {
     private renderActionsCard(): string {
         const content = this.createContainer(
             "detectedActionsContainer",
-            this.createEmptyState("bi bi-info-circle", "No actions detected"),
+            TemplateHelpers.createEmptyState(
+                "bi bi-info-circle",
+                "No actions detected",
+            ),
         );
-        return this.createCard(
+        return TemplateHelpers.createCard(
             "Detected Actions",
             content,
             "bi bi-lightning",
@@ -2488,7 +2345,7 @@ class KnowledgePanel {
 
                 if (url) {
                     // Open the page in a new tab
-                    chrome.tabs.create({ url });
+                    chromeExtensionService.createTab(url, true);
                 }
             }
 
@@ -2513,12 +2370,11 @@ class KnowledgePanel {
     // Load related content using relationship discovery
     private async loadRelatedContent(knowledge: KnowledgeData) {
         try {
-            const response = await chrome.runtime.sendMessage({
-                type: "discoverRelationships",
-                url: this.currentUrl,
-                knowledge: knowledge,
-                maxResults: 10,
-            });
+            const response = await chromeExtensionService.discoverRelationships(
+                this.currentUrl,
+                knowledge,
+                10,
+            );
 
             if (response.success && response.relationships.length > 0) {
                 this.renderRelatedContent(response.relationships);
@@ -2533,10 +2389,8 @@ class KnowledgePanel {
 
     private async loadTemporalSuggestions() {
         try {
-            const response = await chrome.runtime.sendMessage({
-                type: "generateTemporalSuggestions",
-                maxSuggestions: 6,
-            });
+            const response =
+                await chromeExtensionService.generateTemporalSuggestions(6);
 
             if (response.success && response.suggestions.length > 0) {
                 this.addTemporalSuggestions(
@@ -2782,12 +2636,11 @@ class KnowledgePanel {
         try {
             const entityNames = entities.slice(0, 5).map((e) => e.name); // Limit to top 5 entities
 
-            const response = await chrome.runtime.sendMessage({
-                type: "searchByEntities",
-                entities: entityNames,
-                url: this.currentUrl, // Exclude current page
-                maxResults: 5,
-            });
+            const response = await chromeExtensionService.searchByEntities(
+                entityNames,
+                this.currentUrl,
+                5,
+            );
 
             if (response.success && response.results) {
                 return response.results.map((result: any) => ({
@@ -2810,12 +2663,11 @@ class KnowledgePanel {
         try {
             const topTopics = topics.slice(0, 3); // Limit to top 3 topics
 
-            const response = await chrome.runtime.sendMessage({
-                type: "searchByTopics",
-                topics: topTopics,
-                url: this.currentUrl, // Exclude current page
-                maxResults: 5,
-            });
+            const response = await chromeExtensionService.searchByTopics(
+                topTopics,
+                this.currentUrl,
+                5,
+            );
 
             if (response.success && response.results) {
                 return response.results.map((result: any) => ({
@@ -2841,12 +2693,11 @@ class KnowledgePanel {
             // Use first 200 characters of summary for hybrid search
             const searchQuery = summary.substring(0, 200);
 
-            const response = await chrome.runtime.sendMessage({
-                type: "hybridSearch",
-                query: searchQuery,
-                url: this.currentUrl, // Exclude current page
-                maxResults: 3,
-            });
+            const response = await chromeExtensionService.hybridSearch(
+                searchQuery,
+                this.currentUrl,
+                3,
+            );
 
             if (response.success && response.results) {
                 return response.results.map((result: any) => ({
@@ -3076,9 +2927,8 @@ class KnowledgePanel {
         queryResults.innerHTML = this.createEnhancedSearchLoadingState();
 
         try {
-            const response = await chrome.runtime.sendMessage({
-                type: "searchWebMemories",
-                parameters: {
+            const response =
+                await chromeExtensionService.searchWebMemoriesAdvanced({
                     query: query,
                     searchScope: "all_indexed",
                     generateAnswer: true,
@@ -3090,8 +2940,7 @@ class KnowledgePanel {
                     pageType: filters.pageType,
                     temporalSort: filters.temporalSort,
                     frequencySort: filters.frequencySort,
-                },
-            });
+                });
 
             this.renderEnhancedQueryResults(response);
 
@@ -3101,7 +2950,7 @@ class KnowledgePanel {
             }
         } catch (error) {
             console.error("Error querying enhanced knowledge:", error);
-            queryResults.innerHTML = this.createAlert(
+            queryResults.innerHTML = TemplateHelpers.createAlert(
                 "danger",
                 "bi bi-exclamation-triangle",
                 "Failed to search knowledge base. Please try again.",
@@ -3391,12 +3240,9 @@ class KnowledgePanel {
     }
 
     private async checkAIModelAvailability() {
-        // Don't show checking notification - keep it hidden by default
-
         try {
-            const response = await chrome.runtime.sendMessage({
-                type: "checkAIModelAvailability",
-            });
+            const response =
+                await chromeExtensionService.checkAIModelAvailability();
 
             this.aiModelAvailable = response.available || false;
         } catch (error) {
@@ -3422,7 +3268,7 @@ class KnowledgePanel {
                         <button class="btn btn-primary btn-sm" onclick="switchToBasicMode()">
                             <i class="bi bi-lightning me-2"></i>Switch to Basic Mode
                         </button>
-                        <button class="btn btn-outline-secondary btn-sm" onclick="chrome.runtime.openOptionsPage()">
+                        <button class="btn btn-outline-secondary btn-sm" onclick="chromeExtensionService.openOptionsPage()">
                             <i class="bi bi-gear me-2"></i>Configure AI Model
                         </button>
                     </div>
@@ -3443,10 +3289,9 @@ class KnowledgePanel {
 
     private async updateQualityIndicator() {
         try {
-            const response = await chrome.runtime.sendMessage({
-                type: "getPageQualityMetrics",
-                url: this.currentUrl,
-            });
+            const response = await chromeExtensionService.getPageQualityMetrics(
+                this.currentUrl,
+            );
 
             const indicator = document.getElementById("qualityIndicator");
             if (indicator && response.quality) {
@@ -3480,10 +3325,9 @@ class KnowledgePanel {
 
     private async saveExtractionSettings() {
         try {
-            await chrome.storage.sync.set({
-                extractionMode: this.extractionSettings.mode,
-                suggestQuestions: this.extractionSettings.suggestQuestions,
-            });
+            await chromeExtensionService.saveExtractionSettings(
+                this.extractionSettings,
+            );
         } catch (error) {
             console.warn("Could not save extraction settings:", error);
         }
