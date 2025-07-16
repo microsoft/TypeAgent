@@ -45,6 +45,13 @@
         "schemaFile": "./vscode/workbenchCommandActionsSchema.ts",
         "schemaType": "CodeWorkbenchActions"
       }
+    },
+    "code-extension": {
+      "schema": {
+        "description": "Code agent that helps you perform vscode extension actions like show, install, update, enable, disable, uninstall extensions etc.",
+        "schemaFile": "./vscode/extensionsActionsSchema.ts",
+        "schemaType": "CodeWorkbenchExtensionActions"
+      }
     }
   }
 }

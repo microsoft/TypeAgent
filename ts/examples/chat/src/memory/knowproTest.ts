@@ -93,6 +93,19 @@ export async function createKnowproTestCommands(
 
         let mdDom = tp.loadMarkdownFromHtml(html, namedArgs.rootTag);
         context.printer.writeJsonInColor(chalk.cyan, mdDom);
+
+        const blockCollector = new tp.MarkdownBlockCollector(mdDom);
+        const knowledgeCollector = new tp.MarkdownKnowledgeCollector();
+        const blocks = blockCollector.getMarkdownBlocks(knowledgeCollector);
+        const knowledge = knowledgeCollector.knowledgeBlocks;
+        if (blocks.length !== knowledge.length) {
+            context.printer.writeError("Mismatch");
+            return;
+        }
+        for (let i = 0; i < blocks.length; ++i) {
+            context.printer.writeLine(blocks[i]);
+            context.printer.writeJson(knowledge[i]);
+        }
     }
 
     function testHtmlPartsDef(): CommandMetadata {

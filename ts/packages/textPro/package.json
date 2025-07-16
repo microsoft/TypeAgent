@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "cheerio": "1.0.0-rc.12",
+    "knowledge-processor": "workspace:*",
     "marked": "16.0.0"
   },
   "devDependencies": {
