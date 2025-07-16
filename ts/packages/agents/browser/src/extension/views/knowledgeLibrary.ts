@@ -20,7 +20,6 @@ import {
 
 interface FullPageNavigation {
     currentPage: "search" | "discover" | "analytics";
-    previousPage: string | null;
 }
 
 interface DiscoverInsights {
@@ -107,20 +106,6 @@ interface AnalyticsData {
     };
 }
 
-// Import existing interfaces
-interface LocalImportOptions {
-    source: "chrome" | "edge";
-    type: "bookmarks" | "history";
-    limit?: number;
-    days?: number;
-    folder?: string;
-    extractContent?: boolean;
-    enableIntelligentAnalysis?: boolean;
-    extractionMode?: "basic" | "content" | "actions" | "full";
-    maxConcurrent?: number;
-    contentTimeout?: number;
-}
-
 interface LibraryStats {
     totalWebsites: number;
     totalBookmarks: number;
@@ -134,7 +119,6 @@ interface SearchFilters {
     dateTo?: string;
     sourceType?: "bookmarks" | "history";
     domain?: string;
-    minRelevance?: number;
 }
 
 interface KnowledgeStatus {
@@ -189,7 +173,6 @@ class WebsiteLibraryPanelFullPage {
     private isInitialized: boolean = false; // Add initialization guard
     private navigation: FullPageNavigation = {
         currentPage: "search",
-        previousPage: null,
     };
 
     // Search functionality
@@ -231,12 +214,10 @@ class WebsiteLibraryPanelFullPage {
     async initialize() {
         // Prevent duplicate initialization
         if (this.isInitialized) {
-            console.log("Website Library Panel already initialized, skipping");
             return;
         }
 
         this.isInitialized = true;
-        console.log("Initializing Enhanced Full-Page Website Library Panel");
 
         try {
             this.setupNavigation();
@@ -249,8 +230,7 @@ class WebsiteLibraryPanelFullPage {
             await this.loadRecentSearches();
             this.showPage("search");
         } catch (error) {
-            console.error("Failed to initialize Website Library:", error);
-            this.isInitialized = false; // Reset flag on error so retry is possible
+            this.isInitialized = false;
             notificationManager.showError(
                 "Failed to load Website Library. Please refresh the page.",
                 () => window.location.reload(),
@@ -378,8 +358,6 @@ class WebsiteLibraryPanelFullPage {
         });
 
         this.importUI.onImportError((error: any) => {
-            // Handle the error without calling showImportError again to avoid infinite recursion
-            // showImportError is already called from within the import process
             console.error("Import error:", error);
             notificationManager.showError(
                 `Import failed: ${error.message || "Unknown error"}`,
@@ -488,18 +466,13 @@ class WebsiteLibraryPanelFullPage {
     }
 
     private async navigateToPage(page: "search" | "discover" | "analytics") {
-        // Update navigation state
-        this.navigation.previousPage = this.navigation.currentPage;
         this.navigation.currentPage = page;
 
-        // Update UI
         this.updateNavigation();
         this.showPage(page);
 
-        // Load page-specific data
         switch (page) {
             case "search":
-                // Search page is already initialized in setupSearchInterface
                 break;
             case "discover":
                 this.initializeDiscoverPage();
@@ -652,20 +625,9 @@ class WebsiteLibraryPanelFullPage {
             case "showImportModal":
                 this.showImportModal();
                 break;
-            case "exploreRecentBookmarks":
-                this.exploreRecentBookmarks();
-                break;
-            case "exploreMostVisited":
-                this.exploreMostVisited();
-                break;
-            case "exploreByDomain":
-                this.exploreByDomain();
-                break;
             case "reconnect":
                 this.reconnect();
                 break;
-            default:
-                console.warn("Unknown action:", action);
         }
     }
 
@@ -739,17 +701,12 @@ class WebsiteLibraryPanelFullPage {
             const domain = (
                 document.getElementById("domainFilter") as HTMLInputElement
             )?.value;
-            const minRelevance = parseInt(
-                (document.getElementById("relevanceFilter") as HTMLInputElement)
-                    ?.value || "0",
-            );
 
             if (dateFrom) filters.dateFrom = dateFrom;
             if (dateTo) filters.dateTo = dateTo;
             if (sourceType)
                 filters.sourceType = sourceType as "bookmarks" | "history";
             if (domain) filters.domain = domain;
-            if (minRelevance > 0) filters.minRelevance = minRelevance;
 
             const cacheKey = `${query}-${JSON.stringify(filters)}`;
 
@@ -1483,7 +1440,6 @@ class WebsiteLibraryPanelFullPage {
     }
 
     private handleDiscoverDataError(error: any) {
-        console.error("Error loading discover data:", error);
         this.discoverData = {
             trendingTopics: [],
             readingPatterns: [],
@@ -2786,7 +2742,6 @@ class WebsiteLibraryPanelFullPage {
 
     // Quick action methods
     public showImportModal() {
-        console.log("Show import modal - using web activity modal as default");
         this.showWebActivityImportModal();
     }
 
@@ -2899,29 +2854,7 @@ class WebsiteLibraryPanelFullPage {
         );
     }
 
-    public exploreRecentBookmarks() {
-        console.log("Explore recent bookmarks");
-        this.navigateToPage("search");
-        // Set search to show recent bookmarks
-    }
-
-    public exploreMostVisited() {
-        console.log("Explore most visited");
-        this.navigateToPage("search");
-        // Set search to show most visited sites
-    }
-
-    public exploreByDomain() {
-        console.log("Explore by domain");
-        this.navigateToPage("search");
-        // Set view mode to domain view
-        this.setViewMode("domain");
-    }
-
     public showSettings() {
-        console.log("Show enhanced settings modal");
-
-        // Create and show enhanced settings modal
         this.createEnhancedSettingsModal();
     }
 
@@ -3108,9 +3041,6 @@ let isInitialized = false;
 // Initialize when DOM is ready - with guard to prevent double initialization
 function initializeLibraryPanel() {
     if (isInitialized) {
-        console.log(
-            "Website Library already initialized, skipping duplicate initialization",
-        );
         return;
     }
 
@@ -3118,7 +3048,6 @@ function initializeLibraryPanel() {
     libraryPanelInstance = new WebsiteLibraryPanelFullPage();
     libraryPanelInstance.initialize();
 
-    // Make available globally for any remaining references
     (window as any).libraryPanel = libraryPanelInstance;
 }
 
