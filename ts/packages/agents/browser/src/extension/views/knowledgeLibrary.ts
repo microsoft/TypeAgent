@@ -163,7 +163,7 @@ interface SourceReference {
 }
 
 interface EntityMatch {
-    entity: string;
+    name: string;
     type: string;
     count: number;
 }
@@ -1230,9 +1230,9 @@ class WebsiteLibraryPanelFullPage {
             const entityTagsHtml = sortedEntities
                 .map(
                     (entity) => `
-                <div class="entity-tag" title="${entity.type}: found ${entity.count} time${entity.count !== 1 ? "s" : ""}">
-                    <span>${entity.entity}</span>
-                    <span class="entity-count">${entity.count}</span>
+                <div class="entity-tag" title="${entity.name}: found ${entity.count} time${entity.count !== 1 ? "s" : ""}">
+                    <span>${entity.name}</span>
+                    <span class="entity-count">${entity.type}</span>
                 </div>
             `,
                 )

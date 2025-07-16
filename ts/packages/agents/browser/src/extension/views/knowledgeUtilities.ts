@@ -253,7 +253,7 @@ export class ChromeExtensionService {
         query: string,
         filters: SearchFilters,
     ): Promise<SearchResult> {
-        return this.sendMessage({
+        const response = await this.sendMessage({        
             type: "searchWebMemories",
             parameters: {
                 query,
@@ -264,7 +264,9 @@ export class ChromeExtensionService {
                 minScore: filters.minRelevance || 0.3,
                 domain: filters.domain,
             },
-        });
+        }) as any;
+
+        return response.results;
     }
 
     async getCurrentTab(): Promise<chrome.tabs.Tab | null> {
@@ -513,10 +515,11 @@ export class ChromeExtensionService {
     }
 
     async getSearchSuggestions(query: string): Promise<string[]> {
-        return this.sendMessage({
+        const response = await this.sendMessage({
             type: "getSearchSuggestions",
             query,
-        });
+        }) as any;
+        return response.suggestions || [];
     }
 
     async getRecentSearches(): Promise<string[]> {

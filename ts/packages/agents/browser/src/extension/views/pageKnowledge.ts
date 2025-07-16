@@ -748,7 +748,7 @@ class KnowledgePanel {
             container.innerHTML = `
                 <div class="text-muted text-center">
                     <i class="bi bi-info-circle"></i>
-                    No relationships identified
+                    No entity actions identified
                 </div>
             `;
             return;
@@ -1158,11 +1158,11 @@ class KnowledgePanel {
             "relationshipsContainer",
             TemplateHelpers.createEmptyState(
                 "bi bi-info-circle",
-                "No relationships found yet",
+                "No entity actions found yet",
             ),
         );
         return TemplateHelpers.createCard(
-            "Relationships",
+            "Entity Actions",
             content,
             "bi bi-diagram-3",
             "relationshipsCount",
