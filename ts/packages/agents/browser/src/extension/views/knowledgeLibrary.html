@@ -234,21 +234,69 @@
               <div id="summaryContent" class="summary-content"></div>
             </div>
 
-            <!-- Related Entities -->
-            <div
-              id="entitiesSection"
-              class="entities-section"
-              style="display: none"
-            >
-              <div class="entities-header">
-                <i class="bi bi-diagram-2"></i>
-                <span>Related Entities</span>
-              </div>
-              <div id="entitiesContent" class="entities-content"></div>
-            </div>
-
             <!-- Results Container -->
             <div id="resultsContainer" class="results-container"></div>
+
+            <!-- Search Insights Card -->
+            <div
+              id="searchInsightsCard"
+              class="search-insights-card"
+              style="display: none"
+            >
+              <div class="insights-card-header">
+                <h3 class="insights-title">
+                  <i class="bi bi-lightbulb"></i>
+                  Search Insights
+                </h3>
+                <p class="insights-subtitle">
+                  Explore related topics and suggestions
+                </p>
+              </div>
+
+              <div class="insights-content">
+                <!-- Top Topics -->
+                <div
+                  id="topTopicsSection"
+                  class="insight-section"
+                  style="display: none"
+                >
+                  <div class="insight-header">
+                    <i class="bi bi-tags"></i>
+                    <span>Top Topics</span>
+                  </div>
+                  <div id="topTopicsContent" class="insight-content"></div>
+                </div>
+
+                <!-- Suggested Followups -->
+                <div
+                  id="suggestedFollowupsSection"
+                  class="insight-section"
+                  style="display: none"
+                >
+                  <div class="insight-header">
+                    <i class="bi bi-arrow-right-circle"></i>
+                    <span>Suggested Followups</span>
+                  </div>
+                  <div
+                    id="suggestedFollowupsContent"
+                    class="insight-content"
+                  ></div>
+                </div>
+
+                <!-- Related Entities -->
+                <div
+                  id="entitiesSection"
+                  class="insight-section"
+                  style="display: none"
+                >
+                  <div class="insight-header">
+                    <i class="bi bi-diagram-2"></i>
+                    <span>Related Entities</span>
+                  </div>
+                  <div id="entitiesContent" class="insight-content"></div>
+                </div>
+              </div>
+            </div>
 
             <!-- Pagination -->
             <div id="pagination" class="pagination" style="display: none">
@@ -462,26 +510,11 @@
                   </div>
                   <div class="knowledge-card-body">
                     <div class="knowledge-metric" id="totalEntitiesMetric">
-                      245
+                      0
                     </div>
                     <div class="knowledge-label">Total Entities Extracted</div>
                     <div class="knowledge-breakdown">
-                      <div class="breakdown-item">
-                        <span class="breakdown-type">Companies</span>
-                        <span class="breakdown-count">89</span>
-                      </div>
-                      <div class="breakdown-item">
-                        <span class="breakdown-type">Technologies</span>
-                        <span class="breakdown-count">67</span>
-                      </div>
-                      <div class="breakdown-item">
-                        <span class="breakdown-type">People</span>
-                        <span class="breakdown-count">43</span>
-                      </div>
-                      <div class="breakdown-item">
-                        <span class="breakdown-type">Other</span>
-                        <span class="breakdown-count">46</span>
-                      </div>
+                      
                     </div>
                   </div>
                 </div>
@@ -493,18 +526,11 @@
                   </div>
                   <div class="knowledge-card-body">
                     <div class="knowledge-metric" id="totalTopicsMetric">
-                      128
+                      0
                     </div>
                     <div class="knowledge-label">Topics Identified</div>
                     <div class="topic-cloud">
-                      <span class="topic-tag size-large">JavaScript</span>
-                      <span class="topic-tag size-medium">React</span>
-                      <span class="topic-tag size-medium">TypeScript</span>
-                      <span class="topic-tag size-small">Node.js</span>
-                      <span class="topic-tag size-small">API</span>
-                      <span class="topic-tag size-large">Web Development</span>
-                      <span class="topic-tag size-medium">Database</span>
-                      <span class="topic-tag size-small">CSS</span>
+                      
                     </div>
                   </div>
                 </div>
@@ -516,30 +542,11 @@
                   </div>
                   <div class="knowledge-card-body">
                     <div class="knowledge-metric" id="totalActionsMetric">
-                      156
+                      0
                     </div>
                     <div class="knowledge-label">Actionable Items Found</div>
                     <div class="action-breakdown">
-                      <div class="action-type">
-                        <i class="bi bi-download"></i>
-                        <span>Downloads</span>
-                        <span class="action-count">42</span>
-                      </div>
-                      <div class="action-type">
-                        <i class="bi bi-link-45deg"></i>
-                        <span>Links to Follow</span>
-                        <span class="action-count">38</span>
-                      </div>
-                      <div class="action-type">
-                        <i class="bi bi-bookmark"></i>
-                        <span>Save for Later</span>
-                        <span class="action-count">29</span>
-                      </div>
-                      <div class="action-type">
-                        <i class="bi bi-share"></i>
-                        <span>Share Items</span>
-                        <span class="action-count">47</span>
-                      </div>
+                      
                     </div>
                   </div>
                 </div>

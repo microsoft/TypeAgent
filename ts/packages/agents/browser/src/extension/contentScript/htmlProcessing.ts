@@ -44,12 +44,12 @@ export function getPageHTML(
 
     const reducer = new HTMLReducer();
     reducer.removeDivs = false;
-    
+
     // Preserve meta tags if requested and readability was used
     if (filterToReadingView && keepMetaTags) {
         reducer.removeMetaTags = false;
     }
-    
+
     const reducedHtml = reducer.reduce(documentHtml);
     return reducedHtml;
 }
@@ -165,38 +165,45 @@ function applyReadabilityFilter(html: string, keepMetaTags?: boolean): string {
         // Parse the HTML
         const domParser = new DOMParser();
         const doc = domParser.parseFromString(html, "text/html");
-        
+
         // Check if readability can process this document
         if (!isProbablyReaderable(doc)) {
-            console.warn("Document is not probably readerable, skipping Readability filter");
+            console.warn(
+                "Document is not probably readerable, skipping Readability filter",
+            );
             return html;
         }
-        
+
         // Clone document to avoid modifying original
         const documentClone = doc.cloneNode(true) as Document;
-        
+
         // Extract meta tags before applying Readability if we want to preserve them
-        let metaTags = '';
+        let metaTags = "";
         if (keepMetaTags) {
-            const headClone = documentClone.head?.cloneNode(true) as HTMLHeadElement;
+            const headClone = documentClone.head?.cloneNode(
+                true,
+            ) as HTMLHeadElement;
             if (headClone) {
-                const metaElements = headClone.querySelectorAll('meta, title');
-                metaTags = Array.from(metaElements).map(el => el.outerHTML).join('\n');
+                const metaElements = headClone.querySelectorAll("meta, title");
+                metaTags = Array.from(metaElements)
+                    .map((el) => el.outerHTML)
+                    .join("\n");
             }
         }
-        
+
         // Apply Readability
         const article = new Readability(documentClone).parse();
-        
+
         if (article?.content) {
             // Construct new HTML with main content
             let resultHtml = `<html><head>${metaTags}</head><body>${article.content}</body></html>`;
             return resultHtml;
         } else {
-            console.warn("Readability failed to extract content, falling back to original HTML");
+            console.warn(
+                "Readability failed to extract content, falling back to original HTML",
+            );
             return html;
         }
-        
     } catch (error) {
         console.error("Error applying Readability filter:", error);
         return html; // Fallback to original HTML

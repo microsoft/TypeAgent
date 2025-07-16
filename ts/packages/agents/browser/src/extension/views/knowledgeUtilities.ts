@@ -53,6 +53,13 @@ export interface SearchResult {
     };
     query: string;
     filters: SearchFilters;
+    topTopics?: string[];
+    suggestedFollowups?: string[];
+    relatedEntities?: Array<{
+        name: string;
+        type: string;
+        confidence: number;
+    }>;
 }
 
 export interface Website {
@@ -74,9 +81,9 @@ export interface SourceReference {
 }
 
 export interface EntityMatch {
-    entity: string;
+    name: string;
     type: string;
-    count: number;
+    confidence: number;
 }
 
 // ===================================================================
@@ -253,7 +260,7 @@ export class ChromeExtensionService {
         query: string,
         filters: SearchFilters,
     ): Promise<SearchResult> {
-        const response = await this.sendMessage({        
+        const response = (await this.sendMessage({
             type: "searchWebMemories",
             parameters: {
                 query,
@@ -264,7 +271,7 @@ export class ChromeExtensionService {
                 minScore: filters.minRelevance || 0.3,
                 domain: filters.domain,
             },
-        }) as any;
+        })) as any;
 
         return response.results;
     }
@@ -515,10 +522,10 @@ export class ChromeExtensionService {
     }
 
     async getSearchSuggestions(query: string): Promise<string[]> {
-        const response = await this.sendMessage({
+        const response = (await this.sendMessage({
             type: "getSearchSuggestions",
             query,
-        }) as any;
+        })) as any;
         return response.suggestions || [];
     }
 

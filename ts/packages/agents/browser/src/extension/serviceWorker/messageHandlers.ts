@@ -247,8 +247,8 @@ export async function handleMessage(
                         false,
                         true,
                         false, // useTimestampIds
-                        true,  // filterToReadingView - use reading view for knowledge extraction
-                        true,  // keepMetaTags - preserve metadata for context
+                        true, // filterToReadingView - use reading view for knowledge extraction
+                        true, // keepMetaTags - preserve metadata for context
                     );
 
                     const knowledgeResult = await sendActionToAgent({
@@ -1113,6 +1113,9 @@ async function handleSearchWebMemories(message: any) {
                 },
                 query: message.parameters.query,
                 filters: message.parameters.filters || {},
+                topTopics: result.topTopics || [],
+                suggestedFollowups: result.suggestedFollowups || [],
+                relatedEntities: result.relatedEntities || [],
             },
         };
     } catch (error) {
@@ -1295,8 +1298,8 @@ async function indexPageContent(
             false,
             true, // extract text
             false, // useTimestampIds
-            true,  // filterToReadingView - use reading view for indexing
-            true,  // keepMetaTags - preserve metadata for indexing context
+            true, // filterToReadingView - use reading view for indexing
+            true, // keepMetaTags - preserve metadata for indexing context
         );
 
         await sendActionToAgent({
