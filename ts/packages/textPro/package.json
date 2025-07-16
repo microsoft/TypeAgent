@@ -28,8 +28,8 @@
   },
   "dependencies": {
     "cheerio": "1.0.0-rc.12",
-    "marked": "16.0.0",
-    "knowledge-processor": "workspace:*"
+    "knowledge-processor": "workspace:*",
+    "marked": "16.0.0"
   },
   "devDependencies": {
     "prettier": "^3.5.3",
