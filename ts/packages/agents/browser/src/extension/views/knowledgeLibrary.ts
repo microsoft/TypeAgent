@@ -154,6 +154,13 @@ interface SearchResult {
     };
     query: string;
     filters: SearchFilters;
+    topTopics?: string[];
+    suggestedFollowups?: string[];
+    relatedEntities?: Array<{
+        name: string;
+        type: string;
+        confidence: number;
+    }>;
 }
 
 interface SourceReference {
@@ -163,9 +170,9 @@ interface SourceReference {
 }
 
 interface EntityMatch {
-    entity: string;
+    name: string;
     type: string;
-    count: number;
+    confidence: number;
 }
 
 class WebsiteLibraryPanelFullPage {
@@ -826,14 +833,16 @@ class WebsiteLibraryPanelFullPage {
             emptyState.style.display = "none";
         }
 
-        // Hide AI summary and entities sections
+        // Hide AI summary, topics, followups, and entities sections
         const aiSummary = document.getElementById("aiSummary");
-        const entitiesSection = document.getElementById("entitiesSection");
+        const searchInsightsCard =
+            document.getElementById("searchInsightsCard");
+
         if (aiSummary) {
             aiSummary.style.display = "none";
         }
-        if (entitiesSection) {
-            entitiesSection.style.display = "none";
+        if (searchInsightsCard) {
+            searchInsightsCard.style.display = "none";
         }
 
         // Show loading state (create if it doesn't exist)
@@ -916,9 +925,46 @@ class WebsiteLibraryPanelFullPage {
             this.showAISummary(results.summary.text);
         }
 
+        // Handle insights card sections
+        this.showSearchInsights(results);
+    }
+
+    private showSearchInsights(results: SearchResult) {
+        const insightsCard = document.getElementById("searchInsightsCard");
+
+        // Track which sections have data
+        let hasInsights = false;
+
+        // Show top topics if available
+        if (results.topTopics && results.topTopics.length > 0) {
+            this.showTopTopics(results.topTopics);
+            hasInsights = true;
+        } else {
+            this.hideTopTopics();
+        }
+
+        // Show suggested followups if available
+        if (
+            results.suggestedFollowups &&
+            results.suggestedFollowups.length > 0
+        ) {
+            this.showSuggestedFollowups(results.suggestedFollowups);
+            hasInsights = true;
+        } else {
+            this.hideSuggestedFollowups();
+        }
+
         // Show related entities if available
         if (results.summary.entities && results.summary.entities.length > 0) {
             this.showEntities(results.summary.entities);
+            hasInsights = true;
+        } else {
+            this.hideEntities();
+        }
+
+        // Show or hide the entire insights card based on whether we have any insights
+        if (insightsCard) {
+            insightsCard.style.display = hasInsights ? "block" : "none";
         }
     }
 
@@ -1223,16 +1269,18 @@ class WebsiteLibraryPanelFullPage {
         const entitiesContent = document.getElementById("entitiesContent");
 
         if (entitiesSection && entitiesContent && entities.length > 0) {
-            // Sort entities by count descending
-            const sortedEntities = entities.sort((a, b) => b.count - a.count);
+            // Sort entities by confidence descending
+            const sortedEntities = entities.sort(
+                (a, b) => b.confidence - a.confidence,
+            );
 
             // Create entity tags HTML
             const entityTagsHtml = sortedEntities
                 .map(
                     (entity) => `
-                <div class="entity-tag" title="${entity.type}: found ${entity.count} time${entity.count !== 1 ? "s" : ""}">
-                    <span>${entity.entity}</span>
-                    <span class="entity-count">${entity.count}</span>
+                <div class="entity-tag" title="${entity.name}: confidence ${Math.round(entity.confidence * 100)}%">
+                    <span>${entity.name}</span>
+                    <span class="entity-count">${entity.type}</span>
                 </div>
             `,
                 )
@@ -1246,6 +1294,112 @@ class WebsiteLibraryPanelFullPage {
 
             entitiesSection.style.display = "block";
         } else if (entitiesSection) {
+            entitiesSection.style.display = "none";
+        }
+    }
+
+    private showTopTopics(topics: string[]) {
+        const topicsSection = document.getElementById("topTopicsSection");
+        const topicsContent = document.getElementById("topTopicsContent");
+
+        if (topicsSection && topicsContent && topics.length > 0) {
+            // Create topic tags HTML
+            const topicTagsHtml = topics
+                .map(
+                    (topic) => `
+                <div class="topic-tag" data-topic="${topic}" title="Search for: ${topic}">
+                    <span>${topic}</span>
+                </div>
+            `,
+                )
+                .join("");
+
+            topicsContent.innerHTML = `
+                <div class="topic-tags">
+                    ${topicTagsHtml}
+                </div>
+            `;
+
+            // Add click handlers for topic tags
+            topicsContent.querySelectorAll(".topic-tag").forEach((tag) => {
+                tag.addEventListener("click", () => {
+                    const topic = tag.getAttribute("data-topic");
+                    if (topic) {
+                        this.performSearchWithQuery(topic);
+                    }
+                });
+            });
+
+            topicsSection.style.display = "block";
+        } else if (topicsSection) {
+            topicsSection.style.display = "none";
+        }
+    }
+
+    private showSuggestedFollowups(followups: string[]) {
+        const followupsSection = document.getElementById(
+            "suggestedFollowupsSection",
+        );
+        const followupsContent = document.getElementById(
+            "suggestedFollowupsContent",
+        );
+
+        if (followupsSection && followupsContent && followups.length > 0) {
+            // Create followup suggestions HTML
+            const followupItemsHtml = followups
+                .map(
+                    (followup) => `
+                <div class="followup-item" data-followup="${followup}" title="Search for: ${followup}">
+                    <i class="bi bi-arrow-right"></i>
+                    <span>${followup}</span>
+                </div>
+            `,
+                )
+                .join("");
+
+            followupsContent.innerHTML = `
+                <div class="followup-suggestions">
+                    ${followupItemsHtml}
+                </div>
+            `;
+
+            // Add click handlers for followup suggestions
+            followupsContent
+                .querySelectorAll(".followup-item")
+                .forEach((item) => {
+                    item.addEventListener("click", () => {
+                        const followup = item.getAttribute("data-followup");
+                        if (followup) {
+                            this.performSearchWithQuery(followup);
+                        }
+                    });
+                });
+
+            followupsSection.style.display = "block";
+        } else if (followupsSection) {
+            followupsSection.style.display = "none";
+        }
+    }
+
+    private hideTopTopics() {
+        const topicsSection = document.getElementById("topTopicsSection");
+        if (topicsSection) {
+            topicsSection.style.display = "none";
+        }
+    }
+
+    private hideSuggestedFollowups() {
+        const followupsSection = document.getElementById(
+            "suggestedFollowupsSection",
+        );
+        if (followupsSection) {
+            followupsSection.style.display = "none";
+        }
+    }
+
+    private hideEntities() {
+        const entitiesSection = document.getElementById("entitiesSection");
+        if (entitiesSection) {
             entitiesSection.style.display = "none";
         }
     }
@@ -1265,14 +1419,16 @@ class WebsiteLibraryPanelFullPage {
             emptyState.style.display = "none";
         }
 
-        // Hide AI summary and entities sections
+        // Hide AI summary, topics, followups, and entities sections
         const aiSummary = document.getElementById("aiSummary");
-        const entitiesSection = document.getElementById("entitiesSection");
+        const searchInsightsCard =
+            document.getElementById("searchInsightsCard");
+
         if (aiSummary) {
             aiSummary.style.display = "none";
         }
-        if (entitiesSection) {
-            entitiesSection.style.display = "none";
+        if (searchInsightsCard) {
+            searchInsightsCard.style.display = "none";
         }
 
         // Show error in results container without destroying its structure
@@ -1791,8 +1947,10 @@ class WebsiteLibraryPanelFullPage {
 
         this.clearPlaceholderContent();
 
-        // Load and display recent entities and topics
-        this.loadRecentKnowledgeItems(knowledge);
+        // Use recent items from analytics instead of separate call
+        this.updateRecentEntitiesDisplay(knowledge.recentEntities || []);
+        this.updateRecentTopicsDisplay(knowledge.recentTopics || []);
+        this.updateRecentActionsDisplay(knowledge.recentActions || []);
     }
 
     private updateKnowledgeVisualizationCards(knowledge: any) {

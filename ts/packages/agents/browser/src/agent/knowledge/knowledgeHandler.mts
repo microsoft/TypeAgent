@@ -52,6 +52,25 @@ interface AnalyticsDataResponse {
         totalActions: number;
         totalRelationships: number;
         recentItems?: any[];
+        recentEntities?: Array<{
+            name: string;
+            type: string;
+            fromPage: string;
+            extractedAt: string;
+        }>;
+        recentTopics?: Array<{
+            name: string;
+            fromPage: string;
+            extractedAt: string;
+        }>;
+        recentActions?: Array<{
+            type: string;
+            element: string;
+            text?: string;
+            confidence: number;
+            fromPage: string;
+            extractedAt: string;
+        }>;
     };
     domains: {
         topDomains: Array<{
@@ -487,9 +506,31 @@ export async function indexWebPageContent(
                         : [entity.type], // Ensure type is array
                 })),
                 topics: aggregatedResults.keyTopics,
-                actions: [], // Actions would need to be extracted separately if needed
+                actions: aggregatedResults.contentActions || [], // Use actual content actions
                 inverseActions: [], // Required property
             };
+        }
+
+        // Store detectedActions and actionSummary in metadata for retrieval
+        if (
+            aggregatedResults &&
+            (aggregatedResults.detectedActions ||
+                aggregatedResults.actionSummary)
+        ) {
+            websiteObj.metadata = websiteObj.metadata || {};
+
+            if (
+                aggregatedResults.detectedActions &&
+                aggregatedResults.detectedActions.length > 0
+            ) {
+                websiteObj.metadata.detectedActions =
+                    aggregatedResults.detectedActions;
+            }
+
+            if (aggregatedResults.actionSummary) {
+                websiteObj.metadata.actionSummary =
+                    aggregatedResults.actionSummary;
+            }
         }
 
         if (context.agentContext.websiteCollection) {
@@ -1695,11 +1736,23 @@ export async function getPageIndexedKnowledge(
             }
 
             let detectedActions: any[] = [];
+
+            // Check websiteObj metadata for detectedActions first (with safe property access)
+            if (
+                foundWebsite.metadata &&
+                (foundWebsite.metadata as any).detectedActions &&
+                Array.isArray((foundWebsite.metadata as any).detectedActions)
+            ) {
+                detectedActions = (foundWebsite.metadata as any)
+                    .detectedActions;
+            }
+
+            // Also check knowledge object for detectedActions (fallback)
             if (
                 (knowledge as any).detectedActions &&
                 Array.isArray((knowledge as any).detectedActions)
             ) {
-                detectedActions.push(...(knowledge as any).detectedAction);
+                detectedActions.push(...(knowledge as any).detectedActions);
             }
 
             // Convert the stored knowledge to the expected format
@@ -1762,6 +1815,10 @@ export async function getPageIndexedKnowledge(
                     relationships,
                     keyTopics,
                     detectedActions,
+                    contentActions: knowledge.actions || [],
+                    actionSummary: foundWebsite.metadata
+                        ? (foundWebsite.metadata as any).actionSummary
+                        : undefined,
                     suggestedQuestions,
                     summary,
                     contentMetrics,
@@ -2503,6 +2560,7 @@ export async function getAnalyticsData(
             topDomains,
             activityTrends,
             extractionAnalytics,
+            recentKnowledgeItems,
         ] = await Promise.all([
             getDetailedKnowledgeStats(
                 {
@@ -2531,6 +2589,7 @@ export async function getAnalyticsData(
                 },
                 context,
             ),
+            getRecentKnowledgeItems({ limit: 10, type: "all" }, context),
         ]);
 
         // Get basic website statistics from websiteCollection
@@ -2578,6 +2637,9 @@ export async function getAnalyticsData(
                 totalActions: 0, // Actions not tracked in current schema
                 totalRelationships: knowledgeStats.totalRelationships || 0,
                 recentItems: knowledgeStats.recentActivity || [],
+                recentEntities: recentKnowledgeItems.entities || [],
+                recentTopics: recentKnowledgeItems.topics || [],
+                recentActions: recentKnowledgeItems.actions || [],
             },
             domains: {
                 topDomains: topDomains.domains || [],

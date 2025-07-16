@@ -5,6 +5,7 @@ import { HTMLReducer } from "./htmlReducer";
 import DOMPurify from "dompurify";
 import { setIdsOnAllElements, markInvisibleNodesForCleanup } from "./domUtils";
 import { HtmlFragment } from "./types";
+import { Readability, isProbablyReaderable } from "@mozilla/readability";
 
 /**
  * Gets the HTML of the page
@@ -12,6 +13,8 @@ import { HtmlFragment } from "./types";
  * @param documentHtml The HTML to process
  * @param frameId The frame ID
  * @param useTimestampIds Whether to use timestamp IDs
+ * @param filterToReadingView Whether to apply readability filter
+ * @param keepMetaTags Whether to preserve meta tags when using readability
  * @returns The processed HTML
  */
 export function getPageHTML(
@@ -19,6 +22,8 @@ export function getPageHTML(
     documentHtml?: string,
     frameId?: number,
     useTimestampIds?: boolean,
+    filterToReadingView?: boolean,
+    keepMetaTags?: boolean,
 ): string {
     if (!documentHtml) {
         if (frameId !== undefined) {
@@ -28,12 +33,23 @@ export function getPageHTML(
         documentHtml = document.children[0].outerHTML;
     }
 
+    // Apply Readability filter if requested
+    if (filterToReadingView) {
+        documentHtml = applyReadabilityFilter(documentHtml, keepMetaTags);
+    }
+
     if (fullSize) {
         return documentHtml;
     }
 
     const reducer = new HTMLReducer();
     reducer.removeDivs = false;
+
+    // Preserve meta tags if requested and readability was used
+    if (filterToReadingView && keepMetaTags) {
+        reducer.removeMetaTags = false;
+    }
+
     const reducedHtml = reducer.reduce(documentHtml);
     return reducedHtml;
 }
@@ -136,4 +152,60 @@ export function getPageHTMLFragments(
     }
 
     return htmlFragments;
+}
+
+/**
+ * Apply Readability filter to extract main content
+ * @param html The HTML to process
+ * @param keepMetaTags Whether to preserve meta tags
+ * @returns The processed HTML with main content extracted
+ */
+function applyReadabilityFilter(html: string, keepMetaTags?: boolean): string {
+    try {
+        // Parse the HTML
+        const domParser = new DOMParser();
+        const doc = domParser.parseFromString(html, "text/html");
+
+        // Check if readability can process this document
+        if (!isProbablyReaderable(doc)) {
+            console.warn(
+                "Document is not probably readerable, skipping Readability filter",
+            );
+            return html;
+        }
+
+        // Clone document to avoid modifying original
+        const documentClone = doc.cloneNode(true) as Document;
+
+        // Extract meta tags before applying Readability if we want to preserve them
+        let metaTags = "";
+        if (keepMetaTags) {
+            const headClone = documentClone.head?.cloneNode(
+                true,
+            ) as HTMLHeadElement;
+            if (headClone) {
+                const metaElements = headClone.querySelectorAll("meta, title");
+                metaTags = Array.from(metaElements)
+                    .map((el) => el.outerHTML)
+                    .join("\n");
+            }
+        }
+
+        // Apply Readability
+        const article = new Readability(documentClone).parse();
+
+        if (article?.content) {
+            // Construct new HTML with main content
+            let resultHtml = `<html><head>${metaTags}</head><body>${article.content}</body></html>`;
+            return resultHtml;
+        } else {
+            console.warn(
+                "Readability failed to extract content, falling back to original HTML",
+            );
+            return html;
+        }
+    } catch (error) {
+        console.error("Error applying Readability filter:", error);
+        return html; // Fallback to original HTML
+    }
 }
