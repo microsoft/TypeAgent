@@ -212,6 +212,8 @@ export async function handleMessage(
                     message.inputHtml,
                     message.frameId,
                     message.useTimestampIds,
+                    message.filterToReadingView,
+                    message.keepMetaTags,
                 );
                 sendResponse(html);
                 break;

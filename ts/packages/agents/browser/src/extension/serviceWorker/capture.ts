@@ -15,6 +15,8 @@ import {
  * @param downloadAsFile Whether to download the HTML as a file
  * @param extractText Whether to extract text from the HTML
  * @param useTimestampIds Whether to use timestamp IDs
+ * @param filterToReadingView Whether to apply readability filter
+ * @param keepMetaTags Whether to preserve meta tags when using readability
  * @returns Promise resolving to an array of HTML fragments
  */
 export async function getTabHTMLFragments(
@@ -23,6 +25,8 @@ export async function getTabHTMLFragments(
     downloadAsFile?: boolean,
     extractText?: boolean,
     useTimestampIds?: boolean,
+    filterToReadingView?: boolean,
+    keepMetaTags?: boolean,
 ): Promise<HTMLFragment[]> {
     const frames = await chrome.webNavigation.getAllFrames({
         tabId: targetTab.id!,
@@ -41,6 +45,8 @@ export async function getTabHTMLFragments(
                         fullSize: fullSize,
                         frameId: frames[i].frameId,
                         useTimestampIds: useTimestampIds,
+                        filterToReadingView: filterToReadingView,
+                        keepMetaTags: keepMetaTags,
                     },
                     { frameId: frames[i].frameId },
                 );
