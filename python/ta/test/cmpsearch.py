@@ -468,17 +468,17 @@ def compare_and_print_diff(
     if a_repr == b_repr:
         return False
     print("Warning:", message)
-    a_formatted = utils.reindent(black.format_str(a_repr, mode=black.FileMode()))
-    b_formatted = utils.reindent(black.format_str(b_repr, mode=black.FileMode()))
+    a_formatted = utils.format_code(a_repr)
+    b_formatted = utils.format_code(b_repr)
     diff = difflib.unified_diff(
-        a_formatted.splitlines(True),
-        b_formatted.splitlines(True),
+        a_formatted.splitlines(),
+        b_formatted.splitlines(),
         fromfile="expected",
         tofile="actual",
         n=2,
     )
     for x in diff:
-        print(x, end="")
+        print(x.rstrip("\n"))
     return True
 
 
