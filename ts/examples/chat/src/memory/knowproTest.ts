@@ -21,10 +21,7 @@ import {
     changeFileExt,
     getAbsolutePath,
     getFileName,
-    htmlToMd,
     readAllText,
-    simplifyHtml,
-    simplifyText,
 } from "typeagent";
 import chalk from "chalk";
 import { openai } from "aiclient";
@@ -57,13 +54,13 @@ export async function createKnowproTestCommands(
 
     async function testHtml(args: string[]) {
         const html = await readAllText(args[0]);
-        const simpleHtml = simplifyHtml(html);
+        const simpleHtml = tp.simplifyHtml(html);
         context.printer.writeLine(simpleHtml);
     }
 
     async function testHtmlText(args: string[]) {
         const html = await readAllText(args[0]);
-        const text = simplifyText(html);
+        const text = tp.htmlToText(html);
         context.printer.writeLine(text);
     }
 
@@ -86,17 +83,17 @@ export async function createKnowproTestCommands(
             return;
         }
         let html = await readAllText(filePath);
-        let md = htmlToMd(html, namedArgs.rootTag);
-        context.printer.writeLine(md);
+        let markdown = tp.htmlToMarkdown(html, namedArgs.rootTag);
+        context.printer.writeLine(markdown);
 
         const destPath = changeFileExt(filePath, ".md");
-        fs.writeFileSync(destPath, md);
+        fs.writeFileSync(destPath, markdown);
 
-        let mdDom = tp.loadMarkdownFromHtml(html, namedArgs.rootTag);
-        context.printer.writeJsonInColor(chalk.cyan, mdDom);
+        let mdDom = tp.tokenizeMarkdown(markdown);
+        context.printer.writeJsonInColor(chalk.gray, mdDom);
 
         const [textBlocks, knowledgeBlocks] =
-            tp.getTextAndKnowledgeBlocksFromMarkdown(mdDom);
+            tp.textAndKnowledgeBlocksFromMarkdown(mdDom);
         assert(textBlocks.length === knowledgeBlocks.length);
         for (let i = 0; i < textBlocks.length; ++i) {
             context.printer.writeLine("=====");
@@ -126,7 +123,7 @@ export async function createKnowproTestCommands(
             return;
         }
         let html = await readAllText(filePath);
-        let docParts = cm.docPartsFromHtmlEx(html, namedArgs.rootTag);
+        let docParts = cm.docPartsFromHtml(html, false, namedArgs.rootTag);
         for (const part of docParts) {
             context.printer.writeLine("----------------");
             context.printer.writeDocPart(part);

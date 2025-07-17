@@ -3,18 +3,14 @@
 
 import * as md from "marked";
 import { conversation as kpLib } from "knowledge-processor";
-import { htmlToMd } from "./htmlProcessing.js";
 
-export function loadMarkdown(text: string): md.TokensList {
-    return md.lexer(text);
-}
-
-export function loadMarkdownFromHtml(
-    html: string,
-    rootTag?: string,
-): md.TokensList {
-    const markdown = htmlToMd(html, rootTag);
-    return loadMarkdown(markdown);
+/**
+ * Parses markdown into a token DOM using the "marked" library
+ * @param markdown
+ * @returns
+ */
+export function tokenizeMarkdown(markdown: string): md.TokensList {
+    return md.lexer(markdown);
 }
 
 /**
@@ -54,13 +50,20 @@ export interface MarkdownBlockHandler {
     ): void;
 }
 
-export function getTextBlocksFromMarkdown(
+/**
+ * Splits markdown text into text blocks
+ * @param markdown
+ * @param handler
+ * @param maxChunkLength
+ * @returns
+ */
+export function textBlocksFromMarkdown(
     markdown: string | md.Token[],
     handler?: MarkdownBlockHandler,
-    maxChunkLength: number = 1024,
+    maxChunkLength?: number,
 ): string[] {
     const markdownTokens =
-        typeof markdown === "string" ? loadMarkdown(markdown) : markdown;
+        typeof markdown === "string" ? tokenizeMarkdown(markdown) : markdown;
     let textBlocks: string[] = [];
     let curTextBlock = "";
     let prevBlockName: string = "";
@@ -162,7 +165,8 @@ export function getTextBlocksFromMarkdown(
         if (
             !prevBlockName ||
             !shouldMerge ||
-            curTextBlock.length > maxChunkLength
+            (maxChunkLength !== undefined &&
+                curTextBlock.length > maxChunkLength)
         ) {
             endBlock(false);
             curTextBlock = "";
@@ -181,15 +185,20 @@ export function getTextBlocksFromMarkdown(
 }
 
 export type MarkdownKnowledgeBlock = {
-    tags: string[];
+    tags: Set<string>;
     knowledge: kpLib.KnowledgeResponse;
 };
 
-export function getTextAndKnowledgeBlocksFromMarkdown(
+export function textAndKnowledgeBlocksFromMarkdown(
     markdown: string | md.TokensList,
+    maxChunkLength?: number,
 ): [string[], MarkdownKnowledgeBlock[]] {
     const knowledgeCollector = new MarkdownKnowledgeCollector();
-    const textBlocks = getTextBlocksFromMarkdown(markdown, knowledgeCollector);
+    const textBlocks = textBlocksFromMarkdown(
+        markdown,
+        knowledgeCollector,
+        maxChunkLength,
+    );
     const knowledgeBlocks = knowledgeCollector.knowledgeBlocks;
     if (textBlocks.length !== knowledgeBlocks.length) {
         throw new Error(
@@ -228,10 +237,10 @@ class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
                 break;
             case "codespan":
             case "code":
-                this.knowledgeBlock.tags.push("code");
+                this.knowledgeBlock.tags.add("code");
                 break;
             case "list":
-                this.knowledgeBlock.tags.push("list");
+                this.knowledgeBlock.tags.add("list");
                 const listName = this.getPrecedingHeading();
                 if (listName) {
                     this.knowledgeBlock.knowledge.entities.push({
@@ -241,7 +250,7 @@ class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
                 }
                 break;
             case "table":
-                this.knowledgeBlock.tags.push("table");
+                this.knowledgeBlock.tags.add("table");
                 const tableName = this.getPrecedingHeading();
                 if (tableName) {
                     this.knowledgeBlock.knowledge.entities.push({
@@ -298,7 +307,7 @@ class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
                 headingToEntity(headerText, headerLevel),
             );
             // Also make he header text a tag
-            this.knowledgeBlock.tags.push(headerText);
+            this.knowledgeBlock.tags.add(headerText);
         }
         //
         // Also include all links
@@ -351,7 +360,7 @@ function createKnowledgeResponse(): kpLib.KnowledgeResponse {
 
 function createMarkdownKnowledgeBlock(): MarkdownKnowledgeBlock {
     return {
-        tags: [],
+        tags: new Set<string>(),
         knowledge: createKnowledgeResponse(),
     };
 }
