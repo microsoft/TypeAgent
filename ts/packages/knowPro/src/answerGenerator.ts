@@ -281,23 +281,23 @@ export async function generateAnswerInChunks(
     }
 
     let chunkAnswers: answerSchema.AnswerResponse[] = [];
-    const structuredChunks = getStructuredChunks(chunks);
-    let hasStructuredAnswer = false;
-    if (structuredChunks.length > 0) {
-        const structuredAnswers = await runGenerateAnswers(
+    const knowledgeChunks = getKnowledgeChunks(chunks);
+    let hasKnowledgeAnswer = false;
+    if (knowledgeChunks.length > 0) {
+        const knowledgeAnswers = await runGenerateAnswers(
             answerGenerator,
             question,
-            structuredChunks,
+            knowledgeChunks,
             progress,
         );
-        if (!structuredAnswers.success) {
-            return structuredAnswers;
+        if (!knowledgeAnswers.success) {
+            return knowledgeAnswers;
         }
-        chunkAnswers.push(...structuredAnswers.data);
-        hasStructuredAnswer = hasAnswer(chunkAnswers);
+        chunkAnswers.push(...knowledgeAnswers.data);
+        hasKnowledgeAnswer = hasAnswer(chunkAnswers);
     }
 
-    if (!hasStructuredAnswer || !answerGenerator.settings.fastStop) {
+    if (!hasKnowledgeAnswer || !answerGenerator.settings.fastStop) {
         // Generate partial answers from each message chunk
         const messageChunks = chunks.filter(
             (c) => c.messages !== undefined && c.messages.length > 0,
@@ -329,23 +329,23 @@ export async function generateAnswerInChunks(
         return answers.some((a) => a.type === "Answered");
     }
 
-    function getStructuredChunks(
+    function getKnowledgeChunks(
         chunks: contextSchema.AnswerContext[],
     ): contextSchema.AnswerContext[] {
         const structuredChunks: contextSchema.AnswerContext[] = [];
         for (const chunk of chunks) {
-            let structuredChunk: contextSchema.AnswerContext | undefined =
+            let knowledgeChunk: contextSchema.AnswerContext | undefined =
                 undefined;
             if (chunk.entities) {
-                structuredChunk ??= {};
-                structuredChunk.entities = chunk.entities;
+                knowledgeChunk ??= {};
+                knowledgeChunk.entities = chunk.entities;
             }
             if (chunk.topics) {
-                structuredChunk ??= {};
-                structuredChunk.topics = chunk.topics;
+                knowledgeChunk ??= {};
+                knowledgeChunk.topics = chunk.topics;
             }
-            if (structuredChunk !== undefined) {
-                structuredChunks.push(structuredChunk);
+            if (knowledgeChunk !== undefined) {
+                structuredChunks.push(knowledgeChunk);
             }
         }
         return structuredChunks;
