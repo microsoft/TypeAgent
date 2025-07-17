@@ -57,12 +57,14 @@ export interface MarkdownBlockHandler {
 export function getTextBlocksFromMarkdown(
     markdown: string | md.Token[],
     handler?: MarkdownBlockHandler,
+    maxChunkLength: number = 1024,
 ): string[] {
     const markdownTokens =
         typeof markdown === "string" ? loadMarkdown(markdown) : markdown;
     let textBlocks: string[] = [];
     let curTextBlock = "";
-    let prevBlockToken: md.Token | undefined;
+    let prevBlockName: string = "";
+    let prevTokenName: string = "";
     traverseTokens(markdownTokens);
 
     return textBlocks;
@@ -75,7 +77,9 @@ export function getTextBlocksFromMarkdown(
             for (let i = 0; i < tokens.length; ++i) {
                 const token = tokens[i];
                 collectText(token, parentToken);
+                prevTokenName = token.type;
             }
+            endBlock();
         }
     }
 
@@ -90,20 +94,39 @@ export function getTextBlocksFromMarkdown(
                 visitInnerNodes(token);
                 break;
             case "space":
+                curTextBlock += "\n";
                 break;
             case "text":
                 curTextBlock += token.raw;
                 break;
             case "paragraph":
-            case "blockquote":
-            case "codespan":
-            case "list":
-            case "table":
-            case "heading":
-                beginBlock(token, parentToken);
+                beginBlock(
+                    token,
+                    prevBlockName === "paragraph" ||
+                        prevBlockName === "heading" ||
+                        prevTokenName === "space",
+                    parentToken,
+                );
                 curTextBlock += token.raw;
                 visitInnerNodes(token);
-                endBlock();
+                break;
+            case "list":
+            case "table":
+                beginBlock(
+                    token,
+                    prevBlockName === "heading" ||
+                        prevBlockName === "paragraph",
+                    parentToken,
+                );
+                curTextBlock += token.raw;
+                visitInnerNodes(token);
+                break;
+            case "blockquote":
+            case "codespan":
+            case "heading":
+                beginBlock(token, false, parentToken);
+                curTextBlock += token.raw;
+                visitInnerNodes(token);
                 break;
         }
     }
@@ -132,22 +155,28 @@ export function getTextBlocksFromMarkdown(
 
     function beginBlock(
         token: md.Token,
+        shouldMerge: boolean,
         parentToken?: md.Token | undefined,
     ): void {
         // If we just saw a heading, just keep collecting the text block associated with it
-        if (prevBlockToken === undefined || prevBlockToken.type !== "heading") {
+        if (
+            !prevBlockName ||
+            !shouldMerge ||
+            curTextBlock.length > maxChunkLength
+        ) {
+            endBlock(false);
             curTextBlock = "";
             handler?.onBlockStart();
         }
         handler?.onToken(curTextBlock, token, parentToken);
-        prevBlockToken = token;
+        prevBlockName = token.type;
     }
 
     function endBlock(reduceDepth: boolean = true): void {
         if (curTextBlock.length > 0) {
             textBlocks.push(curTextBlock);
+            handler?.onBlockEnd(curTextBlock);
         }
-        handler?.onBlockEnd(curTextBlock);
     }
 }
 

@@ -101,7 +101,7 @@ export async function createKnowproTestCommands(
         for (let i = 0; i < textBlocks.length; ++i) {
             context.printer.writeLine("=====");
             context.printer.writeLine(textBlocks[i]);
-            //context.printer.writeJsonInColor(chalk.gray, knowledgeBlocks[i]);
+            context.printer.writeJsonInColor(chalk.gray, knowledgeBlocks[i]);
         }
     }
 
