@@ -91,6 +91,12 @@ export interface WebsiteData {
     extractionResult?: ExtractionResult;
 }
 
+// Enhanced processing using full HTMLReducer functionality
+import { processHtmlContentEnhanced } from "./simpleAgentProcessor.mjs";
+
+// Re-export the enhanced function for easy access
+export { processHtmlContentEnhanced };
+
 export async function processHtmlContent(
     html: string,
     sourceIdentifier: string, // URL or file path

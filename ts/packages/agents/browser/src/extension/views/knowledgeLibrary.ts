@@ -770,7 +770,11 @@ class WebsiteLibraryPanelFullPage {
                         await chromeExtensionService.checkKnowledgeStatus(
                             website.url,
                         );
-                    website.knowledge = knowledge;
+                    website.knowledge = knowledge || {
+                        hasKnowledge: false,
+                        status: "none" as const,
+                        confidence: 0,
+                    };
                     this.knowledgeCache.set(website.url, knowledge);
                 } else {
                     // No connection - skip knowledge check

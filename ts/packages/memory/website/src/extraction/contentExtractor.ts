@@ -35,7 +35,7 @@ export class ContentExtractor {
         // Initialize HTML fetcher
         this.htmlFetcher = new HtmlFetcher();
 
-        if (inputConfig) {
+        if (inputConfig && inputConfig?.mode) {
             // Create a clean config object with only defined values
             const cleanConfig: ExtractionConfig = {
                 mode: inputConfig.mode,

@@ -19,11 +19,7 @@ import * as kpLib from "knowledge-processor";
 import { openai as ai } from "aiclient";
 import registerDebug from "debug";
 import * as path from "path";
-import {
-    processHtmlBatch,
-    ProcessingOptions,
-    WebsiteData,
-} from "./htmlProcessor.mjs";
+import { WebsiteData } from "./htmlProcessor.mjs";
 import {
     enumerateHtmlFiles,
     readHtmlFile,
@@ -39,6 +35,12 @@ import {
     AIModelRequiredError,
 } from "website-memory";
 import { BrowserKnowledgeExtractor } from "./knowledge/browserKnowledgeExtractor.mjs";
+
+import {
+    createContentExtractor,
+    logProcessingStatus,
+    processHtmlFolder,
+} from "./websiteImport.mjs";
 
 const debug = registerDebug("typeagent:browser:website-memory");
 
@@ -522,6 +524,9 @@ export async function importWebsiteDataFromSession(
 
         const extractionMode = mode || "basic";
 
+        // Log processing status for debugging
+        logProcessingStatus(context);
+
         // Build options object with only defined values
         const importOptions: any = {};
         if (limit !== undefined) importOptions.limit = limit;
@@ -620,12 +625,16 @@ export async function importWebsiteDataFromSession(
 
             try {
                 // Create ContentExtractor with AI model
-                const extractor = new website.ContentExtractor({
-                    mode: extractionMode,
-                    knowledgeExtractor: importOptions.knowledgeExtractor,
-                    timeout: importOptions.contentTimeout || 10000,
-                    maxConcurrentExtractions: importOptions.maxConcurrent || 5,
-                });
+                const extractor = createContentExtractor(
+                    {
+                        mode: extractionMode,
+                        knowledgeExtractor: importOptions.knowledgeExtractor,
+                        timeout: importOptions.contentTimeout || 10000,
+                        maxConcurrentExtractions:
+                            importOptions.maxConcurrent || 5,
+                    },
+                    context,
+                );
 
                 // Use BatchProcessor for efficient processing
                 const batchProcessor = new website.BatchProcessor(extractor);
@@ -776,6 +785,9 @@ export async function importHtmlFolderFromSession(
 
         const extractionMode = options.mode || "basic";
 
+        // Initialize import options for folder processing
+        let importOptions: any = {};
+
         // For AI-enabled modes, validate AI availability before starting import
         if (extractionMode !== "basic") {
             try {
@@ -871,24 +883,90 @@ export async function importHtmlFolderFromSession(
                 }
             }
 
-            // Process the batch using shared HTML processing
+            // Process the batch using enhanced HTML processing for consistency
             try {
-                const processingOptions: ProcessingOptions = {
-                    mode: extractionMode,
-                    maxConcurrent: 5,
-                };
+                const batchResults = [];
 
-                const batchResults = await processHtmlBatch(
-                    batchData,
-                    processingOptions,
-                    (current, total, item) => {
-                        if (displayProgress && current % 2 === 0) {
+                for (const item of batchData) {
+                    try {
+                        if (displayProgress) {
                             displayProgress(
-                                `Processing: ${path.basename(item)}`,
+                                `Processing: ${path.basename(item.identifier)}`,
                             );
                         }
-                    },
-                );
+
+                        // Try HTML processing first
+                        const enhancedResult = await processHtmlFolder(
+                            item.html,
+                            item.identifier,
+                            context,
+                        );
+
+                        // Create extraction input with processed content
+                        const input: ExtractionInput = {
+                            url: `file://${item.identifier}`,
+                            title: item.metadata.filename,
+                            htmlContent: enhancedResult.html,
+                            textContent: enhancedResult.text,
+                            source: "import",
+                        };
+
+                        // Use extractor for consistent processing
+                        const extractor = createContentExtractor(
+                            {
+                                mode: extractionMode,
+                                knowledgeExtractor:
+                                    typeof importOptions !== "undefined" &&
+                                    importOptions.knowledgeExtractor
+                                        ? importOptions.knowledgeExtractor
+                                        : undefined,
+                            },
+                            context,
+                        );
+
+                        const extractionResult = await extractor.extract(
+                            input,
+                            extractionMode,
+                        );
+
+                        // Convert to WebsiteData format (simplified)
+                        const websiteData: WebsiteData = {
+                            url: input.url,
+                            title: input.title,
+                            content: enhancedResult.text,
+                            domain: "file",
+                            metadata: {
+                                websiteSource: "file_import",
+                                url: input.url,
+                                title: input.title,
+                                domain: "file",
+                                pageType: "document",
+                                importDate: new Date().toISOString(),
+                                lastModified:
+                                    item.metadata.lastModified || new Date(),
+                                filename: item.metadata.filename,
+                                filePath: item.identifier,
+                                processingMethod:
+                                    enhancedResult.processingMethod,
+                            },
+                            visitCount: 1,
+                            lastVisited: new Date(),
+                            extractionResult: extractionResult,
+                        };
+
+                        batchResults.push(websiteData);
+                    } catch (error: any) {
+                        errors.push({
+                            type: "file_processing",
+                            message: `Failed to process ${item.identifier}: ${error.message}`,
+                            timestamp: Date.now(),
+                        });
+                        debug(
+                            `Error processing file ${item.identifier}:`,
+                            error,
+                        );
+                    }
+                }
 
                 websiteDataResults.push(...batchResults);
                 successCount += batchResults.length;
