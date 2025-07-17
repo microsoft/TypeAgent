@@ -169,7 +169,7 @@ def main():
             continue
 
         # Wait for user input before continuing.
-        print("-" * 25, counter, "-" * 25)
+        print("-" * 15, counter, question, "-" * 15)
         if context.interactive:
             try:
                 input("Press Enter to continue... ")
