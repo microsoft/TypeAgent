@@ -133,14 +133,19 @@ export async function processHtmlContent(
 
         // Create input for website-memory extraction
         const input: ExtractionInput = {
-            url: sourceIdentifier.startsWith("http") ? sourceIdentifier : `file://${sourceIdentifier}`,
+            url: sourceIdentifier.startsWith("http")
+                ? sourceIdentifier
+                : `file://${sourceIdentifier}`,
             title: "Unknown", // Will be extracted from content
             htmlContent: processedHtml,
             source: sourceIdentifier.startsWith("http") ? "direct" : "import",
         };
 
         // Extract content using website-memory
-        const result = await extractor.extract(input, options.mode || "content");
+        const result = await extractor.extract(
+            input,
+            options.mode || "content",
+        );
 
         if (!result || !result.pageContent) {
             throw new Error("Failed to extract content from HTML");
@@ -168,23 +173,31 @@ export async function processHtmlContent(
             lastVisited: new Date(),
             extractionResult: result,
             metadata: {
-                websiteSource: sourceIdentifier.startsWith("http") ? "web" : "file",
+                websiteSource: sourceIdentifier.startsWith("http")
+                    ? "web"
+                    : "file",
                 url: sourceIdentifier,
                 title: (result.pageContent.title || "Untitled") as string,
                 domain,
                 importDate: new Date().toISOString(),
                 lastModified: fileMetadata?.lastModified || new Date(),
                 originalMetadata: result,
-                links: result.pageContent.links?.map((link: any) => link.href).filter(Boolean) || [],
+                links:
+                    result.pageContent.links
+                        ?.map((link: any) => link.href)
+                        .filter(Boolean) || [],
                 images: result.pageContent.images || [],
                 actions: result.actions || [],
             },
         };
 
         // Add optional properties only if they exist
-        if (fileMetadata?.filename) websiteData.metadata.filename = fileMetadata.filename;
-        if (fileMetadata?.fileSize) websiteData.metadata.fileSize = fileMetadata.fileSize;
-        if (result.structuredData) websiteData.metadata.structuredData = result.structuredData;
+        if (fileMetadata?.filename)
+            websiteData.metadata.filename = fileMetadata.filename;
+        if (fileMetadata?.fileSize)
+            websiteData.metadata.fileSize = fileMetadata.fileSize;
+        if (result.structuredData)
+            websiteData.metadata.structuredData = result.structuredData;
         if (result.metaTags) websiteData.metadata.metaTags = result.metaTags;
 
         return websiteData;
@@ -201,10 +214,10 @@ export function createWebsiteData(
     url: string,
     title: string,
     content: string,
-    metadata: Partial<WebsiteData["metadata"]> = {}
+    metadata: Partial<WebsiteData["metadata"]> = {},
 ): WebsiteData {
     const domain = url.startsWith("http") ? new URL(url).hostname : "local";
-    
+
     return {
         url,
         title,
@@ -259,14 +272,19 @@ export async function processHtmlContentEnhanced(
 
         // Create input for website-memory extraction
         const input: ExtractionInput = {
-            url: sourceIdentifier.startsWith("http") ? sourceIdentifier : `file://${sourceIdentifier}`,
+            url: sourceIdentifier.startsWith("http")
+                ? sourceIdentifier
+                : `file://${sourceIdentifier}`,
             title: "Unknown", // Will be extracted from content
             htmlContent: processedHtml,
             source: sourceIdentifier.startsWith("http") ? "direct" : "import",
         };
 
         // Extract content using website-memory
-        const extractionResult = await extractor.extract(input, options.mode || "content");
+        const extractionResult = await extractor.extract(
+            input,
+            options.mode || "content",
+        );
 
         if (!extractionResult || !extractionResult.pageContent) {
             throw new Error("Failed to extract content from HTML");
@@ -294,24 +312,35 @@ export async function processHtmlContentEnhanced(
             lastVisited: new Date(),
             extractionResult: extractionResult,
             metadata: {
-                websiteSource: sourceIdentifier.startsWith("http") ? "web" : "file",
+                websiteSource: sourceIdentifier.startsWith("http")
+                    ? "web"
+                    : "file",
                 url: sourceIdentifier,
-                title: (extractionResult.pageContent.title || "Untitled") as string,
+                title: (extractionResult.pageContent.title ||
+                    "Untitled") as string,
                 domain,
                 importDate: new Date().toISOString(),
                 lastModified: fileMetadata?.lastModified || new Date(),
                 originalMetadata: extractionResult,
-                links: extractionResult.pageContent.links?.map((link: any) => link.href).filter(Boolean) || [],
+                links:
+                    extractionResult.pageContent.links
+                        ?.map((link: any) => link.href)
+                        .filter(Boolean) || [],
                 images: extractionResult.pageContent.images || [],
                 actions: extractionResult.actions || [],
             },
         };
 
         // Add optional properties only if they exist
-        if (fileMetadata?.filename) websiteData.metadata.filename = fileMetadata.filename;
-        if (fileMetadata?.fileSize) websiteData.metadata.fileSize = fileMetadata.fileSize;
-        if (extractionResult.structuredData) websiteData.metadata.structuredData = extractionResult.structuredData;
-        if (extractionResult.metaTags) websiteData.metadata.metaTags = extractionResult.metaTags;
+        if (fileMetadata?.filename)
+            websiteData.metadata.filename = fileMetadata.filename;
+        if (fileMetadata?.fileSize)
+            websiteData.metadata.fileSize = fileMetadata.fileSize;
+        if (extractionResult.structuredData)
+            websiteData.metadata.structuredData =
+                extractionResult.structuredData;
+        if (extractionResult.metaTags)
+            websiteData.metadata.metaTags = extractionResult.metaTags;
 
         return {
             websiteData,
@@ -326,7 +355,10 @@ export async function processHtmlContentEnhanced(
 /**
  * Parse HTML content into structured format
  */
-export async function parseHtmlContent(html: string, url: string): Promise<ParsedHtmlContent> {
+export async function parseHtmlContent(
+    html: string,
+    url: string,
+): Promise<ParsedHtmlContent> {
     try {
         // Use Node-optimized reducer for HTML processing
         const reducer = await createNodeHtmlReducer();
@@ -337,7 +369,10 @@ export async function parseHtmlContent(html: string, url: string): Promise<Parse
         const title = titleMatch ? titleMatch[1].trim() : "Untitled";
 
         // Extract text content
-        const textContent = processedHtml.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+        const textContent = processedHtml
+            .replace(/<[^>]*>/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
 
         return {
             title,

@@ -10,8 +10,8 @@ import {
     ContentMetadata,
     ProcessingMetadata,
 } from "./types.js";
-import { 
-    UnifiedHtmlProcessor, 
+import {
+    UnifiedHtmlProcessor,
     HtmlProcessingMonitor,
     LegacyProcessedHtmlResult,
     LegacyHtmlProcessingOptions,

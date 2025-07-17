@@ -199,7 +199,10 @@ export class CrossContextHtmlReducer {
         try {
             // Use injected DOM parser if available
             if (this.dependencies.domParser) {
-                return this.dependencies.domParser.parseFromString(html, "text/html");
+                return this.dependencies.domParser.parseFromString(
+                    html,
+                    "text/html",
+                );
             }
 
             // Try browser DOMParser
@@ -210,7 +213,9 @@ export class CrossContextHtmlReducer {
 
             // For Node.js ESM contexts, we can't use async dynamic imports in a sync method
             // This fallback should not be used if createNodeHtmlReducer() is used properly
-            console.warn("No HTML parser available - use createNodeHtmlReducer() for Node.js contexts");
+            console.warn(
+                "No HTML parser available - use createNodeHtmlReducer() for Node.js contexts",
+            );
             return null;
         } catch (error) {
             console.error("Document parsing failed:", error);
@@ -350,12 +355,13 @@ export class CrossContextHtmlReducer {
         // Use a more robust approach that works in both browser and JSDOM
         const removeCommentsFromNode = (node: Node): void => {
             const nodesToRemove: Node[] = [];
-            
+
             // Collect all comment nodes
             for (let i = 0; i < node.childNodes.length; i++) {
                 const child = node.childNodes[i];
-                const nodeType = (typeof Node !== 'undefined' ? Node.COMMENT_NODE : 8);
-                
+                const nodeType =
+                    typeof Node !== "undefined" ? Node.COMMENT_NODE : 8;
+
                 if (child.nodeType === nodeType) {
                     // Don't remove DOCTYPE comments
                     if (!child.textContent?.trim().startsWith("DOCTYPE")) {
@@ -366,15 +372,15 @@ export class CrossContextHtmlReducer {
                     removeCommentsFromNode(child);
                 }
             }
-            
+
             // Remove collected comment nodes
-            nodesToRemove.forEach(commentNode => {
+            nodesToRemove.forEach((commentNode) => {
                 if (commentNode.parentNode) {
                     commentNode.parentNode.removeChild(commentNode);
                 }
             });
         };
-        
+
         removeCommentsFromNode(doc);
     }
 
@@ -394,7 +400,10 @@ export class CrossContextHtmlReducer {
                 (n) =>
                     n.childNodes.length === 0 ||
                     (n.childNodes.length === 1 &&
-                        n.childNodes[0].nodeType === (typeof Node !== 'undefined' ? Node.TEXT_NODE : 3) &&
+                        n.childNodes[0].nodeType ===
+                            (typeof Node !== "undefined"
+                                ? Node.TEXT_NODE
+                                : 3) &&
                         n.textContent?.trim().length === 0),
             );
 
@@ -458,7 +467,9 @@ export class CrossContextHtmlReducer {
 /**
  * Factory function to create cross-context HTML reducer
  */
-export function createCrossContextHtmlReducer(dependencies?: CrossContextDependencies): CrossContextHtmlReducer {
+export function createCrossContextHtmlReducer(
+    dependencies?: CrossContextDependencies,
+): CrossContextHtmlReducer {
     return new CrossContextHtmlReducer(dependencies);
 }
 
@@ -473,11 +484,14 @@ export async function createNodeHtmlReducer(): Promise<CrossContextHtmlReducer> 
             parseFromString: (html: string, mimeType: string): Document => {
                 const dom = new JSDOM(html);
                 return dom.window.document;
-            }
+            },
         };
         return new CrossContextHtmlReducer({ domParser });
     } catch (error) {
-        console.warn("JSDOM not available for Node.js HTML reducer, falling back to auto-detection:", error);
+        console.warn(
+            "JSDOM not available for Node.js HTML reducer, falling back to auto-detection:",
+            error,
+        );
         return new CrossContextHtmlReducer();
     }
 }

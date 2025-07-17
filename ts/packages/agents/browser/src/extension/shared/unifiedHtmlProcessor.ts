@@ -3,7 +3,11 @@
 
 import { CrossContextHtmlReducer } from "../../common/crossContextHtmlReducer.js";
 import { Readability, isProbablyReaderable } from "@mozilla/readability";
-import { ProcessedHtmlResult, ProcessingOptions, ProcessingMetadata } from "../offscreen/types.js";
+import {
+    ProcessedHtmlResult,
+    ProcessingOptions,
+    ProcessingMetadata,
+} from "../offscreen/types.js";
 
 /**
  * Legacy interface for backward compatibility
@@ -53,18 +57,21 @@ export class UnifiedHtmlProcessor {
         try {
             // Apply Readability filter if requested
             if (options.filterToReadingView) {
-                processedHtml = await this.applyReadabilityFilter(processedHtml, options.keepMetaTags);
+                processedHtml = await this.applyReadabilityFilter(
+                    processedHtml,
+                    options.keepMetaTags,
+                );
             }
 
             // Apply HTML reduction if not preserving structure
             if (!options.preserveStructure) {
                 const reducer = new CrossContextHtmlReducer();
                 reducer.removeDivs = false;
-                
+
                 if (options.filterToReadingView && options.keepMetaTags) {
                     reducer.removeMetaTags = false;
                 }
-                
+
                 processedHtml = reducer.reduce(processedHtml);
             }
 
@@ -75,7 +82,10 @@ export class UnifiedHtmlProcessor {
             }
 
             const processedSize = processedHtml.length;
-            const reductionRatio = originalSize > 0 ? (originalSize - processedSize) / originalSize : 0;
+            const reductionRatio =
+                originalSize > 0
+                    ? (originalSize - processedSize) / originalSize
+                    : 0;
             const processingTime = Date.now() - startTime;
 
             return {
@@ -86,14 +96,16 @@ export class UnifiedHtmlProcessor {
                     processedSize,
                     reductionRatio,
                     elementsRemoved,
-                    processingMethod: options.filterToReadingView ? "readability+reduction" : "reduction",
+                    processingMethod: options.filterToReadingView
+                        ? "readability+reduction"
+                        : "reduction",
                     processingTime,
                 },
             };
         } catch (error) {
             console.error("Error processing HTML:", error);
             const processingTime = Date.now() - startTime;
-            
+
             return {
                 html,
                 text: options.extractText ? this.extractText(html) : "",
@@ -112,13 +124,18 @@ export class UnifiedHtmlProcessor {
     /**
      * Apply readability filter to HTML content
      */
-    private static async applyReadabilityFilter(html: string, keepMetaTags?: boolean): Promise<string> {
+    private static async applyReadabilityFilter(
+        html: string,
+        keepMetaTags?: boolean,
+    ): Promise<string> {
         try {
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, "text/html");
-            
+
             if (!isProbablyReaderable(doc)) {
-                console.warn("Document may not be suitable for readability extraction");
+                console.warn(
+                    "Document may not be suitable for readability extraction",
+                );
             }
 
             const reader = new Readability(doc, {
@@ -128,7 +145,9 @@ export class UnifiedHtmlProcessor {
 
             const article = reader.parse();
             if (!article || !article.content) {
-                console.warn("Readability failed to parse content, returning original");
+                console.warn(
+                    "Readability failed to parse content, returning original",
+                );
                 return html;
             }
 
@@ -136,22 +155,30 @@ export class UnifiedHtmlProcessor {
                 // Extract meta tags from original HTML
                 const originalDoc = parser.parseFromString(html, "text/html");
                 const metaTags = originalDoc.querySelectorAll("meta");
-                
+
                 // Parse the article content
-                const articleDoc = parser.parseFromString(article.content, "text/html");
-                const head = articleDoc.querySelector("head") || articleDoc.createElement("head");
-                
+                const articleDoc = parser.parseFromString(
+                    article.content,
+                    "text/html",
+                );
+                const head =
+                    articleDoc.querySelector("head") ||
+                    articleDoc.createElement("head");
+
                 // Add meta tags to the article
                 metaTags.forEach((meta) => {
                     if (meta instanceof HTMLMetaElement) {
                         head.appendChild(meta.cloneNode(true));
                     }
                 });
-                
+
                 if (!articleDoc.querySelector("head")) {
-                    articleDoc.documentElement.insertBefore(head, articleDoc.body);
+                    articleDoc.documentElement.insertBefore(
+                        head,
+                        articleDoc.body,
+                    );
                 }
-                
+
                 return articleDoc.documentElement.outerHTML;
             }
 

@@ -1257,7 +1257,83 @@ async function handleWebsiteAction(
             );
 
         case "importHtmlFolder":
-            return await importHtmlFolderFromSession(parameters, context);
+            // Create progress callback similar to importWebsiteDataWithProgress
+            const folderProgressCallback = (message: string) => {
+                // Extract progress info from message if possible
+                // Updated regex to match format: "X/Y files processed (Z%): description"
+                const progressMatch = message.match(
+                    /(\d+)\/(\d+)\s+files\s+processed.*?:\s*(.+)/,
+                );
+                let current = 0,
+                    total = 0,
+                    item = "";
+                let phase:
+                    | "counting"
+                    | "initializing"
+                    | "fetching"
+                    | "processing"
+                    | "extracting"
+                    | "complete"
+                    | "error" = "processing";
+
+                if (progressMatch) {
+                    current = parseInt(progressMatch[1]);
+                    total = parseInt(progressMatch[2]);
+                    item = progressMatch[3];
+
+                    // Determine phase based on progress
+                    if (current === 0) {
+                        phase = "initializing";
+                    } else if (current === total) {
+                        phase = "complete";
+                    } else {
+                        phase = "processing";
+                    }
+                } else {
+                    // Fallback: try to extract just the description for other message types
+                    item = message;
+
+                    // Determine phase from message content
+                    if (
+                        message.includes("complete") ||
+                        message.includes("finished")
+                    ) {
+                        phase = "complete";
+                    } else if (
+                        message.includes("Found") ||
+                        message.includes("Starting")
+                    ) {
+                        phase = "initializing";
+                    } else if (message.startsWith("Processing:")) {
+                        phase = "processing";
+                        // For individual file processing, preserve any previously known total
+                        total = parameters.totalItems || 0;
+                    }
+                }
+
+                // Create progress data matching ImportProgress interface
+                const progressData = {
+                    phase,
+                    totalItems: total || parameters.totalItems || 0,
+                    processedItems: current || 0,
+                    currentItem: item,
+                    importId: parameters.importId,
+                    errors: [],
+                };
+
+                // Send structured progress update via WebSocket
+                sendProgressUpdateViaWebSocket(
+                    context.agentContext.webSocket,
+                    parameters.importId,
+                    progressData,
+                );
+            };
+
+            return await importHtmlFolderFromSession(
+                parameters,
+                context,
+                folderProgressCallback,
+            );
 
         case "searchWebMemories":
             return await searchWebMemories(parameters, context);

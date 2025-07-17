@@ -7,7 +7,10 @@
  * Maintains complete feature parity with browser-based processing
  */
 
-import { CrossContextHtmlReducer, createNodeHtmlReducer } from "../common/crossContextHtmlReducer.js";
+import {
+    CrossContextHtmlReducer,
+    createNodeHtmlReducer,
+} from "../common/crossContextHtmlReducer.js";
 import {
     processHtmlContent,
     ProcessingOptions,
@@ -28,12 +31,16 @@ export class DirectFolderProcessor {
 
     constructor() {
         this.reducerPromise = this.initializeReducer();
-        debug("Direct folder processor initializing with Node-optimized CrossContextHtmlReducer");
+        debug(
+            "Direct folder processor initializing with Node-optimized CrossContextHtmlReducer",
+        );
     }
 
     private async initializeReducer(): Promise<CrossContextHtmlReducer> {
         this.reducer = await createNodeHtmlReducer();
-        debug("Direct folder processor initialized with Node-optimized CrossContextHtmlReducer");
+        debug(
+            "Direct folder processor initialized with Node-optimized CrossContextHtmlReducer",
+        );
         return this.reducer;
     }
 
@@ -71,7 +78,7 @@ export class DirectFolderProcessor {
         try {
             // Get the initialized reducer
             const reducer = await this.getReducer();
-            
+
             // Configure reducer based on options
             this.configureReducer(options, reducer);
 
@@ -123,7 +130,10 @@ export class DirectFolderProcessor {
     /**
      * Configure reducer based on processing options
      */
-    private configureReducer(options: ProcessingOptions, reducer: CrossContextHtmlReducer): void {
+    private configureReducer(
+        options: ProcessingOptions,
+        reducer: CrossContextHtmlReducer,
+    ): void {
         // Set reducer options based on processing options
         // Default to browser-like settings for compatibility
         reducer.removeScripts = true;
@@ -152,10 +162,13 @@ export class DirectFolderProcessor {
             const options = {
                 wordwrap: 130,
             };
-            
+
             return convert(html, options);
         } catch (error) {
-            console.warn("html-to-text conversion failed, falling back to regex:", error);
+            console.warn(
+                "html-to-text conversion failed, falling back to regex:",
+                error,
+            );
             // Fallback to original regex approach if html-to-text fails
             return html
                 .replace(/<[^>]*>/g, " ") // Remove HTML tags

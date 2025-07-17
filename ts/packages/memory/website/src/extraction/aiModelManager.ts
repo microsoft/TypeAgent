@@ -286,55 +286,6 @@ export class AIModelManager {
     }
 
     /**
-     * Merge basic knowledge with AI-extracted knowledge
-     */
-    private mergeKnowledgeResults(
-        basicKnowledge: kpLib.KnowledgeResponse,
-        aiKnowledge: kpLib.KnowledgeResponse,
-    ): kpLib.KnowledgeResponse {
-        const merged: kpLib.KnowledgeResponse = {
-            topics: [],
-            entities: [],
-            actions: [],
-            inverseActions: [],
-        };
-
-        // Merge topics (removing duplicates, prioritizing AI results)
-        const allTopics = [...aiKnowledge.topics, ...basicKnowledge.topics];
-        merged.topics = [...new Set(allTopics.map((t) => t.toLowerCase()))]
-            .map((normalizedTopic) => {
-                // Find original casing, preferring AI result
-                return (
-                    allTopics.find(
-                        (t) => t.toLowerCase() === normalizedTopic,
-                    ) || normalizedTopic
-                );
-            })
-            .slice(0, 20);
-
-        // Merge entities (removing duplicates by name, prioritizing AI results)
-        const entityMap = new Map<string, kpLib.ConcreteEntity>();
-
-        // Add basic entities first
-        basicKnowledge.entities.forEach((entity) => {
-            entityMap.set(entity.name.toLowerCase(), entity);
-        });
-
-        // Add AI entities (overwriting basic ones with same name)
-        aiKnowledge.entities.forEach((entity) => {
-            entityMap.set(entity.name.toLowerCase(), entity);
-        });
-
-        merged.entities = Array.from(entityMap.values()).slice(0, 30);
-
-        // Use AI actions directly (basic extraction doesn't produce actions)
-        merged.actions = aiKnowledge.actions || [];
-        merged.inverseActions = aiKnowledge.inverseActions || [];
-
-        return merged;
-    }
-
-    /**
      * Aggregate knowledge results from multiple chunks
      */
     private aggregateChunkResults(

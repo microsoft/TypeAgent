@@ -792,16 +792,21 @@ export async function importHtmlFolderFromSession(
         if (extractionMode !== "basic") {
             try {
                 // Create and validate the knowledge extractor (same logic as BrowserKnowledgeExtractor)
-                const apiSettings = ai.azureApiSettingsFromEnv(ai.ModelType.Chat);
+                const apiSettings = ai.azureApiSettingsFromEnv(
+                    ai.ModelType.Chat,
+                );
                 const languageModel = ai.createChatModel(apiSettings);
-                const knowledgeExtractor = kpLib.conversation.createKnowledgeExtractor(languageModel);
-                
+                const knowledgeExtractor =
+                    kpLib.conversation.createKnowledgeExtractor(languageModel);
+
                 // Validate that the knowledge extractor works by testing extraction
-                const testResult = await knowledgeExtractor.extract("test content for validation");
+                const testResult = await knowledgeExtractor.extract(
+                    "test content for validation",
+                );
                 if (!testResult) {
                     throw new Error("Knowledge extractor validation failed");
                 }
-                
+
                 // Store the validated knowledge extractor in import options
                 importOptions.knowledgeExtractor = knowledgeExtractor;
             } catch (error) {
@@ -845,6 +850,13 @@ export async function importHtmlFolderFromSession(
             );
         }
 
+        // Send initial progress update with total count
+        if (displayProgress) {
+            displayProgress(
+                `0/${htmlFiles.length} files processed (0%): Starting import`,
+            );
+        }
+
         // Ensure we have a website collection
         if (!context.agentContext.websiteCollection) {
             context.agentContext.websiteCollection =
@@ -855,15 +867,17 @@ export async function importHtmlFolderFromSession(
         const batches = createFileBatches(htmlFiles, 10);
         const websiteDataResults: WebsiteData[] = [];
 
+        let totalProcessedFiles = 0;
+
         for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
             const batch = batches[batchIndex];
 
             if (displayProgress) {
                 const progressPercent = Math.round(
-                    (batchIndex / batches.length) * 100,
+                    (totalProcessedFiles / htmlFiles.length) * 100,
                 );
                 displayProgress(
-                    `Processing batch ${batchIndex + 1}/${batches.length} (${progressPercent}%)`,
+                    `${totalProcessedFiles}/${htmlFiles.length} files processed (${progressPercent}%): Processing batch ${batchIndex + 1}/${batches.length}`,
                 );
             }
 
@@ -921,7 +935,8 @@ export async function importHtmlFolderFromSession(
                         const extractor = createContentExtractor(
                             {
                                 mode: extractionMode,
-                                knowledgeExtractor: importOptions.knowledgeExtractor,
+                                knowledgeExtractor:
+                                    importOptions.knowledgeExtractor,
                             },
                             context,
                         );
@@ -972,6 +987,17 @@ export async function importHtmlFolderFromSession(
 
                 websiteDataResults.push(...batchResults);
                 successCount += batchResults.length;
+                totalProcessedFiles += batch.length;
+
+                // Update progress after processing batch
+                if (displayProgress) {
+                    const progressPercent = Math.round(
+                        (totalProcessedFiles / htmlFiles.length) * 100,
+                    );
+                    displayProgress(
+                        `${totalProcessedFiles}/${htmlFiles.length} files processed (${progressPercent}%): Completed batch ${batchIndex + 1}/${batches.length}`,
+                    );
+                }
             } catch (error: any) {
                 errors.push({
                     type: "batch_processing",
@@ -1026,7 +1052,7 @@ export async function importHtmlFolderFromSession(
 
         if (displayProgress) {
             displayProgress(
-                `Folder import complete: ${successCount}/${htmlFiles.length} files processed successfully`,
+                `${htmlFiles.length}/${htmlFiles.length} files processed (100%): Import complete - ${successCount} successful`,
             );
         }
 
@@ -1121,11 +1147,18 @@ function convertWebsiteDataToWebsite(data: WebsiteData): any {
         url: data.url,
         title: data.title,
         domain: data.domain,
-        source: data.metadata.websiteSource as "bookmark" | "history" | "reading_list",
-        visitDate: data.lastVisited ? data.lastVisited.toISOString() : new Date().toISOString(),
+        source: data.metadata.websiteSource as
+            | "bookmark"
+            | "history"
+            | "reading_list",
+        visitDate: data.lastVisited
+            ? data.lastVisited.toISOString()
+            : new Date().toISOString(),
         description: data.content.substring(0, 500), // Use first 500 chars as description
         visitCount: data.visitCount || 1,
-        lastVisitTime: data.lastVisited ? data.lastVisited.toISOString() : new Date().toISOString(),
+        lastVisitTime: data.lastVisited
+            ? data.lastVisited.toISOString()
+            : new Date().toISOString(),
     };
 
     // Add optional properties only if they exist
@@ -1143,7 +1176,7 @@ function convertWebsiteDataToWebsite(data: WebsiteData): any {
         [], // tags
         data.extractionResult?.knowledge, // knowledge from extraction
         undefined, // deletionInfo
-        false // isNew = false since content is already processed
+        false, // isNew = false since content is already processed
     );
 
     return websiteInstance;

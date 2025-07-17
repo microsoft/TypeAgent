@@ -55,7 +55,7 @@ export function getPageHTML(
 
 /**
  * Gets HTML fragments from the page using the new consolidated system
- * @param fragmentSelectors CSS selectors for fragments  
+ * @param fragmentSelectors CSS selectors for fragments
  * @param frameId The frame ID
  * @param useTimestampIds Whether to use timestamp IDs
  * @param filterToReadingView Whether to apply readability filter
@@ -91,7 +91,7 @@ export function getPageHTMLFragments(
             if (element instanceof HTMLElement) {
                 const reducer = new CrossContextHtmlReducer();
                 reducer.removeDivs = false;
-                
+
                 if (filterToReadingView && keepMetaTags) {
                     reducer.removeMetaTags = false;
                 }
@@ -150,7 +150,7 @@ export function getPageHTMLSubFragments(
                     if (subElement instanceof HTMLElement) {
                         const reducer = new CrossContextHtmlReducer();
                         reducer.removeDivs = false;
-                        
+
                         if (filterToReadingView && keepMetaTags) {
                             reducer.removeMetaTags = false;
                         }
@@ -178,9 +178,11 @@ function applyReadabilityFilter(html: string, keepMetaTags?: boolean): string {
     try {
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, "text/html");
-        
+
         if (!isProbablyReaderable(doc)) {
-            console.warn("Document may not be suitable for readability extraction");
+            console.warn(
+                "Document may not be suitable for readability extraction",
+            );
         }
 
         const reader = new Readability(doc, {
@@ -190,7 +192,9 @@ function applyReadabilityFilter(html: string, keepMetaTags?: boolean): string {
 
         const article = reader.parse();
         if (!article || !article.content) {
-            console.warn("Readability failed to parse content, returning original");
+            console.warn(
+                "Readability failed to parse content, returning original",
+            );
             return html;
         }
 
@@ -198,22 +202,27 @@ function applyReadabilityFilter(html: string, keepMetaTags?: boolean): string {
             // Extract meta tags from original HTML
             const originalDoc = parser.parseFromString(html, "text/html");
             const metaTags = originalDoc.querySelectorAll("meta");
-            
+
             // Parse the article content
-            const articleDoc = parser.parseFromString(article.content, "text/html");
-            const head = articleDoc.querySelector("head") || articleDoc.createElement("head");
-            
+            const articleDoc = parser.parseFromString(
+                article.content,
+                "text/html",
+            );
+            const head =
+                articleDoc.querySelector("head") ||
+                articleDoc.createElement("head");
+
             // Add meta tags to the article
             metaTags.forEach((meta) => {
                 if (meta instanceof HTMLMetaElement) {
                     head.appendChild(meta.cloneNode(true));
                 }
             });
-            
+
             if (!articleDoc.querySelector("head")) {
                 articleDoc.documentElement.insertBefore(head, articleDoc.body);
             }
-            
+
             return articleDoc.documentElement.outerHTML;
         }
 
