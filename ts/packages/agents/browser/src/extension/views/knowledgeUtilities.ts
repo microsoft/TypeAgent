@@ -773,3 +773,125 @@ export {
     KnowledgeConnectionManager as ConnectionManager,
     ChromeEventManager as EventManager,
 };
+
+// ===================================================================
+// SERVICE INTERFACES FOR REFACTORED PANELS
+// ===================================================================
+
+export interface AnalyticsServices {
+    loadAnalyticsData(): Promise<any>;
+}
+
+export interface SearchServices {
+    performSearch(query: string, filters?: any): Promise<SearchResult>;
+}
+
+export interface DiscoveryServices {
+    loadDiscoverData(): Promise<any>;
+}
+
+// Default implementations using the existing ChromeExtensionService
+export class DefaultAnalyticsServices implements AnalyticsServices {
+    constructor(private chromeService: ChromeExtensionService) {}
+
+    async loadAnalyticsData(): Promise<any> {
+        return this.chromeService.getAnalyticsData({
+            timeRange: "30d",
+            includeQuality: true,
+            includeProgress: true,
+            topDomainsLimit: 10,
+            activityGranularity: "day" as "day",
+        });
+    }
+}
+
+export class DefaultSearchServices implements SearchServices {
+    constructor(private chromeService: ChromeExtensionService) {}
+
+    async performSearch(query: string, filters?: any): Promise<SearchResult> {
+        console.log('DefaultSearchServices: Starting search for:', query, 'with filters:', filters);
+        
+        const searchFilters: SearchFilters = {
+            domain: filters?.domain,
+            sourceType: filters?.sourceType,
+            dateFrom: filters?.dateFrom,
+            dateTo: filters?.dateTo,
+        };
+
+        try {
+            console.log('DefaultSearchServices: Calling chromeService.searchWebMemories...');
+            const result = await this.chromeService.searchWebMemories(query, searchFilters);
+            console.log('DefaultSearchServices: Raw result from chromeService:', result);
+            
+            // The chromeService returns the full SearchResult, but we need to ensure structure
+            if (result && typeof result === 'object') {
+                const searchResult = {
+                    websites: result.websites || [],
+                    summary: result.summary || {
+                        text: '',
+                        totalFound: 0,
+                        searchTime: 0,
+                        sources: [],
+                        entities: []
+                    },
+                    query: query,
+                    filters: searchFilters,
+                    topTopics: result.topTopics || [],
+                    suggestedFollowups: result.suggestedFollowups || [],
+                    relatedEntities: result.relatedEntities || []
+                };
+                console.log('DefaultSearchServices: Formatted result:', searchResult);
+                return searchResult;
+            } else {
+                console.warn('DefaultSearchServices: Unexpected response format, using fallback');
+                // Fallback for unexpected response format
+                return {
+                    websites: [],
+                    summary: {
+                        text: '',
+                        totalFound: 0,
+                        searchTime: 0,
+                        sources: [],
+                        entities: []
+                    },
+                    query: query,
+                    filters: searchFilters,
+                    topTopics: [],
+                    suggestedFollowups: [],
+                    relatedEntities: []
+                };
+            }
+        } catch (error) {
+            console.error('DefaultSearchServices: Search service error:', error);
+            throw error; // Re-throw so the panel can handle the error
+        }
+    }
+}
+
+export class DefaultDiscoveryServices implements DiscoveryServices {
+    constructor(private chromeService: ChromeExtensionService) {}
+
+    async loadDiscoverData(): Promise<any> {
+        const response = await this.chromeService.getDiscoverInsights(10, "30d");
+        
+        // Return the response in the expected format for the discovery panel
+        if (response && response.success) {
+            return {
+                success: true,
+                trendingTopics: response.trendingTopics || [],
+                readingPatterns: response.readingPatterns || [],
+                popularPages: response.popularPages || [],
+                topDomains: response.topDomains || [],
+            };
+        } else {
+            return {
+                success: false,
+                error: response?.error || "Failed to load discover data",
+                trendingTopics: [],
+                readingPatterns: [],
+                popularPages: [],
+                topDomains: [],
+            };
+        }
+    }
+}
