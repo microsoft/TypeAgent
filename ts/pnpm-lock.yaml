@@ -979,6 +979,9 @@ importers:
       html-to-text:
         specifier: ^9.0.5
         version: 9.0.5
+      jsdom:
+        specifier: ^26.1.0
+        version: 26.1.0
       jsonpath:
         specifier: ^1.1.1
         version: 1.1.1
@@ -1100,9 +1103,6 @@ importers:
       jest-environment-jsdom:
         specifier: ^29.7.0
         version: 29.7.0
-      jsdom:
-        specifier: ^26.1.0
-        version: 26.1.0
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1

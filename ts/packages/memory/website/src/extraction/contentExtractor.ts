@@ -18,6 +18,7 @@ import {
     AIExtractionFailedError,
 } from "./types.js";
 
+
 /**
  * Enhanced ContentExtractor with extraction mode capabilities
  * Provides unified content extraction with automatic AI usage and knowledge extraction
@@ -258,7 +259,9 @@ export class ContentExtractor {
         const pageContent = this.extractBasicPageContent(
             htmlContent,
             content.title,
+            content.textContent
         );
+
 
         // Add detected actions if this mode supports them
         let detectedActions = undefined;
@@ -457,7 +460,7 @@ export class ContentExtractor {
             extractsActions: config.extractsActions,
             extractsRelationships: config.extractsRelationships,
             knowledgeStrategy: config.knowledgeStrategy,
-            requiresAI: config.usesAI, // Same as usesAI - no fallbacks
+            requiresAI: config.usesAI,
         };
     }
 
@@ -475,7 +478,7 @@ export class ContentExtractor {
     /**
      * Basic HTML content extraction using proper HTML parsing
      */
-    private extractBasicPageContent(html: string, title: string): any {
+    private extractBasicPageContent(html: string, title: string, content: string | undefined): any {
         try {
             // Use cheerio for proper HTML parsing
             const $ = cheerio.load(html);
@@ -489,12 +492,15 @@ export class ContentExtractor {
                 $("title").text().trim() ||
                 $("h1").first().text().trim();
 
-            // Extract main content from body or fall back to entire document
-            const bodyText = $("body").text() || $.text();
-
-            // Clean up whitespace
-            const mainContent = bodyText.replace(/\s+/g, " ").trim();
-
+            
+            let mainContent = content;
+            
+            if(!mainContent){
+                // Extract main content from body or fall back to entire document
+                const bodyText = $("body").text() || $.text();
+                mainContent = bodyText.replace(/\s+/g, " ").trim();
+            }
+            
             // Extract headings
             const headings: string[] = [];
             $("h1, h2, h3, h4, h5, h6").each((_, element) => {
@@ -509,15 +515,13 @@ export class ContentExtractor {
             const readingTime = Math.max(1, Math.round(words / 200)); // ~200 words per minute
 
             return {
-                pageContent: {
-                    title: extractedTitle,
-                    mainContent,
-                    headings,
-                    wordCount: words,
-                    readingTime,
-                    images: [], // Basic extraction doesn't include images
-                    links: [], // Basic extraction doesn't include links
-                },
+                title: extractedTitle,
+                mainContent,
+                headings,
+                wordCount: words,
+                readingTime,
+                images: [], // Basic extraction doesn't include images
+                links: [], // Basic extraction doesn't include links
             };
         } catch (error) {
             console.warn(
@@ -534,15 +538,13 @@ export class ContentExtractor {
             const words = textContent.split(/\s+/).length;
 
             return {
-                pageContent: {
-                    title: title || "Untitled",
-                    mainContent: textContent,
-                    headings: [],
-                    wordCount: words,
-                    readingTime: Math.max(1, Math.round(words / 200)),
-                    images: [],
-                    links: [],
-                },
+                title: title || "Untitled",
+                mainContent: textContent,
+                headings: [],
+                wordCount: words,
+                readingTime: Math.max(1, Math.round(words / 200)),
+                images: [],
+                links: [],
             };
         }
     }

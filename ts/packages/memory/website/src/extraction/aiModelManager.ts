@@ -59,6 +59,7 @@ export class AIModelManager {
             const result = await this.extractHybridKnowledgeStrict(
                 content,
                 modeConfig,
+                mode,
             );
 
             // Cache the result
@@ -85,15 +86,20 @@ export class AIModelManager {
             .map((line) => line.trim())
             .filter((line) => line.length > 0);
 
-        // Look for title-like content (short lines, likely headings)
-        const potentialTitles = lines.filter(
-            (line) =>
-                line.length > 5 &&
-                line.length < 100 &&
-                !line.includes(".") &&
-                line.charAt(0) === line.charAt(0).toUpperCase(),
-        );
+        let potentialTitles = lines
+            .filter((line) => line.startsWith("Headings: "))
+            .map((line) => line.substring("Headings: ".length));
 
+        // Look for title-like content (short lines, likely headings)
+        if (!potentialTitles || potentialTitles.length === 0) {
+            potentialTitles = lines.filter(
+                (line) =>
+                    line.length > 5 &&
+                    line.length < 100 &&
+                    !line.includes(".") &&
+                    line.charAt(0) === line.charAt(0).toUpperCase(),
+            );
+        }
         // Add potential titles as topics
         knowledge.topics.push(...potentialTitles.slice(0, 10));
 
@@ -107,6 +113,7 @@ export class AIModelManager {
         );
 
         // Create basic entities from capitalized words
+        // TODO: Review this - it's very noisy, even as a fallback option
         const uniqueCapitalizedWords = [...new Set(capitalizedWords)].slice(
             0,
             10,
@@ -129,12 +136,10 @@ export class AIModelManager {
     private async extractHybridKnowledgeStrict(
         content: string,
         modeConfig: any,
+        mode: ExtractionMode,
     ): Promise<kpLib.KnowledgeResponse> {
         try {
-            // 1. Get basic knowledge first (fast, reliable foundation)
-            const basicKnowledge = this.extractBasicKnowledge(content);
-
-            // 2. Get AI knowledge with chunking (required - no fallbacks)
+            // Get AI knowledge with chunking (required - no fallbacks)
             if (!this.knowledgeExtractor) {
                 throw new Error("AI model not available for hybrid extraction");
             }
@@ -148,11 +153,10 @@ export class AIModelManager {
                 throw new Error("AI knowledge extraction returned undefined");
             }
 
-            // 3. Merge basic + AI knowledge
-            return this.mergeKnowledgeResults(basicKnowledge, aiKnowledge);
+            return aiKnowledge;
         } catch (error) {
             // No fallbacks - throw clear error for AI-powered modes
-            throw new AIExtractionFailedError(modeConfig.mode, error as Error);
+            throw new AIExtractionFailedError(mode, error as Error);
         }
     }
 

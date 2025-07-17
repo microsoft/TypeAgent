@@ -6,7 +6,7 @@
  * Replaces the legacy htmlProcessor.mts functionality
  */
 
-import { CrossContextHtmlReducer } from "../common/crossContextHtmlReducer.js";
+import { createNodeHtmlReducer } from "../common/crossContextHtmlReducer.js";
 import {
     ContentExtractor,
     ExtractionInput,
@@ -127,8 +127,8 @@ export async function processHtmlContent(
     const extractor = new ContentExtractor(config);
 
     try {
-        // Pre-process HTML with CrossContextHtmlReducer for consistent processing
-        const reducer = new CrossContextHtmlReducer();
+        // Pre-process HTML with Node-optimized reducer for consistent processing
+        const reducer = await createNodeHtmlReducer();
         const processedHtml = reducer.reduce(html);
 
         // Create input for website-memory extraction
@@ -253,8 +253,8 @@ export async function processHtmlContentEnhanced(
     const extractor = new ContentExtractor(config);
 
     try {
-        // Pre-process HTML with CrossContextHtmlReducer
-        const reducer = new CrossContextHtmlReducer();
+        // Pre-process HTML with Node-optimized reducer
+        const reducer = await createNodeHtmlReducer();
         const processedHtml = reducer.reduce(html);
 
         // Create input for website-memory extraction
@@ -326,10 +326,10 @@ export async function processHtmlContentEnhanced(
 /**
  * Parse HTML content into structured format
  */
-export function parseHtmlContent(html: string, url: string): ParsedHtmlContent {
+export async function parseHtmlContent(html: string, url: string): Promise<ParsedHtmlContent> {
     try {
-        // Use JSDOM if available, otherwise basic parsing
-        const reducer = new CrossContextHtmlReducer();
+        // Use Node-optimized reducer for HTML processing
+        const reducer = await createNodeHtmlReducer();
         const processedHtml = reducer.reduce(html);
 
         // Extract title from HTML

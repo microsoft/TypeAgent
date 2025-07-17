@@ -791,21 +791,27 @@ export async function importHtmlFolderFromSession(
         // For AI-enabled modes, validate AI availability before starting import
         if (extractionMode !== "basic") {
             try {
-                const extractor = new BrowserKnowledgeExtractor(context);
-                // This will throw AIModelRequiredError if AI model is not available
-                await extractor.extractKnowledge(
-                    {
-                        url: "test://validation",
-                        title: "Validation Test",
-                        textContent: "test content for validation",
-                        source: "import",
-                    },
-                    extractionMode,
-                );
+                // Create and validate the knowledge extractor (same logic as BrowserKnowledgeExtractor)
+                const apiSettings = ai.azureApiSettingsFromEnv(ai.ModelType.Chat);
+                const languageModel = ai.createChatModel(apiSettings);
+                const knowledgeExtractor = kpLib.conversation.createKnowledgeExtractor(languageModel);
+                
+                // Validate that the knowledge extractor works by testing extraction
+                const testResult = await knowledgeExtractor.extract("test content for validation");
+                if (!testResult) {
+                    throw new Error("Knowledge extractor validation failed");
+                }
+                
+                // Store the validated knowledge extractor in import options
+                importOptions.knowledgeExtractor = knowledgeExtractor;
             } catch (error) {
                 if (error instanceof AIModelRequiredError) {
                     throw new Error(
                         `Cannot import HTML folder with ${extractionMode} mode: ${error.message}`,
+                    );
+                } else {
+                    throw new Error(
+                        `AI model initialization failed for ${extractionMode} mode: ${(error as Error).message}. Please check AI model configuration or use 'basic' mode.`,
                     );
                 }
             }
@@ -915,11 +921,7 @@ export async function importHtmlFolderFromSession(
                         const extractor = createContentExtractor(
                             {
                                 mode: extractionMode,
-                                knowledgeExtractor:
-                                    typeof importOptions !== "undefined" &&
-                                    importOptions.knowledgeExtractor
-                                        ? importOptions.knowledgeExtractor
-                                        : undefined,
+                                knowledgeExtractor: importOptions.knowledgeExtractor,
                             },
                             context,
                         );
@@ -1114,21 +1116,37 @@ export async function importHtmlFolder(
  * Helper function to convert WebsiteData to Website format for collection storage
  */
 function convertWebsiteDataToWebsite(data: WebsiteData): any {
-    return {
+    // Create a proper WebsiteVisitInfo object for WebsiteMeta
+    const visitInfo: website.WebsiteVisitInfo = {
         url: data.url,
         title: data.title,
-        content: data.content,
         domain: data.domain,
-        metadata: {
-            ...data.metadata,
-            url: data.url,
-            title: data.title,
-            domain: data.domain,
-        },
-        visitCount: data.visitCount,
-        lastVisited: data.lastVisited,
-        extractionResult: data.extractionResult,
+        source: data.metadata.websiteSource as "bookmark" | "history" | "reading_list",
+        visitDate: data.lastVisited ? data.lastVisited.toISOString() : new Date().toISOString(),
+        description: data.content.substring(0, 500), // Use first 500 chars as description
+        visitCount: data.visitCount || 1,
+        lastVisitTime: data.lastVisited ? data.lastVisited.toISOString() : new Date().toISOString(),
     };
+
+    // Add optional properties only if they exist
+    if (data.metadata.pageType) {
+        visitInfo.pageType = data.metadata.pageType;
+    }
+
+    // Create a proper WebsiteMeta instance
+    const websiteMeta = new website.WebsiteMeta(visitInfo);
+
+    // Create and return a Website instance using the proper constructor
+    const websiteInstance = new website.Website(
+        websiteMeta,
+        data.content,
+        [], // tags
+        data.extractionResult?.knowledge, // knowledge from extraction
+        undefined, // deletionInfo
+        false // isNew = false since content is already processed
+    );
+
+    return websiteInstance;
 }
 
 /**

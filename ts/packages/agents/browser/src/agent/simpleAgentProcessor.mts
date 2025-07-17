@@ -1,4 +1,5 @@
 // Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 /**
@@ -6,12 +7,13 @@
  * Maintains complete feature parity with browser-based processing
  */
 
-import { CrossContextHtmlReducer } from "../common/crossContextHtmlReducer.js";
+import { CrossContextHtmlReducer, createNodeHtmlReducer } from "../common/crossContextHtmlReducer.js";
 import {
     processHtmlContent,
     ProcessingOptions,
     WebsiteData,
 } from "./htmlUtils.mjs";
+import { convert } from "html-to-text";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:browser:full-agent-processor");
@@ -21,11 +23,25 @@ const debug = registerDebug("typeagent:browser:full-agent-processor");
  * Zero feature gaps compared to browser-based processing
  */
 export class DirectFolderProcessor {
-    private reducer: CrossContextHtmlReducer;
+    private reducer: CrossContextHtmlReducer | null = null;
+    private reducerPromise: Promise<CrossContextHtmlReducer>;
 
     constructor() {
-        this.reducer = new CrossContextHtmlReducer();
-        debug("Direct folder processor initialized with full HTMLReducer");
+        this.reducerPromise = this.initializeReducer();
+        debug("Direct folder processor initializing with Node-optimized CrossContextHtmlReducer");
+    }
+
+    private async initializeReducer(): Promise<CrossContextHtmlReducer> {
+        this.reducer = await createNodeHtmlReducer();
+        debug("Direct folder processor initialized with Node-optimized CrossContextHtmlReducer");
+        return this.reducer;
+    }
+
+    private async getReducer(): Promise<CrossContextHtmlReducer> {
+        if (this.reducer) {
+            return this.reducer;
+        }
+        return await this.reducerPromise;
     }
 
     /**
@@ -53,11 +69,14 @@ export class DirectFolderProcessor {
         );
 
         try {
+            // Get the initialized reducer
+            const reducer = await this.getReducer();
+            
             // Configure reducer based on options
-            this.configureReducer(options);
+            this.configureReducer(options, reducer);
 
             // Use full HTMLReducer functionality
-            const processedHtml = this.reducer.reduce(htmlContent);
+            const processedHtml = reducer.reduce(htmlContent);
 
             // Extract text content
             const textContent = this.extractTextContent(processedHtml);
@@ -104,19 +123,19 @@ export class DirectFolderProcessor {
     /**
      * Configure reducer based on processing options
      */
-    private configureReducer(options: ProcessingOptions): void {
+    private configureReducer(options: ProcessingOptions, reducer: CrossContextHtmlReducer): void {
         // Set reducer options based on processing options
         // Default to browser-like settings for compatibility
-        this.reducer.removeScripts = true;
-        this.reducer.removeStyleTags = true;
-        this.reducer.removeLinkTags = true;
-        this.reducer.removeMetaTags = false; // Keep meta for content extraction
-        this.reducer.removeSvgTags = true;
-        this.reducer.removeCookieJars = true;
-        this.reducer.removeNonVisibleNodes = true;
-        this.reducer.removeMiscTags = true;
-        this.reducer.removeAllClasses = true;
-        this.reducer.removeDivs = false; // Keep structure for better content extraction
+        reducer.removeScripts = true;
+        reducer.removeStyleTags = true;
+        reducer.removeLinkTags = true;
+        reducer.removeMetaTags = false; // Keep meta for content extraction
+        reducer.removeSvgTags = true;
+        reducer.removeCookieJars = true;
+        reducer.removeNonVisibleNodes = true;
+        reducer.removeMiscTags = true;
+        reducer.removeAllClasses = true;
+        reducer.removeDivs = false; // Keep structure for better content extraction
 
         // Adjust based on specific options if needed
         // Note: mode comparison removed due to type incompatibility
@@ -124,14 +143,26 @@ export class DirectFolderProcessor {
     }
 
     /**
-     * Simple text extraction
+     * Extract text content using html-to-text for better quality and consistency
+     * Uses the same package and configuration as the content script for unified behavior
      */
     private extractTextContent(html: string): string {
-        return html
-            .replace(/<[^>]*>/g, " ") // Remove HTML tags
-            .replace(/&[^;]+;/g, " ") // Remove HTML entities
-            .replace(/\s+/g, " ") // Normalize whitespace
-            .trim();
+        try {
+            // Use same options as content script for consistency
+            const options = {
+                wordwrap: 130,
+            };
+            
+            return convert(html, options);
+        } catch (error) {
+            console.warn("html-to-text conversion failed, falling back to regex:", error);
+            // Fallback to original regex approach if html-to-text fails
+            return html
+                .replace(/<[^>]*>/g, " ") // Remove HTML tags
+                .replace(/&[^;]+;/g, " ") // Remove HTML entities
+                .replace(/\s+/g, " ") // Normalize whitespace
+                .trim();
+        }
     }
 }
 
