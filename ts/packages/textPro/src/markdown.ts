@@ -45,7 +45,7 @@ function getChildTokens(token: md.Token): md.Token[] | undefined {
 }
 
 export interface MarkdownBlockHandler {
-    onBlockStart(token: md.Token, parentToken?: md.Token | undefined): void;
+    onBlockStart(): void;
     onBlockEnd(curTextBlock: string): void;
     onToken(
         curTextBlock: string,
@@ -55,13 +55,14 @@ export interface MarkdownBlockHandler {
 }
 
 export function getTextBlocksFromMarkdown(
-    markdown: string | md.TokensList,
+    markdown: string | md.Token[],
     handler?: MarkdownBlockHandler,
 ): string[] {
     const markdownTokens =
         typeof markdown === "string" ? loadMarkdown(markdown) : markdown;
     let textBlocks: string[] = [];
     let curTextBlock = "";
+    let prevBlockToken: md.Token | undefined;
     traverseTokens(markdownTokens);
 
     return textBlocks;
@@ -86,10 +87,9 @@ export function getTextBlocksFromMarkdown(
             default:
                 curTextBlock += token.raw;
                 handler?.onToken(curTextBlock, token, parentToken);
-                visitInnerMarkup(token);
+                visitInnerNodes(token);
                 break;
             case "space":
-                curTextBlock += token.raw;
                 break;
             case "text":
                 curTextBlock += token.raw;
@@ -102,26 +102,26 @@ export function getTextBlocksFromMarkdown(
             case "heading":
                 beginBlock(token, parentToken);
                 curTextBlock += token.raw;
-                visitInnerMarkup(token);
+                visitInnerNodes(token);
                 endBlock();
                 break;
         }
     }
 
-    function visitInnerMarkup(token: md.Token): void {
+    function visitInnerNodes(token: md.Token): void {
         const children = getChildTokens(token);
         if (children !== undefined && children.length > 0) {
-            visitMarkup(children);
+            visitNodes(children);
         }
     }
 
-    function visitMarkup(tokens: md.Token[]): void {
+    function visitNodes(tokens: md.Token[]): void {
         for (let i = 0; i < tokens.length; ++i) {
             const token = tokens[i];
             switch (token.type) {
                 default:
                     handler?.onToken(curTextBlock, token);
-                    visitInnerMarkup(token);
+                    visitInnerNodes(token);
                     break;
                 case "text":
                 case "space":
@@ -134,16 +134,20 @@ export function getTextBlocksFromMarkdown(
         token: md.Token,
         parentToken?: md.Token | undefined,
     ): void {
-        endBlock(false);
-        handler?.onBlockStart(token, parentToken);
+        // If we just saw a heading, just keep collecting the text block associated with it
+        if (prevBlockToken === undefined || prevBlockToken.type !== "heading") {
+            curTextBlock = "";
+            handler?.onBlockStart();
+        }
+        handler?.onToken(curTextBlock, token, parentToken);
+        prevBlockToken = token;
     }
 
     function endBlock(reduceDepth: boolean = true): void {
         if (curTextBlock.length > 0) {
             textBlocks.push(curTextBlock);
-            handler?.onBlockEnd(curTextBlock);
         }
-        curTextBlock = "";
+        handler?.onBlockEnd(curTextBlock);
     }
 }
 
@@ -173,8 +177,7 @@ class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
     private linksInScope: Map<string, string>;
     private knowledgeBlock: MarkdownKnowledgeBlock;
 
-    private lastTokenName: string = "";
-    private lastTokenText: string = "";
+    private lastToken: md.Token | undefined;
 
     constructor() {
         this.knowledgeBlocks = [];
@@ -187,49 +190,53 @@ class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
         if (token.type === "space") {
             return;
         }
-        this.lastTokenText = token.type;
         switch (token.type) {
             default:
-                break;
-            case "link":
-                const link = token as md.Tokens.Link;
-                this.onLink(link.text, link.href);
-                break;
-        }
-    }
-
-    onBlockStart(token: md.Token): void {
-        const blockName = token.type;
-        switch (blockName) {
-            default:
-                this.knowledgeBlock.tags.push(blockName);
                 break;
             case "heading":
                 const heading = token as md.Tokens.Heading;
                 this.onHeading(heading.text, heading.depth);
                 break;
             case "codespan":
+            case "code":
                 this.knowledgeBlock.tags.push("code");
                 break;
             case "list":
-                this.knowledgeBlock.tags.push(blockName);
-                if (this.lastTokenName === "heading") {
+                this.knowledgeBlock.tags.push("list");
+                const listName = this.getPrecedingHeading();
+                if (listName) {
                     this.knowledgeBlock.knowledge.entities.push({
-                        name: this.lastTokenText,
+                        name: listName,
                         type: ["list"],
                     });
                 }
                 break;
             case "table":
-                this.knowledgeBlock.tags.push(blockName);
-                if (this.lastTokenName === "heading") {
+                this.knowledgeBlock.tags.push("table");
+                const tableName = this.getPrecedingHeading();
+                if (tableName) {
                     this.knowledgeBlock.knowledge.entities.push({
-                        name: this.lastTokenText,
+                        name: tableName,
                         type: ["table"],
                     });
                 }
                 break;
+            case "link":
+                const link = token as md.Tokens.Link;
+                this.onLink(link.text, link.href);
+                break;
         }
+        this.lastToken = token;
+    }
+
+    onBlockStart(): void {
+        //
+        // Start next block
+        // Note: do not clear headingsInScope as they stay active for the duration of the conversion pass
+        // Links are only active for the current block
+        //
+        this.knowledgeBlock = createMarkdownKnowledgeBlock();
+        this.linksInScope.clear();
     }
 
     onHeading(headingText: string, level: number): void {
@@ -241,7 +248,6 @@ class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
             }
         }
         this.headingsInScope.set(level, headingText);
-        this.lastTokenText = headingText;
     }
 
     onLink(text: string, url: string): void {
@@ -274,13 +280,12 @@ class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
             );
         }
         this.knowledgeBlocks.push(this.knowledgeBlock);
-        //
-        // Start next block
-        // Note: do not clear headingsInScope as they stay active for the duration of the conversion pass
-        // Links are only active for the current block
-        //
-        this.knowledgeBlock = createMarkdownKnowledgeBlock();
-        this.linksInScope.clear();
+    }
+
+    private getPrecedingHeading(): string | undefined {
+        return this.lastToken !== undefined && this.lastToken.type === "heading"
+            ? this.lastToken.text
+            : undefined;
     }
 }
 
