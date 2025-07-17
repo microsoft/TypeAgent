@@ -6,14 +6,20 @@ import { DiscoverInsights } from "./discoveryTypes";
 import { AnalyticsData } from "./analyticsTypes";
 
 export interface SearchServices {
-    searchWebMemories(query: string, filters: SearchFilters): Promise<SearchResult>;
+    searchWebMemories(
+        query: string,
+        filters: SearchFilters,
+    ): Promise<SearchResult>;
     getSearchSuggestions(query: string): Promise<string[]>;
     saveSearch(query: string, results: SearchResult): Promise<void>;
     checkKnowledgeStatus(url: string): Promise<any>;
 }
 
 export interface DiscoveryServices {
-    getDiscoverInsights(limit: number, timeframe: string): Promise<{
+    getDiscoverInsights(
+        limit: number,
+        timeframe: string,
+    ): Promise<{
         success: boolean;
         trendingTopics?: any[];
         readingPatterns?: any[];

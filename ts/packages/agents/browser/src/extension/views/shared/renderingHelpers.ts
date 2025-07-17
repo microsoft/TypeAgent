@@ -102,7 +102,10 @@ export class RenderingHelpers {
         }
     }
 
-    static showLoading(container: HTMLElement, message: string = "Loading..."): void {
+    static showLoading(
+        container: HTMLElement,
+        message: string = "Loading...",
+    ): void {
         if (container) {
             container.innerHTML = `
                 <div class="text-center p-4">
@@ -115,7 +118,12 @@ export class RenderingHelpers {
         }
     }
 
-    static showEmpty(container: HTMLElement, icon: string, title: string, message: string): void {
+    static showEmpty(
+        container: HTMLElement,
+        icon: string,
+        title: string,
+        message: string,
+    ): void {
         if (container) {
             container.innerHTML = `
                 <div class="empty-state">

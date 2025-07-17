@@ -1,4 +1,7 @@
-import { DiscoveryServices } from './knowledgeUtilities';
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import { DiscoveryServices } from "./knowledgeUtilities";
 
 export class KnowledgeDiscoveryPanel {
     private container: HTMLElement;
@@ -30,7 +33,7 @@ export class KnowledgeDiscoveryPanel {
 
         try {
             const response = await this.services.loadDiscoverData();
-            
+
             // Handle service response structure
             if (response && response.success) {
                 this.discoverData = {
@@ -40,10 +43,12 @@ export class KnowledgeDiscoveryPanel {
                     topDomains: response.topDomains || [],
                 };
             } else {
-                this.handleDiscoverDataError(response?.error || 'Failed to load discover data');
+                this.handleDiscoverDataError(
+                    response?.error || "Failed to load discover data",
+                );
             }
         } catch (error) {
-            console.error('Failed to load discovery data:', error);
+            console.error("Failed to load discovery data:", error);
             this.handleDiscoverDataError(error);
         }
     }
@@ -51,9 +56,12 @@ export class KnowledgeDiscoveryPanel {
     renderContent(): void {
         if (!this.discoverData) return;
 
-        const hasData = this.discoverData.trendingTopics?.length > 0 ||
-                       this.discoverData.readingPatterns?.some((p: any) => p.activity > 0) ||
-                       this.discoverData.popularPages?.length > 0;
+        const hasData =
+            this.discoverData.trendingTopics?.length > 0 ||
+            this.discoverData.readingPatterns?.some(
+                (p: any) => p.activity > 0,
+            ) ||
+            this.discoverData.popularPages?.length > 0;
 
         const emptyState = document.getElementById("discoverEmptyState");
         if (emptyState) {
@@ -141,7 +149,8 @@ export class KnowledgeDiscoveryPanel {
         }
 
         container.innerHTML = this.discoverData.trendingTopics
-            .map((topic: any) => `
+            .map(
+                (topic: any) => `
                 <div class="card trending-topic-card trend-${topic.trend} discover-card mb-2">
                     <div class="card-body">
                         <h6 class="card-title text-capitalize">${this.escapeHtml(topic.topic)}</h6>
@@ -157,7 +166,8 @@ export class KnowledgeDiscoveryPanel {
                         </div>
                     </div>
                 </div>
-            `)
+            `,
+            )
             .join("");
     }
 
@@ -165,8 +175,12 @@ export class KnowledgeDiscoveryPanel {
         const container = document.getElementById("readingPatterns");
         if (!container || !this.discoverData) return;
 
-        if (this.discoverData.readingPatterns.length === 0 ||
-            this.discoverData.readingPatterns.every((p: any) => p.activity === 0)) {
+        if (
+            this.discoverData.readingPatterns.length === 0 ||
+            this.discoverData.readingPatterns.every(
+                (p: any) => p.activity === 0,
+            )
+        ) {
             container.innerHTML = `
                 <div class="empty-state">
                     <i class="bi bi-clock-history"></i>
@@ -177,7 +191,9 @@ export class KnowledgeDiscoveryPanel {
             return;
         }
 
-        const maxActivity = Math.max(...this.discoverData.readingPatterns.map((p: any) => p.activity));
+        const maxActivity = Math.max(
+            ...this.discoverData.readingPatterns.map((p: any) => p.activity),
+        );
 
         container.innerHTML = `
             <div class="card discover-card">
@@ -185,12 +201,14 @@ export class KnowledgeDiscoveryPanel {
                     <h6 class="card-title">Weekly Activity Pattern</h6>
                     <div class="reading-pattern-chart">
                         ${this.discoverData.readingPatterns
-                            .map((pattern: any) => `
+                            .map(
+                                (pattern: any) => `
                                 <div class="pattern-item ${pattern.peak ? "peak" : ""}">
                                     <div class="pattern-bar" style="height: ${maxActivity > 0 ? (pattern.activity / maxActivity) * 80 + 10 : 2}px" title="${pattern.timeframe}: ${pattern.activity} visits"></div>
                                     <div class="pattern-time">${pattern.timeframe.substring(0, 3)}</div>
                                 </div>
-                            `)
+                            `,
+                            )
                             .join("")}
                     </div>
                     <div class="text-center mt-2">
@@ -205,7 +223,10 @@ export class KnowledgeDiscoveryPanel {
         const container = document.getElementById("popularPages");
         if (!container) return;
 
-        if (!this.discoverData?.popularPages || this.discoverData.popularPages.length === 0) {
+        if (
+            !this.discoverData?.popularPages ||
+            this.discoverData.popularPages.length === 0
+        ) {
             container.innerHTML = `
                 <div class="empty-state">
                     <i class="bi bi-fire"></i>
@@ -217,23 +238,26 @@ export class KnowledgeDiscoveryPanel {
         }
 
         // Convert popular pages to website format for rich rendering
-        const popularPagesAsWebsites = this.discoverData.popularPages.map((page: any) => ({
-            url: page.url,
-            title: page.title,
-            domain: page.domain,
-            visitCount: page.visitCount,
-            lastVisited: page.lastVisited,
-            source: page.isBookmarked ? "bookmarks" : "history",
-            score: page.visitCount,
-            knowledge: {
-                hasKnowledge: false,
-                status: "none",
-            },
-        }));
+        const popularPagesAsWebsites = this.discoverData.popularPages.map(
+            (page: any) => ({
+                url: page.url,
+                title: page.title,
+                domain: page.domain,
+                visitCount: page.visitCount,
+                lastVisited: page.lastVisited,
+                source: page.isBookmarked ? "bookmarks" : "history",
+                score: page.visitCount,
+                knowledge: {
+                    hasKnowledge: false,
+                    status: "none",
+                },
+            }),
+        );
 
         // Use rich list view rendering similar to original
         const pagesHtml = popularPagesAsWebsites
-            .map((website: any) => `
+            .map(
+                (website: any) => `
                 <div class="search-result-item">
                     <div class="d-flex align-items-start">
                         <img src="https://www.google.com/s2/favicons?domain=${website.domain}" 
@@ -257,14 +281,15 @@ export class KnowledgeDiscoveryPanel {
                         </div>
                     </div>
                 </div>
-            `)
+            `,
+            )
             .join("");
 
         container.innerHTML = pagesHtml;
     }
 
     private escapeHtml(text: string): string {
-        const div = document.createElement('div');
+        const div = document.createElement("div");
         div.textContent = text;
         return div.innerHTML;
     }
@@ -273,7 +298,7 @@ export class KnowledgeDiscoveryPanel {
         try {
             return new Date(dateString).toLocaleDateString();
         } catch {
-            return '';
+            return "";
         }
     }
 

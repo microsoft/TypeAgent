@@ -809,8 +809,13 @@ export class DefaultSearchServices implements SearchServices {
     constructor(private chromeService: ChromeExtensionService) {}
 
     async performSearch(query: string, filters?: any): Promise<SearchResult> {
-        console.log('DefaultSearchServices: Starting search for:', query, 'with filters:', filters);
-        
+        console.log(
+            "DefaultSearchServices: Starting search for:",
+            query,
+            "with filters:",
+            filters,
+        );
+
         const searchFilters: SearchFilters = {
             domain: filters?.domain,
             sourceType: filters?.sourceType,
@@ -819,50 +824,66 @@ export class DefaultSearchServices implements SearchServices {
         };
 
         try {
-            console.log('DefaultSearchServices: Calling chromeService.searchWebMemories...');
-            const result = await this.chromeService.searchWebMemories(query, searchFilters);
-            console.log('DefaultSearchServices: Raw result from chromeService:', result);
-            
+            console.log(
+                "DefaultSearchServices: Calling chromeService.searchWebMemories...",
+            );
+            const result = await this.chromeService.searchWebMemories(
+                query,
+                searchFilters,
+            );
+            console.log(
+                "DefaultSearchServices: Raw result from chromeService:",
+                result,
+            );
+
             // The chromeService returns the full SearchResult, but we need to ensure structure
-            if (result && typeof result === 'object') {
+            if (result && typeof result === "object") {
                 const searchResult = {
                     websites: result.websites || [],
                     summary: result.summary || {
-                        text: '',
+                        text: "",
                         totalFound: 0,
                         searchTime: 0,
                         sources: [],
-                        entities: []
+                        entities: [],
                     },
                     query: query,
                     filters: searchFilters,
                     topTopics: result.topTopics || [],
                     suggestedFollowups: result.suggestedFollowups || [],
-                    relatedEntities: result.relatedEntities || []
+                    relatedEntities: result.relatedEntities || [],
                 };
-                console.log('DefaultSearchServices: Formatted result:', searchResult);
+                console.log(
+                    "DefaultSearchServices: Formatted result:",
+                    searchResult,
+                );
                 return searchResult;
             } else {
-                console.warn('DefaultSearchServices: Unexpected response format, using fallback');
+                console.warn(
+                    "DefaultSearchServices: Unexpected response format, using fallback",
+                );
                 // Fallback for unexpected response format
                 return {
                     websites: [],
                     summary: {
-                        text: '',
+                        text: "",
                         totalFound: 0,
                         searchTime: 0,
                         sources: [],
-                        entities: []
+                        entities: [],
                     },
                     query: query,
                     filters: searchFilters,
                     topTopics: [],
                     suggestedFollowups: [],
-                    relatedEntities: []
+                    relatedEntities: [],
                 };
             }
         } catch (error) {
-            console.error('DefaultSearchServices: Search service error:', error);
+            console.error(
+                "DefaultSearchServices: Search service error:",
+                error,
+            );
             throw error; // Re-throw so the panel can handle the error
         }
     }
@@ -872,8 +893,11 @@ export class DefaultDiscoveryServices implements DiscoveryServices {
     constructor(private chromeService: ChromeExtensionService) {}
 
     async loadDiscoverData(): Promise<any> {
-        const response = await this.chromeService.getDiscoverInsights(10, "30d");
-        
+        const response = await this.chromeService.getDiscoverInsights(
+            10,
+            "30d",
+        );
+
         // Return the response in the expected format for the discovery panel
         if (response && response.success) {
             return {

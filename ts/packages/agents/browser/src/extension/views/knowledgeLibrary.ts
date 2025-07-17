@@ -24,13 +24,13 @@ import { KnowledgeDiscoveryPanel } from "./knowledgeDiscoveryPanel";
 import { KnowledgeAnalyticsPanel } from "./knowledgeAnalyticsPanel";
 
 // Import interfaces
-import { 
-    SearchServices, 
-    DiscoveryServices, 
+import {
+    SearchServices,
+    DiscoveryServices,
     AnalyticsServices,
     DefaultSearchServices,
     DefaultDiscoveryServices,
-    DefaultAnalyticsServices
+    DefaultAnalyticsServices,
 } from "./knowledgeUtilities";
 
 interface FullPageNavigation {
@@ -143,7 +143,9 @@ class WebsiteLibraryPanelFullPage {
     }
 
     private setupImportFunctionality() {
-        const importWebActivityBtn = document.getElementById("importWebActivityBtn");
+        const importWebActivityBtn = document.getElementById(
+            "importWebActivityBtn",
+        );
         const importFromFileBtn = document.getElementById("importFromFileBtn");
 
         if (importWebActivityBtn) {
@@ -162,10 +164,13 @@ class WebsiteLibraryPanelFullPage {
     }
 
     private setupImportEventListeners() {
-        window.addEventListener("startWebActivityImport", async (event: any) => {
-            const options = event.detail as ImportOptions;
-            await this.handleWebActivityImport(options);
-        });
+        window.addEventListener(
+            "startWebActivityImport",
+            async (event: any) => {
+                const options = event.detail as ImportOptions;
+                await this.handleWebActivityImport(options);
+            },
+        );
 
         window.addEventListener("startFolderImport", async (event: any) => {
             const options = event.detail as FolderImportOptions;
@@ -200,7 +205,8 @@ class WebsiteLibraryPanelFullPage {
 
     private async checkConnectionStatus(): Promise<boolean> {
         try {
-            const response = await chromeExtensionService.checkWebSocketConnection();
+            const response =
+                await chromeExtensionService.checkWebSocketConnection();
             this.isConnected = response?.connected === true;
             return this.isConnected;
         } catch (error) {
@@ -224,7 +230,8 @@ class WebsiteLibraryPanelFullPage {
                     indicator.className = "status-indicator status-connected";
                     text.textContent = "Connected";
                 } else {
-                    indicator.className = "status-indicator status-disconnected";
+                    indicator.className =
+                        "status-indicator status-disconnected";
                     text.textContent = "Disconnected";
                 }
             }
@@ -299,7 +306,10 @@ class WebsiteLibraryPanelFullPage {
         if (!this.searchPanel) {
             const container = document.getElementById("search-page");
             if (container) {
-                this.searchPanel = new KnowledgeSearchPanel(container, this.services.search);
+                this.searchPanel = new KnowledgeSearchPanel(
+                    container,
+                    this.services.search,
+                );
                 await this.searchPanel.initialize();
                 this.searchPanel.setConnectionStatus(this.isConnected);
             }
@@ -310,7 +320,10 @@ class WebsiteLibraryPanelFullPage {
         if (!this.discoveryPanel) {
             const container = document.getElementById("discover-page");
             if (container) {
-                this.discoveryPanel = new KnowledgeDiscoveryPanel(container, this.services.discovery);
+                this.discoveryPanel = new KnowledgeDiscoveryPanel(
+                    container,
+                    this.services.discovery,
+                );
                 await this.discoveryPanel.initialize();
                 this.discoveryPanel.setConnectionStatus(this.isConnected);
             }
@@ -321,7 +334,10 @@ class WebsiteLibraryPanelFullPage {
         if (!this.analyticsPanel) {
             const container = document.getElementById("analytics-page");
             if (container) {
-                this.analyticsPanel = new KnowledgeAnalyticsPanel(container, this.services.analytics);
+                this.analyticsPanel = new KnowledgeAnalyticsPanel(
+                    container,
+                    this.services.analytics,
+                );
                 await this.analyticsPanel.initialize();
                 this.analyticsPanel.setConnectionStatus(this.isConnected);
             }
@@ -377,7 +393,10 @@ class WebsiteLibraryPanelFullPage {
                 message.type === "importComplete" ||
                 message.type === "contentIndexed"
             ) {
-                if (this.navigation.currentPage === "analytics" && this.analyticsPanel) {
+                if (
+                    this.navigation.currentPage === "analytics" &&
+                    this.analyticsPanel
+                ) {
                     this.analyticsPanel.refreshData().catch(console.error);
                 }
             }
@@ -413,7 +432,9 @@ class WebsiteLibraryPanelFullPage {
     }
 
     // Import handling methods
-    private async handleWebActivityImport(options: ImportOptions): Promise<void> {
+    private async handleWebActivityImport(
+        options: ImportOptions,
+    ): Promise<void> {
         try {
             let isFirstProgress = true;
 
@@ -426,7 +447,8 @@ class WebsiteLibraryPanelFullPage {
                 }
             });
 
-            const result = await this.importManager.startWebActivityImport(options);
+            const result =
+                await this.importManager.startWebActivityImport(options);
             this.importUI.showImportComplete(result);
         } catch (error) {
             this.importUI.showImportError({
@@ -440,7 +462,9 @@ class WebsiteLibraryPanelFullPage {
         }
     }
 
-    private async handleFolderImport(options: FolderImportOptions): Promise<void> {
+    private async handleFolderImport(
+        options: FolderImportOptions,
+    ): Promise<void> {
         try {
             let isFirstProgress = true;
 
@@ -578,22 +602,41 @@ class WebsiteLibraryPanelFullPage {
     private populateSettingsModal() {
         const prefs = this.userPreferences;
 
-        const defaultViewMode = document.getElementById("defaultViewMode") as HTMLSelectElement;
-        const autoExtractKnowledge = document.getElementById("autoExtractKnowledge") as HTMLInputElement;
-        const showConfidenceScores = document.getElementById("showConfidenceScores") as HTMLInputElement;
-        const enableNotifications = document.getElementById("enableNotifications") as HTMLInputElement;
+        const defaultViewMode = document.getElementById(
+            "defaultViewMode",
+        ) as HTMLSelectElement;
+        const autoExtractKnowledge = document.getElementById(
+            "autoExtractKnowledge",
+        ) as HTMLInputElement;
+        const showConfidenceScores = document.getElementById(
+            "showConfidenceScores",
+        ) as HTMLInputElement;
+        const enableNotifications = document.getElementById(
+            "enableNotifications",
+        ) as HTMLInputElement;
 
         if (defaultViewMode) defaultViewMode.value = prefs.viewMode;
-        if (autoExtractKnowledge) autoExtractKnowledge.checked = prefs.autoExtractKnowledge;
-        if (showConfidenceScores) showConfidenceScores.checked = prefs.showConfidenceScores;
-        if (enableNotifications) enableNotifications.checked = prefs.enableNotifications;
+        if (autoExtractKnowledge)
+            autoExtractKnowledge.checked = prefs.autoExtractKnowledge;
+        if (showConfidenceScores)
+            showConfidenceScores.checked = prefs.showConfidenceScores;
+        if (enableNotifications)
+            enableNotifications.checked = prefs.enableNotifications;
     }
 
     private saveUserPreferences() {
-        const defaultViewMode = document.getElementById("defaultViewMode") as HTMLSelectElement;
-        const autoExtractKnowledge = document.getElementById("autoExtractKnowledge") as HTMLInputElement;
-        const showConfidenceScores = document.getElementById("showConfidenceScores") as HTMLInputElement;
-        const enableNotifications = document.getElementById("enableNotifications") as HTMLInputElement;
+        const defaultViewMode = document.getElementById(
+            "defaultViewMode",
+        ) as HTMLSelectElement;
+        const autoExtractKnowledge = document.getElementById(
+            "autoExtractKnowledge",
+        ) as HTMLInputElement;
+        const showConfidenceScores = document.getElementById(
+            "showConfidenceScores",
+        ) as HTMLInputElement;
+        const enableNotifications = document.getElementById(
+            "enableNotifications",
+        ) as HTMLInputElement;
 
         this.userPreferences = {
             viewMode: defaultViewMode?.value || "list",
@@ -611,12 +654,16 @@ class WebsiteLibraryPanelFullPage {
             notificationManager.showSuccess("Settings saved successfully");
 
             if (this.searchPanel) {
-                this.searchPanel.setViewMode(this.userPreferences.viewMode as any);
+                this.searchPanel.setViewMode(
+                    this.userPreferences.viewMode as any,
+                );
             }
 
             const modal = document.getElementById("settingsModal");
             if (modal && (window as any).bootstrap) {
-                const bsModal = (window as any).bootstrap.Modal.getInstance(modal);
+                const bsModal = (window as any).bootstrap.Modal.getInstance(
+                    modal,
+                );
                 if (bsModal) bsModal.hide();
             }
         } catch (error) {
@@ -627,7 +674,9 @@ class WebsiteLibraryPanelFullPage {
 
     private loadUserPreferences(): UserPreferences {
         try {
-            const stored = localStorage.getItem("websiteLibrary_userPreferences");
+            const stored = localStorage.getItem(
+                "websiteLibrary_userPreferences",
+            );
             if (stored) {
                 return JSON.parse(stored);
             }
