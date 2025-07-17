@@ -246,6 +246,9 @@ export async function handleMessage(
                         false,
                         false,
                         true,
+                        false, // useTimestampIds
+                        true, // filterToReadingView - use reading view for knowledge extraction
+                        true, // keepMetaTags - preserve metadata for context
                     );
 
                     const knowledgeResult = await sendActionToAgent({
@@ -548,18 +551,6 @@ export async function handleMessage(
         // Index management message handlers
         case "checkIndexStatus": {
             return await handleCheckIndexStatus();
-        }
-
-        case "createKnowledgeIndex": {
-            return await handleCreateKnowledgeIndex(message);
-        }
-
-        case "refreshKnowledgeIndex": {
-            return await handleRefreshKnowledgeIndex(message);
-        }
-
-        case "deleteKnowledgeIndex": {
-            return await handleDeleteKnowledgeIndex();
         }
 
         case "deleteAction": {
@@ -1122,6 +1113,9 @@ async function handleSearchWebMemories(message: any) {
                 },
                 query: message.parameters.query,
                 filters: message.parameters.filters || {},
+                topTopics: result.topTopics || [],
+                suggestedFollowups: result.suggestedFollowups || [],
+                relatedEntities: result.relatedEntities || [],
             },
         };
     } catch (error) {
@@ -1139,10 +1133,10 @@ async function handleGetSearchSuggestions(message: any) {
         const storage = await chrome.storage.local.get(["searchHistory"]);
         const searchHistory = storage.searchHistory || [];
 
-        const query = message.parameters.query.toLowerCase();
+        const query = message.query.toLowerCase();
         const suggestions = searchHistory
             .filter((search: string) => search.toLowerCase().includes(query))
-            .slice(0, message.parameters.limit || 5);
+            .slice(0, message.limit || 5);
 
         return {
             success: true,
@@ -1304,6 +1298,8 @@ async function indexPageContent(
             false,
             true, // extract text
             false, // useTimestampIds
+            true, // filterToReadingView - use reading view for indexing
+            true, // keepMetaTags - preserve metadata for indexing context
         );
 
         await sendActionToAgent({
@@ -1439,114 +1435,6 @@ async function handleCheckIndexStatus() {
             error: error instanceof Error ? error.message : "Unknown error",
         };
     }
-}
-
-async function handleCreateKnowledgeIndex(message: any) {
-    try {
-        const result = await sendActionToAgent({
-            actionName: "indexWebsiteContent",
-            parameters: {
-                rebuildIndex: true,
-                showProgress: message.parameters?.showProgress || false,
-            },
-        });
-
-        return {
-            success: !result.error,
-            message: result.error
-                ? result.error
-                : "Knowledge index created successfully",
-            itemsIndexed: result.itemsIndexed || 0,
-        };
-    } catch (error) {
-        console.error("Error creating knowledge index:", error);
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : "Unknown error",
-        };
-    }
-}
-
-async function handleRefreshKnowledgeIndex(message: any) {
-    try {
-        // This would refresh/rebuild the existing index
-        const result = await sendActionToAgent({
-            actionName: "refreshWebsiteIndex",
-            parameters: {
-                fullRebuild: true,
-                showProgress: message.parameters?.showProgress || false,
-            },
-        });
-
-        return {
-            success: !result.error,
-            message: result.error
-                ? result.error
-                : "Knowledge index refreshed successfully",
-            itemsReindexed: result.itemsReindexed || 0,
-        };
-    } catch (error) {
-        console.error("Error refreshing knowledge index:", error);
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : "Unknown error",
-        };
-    }
-}
-
-async function handleDeleteKnowledgeIndex() {
-    try {
-        // This would delete the knowledge index but preserve the raw data
-        const result = await sendActionToAgent({
-            actionName: "deleteWebsiteIndex",
-            parameters: {},
-        });
-
-        return {
-            success: !result.error,
-            message: result.error
-                ? result.error
-                : "Knowledge index deleted successfully",
-        };
-    } catch (error) {
-        console.error("Error deleting knowledge index:", error);
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : "Unknown error",
-        };
-    }
-}
-
-// Search helper functions
-async function generateSearchSummary(
-    websites: any[],
-    query: string,
-): Promise<string> {
-    try {
-        // Use the first few websites to generate a summary
-        const topSites = websites.slice(0, 5);
-        const domains = [...new Set(topSites.map((site) => site.domain))];
-        const sources =
-            topSites.filter((site) => site.source === "bookmarks").length > 0
-                ? topSites.filter((site) => site.source === "history").length >
-                  0
-                    ? "bookmarks and browsing history"
-                    : "bookmarks"
-                : "browsing history";
-
-        return `Found ${websites.length} results for "${query}" across ${domains.length} domains from your ${sources}. Top domains include: ${domains.slice(0, 3).join(", ")}.`;
-    } catch (error) {
-        console.error("Error generating search summary:", error);
-        return `Found ${websites.length} results for "${query}".`;
-    }
-}
-
-function extractSources(websites: any[]): any[] {
-    return websites.slice(0, 10).map((site) => ({
-        url: site.url,
-        title: site.title || site.url,
-        relevance: site.relevanceScore || 0.5,
-    }));
 }
 
 function generateSuggestionsFromStats(statsText: string): any {

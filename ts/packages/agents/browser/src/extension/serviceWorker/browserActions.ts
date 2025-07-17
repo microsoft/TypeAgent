@@ -181,6 +181,8 @@ export async function runBrowserAction(action: AppAction): Promise<any> {
                 action.parameters?.downloadAsFile,
                 action.parameters?.extractText,
                 action.parameters?.useTimestampIds,
+                action.parameters?.filterToReadingView,
+                action.parameters?.keepMetaTags,
             );
             break;
         }
