@@ -34,6 +34,7 @@
     "knowpro": "workspace:*",
     "mailparser": "3.7.2",
     "memory-storage": "workspace:*",
+    "textpro": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
     "webvtt-parser": "2.2.0"
