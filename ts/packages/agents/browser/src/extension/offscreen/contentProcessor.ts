@@ -10,10 +10,12 @@ import {
     ContentMetadata,
     ProcessingMetadata,
 } from "./types.js";
-import {
-    SharedHtmlProcessor,
+import { 
+    UnifiedHtmlProcessor, 
     HtmlProcessingMonitor,
-} from "../shared/htmlProcessor.js";
+    LegacyProcessedHtmlResult,
+    LegacyHtmlProcessingOptions,
+} from "../shared/unifiedHtmlProcessor.js";
 
 /**
  * Content processor for offscreen document
@@ -268,8 +270,8 @@ export class OffscreenContentProcessor {
         this.log("info", `Processing HTML content (${originalSize} bytes)`);
 
         try {
-            // Use shared HTML processor for consistent processing
-            const result = await SharedHtmlProcessor.processHtmlContent(html, {
+            // Use unified HTML processor for consistent processing
+            const result = await UnifiedHtmlProcessor.processHtmlContent(html, {
                 filterToReadingView: options.filterToReadingView ?? false,
                 keepMetaTags: options.keepMetaTags ?? false,
                 extractText: options.extractText ?? false,
@@ -539,8 +541,8 @@ export class OffscreenContentProcessor {
     ): Promise<{ html: string; text: string }> {
         const currentHtml = document.documentElement.outerHTML;
 
-        // Use shared HTML processor for consistent processing
-        const result = await SharedHtmlProcessor.processHtmlContent(
+        // Use unified HTML processor for consistent processing
+        const result = await UnifiedHtmlProcessor.processHtmlContent(
             currentHtml,
             {
                 filterToReadingView: options.filterToReadingView ?? false,

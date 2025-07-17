@@ -11,8 +11,7 @@ import "./autoIndexing"; // Initialize auto-indexing
 import "./domUtils";
 import "./elementInteraction";
 import "./eventHandlers";
-import "./htmlProcessing";
-import "./htmlReducer";
+import "./htmlUtils";
 import "./loadingDetector";
 import "./messaging";
 import "./pageContent";

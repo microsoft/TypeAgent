@@ -19,7 +19,7 @@ import * as kpLib from "knowledge-processor";
 import { openai as ai } from "aiclient";
 import registerDebug from "debug";
 import * as path from "path";
-import { WebsiteData } from "./htmlProcessor.mjs";
+import { WebsiteData } from "./htmlUtils.mjs";
 import {
     enumerateHtmlFiles,
     readHtmlFile,

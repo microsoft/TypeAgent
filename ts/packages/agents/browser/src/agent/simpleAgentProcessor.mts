@@ -11,7 +11,7 @@ import {
     processHtmlContent,
     ProcessingOptions,
     WebsiteData,
-} from "./htmlProcessor.mjs";
+} from "./htmlUtils.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:browser:full-agent-processor");
