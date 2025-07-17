@@ -78,3 +78,58 @@ The five Skynet questions are:
 - 58: "What did Christina say about Skynet?"
 
 **Solved by implementing fallback queries**
+
+Remaining issues due to answer generator
+----------------------------------------
+
+- 45 "Summarize Adrian's thoughts to Kevin?" gives no answer about half
+  of the time, scoring alternatingly (or in short runs) 0.000 and 0.9xx.
+  What is it about this query that triggers such strong stochasticity?
+
+Examples of questions where Python's answer generator does better
+-----------------------------------------------------------------
+
+I don't do an exhaustive check but I didn't find any where TS did better.
+Possibly this can be explained by the TS version's stingy character budget.
+Python (yet) use an infinite character budget. (GPT-4o has a very large
+token buffer limit, IIRC our entire podcast would fit in it.)
+*Arguably Python is cheating here.*
+
+- 7, 11 "List all books that are also movies" [Note that this question is repeated!]
+  - TS: The Circle
+  - Py: The books that are also movies mentioned in the provided context are:
+
+        1. The Circle
+  - Here Py adds a clarification because the question was ambiguous
+    (there are of course many thousand books that are also movies).
+
+- 17 "When did we talk about Profiles of the Future?"
+  - TS: We talked about Profiles of the Future on May 1, 2023 at 07:53:21.
+  - Py: We talked about 'Profiles of the Future' on May 1, 2023,
+        at 07:53:21 UTC. Kevin Scott mentioned that Arthur C. Clarke wrote this book
+        in 1968-1969, discussing the challenges of predicting the future.
+  - Arguably better because it gives more detail (including the timezone).
+
+- 20 "How did Asimov get referenced?"
+  - TS: Asimov was referenced by Adrian Tchaikovsky on May 1, 2023 at 07:37:18.402Z.
+  - Py: Asimov was referenced in the context of discussing the ethical and
+        philosophical issues surrounding AI. Adrian Tchaikovsky mentioned
+        Asimov's Laws of Robotics, highlighting that Asimov's stories often
+        pointed out the inadequacy of these laws to govern robots effectively.
+  - TS mistreats "how" as "when". Py is all round more informative.
+
+- 29, 57 "Where did Adrian study?" [Note that this question is repeated!]
+  - TS: Adrian Tchaikovsky studied zoology and psychology.
+  - Py: Adrian studied zoology and psychology at the University of Reading.
+  - TS doesn't even answer the "where" question!
+
+- 54 "What points did they make about Skynet?"
+  - TS: Skynet is described as an AI system with the intent to destroy humanity.
+  - Py: Adrian Tchaikovsky discussed Skynet in the context of highly powerful
+        AI systems. He mentioned that traditional sci-fi scenarios often depict
+        Skynet as deciding to destroy humanity because its existence is threatened
+        or it needs resources. He also noted that Skynet's desire not to be turned
+        off makes sense to humans but not necessarily to Skynet as a computer,
+        which wouldn't have an innate drive to preserve its own existence unless
+        programmed to do so.
+  - Py gives much more color in its answer -- TS barely gives one point.
