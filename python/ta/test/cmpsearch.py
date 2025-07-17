@@ -424,6 +424,8 @@ def compare_results(
             "topic",
         ):
             res = False
+    if not res:
+        print(f"Warning: {message}")
     return res
 
 
@@ -454,19 +456,19 @@ def compare_semantic_ref_ordinals(
 
 def compare_and_print_diff(
     a: object, b: object, message: str
-) -> bool:  # True if unequal
+) -> bool:  # True if equal
     """Diff two objects whose repr() is a valid Python expression."""
     if a == b:
-        return False
+        return True
     a_repr = builtins.repr(a)
     b_repr = builtins.repr(b)
     if a_repr == b_repr:
-        return False
+        return True
     # Shorten floats so slight differences in score etc. don't cause false positives.
     a_repr = re.sub(r"\b\d\.\d\d+", lambda m: f"{float(m.group()):.3f}", a_repr)
     b_repr = re.sub(r"\b\d\.\d\d+", lambda m: f"{float(m.group()):.3f}", b_repr)
     if a_repr == b_repr:
-        return False
+        return True
     print("Warning:", message)
     a_formatted = utils.format_code(a_repr)
     b_formatted = utils.format_code(b_repr)
@@ -479,7 +481,7 @@ def compare_and_print_diff(
     )
     for x in diff:
         print(x.rstrip("\n"))
-    return True
+    return False
 
 
 if __name__ == "__main__":
