@@ -6,6 +6,7 @@
 from contextlib import contextmanager
 import difflib
 import os
+import re
 import shutil
 import time
 
@@ -37,13 +38,21 @@ def pretty_print(obj: object, prefix: str = "", suffix: str = "") -> None:
     NOTE: Only works if the repr() is a valid Python expression.
     """
     line_width = cap(200, shutil.get_terminal_size().columns)
-    print(
-        prefix
-        + black.format_str(
-            repr(obj), mode=black.FileMode(line_length=line_width)
-        ).rstrip()
-        + suffix
-    )
+    formatted_text = black.format_str(
+        repr(obj), mode=black.FileMode(line_length=line_width)
+    ).rstrip()
+    print(prefix + reindent(formatted_text) + suffix)
+
+
+def reindent(text: str) -> str:
+    """Reindent a block of text from 4 to 2 spaces per indent level."""
+    lines = text.splitlines()
+    reindented_lines = []
+    for line in lines:
+        stripped_line = line.lstrip()
+        twice_indent_level = (len(line) - len(stripped_line) + 1) // 2  # Round up
+        reindented_lines.append(" " * twice_indent_level + stripped_line)
+    return "\n".join(reindented_lines)
 
 
 def load_dotenv() -> None:
