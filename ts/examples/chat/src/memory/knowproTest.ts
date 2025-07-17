@@ -92,11 +92,13 @@ export async function createKnowproTestCommands(
         const destPath = changeFileExt(filePath, ".md");
         fs.writeFileSync(destPath, md);
 
-        let mdDom = tp.loadMarkdownFromHtml(html, namedArgs.rootTag);
-        context.printer.writeJsonInColor(chalk.cyan, mdDom);
+        let markdown = tp.htmlToMarkdown(html, namedArgs.rootTag);
+        context.printer.writeLine(markdown);
+        let mdDom = tp.tokenizeMarkdown(markdown);
+        context.printer.writeJsonInColor(chalk.gray, mdDom);
 
         const [textBlocks, knowledgeBlocks] =
-            tp.getTextAndKnowledgeBlocksFromMarkdown(mdDom);
+            tp.textAndKnowledgeBlocksFromMarkdown(mdDom);
         assert(textBlocks.length === knowledgeBlocks.length);
         for (let i = 0; i < textBlocks.length; ++i) {
             context.printer.writeLine("=====");
@@ -126,7 +128,7 @@ export async function createKnowproTestCommands(
             return;
         }
         let html = await readAllText(filePath);
-        let docParts = cm.docPartsFromHtmlEx(html, namedArgs.rootTag);
+        let docParts = cm.docPartsFromHtml(html, namedArgs.rootTag);
         for (const part of docParts) {
             context.printer.writeLine("----------------");
             context.printer.writeDocPart(part);

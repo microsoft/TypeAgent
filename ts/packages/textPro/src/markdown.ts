@@ -3,18 +3,14 @@
 
 import * as md from "marked";
 import { conversation as kpLib } from "knowledge-processor";
-import { htmlToMd } from "./htmlProcessing.js";
 
-export function loadMarkdown(text: string): md.TokensList {
-    return md.lexer(text);
-}
-
-export function loadMarkdownFromHtml(
-    html: string,
-    rootTag?: string,
-): md.TokensList {
-    const markdown = htmlToMd(html, rootTag);
-    return loadMarkdown(markdown);
+/**
+ * Parses markdown into a token DOM using the "marked" library
+ * @param markdown
+ * @returns
+ */
+export function tokenizeMarkdown(markdown: string): md.TokensList {
+    return md.lexer(markdown);
 }
 
 /**
@@ -54,13 +50,20 @@ export interface MarkdownBlockHandler {
     ): void;
 }
 
-export function getTextBlocksFromMarkdown(
+/**
+ * Splits markdown text into text blocks
+ * @param markdown
+ * @param handler
+ * @param maxChunkLength
+ * @returns
+ */
+export function textBlocksFromMarkdown(
     markdown: string | md.Token[],
     handler?: MarkdownBlockHandler,
-    maxChunkLength: number = 1024,
+    maxChunkLength?: number,
 ): string[] {
     const markdownTokens =
-        typeof markdown === "string" ? loadMarkdown(markdown) : markdown;
+        typeof markdown === "string" ? tokenizeMarkdown(markdown) : markdown;
     let textBlocks: string[] = [];
     let curTextBlock = "";
     let prevBlockName: string = "";
@@ -162,7 +165,8 @@ export function getTextBlocksFromMarkdown(
         if (
             !prevBlockName ||
             !shouldMerge ||
-            curTextBlock.length > maxChunkLength
+            (maxChunkLength !== undefined &&
+                curTextBlock.length > maxChunkLength)
         ) {
             endBlock(false);
             curTextBlock = "";
@@ -185,11 +189,16 @@ export type MarkdownKnowledgeBlock = {
     knowledge: kpLib.KnowledgeResponse;
 };
 
-export function getTextAndKnowledgeBlocksFromMarkdown(
+export function textAndKnowledgeBlocksFromMarkdown(
     markdown: string | md.TokensList,
+    maxChunkLength?: number,
 ): [string[], MarkdownKnowledgeBlock[]] {
     const knowledgeCollector = new MarkdownKnowledgeCollector();
-    const textBlocks = getTextBlocksFromMarkdown(markdown, knowledgeCollector);
+    const textBlocks = textBlocksFromMarkdown(
+        markdown,
+        knowledgeCollector,
+        maxChunkLength,
+    );
     const knowledgeBlocks = knowledgeCollector.knowledgeBlocks;
     if (textBlocks.length !== knowledgeBlocks.length) {
         throw new Error(

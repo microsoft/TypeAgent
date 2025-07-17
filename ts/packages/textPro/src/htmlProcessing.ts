@@ -34,7 +34,7 @@ export function simplifyHtml(html: string): string {
  * @param rootTag Root tag at which to start conversion. Can be a JQuery like expression
  * @returns MD text
  */
-export function htmlToMd(html: string, rootTag: string = "body"): string {
+export function htmlToMarkdown(html: string, rootTag: string = "body"): string {
     const convertor = new HtmlToMdConvertor(html);
     return convertor.getMarkdown(rootTag);
 }

@@ -1,24 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    getFileName,
-    HtmlToMdConvertor,
-    HtmlToMdConvertorEvents,
-    htmlToText,
-    readAllText,
-} from "typeagent";
+import { getFileName, readAllText } from "typeagent";
 import {
     DocMemory,
     DocMemorySettings,
     DocPart,
     DocPartMeta,
 } from "./docMemory.js";
-import {
-    conversation as kpLib,
-    splitLargeTextIntoChunks,
-} from "knowledge-processor";
-import * as kp from "knowpro";
+import { splitLargeTextIntoChunks } from "knowledge-processor";
+import * as tp from "textpro";
 import { parseVttTranscript } from "./transcript.js";
 import { filePathToUrlString } from "memory-storage";
 import path from "path";
@@ -68,6 +59,9 @@ export async function importTextFile(
                     maxCharsPerChunk,
                 );
             }
+            break;
+        case ".md":
+            parts = docPartsFromMarkdown(docText, maxCharsPerChunk, sourceUrl);
             break;
     }
     return new DocMemory(docName, parts, settings);
@@ -136,21 +130,49 @@ export function docPartFromText(
     return new DocPart(textChunks, new DocPartMeta(sourceUrl));
 }
 
+export function docPartsFromHtml(
+    html: string,
+    maxCharsPerChunk?: number,
+    sourceUrl?: string,
+    rootTag?: string,
+): DocPart[] {
+    const markdown = tp.htmlToMarkdown(html, rootTag);
+    return docPartsFromMarkdown(markdown, maxCharsPerChunk, sourceUrl);
+}
+
 /**
- * Just grab text from the given html.
- * You can write a more complex parser that also annotates blocks as headings etc.
- * @param html
+ * Convert markdown text into DocParts. These can be added to DocMemory
+ * @param markdown
  * @param maxCharsPerChunk
  * @param sourceUrl
  * @returns
  */
-export function docPartsFromHtml(
-    html: string,
-    maxCharsPerChunk: number,
+export function docPartsFromMarkdown(
+    markdown: string,
+    maxCharsPerChunk?: number,
     sourceUrl?: string,
 ): DocPart[] {
-    const htmlText = htmlToText(html);
-    return docPartsFromText(htmlText, maxCharsPerChunk, sourceUrl);
+    const [textBlocks, knowledgeBlocks] = tp.textAndKnowledgeBlocksFromMarkdown(
+        markdown,
+        maxCharsPerChunk,
+    );
+    if (textBlocks.length !== knowledgeBlocks.length) {
+        throw new Error(
+            `textBlocks.length ${textBlocks.length} !== knowledgeBlocks.length ${knowledgeBlocks.length}`,
+        );
+    }
+    const parts: DocPart[] = [];
+    for (let i = 0; i < textBlocks.length; ++i) {
+        const part = new DocPart(
+            textBlocks[i],
+            new DocPartMeta(sourceUrl),
+            knowledgeBlocks[i].tags,
+            undefined,
+            knowledgeBlocks[i].knowledge,
+        );
+        parts.push(part);
+    }
+    return parts;
 }
 
 /**
@@ -194,140 +216,4 @@ export function mergeDocParts(
         mergedChunks.push(new DocPart(chunk, metadata));
     }
     return mergedChunks;
-}
-
-/**
- * Experimental; work in progress, don't use yet
- */
-export function docPartsFromHtmlEx(
-    html: string,
-    rootPath: string = "body",
-    sourceUrl?: string,
-) {
-    const htmlImporter = new HtmlImporter(html, sourceUrl);
-    return htmlImporter.getParts(rootPath);
-}
-
-class HtmlImporter implements HtmlToMdConvertorEvents {
-    private htmlToMd: HtmlToMdConvertor;
-    private knowledgeBlocks: kpLib.KnowledgeResponse[];
-    private headingsInScope: Map<number, string>;
-    private linksInScope: Map<string, string>;
-    private curKnowledge: kpLib.KnowledgeResponse;
-
-    constructor(
-        html: string,
-        private sourceUrl?: string,
-    ) {
-        this.htmlToMd = new HtmlToMdConvertor(html, this);
-        this.knowledgeBlocks = [];
-        this.curKnowledge = kp.createKnowledgeResponse();
-        this.headingsInScope = new Map<number, string>();
-        this.linksInScope = new Map<string, string>();
-    }
-
-    public getParts(rootPath: string = "body") {
-        this.start();
-        const textBlocks = this.htmlToMd.getMarkdownBlocks(rootPath);
-        if (textBlocks.length !== this.knowledgeBlocks.length) {
-            throw new Error(
-                `textBlocks.length ${textBlocks.length} !== knowledgeBlocks.length ${this.knowledgeBlocks.length}`,
-            );
-        }
-        const docParts: DocPart[] = [];
-        for (let i = 0; i < textBlocks.length; ++i) {
-            const meta = this.sourceUrl
-                ? new DocPartMeta(this.sourceUrl)
-                : undefined;
-            const docPart = new DocPart(
-                textBlocks[i].trim(),
-                meta,
-                undefined,
-                undefined,
-                this.knowledgeBlocks[i],
-            );
-            docParts.push(docPart);
-        }
-        return docParts;
-    }
-
-    private start(): void {
-        this.knowledgeBlocks = [];
-        this.headingsInScope.clear();
-        this.linksInScope.clear();
-        this.curKnowledge = kp.createKnowledgeResponse();
-    }
-
-    onBlockStart(convertor: HtmlToMdConvertor, tagName: string): void {}
-
-    onHeading(
-        convertor: HtmlToMdConvertor,
-        headingText: string,
-        level: number,
-    ): void {
-        // Any heading level > level is no longer in scope
-        const curLevels = [...this.headingsInScope.keys()];
-        for (const hLevel of curLevels) {
-            if (hLevel > level) {
-                this.headingsInScope.delete(hLevel);
-            }
-        }
-        this.headingsInScope.set(level, headingText);
-    }
-
-    onLink(convertor: HtmlToMdConvertor, text: string, url: string): void {
-        this.linksInScope.set(text, url);
-    }
-
-    onBlockEnd(convertor: HtmlToMdConvertor): void {
-        // Include top K headings in scope.. as topics and entities
-        const topK = 2;
-        let headingLevelsInscope = [...this.headingsInScope.keys()].sort(
-            (x, y) => y - x, // Descending
-        );
-        headingLevelsInscope = headingLevelsInscope.slice(0, topK);
-        for (const hLevel of headingLevelsInscope) {
-            const hText = this.headingsInScope.get(hLevel)!;
-            this.curKnowledge.topics.push(hText);
-            this.curKnowledge.entities.push(headingToEntity(hText, hLevel));
-        }
-        //
-        // Also include all links
-        //
-        for (const linkText of this.linksInScope.keys()) {
-            this.curKnowledge.entities.push(
-                linkToEntity(linkText, this.linksInScope.get(linkText)!),
-            );
-        }
-        this.knowledgeBlocks.push(this.curKnowledge);
-        //
-        // Start next block
-        // Note: do not clear headingsInScope as they stay active for the duration of the conversion pass
-        // Links are only active for the current block
-        //
-        this.curKnowledge = kp.createKnowledgeResponse();
-        this.linksInScope.clear();
-    }
-}
-
-export function headingToEntity(
-    headingText: string,
-    level: number,
-): kpLib.ConcreteEntity {
-    return {
-        name: headingText,
-        type: ["heading", "section"],
-        facets: [{ name: "level", value: level }],
-    };
-}
-
-export function linkToEntity(
-    linkText: string,
-    url: string,
-): kpLib.ConcreteEntity {
-    return {
-        name: linkText,
-        type: ["link", "url"],
-        facets: [{ name: "url", value: url }],
-    };
 }
