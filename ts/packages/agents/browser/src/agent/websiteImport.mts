@@ -5,7 +5,7 @@ import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "./actionHandler.mjs";
 import { createContentService } from "./contentService.mjs";
 import { BrowserContentExtractor } from "./browserContentExtractor.mjs";
-import { DirectFolderProcessor } from "./simpleAgentProcessor.mjs";
+import { DirectFolderProcessor } from "./htmlProcessor.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:browser:website-import");
