@@ -48,7 +48,12 @@ export async function importTextFile(
             break;
         case ".html":
         case ".htm":
-            parts = docPartsFromHtml(docText, maxCharsPerChunk, sourceUrl);
+            parts = docPartsFromHtml(
+                docText,
+                true,
+                maxCharsPerChunk,
+                sourceUrl,
+            );
             break;
         case ".vtt":
             parts = docPartsFromVtt(docText, sourceUrl);
@@ -84,7 +89,12 @@ export async function importWebPage(
     if (!htmlResult.success) {
         return htmlResult;
     }
-    const parts = docPartsFromHtml(htmlResult.data, maxCharsPerChunk, url);
+    const parts = docPartsFromHtml(
+        htmlResult.data,
+        false,
+        maxCharsPerChunk,
+        url,
+    );
     const docMemory = new DocMemory(url, parts, settings);
     return success(docMemory);
 }
@@ -130,14 +140,29 @@ export function docPartFromText(
     return new DocPart(textChunks, new DocPartMeta(sourceUrl));
 }
 
+/**
+ * Break the given html into DocParts
+ * @param html html text
+ * @param textOnly if true, use only text, removing all formatting etc.
+ * @param maxCharsPerChunk
+ * @param sourceUrl
+ * @param rootTag
+ * @returns
+ */
 export function docPartsFromHtml(
     html: string,
-    maxCharsPerChunk?: number,
+    textOnly: boolean,
+    maxCharsPerChunk: number,
     sourceUrl?: string,
     rootTag?: string,
 ): DocPart[] {
-    const markdown = tp.htmlToMarkdown(html, rootTag);
-    return docPartsFromMarkdown(markdown, maxCharsPerChunk, sourceUrl);
+    if (textOnly) {
+        const htmlText = tp.htmlToText(html);
+        return docPartsFromText(htmlText, maxCharsPerChunk, sourceUrl);
+    } else {
+        const markdown = tp.htmlToMarkdown(html, rootTag);
+        return docPartsFromMarkdown(markdown, maxCharsPerChunk, sourceUrl);
+    }
 }
 
 /**
@@ -163,12 +188,13 @@ export function docPartsFromMarkdown(
     }
     const parts: DocPart[] = [];
     for (let i = 0; i < textBlocks.length; ++i) {
+        const kBlock = knowledgeBlocks[i];
         const part = new DocPart(
             textBlocks[i],
             new DocPartMeta(sourceUrl),
-            knowledgeBlocks[i].tags,
+            kBlock.tags.size > 0 ? [...kBlock.tags.values()] : undefined,
             undefined,
-            knowledgeBlocks[i].knowledge,
+            kBlock.knowledge,
         );
         parts.push(part);
     }

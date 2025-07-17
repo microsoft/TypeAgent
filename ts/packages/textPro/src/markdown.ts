@@ -185,7 +185,7 @@ export function textBlocksFromMarkdown(
 }
 
 export type MarkdownKnowledgeBlock = {
-    tags: string[];
+    tags: Set<string>;
     knowledge: kpLib.KnowledgeResponse;
 };
 
@@ -237,10 +237,10 @@ class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
                 break;
             case "codespan":
             case "code":
-                this.knowledgeBlock.tags.push("code");
+                this.knowledgeBlock.tags.add("code");
                 break;
             case "list":
-                this.knowledgeBlock.tags.push("list");
+                this.knowledgeBlock.tags.add("list");
                 const listName = this.getPrecedingHeading();
                 if (listName) {
                     this.knowledgeBlock.knowledge.entities.push({
@@ -250,7 +250,7 @@ class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
                 }
                 break;
             case "table":
-                this.knowledgeBlock.tags.push("table");
+                this.knowledgeBlock.tags.add("table");
                 const tableName = this.getPrecedingHeading();
                 if (tableName) {
                     this.knowledgeBlock.knowledge.entities.push({
@@ -307,7 +307,7 @@ class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
                 headingToEntity(headerText, headerLevel),
             );
             // Also make he header text a tag
-            this.knowledgeBlock.tags.push(headerText);
+            this.knowledgeBlock.tags.add(headerText);
         }
         //
         // Also include all links
@@ -360,7 +360,7 @@ function createKnowledgeResponse(): kpLib.KnowledgeResponse {
 
 function createMarkdownKnowledgeBlock(): MarkdownKnowledgeBlock {
     return {
-        tags: [],
+        tags: new Set<string>(),
         knowledge: createKnowledgeResponse(),
     };
 }
