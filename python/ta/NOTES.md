@@ -79,8 +79,8 @@ The five Skynet questions are:
 
 **Solved by implementing fallback queries**
 
-Remaining issues due to answer generator
-----------------------------------------
+Remaining issues due to answer generator ("phase 4")
+----------------------------------------------------
 
 - 45 "Summarize Adrian's thoughts to Kevin?" gives no answer about half
   of the time, scoring alternatingly (or in short runs) 0.000 and 0.9xx.
@@ -133,3 +133,37 @@ token buffer limit, IIRC our entire podcast would fit in it.)
         which wouldn't have an innate drive to preserve its own existence unless
         programmed to do so.
   - Py gives much more color in its answer -- TS barely gives one point.
+
+Remaining issues due to query generator ("phase 1")
+---------------------------------------------------
+
+- 5: "List all book titles from the first 15 minutes"
+  - Consistently no answer.
+  - Likely cause: TS gives times in UTC; Py gives local times (PDT)
+
+- 6 "List all book titles mentioned in the first 15 minutes"
+  - Same as 5.
+
+- 46 "Summarize Adrian's ideas about the Terminator?"
+  - Py adds lots of search terms, including "person", "concept" and many more.
+
+- 27: "Give me an overview of Portids"
+  - Stochastic: 4 out of 5 get no answer.
+  - Probably cause: search query is empty,
+    should have `search_terms=["Portids"]` but has `search_terms=[]`.
+
+- 43: "Summarize Kevin's thoughts on Artificial Intelligence?"
+  - Consistent failure.
+
+- 44: "Summarize Kevin's thoughts on AI?"
+  - Consistent failure.
+
+- 45: "Summarize Adrian's thoughts to Kevin?"
+  - Stochastic, 2/5 fail to get an answer.
+  - Suspicious: added type=["person"] to several filter values.
+
+- 54: "What points did they make about Skynet?"
+  - Consistent failure.
+
+- 55: "How long did Adrian struggle before he got published?"
+  - Consistent failure.
