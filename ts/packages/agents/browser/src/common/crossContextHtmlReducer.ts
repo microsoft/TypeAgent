@@ -1,11 +1,26 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
-import DOMPurify from "dompurify";
+
+/**
+ * Cross-context HTML reducer that works in both browser and Node.js contexts
+ * Uses dependency injection for DOM parsing to ensure reliable operation
+ */
+
+export interface DOMParser {
+    parseFromString(html: string, mimeType: string): Document;
+}
+
+export interface CrossContextDependencies {
+    domParser?: DOMParser;
+    DOMPurify?: any;
+}
 
 /**
  * Class for reducing HTML size by removing unnecessary elements and attributes
+ * Works in both browser (DOMParser) and Node.js (JSDOM) contexts
  */
-export class HTMLReducer {
+export class CrossContextHtmlReducer {
+    // Configuration options
     linkSelectors: string[] = [
         'link[rel="icon"]',
         'link[rel="stylesheet"]',
@@ -118,17 +133,25 @@ export class HTMLReducer {
     removeNonVisibleNodes: boolean = true;
     removeMiscTags: boolean = true;
 
+    // Injected dependencies
+    private dependencies: CrossContextDependencies;
+
+    constructor(dependencies: CrossContextDependencies = {}) {
+        this.dependencies = dependencies;
+    }
+
     /**
      * Reduces HTML by removing unnecessary elements and attributes
      * @param html The HTML to reduce
      * @returns The reduced HTML
      */
     reduce(html: string): string {
-        const domParser = new DOMParser();
-        let doc = domParser.parseFromString(
-            DOMPurify.sanitize(html),
-            "text/html",
-        );
+        // Parse document using cross-context parser
+        let doc = this.parseDocument(html);
+        if (!doc) {
+            console.warn("Failed to parse HTML, returning original");
+            return html;
+        }
 
         this.removeNodes(doc, this.linkSelectors, this.removeLinkTags);
         this.removeNodes(doc, this.metaTagSelectors, this.removeMetaTags);
@@ -148,7 +171,7 @@ export class HTMLReducer {
         this.processClassAttributes(doc);
         this.removeMiscAttributes(doc);
         this.replaceLinks(doc);
-        // this.removeCommentNodes(doc);
+        this.removeCommentNodes(doc); // Enable comment removal
         this.removeEmptyNodes(doc, this.emptyTagsSelector);
         this.reduceElementNesting(doc, this.emptyTagsSelector);
         this.removeDataAttributes(doc);
@@ -165,6 +188,39 @@ export class HTMLReducer {
         reduced = reduced.replace(/\s+/g, " ");
 
         return reduced;
+    }
+
+    /**
+     * Cross-context document parser - works in browser and Node.js
+     * @param html HTML string to parse
+     * @returns Document object or null if parsing fails
+     */
+    private parseDocument(html: string): Document | null {
+        try {
+            // Use injected DOM parser if available
+            if (this.dependencies.domParser) {
+                return this.dependencies.domParser.parseFromString(
+                    html,
+                    "text/html",
+                );
+            }
+
+            // Try browser DOMParser
+            if (typeof DOMParser !== "undefined") {
+                const parser = new DOMParser();
+                return parser.parseFromString(html, "text/html");
+            }
+
+            // For Node.js ESM contexts, we can't use async dynamic imports in a sync method
+            // This fallback should not be used if createNodeHtmlReducer() is used properly
+            console.warn(
+                "No HTML parser available - use createNodeHtmlReducer() for Node.js contexts",
+            );
+            return null;
+        } catch (error) {
+            console.error("Document parsing failed:", error);
+            return null;
+        }
     }
 
     /**
@@ -296,14 +352,36 @@ export class HTMLReducer {
      * @param doc The document to process
      */
     private removeCommentNodes(doc: Document): void {
-        const walker = doc.createTreeWalker(doc, NodeFilter.SHOW_COMMENT);
-        let node = walker.nextNode();
-        while (node) {
-            if (node.parentNode && !node.textContent?.startsWith("<!DOCTYPE")) {
-                node.parentNode.removeChild(node);
+        // Use a more robust approach that works in both browser and JSDOM
+        const removeCommentsFromNode = (node: Node): void => {
+            const nodesToRemove: Node[] = [];
+
+            // Collect all comment nodes
+            for (let i = 0; i < node.childNodes.length; i++) {
+                const child = node.childNodes[i];
+                const nodeType =
+                    typeof Node !== "undefined" ? Node.COMMENT_NODE : 8;
+
+                if (child.nodeType === nodeType) {
+                    // Don't remove DOCTYPE comments
+                    if (!child.textContent?.trim().startsWith("DOCTYPE")) {
+                        nodesToRemove.push(child);
+                    }
+                } else {
+                    // Recursively check child nodes
+                    removeCommentsFromNode(child);
+                }
             }
-            node = walker.nextNode();
-        }
+
+            // Remove collected comment nodes
+            nodesToRemove.forEach((commentNode) => {
+                if (commentNode.parentNode) {
+                    commentNode.parentNode.removeChild(commentNode);
+                }
+            });
+        };
+
+        removeCommentsFromNode(doc);
     }
 
     /**
@@ -322,7 +400,10 @@ export class HTMLReducer {
                 (n) =>
                     n.childNodes.length === 0 ||
                     (n.childNodes.length === 1 &&
-                        n.childNodes[0].nodeType === Node.TEXT_NODE &&
+                        n.childNodes[0].nodeType ===
+                            (typeof Node !== "undefined"
+                                ? Node.TEXT_NODE
+                                : 3) &&
                         n.textContent?.trim().length === 0),
             );
 
@@ -382,3 +463,38 @@ export class HTMLReducer {
         doc.normalize();
     }
 }
+
+/**
+ * Factory function to create cross-context HTML reducer
+ */
+export function createCrossContextHtmlReducer(
+    dependencies?: CrossContextDependencies,
+): CrossContextHtmlReducer {
+    return new CrossContextHtmlReducer(dependencies);
+}
+
+/**
+ * Creates a Node.js-optimized HTML reducer with JSDOM using dynamic import
+ */
+export async function createNodeHtmlReducer(): Promise<CrossContextHtmlReducer> {
+    try {
+        // Use dynamic import for JSDOM in ESM context
+        const { JSDOM } = await import("jsdom");
+        const domParser: DOMParser = {
+            parseFromString: (html: string, mimeType: string): Document => {
+                const dom = new JSDOM(html);
+                return dom.window.document;
+            },
+        };
+        return new CrossContextHtmlReducer({ domParser });
+    } catch (error) {
+        console.warn(
+            "JSDOM not available for Node.js HTML reducer, falling back to auto-detection:",
+            error,
+        );
+        return new CrossContextHtmlReducer();
+    }
+}
+
+// Export HTMLReducer as alias for compatibility
+export { CrossContextHtmlReducer as HTMLReducer };

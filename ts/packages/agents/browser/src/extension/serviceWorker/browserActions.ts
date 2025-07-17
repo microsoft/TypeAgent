@@ -245,6 +245,42 @@ export async function runBrowserAction(action: AppAction): Promise<any> {
             });
             break;
         }
+        case "downloadContentWithBrowser": {
+            // Import and use the existing message handler
+            const { handleMessage } = await import("./messageHandlers.js");
+            const result = await handleMessage(
+                {
+                    type: "downloadContentWithBrowser",
+                    url: action.parameters.url,
+                    options: action.parameters.options,
+                },
+                {} as chrome.runtime.MessageSender,
+            );
+
+            responseObject = result;
+            confirmationMessage = result?.success
+                ? "Content downloaded successfully"
+                : "Content download failed";
+            break;
+        }
+        case "processHtmlContent": {
+            // Import and use the existing message handler
+            const { handleMessage } = await import("./messageHandlers.js");
+            const result = await handleMessage(
+                {
+                    type: "processHtmlContent",
+                    htmlContent: action.parameters.htmlContent,
+                    options: action.parameters.options,
+                },
+                {} as chrome.runtime.MessageSender,
+            );
+
+            responseObject = result;
+            confirmationMessage = result?.success
+                ? "HTML processed successfully"
+                : "HTML processing failed";
+            break;
+        }
 
         default:
             throw new Error(`Unknown action: ${actionName}. `);

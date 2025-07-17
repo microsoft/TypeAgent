@@ -7,7 +7,7 @@ import {
     getPageHTML,
     getPageHTMLSubFragments,
     getPageHTMLFragments,
-} from "./htmlProcessing";
+} from "./htmlUtils";
 import { getPageText } from "./pageContent";
 import {
     getInteractiveElementsBoundingBoxes,

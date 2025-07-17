@@ -8,5 +8,6 @@
     "types": ["node"]
   },
   "include": ["./**/*"],
+  "exclude": ["./backup/**/*"],
   "references": [{ "path": "../common" }]
 }

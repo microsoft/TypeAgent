@@ -9,6 +9,7 @@ import {
     ensureWebsocketConnected,
     getWebSocket,
 } from "./websocket";
+import { BrowserContentDownloader } from "./contentDownloader.js";
 
 /**
  * Handles messages from content scripts
@@ -528,6 +529,19 @@ export async function handleMessage(
 
         case "cancelFileImport": {
             return await handleCancelFileImport(message.importId);
+        }
+
+        // Content Download Adapter message handlers
+        case "downloadContentWithBrowser": {
+            return await handleDownloadContentWithBrowser(message);
+        }
+
+        case "processHtmlContent": {
+            return await handleProcessHtmlContent(message);
+        }
+
+        case "testOffscreenDocument": {
+            return await handleTestOffscreenDocument(message);
         }
 
         // Enhanced search message handlers (searchWebsitesEnhanced removed - was broken)
@@ -1513,4 +1527,134 @@ function generateSuggestionsFromStats(statsText: string): any {
     }
 
     return suggestions;
+}
+
+// Content Download Adapter handler functions
+let contentDownloader: BrowserContentDownloader | null = null;
+
+/**
+ * Get or create a content downloader instance
+ */
+function getContentDownloader(): BrowserContentDownloader {
+    if (!contentDownloader) {
+        contentDownloader = new BrowserContentDownloader();
+    }
+    return contentDownloader;
+}
+
+/**
+ * Handle browser-based content download requests
+ */
+async function handleDownloadContentWithBrowser(message: any): Promise<any> {
+    try {
+        const downloader = getContentDownloader();
+
+        const result = await downloader.downloadContent(message.url, {
+            useAuthentication: message.options?.useAuthentication ?? true,
+            timeout: message.options?.timeout ?? 30000,
+            fallbackToFetch: message.options?.fallbackToFetch ?? true,
+            waitForDynamic: message.options?.waitForDynamic ?? false,
+            scrollBehavior:
+                message.options?.scrollBehavior ?? "capture-initial",
+            processing: message.options?.processing ?? {
+                filterToReadingView: true,
+                keepMetaTags: true,
+                extractText: true,
+            },
+        });
+
+        return result;
+    } catch (error) {
+        console.error("Error in handleDownloadContentWithBrowser:", error);
+        return {
+            success: false,
+            method: "failed",
+            error:
+                error instanceof Error
+                    ? error.message
+                    : "Unknown error occurred",
+        };
+    }
+}
+
+/**
+ * Handle HTML content processing requests (for folder imports)
+ */
+async function handleProcessHtmlContent(message: any): Promise<any> {
+    try {
+        const downloader = getContentDownloader();
+
+        const result = await downloader.processHtmlContent(
+            message.htmlContent,
+            {
+                filterToReadingView:
+                    message.options?.filterToReadingView ?? true,
+                keepMetaTags: message.options?.keepMetaTags ?? true,
+                extractText: message.options?.extractText ?? true,
+                preserveStructure: message.options?.preserveStructure ?? true,
+                maxElements: message.options?.maxElements,
+            },
+        );
+
+        return {
+            success: true,
+            data: result,
+        };
+    } catch (error) {
+        console.error("Error in handleProcessHtmlContent:", error);
+        return {
+            success: false,
+            error:
+                error instanceof Error
+                    ? error.message
+                    : "HTML processing failed",
+        };
+    }
+}
+
+/**
+ * Handle offscreen document testing requests
+ */
+async function handleTestOffscreenDocument(message: any): Promise<any> {
+    try {
+        const downloader = getContentDownloader();
+        const status = downloader.getStatus();
+
+        if (!status.available) {
+            return {
+                success: false,
+                error: "Offscreen document API not available",
+                status,
+            };
+        }
+
+        // Test basic functionality with a simple page
+        const testUrl = message.testUrl || "https://example.com";
+        const result = await downloader.downloadContent(testUrl, {
+            timeout: 10000,
+            fallbackToFetch: false, // Force browser method for testing
+            processing: {
+                filterToReadingView: false,
+                extractText: true,
+            },
+        });
+
+        return {
+            success: result.success,
+            testUrl,
+            method: result.method,
+            contentLength: result.htmlContent?.length || 0,
+            textLength: result.textContent?.length || 0,
+            loadTime: result.metadata?.loadTime || 0,
+            error: result.error,
+            status,
+        };
+    } catch (error) {
+        console.error("Error in handleTestOffscreenDocument:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Test failed",
+            status: { available: false, method: "unknown", capabilities: [] },
+        };
+    }
 }

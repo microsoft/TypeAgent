@@ -10,7 +10,7 @@ import {
     incrementActionIndex,
 } from "./index";
 import { captureAnnotatedScreenshot } from "./capture";
-import { getPageHTML } from "../htmlProcessing";
+import { getPageHTML } from "../htmlUtils";
 
 /**
  * Records a click event

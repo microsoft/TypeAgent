@@ -61,6 +61,13 @@
     {
       "resources": ["views/pdfView.html", "views/pdfView.js"],
       "matches": ["<all_urls>"]
+    },
+    {
+      "resources": [
+        "offscreen/offscreen.html",
+        "offscreen/contentProcessor.js"
+      ],
+      "matches": ["<all_urls>"]
     }
   ],
   "permissions": [
@@ -76,7 +83,8 @@
     "debugger",
     "contextMenus",
     "downloads",
-    "sidePanel"
+    "sidePanel",
+    "offscreen"
   ],
   "host_permissions": ["<all_urls>"],
   "icons": {
