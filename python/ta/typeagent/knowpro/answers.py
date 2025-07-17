@@ -219,12 +219,13 @@ def get_relevant_messages_for_answer[
         msg = conversation.messages[scored_msg_ord.message_ordinal]
         if not msg.text_chunks:
             continue
-        # TODO: Type-safety: In TS, message.metadata has source/dest attrs. Copy that.
+        metadata: IMessageMetadata | None = msg.metadata
+        assert metadata is not None  # For type checkers
         relevant_messages.append(
             RelevantMessage(
-                from_=msg.speaker,  # type: ignore  # It's a PodcastMessage
-                to=msg.listeners,  # type: ignore  # It's a PodcastMessage
-                timestamp=msg.timestamp,  # type: ignore  # It's a PodcastMessage
+                from_=metadata.source,
+                to=metadata.dest,
+                timestamp=msg.timestamp,
                 messageText=(
                     msg.text_chunks[0] if len(msg.text_chunks) == 1 else msg.text_chunks
                 ),
