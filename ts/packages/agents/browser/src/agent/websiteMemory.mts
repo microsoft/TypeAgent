@@ -19,6 +19,32 @@ import * as kpLib from "knowledge-processor";
 import { openai as ai } from "aiclient";
 import registerDebug from "debug";
 import * as path from "path";
+
+/**
+ * Helper function to log structured progress for reliable parsing
+ */
+function logStructuredProgress(
+    current: number,
+    total: number,
+    description: string,
+    phase: string = "processing",
+    displayProgress?: (message: string) => void,
+) {
+    const progressData = {
+        type: "PROGRESS_UPDATE",
+        current: current,
+        total: total,
+        description: description,
+        phase: phase,
+        timestamp: Date.now(),
+    };
+
+    const progressMessage = `PROGRESS_JSON:${JSON.stringify(progressData)}`;
+
+    if (displayProgress) {
+        displayProgress(progressMessage);
+    }
+}
 import { WebsiteData } from "./htmlUtils.mjs";
 import {
     enumerateHtmlFiles,
@@ -480,9 +506,13 @@ export async function importWebsiteDataFromSession(
     displayProgress?: (message: string) => void,
 ) {
     try {
-        if (displayProgress) {
-            displayProgress("Importing website data...");
-        }
+        logStructuredProgress(
+            0,
+            0,
+            "Starting website data import",
+            "initializing",
+            displayProgress,
+        );
 
         const {
             source,
@@ -509,17 +539,19 @@ export async function importWebsiteDataFromSession(
                     : defaultPaths.edge.history;
         }
 
-        // Enhanced progress callback that uses both debug logging and display callback
+        // Enhanced progress callback that uses structured JSON logging
         const progressCallback = (
             current: number,
             total: number,
             item: string,
         ) => {
-            const message = `Importing... ${current}/${total}: ${item.substring(0, 50)}...`;
-            debug(message);
-            if (displayProgress) {
-                displayProgress(message);
-            }
+            logStructuredProgress(
+                current,
+                total,
+                item,
+                "processing",
+                displayProgress,
+            );
         };
 
         const extractionMode = mode || "basic";
@@ -607,11 +639,13 @@ export async function importWebsiteDataFromSession(
 
         // Enhance with HTML content fetching and AI analysis for non-basic modes
         if (extractionMode !== "basic" && websites.length > 0) {
-            if (displayProgress) {
-                displayProgress(
-                    "Fetching webpage content and analyzing with AI...",
-                );
-            }
+            logStructuredProgress(
+                0,
+                websites.length,
+                "Starting content fetching and AI analysis",
+                "extracting",
+                displayProgress,
+            );
 
             // Create inputs that will trigger HTML fetching in ContentExtractor
             const contentInputs: ExtractionInput[] = websites.map((site) => ({
@@ -640,15 +674,18 @@ export async function importWebsiteDataFromSession(
                 const batchProcessor = new website.BatchProcessor(extractor);
 
                 const enhancedProgressCallback = (progress: BatchProgress) => {
-                    if (displayProgress) {
-                        const phase =
-                            progress.processed <= progress.total * 0.6
-                                ? "Fetching content"
-                                : "Analyzing with AI";
-                        displayProgress(
-                            `${phase}: ${progress.processed}/${progress.total} (${progress.percentage}%)`,
-                        );
-                    }
+                    const phase =
+                        progress.processed <= progress.total * 0.6
+                            ? "fetching"
+                            : "extracting";
+                    const description = `${progress.processed <= progress.total * 0.6 ? "Fetching content" : "Analyzing with AI"} (${progress.percentage}%)`;
+                    logStructuredProgress(
+                        progress.processed,
+                        progress.total,
+                        description,
+                        phase,
+                        displayProgress,
+                    );
                 };
 
                 const enhancedResults = await batchProcessor.processBatch(
@@ -672,8 +709,12 @@ export async function importWebsiteDataFromSession(
                 });
 
                 if (displayProgress) {
-                    displayProgress(
+                    logStructuredProgress(
+                        enhancedResults.length,
+                        enhancedResults.length,
                         `Enhanced ${enhancedResults.length} items with ${extractionMode} mode extraction`,
+                        "complete",
+                        displayProgress,
                     );
                 }
             } catch (error) {
@@ -775,9 +816,13 @@ export async function importHtmlFolderFromSession(
     const startTime = Date.now();
 
     try {
-        if (displayProgress) {
-            displayProgress("Validating folder and enumerating HTML files...");
-        }
+        logStructuredProgress(
+            0,
+            0,
+            "Validating folder and enumerating HTML files",
+            "initializing",
+            displayProgress,
+        );
 
         const { folderPath, options = {}, importId } = parameters;
         const errors: any[] = [];
@@ -844,18 +889,22 @@ export async function importHtmlFolderFromSession(
             throw new Error(`No HTML files found in folder: ${folderPath}`);
         }
 
-        if (displayProgress) {
-            displayProgress(
-                `Found ${htmlFiles.length} HTML files. Processing...`,
-            );
-        }
+        logStructuredProgress(
+            0,
+            htmlFiles.length,
+            `Found ${htmlFiles.length} HTML files`,
+            "initializing",
+            displayProgress,
+        );
 
         // Send initial progress update with total count
-        if (displayProgress) {
-            displayProgress(
-                `0/${htmlFiles.length} files processed (0%): Starting import`,
-            );
-        }
+        logStructuredProgress(
+            0,
+            htmlFiles.length,
+            "Starting import",
+            "processing",
+            displayProgress,
+        );
 
         // Ensure we have a website collection
         if (!context.agentContext.websiteCollection) {
@@ -872,14 +921,13 @@ export async function importHtmlFolderFromSession(
         for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
             const batch = batches[batchIndex];
 
-            if (displayProgress) {
-                const progressPercent = Math.round(
-                    (totalProcessedFiles / htmlFiles.length) * 100,
-                );
-                displayProgress(
-                    `${totalProcessedFiles}/${htmlFiles.length} files processed (${progressPercent}%): Processing batch ${batchIndex + 1}/${batches.length}`,
-                );
-            }
+            logStructuredProgress(
+                totalProcessedFiles,
+                htmlFiles.length,
+                `Processing batch ${batchIndex + 1}/${batches.length}`,
+                "processing",
+                displayProgress,
+            );
 
             // Read and prepare batch data
             const batchData = [];
@@ -990,14 +1038,13 @@ export async function importHtmlFolderFromSession(
                 totalProcessedFiles += batch.length;
 
                 // Update progress after processing batch
-                if (displayProgress) {
-                    const progressPercent = Math.round(
-                        (totalProcessedFiles / htmlFiles.length) * 100,
-                    );
-                    displayProgress(
-                        `${totalProcessedFiles}/${htmlFiles.length} files processed (${progressPercent}%): Completed batch ${batchIndex + 1}/${batches.length}`,
-                    );
-                }
+                logStructuredProgress(
+                    totalProcessedFiles,
+                    htmlFiles.length,
+                    `Completed batch ${batchIndex + 1}/${batches.length}`,
+                    "processing",
+                    displayProgress,
+                );
             } catch (error: any) {
                 errors.push({
                     type: "batch_processing",
@@ -1050,11 +1097,13 @@ export async function importHtmlFolderFromSession(
 
         const duration = Date.now() - startTime;
 
-        if (displayProgress) {
-            displayProgress(
-                `${htmlFiles.length}/${htmlFiles.length} files processed (100%): Import complete - ${successCount} successful`,
-            );
-        }
+        logStructuredProgress(
+            htmlFiles.length,
+            htmlFiles.length,
+            `Import complete - ${successCount} successful`,
+            "complete",
+            displayProgress,
+        );
 
         return {
             success: errors.length === 0,

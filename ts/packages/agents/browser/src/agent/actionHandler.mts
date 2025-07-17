@@ -1221,32 +1221,96 @@ async function handleWebsiteAction(
             return await importWebsiteDataFromSession(parameters, context);
 
         case "importWebsiteDataWithProgress":
-            // Create progress callback using closure to capture webSocket context
+            // Create progress callback using JSON parsing instead of regex
             const progressCallback = (message: string) => {
-                // Extract progress info from message if possible
-                const progressMatch = message.match(/(\d+)\/(\d+).*?:\s*(.+)/);
+                console.log("Progress message received:", message);
+
                 let current = 0,
                     total = 0,
-                    item = "";
+                    item = "",
+                    phase = "processing";
 
-                if (progressMatch) {
-                    current = parseInt(progressMatch[1]);
-                    total = parseInt(progressMatch[2]);
-                    item = progressMatch[3];
+                // Check if message contains structured JSON progress data
+                if (message.includes("PROGRESS_JSON:")) {
+                    try {
+                        const jsonStart =
+                            message.indexOf("PROGRESS_JSON:") +
+                            "PROGRESS_JSON:".length;
+                        const jsonStr = message.substring(jsonStart);
+                        const progressData = JSON.parse(jsonStr);
+
+                        console.log(
+                            "✅ Parsed JSON progress data:",
+                            progressData,
+                        );
+
+                        current = progressData.current || 0;
+                        total = progressData.total || 0;
+                        item = progressData.description || "";
+                        phase = progressData.phase || "processing";
+                    } catch (error) {
+                        console.error(
+                            "❌ Failed to parse JSON progress data:",
+                            error,
+                        );
+                        console.log("Raw message:", message);
+
+                        // Fallback to simple message handling
+                        item = message;
+                        total = parameters.totalItems || 0;
+
+                        // Try to determine phase from message content
+                        if (
+                            message.toLowerCase().includes("complete") ||
+                            message.toLowerCase().includes("finished")
+                        ) {
+                            phase = "complete";
+                        } else if (
+                            message.toLowerCase().includes("starting") ||
+                            message.toLowerCase().includes("initializing")
+                        ) {
+                            phase = "initializing";
+                        }
+                    }
+                } else {
+                    // Fallback for non-JSON messages
+                    console.log("📝 Non-JSON message, using as description");
+                    item = message;
+                    total = parameters.totalItems || 0;
+
+                    // Try to determine phase from message content
+                    if (
+                        message.toLowerCase().includes("complete") ||
+                        message.toLowerCase().includes("finished")
+                    ) {
+                        phase = "complete";
+                    } else if (
+                        message.toLowerCase().includes("starting") ||
+                        message.toLowerCase().includes("initializing")
+                    ) {
+                        phase = "initializing";
+                    }
                 }
 
-                // Send structured progress update via WebSocket (captured in closure)
+                const structuredProgress = {
+                    phase: phase,
+                    totalItems: total || parameters.totalItems || 0,
+                    processedItems: current || 0,
+                    currentItem: item,
+                    importId: parameters.importId,
+                    errors: [],
+                };
+
+                console.log(
+                    "📤 Sending structured progress:",
+                    structuredProgress,
+                );
+
+                // Send structured progress update via WebSocket
                 sendProgressUpdateViaWebSocket(
                     context.agentContext.webSocket,
                     parameters.importId,
-                    {
-                        phase: "processing",
-                        totalItems: total || parameters.totalItems || 0,
-                        processedItems: current || 0,
-                        currentItem: item,
-                        importId: parameters.importId,
-                        errors: [],
-                    },
+                    structuredProgress,
                 );
             };
 

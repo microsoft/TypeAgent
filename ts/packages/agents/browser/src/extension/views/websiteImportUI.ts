@@ -117,11 +117,34 @@ export class WebsiteImportUI {
     }
 
     /**
-     * Update import progress display with enhanced animations
+     * Enhanced updateImportProgress method with better validation and logging
      */
     public updateImportProgress(progress: ImportProgress): void {
+        console.log("🔄 Updating import progress:", progress);
+
+        // Validate progress object
+        if (!progress) {
+            console.warn("❌ Progress object is null or undefined");
+            return;
+        }
+
+        if (
+            typeof progress.totalItems !== "number" ||
+            typeof progress.processedItems !== "number"
+        ) {
+            console.warn("❌ Invalid progress data types:", {
+                totalItems: typeof progress.totalItems,
+                processedItems: typeof progress.processedItems,
+                totalItemsValue: progress.totalItems,
+                processedItemsValue: progress.processedItems,
+            });
+        }
+
         const modalElement = document.getElementById(this.activeModal || "");
-        if (!modalElement) return;
+        if (!modalElement) {
+            console.warn("❌ No active modal found for progress update");
+            return;
+        }
 
         const statusElement = modalElement.querySelector(
             "#importStatusMessage",
@@ -131,7 +154,15 @@ export class WebsiteImportUI {
         ) as HTMLElement;
         const progressText = modalElement.querySelector("#importProgressText");
 
-        // Animate status text changes
+        console.log("📊 Progress details:", {
+            totalItems: progress.totalItems,
+            processedItems: progress.processedItems,
+            phase: progress.phase,
+            currentItem: progress.currentItem,
+            importId: progress.importId,
+        });
+
+        // Update status message
         if (statusElement) {
             const phaseMessages: Record<string, string> = {
                 counting: "Counting items to import...",
@@ -144,9 +175,17 @@ export class WebsiteImportUI {
             };
 
             let newMessage = phaseMessages[progress.phase] || progress.phase;
-            if (progress.currentItem) {
-                newMessage += ` (${progress.currentItem.substring(0, 50)}...)`;
+
+            // Add current item info if available
+            if (progress.currentItem && progress.phase !== "complete") {
+                const truncatedItem =
+                    progress.currentItem.length > 50
+                        ? progress.currentItem.substring(0, 50) + "..."
+                        : progress.currentItem;
+                newMessage += ` (${truncatedItem})`;
             }
+
+            console.log("📝 Status message:", newMessage);
 
             // Animate text update
             statusElement.classList.add("status-updating");
@@ -157,11 +196,27 @@ export class WebsiteImportUI {
             }, 200);
         }
 
-        // Enhanced progress bar animation
-        if (progressBar && progress.totalItems > 0) {
-            const percentage = Math.round(
-                (progress.processedItems / progress.totalItems) * 100,
-            );
+        // Update progress bar with enhanced validation
+        if (
+            progressBar &&
+            typeof progress.totalItems === "number" &&
+            typeof progress.processedItems === "number"
+        ) {
+            let percentage = 0;
+
+            if (progress.totalItems > 0) {
+                percentage = Math.round(
+                    (progress.processedItems / progress.totalItems) * 100,
+                );
+                // Ensure percentage is between 0 and 100
+                percentage = Math.max(0, Math.min(100, percentage));
+            }
+
+            console.log("📈 Progress bar update:", {
+                processedItems: progress.processedItems,
+                totalItems: progress.totalItems,
+                percentage: percentage,
+            });
 
             // Smooth progress bar animation
             progressBar.style.transition = "width 0.3s ease-in-out";
@@ -177,11 +232,27 @@ export class WebsiteImportUI {
             } else {
                 progressBar.classList.remove("progress-pulse");
             }
+        } else {
+            console.warn(
+                "❌ Progress bar update skipped due to invalid data:",
+                {
+                    progressBar: !!progressBar,
+                    totalItems: progress.totalItems,
+                    processedItems: progress.processedItems,
+                },
+            );
         }
 
-        // Update progress text
-        if (progressText) {
-            progressText.textContent = `${progress.processedItems} / ${progress.totalItems} items`;
+        // Update progress text with validation
+        if (
+            progressText &&
+            typeof progress.totalItems === "number" &&
+            typeof progress.processedItems === "number"
+        ) {
+            const displayText = `${progress.processedItems} / ${progress.totalItems} items`;
+
+            console.log("📊 Progress text update:", displayText);
+            progressText.textContent = displayText;
 
             if (progress.estimatedTimeRemaining) {
                 const minutes = Math.ceil(
@@ -189,6 +260,8 @@ export class WebsiteImportUI {
                 );
                 progressText.textContent += ` (${minutes}m remaining)`;
             }
+        } else {
+            console.warn("❌ Progress text update skipped due to invalid data");
         }
 
         // Note: Do not call this.progressCallback here to avoid infinite recursion

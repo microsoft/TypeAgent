@@ -2984,11 +2984,23 @@ class WebsiteLibraryPanelFullPage {
     }
 
     private handleImportProgressMessage(message: any) {
-        if (message.importId && message.progress) {
-            // Update the UI with the progress from service worker
-            // This should update the already-visible progress view
-            this.importUI.updateImportProgress(message.progress);
+        console.log("🔄 Raw import progress message received:", message);
+
+        // Validate message structure
+        if (!message.importId || !message.progress) {
+            console.warn("❌ Invalid progress message structure:", message);
+            return;
         }
+
+        console.log("📨 Progress message details:", {
+            importId: message.importId,
+            progress: message.progress,
+            progressType: typeof message.progress,
+            progressKeys: Object.keys(message.progress || {}),
+        });
+
+        // Update the UI with the progress from service worker
+        this.importUI.updateImportProgress(message.progress);
     }
 
     private async handleCancelImport(): Promise<void> {
