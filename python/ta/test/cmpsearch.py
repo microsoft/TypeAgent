@@ -11,13 +11,13 @@ import re
 import sys
 from typing import Any, TypedDict
 
-import black
 import colorama
 import numpy as np
 import typechat
 
 from typeagent.aitools import utils
 from typeagent.aitools.embeddings import AsyncEmbeddingModel
+from typeagent.demo.ui import make_arg_parser
 from typeagent.knowpro.answer_response_schema import AnswerResponse
 from typeagent.knowpro import answers
 from typeagent.knowpro.importing import ConversationSettings
@@ -53,58 +53,20 @@ def main():
 
     # Parse arguments.
 
-    default_qafile = "testdata/Episode_53_Answer_results.json"
-    default_srfile = "testdata/Episode_53_Search_results.json"
-    default_podcast_file = "testdata/Episode_53_AdrianTchaikovsky_index"
-
-    explanation = "a list of objects with 'question' and 'answer' keys"
-    explanation_sr = (
-        "a list of objects with 'searchText', 'searchQueryExpr' and 'results' keys"
-    )
-    parser = argparse.ArgumentParser(
+    parser = make_arg_parser(
         description="Run queries from` QAFILE and compare answers to expectations"
-    )
-    parser.add_argument(
-        "--qafile",
-        type=str,
-        default=default_qafile,
-        help=f"Path to the Answer_results.json file ({explanation})",
-    )
-    parser.add_argument(
-        "--srfile",
-        type=str,
-        default=default_srfile,
-        help=f"Path to the Search_results.json file ({explanation_sr})",
-    )
-    parser.add_argument(
-        "--use-search-query",
-        action="store_true",
-        default=False,
-        help="Use search query from SRFILE",
-    )
-    parser.add_argument(
-        "--use-compiled-search-query",
-        action="store_true",
-        default=False,
-        help="Use compiled search query from SRFILE",
-    )
-    parser.add_argument(
-        "--podcast",
-        type=str,
-        default=default_podcast_file,
-        help="Path to the podcast index files (excluding the '_index.json' suffix)",
     )
     parser.add_argument(
         "--offset",
         type=int,
         default=0,
-        help="Number of initial Q/A pairs to skip",
+        help="Number of initial Q/A pairs to skip (default none)",
     )
     parser.add_argument(
         "--limit",
         type=int,
         default=0,
-        help="Number of Q/A pairs to print (0 means all)",
+        help="Number of Q/A pairs to process (default all)",
     )
     parser.add_argument(
         "--start",
@@ -175,8 +137,8 @@ def main():
         ),
         interactive=args.interactive,
         sr_index=sr_index,
-        use_search_query=args.use_search_query,
-        use_compiled_search_query=args.use_compiled_search_query,
+        use_search_query=args.skip_phase_1,
+        use_compiled_search_query=args.skip_phase_2,
     )
     utils.pretty_print(context.lang_search_options)
     utils.pretty_print(context.answer_options)
@@ -454,9 +416,7 @@ def compare_semantic_ref_ordinals(
     return False
 
 
-def compare_and_print_diff(
-    a: object, b: object, message: str
-) -> bool:  # True if equal
+def compare_and_print_diff(a: object, b: object, message: str) -> bool:  # True if equal
     """Diff two objects whose repr() is a valid Python expression."""
     if a == b:
         return True
