@@ -28,7 +28,6 @@ export class WebsiteImportUI {
     private errorCallback: ((error: ImportError) => void) | null = null;
 
     constructor() {
-        // No need to initialize styles - they're now in CSS file
     }
 
     /**
@@ -49,6 +48,7 @@ export class WebsiteImportUI {
         this.setupFolderImportEventListeners();
         this.showModal(this.folderImportModalId);
         this.activeModal = this.folderImportModalId;
+        this.loadStoredFolderPath();
     }
 
     /**
@@ -59,6 +59,41 @@ export class WebsiteImportUI {
             this.hideModal(this.activeModal);
             this.removeModal(this.activeModal);
             this.activeModal = null;
+        }
+    }
+
+    /**
+     * Load stored folder path from localStorage and populate the input
+     */
+    private loadStoredFolderPath(): void {
+        const modal = document.getElementById(this.folderImportModalId);
+        const folderPathInput = modal?.querySelector("#folderPath") as HTMLInputElement;
+        
+        if (folderPathInput) {
+            try {
+                const storedPath = localStorage.getItem('typeagent_folderImportPath');
+                if (storedPath && storedPath.trim()) {
+                    folderPathInput.value = storedPath;
+                    // Trigger validation and state update
+                    this.updateFolderImportState();
+                }
+            } catch (error) {
+                console.warn('Failed to load stored folder path:', error);
+            }
+        }
+    }
+
+    /**
+     * Save folder path to localStorage
+     */
+    private saveFolderPath(path: string): void {
+        const trimmedPath = path.trim();
+        if (trimmedPath) {
+            try {
+                localStorage.setItem('typeagent_folderImportPath', trimmedPath);
+            } catch (error) {
+                console.warn('Failed to save folder path to localStorage:', error);
+            }
         }
     }
 
@@ -899,7 +934,6 @@ export class WebsiteImportUI {
         const folderPathInput = modal.querySelector(
             "#folderPath",
         ) as HTMLInputElement;
-        const browseFolderBtn = modal.querySelector("#browseFolderBtn");
         const startButton = modal.querySelector(
             "#startFolderImport",
         ) as HTMLButtonElement;
@@ -908,6 +942,9 @@ export class WebsiteImportUI {
         if (folderPathInput) {
             folderPathInput.addEventListener("input", async () => {
                 this.updateFolderImportState();
+                
+                // Save path to localStorage
+                this.saveFolderPath(folderPathInput.value);
 
                 // Debounced validation
                 clearTimeout((folderPathInput as any)._validationTimeout);
@@ -928,31 +965,8 @@ export class WebsiteImportUI {
                         folderPathInput.value,
                     );
                     this.showFolderValidationFeedback(validation);
-                }
-            });
-        }
-
-        // Browse folder button (note: actual folder browsing would require native file system access)
-        if (browseFolderBtn) {
-            browseFolderBtn.addEventListener("click", () => {
-                // Show helpful message since we can't actually browse folders in browser extension
-                const helpModal = `
-                    <div class="alert alert-info">
-                        <strong>Tip:</strong> Copy the folder path from your file manager and paste it here.<br>
-                        <strong>Windows:</strong> Right-click folder → Properties → Copy location<br>
-                        <strong>Mac:</strong> Right-click folder → Get Info → Copy path<br>
-                        <strong>Linux:</strong> Right-click folder → Properties → Copy path
-                    </div>
-                `;
-
-                const feedbackContainer = modal.querySelector(
-                    "#folderValidationFeedback",
-                );
-                if (feedbackContainer) {
-                    feedbackContainer.innerHTML = helpModal;
-                    setTimeout(() => {
-                        feedbackContainer.innerHTML = "";
-                    }, 5000);
+                    // Also save on blur to ensure it's saved
+                    this.saveFolderPath(folderPathInput.value);
                 }
             });
         }
