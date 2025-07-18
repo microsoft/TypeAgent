@@ -28,7 +28,7 @@ export class WebsiteImportUI {
     private errorCallback: ((error: ImportError) => void) | null = null;
 
     constructor() {
-        this.initializeStyles();
+        // No need to initialize styles - they're now in CSS file
     }
 
     /**
@@ -36,13 +36,7 @@ export class WebsiteImportUI {
      */
     public showWebActivityImportModal(): void {
         this.hideActiveModal();
-
-        // Only create modal if it doesn't exist to prevent duplicate event listeners
-        const existingModal = document.getElementById(this.webActivityModalId);
-        if (!existingModal) {
-            this.createWebActivityModal();
-        }
-
+        this.setupWebActivityEventListeners();
         this.showModal(this.webActivityModalId);
         this.activeModal = this.webActivityModalId;
     }
@@ -52,13 +46,7 @@ export class WebsiteImportUI {
      */
     public showFolderImportModal(): void {
         this.hideActiveModal();
-
-        // Only create modal if it doesn't exist to prevent duplicate event listeners
-        const existingModal = document.getElementById(this.folderImportModalId);
-        if (!existingModal) {
-            this.createFolderImportModal();
-        }
-
+        this.setupFolderImportEventListeners();
         this.showModal(this.folderImportModalId);
         this.activeModal = this.folderImportModalId;
     }
@@ -81,8 +69,15 @@ export class WebsiteImportUI {
         const modalElement = document.getElementById(this.activeModal || "");
         if (!modalElement) return;
 
-        const progressContainer = modalElement.querySelector("#importProgress");
-        const formContainer = modalElement.querySelector("#importForm");
+        let progressContainer, formContainer;
+        
+        if (this.activeModal === this.webActivityModalId) {
+            progressContainer = modalElement.querySelector("#webActivityImportProgress");
+            formContainer = modalElement.querySelector("#webActivityImportForm");
+        } else if (this.activeModal === this.folderImportModalId) {
+            progressContainer = modalElement.querySelector("#folderImportProgress");
+            formContainer = modalElement.querySelector("#folderImportForm");
+        }
 
         if (progressContainer && formContainer) {
             this.transitionToProgress(
@@ -146,13 +141,17 @@ export class WebsiteImportUI {
             return;
         }
 
-        const statusElement = modalElement.querySelector(
-            "#importStatusMessage",
-        );
-        const progressBar = modalElement.querySelector(
-            "#importProgressBar",
-        ) as HTMLElement;
-        const progressText = modalElement.querySelector("#importProgressText");
+        let statusElement, progressBar, progressText;
+        
+        if (this.activeModal === this.webActivityModalId) {
+            statusElement = modalElement.querySelector("#webImportStatusMessage");
+            progressBar = modalElement.querySelector("#webImportProgressBar") as HTMLElement;
+            progressText = modalElement.querySelector("#webImportProgressText");
+        } else if (this.activeModal === this.folderImportModalId) {
+            statusElement = modalElement.querySelector("#folderImportStatusMessage");
+            progressBar = modalElement.querySelector("#folderImportProgressBar") as HTMLElement;
+            progressText = modalElement.querySelector("#folderImportProgressText");
+        }
 
         console.log("📊 Progress details:", {
             totalItems: progress.totalItems,
@@ -276,7 +275,13 @@ export class WebsiteImportUI {
         const modalElement = document.getElementById(this.activeModal || "");
         if (!modalElement) return;
 
-        const progressContainer = modalElement.querySelector("#importProgress");
+        let progressContainer;
+        if (this.activeModal === this.webActivityModalId) {
+            progressContainer = modalElement.querySelector("#webActivityImportProgress");
+        } else if (this.activeModal === this.folderImportModalId) {
+            progressContainer = modalElement.querySelector("#folderImportProgress");
+        }
+
         if (progressContainer) {
             const isFolderImport =
                 this.activeModal === this.folderImportModalId;
@@ -364,7 +369,13 @@ export class WebsiteImportUI {
         const modalElement = document.getElementById(this.activeModal || "");
         if (!modalElement) return;
 
-        const progressContainer = modalElement.querySelector("#importProgress");
+        let progressContainer;
+        if (this.activeModal === this.webActivityModalId) {
+            progressContainer = modalElement.querySelector("#webActivityImportProgress");
+        } else if (this.activeModal === this.folderImportModalId) {
+            progressContainer = modalElement.querySelector("#folderImportProgress");
+        }
+
         if (progressContainer) {
             const isFolderImport =
                 this.activeModal === this.folderImportModalId;
@@ -447,9 +458,15 @@ export class WebsiteImportUI {
         if (retryButton) {
             retryButton.addEventListener("click", () => {
                 // Reset to form view
-                const formContainer = modalElement.querySelector("#importForm");
-                const progressContainer =
-                    modalElement.querySelector("#importProgress");
+                let formContainer, progressContainer;
+                
+                if (this.activeModal === this.webActivityModalId) {
+                    formContainer = modalElement.querySelector("#webActivityImportForm");
+                    progressContainer = modalElement.querySelector("#webActivityImportProgress");
+                } else if (this.activeModal === this.folderImportModalId) {
+                    formContainer = modalElement.querySelector("#folderImportForm");
+                    progressContainer = modalElement.querySelector("#folderImportProgress");
+                }
 
                 if (formContainer && progressContainer) {
                     progressContainer.classList.add("d-none");
@@ -484,24 +501,24 @@ export class WebsiteImportUI {
             | "bookmarks"
             | "history";
 
-        // Get form values
+        // Get form values with updated IDs
         const limitInput = modal.querySelector(
-            "#importLimit",
+            "#webImportLimit",
         ) as HTMLInputElement;
         const daysBackInput = modal.querySelector(
-            "#daysBack",
+            "#webDaysBack",
         ) as HTMLInputElement;
         const folderInput = modal.querySelector(
-            "#bookmarkFolder",
+            "#webBookmarkFolder",
         ) as HTMLInputElement;
         const extractionModeInput = modal.querySelector(
-            "#extractionMode",
+            "#webExtractionMode",
         ) as HTMLInputElement;
         const maxConcurrentInput = modal.querySelector(
-            "#maxConcurrent",
+            "#webMaxConcurrent",
         ) as HTMLInputElement;
         const contentTimeoutInput = modal.querySelector(
-            "#contentTimeout",
+            "#webContentTimeout",
         ) as HTMLInputElement;
 
         // Convert slider value to mode string
@@ -552,24 +569,24 @@ export class WebsiteImportUI {
             return null;
         }
 
-        // Get form values
+        // Get form values with updated IDs
         const extractionModeInput = modal.querySelector(
             "#folderExtractionMode",
         ) as HTMLInputElement;
         const preserveStructureInput = modal.querySelector(
-            "#preserveStructure",
+            "#folderPreserveStructure",
         ) as HTMLInputElement;
         const recursiveInput = modal.querySelector(
-            "#recursive",
+            "#folderRecursive",
         ) as HTMLInputElement;
         const limitInput = modal.querySelector(
-            "#fileLimit",
+            "#folderFileLimit",
         ) as HTMLInputElement;
         const maxFileSizeInput = modal.querySelector(
-            "#maxFileSize",
+            "#folderMaxFileSize",
         ) as HTMLInputElement;
         const skipHiddenInput = modal.querySelector(
-            "#skipHidden",
+            "#folderSkipHidden",
         ) as HTMLInputElement;
 
         // Convert slider value to mode string
@@ -756,416 +773,6 @@ export class WebsiteImportUI {
     }
 
     // Private helper methods
-
-    /**
-     * Create web activity import modal
-     */
-    private createWebActivityModal(): void {
-        const modalDiv = document.createElement("div");
-        modalDiv.className = "modal fade";
-        modalDiv.id = this.webActivityModalId;
-        modalDiv.setAttribute("tabindex", "-1");
-
-        modalDiv.innerHTML = `
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content">
-                    <div class="modal-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
-                        <h5 class="modal-title">
-                            <i class="bi bi-download me-2"></i>Import Web Activity
-                        </h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" style="filter: invert(1);"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div id="importForm">
-                            <!-- Browser Selection -->
-                            <div class="mb-3">
-                                <label class="form-label fw-semibold">Select Browser</label>
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <div class="import-option" data-browser="chrome">
-                                            <div class="d-flex align-items-center">
-                                                <i class="bi bi-browser-chrome text-success me-3 fs-4"></i>
-                                                <div>
-                                                    <div class="fw-semibold">Google Chrome</div>
-                                                    <small class="text-muted">Import from Chrome browser</small>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="import-option" data-browser="edge">
-                                            <div class="d-flex align-items-center">
-                                                <i class="bi bi-browser-edge text-primary me-3 fs-4"></i>
-                                                <div>
-                                                    <div class="fw-semibold">Microsoft Edge</div>
-                                                    <small class="text-muted">Import from Edge browser</small>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Data Type Selection -->
-                            <div class="mb-3">
-                                <label class="form-label fw-semibold">Data Type</label>
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <div class="import-option" data-type="bookmarks">
-                                            <div class="d-flex align-items-center">
-                                                <i class="bi bi-bookmark-star text-warning me-3 fs-4"></i>
-                                                <div>
-                                                    <div class="fw-semibold">Bookmarks</div>
-                                                    <small class="text-muted">Saved bookmarks and favorites</small>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="import-option" data-type="history">
-                                            <div class="d-flex align-items-center">
-                                                <i class="bi bi-clock-history text-info me-3 fs-4"></i>
-                                                <div>
-                                                    <div class="fw-semibold">Browser History</div>
-                                                    <small class="text-muted">Recently visited pages</small>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Advanced Options -->
-                            <div class="mb-3">
-                                <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#advancedOptions">
-                                    <i class="bi bi-gear"></i> Advanced Options
-                                </button>
-
-                                <div class="collapse mt-3" id="advancedOptions">
-                                    <div class="card card-body bg-light">
-                                        <div class="row">
-                                            <div class="col-md-6">
-                                                <label class="form-label">Limit (max items)</label>
-                                                <input type="number" id="importLimit" class="form-control form-control-sm" 
-                                                       placeholder="e.g., 1000" min="1" max="50000" value="1000">
-                                            </div>
-                                            <div class="col-md-6" id="daysBackContainer" style="display: none">
-                                                <label class="form-label">Days back (history only)</label>
-                                                <input type="number" id="daysBack" class="form-control form-control-sm" 
-                                                       placeholder="e.g., 30" min="1" max="365" value="30">
-                                            </div>
-                                        </div>
-
-                                        <div class="mt-3" id="folderContainer" style="display: none">
-                                            <label class="form-label">Bookmark Folder (optional)</label>
-                                            <input type="text" id="bookmarkFolder" class="form-control form-control-sm" 
-                                                   placeholder="e.g., Work, Personal">
-                                        </div>
-
-                                        <div class="mt-3">
-                                            <h6 class="mb-3">Enhancement Options</h6>
-                                            
-                                            <div class="mb-3">
-                                                <label for="extractionMode" class="form-label">
-                                                    <i class="bi bi-gear"></i> Extraction Mode
-                                                </label>
-                                                <div class="extraction-mode-slider-container">
-                                                    <input 
-                                                        type="range" 
-                                                        id="extractionMode" 
-                                                        class="extraction-mode-slider" 
-                                                        min="0" 
-                                                        max="3" 
-                                                        value="1" 
-                                                        step="1"
-                                                        data-mode="content"
-                                                    />
-                                                    <div class="slider-labels">
-                                                        <span class="slider-label" data-value="0">Basic</span>
-                                                        <span class="slider-label" data-value="1">Content</span>
-                                                        <span class="slider-label" data-value="2">Actions</span>
-                                                        <span class="slider-label" data-value="3">Full</span>
-                                                    </div>
-                                                    <div class="slider-ticks">
-                                                        <span class="slider-tick" data-value="0"></span>
-                                                        <span class="slider-tick" data-value="1"></span>
-                                                        <span class="slider-tick" data-value="2"></span>
-                                                        <span class="slider-tick" data-value="3"></span>
-                                                    </div>
-                                                </div>
-                                                <small class="text-muted">
-                                                    <span id="webModeDescription">AI-powered content analysis with entity and topic extraction</span>
-                                                </small>
-                                            </div>
-
-                                            <div class="row">
-                                                <div class="col-md-6">
-                                                    <label for="maxConcurrent" class="form-label">Max Concurrent</label>
-                                                    <input type="number" id="maxConcurrent" class="form-control form-control-sm" 
-                                                           value="5" min="1" max="20">
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label for="contentTimeout" class="form-label">Timeout (seconds)</label>
-                                                    <input type="number" id="contentTimeout" class="form-control form-control-sm" 
-                                                           value="30" min="5" max="120">
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Import Controls -->
-                            <div class="d-flex gap-2">
-                                <button id="startWebActivityImport" class="btn btn-primary" disabled>
-                                    <i class="bi bi-download"></i> Start Import
-                                </button>
-                                <button id="cancelWebActivityImport" class="btn btn-outline-secondary d-none">
-                                    <i class="bi bi-x-circle"></i> Cancel
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Progress Display -->
-                        <div id="importProgress" class="d-none">
-                            <div class="progress-container">
-                                <div class="text-center">
-                                    <div class="spinner-border text-primary mb-3" role="status">
-                                        <span class="visually-hidden">Importing...</span>
-                                    </div>
-                                    <div>
-                                        <span class="fw-semibold">Importing Data...</span>
-                                    </div>
-                                    <small id="importStatusMessage" class="text-muted d-block mt-2">
-                                        Preparing import...
-                                    </small>
-                                    <div class="progress mt-3" style="height: 6px;">
-                                        <div id="importProgressBar" class="progress-bar" role="progressbar" 
-                                             style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-                                    </div>
-                                    <small id="importProgressText" class="text-muted d-block mt-1">0 / 0 items</small>
-                                </div>
-
-                                <div class="mt-4 text-center">
-                                    <button id="cancelImportProgress" class="btn btn-outline-danger btn-sm">
-                                        <i class="bi bi-x-circle"></i> Cancel Import
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        document.body.appendChild(modalDiv);
-        this.setupWebActivityEventListeners();
-    }
-
-    /**
-     * Create folder import modal
-     */
-    private createFolderImportModal(): void {
-        const modalDiv = document.createElement("div");
-        modalDiv.className = "modal fade";
-        modalDiv.id = this.folderImportModalId;
-        modalDiv.setAttribute("tabindex", "-1");
-
-        modalDiv.innerHTML = `
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content">
-                    <div class="modal-header" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white;">
-                        <h5 class="modal-title">
-                            <i class="bi bi-folder2-open me-2"></i>Import from Folder
-                        </h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" style="filter: invert(1);"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div id="importForm">
-                            <!-- Folder Path Input -->
-                            <div class="mb-3">
-                                <label for="folderPath" class="form-label fw-semibold">
-                                    <i class="bi bi-folder"></i> Folder Path
-                                </label>
-                                <div class="input-group">
-                                    <input type="text" id="folderPath" class="form-control" 
-                                           placeholder="Enter folder path (e.g., C:\\Documents\\HTMLFiles or /home/user/html-files)"
-                                           autocomplete="off">
-                                    <button type="button" class="btn btn-outline-secondary" id="browseFolderBtn" title="Browse for folder">
-                                        <i class="bi bi-three-dots"></i>
-                                    </button>
-                                </div>
-                                <div class="form-text">
-                                    <small class="text-muted">
-                                        <i class="bi bi-info-circle"></i>
-                                        Enter the full path to a folder containing HTML files. 
-                                        Subfolders will be included if recursive option is enabled.
-                                    </small>
-                                </div>
-                                <div id="folderValidationFeedback"></div>
-                            </div>
-
-                            <!-- Folder Options -->
-                            <div class="mb-3">
-                                <h6 class="mb-3">Folder Options</h6>
-                                
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <div class="form-check mb-2">
-                                            <input class="form-check-input" type="checkbox" id="recursive" checked>
-                                            <label class="form-check-label" for="recursive">
-                                                <i class="bi bi-arrow-down-up"></i> Include subfolders
-                                            </label>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="form-check mb-2">
-                                            <input class="form-check-input" type="checkbox" id="skipHidden" checked>
-                                            <label class="form-check-label" for="skipHidden">
-                                                <i class="bi bi-eye-slash"></i> Skip hidden files
-                                            </label>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <label for="fileLimit" class="form-label">File limit (optional)</label>
-                                        <input type="number" id="fileLimit" class="form-control form-control-sm" 
-                                               placeholder="e.g., 1000" min="1" max="10000" value="1000">
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label for="maxFileSize" class="form-label">Max file size (MB)</label>
-                                        <input type="number" id="maxFileSize" class="form-control form-control-sm" 
-                                               placeholder="50" min="1" max="500" value="50">
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Processing Options -->
-                            <div class="mb-3">
-                                <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#folderAdvancedOptions">
-                                    <i class="bi bi-gear"></i> Processing Options
-                                </button>
-
-                                <div class="collapse mt-3" id="folderAdvancedOptions">
-                                    <div class="card card-body bg-light">
-                                        <div class="mb-3">
-                                            <h6 class="mb-3">Content Processing</h6>
-                                            
-                                            <div class="mb-3">
-                                                <label for="folderExtractionMode" class="form-label">
-                                                    <i class="bi bi-gear"></i> Extraction Mode
-                                                </label>
-                                                <div class="extraction-mode-slider-container">
-                                                    <input 
-                                                        type="range" 
-                                                        id="folderExtractionMode" 
-                                                        class="extraction-mode-slider" 
-                                                        min="0" 
-                                                        max="3" 
-                                                        value="1" 
-                                                        step="1"
-                                                        data-mode="content"
-                                                    />
-                                                    <div class="slider-labels">
-                                                        <span class="slider-label" data-value="0">Basic</span>
-                                                        <span class="slider-label" data-value="1">Content</span>
-                                                        <span class="slider-label" data-value="2">Actions</span>
-                                                        <span class="slider-label" data-value="3">Full</span>
-                                                    </div>
-                                                    <div class="slider-ticks">
-                                                        <span class="slider-tick" data-value="0"></span>
-                                                        <span class="slider-tick" data-value="1"></span>
-                                                        <span class="slider-tick" data-value="2"></span>
-                                                        <span class="slider-tick" data-value="3"></span>
-                                                    </div>
-                                                </div>
-                                                <small class="text-muted">
-                                                    <span id="folderModeDescription">AI-powered content analysis with entity and topic extraction</span>
-                                                </small>
-                                            </div>
-                                            </div>
-
-                                            <div class="form-check mb-2">
-                                                <input class="form-check-input" type="checkbox" id="preserveStructure" checked>
-                                                <label class="form-check-label" for="preserveStructure">
-                                                    <i class="bi bi-diagram-3"></i> Preserve folder structure
-                                                </label>
-                                                <small class="text-muted d-block ms-4">
-                                                    Maintain original folder organization and metadata
-                                                </small>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Path Examples -->
-                            <div class="mb-3">
-                                <details class="text-muted">
-                                    <summary class="btn btn-link btn-sm p-0 text-decoration-none">
-                                        <i class="bi bi-question-circle"></i> Path Examples
-                                    </summary>
-                                    <div class="mt-2 small">
-                                        <strong>Windows:</strong><br>
-                                        <code>C:\\Users\\YourName\\Documents\\HTMLFiles</code><br>
-                                        <code>D:\\Projects\\WebsiteArchive</code><br><br>
-                                        <strong>macOS/Linux:</strong><br>
-                                        <code>/Users/yourname/Documents/HTMLFiles</code><br>
-                                        <code>/home/user/website-archive</code><br><br>
-                                        <strong>Network paths:</strong><br>
-                                        <code>\\\\server\\share\\htmlfiles</code>
-                                    </div>
-                                </details>
-                            </div>
-
-                            <!-- Import Controls -->
-                            <div class="d-flex gap-2">
-                                <button id="startFolderImport" class="btn btn-success" disabled>
-                                    <i class="bi bi-folder-plus"></i> Start Import
-                                </button>
-                                <button id="cancelFolderImport" class="btn btn-outline-secondary d-none">
-                                    <i class="bi bi-x-circle"></i> Cancel
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Progress Display -->
-                        <div id="importProgress" class="d-none">
-                            <div class="progress-container">
-                                <div class="text-center">
-                                    <div class="spinner-border text-success mb-3" role="status">
-                                        <span class="visually-hidden">Processing folder...</span>
-                                    </div>
-                                    <div>
-                                        <span class="fw-semibold">Processing Folder...</span>
-                                    </div>
-                                    <small id="importStatusMessage" class="text-muted d-block mt-2">
-                                        Validating folder...
-                                    </small>
-                                    <div class="progress mt-3" style="height: 6px;">
-                                        <div id="importProgressBar" class="progress-bar bg-success" role="progressbar" 
-                                             style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-                                    </div>
-                                    <small id="importProgressText" class="text-muted d-block mt-1">0 / 0 files</small>
-                                </div>
-
-                                <div class="mt-4 text-center">
-                                    <button id="cancelImportProgress" class="btn btn-outline-danger btn-sm">
-                                        <i class="bi bi-x-circle"></i> Cancel Import
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        document.body.appendChild(modalDiv);
-        this.setupFolderImportEventListeners();
-    }
 
     /**
      * Setup event listeners for web activity modal
@@ -1535,390 +1142,5 @@ export class WebsiteImportUI {
         };
 
         descriptionElement.textContent = descriptions[mode] || descriptions.content;
-    }
-
-    /**
-     * Initialize component styles
-     */
-    private initializeStyles(): void {
-        const styleId = "websiteImportUIStyles";
-        if (!document.getElementById(styleId)) {
-            const style = document.createElement("style");
-            style.id = styleId;
-            style.textContent = `
-                .import-option { 
-                    border: 1px solid #e9ecef; 
-                    border-radius: 0.375rem; 
-                    padding: 1rem; 
-                    margin-bottom: 1rem; 
-                    transition: all 0.2s ease; 
-                    cursor: pointer; 
-                } 
-                .import-option:hover { 
-                    border-color: #667eea; 
-                    background-color: #f8f9ff; 
-                } 
-                .import-option.selected { 
-                    border-color: #667eea; 
-                    background-color: #f0f2ff; 
-                    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
-                }
-                
-                .file-drop-zone {
-                    position: relative;
-                    border: 2px dashed #dee2e6;
-                    border-radius: 0.5rem;
-                    padding: 2rem;
-                    text-align: center;
-                    transition: all 0.2s ease;
-                    background-color: #f8f9fa;
-                }
-                
-                .file-drop-zone:hover {
-                    border-color: #667eea;
-                    background-color: #f0f2ff;
-                }
-                
-                .file-drop-zone.drag-over {
-                    border-color: #667eea;
-                    background-color: #e3f2fd;
-                    border-style: solid;
-                    transform: scale(1.02);
-                    box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
-                    transition: all 0.2s ease;
-                }
-                
-                .drop-zone-overlay {
-                    position: absolute;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    bottom: 0;
-                    background: rgba(102, 126, 234, 0.1);
-                    border-radius: 0.5rem;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    border: 2px solid #667eea;
-                }
-                
-                .overlay-content {
-                    text-align: center;
-                    color: #667eea;
-                }
-                
-                .file-list-container {
-                    max-height: 300px;
-                    overflow-y: auto;
-                    border: 1px solid #dee2e6;
-                    border-radius: 0.375rem;
-                }
-                
-                .file-item {
-                    transition: background-color 0.15s ease;
-                }
-                
-                .file-item:hover {
-                    background-color: #f8f9fa;
-                }
-                
-                .file-item:last-child {
-                    border-bottom: none !important;
-                }
-                
-                .progress-container {
-                    padding: 2rem;
-                }
-                
-                .modal-header {
-                    border-bottom: none;
-                }
-                
-                .form-check-label {
-                    cursor: pointer;
-                }
-                
-                .collapse .card {
-                    border: none;
-                    box-shadow: none;
-                }
-                
-                .btn-outline-secondary:hover {
-                    color: #495057;
-                    background-color: #f8f9fa;
-                    border-color: #dee2e6;
-                }
-                
-                /* Enhanced Modal and Transition Animations */
-                .modal-entering .modal-dialog {
-                    animation: modalSlideIn 0.3s ease-out;
-                }
-                
-                .modal-exiting .modal-dialog {
-                    animation: modalSlideOut 0.3s ease-in;
-                }
-                
-                @keyframes modalSlideIn {
-                    from {
-                        transform: translateY(-50px);
-                        opacity: 0;
-                    }
-                    to {
-                        transform: translateY(0);
-                        opacity: 1;
-                    }
-                }
-                
-                @keyframes modalSlideOut {
-                    from {
-                        transform: translateY(0);
-                        opacity: 1;
-                    }
-                    to {
-                        transform: translateY(-30px);
-                        opacity: 0;
-                    }
-                }
-                
-                .fade-out {
-                    animation: fadeOut 0.3s ease-out forwards;
-                }
-                
-                .fade-in {
-                    animation: fadeIn 0.3s ease-out;
-                }
-                
-                @keyframes fadeOut {
-                    from { opacity: 1; transform: translateX(0); }
-                    to { opacity: 0; transform: translateX(-20px); }
-                }
-                
-                @keyframes fadeIn {
-                    from { opacity: 0; transform: translateX(20px); }
-                    to { opacity: 1; transform: translateX(0); }
-                }
-                
-                .progress-pulse {
-                    animation: progressPulse 1.5s infinite;
-                }
-                
-                @keyframes progressPulse {
-                    0%, 100% { box-shadow: 0 0 0 0 rgba(102, 126, 234, 0.4); }
-                    50% { box-shadow: 0 0 0 10px rgba(102, 126, 234, 0); }
-                }
-                
-                .status-updating {
-                    animation: statusUpdate 0.2s ease;
-                }
-                
-                @keyframes statusUpdate {
-                    0% { transform: scale(1); }
-                    50% { transform: scale(1.05); }
-                    100% { transform: scale(1); }
-                }
-                
-                .file-item-enter {
-                    animation: fileItemEnter 0.3s ease;
-                }
-                
-                .file-item-exit {
-                    animation: fileItemExit 0.3s ease forwards;
-                }
-                
-                @keyframes fileItemEnter {
-                    from { opacity: 0; transform: translateY(-20px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
-                
-                @keyframes fileItemExit {
-                    from { opacity: 1; transform: translateX(0); }
-                    to { opacity: 0; transform: translateX(100%); }
-                }
-                
-                .drop-success {
-                    animation: dropSuccess 0.5s ease;
-                }
-                
-                @keyframes dropSuccess {
-                    0% { background-color: inherit; }
-                    50% { background-color: rgba(40, 167, 69, 0.1); }
-                    100% { background-color: inherit; }
-                }
-                
-                /* Respect user motion preferences */
-                @media (prefers-reduced-motion: reduce) {
-                    .modal-entering .modal-dialog,
-                    .modal-exiting .modal-dialog,
-                    .fade-out,
-                    .fade-in,
-                    .progress-pulse,
-                    .status-updating,
-                    .file-item-enter,
-                    .file-item-exit,
-                    .drop-success {
-                        animation: none !important;
-                    }
-                    
-                    .file-drop-zone.drag-over {
-                        transform: none !important;
-                    }
-                    
-                    .import-option:hover,
-                    .file-item:hover {
-                        transform: none !important;
-                    }
-                }
-
-                /* Extraction Mode Slider Styles */
-                .extraction-mode-slider-container {
-                    position: relative;
-                    margin: 0.5rem 0 1rem 0;
-                }
-
-                .extraction-mode-slider {
-                    width: 100%;
-                    height: 6px;
-                    border-radius: 3px;
-                    background: #e9ecef;
-                    outline: none;
-                    appearance: none;
-                    cursor: pointer;
-                    position: relative;
-                    z-index: 2;
-                }
-
-                .extraction-mode-slider::-webkit-slider-thumb {
-                    appearance: none;
-                    width: 18px;
-                    height: 18px;
-                    border-radius: 50%;
-                    background: #667eea;
-                    cursor: pointer;
-                    border: 2px solid white;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-                    transition: all 0.2s ease;
-                }
-
-                .extraction-mode-slider::-webkit-slider-thumb:hover {
-                    transform: scale(1.1);
-                    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-                }
-
-                .extraction-mode-slider::-moz-range-thumb {
-                    width: 18px;
-                    height: 18px;
-                    border-radius: 50%;
-                    background: #667eea;
-                    cursor: pointer;
-                    border: 2px solid white;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-                    transition: all 0.2s ease;
-                }
-
-                .extraction-mode-slider::-moz-range-thumb:hover {
-                    transform: scale(1.1);
-                    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-                }
-
-                .slider-labels {
-                    display: flex;
-                    justify-content: space-between;
-                    margin-top: 0.5rem;
-                    position: relative;
-                }
-
-                .slider-label {
-                    font-size: 0.7rem;
-                    color: #6c757d;
-                    text-align: center;
-                    flex: 1;
-                    cursor: pointer;
-                    transition: color 0.2s ease;
-                    user-select: none;
-                }
-
-                .slider-label.active {
-                    color: #667eea;
-                    font-weight: 600;
-                }
-
-                .slider-ticks {
-                    position: absolute;
-                    top: 50%;
-                    left: 0;
-                    right: 0;
-                    height: 6px;
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    transform: translateY(-50%);
-                    pointer-events: none;
-                    z-index: 1;
-                }
-
-                .slider-tick {
-                    width: 6px;
-                    height: 6px;
-                    background: #dee2e6;
-                    border-radius: 50%;
-                    border: 1px solid white;
-                    transition: background-color 0.2s ease;
-                }
-
-                .slider-tick.active {
-                    background: #667eea;
-                }
-
-                /* Slider mode colors */
-                .extraction-mode-slider[data-mode="basic"] {
-                    background: linear-gradient(to right, #28a745 0%, #28a745 33.33%, #e9ecef 33.33%, #e9ecef 100%);
-                }
-
-                .extraction-mode-slider[data-mode="basic"]::-webkit-slider-thumb {
-                    background: #28a745;
-                }
-
-                .extraction-mode-slider[data-mode="basic"]::-moz-range-thumb {
-                    background: #28a745;
-                }
-
-                .extraction-mode-slider[data-mode="content"] {
-                    background: linear-gradient(to right, #28a745 0%, #28a745 33.33%, #667eea 33.33%, #667eea 66.66%, #e9ecef 66.66%, #e9ecef 100%);
-                }
-
-                .extraction-mode-slider[data-mode="content"]::-webkit-slider-thumb {
-                    background: #667eea;
-                }
-
-                .extraction-mode-slider[data-mode="content"]::-moz-range-thumb {
-                    background: #667eea;
-                }
-
-                .extraction-mode-slider[data-mode="actions"] {
-                    background: linear-gradient(to right, #28a745 0%, #28a745 33.33%, #667eea 33.33%, #667eea 66.66%, #fd7e14 66.66%, #fd7e14 100%);
-                }
-
-                .extraction-mode-slider[data-mode="actions"]::-webkit-slider-thumb {
-                    background: #fd7e14;
-                }
-
-                .extraction-mode-slider[data-mode="actions"]::-moz-range-thumb {
-                    background: #fd7e14;
-                }
-
-                .extraction-mode-slider[data-mode="full"] {
-                    background: linear-gradient(to right, #28a745 0%, #28a745 25%, #667eea 25%, #667eea 50%, #fd7e14 50%, #fd7e14 75%, #dc3545 75%, #dc3545 100%);
-                }
-
-                .extraction-mode-slider[data-mode="full"]::-webkit-slider-thumb {
-                    background: #dc3545;
-                }
-
-                .extraction-mode-slider[data-mode="full"]::-moz-range-thumb {
-                    background: #dc3545;
-                }
-            `;
-            document.head.appendChild(style);
-        }
     }
 }
