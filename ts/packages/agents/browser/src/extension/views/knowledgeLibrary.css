@@ -1904,6 +1904,114 @@ body {
   padding: 0.25rem 0.5rem;
 }
 
+/* Recent Items Display */
+.recent-items-header {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.recent-items-list {
+  max-height: 120px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.recent-item {
+  display: flex;
+  align-items: center;
+  padding: 0.375rem 0.5rem;
+  font-size: 0.8rem;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: var(--border-radius-sm);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+}
+
+.recent-item:hover {
+  background: rgba(255, 255, 255, 0.8);
+  transform: translateX(2px);
+}
+
+.recent-item .item-icon {
+  margin-right: 0.5rem;
+  opacity: 0.7;
+  font-size: 0.75rem;
+}
+
+.recent-item .item-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.recent-item .item-name {
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.recent-item .item-meta {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  margin-top: 0.125rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.recent-item .item-date {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  margin-left: 0.5rem;
+}
+
+.recent-item.entity-item .item-icon {
+  color: #17a2b8;
+}
+
+.recent-item.topic-item .item-icon {
+  color: #6f42c1;
+}
+
+.recent-item.action-item .item-icon {
+  color: #fd7e14;
+}
+
+.recent-items-list .empty-message {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  padding: 1rem;
+  font-style: italic;
+}
+
+/* Scrollbar styling for recent items */
+.recent-items-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.recent-items-list::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 2px;
+}
+
+.recent-items-list::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 2px;
+}
+
+.recent-items-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
 /* Action Breakdown */
 .action-breakdown {
   display: flex;

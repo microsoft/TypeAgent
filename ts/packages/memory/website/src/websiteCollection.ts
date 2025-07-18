@@ -823,10 +823,6 @@ export class WebsiteCollection
         dirPath: string,
         baseFileName: string,
     ): Promise<void> {
-        console.log(`[WebsiteCollection] writeToFile called: ${dirPath}/${baseFileName} (${this.messages.length} messages)`);
-        
-         console.trace("Call stack to [WebsiteCollection] writeToFile");
-         
         const data = await this.serialize();
         
         // Create model metadata with correct embedding size to prevent size 0 issue

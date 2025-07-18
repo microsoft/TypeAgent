@@ -2597,18 +2597,31 @@ export async function getAnalyticsData(
         let totalSites = 0;
         let totalBookmarks = 0;
         let totalHistory = 0;
+        let totalActions = 0;
 
         if (websiteCollection) {
             const websites = websiteCollection.messages.getAll();
             totalSites = websites.length;
 
-            // Count bookmarks vs history
+            // Count bookmarks vs history and total actions
             websites.forEach((site) => {
                 const metadata = site.metadata as website.WebsiteDocPartMeta;
                 if (metadata?.bookmarkDate) {
                     totalBookmarks++;
                 } else {
                     totalHistory++;
+                }
+
+                // Count actions in this site's knowledge
+                const knowledge = site.getKnowledge();
+                if (knowledge) {
+                    const actions =
+                        (knowledge as any).actions ||
+                        (knowledge as any).detectedActions ||
+                        [];
+                    if (Array.isArray(actions)) {
+                        totalActions += actions.length;
+                    }
                 }
             });
         }
@@ -2634,7 +2647,7 @@ export async function getAnalyticsData(
                 },
                 totalEntities: knowledgeStats.totalEntities || 0,
                 totalTopics: knowledgeStats.topEntityTypes?.length || 0,
-                totalActions: 0, // Actions not tracked in current schema
+                totalActions: totalActions,
                 totalRelationships: knowledgeStats.totalRelationships || 0,
                 recentItems: knowledgeStats.recentActivity || [],
                 recentEntities: recentKnowledgeItems.entities || [],
