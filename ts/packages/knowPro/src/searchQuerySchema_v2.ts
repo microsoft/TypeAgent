@@ -21,7 +21,7 @@ export type EntityTerm = {
     // the specific types of the entity such as "book", "movie", "song", "speaker", "person", "artist", "animal", "instrument", "school", "room", "museum", "food" etc.
     // Do not include generic types such as: "entity", "object", "thing", "concept" etc.
     // An entity can have multiple types; entity types should be single words
-    type: string[];
+    type?: string[];
     // Facet terms search for properties or attributes of the entity.
     // Eg: color(blue), profession(writer), author(*), aunt(Agatha), weight(4kg), phoneNumber(...), title(*) etc.
     facets?: FacetTerm[];
@@ -51,6 +51,12 @@ export type ActionTerm = {
     isInformational: boolean;
 };
 
+export type ScopeFilter = {
+    searchTerms?: string[] | undefined;
+    // Use only if request explicitly asks for time range, particular year, month etc.
+    timeRange?: DateTimeRange | undefined; // in this time range
+};
+
 //
 // Search a search engine using filters:
 // entitySearchTerms cannot contain entities already in actionSearchTerms
@@ -63,8 +69,9 @@ export type SearchFilter = {
     // - Phrases like 'email address' or 'first name' are a single term
     // - use empty searchTerms array when use asks for summaries
     searchTerms?: string[];
-    // Use only if request explicitly asks for time range, particular year, month etc.
-    timeRange?: DateTimeRange | undefined; // in this time range
+    // Use to limit matches to particular sub-set of a conversation, document, etc
+    // E.g. if the user request specifies a particular section or context, use scopeSubQuery to limit the search.
+    scopeSubQuery?: ScopeFilter | undefined;
 };
 
 export type SearchExpr = {
