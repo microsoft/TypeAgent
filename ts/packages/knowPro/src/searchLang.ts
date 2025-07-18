@@ -24,6 +24,7 @@ import {
     SearchQueryTranslator,
 } from "./searchQueryTranslator.js";
 import * as querySchema from "./searchQuerySchema.js";
+import * as querySchema2 from "./searchQuerySchema_v2.js";
 import { PropertyTermSet } from "./collections.js";
 import { dateRangeFromDateTimeRange } from "./common.js";
 import { PropertyNames } from "./propertyIndex.js";
@@ -933,6 +934,83 @@ class SearchQueryCompiler {
         // isEntityTermArray checks for wildcards etc
         return isEntityTermArray(actionTerm.actorEntities);
     }
+
+    /**
+     * Experimental V2
+     */
+
+    public compileQuery2(query: querySchema2.SearchQuery): SearchQueryExpr[] {
+        // Clone the query so we can modify it
+        query = { ...query };
+        const queryExpressions: SearchQueryExpr[] = [];
+        for (const searchExpr of query.searchExpressions) {
+            queryExpressions.push(this.compileSearchExpr2(searchExpr));
+        }
+        return queryExpressions;
+    }
+
+    public compileSearchExpr2(
+        searchExpr: querySchema2.SearchExpr,
+    ): SearchQueryExpr {
+        const queryExpr: SearchQueryExpr = {
+            selectExpressions: [],
+        };
+        if (searchExpr.filters) {
+            for (const filter of searchExpr.filters) {
+                queryExpr.selectExpressions.push(
+                    this.compileSearchFilter2(filter),
+                );
+            }
+        }
+        queryExpr.rawQuery = searchExpr.rewrittenQuery;
+        return queryExpr;
+    }
+
+    public compileSearchFilter2(
+        filter: querySchema2.SearchFilter,
+    ): SearchSelectExpr {
+        let searchTermGroup = this.compileTermGroup(filter);
+        let when = this.compileWhen(filter);
+        if (filter.scopeSubQuery !== undefined) {
+            when = this.compileScopeFilter(filter.scopeSubQuery, when);
+        }
+        return {
+            searchTermGroup,
+            when,
+        };
+    }
+
+    private compileScopeFilter(
+        filter: querySchema2.ScopeFilter,
+        when: WhenFilter | undefined,
+    ): WhenFilter | undefined {
+        when ??= {};
+        if (filter.timeRange) {
+            when.dateRange = dateRangeFromDateTimeRange(filter.timeRange);
+        }
+        if (filter.searchTerms !== undefined && filter.searchTerms.length > 0) {
+            when.tags ??= [];
+            when.tags.push(...filter.searchTerms);
+        }
+        return when;
+    }
+}
+
+// Experimental: explicit NLP to scope expressions
+export function compileSearchQuery2(
+    conversation: IConversation,
+    query: querySchema2.SearchQuery,
+    options?: LanguageQueryCompileOptions,
+    langSearchFilter?: LanguageSearchFilter,
+): SearchQueryExpr[] {
+    const queryBuilder = new SearchQueryCompiler(
+        conversation,
+        options,
+        langSearchFilter,
+    );
+    const searchQueryExprs: SearchQueryExpr[] =
+        queryBuilder.compileQuery2(query);
+    return searchQueryExprs;
 }
 
 const Wildcard = "*";
