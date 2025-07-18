@@ -63,6 +63,7 @@ const sharedScripts = {
     "views/pdfView": "views/pdfView.ts",
     uiEventsDispatcher: "uiEventsDispatcher.ts",
     "sites/paleobiodb": "sites/paleobiodb.ts",
+    "offscreen/contentProcessor": "offscreen/contentProcessor.ts",
 };
 
 const electronOnlyScripts = {
@@ -169,6 +170,11 @@ copyFileSync(
 copyFileSync(
     `${srcDir}/views/knowledgeLibrary.css`,
     `${chromeOutDir}/views/knowledgeLibrary.css`,
+);
+mkdirSync(`${chromeOutDir}/offscreen`, { recursive: true });
+copyFileSync(
+    `${srcDir}/offscreen/offscreen.html`,
+    `${chromeOutDir}/offscreen/offscreen.html`,
 );
 mkdirSync(`${chromeOutDir}/sites`, { recursive: true });
 copyFileSync(

@@ -5,6 +5,7 @@
     "incremental": true,
     "rootDir": ".",
     "outDir": "../../dist/common",
+    "lib": ["DOM", "DOM.Iterable", "ES2020"],
     "types": ["node"]
   },
   "include": ["./**/*"]

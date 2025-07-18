@@ -19,11 +19,33 @@ import * as kpLib from "knowledge-processor";
 import { openai as ai } from "aiclient";
 import registerDebug from "debug";
 import * as path from "path";
-import {
-    processHtmlBatch,
-    ProcessingOptions,
-    WebsiteData,
-} from "./htmlProcessor.mjs";
+
+/**
+ * Helper function to log structured progress for reliable parsing
+ */
+function logStructuredProgress(
+    current: number,
+    total: number,
+    description: string,
+    phase: string = "processing",
+    displayProgress?: (message: string) => void,
+) {
+    const progressData = {
+        type: "PROGRESS_UPDATE",
+        current: current,
+        total: total,
+        description: description,
+        phase: phase,
+        timestamp: Date.now(),
+    };
+
+    const progressMessage = `PROGRESS_JSON:${JSON.stringify(progressData)}`;
+
+    if (displayProgress) {
+        displayProgress(progressMessage);
+    }
+}
+import { WebsiteData } from "./htmlUtils.mjs";
 import {
     enumerateHtmlFiles,
     readHtmlFile,
@@ -39,6 +61,12 @@ import {
     AIModelRequiredError,
 } from "website-memory";
 import { BrowserKnowledgeExtractor } from "./knowledge/browserKnowledgeExtractor.mjs";
+
+import {
+    createContentExtractor,
+    logProcessingStatus,
+    processHtmlFolder,
+} from "./websiteImport.mjs";
 
 const debug = registerDebug("typeagent:browser:website-memory");
 
@@ -478,9 +506,13 @@ export async function importWebsiteDataFromSession(
     displayProgress?: (message: string) => void,
 ) {
     try {
-        if (displayProgress) {
-            displayProgress("Importing website data...");
-        }
+        logStructuredProgress(
+            0,
+            0,
+            "Starting website data import",
+            "initializing",
+            displayProgress,
+        );
 
         const {
             source,
@@ -507,20 +539,25 @@ export async function importWebsiteDataFromSession(
                     : defaultPaths.edge.history;
         }
 
-        // Enhanced progress callback that uses both debug logging and display callback
+        // Enhanced progress callback that uses structured JSON logging
         const progressCallback = (
             current: number,
             total: number,
             item: string,
         ) => {
-            const message = `Importing... ${current}/${total}: ${item.substring(0, 50)}...`;
-            debug(message);
-            if (displayProgress) {
-                displayProgress(message);
-            }
+            logStructuredProgress(
+                current,
+                total,
+                item,
+                "processing",
+                displayProgress,
+            );
         };
 
         const extractionMode = mode || "basic";
+
+        // Log processing status for debugging
+        logProcessingStatus(context);
 
         // Build options object with only defined values
         const importOptions: any = {};
@@ -602,11 +639,13 @@ export async function importWebsiteDataFromSession(
 
         // Enhance with HTML content fetching and AI analysis for non-basic modes
         if (extractionMode !== "basic" && websites.length > 0) {
-            if (displayProgress) {
-                displayProgress(
-                    "Fetching webpage content and analyzing with AI...",
-                );
-            }
+            logStructuredProgress(
+                0,
+                websites.length,
+                "Starting content fetching and AI analysis",
+                "extracting",
+                displayProgress,
+            );
 
             // Create inputs that will trigger HTML fetching in ContentExtractor
             const contentInputs: ExtractionInput[] = websites.map((site) => ({
@@ -620,26 +659,33 @@ export async function importWebsiteDataFromSession(
 
             try {
                 // Create ContentExtractor with AI model
-                const extractor = new website.ContentExtractor({
-                    mode: extractionMode,
-                    knowledgeExtractor: importOptions.knowledgeExtractor,
-                    timeout: importOptions.contentTimeout || 10000,
-                    maxConcurrentExtractions: importOptions.maxConcurrent || 5,
-                });
+                const extractor = createContentExtractor(
+                    {
+                        mode: extractionMode,
+                        knowledgeExtractor: importOptions.knowledgeExtractor,
+                        timeout: importOptions.contentTimeout || 10000,
+                        maxConcurrentExtractions:
+                            importOptions.maxConcurrent || 5,
+                    },
+                    context,
+                );
 
                 // Use BatchProcessor for efficient processing
                 const batchProcessor = new website.BatchProcessor(extractor);
 
                 const enhancedProgressCallback = (progress: BatchProgress) => {
-                    if (displayProgress) {
-                        const phase =
-                            progress.processed <= progress.total * 0.6
-                                ? "Fetching content"
-                                : "Analyzing with AI";
-                        displayProgress(
-                            `${phase}: ${progress.processed}/${progress.total} (${progress.percentage}%)`,
-                        );
-                    }
+                    const phase =
+                        progress.processed <= progress.total * 0.6
+                            ? "fetching"
+                            : "extracting";
+                    const description = `${progress.processed <= progress.total * 0.6 ? "Fetching content" : "Analyzing with AI"} (${progress.percentage}%)`;
+                    logStructuredProgress(
+                        progress.processed,
+                        progress.total,
+                        description,
+                        phase,
+                        displayProgress,
+                    );
                 };
 
                 const enhancedResults = await batchProcessor.processBatch(
@@ -663,8 +709,12 @@ export async function importWebsiteDataFromSession(
                 });
 
                 if (displayProgress) {
-                    displayProgress(
+                    logStructuredProgress(
+                        enhancedResults.length,
+                        enhancedResults.length,
                         `Enhanced ${enhancedResults.length} items with ${extractionMode} mode extraction`,
+                        "complete",
+                        displayProgress,
                     );
                 }
             } catch (error) {
@@ -766,9 +816,13 @@ export async function importHtmlFolderFromSession(
     const startTime = Date.now();
 
     try {
-        if (displayProgress) {
-            displayProgress("Validating folder and enumerating HTML files...");
-        }
+        logStructuredProgress(
+            0,
+            0,
+            "Validating folder and enumerating HTML files",
+            "initializing",
+            displayProgress,
+        );
 
         const { folderPath, options = {}, importId } = parameters;
         const errors: any[] = [];
@@ -776,24 +830,38 @@ export async function importHtmlFolderFromSession(
 
         const extractionMode = options.mode || "basic";
 
+        // Initialize import options for folder processing
+        let importOptions: any = {};
+
         // For AI-enabled modes, validate AI availability before starting import
         if (extractionMode !== "basic") {
             try {
-                const extractor = new BrowserKnowledgeExtractor(context);
-                // This will throw AIModelRequiredError if AI model is not available
-                await extractor.extractKnowledge(
-                    {
-                        url: "test://validation",
-                        title: "Validation Test",
-                        textContent: "test content for validation",
-                        source: "import",
-                    },
-                    extractionMode,
+                // Create and validate the knowledge extractor (same logic as BrowserKnowledgeExtractor)
+                const apiSettings = ai.azureApiSettingsFromEnv(
+                    ai.ModelType.Chat,
                 );
+                const languageModel = ai.createChatModel(apiSettings);
+                const knowledgeExtractor =
+                    kpLib.conversation.createKnowledgeExtractor(languageModel);
+
+                // Validate that the knowledge extractor works by testing extraction
+                const testResult = await knowledgeExtractor.extract(
+                    "test content for validation",
+                );
+                if (!testResult) {
+                    throw new Error("Knowledge extractor validation failed");
+                }
+
+                // Store the validated knowledge extractor in import options
+                importOptions.knowledgeExtractor = knowledgeExtractor;
             } catch (error) {
                 if (error instanceof AIModelRequiredError) {
                     throw new Error(
                         `Cannot import HTML folder with ${extractionMode} mode: ${error.message}`,
+                    );
+                } else {
+                    throw new Error(
+                        `AI model initialization failed for ${extractionMode} mode: ${(error as Error).message}. Please check AI model configuration or use 'basic' mode.`,
                     );
                 }
             }
@@ -821,11 +889,22 @@ export async function importHtmlFolderFromSession(
             throw new Error(`No HTML files found in folder: ${folderPath}`);
         }
 
-        if (displayProgress) {
-            displayProgress(
-                `Found ${htmlFiles.length} HTML files. Processing...`,
-            );
-        }
+        logStructuredProgress(
+            0,
+            htmlFiles.length,
+            `Found ${htmlFiles.length} HTML files`,
+            "initializing",
+            displayProgress,
+        );
+
+        // Send initial progress update with total count
+        logStructuredProgress(
+            0,
+            htmlFiles.length,
+            "Starting import",
+            "processing",
+            displayProgress,
+        );
 
         // Ensure we have a website collection
         if (!context.agentContext.websiteCollection) {
@@ -837,17 +916,18 @@ export async function importHtmlFolderFromSession(
         const batches = createFileBatches(htmlFiles, 10);
         const websiteDataResults: WebsiteData[] = [];
 
+        let totalProcessedFiles = 0;
+
         for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
             const batch = batches[batchIndex];
 
-            if (displayProgress) {
-                const progressPercent = Math.round(
-                    (batchIndex / batches.length) * 100,
-                );
-                displayProgress(
-                    `Processing batch ${batchIndex + 1}/${batches.length} (${progressPercent}%)`,
-                );
-            }
+            logStructuredProgress(
+                totalProcessedFiles,
+                htmlFiles.length,
+                `Processing batch ${batchIndex + 1}/${batches.length}`,
+                "processing",
+                displayProgress,
+            );
 
             // Read and prepare batch data
             const batchData = [];
@@ -871,27 +951,100 @@ export async function importHtmlFolderFromSession(
                 }
             }
 
-            // Process the batch using shared HTML processing
+            // Process the batch using enhanced HTML processing for consistency
             try {
-                const processingOptions: ProcessingOptions = {
-                    mode: extractionMode,
-                    maxConcurrent: 5,
-                };
+                const batchResults = [];
 
-                const batchResults = await processHtmlBatch(
-                    batchData,
-                    processingOptions,
-                    (current, total, item) => {
-                        if (displayProgress && current % 2 === 0) {
+                for (const item of batchData) {
+                    try {
+                        if (displayProgress) {
                             displayProgress(
-                                `Processing: ${path.basename(item)}`,
+                                `Processing: ${path.basename(item.identifier)}`,
                             );
                         }
-                    },
-                );
+
+                        // Try HTML processing first
+                        const enhancedResult = await processHtmlFolder(
+                            item.html,
+                            item.identifier,
+                            context,
+                        );
+
+                        // Create extraction input with processed content
+                        const input: ExtractionInput = {
+                            url: `file://${item.identifier}`,
+                            title: item.metadata.filename,
+                            htmlContent: enhancedResult.html,
+                            textContent: enhancedResult.text,
+                            source: "import",
+                        };
+
+                        // Use extractor for consistent processing
+                        const extractor = createContentExtractor(
+                            {
+                                mode: extractionMode,
+                                knowledgeExtractor:
+                                    importOptions.knowledgeExtractor,
+                            },
+                            context,
+                        );
+
+                        const extractionResult = await extractor.extract(
+                            input,
+                            extractionMode,
+                        );
+
+                        // Convert to WebsiteData format (simplified)
+                        const websiteData: WebsiteData = {
+                            url: input.url,
+                            title: input.title,
+                            content: enhancedResult.text,
+                            domain: "file",
+                            metadata: {
+                                websiteSource: "file_import",
+                                url: input.url,
+                                title: input.title,
+                                domain: "file",
+                                pageType: "document",
+                                importDate: new Date().toISOString(),
+                                lastModified:
+                                    item.metadata.lastModified || new Date(),
+                                filename: item.metadata.filename,
+                                filePath: item.identifier,
+                                processingMethod:
+                                    enhancedResult.processingMethod,
+                            },
+                            visitCount: 1,
+                            lastVisited: new Date(),
+                            extractionResult: extractionResult,
+                        };
+
+                        batchResults.push(websiteData);
+                    } catch (error: any) {
+                        errors.push({
+                            type: "file_processing",
+                            message: `Failed to process ${item.identifier}: ${error.message}`,
+                            timestamp: Date.now(),
+                        });
+                        debug(
+                            `Error processing file ${item.identifier}:`,
+                            error,
+                        );
+                    }
+                }
 
                 websiteDataResults.push(...batchResults);
                 successCount += batchResults.length;
+                totalProcessedFiles += batch.length;
+
+                // Update progress after processing batch
+                logStructuredProgress(
+                    totalProcessedFiles,
+                    htmlFiles.length,
+                    `Completed batch ${batchIndex + 1}/${batches.length}`,
+                    "processing",
+                    displayProgress,
+                );
             } catch (error: any) {
                 errors.push({
                     type: "batch_processing",
@@ -944,11 +1097,13 @@ export async function importHtmlFolderFromSession(
 
         const duration = Date.now() - startTime;
 
-        if (displayProgress) {
-            displayProgress(
-                `Folder import complete: ${successCount}/${htmlFiles.length} files processed successfully`,
-            );
-        }
+        logStructuredProgress(
+            htmlFiles.length,
+            htmlFiles.length,
+            `Import complete - ${successCount} successful`,
+            "complete",
+            displayProgress,
+        );
 
         return {
             success: errors.length === 0,
@@ -1036,21 +1191,44 @@ export async function importHtmlFolder(
  * Helper function to convert WebsiteData to Website format for collection storage
  */
 function convertWebsiteDataToWebsite(data: WebsiteData): any {
-    return {
+    // Create a proper WebsiteVisitInfo object for WebsiteMeta
+    const visitInfo: website.WebsiteVisitInfo = {
         url: data.url,
         title: data.title,
-        content: data.content,
         domain: data.domain,
-        metadata: {
-            ...data.metadata,
-            url: data.url,
-            title: data.title,
-            domain: data.domain,
-        },
-        visitCount: data.visitCount,
-        lastVisited: data.lastVisited,
-        extractionResult: data.extractionResult,
+        source: data.metadata.websiteSource as
+            | "bookmark"
+            | "history"
+            | "reading_list",
+        visitDate: data.lastVisited
+            ? data.lastVisited.toISOString()
+            : new Date().toISOString(),
+        description: data.content.substring(0, 500), // Use first 500 chars as description
+        visitCount: data.visitCount || 1,
+        lastVisitTime: data.lastVisited
+            ? data.lastVisited.toISOString()
+            : new Date().toISOString(),
     };
+
+    // Add optional properties only if they exist
+    if (data.metadata.pageType) {
+        visitInfo.pageType = data.metadata.pageType;
+    }
+
+    // Create a proper WebsiteMeta instance
+    const websiteMeta = new website.WebsiteMeta(visitInfo);
+
+    // Create and return a Website instance using the proper constructor
+    const websiteInstance = new website.Website(
+        websiteMeta,
+        data.content,
+        [], // tags
+        data.extractionResult?.knowledge, // knowledge from extraction
+        undefined, // deletionInfo
+        false, // isNew = false since content is already processed
+    );
+
+    return websiteInstance;
 }
 
 /**

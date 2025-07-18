@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { getPageHTML } from "../htmlProcessing";
+import { getPageHTML } from "../htmlUtils";
 import { getRecordingState, setLastScreenshot, setLastPageHtml } from "./index";
 
 /**

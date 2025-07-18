@@ -35,7 +35,7 @@ export class ContentExtractor {
         // Initialize HTML fetcher
         this.htmlFetcher = new HtmlFetcher();
 
-        if (inputConfig) {
+        if (inputConfig && inputConfig?.mode) {
             // Create a clean config object with only defined values
             const cleanConfig: ExtractionConfig = {
                 mode: inputConfig.mode,
@@ -258,6 +258,7 @@ export class ContentExtractor {
         const pageContent = this.extractBasicPageContent(
             htmlContent,
             content.title,
+            content.textContent,
         );
 
         // Add detected actions if this mode supports them
@@ -457,7 +458,7 @@ export class ContentExtractor {
             extractsActions: config.extractsActions,
             extractsRelationships: config.extractsRelationships,
             knowledgeStrategy: config.knowledgeStrategy,
-            requiresAI: config.usesAI, // Same as usesAI - no fallbacks
+            requiresAI: config.usesAI,
         };
     }
 
@@ -475,7 +476,11 @@ export class ContentExtractor {
     /**
      * Basic HTML content extraction using proper HTML parsing
      */
-    private extractBasicPageContent(html: string, title: string): any {
+    private extractBasicPageContent(
+        html: string,
+        title: string,
+        content: string | undefined,
+    ): any {
         try {
             // Use cheerio for proper HTML parsing
             const $ = cheerio.load(html);
@@ -489,11 +494,13 @@ export class ContentExtractor {
                 $("title").text().trim() ||
                 $("h1").first().text().trim();
 
-            // Extract main content from body or fall back to entire document
-            const bodyText = $("body").text() || $.text();
+            let mainContent = content;
 
-            // Clean up whitespace
-            const mainContent = bodyText.replace(/\s+/g, " ").trim();
+            if (!mainContent) {
+                // Extract main content from body or fall back to entire document
+                const bodyText = $("body").text() || $.text();
+                mainContent = bodyText.replace(/\s+/g, " ").trim();
+            }
 
             // Extract headings
             const headings: string[] = [];
@@ -509,15 +516,13 @@ export class ContentExtractor {
             const readingTime = Math.max(1, Math.round(words / 200)); // ~200 words per minute
 
             return {
-                pageContent: {
-                    title: extractedTitle,
-                    mainContent,
-                    headings,
-                    wordCount: words,
-                    readingTime,
-                    images: [], // Basic extraction doesn't include images
-                    links: [], // Basic extraction doesn't include links
-                },
+                title: extractedTitle,
+                mainContent,
+                headings,
+                wordCount: words,
+                readingTime,
+                images: [], // Basic extraction doesn't include images
+                links: [], // Basic extraction doesn't include links
             };
         } catch (error) {
             console.warn(
@@ -534,15 +539,13 @@ export class ContentExtractor {
             const words = textContent.split(/\s+/).length;
 
             return {
-                pageContent: {
-                    title: title || "Untitled",
-                    mainContent: textContent,
-                    headings: [],
-                    wordCount: words,
-                    readingTime: Math.max(1, Math.round(words / 200)),
-                    images: [],
-                    links: [],
-                },
+                title: title || "Untitled",
+                mainContent: textContent,
+                headings: [],
+                wordCount: words,
+                readingTime: Math.max(1, Math.round(words / 200)),
+                images: [],
+                links: [],
             };
         }
     }
