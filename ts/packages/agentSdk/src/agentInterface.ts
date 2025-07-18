@@ -9,6 +9,16 @@ import { Profiler } from "./profiler.js";
 import { TemplateSchema } from "./templateInput.js";
 
 //==============================================================================
+// Indexing Service Types
+//==============================================================================
+export type IndexingServiceConfig = {
+    serviceScript: string;
+    description?: string;
+};
+
+export type IndexingServicesManifest = Record<string, IndexingServiceConfig>;
+
+//==============================================================================
 // Manifest
 //==============================================================================
 export type AppAgentManifest = {
@@ -17,6 +27,7 @@ export type AppAgentManifest = {
     commandDefaultEnabled?: boolean;
     localView?: boolean; // whether the agent serve a local view, default is false
     sharedLocalView?: string[]; // list of agents to share the local view with, default is none
+    indexingServices?: IndexingServicesManifest;
 } & ActionManifest;
 
 export type SchemaTypeNames = {
