@@ -36,7 +36,88 @@ function setupChromeApiMocks() {
         (path) => `chrome-extension://abcdefgh/${path}`,
     );
     chrome.runtime.getManifest.mockReturnValue({ version: "1.0.0" });
-    chrome.runtime.sendMessage.mockImplementation(() => Promise.resolve({}));
+    chrome.runtime.sendMessage.mockImplementation((message) => {
+        // Handle offscreen document messages
+        if (message && message.target === "offscreen") {
+            if (message.type === "ping") {
+                return Promise.resolve({
+                    success: true,
+                    messageId: message.messageId || "test-message-id",
+                });
+            }
+            if (message.type === "downloadContent") {
+                const url = message.url || "https://example.com";
+
+                // Check for invalid URLs to simulate realistic behavior
+                try {
+                    new URL(url);
+                } catch (error) {
+                    return Promise.resolve({
+                        success: false,
+                        error: `Invalid URL: ${url}`,
+                        messageId: message.messageId || "test-message-id",
+                    });
+                }
+
+                const mockHtml = `<html><head><title>Test Page</title></head><body><h1>Test Content</h1><p>Mock content from ${url}</p></body></html>`;
+                const cleanedHtml = mockHtml.replace(
+                    /<script[^>]*>.*?<\/script>/gi,
+                    "",
+                );
+                const textContent = mockHtml
+                    .replace(/<[^>]*>/g, " ")
+                    .replace(/\s+/g, " ")
+                    .trim();
+
+                return Promise.resolve({
+                    success: true,
+                    data: {
+                        processedHtml: cleanedHtml,
+                        textContent: textContent,
+                        metadata: {
+                            finalUrl: url,
+                            processingMethod: "offscreen",
+                            processingTime: 100,
+                            originalSize: mockHtml.length,
+                            processedSize: cleanedHtml.length,
+                            reductionRatio:
+                                cleanedHtml.length / mockHtml.length,
+                            timestamp: Date.now(),
+                            title: "Test Page",
+                        },
+                    },
+                    messageId: message.messageId || "test-message-id",
+                });
+            }
+            if (message.type === "processHtmlContent") {
+                const html = message.htmlContent || "";
+                const cleanedHtml = html.replace(
+                    /<script[^>]*>.*?<\/script>/gi,
+                    "",
+                );
+                const textContent = html
+                    .replace(/<[^>]*>/g, " ")
+                    .replace(/\s+/g, " ")
+                    .trim();
+
+                return Promise.resolve({
+                    success: true,
+                    data: {
+                        html: cleanedHtml,
+                        text: textContent,
+                    },
+                    messageId: message.messageId || "test-message-id",
+                });
+            }
+            // Default success response for other offscreen messages
+            return Promise.resolve({
+                success: true,
+                messageId: message.messageId || "test-message-id",
+            });
+        }
+        return Promise.resolve({});
+    });
+    chrome.runtime.getContexts.mockImplementation(() => Promise.resolve([]));
     // chrome.runtime.id = "test-extension-id";
 
     chrome.runtime.connect.mockImplementation(() => ({
@@ -140,6 +221,13 @@ function setupChromeApiMocks() {
     chrome.windows.update.mockImplementation(() => Promise.resolve({ id: 1 }));
     chrome.windows.remove.mockImplementation(() => Promise.resolve());
     // chrome.windows.WINDOW_ID_NONE = -1;
+
+    // Setup offscreen API
+    chrome.offscreen.createDocument.mockImplementation(() => Promise.resolve());
+    chrome.offscreen.closeDocument.mockImplementation(() => Promise.resolve());
+    chrome.offscreen.hasDocument.mockImplementation(() =>
+        Promise.resolve(false),
+    );
 }
 
 module.exports = { setupChromeApiMocks };

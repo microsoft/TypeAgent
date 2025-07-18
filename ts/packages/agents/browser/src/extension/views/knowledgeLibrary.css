@@ -3434,3 +3434,459 @@ body {
   margin-bottom: 1.5rem;
   opacity: 0.8;
 }
+
+/* Website Import UI Styles */
+/* Import Options */
+.import-option {
+  border: 1px solid #e9ecef;
+  border-radius: 0.375rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.import-option:hover {
+  border-color: #667eea;
+  background-color: #f8f9ff;
+}
+
+.import-option.selected {
+  border-color: #667eea;
+  background-color: #f0f2ff;
+  box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+}
+
+/* File Drop Zone */
+.file-drop-zone {
+  position: relative;
+  border: 2px dashed #dee2e6;
+  border-radius: 0.5rem;
+  padding: 2rem;
+  text-align: center;
+  transition: all 0.2s ease;
+  background-color: #f8f9fa;
+}
+
+.file-drop-zone:hover {
+  border-color: #667eea;
+  background-color: #f0f2ff;
+}
+
+.file-drop-zone.drag-over {
+  border-color: #667eea;
+  background-color: #e3f2fd;
+  border-style: solid;
+  transform: scale(1.02);
+  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+  transition: all 0.2s ease;
+}
+
+.drop-zone-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(102, 126, 234, 0.1);
+  border-radius: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #667eea;
+}
+
+.overlay-content {
+  text-align: center;
+  color: #667eea;
+}
+
+/* File List */
+.file-list-container {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid #dee2e6;
+  border-radius: 0.375rem;
+}
+
+.file-item {
+  transition: background-color 0.15s ease;
+}
+
+.file-item:hover {
+  background-color: #f8f9fa;
+}
+
+.file-item:last-child {
+  border-bottom: none !important;
+}
+
+/* Import Progress */
+.progress-container {
+  padding: 2rem;
+}
+
+/* Modal Overrides */
+.import-modal .modal-header {
+  border-bottom: none;
+}
+
+.import-modal .form-check-label {
+  cursor: pointer;
+}
+
+.import-modal .collapse .card {
+  border: none;
+  box-shadow: none;
+}
+
+.import-modal .btn-outline-secondary:hover {
+  color: #495057;
+  background-color: #f8f9fa;
+  border-color: #dee2e6;
+}
+
+/* Modal Animations */
+.modal-entering .modal-dialog {
+  animation: modalSlideIn 0.3s ease-out;
+}
+
+.modal-exiting .modal-dialog {
+  animation: modalSlideOut 0.3s ease-in;
+}
+
+@keyframes modalSlideIn {
+  from {
+    transform: translateY(-50px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes modalSlideOut {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(-30px);
+    opacity: 0;
+  }
+}
+
+/* Transition Animations */
+.fade-out {
+  animation: fadeOut 0.3s ease-out forwards;
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Progress Animations */
+.progress-pulse {
+  animation: progressPulse 1.5s infinite;
+}
+
+@keyframes progressPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(102, 126, 234, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(102, 126, 234, 0);
+  }
+}
+
+.status-updating {
+  animation: statusUpdate 0.2s ease;
+}
+
+@keyframes statusUpdate {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* File Item Animations */
+.file-item-enter {
+  animation: fileItemEnter 0.3s ease;
+}
+
+.file-item-exit {
+  animation: fileItemExit 0.3s ease forwards;
+}
+
+@keyframes fileItemEnter {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fileItemExit {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+}
+
+.drop-success {
+  animation: dropSuccess 0.5s ease;
+}
+
+@keyframes dropSuccess {
+  0% {
+    background-color: inherit;
+  }
+  50% {
+    background-color: rgba(40, 167, 69, 0.1);
+  }
+  100% {
+    background-color: inherit;
+  }
+}
+
+/* Extraction Mode Slider Styles */
+.extraction-mode-slider-container {
+  position: relative;
+  margin: 0.5rem 0 1rem 0;
+}
+
+.extraction-mode-slider {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: #e9ecef;
+  outline: none;
+  appearance: none;
+  cursor: pointer;
+  position: relative;
+  z-index: 2;
+}
+
+.extraction-mode-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #667eea;
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+}
+
+.extraction-mode-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.extraction-mode-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #667eea;
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+}
+
+.extraction-mode-slider::-moz-range-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.slider-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.5rem;
+  position: relative;
+}
+
+.slider-label {
+  font-size: 0.7rem;
+  color: #6c757d;
+  text-align: center;
+  flex: 1;
+  cursor: pointer;
+  transition: color 0.2s ease;
+  user-select: none;
+}
+
+.slider-label.active {
+  color: #667eea;
+  font-weight: 600;
+}
+
+.slider-ticks {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transform: translateY(-50%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.slider-tick {
+  width: 6px;
+  height: 6px;
+  background: #dee2e6;
+  border-radius: 50%;
+  border: 1px solid white;
+  transition: background-color 0.2s ease;
+}
+
+.slider-tick.active {
+  background: #667eea;
+}
+
+/* Slider mode colors */
+.extraction-mode-slider[data-mode="basic"] {
+  background: linear-gradient(
+    to right,
+    #28a745 0%,
+    #28a745 33.33%,
+    #e9ecef 33.33%,
+    #e9ecef 100%
+  );
+}
+
+.extraction-mode-slider[data-mode="basic"]::-webkit-slider-thumb {
+  background: #28a745;
+}
+
+.extraction-mode-slider[data-mode="basic"]::-moz-range-thumb {
+  background: #28a745;
+}
+
+.extraction-mode-slider[data-mode="content"] {
+  background: linear-gradient(
+    to right,
+    #28a745 0%,
+    #28a745 33.33%,
+    #667eea 33.33%,
+    #667eea 66.66%,
+    #e9ecef 66.66%,
+    #e9ecef 100%
+  );
+}
+
+.extraction-mode-slider[data-mode="content"]::-webkit-slider-thumb {
+  background: #667eea;
+}
+
+.extraction-mode-slider[data-mode="content"]::-moz-range-thumb {
+  background: #667eea;
+}
+
+.extraction-mode-slider[data-mode="actions"] {
+  background: linear-gradient(
+    to right,
+    #28a745 0%,
+    #28a745 33.33%,
+    #667eea 33.33%,
+    #667eea 66.66%,
+    #fd7e14 66.66%,
+    #fd7e14 100%
+  );
+}
+
+.extraction-mode-slider[data-mode="actions"]::-webkit-slider-thumb {
+  background: #fd7e14;
+}
+
+.extraction-mode-slider[data-mode="actions"]::-moz-range-thumb {
+  background: #fd7e14;
+}
+
+.extraction-mode-slider[data-mode="full"] {
+  background: linear-gradient(
+    to right,
+    #28a745 0%,
+    #28a745 25%,
+    #667eea 25%,
+    #667eea 50%,
+    #fd7e14 50%,
+    #fd7e14 75%,
+    #dc3545 75%,
+    #dc3545 100%
+  );
+}
+
+.extraction-mode-slider[data-mode="full"]::-webkit-slider-thumb {
+  background: #dc3545;
+}
+
+.extraction-mode-slider[data-mode="full"]::-moz-range-thumb {
+  background: #dc3545;
+}
+
+/* Motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .modal-entering .modal-dialog,
+  .modal-exiting .modal-dialog,
+  .fade-out,
+  .fade-in,
+  .progress-pulse,
+  .status-updating,
+  .file-item-enter,
+  .file-item-exit,
+  .drop-success {
+    animation: none !important;
+  }
+
+  .file-drop-zone.drag-over {
+    transform: none !important;
+  }
+
+  .import-option:hover,
+  .file-item:hover {
+    transform: none !important;
+  }
+}

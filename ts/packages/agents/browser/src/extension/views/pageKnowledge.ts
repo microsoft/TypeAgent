@@ -128,7 +128,6 @@ class KnowledgePanel {
         this.setupEventListeners();
         await this.loadCurrentPageInfo();
         await this.loadAutoIndexSetting();
-        await this.loadIndexStats();
         await this.checkConnectionStatus();
         await this.loadFreshKnowledge();
         await this.loadExtractionSettings();
@@ -167,17 +166,29 @@ class KnowledgePanel {
             });
 
         document
-            .getElementById("openSettings")!
-            .addEventListener("click", () => {
-                chromeExtensionService.openOptionsPage();
+            .getElementById("extractionMode")!
+            .addEventListener("input", (e) => {
+                const slider = e.target as HTMLInputElement;
+                const modeMap = ["basic", "content", "actions", "full"];
+                const mode = modeMap[parseInt(slider.value)] as any;
+                slider.setAttribute("data-mode", mode);
+                this.updateExtractionMode(mode);
+                this.updateSliderLabels(parseInt(slider.value));
             });
 
-        document
-            .getElementById("extractionMode")!
-            .addEventListener("change", (e) => {
-                const select = e.target as HTMLSelectElement;
-                this.updateExtractionMode(select.value as any);
+        // Add click handlers for slider labels
+        document.querySelectorAll(".slider-label").forEach((label, index) => {
+            label.addEventListener("click", () => {
+                const slider = document.getElementById(
+                    "extractionMode",
+                ) as HTMLInputElement;
+                const modeMap = ["basic", "content", "actions", "full"];
+                slider.value = index.toString();
+                slider.setAttribute("data-mode", modeMap[index]);
+                this.updateExtractionMode(modeMap[index] as any);
+                this.updateSliderLabels(index);
             });
+        });
 
         EventManager.setupTabListeners(() => {
             this.onTabChange();
@@ -394,7 +405,6 @@ class KnowledgePanel {
 
                 await this.renderKnowledgeResults(this.knowledgeData);
                 this.showExtractionInfo();
-                await this.updateQualityIndicator();
 
                 // Show detailed success notification
                 const entityCount = this.knowledgeData.entities?.length || 0;
@@ -530,9 +540,7 @@ class KnowledgePanel {
 
             // Update all relevant UI components after successful indexing
             await this.refreshPageStatusAfterIndexing();
-            await this.loadIndexStats();
             await this.loadFreshKnowledge(); // Load and display the newly indexed knowledge data
-            await this.updateQualityIndicator();
         } catch (error) {
             console.error("Error indexing page:", error);
 
@@ -896,21 +904,6 @@ class KnowledgePanel {
         });
     }
 
-    private async loadIndexStats() {
-        try {
-            const response = await chromeExtensionService.getIndexStats();
-
-            document.getElementById("totalPages")!.textContent =
-                response.totalPages.toString();
-            document.getElementById("totalEntities")!.textContent =
-                response.totalEntities.toString();
-            document.getElementById("lastIndexed")!.textContent =
-                response.lastIndexed || "Never";
-        } catch (error) {
-            console.error("Error loading index stats:", error);
-        }
-    }
-
     private async loadExtractionSettings() {
         try {
             const settings =
@@ -920,12 +913,19 @@ class KnowledgePanel {
                     ...this.extractionSettings,
                     ...settings,
                 };
-                // Sync with modern dropdown
-                const modernSelect = document.getElementById(
+                // Sync with slider
+                const slider = document.getElementById(
                     "extractionMode",
-                ) as HTMLSelectElement;
-                if (modernSelect && this.extractionSettings.mode) {
-                    modernSelect.value = this.extractionSettings.mode;
+                ) as HTMLInputElement;
+                if (slider && this.extractionSettings.mode) {
+                    const modeMap = ["basic", "content", "actions", "full"];
+                    const value = modeMap.indexOf(this.extractionSettings.mode);
+                    slider.value = value.toString();
+                    slider.setAttribute(
+                        "data-mode",
+                        this.extractionSettings.mode,
+                    );
+                    this.updateSliderLabels(value);
                 }
             }
         } catch (error) {
@@ -1507,6 +1507,27 @@ class KnowledgePanel {
         };
     }
 
+    private updateSliderLabels(activeValue: number) {
+        const labels = document.querySelectorAll(".slider-label");
+        const ticks = document.querySelectorAll(".slider-tick");
+
+        labels.forEach((label, index) => {
+            if (index === activeValue) {
+                label.classList.add("active");
+            } else {
+                label.classList.remove("active");
+            }
+        });
+
+        ticks.forEach((tick, index) => {
+            if (index === activeValue) {
+                tick.classList.add("active");
+            } else {
+                tick.classList.remove("active");
+            }
+        });
+    }
+
     private updateExtractionMode(
         mode: "basic" | "content" | "actions" | "full",
     ) {
@@ -1597,50 +1618,16 @@ class KnowledgePanel {
         `;
 
         (window as any).switchToBasicMode = () => {
-            const modeSelect = document.getElementById(
+            const modeSlider = document.getElementById(
                 "extractionMode",
-            ) as HTMLSelectElement;
-            modeSelect.value = "basic";
+            ) as HTMLInputElement;
+            modeSlider.value = "0";
+            modeSlider.setAttribute("data-mode", "basic");
             this.updateExtractionMode("basic");
+            this.updateSliderLabels(0);
             knowledgeSection.innerHTML = "";
             knowledgeSection.classList.add("d-none");
         };
-    }
-
-    private async updateQualityIndicator() {
-        try {
-            const response = await chromeExtensionService.getPageQualityMetrics(
-                this.currentUrl,
-            );
-
-            const indicator = document.getElementById("qualityIndicator");
-            if (indicator && response.quality) {
-                const quality = response.quality;
-
-                let qualityClass = "bg-secondary";
-                let qualityText = "Unknown";
-
-                if (quality.score >= 0.8) {
-                    qualityClass = "quality-excellent";
-                    qualityText = "Excellent";
-                } else if (quality.score >= 0.6) {
-                    qualityClass = "quality-good";
-                    qualityText = "Good";
-                } else if (quality.score >= 0.4) {
-                    qualityClass = "quality-basic";
-                    qualityText = "Basic";
-                } else {
-                    qualityClass = "quality-poor";
-                    qualityText = "Poor";
-                }
-
-                indicator.className = `badge ${qualityClass}`;
-                indicator.textContent = qualityText;
-                indicator.title = `Quality Score: ${Math.round(quality.score * 100)}% • ${quality.entityCount} entities • ${quality.topicCount} topics`;
-            }
-        } catch (error) {
-            console.warn("Could not get quality metrics:", error);
-        }
     }
 
     private async saveExtractionSettings() {
