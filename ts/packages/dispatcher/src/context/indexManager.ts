@@ -207,8 +207,9 @@ export class IndexManager {
 
                 // Determine which indexing service to use based on source type
                 if (index.source === "website") {
+                    // Use browser agent indexing service for enhanced knowledge extraction
                     serviceRoot = getPackageFilePath(
-                        "./node_modules/website-memory/dist/indexingService.js",
+                        "./node_modules/browser-typeagent/dist/agent/indexing/browserIndexingService.js",
                     );
                 } else {
                     // Default to image memory service

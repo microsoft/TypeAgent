@@ -17,6 +17,7 @@
     "./agent/manifest": "./src/agent/manifest.json",
     "./agent/handlers": "./dist/agent/actionHandler.mjs",
     "./agent/types": "./dist/common/browserControl.mjs",
+    "./agent/indexing": "./dist/agent/indexing/browserIndexingService.js",
     "./contentScriptRpc/types": "./dist/common/contentScriptRpc/types.mjs",
     "./contentScriptRpc/client": "./dist/common/contentScriptRpc/client.mjs"
   },
