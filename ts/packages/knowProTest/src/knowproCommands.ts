@@ -331,7 +331,7 @@ function createLangFilter(
     return when;
 }
 
-function createSearchOptions(request: SearchRequest): kp.SearchOptions {
+export function createSearchOptions(request: SearchRequest): kp.SearchOptions {
     let options = kp.createSearchOptions();
     options.exactMatch = request.exact;
     options.maxMessageMatches = request.messageTopK;
