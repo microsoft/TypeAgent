@@ -27,6 +27,7 @@ export { mergeConcreteEntities as mergeConcreteEntitiesEx } from "./knowledgeMer
 
 export * from "./dateTimeSchema.js";
 export * as querySchema from "./searchQuerySchema.js";
+export * as querySchema2 from "./searchQuerySchema_v2.js";
 export * from "./searchQueryTranslator.js";
 export * from "./searchLang.js";
 

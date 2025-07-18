@@ -11,7 +11,7 @@ import {
     parseTypedArguments,
     ProgressBar,
 } from "interactive-app";
-import { KnowproContext } from "./knowproMemory.js";
+import { KnowproContext, searchDef } from "./knowproMemory.js";
 import { argDestFile, argSourceFile } from "../common.js";
 import * as kp from "knowpro";
 import * as kpTest from "knowpro-test";
@@ -51,6 +51,7 @@ export async function createKnowproTestCommands(
     commands.kpTestHtmlMd = testHtmlMd;
     commands.kpTestHtmlParts = testHtmlParts;
     commands.kpTestChoices = testMultipleChoice;
+    commands.kpTestSearch = testSearchScope;
 
     async function testHtml(args: string[]) {
         const html = await readAllText(args[0]);
@@ -446,6 +447,29 @@ export async function createKnowproTestCommands(
         }
         context.printer.writeError("No conversation loaded");
         return undefined;
+    }
+
+    commands.kpTestSearch.metadata = searchDef();
+    async function testSearchScope(args: string[]) {
+        const namedArgs = parseNamedArguments(args, searchDef());
+        const result = await context.queryTranslator.translate!(
+            namedArgs.query,
+        );
+        context.printer.writeTranslation(result);
+        context.printer.writeHeading("Scope");
+        const resultScope = await context.queryTranslator.translateWithScope!(
+            namedArgs.query,
+        );
+        context.printer.writeTranslation(resultScope);
+        if (result.success && resultScope.success) {
+            const error = kpTest.compareSearchQueryScope(
+                result.data,
+                resultScope.data,
+            );
+            if (error !== undefined) {
+                context.printer.writeError(error);
+            }
+        }
     }
 
     function writeSearchScore(

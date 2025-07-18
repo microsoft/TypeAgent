@@ -26,6 +26,7 @@ export function createKnowledgeModel(nameSuffix?: string) {
     // Use 0 temperature and explicit seed to minimize variation
     model.completionSettings.temperature = 0;
     model.completionSettings.seed = 345;
+    //model.completionSettings.top_p = 0.2;
 
     return model;
 }

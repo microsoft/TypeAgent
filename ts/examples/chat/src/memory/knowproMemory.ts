@@ -85,11 +85,12 @@ export class KnowproContext extends kpTest.KnowproContext {
     }
 }
 
+const DefaultMaxToDisplay = 25;
+
 export async function createKnowproCommands(
     commands: Record<string, CommandHandler>,
 ): Promise<void> {
     const context: KnowproContext = new KnowproContext();
-    const DefaultMaxToDisplay = 25;
     const DefaultKnowledgeTopK = 50;
     const MessageCountLarge = 1000;
     const MessageCountMedium = 500;
@@ -264,19 +265,6 @@ export async function createKnowproCommands(
         }
     }
 
-    function searchDef(base?: CommandMetadata): CommandMetadata {
-        const def = kpTest.searchRequestDef();
-        def.options ??= {};
-        def.options.debug = argBool("Show debug info", false);
-        def.options.distinct = argBool("Show distinct results", true);
-        def.options.maxToDisplay = argNum(
-            "Maximum to display",
-            DefaultMaxToDisplay,
-        );
-        def.options.showKnowledge = argBool("Show knowledge matches", true);
-        def.options.showMessages = argBool("Show message matches", false);
-        return def;
-    }
     commands.kpSearch.metadata = searchDef();
     async function search(args: string[], io: InteractiveIo): Promise<void> {
         if (!ensureConversationLoaded()) {
@@ -989,4 +977,18 @@ export async function createKnowproCommands(
         }
         return obj;
     }
+}
+
+export function searchDef(base?: CommandMetadata): CommandMetadata {
+    const def = kpTest.searchRequestDef();
+    def.options ??= {};
+    def.options.debug = argBool("Show debug info", false);
+    def.options.distinct = argBool("Show distinct results", true);
+    def.options.maxToDisplay = argNum(
+        "Maximum to display",
+        DefaultMaxToDisplay,
+    );
+    def.options.showKnowledge = argBool("Show knowledge matches", true);
+    def.options.showMessages = argBool("Show message matches", false);
+    return def;
 }
