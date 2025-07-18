@@ -490,9 +490,12 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
         const actionTypes = new Set(
             detectedActions
                 .map((a) => a.actionType)
-                .filter((actionType): actionType is string => actionType != null && actionType !== "")
+                .filter(
+                    (actionType): actionType is string =>
+                        actionType != null && actionType !== "",
+                ),
         );
-        
+
         actionTypes.forEach((actionType) => {
             topics.push(`supports ${actionType}`);
             topics.push(

@@ -177,9 +177,11 @@ class KnowledgePanel {
             });
 
         // Add click handlers for slider labels
-        document.querySelectorAll('.slider-label').forEach((label, index) => {
-            label.addEventListener('click', () => {
-                const slider = document.getElementById("extractionMode") as HTMLInputElement;
+        document.querySelectorAll(".slider-label").forEach((label, index) => {
+            label.addEventListener("click", () => {
+                const slider = document.getElementById(
+                    "extractionMode",
+                ) as HTMLInputElement;
                 const modeMap = ["basic", "content", "actions", "full"];
                 slider.value = index.toString();
                 slider.setAttribute("data-mode", modeMap[index]);
@@ -919,7 +921,10 @@ class KnowledgePanel {
                     const modeMap = ["basic", "content", "actions", "full"];
                     const value = modeMap.indexOf(this.extractionSettings.mode);
                     slider.value = value.toString();
-                    slider.setAttribute("data-mode", this.extractionSettings.mode);
+                    slider.setAttribute(
+                        "data-mode",
+                        this.extractionSettings.mode,
+                    );
                     this.updateSliderLabels(value);
                 }
             }
@@ -1503,22 +1508,22 @@ class KnowledgePanel {
     }
 
     private updateSliderLabels(activeValue: number) {
-        const labels = document.querySelectorAll('.slider-label');
-        const ticks = document.querySelectorAll('.slider-tick');
-        
+        const labels = document.querySelectorAll(".slider-label");
+        const ticks = document.querySelectorAll(".slider-tick");
+
         labels.forEach((label, index) => {
             if (index === activeValue) {
-                label.classList.add('active');
+                label.classList.add("active");
             } else {
-                label.classList.remove('active');
+                label.classList.remove("active");
             }
         });
 
         ticks.forEach((tick, index) => {
             if (index === activeValue) {
-                tick.classList.add('active');
+                tick.classList.add("active");
             } else {
-                tick.classList.remove('active');
+                tick.classList.remove("active");
             }
         });
     }

@@ -176,8 +176,9 @@ export function getPageHTMLSubFragments(
  */
 function applyReadabilityFilter(html: string, keepMetaTags?: boolean): string {
     try {
+        const sanitizedHtml = DOMPurify.sanitize(html);
         const parser = new DOMParser();
-        const doc = parser.parseFromString(html, "text/html");
+        const doc = parser.parseFromString(sanitizedHtml, "text/html");
 
         if (!isProbablyReaderable(doc)) {
             console.warn(
@@ -200,7 +201,10 @@ function applyReadabilityFilter(html: string, keepMetaTags?: boolean): string {
 
         if (keepMetaTags) {
             // Extract meta tags from original HTML
-            const originalDoc = parser.parseFromString(html, "text/html");
+            const originalDoc = parser.parseFromString(
+                sanitizedHtml,
+                "text/html",
+            );
             const metaTags = originalDoc.querySelectorAll("meta");
 
             // Parse the article content

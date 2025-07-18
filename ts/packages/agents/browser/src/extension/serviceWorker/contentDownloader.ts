@@ -303,36 +303,12 @@ export class BrowserContentDownloader implements ContentDownloadAdapter {
         let processedHtml = html;
         let textContent = "";
 
-        if (options.filterToReadingView) {
-            // Basic content extraction using regex
-            processedHtml = this.extractMainContent(html);
-        }
-
         if (options.extractText) {
             // Extract text content
             textContent = this.extractTextContent(processedHtml);
         }
 
         return { html: processedHtml, text: textContent };
-    }
-
-    /**
-     * Extract main content using basic regex patterns
-     */
-    private extractMainContent(html: string): string {
-        // Remove scripts, styles, and common non-content elements
-        return html
-            .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
-            .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
-            .replace(/<nav\b[^<]*(?:(?!<\/nav>)<[^<]*)*<\/nav>/gi, "")
-            .replace(/<header\b[^<]*(?:(?!<\/header>)<[^<]*)*<\/header>/gi, "")
-            .replace(/<footer\b[^<]*(?:(?!<\/footer>)<[^<]*)*<\/footer>/gi, "")
-            .replace(/<aside\b[^<]*(?:(?!<\/aside>)<[^<]*)*<\/aside>/gi, "")
-            .replace(/<!--[\s\S]*?-->/g, "")
-            .replace(
-                /<div[^>]*class="[^"]*(?:ad|advertisement|sidebar|popup|modal|banner|cookie)[^"]*"[^>]*>[\s\S]*?<\/div>/gi,
-                "",
-            );
     }
 
     /**

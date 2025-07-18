@@ -27,8 +27,7 @@ export class WebsiteImportUI {
     private completionCallback: ((result: ImportResult) => void) | null = null;
     private errorCallback: ((error: ImportError) => void) | null = null;
 
-    constructor() {
-    }
+    constructor() {}
 
     /**
      * Show web activity import modal (browser history/bookmarks)
@@ -67,18 +66,22 @@ export class WebsiteImportUI {
      */
     private loadStoredFolderPath(): void {
         const modal = document.getElementById(this.folderImportModalId);
-        const folderPathInput = modal?.querySelector("#folderPath") as HTMLInputElement;
-        
+        const folderPathInput = modal?.querySelector(
+            "#folderPath",
+        ) as HTMLInputElement;
+
         if (folderPathInput) {
             try {
-                const storedPath = localStorage.getItem('typeagent_folderImportPath');
+                const storedPath = localStorage.getItem(
+                    "typeagent_folderImportPath",
+                );
                 if (storedPath && storedPath.trim()) {
                     folderPathInput.value = storedPath;
                     // Trigger validation and state update
                     this.updateFolderImportState();
                 }
             } catch (error) {
-                console.warn('Failed to load stored folder path:', error);
+                console.warn("Failed to load stored folder path:", error);
             }
         }
     }
@@ -90,9 +93,12 @@ export class WebsiteImportUI {
         const trimmedPath = path.trim();
         if (trimmedPath) {
             try {
-                localStorage.setItem('typeagent_folderImportPath', trimmedPath);
+                localStorage.setItem("typeagent_folderImportPath", trimmedPath);
             } catch (error) {
-                console.warn('Failed to save folder path to localStorage:', error);
+                console.warn(
+                    "Failed to save folder path to localStorage:",
+                    error,
+                );
             }
         }
     }
@@ -105,12 +111,18 @@ export class WebsiteImportUI {
         if (!modalElement) return;
 
         let progressContainer, formContainer;
-        
+
         if (this.activeModal === this.webActivityModalId) {
-            progressContainer = modalElement.querySelector("#webActivityImportProgress");
-            formContainer = modalElement.querySelector("#webActivityImportForm");
+            progressContainer = modalElement.querySelector(
+                "#webActivityImportProgress",
+            );
+            formContainer = modalElement.querySelector(
+                "#webActivityImportForm",
+            );
         } else if (this.activeModal === this.folderImportModalId) {
-            progressContainer = modalElement.querySelector("#folderImportProgress");
+            progressContainer = modalElement.querySelector(
+                "#folderImportProgress",
+            );
             formContainer = modalElement.querySelector("#folderImportForm");
         }
 
@@ -177,15 +189,25 @@ export class WebsiteImportUI {
         }
 
         let statusElement, progressBar, progressText;
-        
+
         if (this.activeModal === this.webActivityModalId) {
-            statusElement = modalElement.querySelector("#webImportStatusMessage");
-            progressBar = modalElement.querySelector("#webImportProgressBar") as HTMLElement;
+            statusElement = modalElement.querySelector(
+                "#webImportStatusMessage",
+            );
+            progressBar = modalElement.querySelector(
+                "#webImportProgressBar",
+            ) as HTMLElement;
             progressText = modalElement.querySelector("#webImportProgressText");
         } else if (this.activeModal === this.folderImportModalId) {
-            statusElement = modalElement.querySelector("#folderImportStatusMessage");
-            progressBar = modalElement.querySelector("#folderImportProgressBar") as HTMLElement;
-            progressText = modalElement.querySelector("#folderImportProgressText");
+            statusElement = modalElement.querySelector(
+                "#folderImportStatusMessage",
+            );
+            progressBar = modalElement.querySelector(
+                "#folderImportProgressBar",
+            ) as HTMLElement;
+            progressText = modalElement.querySelector(
+                "#folderImportProgressText",
+            );
         }
 
         console.log("📊 Progress details:", {
@@ -312,9 +334,13 @@ export class WebsiteImportUI {
 
         let progressContainer;
         if (this.activeModal === this.webActivityModalId) {
-            progressContainer = modalElement.querySelector("#webActivityImportProgress");
+            progressContainer = modalElement.querySelector(
+                "#webActivityImportProgress",
+            );
         } else if (this.activeModal === this.folderImportModalId) {
-            progressContainer = modalElement.querySelector("#folderImportProgress");
+            progressContainer = modalElement.querySelector(
+                "#folderImportProgress",
+            );
         }
 
         if (progressContainer) {
@@ -406,9 +432,13 @@ export class WebsiteImportUI {
 
         let progressContainer;
         if (this.activeModal === this.webActivityModalId) {
-            progressContainer = modalElement.querySelector("#webActivityImportProgress");
+            progressContainer = modalElement.querySelector(
+                "#webActivityImportProgress",
+            );
         } else if (this.activeModal === this.folderImportModalId) {
-            progressContainer = modalElement.querySelector("#folderImportProgress");
+            progressContainer = modalElement.querySelector(
+                "#folderImportProgress",
+            );
         }
 
         if (progressContainer) {
@@ -494,13 +524,20 @@ export class WebsiteImportUI {
             retryButton.addEventListener("click", () => {
                 // Reset to form view
                 let formContainer, progressContainer;
-                
+
                 if (this.activeModal === this.webActivityModalId) {
-                    formContainer = modalElement.querySelector("#webActivityImportForm");
-                    progressContainer = modalElement.querySelector("#webActivityImportProgress");
+                    formContainer = modalElement.querySelector(
+                        "#webActivityImportForm",
+                    );
+                    progressContainer = modalElement.querySelector(
+                        "#webActivityImportProgress",
+                    );
                 } else if (this.activeModal === this.folderImportModalId) {
-                    formContainer = modalElement.querySelector("#folderImportForm");
-                    progressContainer = modalElement.querySelector("#folderImportProgress");
+                    formContainer =
+                        modalElement.querySelector("#folderImportForm");
+                    progressContainer = modalElement.querySelector(
+                        "#folderImportProgress",
+                    );
                 }
 
                 if (formContainer && progressContainer) {
@@ -558,8 +595,8 @@ export class WebsiteImportUI {
 
         // Convert slider value to mode string
         const modeMap = ["basic", "content", "actions", "full"];
-        const extractionMode = extractionModeInput?.value 
-            ? modeMap[parseInt(extractionModeInput.value)] as any
+        const extractionMode = extractionModeInput?.value
+            ? (modeMap[parseInt(extractionModeInput.value)] as any)
             : "content";
 
         const options: ImportOptions = {
@@ -626,8 +663,8 @@ export class WebsiteImportUI {
 
         // Convert slider value to mode string
         const modeMap = ["basic", "content", "actions", "full"];
-        const extractionMode = extractionModeInput?.value 
-            ? modeMap[parseInt(extractionModeInput.value)] as any
+        const extractionMode = extractionModeInput?.value
+            ? (modeMap[parseInt(extractionModeInput.value)] as any)
             : "content";
 
         const options: FolderImportOptions = {
@@ -847,9 +884,14 @@ export class WebsiteImportUI {
         });
 
         // Setup extraction mode slider
-        const extractionSlider = modal.querySelector("#extractionMode") as HTMLInputElement;
+        const extractionSlider = modal.querySelector(
+            "#extractionMode",
+        ) as HTMLInputElement;
         if (extractionSlider) {
-            this.setupSliderEventListeners(extractionSlider, "#webModeDescription");
+            this.setupSliderEventListeners(
+                extractionSlider,
+                "#webModeDescription",
+            );
         }
 
         // Start import button - use replaceWith to remove any existing event listeners
@@ -942,7 +984,7 @@ export class WebsiteImportUI {
         if (folderPathInput) {
             folderPathInput.addEventListener("input", async () => {
                 this.updateFolderImportState();
-                
+
                 // Save path to localStorage
                 this.saveFolderPath(folderPathInput.value);
 
@@ -980,9 +1022,14 @@ export class WebsiteImportUI {
         });
 
         // Setup extraction mode slider
-        const folderExtractionSlider = modal.querySelector("#folderExtractionMode") as HTMLInputElement;
+        const folderExtractionSlider = modal.querySelector(
+            "#folderExtractionMode",
+        ) as HTMLInputElement;
         if (folderExtractionSlider) {
-            this.setupSliderEventListeners(folderExtractionSlider, "#folderModeDescription");
+            this.setupSliderEventListeners(
+                folderExtractionSlider,
+                "#folderModeDescription",
+            );
         }
 
         // Start import button - use replaceWith to remove any existing event listeners
@@ -1083,12 +1130,15 @@ export class WebsiteImportUI {
     /**
      * Setup event listeners for extraction mode slider
      */
-    private setupSliderEventListeners(slider: HTMLInputElement, descriptionSelector: string): void {
-        const modal = slider.closest('.modal');
+    private setupSliderEventListeners(
+        slider: HTMLInputElement,
+        descriptionSelector: string,
+    ): void {
+        const modal = slider.closest(".modal");
         if (!modal) return;
 
         // Handle slider input
-        slider.addEventListener('input', () => {
+        slider.addEventListener("input", () => {
             const modeMap = ["basic", "content", "actions", "full"];
             const mode = modeMap[parseInt(slider.value)];
             slider.setAttribute("data-mode", mode);
@@ -1097,9 +1147,9 @@ export class WebsiteImportUI {
         });
 
         // Handle label clicks
-        const labels = modal.querySelectorAll('.slider-label');
+        const labels = modal.querySelectorAll(".slider-label");
         labels.forEach((label, index) => {
-            label.addEventListener('click', () => {
+            label.addEventListener("click", () => {
                 const modeMap = ["basic", "content", "actions", "full"];
                 slider.value = index.toString();
                 slider.setAttribute("data-mode", modeMap[index]);
@@ -1117,26 +1167,26 @@ export class WebsiteImportUI {
      * Update slider labels and ticks visual state
      */
     private updateSliderLabels(slider: HTMLInputElement): void {
-        const modal = slider.closest('.modal');
+        const modal = slider.closest(".modal");
         if (!modal) return;
 
         const activeValue = parseInt(slider.value);
-        const labels = modal.querySelectorAll('.slider-label');
-        const ticks = modal.querySelectorAll('.slider-tick');
-        
+        const labels = modal.querySelectorAll(".slider-label");
+        const ticks = modal.querySelectorAll(".slider-tick");
+
         labels.forEach((label, index) => {
             if (index === activeValue) {
-                label.classList.add('active');
+                label.classList.add("active");
             } else {
-                label.classList.remove('active');
+                label.classList.remove("active");
             }
         });
 
         ticks.forEach((tick, index) => {
             if (index === activeValue) {
-                tick.classList.add('active');
+                tick.classList.add("active");
             } else {
-                tick.classList.remove('active');
+                tick.classList.remove("active");
             }
         });
     }
@@ -1149,12 +1199,14 @@ export class WebsiteImportUI {
         if (!descriptionElement) return;
 
         const descriptions: Record<string, string> = {
-            "basic": "Fast metadata extraction without AI - perfect for bulk operations",
-            "content": "AI-powered content analysis with entity and topic extraction",
-            "actions": "AI analysis plus interaction detection for dynamic pages",
-            "full": "Complete AI analysis with relationships and cross-references"
+            basic: "Fast metadata extraction without AI - perfect for bulk operations",
+            content:
+                "AI-powered content analysis with entity and topic extraction",
+            actions: "AI analysis plus interaction detection for dynamic pages",
+            full: "Complete AI analysis with relationships and cross-references",
         };
 
-        descriptionElement.textContent = descriptions[mode] || descriptions.content;
+        descriptionElement.textContent =
+            descriptions[mode] || descriptions.content;
     }
 }

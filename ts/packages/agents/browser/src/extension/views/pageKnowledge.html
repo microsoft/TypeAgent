@@ -541,13 +541,13 @@
         background: #667eea;
         cursor: pointer;
         border: 2px solid white;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         transition: all 0.2s ease;
       }
 
       .extraction-mode-slider::-webkit-slider-thumb:hover {
         transform: scale(1.1);
-        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
       }
 
       .extraction-mode-slider::-moz-range-thumb {
@@ -557,13 +557,13 @@
         background: #667eea;
         cursor: pointer;
         border: 2px solid white;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         transition: all 0.2s ease;
       }
 
       .extraction-mode-slider::-moz-range-thumb:hover {
         transform: scale(1.1);
-        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
       }
 
       .slider-labels {
@@ -617,7 +617,13 @@
 
       /* Basic mode color - green for fast/simple */
       .extraction-mode-slider[data-mode="basic"] {
-        background: linear-gradient(to right, #28a745 0%, #28a745 33.33%, #e9ecef 33.33%, #e9ecef 100%);
+        background: linear-gradient(
+          to right,
+          #28a745 0%,
+          #28a745 33.33%,
+          #e9ecef 33.33%,
+          #e9ecef 100%
+        );
       }
 
       .extraction-mode-slider[data-mode="basic"]::-webkit-slider-thumb {
@@ -630,7 +636,15 @@
 
       /* Content mode color - blue for standard */
       .extraction-mode-slider[data-mode="content"] {
-        background: linear-gradient(to right, #28a745 0%, #28a745 33.33%, #667eea 33.33%, #667eea 66.66%, #e9ecef 66.66%, #e9ecef 100%);
+        background: linear-gradient(
+          to right,
+          #28a745 0%,
+          #28a745 33.33%,
+          #667eea 33.33%,
+          #667eea 66.66%,
+          #e9ecef 66.66%,
+          #e9ecef 100%
+        );
       }
 
       .extraction-mode-slider[data-mode="content"]::-webkit-slider-thumb {
@@ -643,7 +657,15 @@
 
       /* Actions mode color - orange for enhanced */
       .extraction-mode-slider[data-mode="actions"] {
-        background: linear-gradient(to right, #28a745 0%, #28a745 33.33%, #667eea 33.33%, #667eea 66.66%, #fd7e14 66.66%, #fd7e14 100%);
+        background: linear-gradient(
+          to right,
+          #28a745 0%,
+          #28a745 33.33%,
+          #667eea 33.33%,
+          #667eea 66.66%,
+          #fd7e14 66.66%,
+          #fd7e14 100%
+        );
       }
 
       .extraction-mode-slider[data-mode="actions"]::-webkit-slider-thumb {
@@ -656,7 +678,17 @@
 
       /* Full mode color - red for maximum */
       .extraction-mode-slider[data-mode="full"] {
-        background: linear-gradient(to right, #28a745 0%, #28a745 25%, #667eea 25%, #667eea 50%, #fd7e14 50%, #fd7e14 75%, #dc3545 75%, #dc3545 100%);
+        background: linear-gradient(
+          to right,
+          #28a745 0%,
+          #28a745 25%,
+          #667eea 25%,
+          #667eea 50%,
+          #fd7e14 50%,
+          #fd7e14 75%,
+          #dc3545 75%,
+          #dc3545 100%
+        );
       }
 
       .extraction-mode-slider[data-mode="full"]::-webkit-slider-thumb {
@@ -724,17 +756,17 @@
                 <span class="slider-label" data-value="3">Full</span>
               </div>
 
-              <input 
-                type="range" 
-                id="extractionMode" 
-                class="extraction-mode-slider" 
-                min="0" 
-                max="3" 
-                value="1" 
+              <input
+                type="range"
+                id="extractionMode"
+                class="extraction-mode-slider"
+                min="0"
+                max="3"
+                value="1"
                 step="1"
                 data-mode="content"
               />
-              
+
               <div class="slider-ticks">
                 <span class="slider-tick" data-value="0"></span>
                 <span class="slider-tick" data-value="1"></span>

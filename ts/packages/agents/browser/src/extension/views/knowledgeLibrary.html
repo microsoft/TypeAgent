@@ -613,14 +613,31 @@
     </div>
 
     <!-- Web Activity Import Modal -->
-    <div class="modal fade import-modal" id="webActivityImportModal" tabindex="-1" aria-hidden="true">
+    <div
+      class="modal fade import-modal"
+      id="webActivityImportModal"
+      tabindex="-1"
+      aria-hidden="true"
+    >
       <div class="modal-dialog modal-lg">
         <div class="modal-content">
-          <div class="modal-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+          <div
+            class="modal-header"
+            style="
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              color: white;
+            "
+          >
             <h5 class="modal-title">
               <i class="bi bi-download me-2"></i>Import Web Activity
             </h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" style="filter: invert(1);"></button>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+              style="filter: invert(1)"
+            ></button>
           </div>
           <div class="modal-body">
             <div id="webActivityImportForm">
@@ -631,10 +648,14 @@
                   <div class="col-md-6">
                     <div class="import-option" data-browser="chrome">
                       <div class="d-flex align-items-center">
-                        <i class="bi bi-browser-chrome text-success me-3 fs-4"></i>
+                        <i
+                          class="bi bi-browser-chrome text-success me-3 fs-4"
+                        ></i>
                         <div>
                           <div class="fw-semibold">Google Chrome</div>
-                          <small class="text-muted">Import from Chrome browser</small>
+                          <small class="text-muted"
+                            >Import from Chrome browser</small
+                          >
                         </div>
                       </div>
                     </div>
@@ -642,10 +663,14 @@
                   <div class="col-md-6">
                     <div class="import-option" data-browser="edge">
                       <div class="d-flex align-items-center">
-                        <i class="bi bi-browser-edge text-primary me-3 fs-4"></i>
+                        <i
+                          class="bi bi-browser-edge text-primary me-3 fs-4"
+                        ></i>
                         <div>
                           <div class="fw-semibold">Microsoft Edge</div>
-                          <small class="text-muted">Import from Edge browser</small>
+                          <small class="text-muted"
+                            >Import from Edge browser</small
+                          >
                         </div>
                       </div>
                     </div>
@@ -660,10 +685,14 @@
                   <div class="col-md-6">
                     <div class="import-option" data-type="bookmarks">
                       <div class="d-flex align-items-center">
-                        <i class="bi bi-bookmark-star text-warning me-3 fs-4"></i>
+                        <i
+                          class="bi bi-bookmark-star text-warning me-3 fs-4"
+                        ></i>
                         <div>
                           <div class="fw-semibold">Bookmarks</div>
-                          <small class="text-muted">Saved bookmarks and favorites</small>
+                          <small class="text-muted"
+                            >Saved bookmarks and favorites</small
+                          >
                         </div>
                       </div>
                     </div>
@@ -674,7 +703,9 @@
                         <i class="bi bi-clock-history text-info me-3 fs-4"></i>
                         <div>
                           <div class="fw-semibold">Browser History</div>
-                          <small class="text-muted">Recently visited pages</small>
+                          <small class="text-muted"
+                            >Recently visited pages</small
+                          >
                         </div>
                       </div>
                     </div>
@@ -684,7 +715,12 @@
 
               <!-- Advanced Options -->
               <div class="mb-3">
-                <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#webAdvancedOptions">
+                <button
+                  class="btn btn-outline-secondary btn-sm"
+                  type="button"
+                  data-bs-toggle="collapse"
+                  data-bs-target="#webAdvancedOptions"
+                >
                   <i class="bi bi-gear"></i> Advanced Options
                 </button>
 
@@ -693,45 +729,83 @@
                     <div class="row">
                       <div class="col-md-6">
                         <label class="form-label">Limit (max items)</label>
-                        <input type="number" id="webImportLimit" class="form-control form-control-sm" 
-                               placeholder="e.g., 1000" min="1" max="50000" value="1000">
+                        <input
+                          type="number"
+                          id="webImportLimit"
+                          class="form-control form-control-sm"
+                          placeholder="e.g., 1000"
+                          min="1"
+                          max="50000"
+                          value="1000"
+                        />
                       </div>
-                      <div class="col-md-6" id="webDaysBackContainer" style="display: none">
-                        <label class="form-label">Days back (history only)</label>
-                        <input type="number" id="webDaysBack" class="form-control form-control-sm" 
-                               placeholder="e.g., 30" min="1" max="365" value="30">
+                      <div
+                        class="col-md-6"
+                        id="webDaysBackContainer"
+                        style="display: none"
+                      >
+                        <label class="form-label"
+                          >Days back (history only)</label
+                        >
+                        <input
+                          type="number"
+                          id="webDaysBack"
+                          class="form-control form-control-sm"
+                          placeholder="e.g., 30"
+                          min="1"
+                          max="365"
+                          value="30"
+                        />
                       </div>
                     </div>
 
-                    <div class="mt-3" id="webFolderContainer" style="display: none">
-                      <label class="form-label">Bookmark Folder (optional)</label>
-                      <input type="text" id="webBookmarkFolder" class="form-control form-control-sm" 
-                             placeholder="e.g., Work, Personal">
+                    <div
+                      class="mt-3"
+                      id="webFolderContainer"
+                      style="display: none"
+                    >
+                      <label class="form-label"
+                        >Bookmark Folder (optional)</label
+                      >
+                      <input
+                        type="text"
+                        id="webBookmarkFolder"
+                        class="form-control form-control-sm"
+                        placeholder="e.g., Work, Personal"
+                      />
                     </div>
 
                     <div class="mt-3">
                       <h6 class="mb-3">Enhancement Options</h6>
-                      
+
                       <div class="mb-3">
                         <label for="webExtractionMode" class="form-label">
                           <i class="bi bi-gear"></i> Extraction Mode
                         </label>
                         <div class="extraction-mode-slider-container">
-                          <input 
-                            type="range" 
-                            id="webExtractionMode" 
-                            class="extraction-mode-slider" 
-                            min="0" 
-                            max="3" 
-                            value="1" 
+                          <input
+                            type="range"
+                            id="webExtractionMode"
+                            class="extraction-mode-slider"
+                            min="0"
+                            max="3"
+                            value="1"
                             step="1"
                             data-mode="content"
                           />
                           <div class="slider-labels">
-                            <span class="slider-label" data-value="0">Basic</span>
-                            <span class="slider-label" data-value="1">Content</span>
-                            <span class="slider-label" data-value="2">Actions</span>
-                            <span class="slider-label" data-value="3">Full</span>
+                            <span class="slider-label" data-value="0"
+                              >Basic</span
+                            >
+                            <span class="slider-label" data-value="1"
+                              >Content</span
+                            >
+                            <span class="slider-label" data-value="2"
+                              >Actions</span
+                            >
+                            <span class="slider-label" data-value="3"
+                              >Full</span
+                            >
                           </div>
                           <div class="slider-ticks">
                             <span class="slider-tick" data-value="0"></span>
@@ -741,20 +815,39 @@
                           </div>
                         </div>
                         <small class="text-muted">
-                          <span id="webModeDescription">AI-powered content analysis with entity and topic extraction</span>
+                          <span id="webModeDescription"
+                            >AI-powered content analysis with entity and topic
+                            extraction</span
+                          >
                         </small>
                       </div>
 
                       <div class="row">
                         <div class="col-md-6">
-                          <label for="webMaxConcurrent" class="form-label">Max Concurrent</label>
-                          <input type="number" id="webMaxConcurrent" class="form-control form-control-sm" 
-                                 value="5" min="1" max="20">
+                          <label for="webMaxConcurrent" class="form-label"
+                            >Max Concurrent</label
+                          >
+                          <input
+                            type="number"
+                            id="webMaxConcurrent"
+                            class="form-control form-control-sm"
+                            value="5"
+                            min="1"
+                            max="20"
+                          />
                         </div>
                         <div class="col-md-6">
-                          <label for="webContentTimeout" class="form-label">Timeout (seconds)</label>
-                          <input type="number" id="webContentTimeout" class="form-control form-control-sm" 
-                                 value="30" min="5" max="120">
+                          <label for="webContentTimeout" class="form-label"
+                            >Timeout (seconds)</label
+                          >
+                          <input
+                            type="number"
+                            id="webContentTimeout"
+                            class="form-control form-control-sm"
+                            value="30"
+                            min="5"
+                            max="120"
+                          />
                         </div>
                       </div>
                     </div>
@@ -764,10 +857,17 @@
 
               <!-- Import Controls -->
               <div class="d-flex gap-2">
-                <button id="startWebActivityImport" class="btn btn-primary" disabled>
+                <button
+                  id="startWebActivityImport"
+                  class="btn btn-primary"
+                  disabled
+                >
                   <i class="bi bi-download"></i> Start Import
                 </button>
-                <button id="cancelWebActivityImport" class="btn btn-outline-secondary d-none">
+                <button
+                  id="cancelWebActivityImport"
+                  class="btn btn-outline-secondary d-none"
+                >
                   <i class="bi bi-x-circle"></i> Cancel
                 </button>
               </div>
@@ -783,18 +883,35 @@
                   <div>
                     <span class="fw-semibold">Importing Data...</span>
                   </div>
-                  <small id="webImportStatusMessage" class="text-muted d-block mt-2">
+                  <small
+                    id="webImportStatusMessage"
+                    class="text-muted d-block mt-2"
+                  >
                     Preparing import...
                   </small>
-                  <div class="progress mt-3" style="height: 6px;">
-                    <div id="webImportProgressBar" class="progress-bar" role="progressbar" 
-                         style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                  <div class="progress mt-3" style="height: 6px">
+                    <div
+                      id="webImportProgressBar"
+                      class="progress-bar"
+                      role="progressbar"
+                      style="width: 0%"
+                      aria-valuenow="0"
+                      aria-valuemin="0"
+                      aria-valuemax="100"
+                    ></div>
                   </div>
-                  <small id="webImportProgressText" class="text-muted d-block mt-1">0 / 0 items</small>
+                  <small
+                    id="webImportProgressText"
+                    class="text-muted d-block mt-1"
+                    >0 / 0 items</small
+                  >
                 </div>
 
                 <div class="mt-4 text-center">
-                  <button id="cancelWebImportProgress" class="btn btn-outline-danger btn-sm">
+                  <button
+                    id="cancelWebImportProgress"
+                    class="btn btn-outline-danger btn-sm"
+                  >
                     <i class="bi bi-x-circle"></i> Cancel Import
                   </button>
                 </div>
@@ -806,14 +923,31 @@
     </div>
 
     <!-- Folder Import Modal -->
-    <div class="modal fade import-modal" id="folderImportModal" tabindex="-1" aria-hidden="true">
+    <div
+      class="modal fade import-modal"
+      id="folderImportModal"
+      tabindex="-1"
+      aria-hidden="true"
+    >
       <div class="modal-dialog modal-lg">
         <div class="modal-content">
-          <div class="modal-header" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white;">
+          <div
+            class="modal-header"
+            style="
+              background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+              color: white;
+            "
+          >
             <h5 class="modal-title">
               <i class="bi bi-folder2-open me-2"></i>Import from Folder
             </h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" style="filter: invert(1);"></button>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+              style="filter: invert(1)"
+            ></button>
           </div>
           <div class="modal-body">
             <div id="folderImportForm">
@@ -822,13 +956,17 @@
                 <label for="folderPath" class="form-label fw-semibold">
                   <i class="bi bi-folder"></i> Folder Path
                 </label>
-                <input type="text" id="folderPath" class="form-control" 
-                       placeholder="Enter folder path (e.g., C:\Documents\HTMLFiles or /home/user/html-files)"
-                       autocomplete="off">
+                <input
+                  type="text"
+                  id="folderPath"
+                  class="form-control"
+                  placeholder="Enter folder path (e.g., C:\Documents\HTMLFiles or /home/user/html-files)"
+                  autocomplete="off"
+                />
                 <div class="form-text">
                   <small class="text-muted">
                     <i class="bi bi-info-circle"></i>
-                    Enter the full path to a folder containing HTML files. 
+                    Enter the full path to a folder containing HTML files.
                     Subfolders will be included if recursive option is enabled.
                   </small>
                 </div>
@@ -838,11 +976,16 @@
               <!-- Folder Options -->
               <div class="mb-3">
                 <h6 class="mb-3">Folder Options</h6>
-                
+
                 <div class="row">
                   <div class="col-md-6">
                     <div class="form-check mb-2">
-                      <input class="form-check-input" type="checkbox" id="folderRecursive" checked>
+                      <input
+                        class="form-check-input"
+                        type="checkbox"
+                        id="folderRecursive"
+                        checked
+                      />
                       <label class="form-check-label" for="folderRecursive">
                         <i class="bi bi-arrow-down-up"></i> Include subfolders
                       </label>
@@ -850,7 +993,12 @@
                   </div>
                   <div class="col-md-6">
                     <div class="form-check mb-2">
-                      <input class="form-check-input" type="checkbox" id="folderSkipHidden" checked>
+                      <input
+                        class="form-check-input"
+                        type="checkbox"
+                        id="folderSkipHidden"
+                        checked
+                      />
                       <label class="form-check-label" for="folderSkipHidden">
                         <i class="bi bi-eye-slash"></i> Skip hidden files
                       </label>
@@ -860,21 +1008,44 @@
 
                 <div class="row">
                   <div class="col-md-6">
-                    <label for="folderFileLimit" class="form-label">File limit (optional)</label>
-                    <input type="number" id="folderFileLimit" class="form-control form-control-sm" 
-                           placeholder="e.g., 1000" min="1" max="10000" value="1000">
+                    <label for="folderFileLimit" class="form-label"
+                      >File limit (optional)</label
+                    >
+                    <input
+                      type="number"
+                      id="folderFileLimit"
+                      class="form-control form-control-sm"
+                      placeholder="e.g., 1000"
+                      min="1"
+                      max="10000"
+                      value="1000"
+                    />
                   </div>
                   <div class="col-md-6">
-                    <label for="folderMaxFileSize" class="form-label">Max file size (MB)</label>
-                    <input type="number" id="folderMaxFileSize" class="form-control form-control-sm" 
-                           placeholder="50" min="1" max="500" value="50">
+                    <label for="folderMaxFileSize" class="form-label"
+                      >Max file size (MB)</label
+                    >
+                    <input
+                      type="number"
+                      id="folderMaxFileSize"
+                      class="form-control form-control-sm"
+                      placeholder="50"
+                      min="1"
+                      max="500"
+                      value="50"
+                    />
                   </div>
                 </div>
               </div>
 
               <!-- Processing Options -->
               <div class="mb-3">
-                <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#folderAdvancedOptions">
+                <button
+                  class="btn btn-outline-secondary btn-sm"
+                  type="button"
+                  data-bs-toggle="collapse"
+                  data-bs-target="#folderAdvancedOptions"
+                >
                   <i class="bi bi-gear"></i> Processing Options
                 </button>
 
@@ -882,27 +1053,35 @@
                   <div class="card card-body bg-light">
                     <div class="mb-3">
                       <h6 class="mb-3">Content Processing</h6>
-                      
+
                       <div class="mb-3">
                         <label for="folderExtractionMode" class="form-label">
                           <i class="bi bi-gear"></i> Extraction Mode
                         </label>
                         <div class="extraction-mode-slider-container">
-                          <input 
-                            type="range" 
-                            id="folderExtractionMode" 
-                            class="extraction-mode-slider" 
-                            min="0" 
-                            max="3" 
-                            value="1" 
+                          <input
+                            type="range"
+                            id="folderExtractionMode"
+                            class="extraction-mode-slider"
+                            min="0"
+                            max="3"
+                            value="1"
                             step="1"
                             data-mode="content"
                           />
                           <div class="slider-labels">
-                            <span class="slider-label" data-value="0">Basic</span>
-                            <span class="slider-label" data-value="1">Content</span>
-                            <span class="slider-label" data-value="2">Actions</span>
-                            <span class="slider-label" data-value="3">Full</span>
+                            <span class="slider-label" data-value="0"
+                              >Basic</span
+                            >
+                            <span class="slider-label" data-value="1"
+                              >Content</span
+                            >
+                            <span class="slider-label" data-value="2"
+                              >Actions</span
+                            >
+                            <span class="slider-label" data-value="3"
+                              >Full</span
+                            >
                           </div>
                           <div class="slider-ticks">
                             <span class="slider-tick" data-value="0"></span>
@@ -912,14 +1091,26 @@
                           </div>
                         </div>
                         <small class="text-muted">
-                          <span id="folderModeDescription">AI-powered content analysis with entity and topic extraction</span>
+                          <span id="folderModeDescription"
+                            >AI-powered content analysis with entity and topic
+                            extraction</span
+                          >
                         </small>
                       </div>
 
                       <div class="form-check mb-2">
-                        <input class="form-check-input" type="checkbox" id="folderPreserveStructure" checked>
-                        <label class="form-check-label" for="folderPreserveStructure">
-                          <i class="bi bi-diagram-3"></i> Preserve folder structure
+                        <input
+                          class="form-check-input"
+                          type="checkbox"
+                          id="folderPreserveStructure"
+                          checked
+                        />
+                        <label
+                          class="form-check-label"
+                          for="folderPreserveStructure"
+                        >
+                          <i class="bi bi-diagram-3"></i> Preserve folder
+                          structure
                         </label>
                         <small class="text-muted d-block ms-4">
                           Maintain original folder organization and metadata
@@ -937,13 +1128,13 @@
                     <i class="bi bi-question-circle"></i> Path Examples
                   </summary>
                   <div class="mt-2 small">
-                    <strong>Windows:</strong><br>
-                    <code>C:\Users\YourName\Documents\HTMLFiles</code><br>
-                    <code>D:\Projects\WebsiteArchive</code><br><br>
-                    <strong>macOS/Linux:</strong><br>
-                    <code>/Users/yourname/Documents/HTMLFiles</code><br>
-                    <code>/home/user/website-archive</code><br><br>
-                    <strong>Network paths:</strong><br>
+                    <strong>Windows:</strong><br />
+                    <code>C:\Users\YourName\Documents\HTMLFiles</code><br />
+                    <code>D:\Projects\WebsiteArchive</code><br /><br />
+                    <strong>macOS/Linux:</strong><br />
+                    <code>/Users/yourname/Documents/HTMLFiles</code><br />
+                    <code>/home/user/website-archive</code><br /><br />
+                    <strong>Network paths:</strong><br />
                     <code>\\server\share\htmlfiles</code>
                   </div>
                 </details>
@@ -954,7 +1145,10 @@
                 <button id="startFolderImport" class="btn btn-success" disabled>
                   <i class="bi bi-folder-plus"></i> Start Import
                 </button>
-                <button id="cancelFolderImport" class="btn btn-outline-secondary d-none">
+                <button
+                  id="cancelFolderImport"
+                  class="btn btn-outline-secondary d-none"
+                >
                   <i class="bi bi-x-circle"></i> Cancel
                 </button>
               </div>
@@ -970,18 +1164,35 @@
                   <div>
                     <span class="fw-semibold">Processing Folder...</span>
                   </div>
-                  <small id="folderImportStatusMessage" class="text-muted d-block mt-2">
+                  <small
+                    id="folderImportStatusMessage"
+                    class="text-muted d-block mt-2"
+                  >
                     Validating folder...
                   </small>
-                  <div class="progress mt-3" style="height: 6px;">
-                    <div id="folderImportProgressBar" class="progress-bar bg-success" role="progressbar" 
-                         style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                  <div class="progress mt-3" style="height: 6px">
+                    <div
+                      id="folderImportProgressBar"
+                      class="progress-bar bg-success"
+                      role="progressbar"
+                      style="width: 0%"
+                      aria-valuenow="0"
+                      aria-valuemin="0"
+                      aria-valuemax="100"
+                    ></div>
                   </div>
-                  <small id="folderImportProgressText" class="text-muted d-block mt-1">0 / 0 files</small>
+                  <small
+                    id="folderImportProgressText"
+                    class="text-muted d-block mt-1"
+                    >0 / 0 files</small
+                  >
                 </div>
 
                 <div class="mt-4 text-center">
-                  <button id="cancelFolderImportProgress" class="btn btn-outline-danger btn-sm">
+                  <button
+                    id="cancelFolderImportProgress"
+                    class="btn btn-outline-danger btn-sm"
+                  >
                     <i class="bi bi-x-circle"></i> Cancel Import
                   </button>
                 </div>

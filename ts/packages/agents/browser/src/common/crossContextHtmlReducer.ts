@@ -147,7 +147,14 @@ export class CrossContextHtmlReducer {
      */
     reduce(html: string): string {
         // Parse document using cross-context parser
-        let doc = this.parseDocument(html);
+        let domPurify =
+            this.dependencies.DOMPurify ||
+            (typeof DOMPurify !== "undefined" ? DOMPurify : undefined);
+        let safeHtml = domPurify
+            ? domPurify.sanitize(html, { RETURN_TRUSTED_TYPE: false })
+            : html;
+
+        let doc = this.parseDocument(safeHtml);
         if (!doc) {
             console.warn("Failed to parse HTML, returning original");
             return html;
