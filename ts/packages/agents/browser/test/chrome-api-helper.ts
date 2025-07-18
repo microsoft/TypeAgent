@@ -4,6 +4,18 @@
 /// <reference path="types/jest-chrome-extensions.d.ts" />
 
 /**
+ * Removes all <script>...</script> tags from the input HTML, including nested/multiple instances.
+ */
+function removeScriptTags(html: string): string {
+    let prev;
+    do {
+        prev = html;
+        html = html.replace(/<script[^>]*>.*?<\/script>/gi, "");
+    } while (html !== prev);
+    return html;
+}
+
+/**
  * Initializes Chrome API mocks with default behaviors for testing
  */
 function setupChromeApiMocks() {
@@ -60,10 +72,8 @@ function setupChromeApiMocks() {
                 }
 
                 const mockHtml = `<html><head><title>Test Page</title></head><body><h1>Test Content</h1><p>Mock content from ${url}</p></body></html>`;
-                const cleanedHtml = mockHtml.replace(
-                    /<script[^>]*>.*?<\/script>/gi,
-                    "",
-                );
+                const cleanedHtml = removeScriptTags(mockHtml);
+
                 const textContent = mockHtml
                     .replace(/<[^>]*>/g, " ")
                     .replace(/\s+/g, " ")
@@ -91,10 +101,7 @@ function setupChromeApiMocks() {
             }
             if (message.type === "processHtmlContent") {
                 const html = message.htmlContent || "";
-                const cleanedHtml = html.replace(
-                    /<script[^>]*>.*?<\/script>/gi,
-                    "",
-                );
+                const cleanedHtml = removeScriptTags(html);
                 const textContent = html
                     .replace(/<[^>]*>/g, " ")
                     .replace(/\s+/g, " ")

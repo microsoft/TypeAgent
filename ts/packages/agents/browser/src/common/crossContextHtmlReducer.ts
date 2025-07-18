@@ -152,9 +152,12 @@ export class CrossContextHtmlReducer {
         let domPurify =
             this.dependencies.DOMPurify ||
             (typeof DOMPurify !== "undefined" ? DOMPurify : undefined);
-        let safeHtml = domPurify
-            ? domPurify.sanitize(html, { RETURN_TRUSTED_TYPE: false })
-            : html;
+        if (!domPurify) {
+            throw new Error(
+                "DOMPurify is required for HTML sanitization to prevent XSS.",
+            );
+        }
+        let safeHtml = domPurify.sanitize(html, { RETURN_TRUSTED_TYPE: false });
 
         let doc = this.parseDocument(safeHtml);
         if (!doc) {
