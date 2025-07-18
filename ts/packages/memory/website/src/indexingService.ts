@@ -188,8 +188,22 @@ if (
         sendIndexStatus();
 
         try {
-            // Import website data
-            websites = new WebsiteCollection();
+            // Import website data - LOAD EXISTING COLLECTION FIRST
+            debug(`Attempting to load existing collection from ${index.path}`);
+            
+            try {
+                websites = await WebsiteCollection.readFromFile(index.path, "index");
+                
+                if (!websites || websites.messages.length === 0) {
+                    debug("No existing collection found or empty, creating new one");
+                    websites = new WebsiteCollection();
+                } else {
+                    debug(`Loaded existing collection with ${websites.messages.length} websites`);
+                }
+            } catch (loadError) {
+                debug(`Failed to load existing collection: ${loadError}. Creating new collection.`);
+                websites = new WebsiteCollection();
+            }
 
             const browserType = index.browserType || "chrome";
             const sourceType = index.sourceType || "bookmarks";
@@ -202,10 +216,23 @@ if (
                 indexingProgress,
             );
 
-            await addWebsitesIncremental(websites, importedWebsites);
+            // Filter out websites that already exist in the collection
+            const existingUrls = new Set(websites.getWebsites().map(w => w.metadata.url));
+            const newWebsites = importedWebsites.filter(w => !existingUrls.has(w.metadata.url));
+
+            if (newWebsites.length === 0) {
+                debug(`No new websites to add. Collection already has ${existingUrls.size} websites.`);
+                index!.state = "finished";
+                sendIndexStatus();
+                return;
+            }
+
+            debug(`Found ${newWebsites.length} new websites out of ${importedWebsites.length} imported (${existingUrls.size} already exist)`);
+
+            await addWebsitesIncremental(websites, newWebsites);
 
             debug(
-                `Imported ${importedWebsites.length} websites from ${browserType} ${sourceType}`,
+                `Added ${newWebsites.length} new websites from ${browserType} ${sourceType}`,
             );
 
             await buildIndex(websites, true);

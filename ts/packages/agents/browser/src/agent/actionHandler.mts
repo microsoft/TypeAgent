@@ -200,11 +200,12 @@ async function updateBrowserContext(
                         const sessionDir = await getSessionFolderPath(context);
 
                         if (sessionDir) {
-                            // Create index path following IndexManager pattern: sessionDir/indexes/website-index
+                            // Create index path following IndexManager pattern: sessionDir/indexes/website
                             const indexPath = path.join(
                                 sessionDir,
                                 "indexes",
-                                "website-index",
+                                "website",
+                                "index",
                             );
                             fs.mkdirSync(indexPath, { recursive: true });
 

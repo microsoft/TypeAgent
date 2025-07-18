@@ -29,7 +29,7 @@ import {
     KnowledgeTopicTable,
     ActionKnowledgeCorrelationTable,
 } from "./tables.js";
-import { Website } from "./websiteMeta.js";
+import { Website, WebsiteMeta } from "./websiteMeta.js";
 import { WebsiteDocPart } from "./websiteDocPart.js";
 import path from "node:path";
 import fs from "node:fs";
@@ -138,21 +138,107 @@ export class WebsiteCollection
     }
 
     /**
-     * Add websites to the collection
+     * Add websites to the collection with smart deduplication
      */
     public addWebsites(websites: Website[]): void {
         for (const website of websites) {
-            const docPart = WebsiteDocPart.fromWebsite(website);
+            this.addWebsiteWithDeduplication(website);
+        }
+    }
+
+    /**
+     * Add a single website with smart deduplication logic
+     */
+    public addWebsiteWithDeduplication(website: Website): void {
+        const docPart = WebsiteDocPart.fromWebsite(website);
+        const url = website.metadata.url;
+        
+        // Check if URL already exists in collection
+        const existingIndex = this.findWebsiteByUrl(url);
+        
+        if (existingIndex !== -1) {
+            const existing = this.messages.get(existingIndex) as WebsiteDocPart;
+            
+            // Preserve richer data: prefer entries with more content/knowledge
+            if (this.shouldReplaceExisting(existing, docPart)) {
+                console.log(`[WebsiteCollection] Replacing existing entry for ${url} with richer data`);
+                // Update existing entry with new data
+                (this.messages as any).items[existingIndex] = docPart;
+            } else {
+                console.log(`[WebsiteCollection] Skipping duplicate entry for ${url} - existing data is richer`);
+                return;
+            }
+        } else {
+            // New URL, add normally
             this.messages.append(docPart);
         }
+    }
+
+    /**
+     * Find website by URL in the collection
+     */
+    private findWebsiteByUrl(url: string): number {
+        const websites = this.messages.getAll() as WebsiteDocPart[];
+        for (let i = 0; i < websites.length; i++) {
+            if (websites[i].url === url) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Determine if new data should replace existing data
+     * Priority: Rich AI data > HTML content > Basic metadata
+     */
+    private shouldReplaceExisting(existing: WebsiteDocPart, newEntry: WebsiteDocPart): boolean {
+        // Calculate content richness scores
+        const existingScore = this.calculateRichnessScore(existing);
+        const newScore = this.calculateRichnessScore(newEntry);
+        
+        console.log(`[WebsiteCollection] Existing richness: ${existingScore}, New richness: ${newScore}`);
+        
+        return newScore > existingScore;
+    }
+
+    /**
+     * Calculate how rich/valuable a website entry is
+     */
+    private calculateRichnessScore(docPart: WebsiteDocPart): number {
+        let score = 0;
+        
+        // Basic metadata (always present)
+        score += 1;
+        
+        // HTML content
+        if (docPart.textChunks && docPart.textChunks.length > 0) {
+            score += 2;
+            // More content = higher score
+            score += Math.min(docPart.textChunks.join('').length / 1000, 5);
+        }
+        
+        // Knowledge data (AI-extracted)
+        const knowledge = docPart.getKnowledge();
+        if (knowledge) {
+            score += 5; // AI knowledge is very valuable
+            score += knowledge.entities.length * 0.1;
+            score += knowledge.topics.length * 0.1;
+            score += knowledge.actions.length * 0.1;
+        }
+        
+        // Detected actions
+        if (docPart.metadata.detectedActions && docPart.metadata.detectedActions.length > 0) {
+            score += 2;
+        }
+        
+        return score;
     }
 
     /**
      * Add a single website to the collection
      */
     public addWebsite(website: Website): void {
-        const docPart = WebsiteDocPart.fromWebsite(website);
-        this.messages.append(docPart);
+        this.addWebsiteWithDeduplication(website);
     }
 
     /**
@@ -659,7 +745,35 @@ export class WebsiteCollection
         // Convert messages back to WebsiteDocPart instances
         const websiteDocParts = data.messages.map((m) => {
             // Reconstruct WebsiteMeta from the serialized message metadata
-            const websiteMeta = (m.metadata as any).websiteMeta || m.metadata;
+            const metadataObj = (m.metadata as any).websiteMeta || m.metadata;
+            
+            // Create a proper WebsiteMeta instance from the serialized data
+            const websiteMeta = new WebsiteMeta({
+                url: metadataObj.url,
+                title: metadataObj.title,
+                domain: metadataObj.domain,
+                visitDate: metadataObj.visitDate,
+                bookmarkDate: metadataObj.bookmarkDate,
+                source: metadataObj.websiteSource || metadataObj.source || "bookmark",
+                folder: metadataObj.folder,
+                pageType: metadataObj.pageType,
+                keywords: metadataObj.keywords,
+                description: metadataObj.description,
+                favicon: metadataObj.favicon,
+                visitCount: metadataObj.visitCount,
+                lastVisitTime: metadataObj.lastVisitTime,
+                typedCount: metadataObj.typedCount,
+            });
+            
+            // Restore enhanced properties if they exist
+            if (metadataObj.pageContent) websiteMeta.pageContent = metadataObj.pageContent;
+            if (metadataObj.metaTags) websiteMeta.metaTags = metadataObj.metaTags;
+            if (metadataObj.structuredData) websiteMeta.structuredData = metadataObj.structuredData;
+            if (metadataObj.extractedActions) websiteMeta.extractedActions = metadataObj.extractedActions;
+            if (metadataObj.contentSummary) websiteMeta.contentSummary = metadataObj.contentSummary;
+            if (metadataObj.detectedActions) websiteMeta.detectedActions = metadataObj.detectedActions;
+            if (metadataObj.actionSummary) websiteMeta.actionSummary = metadataObj.actionSummary;
+            
             return new WebsiteDocPart(
                 websiteMeta,
                 m.textChunks,
@@ -709,8 +823,21 @@ export class WebsiteCollection
         dirPath: string,
         baseFileName: string,
     ): Promise<void> {
+        console.log(`[WebsiteCollection] writeToFile called: ${dirPath}/${baseFileName} (${this.messages.length} messages)`);
+        
+         console.trace("Call stack to [WebsiteCollection] writeToFile");
+         
         const data = await this.serialize();
-        await writeConversationDataToFile(data, dirPath, baseFileName);
+        
+        // Create model metadata with correct embedding size to prevent size 0 issue
+        const embeddingSize = this.settings.conversationSettings
+            .relatedTermIndexSettings.embeddingIndexSettings?.embeddingSize || 1536;
+        const modelMetadata = {
+            embeddingSize,
+            modelName: "text-embedding-ada-002"
+        };
+        
+        await writeConversationDataToFile(data, dirPath, baseFileName, modelMetadata);
 
         // if we have an in-memory database we need to write it out to disk
         if (this.dbPath.length === 0 || this.dbPath === ":memory:") {
