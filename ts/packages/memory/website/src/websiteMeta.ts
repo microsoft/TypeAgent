@@ -486,8 +486,13 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
         topics: string[],
         detectedActions: DetectedAction[],
     ): void {
-        // Add action type topics
-        const actionTypes = new Set(detectedActions.map((a) => a.actionType));
+        // Add action type topics - filter out undefined actionTypes
+        const actionTypes = new Set(
+            detectedActions
+                .map((a) => a.actionType)
+                .filter((actionType): actionType is string => actionType != null && actionType !== "")
+        );
+        
         actionTypes.forEach((actionType) => {
             topics.push(`supports ${actionType}`);
             topics.push(
@@ -579,7 +584,7 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
     ): void {
         // Create action entities for high-confidence actions
         detectedActions.forEach((action, index) => {
-            if (action.confidence > 0.7) {
+            if (action.confidence > 0.7 && action.actionType) {
                 const actionEntity: any = {
                     name: `${this.domain}_action_${index}`,
                     type: [
@@ -658,25 +663,27 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
                 (a, b) => b.confidence - a.confidence,
             )[0];
 
-            const actionVerb = primaryAction.actionType
-                .replace("Action", "")
-                .toLowerCase();
+            if (primaryAction.actionType) {
+                const actionVerb = primaryAction.actionType
+                    .replace("Action", "")
+                    .toLowerCase();
 
-            actions.push({
-                verbs: ["can", actionVerb],
-                verbTense: "present",
-                subjectEntityName: "user",
-                objectEntityName: this.domain || this.url,
-                indirectObjectEntityName: "none",
-                params: [
-                    { name: "actionType", value: primaryAction.actionType },
-                    {
-                        name: "actionConfidence",
-                        value: primaryAction.confidence.toString(),
-                    },
-                    { name: "actionName", value: primaryAction.name },
-                ],
-            });
+                actions.push({
+                    verbs: ["can", actionVerb],
+                    verbTense: "present",
+                    subjectEntityName: "user",
+                    objectEntityName: this.domain || this.url,
+                    indirectObjectEntityName: "none",
+                    params: [
+                        { name: "actionType", value: primaryAction.actionType },
+                        {
+                            name: "actionConfidence",
+                            value: primaryAction.confidence.toString(),
+                        },
+                        { name: "actionName", value: primaryAction.name },
+                    ],
+                });
+            }
         }
 
         // Add specific high-value actions

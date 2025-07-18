@@ -231,6 +231,7 @@
       .spinner-grow-sm {
         width: 0.75rem;
         height: 0.75rem;
+      }
       .mode-description {
         font-size: 0.75rem;
         color: #6c757d;
@@ -513,6 +514,158 @@
       .related-content-summary {
         border: 1px solid #e9ecef;
       }
+
+      /* Extraction Mode Slider Styles */
+      .extraction-mode-slider-container {
+        position: relative;
+        margin: 0.5rem 0 1rem 0;
+      }
+
+      .extraction-mode-slider {
+        width: 100%;
+        height: 6px;
+        border-radius: 3px;
+        background: #e9ecef;
+        outline: none;
+        appearance: none;
+        cursor: pointer;
+        position: relative;
+        z-index: 2;
+      }
+
+      .extraction-mode-slider::-webkit-slider-thumb {
+        appearance: none;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: #667eea;
+        cursor: pointer;
+        border: 2px solid white;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        transition: all 0.2s ease;
+      }
+
+      .extraction-mode-slider::-webkit-slider-thumb:hover {
+        transform: scale(1.1);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+      }
+
+      .extraction-mode-slider::-moz-range-thumb {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: #667eea;
+        cursor: pointer;
+        border: 2px solid white;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        transition: all 0.2s ease;
+      }
+
+      .extraction-mode-slider::-moz-range-thumb:hover {
+        transform: scale(1.1);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+      }
+
+      .slider-labels {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 0.5rem;
+        position: relative;
+      }
+
+      .slider-label {
+        font-size: 0.75rem;
+        color: #6c757d;
+        text-align: center;
+        flex: 1;
+        cursor: pointer;
+        transition: color 0.2s ease;
+        user-select: none;
+      }
+
+      .slider-label.active {
+        color: #667eea;
+        font-weight: 600;
+      }
+
+      .slider-ticks {
+        position: absolute;
+        top: 50%;
+        left: 0;
+        right: 0;
+        height: 6px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transform: translateY(-50%);
+        pointer-events: none;
+        z-index: 1;
+      }
+
+      .slider-tick {
+        width: 8px;
+        height: 8px;
+        background: #dee2e6;
+        border-radius: 50%;
+        border: 2px solid white;
+        transition: background-color 0.2s ease;
+      }
+
+      .slider-tick.active {
+        background: #667eea;
+      }
+
+      /* Basic mode color - green for fast/simple */
+      .extraction-mode-slider[data-mode="basic"] {
+        background: linear-gradient(to right, #28a745 0%, #28a745 33.33%, #e9ecef 33.33%, #e9ecef 100%);
+      }
+
+      .extraction-mode-slider[data-mode="basic"]::-webkit-slider-thumb {
+        background: #28a745;
+      }
+
+      .extraction-mode-slider[data-mode="basic"]::-moz-range-thumb {
+        background: #28a745;
+      }
+
+      /* Content mode color - blue for standard */
+      .extraction-mode-slider[data-mode="content"] {
+        background: linear-gradient(to right, #28a745 0%, #28a745 33.33%, #667eea 33.33%, #667eea 66.66%, #e9ecef 66.66%, #e9ecef 100%);
+      }
+
+      .extraction-mode-slider[data-mode="content"]::-webkit-slider-thumb {
+        background: #667eea;
+      }
+
+      .extraction-mode-slider[data-mode="content"]::-moz-range-thumb {
+        background: #667eea;
+      }
+
+      /* Actions mode color - orange for enhanced */
+      .extraction-mode-slider[data-mode="actions"] {
+        background: linear-gradient(to right, #28a745 0%, #28a745 33.33%, #667eea 33.33%, #667eea 66.66%, #fd7e14 66.66%, #fd7e14 100%);
+      }
+
+      .extraction-mode-slider[data-mode="actions"]::-webkit-slider-thumb {
+        background: #fd7e14;
+      }
+
+      .extraction-mode-slider[data-mode="actions"]::-moz-range-thumb {
+        background: #fd7e14;
+      }
+
+      /* Full mode color - red for maximum */
+      .extraction-mode-slider[data-mode="full"] {
+        background: linear-gradient(to right, #28a745 0%, #28a745 25%, #667eea 25%, #667eea 50%, #fd7e14 50%, #fd7e14 75%, #dc3545 75%, #dc3545 100%);
+      }
+
+      .extraction-mode-slider[data-mode="full"]::-webkit-slider-thumb {
+        background: #dc3545;
+      }
+
+      .extraction-mode-slider[data-mode="full"]::-moz-range-thumb {
+        background: #dc3545;
+      }
     </style>
   </head>
   <body>
@@ -563,12 +716,32 @@
             <label for="extractionMode" class="form-label text-muted">
               <i class="bi bi-gear"></i> Extraction Mode
             </label>
-            <select id="extractionMode" class="form-select form-select-sm">
-              <option value="basic">Basic (Fast, No AI)</option>
-              <option value="content" selected>Content (AI Analysis)</option>
-              <option value="actions">Actions (AI + Interactions)</option>
-              <option value="full">Full (Complete AI Analysis)</option>
-            </select>
+            <div class="extraction-mode-slider-container">
+              <div class="slider-labels">
+                <span class="slider-label" data-value="0">Basic</span>
+                <span class="slider-label" data-value="1">Content</span>
+                <span class="slider-label" data-value="2">Actions</span>
+                <span class="slider-label" data-value="3">Full</span>
+              </div>
+
+              <input 
+                type="range" 
+                id="extractionMode" 
+                class="extraction-mode-slider" 
+                min="0" 
+                max="3" 
+                value="1" 
+                step="1"
+                data-mode="content"
+              />
+              
+              <div class="slider-ticks">
+                <span class="slider-tick" data-value="0"></span>
+                <span class="slider-tick" data-value="1"></span>
+                <span class="slider-tick" data-value="2"></span>
+                <span class="slider-tick" data-value="3"></span>
+              </div>
+            </div>
             <div class="form-text" id="modeDescription">
               AI-powered content analysis with entity and topic extraction
             </div>
@@ -675,48 +848,6 @@
 
           <div id="queryResults" class="mt-3">
             <!-- Query results will appear here -->
-          </div>
-        </div>
-      </div>
-
-      <!-- Index Status Section -->
-      <div class="knowledge-card card">
-        <div class="card-header">
-          <h6 class="mb-0"><i class="bi bi-database"></i> Index Status</h6>
-        </div>
-        <div class="card-body">
-          <div id="indexStats">
-            <div class="row text-center">
-              <div class="col-4">
-                <div class="h5 mb-0" id="totalPages">0</div>
-                <small class="text-muted">Pages</small>
-              </div>
-              <div class="col-4">
-                <div class="h5 mb-0" id="totalEntities">0</div>
-                <small class="text-muted">Entities</small>
-              </div>
-              <div class="col-4">
-                <div class="h5 mb-0" id="lastIndexed">Never</div>
-                <small class="text-muted">Last Index</small>
-              </div>
-            </div>
-          </div>
-
-          <!-- Index Status Section -->
-          <div class="mt-3">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <small class="text-muted">Knowledge Quality</small>
-              <div id="qualityIndicator" class="badge bg-secondary">
-                Unknown
-              </div>
-            </div>
-
-            <button
-              id="openSettings"
-              class="btn btn-outline-secondary btn-sm w-100"
-            >
-              <i class="bi bi-gear"></i> Configure Knowledge Settings
-            </button>
           </div>
         </div>
       </div>

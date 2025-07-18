@@ -494,15 +494,9 @@ export class WebsiteImportUI {
         const folderInput = modal.querySelector(
             "#bookmarkFolder",
         ) as HTMLInputElement;
-        const extractContentInput = modal.querySelector(
-            "#extractContent",
-        ) as HTMLInputElement;
-        const intelligentAnalysisInput = modal.querySelector(
-            "#enableIntelligentAnalysis",
-        ) as HTMLInputElement;
         const extractionModeInput = modal.querySelector(
             "#extractionMode",
-        ) as HTMLSelectElement;
+        ) as HTMLInputElement;
         const maxConcurrentInput = modal.querySelector(
             "#maxConcurrent",
         ) as HTMLInputElement;
@@ -510,10 +504,16 @@ export class WebsiteImportUI {
             "#contentTimeout",
         ) as HTMLInputElement;
 
+        // Convert slider value to mode string
+        const modeMap = ["basic", "content", "actions", "full"];
+        const extractionMode = extractionModeInput?.value 
+            ? modeMap[parseInt(extractionModeInput.value)] as any
+            : "content";
+
         const options: ImportOptions = {
             source,
             type,
-            mode: (extractionModeInput?.value as any) ?? "content",
+            mode: extractionMode,
             maxConcurrent: maxConcurrentInput?.value
                 ? parseInt(maxConcurrentInput.value)
                 : 5,
@@ -553,18 +553,9 @@ export class WebsiteImportUI {
         }
 
         // Get form values
-        const extractContentInput = modal.querySelector(
-            "#folderExtractContent",
-        ) as HTMLInputElement;
-        const intelligentAnalysisInput = modal.querySelector(
-            "#folderIntelligentAnalysis",
-        ) as HTMLInputElement;
-        const actionDetectionInput = modal.querySelector(
-            "#folderActionDetection",
-        ) as HTMLInputElement;
         const extractionModeInput = modal.querySelector(
             "#folderExtractionMode",
-        ) as HTMLSelectElement;
+        ) as HTMLInputElement;
         const preserveStructureInput = modal.querySelector(
             "#preserveStructure",
         ) as HTMLInputElement;
@@ -581,9 +572,15 @@ export class WebsiteImportUI {
             "#skipHidden",
         ) as HTMLInputElement;
 
+        // Convert slider value to mode string
+        const modeMap = ["basic", "content", "actions", "full"];
+        const extractionMode = extractionModeInput?.value 
+            ? modeMap[parseInt(extractionModeInput.value)] as any
+            : "content";
+
         const options: FolderImportOptions = {
             folderPath: folderPathInput.value.trim(),
-            mode: (extractionModeInput?.value as any) ?? "content",
+            mode: extractionMode,
             preserveStructure: preserveStructureInput?.checked ?? true,
             recursive: recursiveInput?.checked ?? true,
             fileTypes: [".html", ".htm", ".mhtml"],
@@ -868,34 +865,37 @@ export class WebsiteImportUI {
                                         <div class="mt-3">
                                             <h6 class="mb-3">Enhancement Options</h6>
                                             
-                                            <div class="form-check mb-2">
-                                                <input class="form-check-input" type="checkbox" id="extractContent" checked>
-                                                <label class="form-check-label" for="extractContent">
-                                                    <i class="bi bi-download"></i> Extract page content
-                                                </label>
-                                                <small class="text-muted d-block ms-4">
-                                                    Fetch actual page content for semantic search
-                                                </small>
-                                            </div>
-
-                                            <div class="form-check mb-2">
-                                                <input class="form-check-input" type="checkbox" id="enableIntelligentAnalysis" checked>
-                                                <label class="form-check-label" for="enableIntelligentAnalysis">
-                                                    <i class="bi bi-robot"></i> AI knowledge extraction
-                                                </label>
-                                                <small class="text-muted d-block ms-4">
-                                                    Extract entities, topics, and insights using AI
-                                                </small>
-                                            </div>
-
                                             <div class="mb-3">
-                                                <label for="extractionMode" class="form-label">Extraction Quality</label>
-                                                <select id="extractionMode" class="form-select form-select-sm">
-                                                    <option value="basic">Basic - Fast extraction</option>
-                                                    <option value="content" selected>Content - Good quality</option>
-                                                    <option value="actions">Actions - Include action detection</option>
-                                                    <option value="full">Full - Maximum detail</option>
-                                                </select>
+                                                <label for="extractionMode" class="form-label">
+                                                    <i class="bi bi-gear"></i> Extraction Mode
+                                                </label>
+                                                <div class="extraction-mode-slider-container">
+                                                    <input 
+                                                        type="range" 
+                                                        id="extractionMode" 
+                                                        class="extraction-mode-slider" 
+                                                        min="0" 
+                                                        max="3" 
+                                                        value="1" 
+                                                        step="1"
+                                                        data-mode="content"
+                                                    />
+                                                    <div class="slider-labels">
+                                                        <span class="slider-label" data-value="0">Basic</span>
+                                                        <span class="slider-label" data-value="1">Content</span>
+                                                        <span class="slider-label" data-value="2">Actions</span>
+                                                        <span class="slider-label" data-value="3">Full</span>
+                                                    </div>
+                                                    <div class="slider-ticks">
+                                                        <span class="slider-tick" data-value="0"></span>
+                                                        <span class="slider-tick" data-value="1"></span>
+                                                        <span class="slider-tick" data-value="2"></span>
+                                                        <span class="slider-tick" data-value="3"></span>
+                                                    </div>
+                                                </div>
+                                                <small class="text-muted">
+                                                    <span id="webModeDescription">AI-powered content analysis with entity and topic extraction</span>
+                                                </small>
                                             </div>
 
                                             <div class="row">
@@ -1053,44 +1053,38 @@ export class WebsiteImportUI {
                                         <div class="mb-3">
                                             <h6 class="mb-3">Content Processing</h6>
                                             
-                                            <div class="form-check mb-2">
-                                                <input class="form-check-input" type="checkbox" id="folderExtractContent" checked>
-                                                <label class="form-check-label" for="folderExtractContent">
-                                                    <i class="bi bi-file-text"></i> Extract content from files
-                                                </label>
-                                                <small class="text-muted d-block ms-4">
-                                                    Parse HTML content and extract meaningful text
-                                                </small>
-                                            </div>
-
-                                            <div class="form-check mb-2">
-                                                <input class="form-check-input" type="checkbox" id="folderIntelligentAnalysis" checked>
-                                                <label class="form-check-label" for="folderIntelligentAnalysis">
-                                                    <i class="bi bi-robot"></i> AI knowledge extraction
-                                                </label>
-                                                <small class="text-muted d-block ms-4">
-                                                    Extract entities, topics, and insights using AI
-                                                </small>
-                                            </div>
-
-                                            <div class="form-check mb-3">
-                                                <input class="form-check-input" type="checkbox" id="folderActionDetection">
-                                                <label class="form-check-label" for="folderActionDetection">
-                                                    <i class="bi bi-lightning"></i> Action detection
-                                                </label>
-                                                <small class="text-muted d-block ms-4">
-                                                    Identify actionable elements in files
-                                                </small>
-                                            </div>
-
                                             <div class="mb-3">
-                                                <label for="folderExtractionMode" class="form-label">Processing Quality</label>
-                                                <select id="folderExtractionMode" class="form-select form-select-sm">
-                                                    <option value="basic">Basic - Fast processing</option>
-                                                    <option value="content" selected>Content - Good quality</option>
-                                                    <option value="actions">Actions - Include action detection</option>
-                                                    <option value="full">Full - Maximum detail</option>
-                                                </select>
+                                                <label for="folderExtractionMode" class="form-label">
+                                                    <i class="bi bi-gear"></i> Extraction Mode
+                                                </label>
+                                                <div class="extraction-mode-slider-container">
+                                                    <input 
+                                                        type="range" 
+                                                        id="folderExtractionMode" 
+                                                        class="extraction-mode-slider" 
+                                                        min="0" 
+                                                        max="3" 
+                                                        value="1" 
+                                                        step="1"
+                                                        data-mode="content"
+                                                    />
+                                                    <div class="slider-labels">
+                                                        <span class="slider-label" data-value="0">Basic</span>
+                                                        <span class="slider-label" data-value="1">Content</span>
+                                                        <span class="slider-label" data-value="2">Actions</span>
+                                                        <span class="slider-label" data-value="3">Full</span>
+                                                    </div>
+                                                    <div class="slider-ticks">
+                                                        <span class="slider-tick" data-value="0"></span>
+                                                        <span class="slider-tick" data-value="1"></span>
+                                                        <span class="slider-tick" data-value="2"></span>
+                                                        <span class="slider-tick" data-value="3"></span>
+                                                    </div>
+                                                </div>
+                                                <small class="text-muted">
+                                                    <span id="folderModeDescription">AI-powered content analysis with entity and topic extraction</span>
+                                                </small>
+                                            </div>
                                             </div>
 
                                             <div class="form-check mb-2">
@@ -1209,6 +1203,12 @@ export class WebsiteImportUI {
                 this.updateWebActivityFormState();
             });
         });
+
+        // Setup extraction mode slider
+        const extractionSlider = modal.querySelector("#extractionMode") as HTMLInputElement;
+        if (extractionSlider) {
+            this.setupSliderEventListeners(extractionSlider, "#webModeDescription");
+        }
 
         // Start import button - use replaceWith to remove any existing event listeners
         const startButton = modal.querySelector("#startWebActivityImport");
@@ -1358,6 +1358,12 @@ export class WebsiteImportUI {
             });
         });
 
+        // Setup extraction mode slider
+        const folderExtractionSlider = modal.querySelector("#folderExtractionMode") as HTMLInputElement;
+        if (folderExtractionSlider) {
+            this.setupSliderEventListeners(folderExtractionSlider, "#folderModeDescription");
+        }
+
         // Start import button - use replaceWith to remove any existing event listeners
         if (startButton) {
             // Clone the button to remove any existing event listeners
@@ -1451,6 +1457,84 @@ export class WebsiteImportUI {
         document.body.classList.remove("modal-open");
         document.body.style.removeProperty("overflow");
         document.body.style.removeProperty("padding-right");
+    }
+
+    /**
+     * Setup event listeners for extraction mode slider
+     */
+    private setupSliderEventListeners(slider: HTMLInputElement, descriptionSelector: string): void {
+        const modal = slider.closest('.modal');
+        if (!modal) return;
+
+        // Handle slider input
+        slider.addEventListener('input', () => {
+            const modeMap = ["basic", "content", "actions", "full"];
+            const mode = modeMap[parseInt(slider.value)];
+            slider.setAttribute("data-mode", mode);
+            this.updateSliderLabels(slider);
+            this.updateModeDescription(descriptionSelector, mode);
+        });
+
+        // Handle label clicks
+        const labels = modal.querySelectorAll('.slider-label');
+        labels.forEach((label, index) => {
+            label.addEventListener('click', () => {
+                const modeMap = ["basic", "content", "actions", "full"];
+                slider.value = index.toString();
+                slider.setAttribute("data-mode", modeMap[index]);
+                this.updateSliderLabels(slider);
+                this.updateModeDescription(descriptionSelector, modeMap[index]);
+            });
+        });
+
+        // Initialize state
+        this.updateSliderLabels(slider);
+        this.updateModeDescription(descriptionSelector, "content");
+    }
+
+    /**
+     * Update slider labels and ticks visual state
+     */
+    private updateSliderLabels(slider: HTMLInputElement): void {
+        const modal = slider.closest('.modal');
+        if (!modal) return;
+
+        const activeValue = parseInt(slider.value);
+        const labels = modal.querySelectorAll('.slider-label');
+        const ticks = modal.querySelectorAll('.slider-tick');
+        
+        labels.forEach((label, index) => {
+            if (index === activeValue) {
+                label.classList.add('active');
+            } else {
+                label.classList.remove('active');
+            }
+        });
+
+        ticks.forEach((tick, index) => {
+            if (index === activeValue) {
+                tick.classList.add('active');
+            } else {
+                tick.classList.remove('active');
+            }
+        });
+    }
+
+    /**
+     * Update mode description text
+     */
+    private updateModeDescription(selector: string, mode: string): void {
+        const descriptionElement = document.querySelector(selector);
+        if (!descriptionElement) return;
+
+        const descriptions: Record<string, string> = {
+            "basic": "Fast metadata extraction without AI - perfect for bulk operations",
+            "content": "AI-powered content analysis with entity and topic extraction",
+            "actions": "AI analysis plus interaction detection for dynamic pages",
+            "full": "Complete AI analysis with relationships and cross-references"
+        };
+
+        descriptionElement.textContent = descriptions[mode] || descriptions.content;
     }
 
     /**
@@ -1683,6 +1767,155 @@ export class WebsiteImportUI {
                     .file-item:hover {
                         transform: none !important;
                     }
+                }
+
+                /* Extraction Mode Slider Styles */
+                .extraction-mode-slider-container {
+                    position: relative;
+                    margin: 0.5rem 0 1rem 0;
+                }
+
+                .extraction-mode-slider {
+                    width: 100%;
+                    height: 6px;
+                    border-radius: 3px;
+                    background: #e9ecef;
+                    outline: none;
+                    appearance: none;
+                    cursor: pointer;
+                    position: relative;
+                    z-index: 2;
+                }
+
+                .extraction-mode-slider::-webkit-slider-thumb {
+                    appearance: none;
+                    width: 18px;
+                    height: 18px;
+                    border-radius: 50%;
+                    background: #667eea;
+                    cursor: pointer;
+                    border: 2px solid white;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                    transition: all 0.2s ease;
+                }
+
+                .extraction-mode-slider::-webkit-slider-thumb:hover {
+                    transform: scale(1.1);
+                    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+                }
+
+                .extraction-mode-slider::-moz-range-thumb {
+                    width: 18px;
+                    height: 18px;
+                    border-radius: 50%;
+                    background: #667eea;
+                    cursor: pointer;
+                    border: 2px solid white;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                    transition: all 0.2s ease;
+                }
+
+                .extraction-mode-slider::-moz-range-thumb:hover {
+                    transform: scale(1.1);
+                    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+                }
+
+                .slider-labels {
+                    display: flex;
+                    justify-content: space-between;
+                    margin-top: 0.5rem;
+                    position: relative;
+                }
+
+                .slider-label {
+                    font-size: 0.7rem;
+                    color: #6c757d;
+                    text-align: center;
+                    flex: 1;
+                    cursor: pointer;
+                    transition: color 0.2s ease;
+                    user-select: none;
+                }
+
+                .slider-label.active {
+                    color: #667eea;
+                    font-weight: 600;
+                }
+
+                .slider-ticks {
+                    position: absolute;
+                    top: 50%;
+                    left: 0;
+                    right: 0;
+                    height: 6px;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    transform: translateY(-50%);
+                    pointer-events: none;
+                    z-index: 1;
+                }
+
+                .slider-tick {
+                    width: 6px;
+                    height: 6px;
+                    background: #dee2e6;
+                    border-radius: 50%;
+                    border: 1px solid white;
+                    transition: background-color 0.2s ease;
+                }
+
+                .slider-tick.active {
+                    background: #667eea;
+                }
+
+                /* Slider mode colors */
+                .extraction-mode-slider[data-mode="basic"] {
+                    background: linear-gradient(to right, #28a745 0%, #28a745 33.33%, #e9ecef 33.33%, #e9ecef 100%);
+                }
+
+                .extraction-mode-slider[data-mode="basic"]::-webkit-slider-thumb {
+                    background: #28a745;
+                }
+
+                .extraction-mode-slider[data-mode="basic"]::-moz-range-thumb {
+                    background: #28a745;
+                }
+
+                .extraction-mode-slider[data-mode="content"] {
+                    background: linear-gradient(to right, #28a745 0%, #28a745 33.33%, #667eea 33.33%, #667eea 66.66%, #e9ecef 66.66%, #e9ecef 100%);
+                }
+
+                .extraction-mode-slider[data-mode="content"]::-webkit-slider-thumb {
+                    background: #667eea;
+                }
+
+                .extraction-mode-slider[data-mode="content"]::-moz-range-thumb {
+                    background: #667eea;
+                }
+
+                .extraction-mode-slider[data-mode="actions"] {
+                    background: linear-gradient(to right, #28a745 0%, #28a745 33.33%, #667eea 33.33%, #667eea 66.66%, #fd7e14 66.66%, #fd7e14 100%);
+                }
+
+                .extraction-mode-slider[data-mode="actions"]::-webkit-slider-thumb {
+                    background: #fd7e14;
+                }
+
+                .extraction-mode-slider[data-mode="actions"]::-moz-range-thumb {
+                    background: #fd7e14;
+                }
+
+                .extraction-mode-slider[data-mode="full"] {
+                    background: linear-gradient(to right, #28a745 0%, #28a745 25%, #667eea 25%, #667eea 50%, #fd7e14 50%, #fd7e14 75%, #dc3545 75%, #dc3545 100%);
+                }
+
+                .extraction-mode-slider[data-mode="full"]::-webkit-slider-thumb {
+                    background: #dc3545;
+                }
+
+                .extraction-mode-slider[data-mode="full"]::-moz-range-thumb {
+                    background: #dc3545;
                 }
             `;
             document.head.appendChild(style);
