@@ -949,7 +949,7 @@ export class WebsiteImportUI {
             "#folderContainer",
         ) as HTMLElement;
 
-        if (selectedType) {
+        if (selectedType  && daysBackContainer  && folderContainer) {
             const type = selectedType.getAttribute("data-type");
             if (type === "history") {
                 daysBackContainer.style.display = "block";

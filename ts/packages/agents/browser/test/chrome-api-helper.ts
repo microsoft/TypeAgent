@@ -3,16 +3,14 @@
 
 /// <reference path="types/jest-chrome-extensions.d.ts" />
 
+import DOMPurify from 'dompurify';
+
 /**
  * Removes all <script>...</script> tags from the input HTML, including nested/multiple instances.
  */
 function removeScriptTags(html: string): string {
-    let prev;
-    do {
-        prev = html;
-        html = html.replace(/<script[^>]*>.*?<\/script>/gi, "");
-    } while (html !== prev);
-    return html;
+    const cleanHtml = DOMPurify.sanitize(html);
+    return cleanHtml;
 }
 
 /**

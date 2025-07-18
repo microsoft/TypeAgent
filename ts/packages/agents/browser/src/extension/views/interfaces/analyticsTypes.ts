@@ -61,6 +61,14 @@ export interface AnalyticsData {
             fromPage: string;
             extractedAt: string;
         }>;
+        recentRelationships?: Array<{
+            from: string;
+            relationship: string;
+            to: string;
+            confidence: number;
+            fromPage: string;
+            extractedAt: string;
+        }>;
     };
     activity?: {
         trends: Array<{
