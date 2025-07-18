@@ -15,6 +15,8 @@ export interface CrossContextDependencies {
     DOMPurify?: any;
 }
 
+import DOMPurify from "dompurify";
+
 /**
  * Class for reducing HTML size by removing unnecessary elements and attributes
  * Works in both browser (DOMParser) and Node.js (JSDOM) contexts
