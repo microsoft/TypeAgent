@@ -3,7 +3,10 @@
 
 import { Args, Command, Flags } from "@oclif/core";
 import { ClientIO, createDispatcher } from "agent-dispatcher";
-import { getDefaultAppAgentProviders } from "default-agent-provider";
+import {
+    getDefaultAppAgentProviders,
+    getIndexingServiceRegistry,
+} from "default-agent-provider";
 import { getChatModelNames } from "aiclient";
 import {
     ChatHistoryInput,
@@ -145,6 +148,8 @@ export default class ReplayCommand extends Command {
                 persistDir: instanceDir,
                 dblogging: true,
                 clientId: getClientId(),
+                indexingServiceRegistry:
+                    await getIndexingServiceRegistry(instanceDir),
             });
 
             try {

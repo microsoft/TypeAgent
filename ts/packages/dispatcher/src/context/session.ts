@@ -309,7 +309,11 @@ export class Session {
         return session;
     }
 
-    public static async load(instanceDir: string, dir: string, indexingServiceRegistry?: IndexingServiceRegistry) {
+    public static async load(
+        instanceDir: string,
+        dir: string,
+        indexingServiceRegistry?: IndexingServiceRegistry,
+    ) {
         const dirPath = getSessionDirPath(instanceDir, dir);
         const sessionData = await readSessionData(dirPath);
         debugSession(`Loading session: ${dir}`);
@@ -320,11 +324,18 @@ export class Session {
         return new Session(sessionData, dirPath, indexingServiceRegistry);
     }
 
-    public static async restoreLastSession(instanceDir: string, indexingServiceRegistry?: IndexingServiceRegistry) {
+    public static async restoreLastSession(
+        instanceDir: string,
+        indexingServiceRegistry?: IndexingServiceRegistry,
+    ) {
         const sessionDir = (await loadSessions(instanceDir))?.lastSession;
         if (sessionDir !== undefined) {
             try {
-                return this.load(instanceDir, sessionDir, indexingServiceRegistry);
+                return this.load(
+                    instanceDir,
+                    sessionDir,
+                    indexingServiceRegistry,
+                );
             } catch (e: any) {
                 throw new Error(
                     `Unable to restore last session '${sessionDir}': ${e.message}`,
@@ -356,7 +367,11 @@ export class Session {
             }
 
             // Pass the registry to IndexManager.load
-            IndexManager.load(sessionData.indexes, sessionDirPath, indexingServiceRegistry).catch((error) => {
+            IndexManager.load(
+                sessionData.indexes,
+                sessionDirPath,
+                indexingServiceRegistry,
+            ).catch((error) => {
                 console.warn(`Failed to load indexing services: ${error}`);
             });
         }

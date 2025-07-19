@@ -105,11 +105,14 @@ export interface IndexingPerformanceMetrics {
     successRate: number;
     enhancementRate: number;
     modeDistribution: Record<ExtractionMode, number>;
-    domainStatistics: Record<string, {
-        count: number;
-        averageQuality: number;
-        preferredMode: ExtractionMode;
-    }>;
+    domainStatistics: Record<
+        string,
+        {
+            count: number;
+            averageQuality: number;
+            preferredMode: ExtractionMode;
+        }
+    >;
 }
 
 /**

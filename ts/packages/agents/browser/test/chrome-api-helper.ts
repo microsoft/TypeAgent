@@ -3,7 +3,7 @@
 
 /// <reference path="types/jest-chrome-extensions.d.ts" />
 
-import DOMPurify from 'dompurify';
+import DOMPurify from "dompurify";
 
 /**
  * Removes all <script>...</script> tags from the input HTML, including nested/multiple instances.

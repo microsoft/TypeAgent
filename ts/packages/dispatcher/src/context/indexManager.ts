@@ -40,7 +40,11 @@ export class IndexManager {
     /*
      * Loads the supplied indexes
      */
-    public static async load(indexesToLoad: IndexData[], sessionDir: string, serviceRegistry?: IndexingServiceRegistry) {
+    public static async load(
+        indexesToLoad: IndexData[],
+        sessionDir: string,
+        serviceRegistry?: IndexingServiceRegistry,
+    ) {
         this.rootPath = path.join(sessionDir, "indexes");
         this.indexingRegistry = serviceRegistry;
 
@@ -210,17 +214,25 @@ export class IndexManager {
 
                 // Try to use registry-based service discovery first
                 if (IndexManager.indexingRegistry) {
-                    const serviceInfo = IndexManager.indexingRegistry.get(index.source);
+                    const serviceInfo = IndexManager.indexingRegistry.get(
+                        index.source,
+                    );
                     if (serviceInfo) {
-                        debug(`Using registered indexing service for ${index.source}: ${serviceInfo.agentName}/${serviceInfo.serviceScript}`);
+                        debug(
+                            `Using registered indexing service for ${index.source}: ${serviceInfo.agentName}/${serviceInfo.serviceScript}`,
+                        );
 
                         serviceRoot = serviceInfo.serviceScript;
                     } else {
-                        debug(`No registered service found for ${index.source}, falling back to defaults`);
+                        debug(
+                            `No registered service found for ${index.source}, falling back to defaults`,
+                        );
                         serviceRoot = this.getDefaultServicePath(index.source);
                     }
                 } else {
-                    debug(`No indexing registry available, using legacy service discovery`);
+                    debug(
+                        `No indexing registry available, using legacy service discovery`,
+                    );
                     serviceRoot = this.getDefaultServicePath(index.source);
                 }
 
@@ -271,7 +283,7 @@ export class IndexManager {
         // Legacy service discovery for backward compatibility
         if (indexSource === "website") {
             return getPackageFilePath(
-                   "./node_modules/website-memory/dist/indexingService.js",
+                "./node_modules/website-memory/dist/indexingService.js",
             );
         } else {
             // Default to image memory service

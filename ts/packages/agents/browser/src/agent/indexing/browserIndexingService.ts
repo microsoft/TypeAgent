@@ -5,15 +5,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import registerDebug from "debug";
 
-import { 
-    importWebsites, 
-    Website, 
-    WebsiteCollection
-} from "website-memory";
+import { importWebsites, Website, WebsiteCollection } from "website-memory";
 
 import { IndexingKnowledgeExtractor } from "./indexingKnowledgeExtractor.mjs";
 
-const debug = registerDebug("typeagent:browserIndexingService");
+const debug = registerDebug("typeagent:browser:IndexingService");
 
 // Types from website-memory (re-exported for clarity)
 export type IndexSource = "website" | "image" | "email";
@@ -49,14 +45,13 @@ export class BrowserIndexingService {
      */
     async initialize(): Promise<void> {
         debug("Initializing browser indexing service...");
-        
+
         try {
             await this.knowledgeExtractor.initialize();
             debug("Knowledge extractor initialized");
-            
+
             debug("Browser indexing service ready");
             debug("Capabilities:", this.knowledgeExtractor.getCapabilities());
-            
         } catch (error) {
             debug("Initialization error:", error);
             throw error;
@@ -68,23 +63,29 @@ export class BrowserIndexingService {
      */
     async startIndexing(indexData: IndexData): Promise<void> {
         this.index = indexData;
-        debug(`Starting indexing for: ${indexData.name} (${indexData.sourceType} from ${indexData.browserType})`);
+        debug(
+            `Starting indexing for: ${indexData.name} (${indexData.sourceType} from ${indexData.browserType})`,
+        );
 
         try {
             // Load existing collection first (maintains existing behavior)
             const websites = await this.loadExistingCollection();
-            
+
             // Import bookmarks/history using browser agent processing
             const importedWebsites = await this.importWithBrowserAgent(
                 indexData.browserType || "chrome",
-                indexData.sourceType || "bookmarks", 
-                indexData.location
+                indexData.sourceType || "bookmarks",
+                indexData.location,
             );
-            
+
             // Filter websites that already exist in the collection
-            const existingUrls = new Set(websites.getWebsites().map(w => w.metadata.url));
-            const newWebsites = importedWebsites.filter(w => !existingUrls.has(w.metadata.url));
-            
+            const existingUrls = new Set(
+                websites.getWebsites().map((w) => w.metadata.url),
+            );
+            const newWebsites = importedWebsites.filter(
+                (w) => !existingUrls.has(w.metadata.url),
+            );
+
             if (newWebsites.length === 0) {
                 debug("No new websites to index");
                 this.index.state = "finished";
@@ -92,25 +93,23 @@ export class BrowserIndexingService {
                 this.sendIndexStatus();
                 return;
             }
-            
-            debug(`Processing ${newWebsites.length} new websites with enhanced knowledge extraction`);
-            
-            // Process with enhanced knowledge extraction
-            await this.processWebsitesWithKnowledge(newWebsites);
-            
-            // Add new websites to collection using incremental method
-            await this.addWebsitesIncremental(websites, newWebsites);
-            
-            // Build and save index
-            await this.buildAndSaveIndex(websites);
-            
+
+            debug(
+                `📝 PROCESSING ${newWebsites.length} websites incrementally with enhanced knowledge extraction`,
+            );
+
+            // Process websites incrementally - process, add to collection, and index each one
+            await this.processWebsitesIncrementally(websites, newWebsites);
+
+            // Final save of the index
+            await this.saveIndexToDisk(websites);
+
             this.index.state = "finished";
             this.index.progress = 100;
             this.index.size = websites.getWebsites().length;
             this.sendIndexStatus();
-            
+
             debug("Enhanced indexing completed successfully");
-            
         } catch (error) {
             debug("Indexing failed:", error);
             this.index.state = "error";
@@ -123,16 +122,25 @@ export class BrowserIndexingService {
      */
     private async loadExistingCollection(): Promise<WebsiteCollection> {
         try {
-            const websites = await WebsiteCollection.readFromFile(this.index!.path, "index");
+            const websites = await WebsiteCollection.readFromFile(
+                this.index!.path,
+                "index",
+            );
             if (websites && websites.messages.length > 0) {
-                debug(`Loaded existing collection with ${websites.messages.length} websites`);
+                debug(
+                    `Loaded existing collection with ${websites.messages.length} websites`,
+                );
                 return websites;
             } else {
-                debug("No existing collection found or empty, creating new one");
+                debug(
+                    "No existing collection found or empty, creating new one",
+                );
                 return new WebsiteCollection();
             }
         } catch (error) {
-            debug(`Failed to load existing collection: ${error}. Creating new collection.`);
+            debug(
+                `Failed to load existing collection: ${error}. Creating new collection.`,
+            );
             return new WebsiteCollection();
         }
     }
@@ -143,110 +151,47 @@ export class BrowserIndexingService {
     private async importWithBrowserAgent(
         browserType: string,
         sourceType: string,
-        location: string
+        location: string,
     ): Promise<Website[]> {
         debug(`Importing ${sourceType} from ${browserType} at ${location}`);
-        
+
+        // Resolve browser file path - needed when location is not a direct file path
+        let resolvedLocation = location;
+        if (
+            location === "browser-agent" ||
+            location === "default" ||
+            !location.includes(path.sep)
+        ) {
+            const { getDefaultBrowserPaths } = await import("website-memory");
+            const defaultPaths = getDefaultBrowserPaths();
+
+            if (browserType === "chrome") {
+                resolvedLocation =
+                    sourceType === "bookmarks"
+                        ? defaultPaths.chrome.bookmarks
+                        : defaultPaths.chrome.history;
+            } else if (browserType === "edge") {
+                resolvedLocation =
+                    sourceType === "bookmarks"
+                        ? defaultPaths.edge.bookmarks
+                        : defaultPaths.edge.history;
+            }
+
+            debug(
+                `Resolved location from '${location}' to '${resolvedLocation}'`,
+            );
+        }
+
         return await importWebsites(
             browserType as "chrome" | "edge",
             sourceType as "bookmarks" | "history",
-            location,
-            { 
+            resolvedLocation,
+            {
                 limit: 10000,
                 // Standard content extractor - enhanced processing happens later
             },
-            this.indexingProgress.bind(this)
+            this.indexingProgress.bind(this),
         );
-    }
-
-    /**
-     * Add websites incrementally to the collection
-     */
-    private async addWebsitesIncremental(
-        websiteCollection: WebsiteCollection,
-        newWebsites: Website[]
-    ): Promise<void> {
-        for (const website of newWebsites) {
-            try {
-                const { WebsiteDocPart } = await import("website-memory");
-                const docPart = WebsiteDocPart.fromWebsite(website);
-                await websiteCollection.addWebsiteToIndex(docPart);
-            } catch (error) {
-                debug(`Error adding website incrementally: ${error}, falling back to batch add`);
-                websiteCollection.addWebsites([website]);
-            }
-        }
-    }
-
-    /**
-     * Process websites with enhanced knowledge extraction
-     */
-    private async processWebsitesWithKnowledge(websites: Website[]): Promise<void> {
-        debug(`Starting enhanced knowledge processing for ${websites.length} websites`);
-        
-        let enhancedCount = 0;
-        let errorCount = 0;
-        
-        for (let i = 0; i < websites.length; i++) {
-            const website = websites[i];
-            
-            try {
-                // Determine extraction mode based on URL
-                const extractionMode = this.knowledgeExtractor.getExtractionModeForUrl(website.metadata.url);
-                
-                debug(`Processing ${website.metadata.url} with ${extractionMode} mode`);
-                
-                // Enhanced knowledge extraction for each website with context information
-                // Includes URL, title, and bookmark folder hierarchy for better AI analysis
-                const result = await this.knowledgeExtractor.extractKnowledge({
-                    url: website.metadata.url,
-                    title: website.metadata.title || "",
-                    textContent: website.textChunks?.join('\n') || website.metadata.description || "",
-                    source: "import" as const,
-                    timestamp: new Date().toISOString(),
-                    // Add folder information for context enhancement
-                    folder: website.metadata.folder,
-                } as any, extractionMode);
-                
-                if (result.success) {
-                    // Update website with extracted knowledge
-                    if (result.knowledge) {
-                        website.knowledge = result.knowledge;
-                        enhancedCount++;
-                    }
-                    
-                    // Add processing metadata (store as additional properties - not ideal but works)
-                    (website.metadata as any).extractionMode = extractionMode;
-                    (website.metadata as any).processingTime = result.processingTime;
-                    (website.metadata as any).aiProcessingUsed = result.aiProcessingUsed;
-                    
-                    // Add quality metrics if available
-                    if (result.qualityMetrics) {
-                        (website.metadata as any).qualityScore = this.calculateQualityScore(result.qualityMetrics);
-                    }
-                    
-                    // Add summary data if enhanced with summarization
-                    if ((result as any).summaryData) {
-                        (website as any).summaryData = (result as any).summaryData;
-                        (website.metadata as any).enhancedWithSummary = true;
-                    }
-                    
-                    debug(`Successfully processed ${website.metadata.url} (AI: ${result.aiProcessingUsed})`);
-                } else {
-                    debug(`Failed to process ${website.metadata.url}: ${result.error}`);
-                    errorCount++;
-                }
-                
-            } catch (error) {
-                debug(`Error processing ${website.metadata.url}:`, error);
-                errorCount++;
-            }
-            
-            // Report progress
-            this.indexingProgress(i + 1, websites.length, website.metadata.title || website.metadata.url);
-        }
-        
-        debug(`Enhanced processing complete: ${enhancedCount} enhanced, ${errorCount} errors`);
     }
 
     /**
@@ -257,31 +202,170 @@ export class BrowserIndexingService {
         const factors = [
             Math.min(metrics.confidence || 0, 1),
             Math.min((metrics.entityCount || 0) / 10, 1), // Normalize entity count
-            Math.min((metrics.topicCount || 0) / 5, 1),   // Normalize topic count
-            metrics.aiProcessingTime ? 0.2 : 0,          // Bonus for AI processing
+            Math.min((metrics.topicCount || 0) / 5, 1), // Normalize topic count
+            metrics.aiProcessingTime ? 0.2 : 0, // Bonus for AI processing
         ];
-        
-        return factors.reduce((sum, factor) => sum + factor, 0) / factors.length;
+
+        return (
+            factors.reduce((sum, factor) => sum + factor, 0) / factors.length
+        );
     }
 
     /**
-     * Build and save the search index
+     * Process websites incrementally - for each website: process, add to collection, and index
+     * This follows the pattern from websiteMemory.mts line 739
      */
-    private async buildAndSaveIndex(websites: WebsiteCollection): Promise<void> {
-        debug("Building search index...");
-        
+    private async processWebsitesIncrementally(
+        websiteCollection: WebsiteCollection,
+        newWebsites: Website[],
+    ): Promise<void> {
+        debug(
+            `INCREMENTAL PROCESSING: Starting processing of ${newWebsites.length} websites`,
+        );
+
+        for (let i = 0; i < newWebsites.length; i++) {
+            const website = newWebsites[i];
+
+            try {
+                debug(
+                    `📄 PROCESSING WEBSITE ${i + 1}/${newWebsites.length}: ${website.metadata.title || website.metadata.url}`,
+                );
+
+                // Step 1: Enhanced knowledge extraction for this website
+                await this.processWebsiteWithKnowledge(
+                    website,
+                    i + 1,
+                    newWebsites.length,
+                );
+
+                // Step 2: Add to collection
+                websiteCollection.addWebsites([website]); // Add to collection
+
+                // Step 3: Incrementally add to search index
+                try {
+                    await websiteCollection.addToIndex();
+                } catch (indexError) {
+                    debug(
+                        `⚠️  INCREMENTAL INDEX FAILED: Falling back to full rebuild: ${indexError}`,
+                    );
+                    await websiteCollection.buildIndex();
+                }
+
+                // Update progress
+                this.indexingProgress(
+                    i + 1,
+                    newWebsites.length,
+                    website.metadata.title || website.metadata.url,
+                );
+
+                // Periodic save every 10 websites to preserve progress
+                if ((i + 1) % 10 === 0) {
+                    debug(
+                        `💾 PERIODIC SAVE: Saving progress after ${i + 1} websites`,
+                    );
+                    await this.saveIndexToDisk(websiteCollection);
+                }
+            } catch (error) {
+                debug(
+                    `❌ FAILED TO PROCESS: ${website.metadata.title || website.metadata.url}: ${error}`,
+                );
+                // Continue with next website rather than failing entire batch
+            }
+        }
+
+        debug(
+            `✅ INCREMENTAL PROCESSING COMPLETE: Successfully processed ${newWebsites.length} websites`,
+        );
+    }
+
+    /**
+     * Process a single website with enhanced knowledge extraction
+     */
+    private async processWebsiteWithKnowledge(
+        website: Website,
+        current: number,
+        total: number,
+    ): Promise<void> {
         try {
-            // Build the index using the collection's built-in method
-            await websites.addToIndex();
-            
-            debug(`Index built successfully`);
-            
+            // Determine extraction mode based on URL
+            const extractionMode =
+                this.knowledgeExtractor.getExtractionModeForUrl(
+                    website.metadata.url,
+                );
+
+            debug(
+                `Processing ${website.metadata.url} with ${extractionMode} mode`,
+            );
+
+            // Enhanced knowledge extraction with context information
+            const result = await this.knowledgeExtractor.extractKnowledge(
+                {
+                    url: website.metadata.url,
+                    title: website.metadata.title || "",
+                    textContent:
+                        website.textChunks?.join("\n") ||
+                        website.metadata.description ||
+                        "",
+                    source: "import" as const,
+                    timestamp: new Date().toISOString(),
+                    folder: website.metadata.folder,
+                } as any,
+                extractionMode,
+            );
+
+            if (result.success) {
+                // Update website with extracted knowledge
+                if (result.knowledge) {
+                    website.knowledge = result.knowledge;
+                }
+
+                // Add processing metadata
+                (website.metadata as any).extractionMode = extractionMode;
+                (website.metadata as any).processingTime =
+                    result.processingTime;
+                (website.metadata as any).aiProcessingUsed =
+                    result.aiProcessingUsed;
+
+                // Add quality metrics if available
+                if (result.qualityMetrics) {
+                    (website.metadata as any).qualityScore =
+                        this.calculateQualityScore(result.qualityMetrics);
+                }
+
+                // Add summary data if enhanced with summarization
+                if ((result as any).summaryData) {
+                    (website as any).summaryData = (result as any).summaryData;
+                    (website.metadata as any).enhancedWithSummary = true;
+                }
+
+                debug(
+                    `Successfully processed ${website.metadata.url} (AI: ${result.aiProcessingUsed})`,
+                );
+            } else {
+                debug(`${website.metadata.url}: ${result.error}`);
+            }
+        } catch (error) {
+            debug(
+                `❌ KNOWLEDGE EXTRACTION ERROR: ${website.metadata.url}:`,
+                error,
+            );
+        }
+    }
+
+    /**
+     * Save the index to disk
+     */
+    private async saveIndexToDisk(websites: WebsiteCollection): Promise<void> {
+        try {
+            // Ensure index directory exists before writing
+            const { ensureDir } = await import("typeagent");
+            await ensureDir(this.index!.path);
+
             // Save the index to disk
             await websites.writeToFile(this.index!.path, "index");
             debug(`Index saved to ${this.index!.path}`);
-            
         } catch (error) {
-            debug("Error building index:", error);
+            debug("Error saving index to disk:", error);
             throw error;
         }
     }
@@ -289,15 +373,19 @@ export class BrowserIndexingService {
     /**
      * Report indexing progress
      */
-    private indexingProgress(current: number, total: number, itemName: string): void {
+    private indexingProgress(
+        current: number,
+        total: number,
+        itemName: string,
+    ): void {
         if (!this.index) return;
-        
+
         this.index.progress = current;
         this.index.size = current;
         this.index.state = "indexing";
-        
+
         debug(`Progress: ${current}/${total} - ${itemName}`);
-        
+
         // Send progress to parent process (every 10 items or at completion)
         if (current % 10 === 0 || current === total) {
             this.sendIndexStatus();
@@ -336,16 +424,18 @@ if (
             try {
                 // Initialize service
                 await service.initialize();
-                
+
                 // Start indexing with provided data
                 await service.startIndexing(message as IndexData);
-                
             } catch (error) {
                 debug("Error in message handling:", error);
                 process.send?.({
                     ...message,
                     state: "error",
-                    error: error instanceof Error ? error.message : "Unknown error"
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error",
                 });
             }
         }
@@ -359,5 +449,7 @@ if (
         process.exit(1);
     });
 
-    debug("Browser indexing service started successfully and waiting for instructions");
+    debug(
+        "Browser indexing service started successfully and waiting for instructions",
+    );
 }

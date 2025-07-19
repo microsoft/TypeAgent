@@ -298,7 +298,8 @@ async function initializeDispatcher(
             dblogging: true,
             clientId: getClientId(),
             clientIO,
-            indexingServiceRegistry: await getIndexingServiceRegistry(instanceDir),
+            indexingServiceRegistry:
+                await getIndexingServiceRegistry(instanceDir),
             constructionProvider: getDefaultConstructionProvider(),
             allowSharedLocalView: ["browser"],
             portBase: isProd ? 9001 : 9050,

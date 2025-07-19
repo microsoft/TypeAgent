@@ -209,9 +209,7 @@ export class KnowledgeAnalyticsPanel {
             knowledge.recentTopics || knowledge.recentItems?.topics || [],
         );
         // Use recentRelationships instead of transforming recentActions
-        this.updateRecentActionsDisplay(
-            knowledge.recentRelationships || [],
-        );
+        this.updateRecentActionsDisplay(knowledge.recentRelationships || []);
     }
 
     private updateKnowledgeVisualizationCards(knowledge: any): void {
@@ -607,7 +605,8 @@ export class KnowledgeAnalyticsPanel {
         // Use the relationship data directly (no transformation needed)
         const relationshipsHtml = recentRelationships
             .slice(0, 10)
-            .map((rel) => `
+            .map(
+                (rel) => `
                 <div class="relationship-item rounded">
                     <span class="fw-semibold">${this.escapeHtml(rel.from)}</span>
                     <i class="bi bi-arrow-right mx-2 text-muted"></i>
@@ -615,7 +614,8 @@ export class KnowledgeAnalyticsPanel {
                     <i class="bi bi-arrow-right mx-2 text-muted"></i>
                     <span class="fw-semibold">${this.escapeHtml(rel.to)}</span>
                 </div>
-            `)
+            `,
+            )
             .join("");
 
         container.innerHTML = relationshipsHtml;

@@ -5,41 +5,44 @@ import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { openai as ai } from "aiclient";
 import { ExtractionMode } from "website-memory";
+import registerDebug from "debug";
+import { PageSummary } from "./schema/summarization.mjs";
+import { fileURLToPath } from "url";
+import path from "path";
+import fs from "fs";
+const debug = registerDebug("typeagent:browser:indexing");
 
-/**
- * Schema for page summarization output
- */
-export interface PageSummary {
-    summary: string; // Concise summary of main content (1000 characters or less)
-    keyPoints: string[]; // Main points or key information (max 5)
-    entities: string[]; // Important entities mentioned (people, organizations, technologies)
-    topics: string[]; // Main topics or themes
-    contentType: string; // Type of content (e.g., 'article', 'documentation', 'news', 'reference', 'tutorial', 'blog', 'forum', 'other')
-    intent: string; // Likely user intent for bookmarking (e.g., 'research', 'reference', 'learning', 'entertainment', 'shopping', 'work', 'news', 'other')
+function getSchemaFileContents(fileName: string): string {
+    const packageRoot = path.join("..", "..", "..");
+
+    return fs.readFileSync(
+        fileURLToPath(
+            new URL(
+                path.join(packageRoot, "./src/agent/indexing/schema", fileName),
+                import.meta.url,
+            ),
+        ),
+        "utf8",
+    );
 }
 
 /**
  * ContentSummaryAdapter enhances knowledge extraction with page summarization.
  * Follows the same pattern as ActionDetectionAdapter for consistency.
- * 
+ *
  * Inserts summarization step in the HTML→text→knowledge pipeline:
  * HTML Content → Text Extraction → SUMMARIZATION → Knowledge Processing
  */
 export class ContentSummaryAdapter {
-    private summaryTranslator: TypeChatJsonTranslator<PageSummary> | null = null;
+    private summaryTranslator: TypeChatJsonTranslator<PageSummary> | null =
+        null;
     private isInitialized: boolean = false;
-    
-    private readonly schemaText = `
-interface PageSummary {
-    summary: string; // Concise summary of main content (1000 characters or less)
-    keyPoints: string[]; // Main points or key information (max 5)
-    entities: string[]; // Important entities mentioned (people, organizations, technologies)
-    topics: string[]; // Main topics or themes
-    contentType: string; // Type of content (e.g., 'article', 'documentation', 'news', 'reference', 'tutorial', 'blog', 'forum', 'other')
-    intent: string; // Likely user intent for bookmarking (e.g., 'research', 'reference', 'learning', 'entertainment', 'shopping', 'work', 'news', 'other')
-}`;
 
-    constructor() {}
+    private schemaText: string;
+
+    constructor() {
+        this.schemaText = getSchemaFileContents("summarization.mts");
+    }
 
     /**
      * Main entry point: Enhance text content with summarization for specified mode
@@ -56,29 +59,31 @@ interface PageSummary {
             title?: string;
             bookmarkFolder?: string;
             includeContextInEnhancedText?: boolean;
-        } = {}
+        } = {},
     ): Promise<{
         enhancedText: string;
         summaryData?: PageSummary;
         processingTime?: number;
     }> {
         const startTime = Date.now();
-        
+
         try {
             // Only process summary mode - same pattern as ActionDetectionAdapter
             if (mode !== ("summary" as ExtractionMode)) {
-                return { 
-                    enhancedText: textContent, 
-                    processingTime: Date.now() - startTime 
+                return {
+                    enhancedText: textContent,
+                    processingTime: Date.now() - startTime,
                 };
             }
 
             // Skip if content is too short or empty
             if (!textContent || textContent.length < 200) {
-                console.log("Content too short for summarization, using original text");
-                return { 
-                    enhancedText: textContent, 
-                    processingTime: Date.now() - startTime 
+                console.log(
+                    "Content too short for summarization, using original text",
+                );
+                return {
+                    enhancedText: textContent,
+                    processingTime: Date.now() - startTime,
                 };
             }
 
@@ -86,50 +91,67 @@ interface PageSummary {
             await this.ensureInitialized();
 
             if (!this.summaryTranslator) {
-                console.warn("Summary translator not available, using original text");
-                return { 
-                    enhancedText: textContent, 
-                    processingTime: Date.now() - startTime 
+                console.warn(
+                    "Summary translator not available, using original text",
+                );
+                return {
+                    enhancedText: textContent,
+                    processingTime: Date.now() - startTime,
                 };
             }
 
             // Optimize content length for processing
             const maxLength = options.maxInputLength || 8000;
-            const contentToSummarize = textContent.length > maxLength 
-                ? this.smartTruncate(textContent, maxLength)
-                : textContent;
+            const contentToSummarize =
+                textContent.length > maxLength
+                    ? this.smartTruncate(textContent, maxLength)
+                    : textContent;
 
-            console.log(`Processing summarization for ${contentToSummarize.length} characters`);
+            debug(
+                `Processing summarization for ${contentToSummarize.length} characters`,
+            );
 
             // Create and execute summary prompt
-            const prompt = this.createSummaryPrompt(contentToSummarize, options);
+            const prompt = this.createSummaryPrompt(
+                contentToSummarize,
+                options,
+            );
+            debug(
+                `🤖 SUBMITTING SUMMARY REQUEST: ${contentToSummarize.length} chars to AI model`,
+            );
+
             const result = await this.summaryTranslator.translate(prompt);
-            
+
             if (!result.success) {
-                console.warn("Summary generation failed:", result.message);
-                return { 
-                    enhancedText: textContent, 
-                    processingTime: Date.now() - startTime 
+                debug("❌ SUMMARY GENERATION FAILED:", result.message);
+                return {
+                    enhancedText: textContent,
+                    processingTime: Date.now() - startTime,
                 };
             }
 
             const summaryData = result.data;
-            console.log(`Summary generated: ${summaryData.summary.substring(0, 100)}...`);
+            debug(
+                `📊 SUMMARY STATS: ${summaryData.keyPoints.length} key points, ${summaryData.entities.length} entities, ${summaryData.topics.length} topics`,
+            );
 
             // Create enhanced text that combines summary with structured information and context
-            const enhancedText = this.createEnhancedText(summaryData, textContent, options);
-            
-            return { 
-                enhancedText, 
+            const enhancedText = this.createEnhancedText(
                 summaryData,
-                processingTime: Date.now() - startTime
+                textContent,
+                options,
+            );
+
+            return {
+                enhancedText,
+                summaryData,
+                processingTime: Date.now() - startTime,
             };
-            
         } catch (error) {
             console.error("Error in content summarization:", error);
-            return { 
-                enhancedText: textContent, 
-                processingTime: Date.now() - startTime 
+            return {
+                enhancedText: textContent,
+                processingTime: Date.now() - startTime,
             };
         }
     }
@@ -147,20 +169,25 @@ interface PageSummary {
             // Use same model initialization as browser agent
             const apiSettings = ai.azureApiSettingsFromEnv(ai.ModelType.Chat);
             const languageModel = ai.createChatModel(apiSettings);
-            
+
             // Create TypeScript schema validator
-            const validator = createTypeScriptJsonValidator<PageSummary>(this.schemaText, "PageSummary");
-            
-            this.summaryTranslator = createJsonTranslator(
-                languageModel, 
-                validator
+            const validator = createTypeScriptJsonValidator<PageSummary>(
+                this.schemaText,
+                "PageSummary",
             );
-            
+
+            this.summaryTranslator = createJsonTranslator(
+                languageModel,
+                validator,
+            );
+
             this.isInitialized = true;
-            console.log("Content summary adapter initialized successfully");
-            
+            debug("Content summary adapter initialized successfully");
         } catch (error) {
-            console.warn("Failed to initialize content summary adapter:", error);
+            console.warn(
+                "Failed to initialize content summary adapter:",
+                error,
+            );
             this.summaryTranslator = null;
             this.isInitialized = true; // Mark as attempted to avoid retries
         }
@@ -170,30 +197,33 @@ interface PageSummary {
      * Create enhanced text that combines summary with key extracted information and context
      */
     private createEnhancedText(
-        summaryData: PageSummary, 
+        summaryData: PageSummary,
         originalText: string,
         options: {
             url?: string;
             title?: string;
             bookmarkFolder?: string;
             includeContextInEnhancedText?: boolean;
-        } = {}
+        } = {},
     ): string {
         const parts = [];
 
         // Add context information if requested and available
-        if (options.includeContextInEnhancedText !== false) { // Default to true
+        if (options.includeContextInEnhancedText !== false) {
+            // Default to true
             if (options.url) {
                 parts.push(`URL: ${options.url}`);
             }
-            
+
             if (options.title) {
                 parts.push(`Page Title: ${options.title}`);
             }
-            
+
             if (options.bookmarkFolder) {
                 // Parse folder hierarchy if it contains separators
-                const folderHierarchy = this.parseFolderHierarchy(options.bookmarkFolder);
+                const folderHierarchy = this.parseFolderHierarchy(
+                    options.bookmarkFolder,
+                );
                 parts.push(`Bookmark Location: ${folderHierarchy}`);
             }
         }
@@ -204,26 +234,28 @@ interface PageSummary {
         parts.push(`User Intent: ${summaryData.intent}`);
 
         if (summaryData.keyPoints.length > 0) {
-            parts.push(`Key Points: ${summaryData.keyPoints.join('; ')}`);
+            parts.push(`Key Points: ${summaryData.keyPoints.join("; ")}`);
         }
 
         if (summaryData.topics.length > 0) {
-            parts.push(`Main Topics: ${summaryData.topics.join(', ')}`);
+            parts.push(`Main Topics: ${summaryData.topics.join(", ")}`);
         }
 
         if (summaryData.entities.length > 0) {
-            parts.push(`Entities: ${summaryData.entities.join(', ')}`);
+            parts.push(`Entities: ${summaryData.entities.join(", ")}`);
         }
 
         // Include truncated original text for additional context
         const contextLength = Math.min(2000, originalText.length * 0.3);
         if (originalText.length > contextLength) {
-            parts.push(`Additional Context: ${originalText.substring(0, contextLength)}...`);
+            parts.push(
+                `Additional Context: ${originalText.substring(0, contextLength)}...`,
+            );
         } else {
             parts.push(`Original Content: ${originalText}`);
         }
 
-        return parts.join('\n\n');
+        return parts.join("\n\n");
     }
 
     /**
@@ -231,22 +263,25 @@ interface PageSummary {
      */
     private parseFolderHierarchy(folderPath: string): string {
         if (!folderPath) return folderPath;
-        
+
         // Handle common folder separators and create readable hierarchy
-        const separators = ['/', '\\', '>', '|', ' > '];
+        const separators = ["/", "\\", ">", "|", " > "];
         let hierarchy = folderPath;
-        
+
         // Find which separator is used
         for (const sep of separators) {
             if (folderPath.includes(sep)) {
-                const parts = folderPath.split(sep).map(part => part.trim()).filter(part => part.length > 0);
+                const parts = folderPath
+                    .split(sep)
+                    .map((part) => part.trim())
+                    .filter((part) => part.length > 0);
                 if (parts.length > 1) {
-                    hierarchy = parts.join(' → ');
+                    hierarchy = parts.join(" → ");
                     break;
                 }
             }
         }
-        
+
         return hierarchy;
     }
 
@@ -254,8 +289,11 @@ interface PageSummary {
      * Create summarization prompt with TypeAgent style
      */
     private createSummaryPrompt(
-        textContent: string, 
-        options: { targetSummaryLength?: number; includeKeyPoints?: boolean } = {}
+        textContent: string,
+        options: {
+            targetSummaryLength?: number;
+            includeKeyPoints?: boolean;
+        } = {},
     ): string {
         const prompt = `
 You are an expert at creating concise, informative summaries of web content.
@@ -277,16 +315,16 @@ ${textContent}`;
      */
     private smartTruncate(text: string, maxLength: number): string {
         if (text.length <= maxLength) return text;
-        
+
         // Try to find a good breaking point (end of sentence/paragraph)
         const truncated = text.substring(0, maxLength);
-        const lastSentence = truncated.lastIndexOf('.');
-        const lastParagraph = truncated.lastIndexOf('\n\n');
-        
+        const lastSentence = truncated.lastIndexOf(".");
+        const lastParagraph = truncated.lastIndexOf("\n\n");
+
         const breakPoint = Math.max(lastSentence, lastParagraph);
-        
+
         // Use break point if it's not too far back (at least 70% of max length)
-        return breakPoint > maxLength * 0.7 
+        return breakPoint > maxLength * 0.7
             ? truncated.substring(0, breakPoint + 1)
             : truncated + "...";
     }
@@ -307,11 +345,11 @@ ${textContent}`;
             supportedModes: ["summary"],
             features: [
                 "Content Summarization",
-                "Key Point Extraction", 
+                "Key Point Extraction",
                 "Entity Identification",
                 "Topic Classification",
                 "Content Type Detection",
-                "Intent Analysis"
+                "Intent Analysis",
             ],
             aiModelRequired: true,
         };

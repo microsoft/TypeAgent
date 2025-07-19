@@ -1436,16 +1436,17 @@ export async function getRecentKnowledgeItems(
                 // Extract relationships from actions data
                 // This provides properly formatted relationship data for the UI
                 if (type === "relationships" || type === "all") {
-                    const actions =
-                        (knowledge as any).actions ||
-                        [];
+                    const actions = (knowledge as any).actions || [];
 
                     if (Array.isArray(actions)) {
                         for (const action of actions) {
                             // Transform action data to relationship format
-                            const from = action.subjectEntityName || "Unknown Entity";
-                            const relationship = action.verbs?.join(", ") || "related to";
-                            const to = action.objectEntityName || "Unknown Target";
+                            const from =
+                                action.subjectEntityName || "Unknown Entity";
+                            const relationship =
+                                action.verbs?.join(", ") || "related to";
+                            const to =
+                                action.objectEntityName || "Unknown Target";
                             const confidence = action.confidence || 0.8;
 
                             recentRelationships.push({

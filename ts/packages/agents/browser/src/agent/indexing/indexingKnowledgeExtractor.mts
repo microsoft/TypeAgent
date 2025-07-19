@@ -3,13 +3,15 @@
 
 import { conversation as kpLib } from "knowledge-processor";
 import { openai as ai } from "aiclient";
-import { 
+import {
     ContentExtractor,
     ExtractionMode,
     ExtractionInput,
-    ExtractionResult
+    ExtractionResult,
 } from "website-memory";
 import { ContentSummaryAdapter } from "./contentSummaryAdapter.mjs";
+import registerDebug from "debug";
+const debug = registerDebug("typeagent:browser:indexing");
 
 /**
  * Specialized knowledge extractor for indexing service
@@ -33,19 +35,16 @@ export class IndexingKnowledgeExtractor {
         }
 
         try {
-            console.log("Initializing indexing knowledge extractor...");
-            
             // Initialize AI models (same pattern as BrowserKnowledgeExtractor)
             const apiSettings = ai.azureApiSettingsFromEnv(ai.ModelType.Chat);
             const languageModel = ai.createChatModel(apiSettings);
-            this.knowledgeExtractor = kpLib.createKnowledgeExtractor(languageModel);
-            
+            this.knowledgeExtractor =
+                kpLib.createKnowledgeExtractor(languageModel);
+
             // Initialize content summary adapter
             await this.contentSummaryAdapter.ensureInitialized();
-            
+
             this.isInitialized = true;
-            console.log("Indexing knowledge extractor initialized successfully");
-            
         } catch (error) {
             console.warn("AI model initialization failed for indexing:", error);
             this.knowledgeExtractor = undefined;
@@ -57,40 +56,43 @@ export class IndexingKnowledgeExtractor {
      * Extract knowledge with optional summary enhancement
      */
     async extractKnowledge(
-        content: ExtractionInput, 
-        mode: ExtractionMode
+        content: ExtractionInput,
+        mode: ExtractionMode,
     ): Promise<ExtractionResult> {
         const startTime = Date.now();
-        
+
         try {
-            console.log(`Extracting knowledge for ${content.url} using ${mode} mode`);
-            
+            debug(`Extracting knowledge for ${content.url} using ${mode} mode`);
+
             // Create content extractor with our knowledge extractor
             const config: any = { mode };
             if (this.knowledgeExtractor) {
                 config.knowledgeExtractor = this.knowledgeExtractor;
             }
-            
+
             const extractor = new ContentExtractor(config);
             const result = await extractor.extract(content, mode);
-            
+
             // Apply summary enhancement for summary mode when AI is available
-            if (mode === ("summary" as ExtractionMode) && 
-                this.contentSummaryAdapter.isAvailable() && 
-                this.knowledgeExtractor) {
+            if (
+                mode === ("summary" as ExtractionMode) &&
+                this.contentSummaryAdapter.isAvailable() &&
+                this.knowledgeExtractor
+            ) {
                 await this.enhanceWithSummary(result, content);
             }
-            
+
             // Update processing time
             result.processingTime = Date.now() - startTime;
             result.extractionTime = result.processingTime;
-            
-            console.log(`Knowledge extraction completed in ${result.processingTime}ms`);
+
+            debug(
+                `Knowledge extraction completed in ${result.processingTime}ms`,
+            );
             return result;
-            
         } catch (error) {
             console.error("Knowledge extraction failed:", error);
-            
+
             // Return basic result with error information
             return {
                 success: false,
@@ -109,7 +111,7 @@ export class IndexingKnowledgeExtractor {
                     actionCount: 0,
                     extractionTime: Date.now() - startTime,
                     knowledgeStrategy: "basic" as const,
-                }
+                },
             };
         }
     }
@@ -117,80 +119,107 @@ export class IndexingKnowledgeExtractor {
     /**
      * Apply summary enhancement to extraction result
      */
-    private async enhanceWithSummary(result: any, content: ExtractionInput): Promise<void> {
+    private async enhanceWithSummary(
+        result: any,
+        content: ExtractionInput,
+    ): Promise<void> {
         try {
-            console.log("Applying summary enhancement...");
-            
+            debug("Applying summary enhancement...");
+
             // Get text content from extraction result or input
             const textContent = this.prepareTextFromResult(result, content);
-            
+
             if (!textContent || textContent.length < 200) {
-                console.log("Insufficient text content for summarization");
+                debug("Insufficient text content for summarization");
                 return;
             }
 
             const startTime = Date.now();
-            
+
             // Apply summary enhancement with context information
             const enhancementOptions: any = {
                 url: content.url,
                 title: content.title,
                 includeContextInEnhancedText: true,
             };
-            
+
             const bookmarkFolder = this.extractBookmarkFolder(content);
             if (bookmarkFolder) {
                 enhancementOptions.bookmarkFolder = bookmarkFolder;
             }
-            
-            const { enhancedText, summaryData, processingTime } = 
-                await this.contentSummaryAdapter.enhanceWithSummary(textContent, ("summary" as ExtractionMode), enhancementOptions);
+
+            const { enhancedText, summaryData, processingTime } =
+                await this.contentSummaryAdapter.enhanceWithSummary(
+                    textContent,
+                    "summary" as ExtractionMode,
+                    enhancementOptions,
+                );
 
             if (summaryData) {
-                console.log(`Summary generated in ${processingTime}ms, enhancing extraction result...`);
-                
+                debug(
+                    `Summary generated in ${processingTime}ms, enhancing extraction result...`,
+                );
+
                 // Add summary data to result
                 result.summaryData = summaryData;
                 result.enhancedWithSummary = true;
                 result.summaryProcessingTime = processingTime;
-                
+
                 // If we have knowledge extractor, re-process with enhanced text
                 if (this.knowledgeExtractor && enhancedText !== textContent) {
                     try {
-                        const enhancedKnowledge = await this.knowledgeExtractor.extractKnowledge(
-                            enhancedText, 
-                            ("summary" as ExtractionMode)
+                        debug(
+                            "Re-processing with enhanced text using knowledge extractor...",
                         );
+                        const enhancedKnowledge =
+                            await this.knowledgeExtractor.extract(enhancedText);
 
                         if (enhancedKnowledge) {
                             // Merge enhanced knowledge with existing
-                            if (typeof result.knowledge === 'object' && typeof enhancedKnowledge === 'object') {
-                                result.knowledge = { ...result.knowledge, ...enhancedKnowledge };
+                            if (
+                                typeof result.knowledge === "object" &&
+                                typeof enhancedKnowledge === "object"
+                            ) {
+                                result.knowledge = {
+                                    ...result.knowledge,
+                                    ...enhancedKnowledge,
+                                };
                             } else {
                                 result.knowledge = enhancedKnowledge;
                             }
-                            
-                            console.log("Knowledge enhanced with summary data and context");
+
+                            debug(
+                                "Knowledge enhanced with summary data and context",
+                            );
                         }
                     } catch (enhanceError) {
-                        console.warn("Failed to enhance knowledge with summary:", enhanceError);
+                        console.warn(
+                            "Failed to enhance knowledge with summary:",
+                            enhanceError,
+                        );
                     }
                 }
-                
+
                 // Update quality metrics with summary bonus
                 if (result.qualityMetrics) {
-                    result.qualityMetrics.confidence = Math.min(1.0, result.qualityMetrics.confidence + 0.2);
+                    result.qualityMetrics.confidence = Math.min(
+                        1.0,
+                        result.qualityMetrics.confidence + 0.2,
+                    );
                     if (summaryData.entities?.length > 0) {
-                        result.qualityMetrics.entityCount += summaryData.entities.length;
+                        result.qualityMetrics.entityCount +=
+                            summaryData.entities.length;
                     }
                     if (summaryData.topics?.length > 0) {
-                        result.qualityMetrics.topicCount += summaryData.topics.length;
+                        result.qualityMetrics.topicCount +=
+                            summaryData.topics.length;
                     }
                 }
-                
-                console.log(`Enhanced extraction completed in ${Date.now() - startTime}ms total`);
-            }
 
+                debug(
+                    `Enhanced extraction completed in ${Date.now() - startTime}ms total`,
+                );
+            }
         } catch (error) {
             console.warn("Summary enhancement failed:", error);
             // Don't fail the entire extraction - graceful degradation
@@ -200,19 +229,23 @@ export class IndexingKnowledgeExtractor {
     /**
      * Extract bookmark folder information from content input
      */
-    private extractBookmarkFolder(content: ExtractionInput): string | undefined {
+    private extractBookmarkFolder(
+        content: ExtractionInput,
+    ): string | undefined {
         // Check if content has folder information
         // This might come from the website metadata or import process
         if ((content as any).folder) {
             return (content as any).folder;
         }
-        
+
         // Could also extract from URL path for some cases
         if (content.url) {
             try {
                 const url = new URL(content.url);
                 // For some bookmark systems, folder info might be in URL parameters
-                const folderParam = url.searchParams.get('folder') || url.searchParams.get('path');
+                const folderParam =
+                    url.searchParams.get("folder") ||
+                    url.searchParams.get("path");
                 if (folderParam) {
                     return folderParam;
                 }
@@ -220,21 +253,24 @@ export class IndexingKnowledgeExtractor {
                 // Invalid URL, continue without folder info
             }
         }
-        
+
         return undefined;
     }
 
     /**
      * Prepare text content from extraction result for summarization
      */
-    private prepareTextFromResult(result: any, content: ExtractionInput): string {
+    private prepareTextFromResult(
+        result: any,
+        content: ExtractionInput,
+    ): string {
         const parts: string[] = [];
-        
+
         // Add title
         if (content.title) {
             parts.push(`Title: ${content.title}`);
         }
-        
+
         // Add main content from extraction
         if (result.pageContent?.mainContent) {
             parts.push(result.pageContent.mainContent);
@@ -243,9 +279,12 @@ export class IndexingKnowledgeExtractor {
         } else if (content.textContent) {
             parts.push(content.textContent);
         }
-        
+
         // Add headings if available
-        if (result.pageContent?.headings && Array.isArray(result.pageContent.headings)) {
+        if (
+            result.pageContent?.headings &&
+            Array.isArray(result.pageContent.headings)
+        ) {
             const headingText = result.pageContent.headings
                 .map((h: any) => h.text || h.content || h)
                 .filter((text: string) => text && text.length > 0)
@@ -254,20 +293,22 @@ export class IndexingKnowledgeExtractor {
                 parts.push(`Headings: ${headingText}`);
             }
         }
-        
+
         // Add meta description if available
         if (result.pageContent?.metaTags?.description) {
-            parts.push(`Description: ${result.pageContent.metaTags.description}`);
+            parts.push(
+                `Description: ${result.pageContent.metaTags.description}`,
+            );
         }
-        
+
         // Add any existing knowledge as context
-        if (result.knowledge && typeof result.knowledge === 'string') {
+        if (result.knowledge && typeof result.knowledge === "string") {
             parts.push(`Existing Knowledge: ${result.knowledge}`);
         } else if (result.knowledge?.text) {
             parts.push(`Existing Knowledge: ${result.knowledge.text}`);
         }
-        
-        return parts.join('\n\n').trim();
+
+        return parts.join("\n\n").trim();
     }
 
     /**

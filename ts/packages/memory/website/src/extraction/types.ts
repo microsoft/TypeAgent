@@ -28,7 +28,12 @@ import { DetectedAction, ActionSummary } from "../actionExtractor.js";
  * await extractor.extract(content, "full");
  * ```
  */
-export type ExtractionMode = "basic" | "summary" | "content" | "actions" | "full";
+export type ExtractionMode =
+    | "basic"
+    | "summary"
+    | "content"
+    | "actions"
+    | "full";
 
 /**
  * Configuration for content extraction operations

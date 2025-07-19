@@ -110,6 +110,7 @@ export type CommandHandlerContext = {
     readonly embeddingCacheDir: string | undefined;
 
     readonly indexManager: IndexManager;
+    readonly indexingServiceRegistry: IndexingServiceRegistry | undefined;
 
     activityContext?: ActivityContext | undefined;
     conversationManager?: Conversation.ConversationManager | undefined;
@@ -224,18 +225,28 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
     embeddingCacheDir?: string | undefined; // default to 'cache' under 'persistDir' if specified
 };
 
-async function getSession(instanceDir?: string, indexingServiceRegistry?: IndexingServiceRegistry) {
+async function getSession(
+    instanceDir?: string,
+    indexingServiceRegistry?: IndexingServiceRegistry,
+) {
     let session: Session | undefined;
     if (instanceDir !== undefined) {
         try {
-            session = await Session.restoreLastSession(instanceDir, indexingServiceRegistry);
+            session = await Session.restoreLastSession(
+                instanceDir,
+                indexingServiceRegistry,
+            );
         } catch (e: any) {
             debugError(`WARNING: ${e.message}. Creating new session.`);
         }
     }
     if (session === undefined) {
         // fill in the translator/action later.
-        session = await Session.create(undefined, instanceDir, indexingServiceRegistry);
+        session = await Session.create(
+            undefined,
+            instanceDir,
+            indexingServiceRegistry,
+        );
     }
     return session;
 }
@@ -465,6 +476,7 @@ export async function initializeCommandHandlerContext(
             constructionProvider,
             collectCommandResult: options?.collectCommandResult ?? false,
             indexManager: IndexManager.getInstance(),
+            indexingServiceRegistry: options?.indexingServiceRegistry,
         };
 
         await initializeMemory(context, sessionDirPath);
