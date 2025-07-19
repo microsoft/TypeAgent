@@ -21,6 +21,7 @@ import {
     setupAgentCache,
     setupBuiltInCache,
 } from "./session.js";
+import { IndexingServiceRegistry } from "./indexingServiceRegistry.js";
 import { TypeAgentTranslator } from "../translation/agentTranslators.js";
 import { ActionConfigProvider } from "../translation/actionConfigProvider.js";
 import { getCacheFactory } from "../utils/cacheFactory.js";
@@ -109,6 +110,7 @@ export type CommandHandlerContext = {
     readonly embeddingCacheDir: string | undefined;
 
     readonly indexManager: IndexManager;
+    readonly indexingServiceRegistry: IndexingServiceRegistry | undefined;
 
     activityContext?: ActivityContext | undefined;
     conversationManager?: Conversation.ConversationManager | undefined;
@@ -201,6 +203,9 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
     allowSharedLocalView?: string[]; // agents that can access any shared local views, default to undefined
     portBase?: number; // default to 9001
 
+    // Indexing service discovery
+    indexingServiceRegistry?: IndexingServiceRegistry; // registry for indexing service discovery
+
     // Agent specific initialization options.
     agentInitOptions?: Record<string, unknown>; // agent specific initialization options.
 
@@ -220,18 +225,28 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
     embeddingCacheDir?: string | undefined; // default to 'cache' under 'persistDir' if specified
 };
 
-async function getSession(instanceDir?: string) {
+async function getSession(
+    instanceDir?: string,
+    indexingServiceRegistry?: IndexingServiceRegistry,
+) {
     let session: Session | undefined;
     if (instanceDir !== undefined) {
         try {
-            session = await Session.restoreLastSession(instanceDir);
+            session = await Session.restoreLastSession(
+                instanceDir,
+                indexingServiceRegistry,
+            );
         } catch (e: any) {
             debugError(`WARNING: ${e.message}. Creating new session.`);
         }
     }
     if (session === undefined) {
         // fill in the translator/action later.
-        session = await Session.create(undefined, instanceDir);
+        session = await Session.create(
+            undefined,
+            instanceDir,
+            indexingServiceRegistry,
+        );
     }
     return session;
 }
@@ -388,6 +403,7 @@ export async function initializeCommandHandlerContext(
     try {
         const session = await getSession(
             persistSession ? persistDir : undefined,
+            options?.indexingServiceRegistry,
         );
 
         // initialization options set the default, but persisted configuration will still overrides it.
@@ -460,6 +476,7 @@ export async function initializeCommandHandlerContext(
             constructionProvider,
             collectCommandResult: options?.collectCommandResult ?? false,
             indexManager: IndexManager.getInstance(),
+            indexingServiceRegistry: options?.indexingServiceRegistry,
         };
 
         await initializeMemory(context, sessionDirPath);

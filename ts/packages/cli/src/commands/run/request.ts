@@ -8,7 +8,10 @@ import {
     getAllActionConfigProvider,
 } from "agent-dispatcher/internal";
 import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
-import { getDefaultAppAgentProviders } from "default-agent-provider";
+import {
+    getDefaultAppAgentProviders,
+    getIndexingServiceRegistry,
+} from "default-agent-provider";
 import chalk from "chalk";
 import { getChatModelNames } from "aiclient";
 import { readFileSync, existsSync } from "fs";
@@ -68,6 +71,8 @@ export default class RequestCommand extends Command {
             explainer: flags.explainer
                 ? { enabled: true, name: flags.explainer }
                 : { enabled: false },
+            indexingServiceRegistry:
+                await getIndexingServiceRegistry(instanceDir),
             cache: { enabled: false },
             persistDir: instanceDir,
             dblogging: true,

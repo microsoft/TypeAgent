@@ -12,6 +12,7 @@ import {
     getDefaultAppAgentProviders,
     getDefaultConstructionProvider,
     getDefaultAppAgentInstaller,
+    getIndexingServiceRegistry,
 } from "default-agent-provider";
 import inspector from "node:inspector";
 import { getChatModelNames } from "aiclient";
@@ -83,6 +84,9 @@ export default class Interactive extends Command {
                 enableServiceHost: true,
                 clientIO,
                 dblogging: true,
+                indexingServiceRegistry: await getIndexingServiceRegistry(
+                    !flags.memory ? getInstanceDir() : undefined,
+                ),
                 clientId: getClientId(),
                 constructionProvider: getDefaultConstructionProvider(),
             });

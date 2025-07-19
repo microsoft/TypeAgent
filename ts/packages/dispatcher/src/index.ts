@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 export { createDispatcher, Dispatcher, CommandResult } from "./dispatcher.js";
+export { IndexManager } from "./context/indexManager.js";
 export type { DispatcherOptions } from "./context/commandHandlerContext.js";
 export type { CommandCompletionResult } from "./command/completion.js";
 export type {
@@ -20,3 +21,8 @@ export type {
     TemplateEditConfig,
     TemplateData,
 } from "./translation/actionTemplate.js";
+export type {
+    IndexingServiceRegistry,
+    IndexingServiceInfo,
+} from "./context/indexingServiceRegistry.js";
+export { DefaultIndexingServiceRegistry } from "./context/indexingServiceRegistry.js";

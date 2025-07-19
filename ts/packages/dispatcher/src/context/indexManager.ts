@@ -10,6 +10,7 @@ import path from "node:path";
 import { ensureDir, isDirectoryPath } from "typeagent";
 import { IndexData, IndexSource } from "image-memory";
 import { IndexData as WebsiteIndexData } from "website-memory";
+import { IndexingServiceRegistry } from "./indexingServiceRegistry.js";
 
 const debug = registerDebug("typeagent:indexManager");
 
@@ -23,6 +24,7 @@ export class IndexManager {
     private indexingServices: Map<IndexData, ChildProcess | undefined> =
         new Map<IndexData, ChildProcess | undefined>();
     private static rootPath: string;
+    private static indexingRegistry: IndexingServiceRegistry | undefined;
     //private cacheRoot: string;
     private static imageRoot: string | undefined;
     private static emailRoot: string | undefined;
@@ -38,8 +40,13 @@ export class IndexManager {
     /*
      * Loads the supplied indexes
      */
-    public static load(indexesToLoad: IndexData[], sessionDir: string) {
+    public static async load(
+        indexesToLoad: IndexData[],
+        sessionDir: string,
+        serviceRegistry?: IndexingServiceRegistry,
+    ) {
         this.rootPath = path.join(sessionDir, "indexes");
+        this.indexingRegistry = serviceRegistry;
 
         ensureDirectory(IndexManager.rootPath);
 
@@ -205,16 +212,28 @@ export class IndexManager {
             try {
                 let serviceRoot: string;
 
-                // Determine which indexing service to use based on source type
-                if (index.source === "website") {
-                    serviceRoot = getPackageFilePath(
-                        "./node_modules/website-memory/dist/indexingService.js",
+                // Try to use registry-based service discovery first
+                if (IndexManager.indexingRegistry) {
+                    const serviceInfo = IndexManager.indexingRegistry.get(
+                        index.source,
                     );
+                    if (serviceInfo) {
+                        debug(
+                            `Using registered indexing service for ${index.source}: ${serviceInfo.agentName}/${serviceInfo.serviceScript}`,
+                        );
+
+                        serviceRoot = serviceInfo.serviceScript;
+                    } else {
+                        debug(
+                            `No registered service found for ${index.source}, falling back to defaults`,
+                        );
+                        serviceRoot = this.getDefaultServicePath(index.source);
+                    }
                 } else {
-                    // Default to image memory service
-                    serviceRoot = getPackageFilePath(
-                        "./node_modules/image-memory/dist/indexingService.js",
+                    debug(
+                        `No indexing registry available, using legacy service discovery`,
                     );
+                    serviceRoot = this.getDefaultServicePath(index.source);
                 }
 
                 const childProcess = fork(serviceRoot);
@@ -258,5 +277,19 @@ export class IndexManager {
                 resolve(undefined);
             }
         });
+    }
+
+    private getDefaultServicePath(indexSource: IndexSource): string {
+        // Legacy service discovery for backward compatibility
+        if (indexSource === "website") {
+            return getPackageFilePath(
+                "./node_modules/website-memory/dist/indexingService.js",
+            );
+        } else {
+            // Default to image memory service
+            return getPackageFilePath(
+                "./node_modules/image-memory/dist/indexingService.js",
+            );
+        }
     }
 }

@@ -54,7 +54,7 @@ interface Relationship {
 }
 
 interface ExtractionSettings {
-    mode: "basic" | "content" | "actions" | "full";
+    mode: "basic" | "summary" | "content" | "actions" | "full";
 }
 
 interface ExtractionModeInfo {
@@ -71,6 +71,13 @@ const MODE_DESCRIPTIONS: Record<string, ExtractionModeInfo> = {
         requiresAI: false,
         features: ["URL analysis", "Domain classification", "Basic topics"],
         performance: "Fastest",
+    },
+    summary: {
+        description:
+            "AI-enhanced content summarization with key insights extraction",
+        requiresAI: true,
+        features: ["Content summarization", "Key insights", "Enhanced context"],
+        performance: "Fast",
     },
     content: {
         description:
@@ -169,7 +176,13 @@ class KnowledgePanel {
             .getElementById("extractionMode")!
             .addEventListener("input", (e) => {
                 const slider = e.target as HTMLInputElement;
-                const modeMap = ["basic", "content", "actions", "full"];
+                const modeMap = [
+                    "basic",
+                    "summary",
+                    "content",
+                    "actions",
+                    "full",
+                ];
                 const mode = modeMap[parseInt(slider.value)] as any;
                 slider.setAttribute("data-mode", mode);
                 this.updateExtractionMode(mode);
@@ -182,7 +195,13 @@ class KnowledgePanel {
                 const slider = document.getElementById(
                     "extractionMode",
                 ) as HTMLInputElement;
-                const modeMap = ["basic", "content", "actions", "full"];
+                const modeMap = [
+                    "basic",
+                    "summary",
+                    "content",
+                    "actions",
+                    "full",
+                ];
                 slider.value = index.toString();
                 slider.setAttribute("data-mode", modeMap[index]);
                 this.updateExtractionMode(modeMap[index] as any);
@@ -918,7 +937,13 @@ class KnowledgePanel {
                     "extractionMode",
                 ) as HTMLInputElement;
                 if (slider && this.extractionSettings.mode) {
-                    const modeMap = ["basic", "content", "actions", "full"];
+                    const modeMap = [
+                        "basic",
+                        "summary",
+                        "content",
+                        "actions",
+                        "full",
+                    ];
                     const value = modeMap.indexOf(this.extractionSettings.mode);
                     slider.value = value.toString();
                     slider.setAttribute(
@@ -1529,7 +1554,7 @@ class KnowledgePanel {
     }
 
     private updateExtractionMode(
-        mode: "basic" | "content" | "actions" | "full",
+        mode: "basic" | "summary" | "content" | "actions" | "full",
     ) {
         this.extractionSettings.mode = mode;
 

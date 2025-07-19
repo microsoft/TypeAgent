@@ -143,18 +143,21 @@ export class Analytics {
         // Calculate mode-specific metrics
         const modeUsage: Record<ExtractionMode, number> = {
             basic: 0,
+            summary: 0,
             content: 0,
             actions: 0,
             full: 0,
         };
         const modeTimeSum: Record<ExtractionMode, number> = {
             basic: 0,
+            summary: 0,
             content: 0,
             actions: 0,
             full: 0,
         };
         const modeSuccesses: Record<ExtractionMode, number> = {
             basic: 0,
+            summary: 0,
             content: 0,
             actions: 0,
             full: 0,
@@ -171,6 +174,10 @@ export class Analytics {
         const modeAverageTime: Record<ExtractionMode, number> = {
             basic:
                 modeUsage.basic > 0 ? modeTimeSum.basic / modeUsage.basic : 0,
+            summary:
+                modeUsage.summary > 0
+                    ? modeTimeSum.summary / modeUsage.summary
+                    : 0,
             content:
                 modeUsage.content > 0
                     ? modeTimeSum.content / modeUsage.content
@@ -186,6 +193,10 @@ export class Analytics {
             basic:
                 modeUsage.basic > 0
                     ? (modeSuccesses.basic / modeUsage.basic) * 100
+                    : 0,
+            summary:
+                modeUsage.summary > 0
+                    ? (modeSuccesses.summary / modeUsage.summary) * 100
                     : 0,
             content:
                 modeUsage.content > 0
@@ -391,9 +402,27 @@ export class Analytics {
             successRate: 0,
             averageProcessingTime: 0,
             averageConfidence: 0,
-            modeUsage: { basic: 0, content: 0, actions: 0, full: 0 },
-            modeAverageTime: { basic: 0, content: 0, actions: 0, full: 0 },
-            modeSuccessRate: { basic: 0, content: 0, actions: 0, full: 0 },
+            modeUsage: {
+                basic: 0,
+                summary: 0,
+                content: 0,
+                actions: 0,
+                full: 0,
+            },
+            modeAverageTime: {
+                basic: 0,
+                summary: 0,
+                content: 0,
+                actions: 0,
+                full: 0,
+            },
+            modeSuccessRate: {
+                basic: 0,
+                summary: 0,
+                content: 0,
+                actions: 0,
+                full: 0,
+            },
             averageEntityCount: 0,
             averageTopicCount: 0,
             averageActionCount: 0,

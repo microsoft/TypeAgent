@@ -3,7 +3,10 @@
 
 import { Args, Command, Flags } from "@oclif/core";
 import { ClientIO, createDispatcher } from "agent-dispatcher";
-import { getDefaultAppAgentProviders } from "default-agent-provider";
+import {
+    getDefaultAppAgentProviders,
+    getIndexingServiceRegistry,
+} from "default-agent-provider";
 import { getChatModelNames } from "aiclient";
 import { getAllActionConfigProvider } from "agent-dispatcher/internal";
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
@@ -113,6 +116,8 @@ export default class TranslateCommand extends Command {
                 clientIO,
                 persistDir: instanceDir,
                 dblogging: true,
+                indexingServiceRegistry:
+                    await getIndexingServiceRegistry(instanceDir),
                 clientId: getClientId(),
             });
             try {

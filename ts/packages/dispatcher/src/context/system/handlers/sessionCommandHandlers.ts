@@ -100,6 +100,7 @@ class SessionOpenCommandHandler implements CommandHandler {
         const session = await Session.load(
             systemContext.persistDir,
             params.args.session,
+            systemContext.indexingServiceRegistry,
         );
         await setSessionOnCommandHandlerContext(systemContext, session);
         displaySuccess(`Session opened: ${params.args.session}`, context);
