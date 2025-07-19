@@ -19,6 +19,7 @@ import {
     TemporalQueryProcessor,
     TemporalPattern,
 } from "./knowledge/temporalQueryProcessor.js";
+import { QueryEnhancementAdapter } from "./search/queryEnhancementAdapter.mjs";
 
 const debug = registerDebug("typeagent:browser:unified-search");
 
@@ -33,6 +34,10 @@ export interface SearchWebMemoriesRequest {
     source?: "bookmark" | "history" | undefined;
     temporalSort?: "ascend" | "descend" | "none" | undefined;
     frequencySort?: "ascend" | "descend" | "none" | undefined;
+
+    // Temporal filters
+    dateFrom?: string | undefined;
+    dateTo?: string | undefined;
 
     // Search configuration
     limit?: number | undefined;
@@ -52,6 +57,9 @@ export interface SearchWebMemoriesRequest {
     combineAnswers?: boolean | undefined;
     choices?: string | undefined; // Multiple choice (semicolon separated)
     debug?: boolean | undefined;
+
+    // Internal metadata for query enhancement
+    metadata?: any;
 }
 
 export interface ParsedQuery {
@@ -145,6 +153,8 @@ export async function searchWebMemories(
         intermediateFallbacks: [],
     };
 
+    let enhancedRequest = request; // Declare outside try block
+
     try {
         // Validate inputs
         if (!request.query || request.query.trim().length === 0) {
@@ -162,10 +172,24 @@ export async function searchWebMemories(
 
         debug(`Starting unified search for query: "${request.query}"`);
 
+        // Query Enhancement Phase
+        const enhancementStart = Date.now();
+        const queryAdapter = new QueryEnhancementAdapter();
+        
+        debug(`Performing comprehensive LLM analysis for query: "${request.query}"`);
+        enhancedRequest = await queryAdapter.enhanceSearchRequest(request, {
+            websiteCollection,
+            userContext: context
+        });
+        const detectedIntent = (enhancedRequest as any).metadata?.analysis;
+        
+        const enhancementTime = Date.now() - enhancementStart;
+        debug(`Query enhancement completed in ${enhancementTime}ms`);
+
         // PHASE 1: Query parsing and understanding
         const parseStart = Date.now();
-        const parsedQuery = await parseAndExpandQuery(request.query, context);
-        timing.parsing = Date.now() - parseStart;
+        const parsedQuery = await parseAndExpandQuery(enhancedRequest.query, context);
+        timing.parsing = Date.now() - parseStart + enhancementTime;
         debugContext.parsedQuery = parsedQuery;
 
         debug(
@@ -177,11 +201,11 @@ export async function searchWebMemories(
         let searchResults: website.Website[] = [];
 
         // Strategy 1: Try advanced search if enabled
-        if (request.enableAdvancedSearch) {
+        if (enhancedRequest.enableAdvancedSearch) {
             try {
-                debugContext.searchStrategies.push("advanced-semantic");
+                debugContext.searchStrategies.push("llm-enhanced-advanced");
                 searchResults = await performAdvancedSearch(
-                    request,
+                    enhancedRequest,
                     parsedQuery,
                     websiteCollection,
                     context,
@@ -189,13 +213,13 @@ export async function searchWebMemories(
 
                 if (searchResults.length === 0) {
                     debugContext.intermediateFallbacks.push(
-                        "advanced-semantic -> basic-semantic",
+                        "llm-enhanced-advanced -> basic-semantic",
                     );
                 }
             } catch (error) {
-                debug(`Advanced search failed, falling back: ${error}`);
+                debug(`Enhanced advanced search failed, falling back: ${error}`);
                 debugContext.intermediateFallbacks.push(
-                    "advanced-semantic -> fallback",
+                    "llm-enhanced-advanced -> fallback",
                 );
             }
         }
@@ -204,10 +228,10 @@ export async function searchWebMemories(
         if (searchResults.length === 0) {
             debugContext.searchStrategies.push("basic-semantic");
             searchResults = await findRequestedWebsites(
-                [request.query],
+                [enhancedRequest.query],
                 context.agentContext,
-                request.exactMatch || false,
-                request.minScore || 0.3,
+                enhancedRequest.exactMatch || false,
+                enhancedRequest.minScore || 0.3,
             );
         }
 
@@ -218,14 +242,24 @@ export async function searchWebMemories(
         const processingStart = Date.now();
         let filteredResults = await applyDiscoveryFilters(
             searchResults,
-            request,
+            enhancedRequest,
         );
 
         // Apply sorting
-        filteredResults = applySorting(filteredResults, request);
+        filteredResults = applySorting(filteredResults, enhancedRequest);
+
+        // Apply comprehensive LLM-informed ranking
+        if (detectedIntent && filteredResults.length > 0) {
+            debug(`Applying comprehensive LLM-informed ranking for intent: ${detectedIntent.intent.type}`);
+            filteredResults = await queryAdapter.enhanceSearchResults(
+                filteredResults,
+                enhancedRequest,
+                detectedIntent
+            );
+        }
 
         // Apply limit
-        const limitedResults = filteredResults.slice(0, request.limit || 20);
+        const limitedResults = filteredResults.slice(0, enhancedRequest.limit || 20);
 
         // Convert to website results format
         const websites = convertToWebsiteResults(limitedResults);
@@ -236,12 +270,12 @@ export async function searchWebMemories(
         let answerSources: WebPageReference[] | undefined;
         let confidence: number | undefined;
 
-        if (request.generateAnswer !== false && limitedResults.length > 0) {
+        if (enhancedRequest.generateAnswer !== false && limitedResults.length > 0) {
             const answerResult = await generateAnswerFromResults(
-                request.query,
+                enhancedRequest.query,
                 limitedResults,
                 parsedQuery,
-                request,
+                enhancedRequest,
             );
             answer = answerResult.answer;
             answerType = answerResult.type;
@@ -254,7 +288,7 @@ export async function searchWebMemories(
         let topTopics: string[] | undefined;
 
         if (
-            request.includeRelatedEntities !== false &&
+            enhancedRequest.includeRelatedEntities !== false &&
             limitedResults.length > 0
         ) {
             const knowledgeResult =
@@ -267,7 +301,7 @@ export async function searchWebMemories(
         let relationships: RelationshipResult[] | undefined;
         let temporalPatterns: TemporalPattern[] | undefined;
 
-        if (request.includeRelationships && limitedResults.length > 0) {
+        if (enhancedRequest.includeRelationships && limitedResults.length > 0) {
             try {
                 const relationshipDiscovery = new RelationshipDiscovery(
                     context,
@@ -303,7 +337,7 @@ export async function searchWebMemories(
 
         // PHASE 8: Generate follow-up suggestions
         const suggestedFollowups = await generateFollowupSuggestions(
-            request.query,
+            enhancedRequest.query,
             websites,
             relatedEntities,
         );
@@ -312,16 +346,16 @@ export async function searchWebMemories(
         debugContext.knowledgeMatchCount = limitedResults.length;
         debugContext.timing = timing;
 
-        // Build response
+        // Build enhanced response
         const response: SearchWebMemoriesResponse = {
             websites,
             summary: {
                 totalFound: filteredResults.length,
                 searchTime: timing.total,
-                strategies: debugContext.searchStrategies,
-                confidence: confidence || 0.7,
+                strategies: detectedIntent ? ["llm-enhanced", ...debugContext.searchStrategies] : debugContext.searchStrategies,
+                confidence: detectedIntent?.confidence || confidence || 0.7,
             },
-            queryIntent: parsedQuery.intent,
+            queryIntent: detectedIntent?.intent.type || parsedQuery.intent,
             parsedQuery,
             suggestedFollowups,
         };
@@ -347,12 +381,12 @@ export async function searchWebMemories(
             response.temporalPatterns = temporalPatterns;
         }
 
-        if (request.debug) {
+        if (enhancedRequest.debug) {
             response.debugContext = debugContext;
         }
 
         debug(
-            `Unified search completed in ${timing.total}ms with ${websites.length} results`,
+            `Enhanced search completed in ${timing.total}ms with ${websites.length} results`,
         );
         return response;
     } catch (error) {
@@ -362,7 +396,7 @@ export async function searchWebMemories(
         return createErrorResponse(
             error instanceof Error ? error.message : "Unknown search error",
             startTime,
-            request.debug ? debugContext : undefined,
+            enhancedRequest?.debug ? debugContext : undefined,
         );
     }
 }
