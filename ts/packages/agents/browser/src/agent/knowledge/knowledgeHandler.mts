@@ -394,7 +394,7 @@ export async function extractKnowledgeFromPage(
         extractEntities: boolean;
         extractRelationships: boolean;
         suggestQuestions: boolean;
-        mode?: "basic" | "content" | "actions" | "full";
+        mode?: "basic" | "summary" | "content" | "actions" | "full";
     },
     context: SessionContext<BrowserActionContext>,
 ): Promise<EnhancedKnowledgeExtractionResult> {
@@ -421,7 +421,7 @@ export async function extractKnowledgeFromPage(
     }
 
     try {
-        const extractionMode = parameters.mode || "content";
+        const extractionMode = (parameters.mode || "content") as ExtractionMode;
         const extractor = new BrowserKnowledgeExtractor(context);
 
         // Process each fragment individually using batch processing

@@ -1325,10 +1325,6 @@ async function handleWebsiteAction(
             // Create progress callback similar to importWebsiteDataWithProgress
             const folderProgressCallback = (message: string) => {
                 // Extract progress info from message if possible
-                // Updated regex to match format: "X/Y files processed (Z%): description"
-                const progressMatch = message.match(
-                    /(\d+)\/(\d+)\s+files\s+processed.*?:\s*(.+)/,
-                );
                 let current = 0,
                     total = 0,
                     item = "";
@@ -1341,46 +1337,85 @@ async function handleWebsiteAction(
                     | "complete"
                     | "error" = "processing";
 
-                if (progressMatch) {
-                    current = parseInt(progressMatch[1]);
-                    total = parseInt(progressMatch[2]);
-                    item = progressMatch[3];
+                // Handle JSON progress format from logStructuredProgress
+                if (message.includes("PROGRESS_JSON:")) {
+                    try {
+                        const jsonStart =
+                            message.indexOf("PROGRESS_JSON:") +
+                            "PROGRESS_JSON:".length;
+                        const progressData = JSON.parse(
+                            message.substring(jsonStart),
+                        );
 
-                    // Determine phase based on progress
-                    if (current === 0) {
-                        phase = "initializing";
-                    } else if (current === total) {
-                        phase = "complete";
-                    } else {
-                        phase = "processing";
+                        current = progressData.current ?? 0;
+                        total = progressData.total ?? 0;
+                        item = progressData.description ?? "";
+                        phase = progressData.phase ?? "processing";
+
+                        console.log(
+                            "✅ Parsed JSON progress data:",
+                            progressData,
+                        );
+                        console.log(
+                            "✅ Extracted values - current:",
+                            current,
+                            "total:",
+                            total,
+                            "item:",
+                            item,
+                        );
+                    } catch (error) {
+                        console.warn("Failed to parse JSON progress:", error);
+                        // Fall back to regex parsing
                     }
                 } else {
-                    // Fallback: try to extract just the description for other message types
-                    item = message;
+                    // Existing regex logic for other message formats
+                    // Updated regex to match format: "X/Y files processed (Z%): description"
+                    const progressMatch = message.match(
+                        /(\d+)\/(\d+)\s+files\s+processed.*?:\s*(.+)/,
+                    );
 
-                    // Determine phase from message content
-                    if (
-                        message.includes("complete") ||
-                        message.includes("finished")
-                    ) {
-                        phase = "complete";
-                    } else if (
-                        message.includes("Found") ||
-                        message.includes("Starting")
-                    ) {
-                        phase = "initializing";
-                    } else if (message.startsWith("Processing:")) {
-                        phase = "processing";
-                        // For individual file processing, preserve any previously known total
-                        total = parameters.totalItems || 0;
+                    if (progressMatch) {
+                        current = parseInt(progressMatch[1]);
+                        total = parseInt(progressMatch[2]);
+                        item = progressMatch[3];
+
+                        // Determine phase based on progress
+                        if (current === 0) {
+                            phase = "initializing";
+                        } else if (current === total) {
+                            phase = "complete";
+                        } else {
+                            phase = "processing";
+                        }
+                    } else {
+                        // Fallback: try to extract just the description for other message types
+                        item = message;
+
+                        // Determine phase from message content
+                        if (
+                            message.includes("complete") ||
+                            message.includes("finished")
+                        ) {
+                            phase = "complete";
+                        } else if (
+                            message.includes("Found") ||
+                            message.includes("Starting")
+                        ) {
+                            phase = "initializing";
+                        } else if (message.startsWith("Processing:")) {
+                            phase = "processing";
+                            // For individual file processing, preserve any previously known total
+                            total = parameters.totalItems || 0;
+                        }
                     }
                 }
 
                 // Create progress data matching ImportProgress interface
                 const progressData = {
                     phase,
-                    totalItems: total || parameters.totalItems || 0,
-                    processedItems: current || 0,
+                    totalItems: total,
+                    processedItems: current,
                     currentItem: item,
                     importId: parameters.importId,
                     errors: [],

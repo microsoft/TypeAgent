@@ -4090,8 +4090,8 @@ body {
   background: linear-gradient(
     to right,
     #28a745 0%,
-    #28a745 33.33%,
-    #e9ecef 33.33%,
+    #28a745 20%,
+    #e9ecef 20%,
     #e9ecef 100%
   );
 }
@@ -4104,14 +4104,36 @@ body {
   background: #28a745;
 }
 
+.extraction-mode-slider[data-mode="summary"] {
+  background: linear-gradient(
+    to right,
+    #28a745 0%,
+    #28a745 20%,
+    #ffc107 20%,
+    #ffc107 40%,
+    #e9ecef 40%,
+    #e9ecef 100%
+  );
+}
+
+.extraction-mode-slider[data-mode="summary"]::-webkit-slider-thumb {
+  background: #ffc107;
+}
+
+.extraction-mode-slider[data-mode="summary"]::-moz-range-thumb {
+  background: #ffc107;
+}
+
 .extraction-mode-slider[data-mode="content"] {
   background: linear-gradient(
     to right,
     #28a745 0%,
-    #28a745 33.33%,
-    #667eea 33.33%,
-    #667eea 66.66%,
-    #e9ecef 66.66%,
+    #28a745 20%,
+    #ffc107 20%,
+    #ffc107 40%,
+    #667eea 40%,
+    #667eea 60%,
+    #e9ecef 60%,
     #e9ecef 100%
   );
 }
@@ -4128,11 +4150,15 @@ body {
   background: linear-gradient(
     to right,
     #28a745 0%,
-    #28a745 33.33%,
-    #667eea 33.33%,
-    #667eea 66.66%,
-    #fd7e14 66.66%,
-    #fd7e14 100%
+    #28a745 20%,
+    #ffc107 20%,
+    #ffc107 40%,
+    #667eea 40%,
+    #667eea 60%,
+    #fd7e14 60%,
+    #fd7e14 80%,
+    #e9ecef 80%,
+    #e9ecef 100%
   );
 }
 
@@ -4141,6 +4167,30 @@ body {
 }
 
 .extraction-mode-slider[data-mode="actions"]::-moz-range-thumb {
+  background: #fd7e14;
+}
+
+.extraction-mode-slider[data-mode="full"] {
+  background: linear-gradient(
+    to right,
+    #28a745 0%,
+    #28a745 20%,
+    #ffc107 20%,
+    #ffc107 40%,
+    #667eea 40%,
+    #667eea 60%,
+    #fd7e14 60%,
+    #fd7e14 80%,
+    #dc3545 80%,
+    #dc3545 100%
+  );
+}
+
+.extraction-mode-slider[data-mode="full"]::-webkit-slider-thumb {
+  background: #dc3545;
+}
+
+.extraction-mode-slider[data-mode="full"]::-moz-range-thumb {
   background: #fd7e14;
 }
 
