@@ -145,65 +145,6 @@ export class KnowledgeSearchPanel {
                 }
             });
         });
-
-        // Setup filter event listeners
-        this.setupFilterListeners();
-    }
-
-    private setupFilterListeners(): void {
-        // Source filter
-        const sourceFilter = document.getElementById(
-            "sourceFilter",
-        ) as HTMLSelectElement;
-        if (sourceFilter) {
-            sourceFilter.addEventListener("change", () =>
-                this.updateSearchFilters(),
-            );
-        }
-
-        // Domain filter
-        const domainFilter = document.getElementById(
-            "domainFilter",
-        ) as HTMLInputElement;
-        if (domainFilter) {
-            domainFilter.addEventListener("input", () =>
-                this.updateSearchFilters(),
-            );
-        }
-
-        // Date filters
-        const dateFrom = document.getElementById(
-            "dateFrom",
-        ) as HTMLInputElement;
-        const dateTo = document.getElementById("dateTo") as HTMLInputElement;
-
-        if (dateFrom) {
-            dateFrom.addEventListener("change", () =>
-                this.updateSearchFilters(),
-            );
-        }
-        if (dateTo) {
-            dateTo.addEventListener("change", () => this.updateSearchFilters());
-        }
-
-        // Knowledge filters
-        const knowledgeFilters = [
-            "hasEntitiesFilter",
-            "hasTopicsFilter",
-            "hasActionsFilter",
-            "knowledgeExtractedFilter",
-        ];
-
-        knowledgeFilters.forEach((filterId) => {
-            const filter = document.getElementById(
-                filterId,
-            ) as HTMLInputElement;
-            if (filter) {
-                filter.addEventListener("change", () =>
-                    this.updateSearchFilters(),
-                );
-            }
-        });
     }
 
     private updateViewModeButtons(): void {
@@ -231,55 +172,6 @@ export class KnowledgeSearchPanel {
                 this.clearSearchResults();
             }
         }, 300);
-    }
-
-    private updateSearchFilters(): void {
-        const sourceFilter = document.getElementById(
-            "sourceFilter",
-        ) as HTMLSelectElement;
-        const domainFilter = document.getElementById(
-            "domainFilter",
-        ) as HTMLInputElement;
-        const dateFrom = document.getElementById(
-            "dateFrom",
-        ) as HTMLInputElement;
-        const dateTo = document.getElementById("dateTo") as HTMLInputElement;
-
-        const filters: any = {};
-
-        if (sourceFilter?.value) {
-            filters.sourceType = sourceFilter.value;
-        }
-
-        if (domainFilter?.value) {
-            filters.domain = domainFilter.value;
-        }
-
-        if (dateFrom?.value) {
-            filters.dateFrom = dateFrom.value;
-        }
-
-        if (dateTo?.value) {
-            filters.dateTo = dateTo.value;
-        }
-
-        // Knowledge filters
-        const knowledgeFilters = [
-            "hasEntitiesFilter",
-            "hasTopicsFilter",
-            "hasActionsFilter",
-            "knowledgeExtractedFilter",
-        ];
-        knowledgeFilters.forEach((filterId) => {
-            const filter = document.getElementById(
-                filterId,
-            ) as HTMLInputElement;
-            if (filter?.checked) {
-                filters[filterId] = true;
-            }
-        });
-
-        this.updateFilters(filters);
     }
 
     private showSearchLoading(): void {
@@ -607,7 +499,7 @@ export class KnowledgeSearchPanel {
         if (searchInput) {
             searchInput.disabled = !isConnected;
             searchInput.placeholder = isConnected
-                ? "Search websites, bookmarks, and pages using AI..."
+                ? "Ask in natural language: 'latest github bookmarks', 'car reviews last week'..."
                 : "Connection required for search...";
         }
 
