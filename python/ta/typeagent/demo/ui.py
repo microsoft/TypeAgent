@@ -389,7 +389,7 @@ def print_result[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
             text = " ".join(msg.text_chunks).strip()
             print(
                 f"({score:5.1f}) M={msg_ord:d}: "
-                f"{msg.metadata.source:>15.15s}: "
+                f"{msg.metadata.source!s:>15.15s}: "
                 f"{repr(text)[1:-1]:<150.150s}  "
             )
     if result.knowledge_matches:
