@@ -44,5 +44,10 @@ export default {
         "../../common/browserControl.mjs":
             "<rootDir>/test/mocks/browserControl.js",
         "^src/(.*)$": "<rootDir>/src/$1",
+        // Mock problematic modules that use import.meta.url
+        "^.*queryAnalyzer\\.(mjs|mts)$": "<rootDir>/test/mocks/queryAnalyzer.js",
+        "^.*metadataRanker\\.(mjs|mts)$": "<rootDir>/test/mocks/metadataRanker.js",
+        // Map .mjs imports from src to .mts files for ts-jest
+        "^(.*)\\.mjs$": "$1.mts",
     },
 };
