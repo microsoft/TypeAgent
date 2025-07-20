@@ -9,12 +9,12 @@ export class QueryAnalyzer {
         return {
             intent: {
                 type: "find_specific",
-                confidence: 0.8
+                confidence: 0.8,
             },
             temporalFilters: [],
             contentFilters: [],
             enhancedQuery: query,
-            confidence: 0.8
+            confidence: 0.8,
         };
     }
 
