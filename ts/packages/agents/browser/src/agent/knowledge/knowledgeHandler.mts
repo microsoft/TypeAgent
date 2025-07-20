@@ -2334,6 +2334,7 @@ function createEmptyKnowledgeStats(): DetailedKnowledgeStats {
     return {
         totalPages: 0,
         totalEntities: 0,
+        totalTopics: 0,
         totalRelationships: 0,
         uniqueDomains: 0,
         topEntityTypes: [],
@@ -2367,6 +2368,7 @@ function createEmptyKnowledgeStats(): DetailedKnowledgeStats {
 async function calculateBaseStats(websites: any[]): Promise<{
     totalPages: number;
     totalEntities: number;
+    totalTopics: number;
     totalRelationships: number;
     uniqueDomains: number;
     topEntityTypes: Array<{ type: string; count: number }>;
@@ -2380,10 +2382,12 @@ async function calculateBaseStats(websites: any[]): Promise<{
     };
 }> {
     let totalEntities = 0;
+    let totalTopics = 0;
     let totalRelationships = 0;
     const domains = new Set<string>();
     const entityTypeCounts = new Map<string, number>();
     const domainCounts = new Map<string, number>();
+    const uniqueTopicsSet = new Set<string>();
     let totalContent = 0;
 
     for (const site of websites) {
@@ -2418,6 +2422,13 @@ async function calculateBaseStats(websites: any[]): Promise<{
                     });
                 }
 
+                // Count unique topics
+                if (knowledge.topics?.length > 0) {
+                    knowledge.topics.forEach((topic: string) => {
+                        uniqueTopicsSet.add(topic.toLowerCase().trim());
+                    });
+                }
+
                 // Count relationships/actions
                 if (knowledge.actions?.length > 0) {
                     totalRelationships += knowledge.actions.length;
@@ -2431,6 +2442,9 @@ async function calculateBaseStats(websites: any[]): Promise<{
             console.warn("Error processing site for stats:", error);
         }
     }
+
+    // Set totalTopics to the count of unique topics found
+    totalTopics = uniqueTopicsSet.size;
 
     // Convert entity types to sorted array
     const topEntityTypes = Array.from(entityTypeCounts.entries())
@@ -2450,6 +2464,7 @@ async function calculateBaseStats(websites: any[]): Promise<{
     return {
         totalPages: websites.length,
         totalEntities,
+        totalTopics,
         totalRelationships,
         uniqueDomains: domains.size,
         topEntityTypes,
@@ -2718,7 +2733,7 @@ export async function getAnalyticsData(
                     lowQuality: 0,
                 },
                 totalEntities: knowledgeStats.totalEntities || 0,
-                totalTopics: knowledgeStats.topEntityTypes?.length || 0,
+                totalTopics: knowledgeStats.totalTopics || 0,
                 totalActions: totalActions,
                 totalRelationships: knowledgeStats.totalRelationships || 0,
                 recentItems: knowledgeStats.recentActivity || [],

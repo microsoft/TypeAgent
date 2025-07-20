@@ -7,6 +7,10 @@ import {
     Website,
     EntityMatch,
 } from "./knowledgeUtilities";
+import type {
+    DynamicSummary,
+    SmartFollowup,
+} from "../../agent/search/schema/answerEnhancement.mjs";
 
 export class KnowledgeSearchPanel {
     private container: HTMLElement;
@@ -62,18 +66,33 @@ export class KnowledgeSearchPanel {
 
             this.renderSearchResults();
 
-            // Show AI summary if available
-            if (
-                this.currentResults.summary &&
-                this.currentResults.summary.text
-            ) {
-                console.log("KnowledgeSearchPanel: Showing AI summary");
-                this.showAISummary(this.currentResults.summary.text);
-            }
+            // Show enhanced AI summary and follow-ups if available
+            if (this.currentResults.answerEnhancement) {
+                console.log(
+                    "KnowledgeSearchPanel: Showing enhanced AI summary and follow-ups",
+                );
+                this.showEnhancedSummary(
+                    this.currentResults.answerEnhancement.summary,
+                );
+                this.showEnhancedFollowups(
+                    this.currentResults.answerEnhancement.followups,
+                );
+            } else {
+                // Fallback to static summary and insights
+                if (
+                    this.currentResults.summary &&
+                    this.currentResults.summary.text
+                ) {
+                    console.log(
+                        "KnowledgeSearchPanel: Showing static AI summary",
+                    );
+                    this.showAISummary(this.currentResults.summary.text);
+                }
 
-            // Show search insights
-            console.log("KnowledgeSearchPanel: Showing search insights");
-            this.showSearchInsights(this.currentResults);
+                // Show search insights
+                console.log("KnowledgeSearchPanel: Showing search insights");
+                this.showSearchInsights(this.currentResults);
+            }
         } catch (error) {
             console.error("KnowledgeSearchPanel: Search failed:", error);
             this.renderSearchError();
@@ -105,20 +124,17 @@ export class KnowledgeSearchPanel {
     }
 
     private setupEventListeners(): void {
-        // Setup search input with debouncing
+        // Setup search input for Enter key submission only
         const searchInput = document.getElementById(
             "searchInput",
         ) as HTMLInputElement;
         if (searchInput) {
-            searchInput.addEventListener("input", (event) => {
-                const query = (event.target as HTMLInputElement).value;
-                this.currentQuery = query;
-                this.debounceSearch(query);
-            });
-
             searchInput.addEventListener("keypress", (e) => {
                 if (e.key === "Enter") {
-                    this.performSearch(this.currentQuery.trim());
+                    const query = (e.target as HTMLInputElement).value.trim();
+                    if (query) {
+                        this.performSearch(query);
+                    }
                 }
             });
         }
@@ -127,7 +143,13 @@ export class KnowledgeSearchPanel {
         const searchButton = document.getElementById("searchButton");
         if (searchButton) {
             searchButton.addEventListener("click", () => {
-                this.performSearch(this.currentQuery.trim());
+                const searchInput = document.getElementById(
+                    "searchInput",
+                ) as HTMLInputElement;
+                const query = searchInput ? searchInput.value.trim() : "";
+                if (query) {
+                    this.performSearch(query);
+                }
             });
         }
 
@@ -144,65 +166,6 @@ export class KnowledgeSearchPanel {
                     this.setViewMode(view);
                 }
             });
-        });
-
-        // Setup filter event listeners
-        this.setupFilterListeners();
-    }
-
-    private setupFilterListeners(): void {
-        // Source filter
-        const sourceFilter = document.getElementById(
-            "sourceFilter",
-        ) as HTMLSelectElement;
-        if (sourceFilter) {
-            sourceFilter.addEventListener("change", () =>
-                this.updateSearchFilters(),
-            );
-        }
-
-        // Domain filter
-        const domainFilter = document.getElementById(
-            "domainFilter",
-        ) as HTMLInputElement;
-        if (domainFilter) {
-            domainFilter.addEventListener("input", () =>
-                this.updateSearchFilters(),
-            );
-        }
-
-        // Date filters
-        const dateFrom = document.getElementById(
-            "dateFrom",
-        ) as HTMLInputElement;
-        const dateTo = document.getElementById("dateTo") as HTMLInputElement;
-
-        if (dateFrom) {
-            dateFrom.addEventListener("change", () =>
-                this.updateSearchFilters(),
-            );
-        }
-        if (dateTo) {
-            dateTo.addEventListener("change", () => this.updateSearchFilters());
-        }
-
-        // Knowledge filters
-        const knowledgeFilters = [
-            "hasEntitiesFilter",
-            "hasTopicsFilter",
-            "hasActionsFilter",
-            "knowledgeExtractedFilter",
-        ];
-
-        knowledgeFilters.forEach((filterId) => {
-            const filter = document.getElementById(
-                filterId,
-            ) as HTMLInputElement;
-            if (filter) {
-                filter.addEventListener("change", () =>
-                    this.updateSearchFilters(),
-                );
-            }
         });
     }
 
@@ -231,55 +194,6 @@ export class KnowledgeSearchPanel {
                 this.clearSearchResults();
             }
         }, 300);
-    }
-
-    private updateSearchFilters(): void {
-        const sourceFilter = document.getElementById(
-            "sourceFilter",
-        ) as HTMLSelectElement;
-        const domainFilter = document.getElementById(
-            "domainFilter",
-        ) as HTMLInputElement;
-        const dateFrom = document.getElementById(
-            "dateFrom",
-        ) as HTMLInputElement;
-        const dateTo = document.getElementById("dateTo") as HTMLInputElement;
-
-        const filters: any = {};
-
-        if (sourceFilter?.value) {
-            filters.sourceType = sourceFilter.value;
-        }
-
-        if (domainFilter?.value) {
-            filters.domain = domainFilter.value;
-        }
-
-        if (dateFrom?.value) {
-            filters.dateFrom = dateFrom.value;
-        }
-
-        if (dateTo?.value) {
-            filters.dateTo = dateTo.value;
-        }
-
-        // Knowledge filters
-        const knowledgeFilters = [
-            "hasEntitiesFilter",
-            "hasTopicsFilter",
-            "hasActionsFilter",
-            "knowledgeExtractedFilter",
-        ];
-        knowledgeFilters.forEach((filterId) => {
-            const filter = document.getElementById(
-                filterId,
-            ) as HTMLInputElement;
-            if (filter?.checked) {
-                filters[filterId] = true;
-            }
-        });
-
-        this.updateFilters(filters);
     }
 
     private showSearchLoading(): void {
@@ -607,7 +521,7 @@ export class KnowledgeSearchPanel {
         if (searchInput) {
             searchInput.disabled = !isConnected;
             searchInput.placeholder = isConnected
-                ? "Search websites, bookmarks, and pages using AI..."
+                ? "Ask in natural language: 'latest github bookmarks', 'car reviews last week'..."
                 : "Connection required for search...";
         }
 
@@ -756,6 +670,88 @@ export class KnowledgeSearchPanel {
         if (summarySection && summaryContent) {
             summaryContent.textContent = summary;
             summarySection.style.display = "block";
+        }
+    }
+
+    private showEnhancedSummary(summary: DynamicSummary): void {
+        const summarySection = document.getElementById("aiSummary");
+        const summaryContent = document.getElementById("summaryContent");
+
+        if (summarySection && summaryContent) {
+            // Build enhanced summary with key findings
+            let enhancedText = summary.text;
+
+            if (summary.keyFindings && summary.keyFindings.length > 0) {
+                enhancedText += "\n\nKey Findings:\n";
+                summary.keyFindings.forEach((finding) => {
+                    enhancedText += `• ${finding}\n`;
+                });
+            }
+
+            if (summary.statistics) {
+                enhancedText += `\n📊 Found ${summary.statistics.totalResults} results`;
+                if (summary.statistics.timeSpan) {
+                    enhancedText += ` from ${summary.statistics.timeSpan}`;
+                }
+                if (
+                    summary.statistics.dominantDomains &&
+                    summary.statistics.dominantDomains.length > 0
+                ) {
+                    enhancedText += `, primarily from ${summary.statistics.dominantDomains.join(", ")}`;
+                }
+            }
+
+            summaryContent.textContent = enhancedText;
+            summarySection.style.display = "block";
+        }
+    }
+
+    private showEnhancedFollowups(followups: SmartFollowup[]): void {
+        const followupsSection = document.getElementById(
+            "suggestedFollowupsSection",
+        );
+        const followupsContent = document.getElementById(
+            "suggestedFollowupsContent",
+        );
+
+        if (followupsSection && followupsContent && followups.length > 0) {
+            const followupItemsHtml = followups
+                .map(
+                    (followup) => `
+                    <div class="followup-item enhanced-followup" data-followup="${this.escapeHtml(followup.query)}" 
+                         title="${this.escapeHtml(followup.reasoning)}">
+                        <div class="followup-content">
+                            <i class="bi bi-arrow-right-circle"></i>
+                            <span class="followup-query">${this.escapeHtml(followup.query)}</span>
+                            <span class="followup-type">${followup.type}</span>
+                        </div>
+                        <div class="followup-reasoning">${this.escapeHtml(followup.reasoning)}</div>
+                    </div>
+                `,
+                )
+                .join("");
+
+            followupsContent.innerHTML = `
+                <div class="followup-suggestions enhanced">
+                    ${followupItemsHtml}
+                </div>
+            `;
+
+            // Add click handlers
+            followupsContent
+                .querySelectorAll(".followup-item")
+                .forEach((item) => {
+                    item.addEventListener("click", () => {
+                        const followup = item.getAttribute("data-followup");
+                        if (followup) {
+                            this.performSearchWithQuery(followup);
+                        }
+                    });
+                });
+
+            followupsSection.style.display = "block";
+        } else if (followupsSection) {
+            followupsSection.style.display = "none";
         }
     }
 

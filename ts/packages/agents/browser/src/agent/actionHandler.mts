@@ -1224,7 +1224,7 @@ async function handleWebsiteAction(
         case "importWebsiteDataWithProgress":
             // Create progress callback using JSON parsing instead of regex
             const progressCallback = (message: string) => {
-                console.log("Progress message received:", message);
+                debug("Progress message received:", message);
 
                 let current = 0,
                     total = 0,
@@ -1240,10 +1240,7 @@ async function handleWebsiteAction(
                         const jsonStr = message.substring(jsonStart);
                         const progressData = JSON.parse(jsonStr);
 
-                        console.log(
-                            "✅ Parsed JSON progress data:",
-                            progressData,
-                        );
+                        debug("Parsed JSON progress data:", progressData);
 
                         current = progressData.current || 0;
                         total = progressData.total || 0;
@@ -1251,10 +1248,10 @@ async function handleWebsiteAction(
                         phase = progressData.phase || "processing";
                     } catch (error) {
                         console.error(
-                            "❌ Failed to parse JSON progress data:",
+                            "Failed to parse JSON progress data:",
                             error,
                         );
-                        console.log("Raw message:", message);
+                        debug("Raw message:", message);
 
                         // Fallback to simple message handling
                         item = message;
@@ -1275,7 +1272,7 @@ async function handleWebsiteAction(
                     }
                 } else {
                     // Fallback for non-JSON messages
-                    console.log("📝 Non-JSON message, using as description");
+                    debug("Non-JSON message, using as description");
                     item = message;
                     total = parameters.totalItems || 0;
 
@@ -1302,10 +1299,7 @@ async function handleWebsiteAction(
                     errors: [],
                 };
 
-                console.log(
-                    "📤 Sending structured progress:",
-                    structuredProgress,
-                );
+                debug("Sending structured progress:", structuredProgress);
 
                 // Send structured progress update via WebSocket
                 sendProgressUpdateViaWebSocket(
@@ -1352,12 +1346,9 @@ async function handleWebsiteAction(
                         item = progressData.description ?? "";
                         phase = progressData.phase ?? "processing";
 
-                        console.log(
-                            "✅ Parsed JSON progress data:",
-                            progressData,
-                        );
-                        console.log(
-                            "✅ Extracted values - current:",
+                        debug("Parsed JSON progress data:", progressData);
+                        debug(
+                            "Extracted values - current:",
                             current,
                             "total:",
                             total,
@@ -1499,7 +1490,7 @@ async function handleActionsStoreAction(
                 }
 
                 await actionsStore.recordUsage(actionId);
-                console.log(`Recorded usage for action: ${actionId}`);
+                debug(`Recorded usage for action: ${actionId}`);
 
                 return {
                     success: true,

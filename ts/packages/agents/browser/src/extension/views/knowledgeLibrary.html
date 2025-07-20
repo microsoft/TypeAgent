@@ -91,7 +91,8 @@
               <i class="bi bi-search text-primary"></i>Search Your Library
             </h1>
             <p class="page-subtitle">
-              Find websites, bookmarks, and pages using AI-powered search
+              Ask in natural language: "latest github bookmarks", "car reviews
+              last week", "most visited news sites"
             </p>
           </div>
 
@@ -102,81 +103,12 @@
                 type="text"
                 id="searchInput"
                 class="search-input"
-                placeholder="Search websites, bookmarks, and pages using AI..."
+                placeholder="Ask in natural language: 'latest github bookmarks', 'car reviews last week'..."
               />
               <button id="searchButton" class="search-btn">
                 <i class="bi bi-search"></i>
               </button>
             </div>
-
-            <!-- Advanced Filters -->
-            <details class="search-filters">
-              <summary class="filter-toggle">
-                <i class="bi bi-funnel"></i>Advanced Filters
-              </summary>
-              <div class="filter-content">
-                <div class="filter-row">
-                  <div class="filter-group">
-                    <label>Date Range</label>
-                    <div class="date-inputs">
-                      <input type="date" id="dateFrom" />
-                      <input type="date" id="dateTo" />
-                    </div>
-                  </div>
-                  <div class="filter-group">
-                    <label>Source Type</label>
-                    <select id="sourceFilter">
-                      <option value="">All Sources</option>
-                      <option value="bookmarks">Bookmarks Only</option>
-                      <option value="history">History Only</option>
-                    </select>
-                  </div>
-                  <div class="filter-group">
-                    <label>Domain</label>
-                    <input
-                      type="text"
-                      id="domainFilter"
-                      placeholder="e.g., github.com"
-                    />
-                  </div>
-                  <div class="filter-group">
-                    <label
-                      >Min Relevance: <span id="relevanceValue">0%</span></label
-                    >
-                    <input
-                      type="range"
-                      id="relevanceFilter"
-                      min="0"
-                      max="100"
-                      value="0"
-                    />
-                  </div>
-                </div>
-                <div class="filter-row">
-                  <div class="filter-group">
-                    <label>Knowledge Filters</label>
-                    <div class="checkbox-group">
-                      <label class="checkbox-item">
-                        <input type="checkbox" id="hasEntitiesFilter" />
-                        <i class="bi bi-diagram-2"></i>Has Entities
-                      </label>
-                      <label class="checkbox-item">
-                        <input type="checkbox" id="hasTopicsFilter" />
-                        <i class="bi bi-tags"></i>Has Topics
-                      </label>
-                      <label class="checkbox-item">
-                        <input type="checkbox" id="hasActionsFilter" />
-                        <i class="bi bi-lightning"></i>Has Actions
-                      </label>
-                      <label class="checkbox-item">
-                        <input type="checkbox" id="knowledgeExtractedFilter" />
-                        <i class="bi bi-check-circle"></i>Knowledge Extracted
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </details>
 
             <!-- Recent Searches -->
             <div class="recent-searches" id="recentSearches">
@@ -310,8 +242,8 @@
             <i class="bi bi-search"></i>
             <h6>Search Your Library</h6>
             <p class="mb-3">
-              Enter a search term above to find websites, bookmarks, and pages
-              using AI-powered search.
+              Ask in natural language above: "latest github bookmarks",
+              "summarize car reviews last week", "most visited sites"
             </p>
           </div>
         </div>

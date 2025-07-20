@@ -3,7 +3,6 @@
 
 import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "./actionHandler.mjs";
-import { findRequestedWebsites } from "./websiteMemory.mjs";
 import * as website from "website-memory";
 import * as kp from "knowpro";
 import registerDebug from "debug";
@@ -11,14 +10,9 @@ import {
     Entity,
     WebPageReference,
 } from "./knowledge/schema/knowledgeExtraction.mjs";
-import {
-    RelationshipDiscovery,
-    RelationshipResult,
-} from "./knowledge/relationshipDiscovery.js";
-import {
-    TemporalQueryProcessor,
-    TemporalPattern,
-} from "./knowledge/temporalQueryProcessor.js";
+import { QueryEnhancementAdapter } from "./search/queryEnhancementAdapter.mjs";
+import { AnswerEnhancementAdapter } from "./search/answerEnhancementAdapter.mjs";
+import type { AnswerEnhancement } from "./search/schema/answerEnhancement.mjs";
 
 const debug = registerDebug("typeagent:browser:unified-search");
 
@@ -34,6 +28,10 @@ export interface SearchWebMemoriesRequest {
     temporalSort?: "ascend" | "descend" | "none" | undefined;
     frequencySort?: "ascend" | "descend" | "none" | undefined;
 
+    // Temporal filters
+    dateFrom?: string | undefined;
+    dateTo?: string | undefined;
+
     // Search configuration
     limit?: number | undefined;
     minScore?: number | undefined;
@@ -42,7 +40,6 @@ export interface SearchWebMemoriesRequest {
     // Processing options (consumer controls cost)
     generateAnswer?: boolean | undefined; // Default: true
     includeRelatedEntities?: boolean | undefined; // Default: true
-    includeRelationships?: boolean | undefined; // Default: false (expensive)
     enableAdvancedSearch?: boolean | undefined; // Use advanced patterns
 
     // Advanced options
@@ -52,6 +49,9 @@ export interface SearchWebMemoriesRequest {
     combineAnswers?: boolean | undefined;
     choices?: string | undefined; // Multiple choice (semicolon separated)
     debug?: boolean | undefined;
+
+    // Internal metadata for query enhancement
+    metadata?: any;
 }
 
 export interface ParsedQuery {
@@ -108,14 +108,13 @@ export interface SearchWebMemoriesResponse {
     relatedEntities?: Entity[] | undefined;
     topTopics?: string[] | undefined;
 
-    // Advanced results - when includeRelationships=true
-    relationships?: RelationshipResult[] | undefined;
-    temporalPatterns?: TemporalPattern[] | undefined;
-
     // Query understanding
     queryIntent?: "question" | "discovery" | "mixed" | undefined;
     parsedQuery?: ParsedQuery | undefined;
     suggestedFollowups?: string[] | undefined;
+
+    // Answer Enhancement - dynamic summaries and smart follow-ups
+    answerEnhancement?: AnswerEnhancement | undefined;
 
     // Debug info - when debug=true
     debugContext?: SearchDebugContext | undefined;
@@ -145,6 +144,8 @@ export async function searchWebMemories(
         intermediateFallbacks: [],
     };
 
+    let enhancedRequest = request; // Declare outside try block
+
     try {
         // Validate inputs
         if (!request.query || request.query.trim().length === 0) {
@@ -162,10 +163,29 @@ export async function searchWebMemories(
 
         debug(`Starting unified search for query: "${request.query}"`);
 
+        // Query Enhancement Phase
+        const enhancementStart = Date.now();
+        const queryAdapter = new QueryEnhancementAdapter();
+
+        debug(
+            `Performing comprehensive LLM analysis for query: "${request.query}"`,
+        );
+        enhancedRequest = await queryAdapter.enhanceSearchRequest(request, {
+            websiteCollection,
+            userContext: context,
+        });
+        const detectedIntent = (enhancedRequest as any).metadata?.analysis;
+
+        const enhancementTime = Date.now() - enhancementStart;
+        debug(`Query enhancement completed in ${enhancementTime}ms`);
+
         // PHASE 1: Query parsing and understanding
         const parseStart = Date.now();
-        const parsedQuery = await parseAndExpandQuery(request.query, context);
-        timing.parsing = Date.now() - parseStart;
+        const parsedQuery = await parseAndExpandQuery(
+            enhancedRequest.query,
+            context,
+        );
+        timing.parsing = Date.now() - parseStart + enhancementTime;
         debugContext.parsedQuery = parsedQuery;
 
         debug(
@@ -176,85 +196,56 @@ export async function searchWebMemories(
         const searchStart = Date.now();
         let searchResults: website.Website[] = [];
 
-        // Strategy 1: Try advanced search if enabled
-        if (request.enableAdvancedSearch) {
-            try {
-                debugContext.searchStrategies.push("advanced-semantic");
-                searchResults = await performAdvancedSearch(
-                    request,
-                    parsedQuery,
-                    websiteCollection,
-                    context,
-                );
-
-                if (searchResults.length === 0) {
-                    debugContext.intermediateFallbacks.push(
-                        "advanced-semantic -> basic-semantic",
-                    );
-                }
-            } catch (error) {
-                debug(`Advanced search failed, falling back: ${error}`);
-                debugContext.intermediateFallbacks.push(
-                    "advanced-semantic -> fallback",
-                );
-            }
-        }
-
-        // Strategy 2: Basic semantic search fallback
-        if (searchResults.length === 0) {
-            debugContext.searchStrategies.push("basic-semantic");
-            searchResults = await findRequestedWebsites(
-                [request.query],
-                context.agentContext,
-                request.exactMatch || false,
-                request.minScore || 0.3,
-            );
-        }
+        // Unified comprehensive search (replaces both advanced search and findRequestedWebsites)
+        debugContext.searchStrategies.push("comprehensive-unified");
+        searchResults = await performComprehensiveSearch(
+            enhancedRequest,
+            parsedQuery,
+            context,
+        );
 
         timing.search = Date.now() - searchStart;
-        debug(`Found ${searchResults.length} results from search`);
+        debug(
+            `Found ${searchResults.length} results from comprehensive search`,
+        );
 
         // PHASE 3: Apply discovery filters
         const processingStart = Date.now();
         let filteredResults = await applyDiscoveryFilters(
             searchResults,
-            request,
+            enhancedRequest,
         );
 
         // Apply sorting
-        filteredResults = applySorting(filteredResults, request);
+        filteredResults = applySorting(filteredResults, enhancedRequest);
+
+        // Apply comprehensive LLM-informed ranking
+        if (detectedIntent && filteredResults.length > 0) {
+            debug(
+                `Applying comprehensive LLM-informed ranking for intent: ${detectedIntent.intent.type}`,
+            );
+            filteredResults = await queryAdapter.enhanceSearchResults(
+                filteredResults,
+                enhancedRequest,
+                detectedIntent,
+            );
+        }
 
         // Apply limit
-        const limitedResults = filteredResults.slice(0, request.limit || 20);
+        const limitedResults = filteredResults.slice(
+            0,
+            enhancedRequest.limit || 20,
+        );
 
         // Convert to website results format
         const websites = convertToWebsiteResults(limitedResults);
 
-        // PHASE 4: Generate answer if requested
-        let answer: string | undefined;
-        let answerType: "direct" | "synthesized" | "noAnswer" | undefined;
-        let answerSources: WebPageReference[] | undefined;
-        let confidence: number | undefined;
-
-        if (request.generateAnswer !== false && limitedResults.length > 0) {
-            const answerResult = await generateAnswerFromResults(
-                request.query,
-                limitedResults,
-                parsedQuery,
-                request,
-            );
-            answer = answerResult.answer;
-            answerType = answerResult.type;
-            answerSources = answerResult.sources;
-            confidence = answerResult.confidence;
-        }
-
-        // PHASE 5: Extract knowledge if requested
+        // PHASE 4: Extract knowledge if requested
         let relatedEntities: Entity[] | undefined;
         let topTopics: string[] | undefined;
 
         if (
-            request.includeRelatedEntities !== false &&
+            enhancedRequest.includeRelatedEntities !== false &&
             limitedResults.length > 0
         ) {
             const knowledgeResult =
@@ -263,75 +254,69 @@ export async function searchWebMemories(
             topTopics = knowledgeResult.topics;
         }
 
-        // PHASE 6: Discover relationships if requested
-        let relationships: RelationshipResult[] | undefined;
-        let temporalPatterns: TemporalPattern[] | undefined;
-
-        if (request.includeRelationships && limitedResults.length > 0) {
-            try {
-                const relationshipDiscovery = new RelationshipDiscovery(
-                    context,
-                );
-                const topResult = limitedResults[0];
-                const knowledge = topResult.getKnowledge();
-                relationships =
-                    await relationshipDiscovery.discoverRelationships(
-                        topResult.metadata.url,
-                        knowledge,
-                        3,
-                    );
-            } catch (error) {
-                debug(`Relationship discovery failed: ${error}`);
-            }
-        }
-
-        // PHASE 7: Temporal analysis if needed
-        if (parsedQuery.temporalTerms.length > 0 && limitedResults.length > 1) {
-            try {
-                const temporalProcessor = new TemporalQueryProcessor(context);
-                temporalPatterns =
-                    await temporalProcessor.analyzeTemporalPatterns(
-                        limitedResults,
-                    );
-            } catch (error) {
-                debug(`Temporal analysis failed: ${error}`);
-            }
-        }
-
         timing.processing = Date.now() - processingStart;
         timing.total = Date.now() - startTime;
 
-        // PHASE 8: Generate follow-up suggestions
-        const suggestedFollowups = await generateFollowupSuggestions(
-            request.query,
-            websites,
-            relatedEntities,
-        );
+        // PHASE 5: Answer Enhancement - Generate dynamic summary and smart follow-ups
+        let answerEnhancement;
+        if (
+            enhancedRequest.generateAnswer !== false &&
+            limitedResults.length > 0
+        ) {
+            try {
+                const answerAdapter = new AnswerEnhancementAdapter();
+                answerEnhancement = await answerAdapter.enhanceSearchResults(
+                    request.query,
+                    detectedIntent,
+                    limitedResults,
+                );
+                if (answerEnhancement) {
+                    debug(
+                        `Answer enhancement generated with confidence: ${answerEnhancement.confidence}`,
+                    );
+                }
+            } catch (error) {
+                debug(`Answer enhancement failed: ${error}`);
+                answerEnhancement = undefined;
+            }
+        }
 
         // Update debug context
         debugContext.knowledgeMatchCount = limitedResults.length;
         debugContext.timing = timing;
 
-        // Build response
+        // Build enhanced response
         const response: SearchWebMemoriesResponse = {
             websites,
             summary: {
                 totalFound: filteredResults.length,
                 searchTime: timing.total,
-                strategies: debugContext.searchStrategies,
-                confidence: confidence || 0.7,
+                strategies: detectedIntent
+                    ? ["llm-enhanced", ...debugContext.searchStrategies]
+                    : debugContext.searchStrategies,
+                confidence:
+                    detectedIntent?.confidence ||
+                    answerEnhancement?.confidence ||
+                    0.7,
             },
-            queryIntent: parsedQuery.intent,
+            queryIntent: detectedIntent?.intent.type || parsedQuery.intent,
             parsedQuery,
-            suggestedFollowups,
+            // Use enhanced followups if available, otherwise provide empty array
+            suggestedFollowups:
+                answerEnhancement?.followups.map((f) => f.query) || [],
         };
 
         // Add optional components
-        if (answer !== undefined) {
-            response.answer = answer;
-            response.answerType = answerType || undefined;
-            response.answerSources = answerSources || undefined;
-            response.confidence = confidence || undefined;
+        if (answerEnhancement && enhancedRequest.generateAnswer !== false) {
+            response.answer = answerEnhancement.summary.text;
+            response.answerType = "synthesized";
+            response.answerSources = websites.slice(0, 5).map((site) => ({
+                url: site.url,
+                title: site.title,
+                relevanceScore: site.relevanceScore,
+                lastIndexed: site.lastVisited || new Date().toISOString(),
+            }));
+            response.confidence = answerEnhancement.confidence;
         }
 
         if (relatedEntities !== undefined) {
@@ -339,20 +324,16 @@ export async function searchWebMemories(
             response.topTopics = topTopics || undefined;
         }
 
-        if (relationships !== undefined) {
-            response.relationships = relationships;
+        if (answerEnhancement !== undefined) {
+            response.answerEnhancement = answerEnhancement;
         }
 
-        if (temporalPatterns !== undefined) {
-            response.temporalPatterns = temporalPatterns;
-        }
-
-        if (request.debug) {
+        if (enhancedRequest.debug) {
             response.debugContext = debugContext;
         }
 
         debug(
-            `Unified search completed in ${timing.total}ms with ${websites.length} results`,
+            `Enhanced search completed in ${timing.total}ms with ${websites.length} results`,
         );
         return response;
     } catch (error) {
@@ -362,8 +343,289 @@ export async function searchWebMemories(
         return createErrorResponse(
             error instanceof Error ? error.message : "Unknown search error",
             startTime,
-            request.debug ? debugContext : undefined,
+            enhancedRequest?.debug ? debugContext : undefined,
         );
+    }
+}
+
+// Comprehensive Search Strategy Functions
+
+/**
+ * Perform comprehensive search using all available strategies
+ * Replaces both performAdvancedSearch and findRequestedWebsites
+ */
+async function performComprehensiveSearch(
+    request: SearchWebMemoriesRequest,
+    parsedQuery: ParsedQuery,
+    context: SessionContext<BrowserActionContext>,
+): Promise<website.Website[]> {
+    const websiteCollection = context.agentContext.websiteCollection;
+    if (!websiteCollection || websiteCollection.messages.length === 0) {
+        return [];
+    }
+
+    debug(`Starting comprehensive search for query: "${request.query}"`);
+
+    // Strategy 1: Advanced search (LLM-enhanced) if enabled
+    if (request.enableAdvancedSearch) {
+        try {
+            const advancedResults = await performAdvancedSearch(
+                request,
+                parsedQuery,
+                websiteCollection,
+                context,
+            );
+            if (advancedResults.length > 0) {
+                debug(
+                    `Comprehensive search succeeded with advanced strategy: ${advancedResults.length} results`,
+                );
+                return advancedResults;
+            }
+        } catch (error) {
+            debug(`Advanced search failed in comprehensive search: ${error}`);
+        }
+    }
+
+    // Strategy 2: Hybrid search for single term queries
+    if (isSingleTermQuery(request.query) && !request.exactMatch) {
+        const hybridResults = await performHybridSearch(
+            request,
+            websiteCollection,
+        );
+        if (hybridResults.length > 0) {
+            debug(
+                `Comprehensive search succeeded with hybrid strategy: ${hybridResults.length} results`,
+            );
+            return hybridResults;
+        }
+    }
+
+    // Strategy 3: Entity search for proper nouns and capitalized terms
+    if (hasCapitalizedTerms(request.query)) {
+        const entityResults = await performEntitySearch(
+            request,
+            websiteCollection,
+        );
+        if (entityResults.length > 0) {
+            debug(
+                `Comprehensive search succeeded with entity strategy: ${entityResults.length} results`,
+            );
+            return entityResults;
+        }
+    }
+
+    // Strategy 4: Topic search for conceptual terms
+    const topicResults = await performTopicSearch(request, websiteCollection);
+    if (topicResults.length > 0) {
+        debug(
+            `Comprehensive search succeeded with topic strategy: ${topicResults.length} results`,
+        );
+        return topicResults;
+    }
+
+    // Strategy 5: Basic semantic search (final fallback)
+    debug(`Falling back to semantic search for query: "${request.query}"`);
+    return await performBasicSemanticSearch(request, websiteCollection);
+}
+
+/**
+ * Check if query is a single term (no spaces)
+ */
+function isSingleTermQuery(query: string): boolean {
+    return query.trim().split(/\s+/).length === 1;
+}
+
+/**
+ * Check if query contains capitalized terms (potential proper nouns)
+ */
+function hasCapitalizedTerms(query: string): boolean {
+    return /\b[A-Z][a-z]+\b/.test(query);
+}
+
+/**
+ * Perform hybrid search for single term queries
+ */
+async function performHybridSearch(
+    request: SearchWebMemoriesRequest,
+    websiteCollection: website.WebsiteCollection,
+): Promise<website.Website[]> {
+    try {
+        debug(`Attempting hybrid search for: "${request.query}"`);
+        const hybridResults = await websiteCollection.hybridSearch(
+            request.query,
+        );
+
+        if (hybridResults.length > 0) {
+            debug(`Found ${hybridResults.length} results using hybrid search`);
+            return hybridResults
+                .filter(
+                    (result) =>
+                        result.relevanceScore >= (request.minScore || 0.3),
+                )
+                .map((result) => result.website.toWebsite())
+                .slice(0, request.limit || 20);
+        }
+        return [];
+    } catch (error) {
+        debug(`Hybrid search failed: ${error}`);
+        return [];
+    }
+}
+
+/**
+ * Perform entity search for proper nouns and specific terms
+ */
+async function performEntitySearch(
+    request: SearchWebMemoriesRequest,
+    websiteCollection: website.WebsiteCollection,
+): Promise<website.Website[]> {
+    try {
+        debug(`Attempting entity search for: "${request.query}"`);
+        const searchFilters = [request.query]; // Convert single query to filter array
+        const entityResults =
+            await websiteCollection.searchByEntities(searchFilters);
+
+        if (entityResults.length > 0) {
+            debug(`Found ${entityResults.length} results using entity search`);
+            return entityResults
+                .map((result) => result.toWebsite())
+                .slice(0, request.limit || 20);
+        }
+        return [];
+    } catch (error) {
+        debug(`Entity search failed: ${error}`);
+        return [];
+    }
+}
+
+/**
+ * Perform topic search for conceptual terms
+ */
+async function performTopicSearch(
+    request: SearchWebMemoriesRequest,
+    websiteCollection: website.WebsiteCollection,
+): Promise<website.Website[]> {
+    try {
+        debug(`Attempting topic search for: "${request.query}"`);
+        const searchFilters = [request.query];
+        const topicResults =
+            await websiteCollection.searchByTopics(searchFilters);
+
+        if (topicResults.length > 0) {
+            debug(`Found ${topicResults.length} results using topic search`);
+            return topicResults
+                .map((result) => result.toWebsite())
+                .slice(0, request.limit || 20);
+        }
+        return [];
+    } catch (error) {
+        debug(`Topic search failed: ${error}`);
+        return [];
+    }
+}
+
+/**
+ * Perform basic semantic search using knowpro (final fallback)
+ * This replaces the semantic search logic from findRequestedWebsites
+ */
+async function performBasicSemanticSearch(
+    request: SearchWebMemoriesRequest,
+    websiteCollection: website.WebsiteCollection,
+): Promise<website.Website[]> {
+    try {
+        debug(`Performing semantic search fallback for: "${request.query}"`);
+
+        const matches = await kp.searchConversationKnowledge(
+            websiteCollection,
+            // search group
+            {
+                booleanOp: "or", // Use OR to match the query
+                terms: [{ term: { text: request.query } }],
+            },
+            // when filter
+            {
+                // No specific knowledge type filter - search across all types
+            },
+            // options
+            {
+                exactMatch: request.exactMatch || false,
+            },
+        );
+
+        if (!matches || matches.size === 0) {
+            debug(`No semantic matches found for query: "${request.query}"`);
+            return [];
+        }
+
+        debug(`Found ${matches.size} semantic matches for: "${request.query}"`);
+
+        const results: { website: website.Website; score: number }[] = [];
+        const processedMessages = new Set<number>();
+
+        matches.forEach((match: kp.SemanticRefSearchResult) => {
+            match.semanticRefMatches.forEach(
+                (refMatch: kp.ScoredSemanticRefOrdinal) => {
+                    if (refMatch.score >= (request.minScore || 0.3)) {
+                        const semanticRef: kp.SemanticRef | undefined =
+                            websiteCollection.semanticRefs.get(
+                                refMatch.semanticRefOrdinal,
+                            );
+                        if (semanticRef) {
+                            const messageOrdinal =
+                                semanticRef.range.start.messageOrdinal;
+                            if (
+                                messageOrdinal !== undefined &&
+                                !processedMessages.has(messageOrdinal)
+                            ) {
+                                processedMessages.add(messageOrdinal);
+
+                                const websiteData =
+                                    websiteCollection.messages.get(
+                                        messageOrdinal,
+                                    ) as any;
+                                if (websiteData) {
+                                    // Use the semantic search score as the primary score
+                                    const totalScore = refMatch.score;
+
+                                    results.push({
+                                        website: websiteData,
+                                        score: totalScore,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                },
+            );
+        });
+
+        // Sort by score (highest first) and remove duplicates
+        const uniqueResults = new Map<
+            string,
+            { website: website.Website; score: number }
+        >();
+        results.forEach((result) => {
+            const url = result.website.metadata.url;
+            const existing = uniqueResults.get(url);
+            if (!existing || result.score > existing.score) {
+                uniqueResults.set(url, result);
+            }
+        });
+
+        const sortedResults = Array.from(uniqueResults.values()).sort(
+            (a, b) => b.score - a.score,
+        );
+
+        debug(
+            `Filtered to ${sortedResults.length} unique websites after semantic search scoring`,
+        );
+
+        return sortedResults
+            .map((r) => r.website)
+            .slice(0, request.limit || 20);
+    } catch (error) {
+        debug(`Error in semantic search: ${error}`);
+        return [];
     }
 }
 
@@ -623,65 +885,6 @@ function extractSnippet(website: website.Website): string {
     );
 }
 
-async function generateAnswerFromResults(
-    query: string,
-    results: website.Website[],
-    parsedQuery: ParsedQuery,
-    request: SearchWebMemoriesRequest,
-): Promise<{
-    answer: string;
-    type: "direct" | "synthesized" | "noAnswer";
-    sources: WebPageReference[];
-    confidence: number;
-}> {
-    if (results.length === 0) {
-        return {
-            answer: "No relevant information found for your query.",
-            type: "noAnswer",
-            sources: [],
-            confidence: 0,
-        };
-    }
-
-    const topResult = results[0];
-    const metadata = topResult.metadata as any;
-
-    // Generate contextual answer
-    let answer = "";
-    if (parsedQuery.isQuestion) {
-        answer = `Based on your browsing history, I found ${results.length} relevant result${results.length > 1 ? "s" : ""} for "${query}". `;
-        answer += `The most relevant appears to be "${metadata.title}" (${metadata.url}). `;
-
-        // Add knowledge context if available
-        const knowledge = topResult.getKnowledge();
-        if (knowledge?.topics && knowledge.topics.length > 0) {
-            answer += `This content covers topics including: ${knowledge.topics.slice(0, 3).join(", ")}. `;
-        }
-    } else {
-        answer = `Found ${results.length} website${results.length > 1 ? "s" : ""} matching "${query}". `;
-        answer += `Top result: "${metadata.title}" from ${metadata.domain}. `;
-    }
-
-    // Extract sources
-    const sources: WebPageReference[] = results.slice(0, 5).map((site) => {
-        const meta = site.metadata as any;
-        return {
-            url: meta.url,
-            title: meta.title || meta.url,
-            relevanceScore: 0.8,
-            lastIndexed:
-                meta.visitDate || meta.bookmarkDate || new Date().toISOString(),
-        };
-    });
-
-    return {
-        answer,
-        type: "synthesized",
-        sources,
-        confidence: Math.min(0.9, 0.5 + results.length * 0.1),
-    };
-}
-
 async function extractKnowledgeFromResults(
     results: website.Website[],
 ): Promise<{ entities: Entity[]; topics: string[] }> {
@@ -711,32 +914,6 @@ async function extractKnowledgeFromResults(
         entities,
         topics: Array.from(topicsSet).slice(0, 10),
     };
-}
-
-async function generateFollowupSuggestions(
-    query: string,
-    websites: WebsiteResult[],
-    entities?: Entity[],
-): Promise<string[]> {
-    const suggestions: string[] = [];
-
-    // Domain-based suggestions
-    if (websites.length > 0) {
-        const topDomain = websites[0].domain;
-        suggestions.push(`More from ${topDomain}`);
-    }
-
-    // Entity-based suggestions
-    if (entities && entities.length > 0) {
-        const topEntity = entities[0].name;
-        suggestions.push(`Learn more about ${topEntity}`);
-    }
-
-    // Temporal suggestions
-    suggestions.push(`Recent content about ${query}`);
-    suggestions.push(`Related topics to ${query}`);
-
-    return suggestions.slice(0, 4);
 }
 
 function createEmptyResponse(
