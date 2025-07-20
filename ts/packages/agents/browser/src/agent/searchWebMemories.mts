@@ -379,15 +379,17 @@ export async function searchWebMemories(
             },
             queryIntent: detectedIntent?.intent.type || parsedQuery.intent,
             parsedQuery,
-            suggestedFollowups,
+            // Use enhanced followups if available, otherwise fall back to static suggestions
+            suggestedFollowups: answerEnhancement?.followups.map(f => f.query) || suggestedFollowups,
         };
 
         // Add optional components
         if (answer !== undefined) {
-            response.answer = answer;
+            // Use enhanced summary text if available, otherwise use generated answer
+            response.answer = answerEnhancement?.summary.text || answer;
             response.answerType = answerType || undefined;
             response.answerSources = answerSources || undefined;
-            response.confidence = confidence || undefined;
+            response.confidence = answerEnhancement?.confidence || confidence || undefined;
         }
 
         if (relatedEntities !== undefined) {

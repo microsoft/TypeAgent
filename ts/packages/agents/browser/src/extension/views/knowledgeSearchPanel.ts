@@ -113,20 +113,17 @@ export class KnowledgeSearchPanel {
     }
 
     private setupEventListeners(): void {
-        // Setup search input with debouncing
+        // Setup search input for Enter key submission only
         const searchInput = document.getElementById(
             "searchInput",
         ) as HTMLInputElement;
         if (searchInput) {
-            searchInput.addEventListener("input", (event) => {
-                const query = (event.target as HTMLInputElement).value;
-                this.currentQuery = query;
-                this.debounceSearch(query);
-            });
-
             searchInput.addEventListener("keypress", (e) => {
                 if (e.key === "Enter") {
-                    this.performSearch(this.currentQuery.trim());
+                    const query = (e.target as HTMLInputElement).value.trim();
+                    if (query) {
+                        this.performSearch(query);
+                    }
                 }
             });
         }
@@ -135,7 +132,11 @@ export class KnowledgeSearchPanel {
         const searchButton = document.getElementById("searchButton");
         if (searchButton) {
             searchButton.addEventListener("click", () => {
-                this.performSearch(this.currentQuery.trim());
+                const searchInput = document.getElementById("searchInput") as HTMLInputElement;
+                const query = searchInput ? searchInput.value.trim() : "";
+                if (query) {
+                    this.performSearch(query);
+                }
             });
         }
 

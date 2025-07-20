@@ -2,79 +2,91 @@
 // Licensed under the MIT License.
 
 /**
- * Answer enhancement schema for LLM-based dynamic summaries and follow-ups
- * Used with TypeChat for structured answer generation
+ * Answer enhancement schema for LLM-based dynamic summaries and follow-ups.
+ * The LLM should generate comprehensive answer enhancements that help users
+ * understand and explore their search results more effectively.
  */
 
+/**
+ * Complete answer enhancement containing both summary and follow-up suggestions.
+ */
 export interface AnswerEnhancement {
     summary: DynamicSummary;
+    
+    /** 3-4 smart follow-up suggestions for further exploration */
     followups: SmartFollowup[];
     confidence: number;
     generationTime: number;
 }
 
+/**
+ * Dynamic summary that contextualizes search results with insights and patterns.
+ * 
+ * GENERATION GUIDELINES:
+ * - Write conversationally, not like a search report
+ * - Highlight what makes these results notable or useful
+ * - Identify trends, dominant sources, timeframes
+ * - Provide specific insights beyond just "found X results"
+ * 
+ */
 export interface DynamicSummary {
+    /** 
+     * Main summary text explaining what was found and why it's relevant.
+     * Should be conversational and insightful, not just "Found X results".
+     */
     text: string;
+    
+    /** 
+     * 2-4 key insights or patterns discovered in the results.
+     * Focus on what makes these results interesting or notable.
+     */
     keyFindings: string[];
+    
     statistics: {
         totalResults: number;
+        
+        /** 
+         * Time span covered by results (optional).
+         * EXAMPLES: "last 2 weeks", "past month", "from 2020-2023"
+         */
         timeSpan?: string;
+        
+        /** 
+         * Top domains/sources in the results.
+         * EXAMPLES: ["github.com"], ["react.dev", "medium.com"]
+         */
         dominantDomains: string[];
     };
+    
     confidence: number;
-}
-
-export interface SmartFollowup {
-    query: string;
-    reasoning: string;
-    type: "temporal" | "domain" | "content" | "comparative";
-    confidence: number;
-}
-
-// Wrapper interface to handle LLM output that wraps followups in an object
-export interface FollowupResponse {
-    followups: SmartFollowup[];
 }
 
 /**
- * Example valid DynamicSummary object:
+ * Smart follow-up suggestion that builds naturally from the search results.
  * 
- * For query "recent github repositories":
- * {
- *   text: "Found 8 GitHub repositories from the last 2 weeks, primarily focusing on AI/ML projects. Most activity on TypeScript projects, with 3 repositories related to language models.",
- *   keyFindings: [
- *     "AI/ML projects dominate recent activity",
- *     "TypeScript is the primary language",
- *     "Language model repositories trending"
- *   ],
- *   statistics: {
- *     totalResults: 8,
- *     timeSpan: "last 2 weeks",
- *     dominantDomains: ["github.com"]
- *   },
- *   confidence: 0.92
- * }
+ * GENERATION GUIDELINES:
+ * - Use natural language the user would actually type
+ * - Build logically from current results (temporal, domain, content, comparative)
+ * - Address logical next steps or refinements
+ * - Provide clear reasoning for why this follow-up would be helpful
  * 
- * Example valid SmartFollowup objects:
- * 
- * [
- *   {
- *     query: "Show me all AI/ML repositories from this year",
- *     reasoning: "User is interested in AI/ML projects, expand timeframe",
- *     type: "temporal",
- *     confidence: 0.88
- *   },
- *   {
- *     query: "Find documentation for these transformer projects",
- *     reasoning: "User has transformer repositories, likely needs docs",
- *     type: "content",
- *     confidence: 0.85
- *   },
- *   {
- *     query: "Show similar repositories on other platforms",
- *     reasoning: "Expand beyond GitHub to other code platforms",
- *     type: "domain",
- *     confidence: 0.80
- *   }
- * ]
  */
+export interface SmartFollowup {
+    /** 
+     * Natural language query the user would actually type.
+     */
+    query: string;
+    
+    /** 
+     * Clear explanation of why this follow-up would be helpful.
+     * Should explain the logical connection to current results.
+     */
+    reasoning: string;
+    
+    /** Type of exploration this follow-up represents */
+    type: "temporal" | "domain" | "content" | "comparative";
+    
+    /** Confidence in this follow-up's usefulness (0.0 to 1.0) */
+    confidence: number;
+}
+
