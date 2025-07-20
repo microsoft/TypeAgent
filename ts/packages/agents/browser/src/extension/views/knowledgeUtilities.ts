@@ -6,6 +6,8 @@
  * Consolidates common functionality from knowledgeLibrary.ts and pageKnowledge.ts
  */
 
+import type { AnswerEnhancement } from "../../agent/search/schema/answerEnhancement.mjs";
+
 // ===================================================================
 // INTERFACES AND TYPES
 // ===================================================================
@@ -60,6 +62,7 @@ export interface SearchResult {
         type: string;
         confidence: number;
     }>;
+    answerEnhancement?: AnswerEnhancement; // NEW: Dynamic enhancement from LLM
 }
 
 export interface Website {
@@ -852,10 +855,15 @@ export class DefaultSearchServices implements SearchServices {
                     topTopics: result.topTopics || [],
                     suggestedFollowups: result.suggestedFollowups || [],
                     relatedEntities: result.relatedEntities || [],
+                    answerEnhancement: result.answerEnhancement, // FIXED: Include answer enhancement data
                 };
                 console.log(
                     "DefaultSearchServices: Formatted result:",
                     searchResult,
+                );
+                console.log(
+                    "DefaultSearchServices: Answer enhancement included:",
+                    !!searchResult.answerEnhancement,
                 );
                 return searchResult;
             } else {

@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { AnswerEnhancement } from "../../../agent/search/schema/answerEnhancement.mjs";
+
 export interface SearchFilters {
     dateFrom?: string;
     dateTo?: string;
@@ -48,6 +50,7 @@ export interface SearchResult {
         type: string;
         confidence: number;
     }>;
+    enhancement?: AnswerEnhancement; // NEW: Dynamic enhancement from LLM
 }
 
 export interface SourceReference {

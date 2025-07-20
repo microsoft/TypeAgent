@@ -20,6 +20,8 @@ import {
     TemporalPattern,
 } from "./knowledge/temporalQueryProcessor.js";
 import { QueryEnhancementAdapter } from "./search/queryEnhancementAdapter.mjs";
+import { AnswerEnhancementAdapter } from "./search/answerEnhancementAdapter.mjs";
+import type { AnswerEnhancement } from "./search/schema/answerEnhancement.mjs";
 
 const debug = registerDebug("typeagent:browser:unified-search");
 
@@ -124,6 +126,9 @@ export interface SearchWebMemoriesResponse {
     queryIntent?: "question" | "discovery" | "mixed" | undefined;
     parsedQuery?: ParsedQuery | undefined;
     suggestedFollowups?: string[] | undefined;
+
+    // Answer Enhancement - dynamic summaries and smart follow-ups
+    answerEnhancement?: AnswerEnhancement | undefined;
 
     // Debug info - when debug=true
     debugContext?: SearchDebugContext | undefined;
@@ -342,6 +347,23 @@ export async function searchWebMemories(
             relatedEntities,
         );
 
+        // PHASE 9: Answer Enhancement - Generate dynamic summary and smart follow-ups
+        let answerEnhancement;
+        try {
+            const answerAdapter = new AnswerEnhancementAdapter();
+            answerEnhancement = await answerAdapter.enhanceSearchResults(
+                request.query,
+                detectedIntent,
+                limitedResults  // Use limitedResults (Website[]) instead of websites (WebsiteResult[])
+            );
+            if (answerEnhancement) {
+                debug(`Answer enhancement generated with confidence: ${answerEnhancement.confidence}`);
+            }
+        } catch (error) {
+            debug(`Answer enhancement failed: ${error}`);
+            answerEnhancement = undefined;
+        }
+
         // Update debug context
         debugContext.knowledgeMatchCount = limitedResults.length;
         debugContext.timing = timing;
@@ -379,6 +401,10 @@ export async function searchWebMemories(
 
         if (temporalPatterns !== undefined) {
             response.temporalPatterns = temporalPatterns;
+        }
+
+        if (answerEnhancement !== undefined) {
+            response.answerEnhancement = answerEnhancement;
         }
 
         if (enhancedRequest.debug) {
