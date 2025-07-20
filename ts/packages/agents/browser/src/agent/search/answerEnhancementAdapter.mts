@@ -30,29 +30,38 @@ export class AnswerEnhancementAdapter {
     async enhanceSearchResults(
         originalQuery: string,
         queryAnalysis: QueryAnalysis | undefined,
-        searchResults: Website[]
+        searchResults: Website[],
     ): Promise<AnswerEnhancement | undefined> {
         try {
             const startTime = Date.now();
             await this.ensureInitialized();
 
-            debug(`Enhancing search results for query: "${originalQuery}" with ${searchResults.length} results`);
+            debug(
+                `Enhancing search results for query: "${originalQuery}" with ${searchResults.length} results`,
+            );
 
             // Skip enhancement if no query analysis or insufficient results
             if (!queryAnalysis || searchResults.length === 0) {
-                debug("Skipping enhancement: missing query analysis or no results");
+                debug(
+                    "Skipping enhancement: missing query analysis or no results",
+                );
                 return undefined;
             }
 
             // Build context from search results
-            const searchContext = this.contextBuilder.buildContext(originalQuery, searchResults);
-            debug(`Built context with ${searchContext.patterns.dominantDomains.length} domains`);
+            const searchContext = this.contextBuilder.buildContext(
+                originalQuery,
+                searchResults,
+            );
+            debug(
+                `Built context with ${searchContext.patterns.dominantDomains.length} domains`,
+            );
 
             // Generate enhanced summary and follow-ups
             const enhancement = await this.answerGenerator.generateEnhancement(
                 originalQuery,
                 queryAnalysis,
-                searchContext
+                searchContext,
             );
 
             if (!enhancement) {
@@ -64,15 +73,20 @@ export class AnswerEnhancementAdapter {
             const actualGenerationTime = Date.now() - startTime;
             const finalEnhancement: AnswerEnhancement = {
                 ...enhancement,
-                generationTime: actualGenerationTime
+                generationTime: actualGenerationTime,
             };
 
-            debug(`Enhancement complete in ${actualGenerationTime}ms with confidence: ${finalEnhancement.confidence}`);
-            debug(`Generated summary with ${finalEnhancement.summary.keyFindings.length} key findings`);
-            debug(`Generated ${finalEnhancement.followups.length} follow-up suggestions`);
+            debug(
+                `Enhancement complete in ${actualGenerationTime}ms with confidence: ${finalEnhancement.confidence}`,
+            );
+            debug(
+                `Generated summary with ${finalEnhancement.summary.keyFindings.length} key findings`,
+            );
+            debug(
+                `Generated ${finalEnhancement.followups.length} follow-up suggestions`,
+            );
 
             return finalEnhancement;
-
         } catch (error) {
             debug(`Error enhancing search results: ${error}`);
             return undefined; // Let UI fall back to static content

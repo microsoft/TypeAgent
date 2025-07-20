@@ -13,7 +13,10 @@ import {
     GetWebsiteStats,
 } from "./actionsSchema.mjs";
 import { BrowserActionContext } from "./actionHandler.mjs";
-import { searchWebMemories, SearchWebMemoriesRequest } from "./searchWebMemories.mjs";
+import {
+    searchWebMemories,
+    SearchWebMemoriesRequest,
+} from "./searchWebMemories.mjs";
 import * as website from "website-memory";
 import * as kpLib from "knowledge-processor";
 import { openai as ai } from "aiclient";
@@ -73,7 +76,7 @@ const debug = registerDebug("typeagent:browser:website-memory");
 /**
  * Resolve URL using website visit history (bookmarks, browser history)
  * This provides a more personalized alternative to web search
- * 
+ *
  * Refactored to use searchWebMemories for consistent search behavior
  */
 export async function resolveURLWithHistory(
@@ -107,35 +110,40 @@ export async function resolveURLWithHistory(
         // Use searchWebMemories with URL resolution optimized parameters
         const searchRequest: SearchWebMemoriesRequest = {
             query: site,
-            limit: 5,                      // Only need top 5 candidates for URL resolution
-            minScore: 0.3,                 // Same threshold as before (lower for broader matching)
-            exactMatch: false,             // Allow fuzzy matching
-            generateAnswer: false,         // Don't need answers for URL resolution
-            includeRelatedEntities: false, // Don't need entities for URL resolution  
-            enableAdvancedSearch: true,    // Use enhanced search if available
+            limit: 5, // Only need top 5 candidates for URL resolution
+            minScore: 0.3, // Same threshold as before (lower for broader matching)
+            exactMatch: false, // Allow fuzzy matching
+            generateAnswer: false, // Don't need answers for URL resolution
+            includeRelatedEntities: false, // Don't need entities for URL resolution
+            enableAdvancedSearch: true, // Use enhanced search if available
             searchScope: "all_indexed",
-            temporalSort: "descend",       // Slight preference for recent matches
-            debug: false,                  // Keep false for production URL resolution
+            temporalSort: "descend", // Slight preference for recent matches
+            debug: false, // Keep false for production URL resolution
         };
 
         const response = await searchWebMemories(searchRequest, sessionContext);
-        
+
         if (response.websites.length === 0) {
             debug(`No matches found for site: '${site}'`);
             return undefined;
         }
 
-        debug(`Found ${response.websites.length} candidates from searchWebMemories for: '${site}'`);
+        debug(
+            `Found ${response.websites.length} candidates from searchWebMemories for: '${site}'`,
+        );
 
         // Use the built-in relevance scores from search results
-        const scoredCandidates = response.websites.map(website => ({
+        const scoredCandidates = response.websites.map((website) => ({
             url: website.url,
             score: website.relevanceScore, // Use native relevance scoring
-            metadata: website
+            metadata: website,
         }));
 
         // Sort by relevance score and remove duplicates
-        const uniqueCandidates = new Map<string, { url: string; score: number; metadata: any }>();
+        const uniqueCandidates = new Map<
+            string,
+            { url: string; score: number; metadata: any }
+        >();
         scoredCandidates.forEach((candidate) => {
             const existing = uniqueCandidates.get(candidate.url);
             if (!existing || candidate.score > existing.score) {
@@ -157,9 +165,10 @@ export async function resolveURLWithHistory(
         );
 
         return bestMatch.url;
-        
     } catch (error) {
-        debug(`Error in resolveURLWithHistory using searchWebMemories: ${error}`);
+        debug(
+            `Error in resolveURLWithHistory using searchWebMemories: ${error}`,
+        );
         return undefined;
     }
 }

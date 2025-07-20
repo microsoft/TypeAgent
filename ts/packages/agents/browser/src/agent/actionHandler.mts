@@ -1240,10 +1240,7 @@ async function handleWebsiteAction(
                         const jsonStr = message.substring(jsonStart);
                         const progressData = JSON.parse(jsonStr);
 
-                        debug(
-                            "Parsed JSON progress data:",
-                            progressData,
-                        );
+                        debug("Parsed JSON progress data:", progressData);
 
                         current = progressData.current || 0;
                         total = progressData.total || 0;
@@ -1302,10 +1299,7 @@ async function handleWebsiteAction(
                     errors: [],
                 };
 
-                debug(
-                    "Sending structured progress:",
-                    structuredProgress,
-                );
+                debug("Sending structured progress:", structuredProgress);
 
                 // Send structured progress update via WebSocket
                 sendProgressUpdateViaWebSocket(
@@ -1352,10 +1346,7 @@ async function handleWebsiteAction(
                         item = progressData.description ?? "";
                         phase = progressData.phase ?? "processing";
 
-                        debug(
-                            "Parsed JSON progress data:",
-                            progressData,
-                        );
+                        debug("Parsed JSON progress data:", progressData);
                         debug(
                             "Extracted values - current:",
                             current,

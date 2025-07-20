@@ -166,20 +166,25 @@ export async function searchWebMemories(
         // Query Enhancement Phase
         const enhancementStart = Date.now();
         const queryAdapter = new QueryEnhancementAdapter();
-        
-        debug(`Performing comprehensive LLM analysis for query: "${request.query}"`);
+
+        debug(
+            `Performing comprehensive LLM analysis for query: "${request.query}"`,
+        );
         enhancedRequest = await queryAdapter.enhanceSearchRequest(request, {
             websiteCollection,
-            userContext: context
+            userContext: context,
         });
         const detectedIntent = (enhancedRequest as any).metadata?.analysis;
-        
+
         const enhancementTime = Date.now() - enhancementStart;
         debug(`Query enhancement completed in ${enhancementTime}ms`);
 
         // PHASE 1: Query parsing and understanding
         const parseStart = Date.now();
-        const parsedQuery = await parseAndExpandQuery(enhancedRequest.query, context);
+        const parsedQuery = await parseAndExpandQuery(
+            enhancedRequest.query,
+            context,
+        );
         timing.parsing = Date.now() - parseStart + enhancementTime;
         debugContext.parsedQuery = parsedQuery;
 
@@ -200,7 +205,9 @@ export async function searchWebMemories(
         );
 
         timing.search = Date.now() - searchStart;
-        debug(`Found ${searchResults.length} results from comprehensive search`);
+        debug(
+            `Found ${searchResults.length} results from comprehensive search`,
+        );
 
         // PHASE 3: Apply discovery filters
         const processingStart = Date.now();
@@ -214,16 +221,21 @@ export async function searchWebMemories(
 
         // Apply comprehensive LLM-informed ranking
         if (detectedIntent && filteredResults.length > 0) {
-            debug(`Applying comprehensive LLM-informed ranking for intent: ${detectedIntent.intent.type}`);
+            debug(
+                `Applying comprehensive LLM-informed ranking for intent: ${detectedIntent.intent.type}`,
+            );
             filteredResults = await queryAdapter.enhanceSearchResults(
                 filteredResults,
                 enhancedRequest,
-                detectedIntent
+                detectedIntent,
             );
         }
 
         // Apply limit
-        const limitedResults = filteredResults.slice(0, enhancedRequest.limit || 20);
+        const limitedResults = filteredResults.slice(
+            0,
+            enhancedRequest.limit || 20,
+        );
 
         // Convert to website results format
         const websites = convertToWebsiteResults(limitedResults);
@@ -247,16 +259,21 @@ export async function searchWebMemories(
 
         // PHASE 5: Answer Enhancement - Generate dynamic summary and smart follow-ups
         let answerEnhancement;
-        if (enhancedRequest.generateAnswer !== false && limitedResults.length > 0) {
+        if (
+            enhancedRequest.generateAnswer !== false &&
+            limitedResults.length > 0
+        ) {
             try {
                 const answerAdapter = new AnswerEnhancementAdapter();
                 answerEnhancement = await answerAdapter.enhanceSearchResults(
                     request.query,
                     detectedIntent,
-                    limitedResults
+                    limitedResults,
                 );
                 if (answerEnhancement) {
-                    debug(`Answer enhancement generated with confidence: ${answerEnhancement.confidence}`);
+                    debug(
+                        `Answer enhancement generated with confidence: ${answerEnhancement.confidence}`,
+                    );
                 }
             } catch (error) {
                 debug(`Answer enhancement failed: ${error}`);
@@ -274,20 +291,26 @@ export async function searchWebMemories(
             summary: {
                 totalFound: filteredResults.length,
                 searchTime: timing.total,
-                strategies: detectedIntent ? ["llm-enhanced", ...debugContext.searchStrategies] : debugContext.searchStrategies,
-                confidence: detectedIntent?.confidence || (answerEnhancement?.confidence) || 0.7,
+                strategies: detectedIntent
+                    ? ["llm-enhanced", ...debugContext.searchStrategies]
+                    : debugContext.searchStrategies,
+                confidence:
+                    detectedIntent?.confidence ||
+                    answerEnhancement?.confidence ||
+                    0.7,
             },
             queryIntent: detectedIntent?.intent.type || parsedQuery.intent,
             parsedQuery,
             // Use enhanced followups if available, otherwise provide empty array
-            suggestedFollowups: answerEnhancement?.followups.map(f => f.query) || [],
+            suggestedFollowups:
+                answerEnhancement?.followups.map((f) => f.query) || [],
         };
 
         // Add optional components
         if (answerEnhancement && enhancedRequest.generateAnswer !== false) {
             response.answer = answerEnhancement.summary.text;
             response.answerType = "synthesized";
-            response.answerSources = websites.slice(0, 5).map(site => ({
+            response.answerSources = websites.slice(0, 5).map((site) => ({
                 url: site.url,
                 title: site.title,
                 relevanceScore: site.relevanceScore,
@@ -353,7 +376,9 @@ async function performComprehensiveSearch(
                 context,
             );
             if (advancedResults.length > 0) {
-                debug(`Comprehensive search succeeded with advanced strategy: ${advancedResults.length} results`);
+                debug(
+                    `Comprehensive search succeeded with advanced strategy: ${advancedResults.length} results`,
+                );
                 return advancedResults;
             }
         } catch (error) {
@@ -363,18 +388,28 @@ async function performComprehensiveSearch(
 
     // Strategy 2: Hybrid search for single term queries
     if (isSingleTermQuery(request.query) && !request.exactMatch) {
-        const hybridResults = await performHybridSearch(request, websiteCollection);
+        const hybridResults = await performHybridSearch(
+            request,
+            websiteCollection,
+        );
         if (hybridResults.length > 0) {
-            debug(`Comprehensive search succeeded with hybrid strategy: ${hybridResults.length} results`);
+            debug(
+                `Comprehensive search succeeded with hybrid strategy: ${hybridResults.length} results`,
+            );
             return hybridResults;
         }
     }
 
     // Strategy 3: Entity search for proper nouns and capitalized terms
     if (hasCapitalizedTerms(request.query)) {
-        const entityResults = await performEntitySearch(request, websiteCollection);
+        const entityResults = await performEntitySearch(
+            request,
+            websiteCollection,
+        );
         if (entityResults.length > 0) {
-            debug(`Comprehensive search succeeded with entity strategy: ${entityResults.length} results`);
+            debug(
+                `Comprehensive search succeeded with entity strategy: ${entityResults.length} results`,
+            );
             return entityResults;
         }
     }
@@ -382,7 +417,9 @@ async function performComprehensiveSearch(
     // Strategy 4: Topic search for conceptual terms
     const topicResults = await performTopicSearch(request, websiteCollection);
     if (topicResults.length > 0) {
-        debug(`Comprehensive search succeeded with topic strategy: ${topicResults.length} results`);
+        debug(
+            `Comprehensive search succeeded with topic strategy: ${topicResults.length} results`,
+        );
         return topicResults;
     }
 
@@ -414,12 +451,17 @@ async function performHybridSearch(
 ): Promise<website.Website[]> {
     try {
         debug(`Attempting hybrid search for: "${request.query}"`);
-        const hybridResults = await websiteCollection.hybridSearch(request.query);
-        
+        const hybridResults = await websiteCollection.hybridSearch(
+            request.query,
+        );
+
         if (hybridResults.length > 0) {
             debug(`Found ${hybridResults.length} results using hybrid search`);
             return hybridResults
-                .filter((result) => result.relevanceScore >= (request.minScore || 0.3))
+                .filter(
+                    (result) =>
+                        result.relevanceScore >= (request.minScore || 0.3),
+                )
                 .map((result) => result.website.toWebsite())
                 .slice(0, request.limit || 20);
         }
@@ -440,8 +482,9 @@ async function performEntitySearch(
     try {
         debug(`Attempting entity search for: "${request.query}"`);
         const searchFilters = [request.query]; // Convert single query to filter array
-        const entityResults = await websiteCollection.searchByEntities(searchFilters);
-        
+        const entityResults =
+            await websiteCollection.searchByEntities(searchFilters);
+
         if (entityResults.length > 0) {
             debug(`Found ${entityResults.length} results using entity search`);
             return entityResults
@@ -465,8 +508,9 @@ async function performTopicSearch(
     try {
         debug(`Attempting topic search for: "${request.query}"`);
         const searchFilters = [request.query];
-        const topicResults = await websiteCollection.searchByTopics(searchFilters);
-        
+        const topicResults =
+            await websiteCollection.searchByTopics(searchFilters);
+
         if (topicResults.length > 0) {
             debug(`Found ${topicResults.length} results using topic search`);
             return topicResults
@@ -490,7 +534,7 @@ async function performBasicSemanticSearch(
 ): Promise<website.Website[]> {
     try {
         debug(`Performing semantic search fallback for: "${request.query}"`);
-        
+
         const matches = await kp.searchConversationKnowledge(
             websiteCollection,
             // search group
@@ -572,12 +616,13 @@ async function performBasicSemanticSearch(
             (a, b) => b.score - a.score,
         );
 
-        debug(`Filtered to ${sortedResults.length} unique websites after semantic search scoring`);
+        debug(
+            `Filtered to ${sortedResults.length} unique websites after semantic search scoring`,
+        );
 
         return sortedResults
             .map((r) => r.website)
             .slice(0, request.limit || 20);
-
     } catch (error) {
         debug(`Error in semantic search: ${error}`);
         return [];

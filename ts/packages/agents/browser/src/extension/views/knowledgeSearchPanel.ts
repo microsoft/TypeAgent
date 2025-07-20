@@ -7,7 +7,10 @@ import {
     Website,
     EntityMatch,
 } from "./knowledgeUtilities";
-import type { DynamicSummary, SmartFollowup } from "../../agent/search/schema/answerEnhancement.mjs";
+import type {
+    DynamicSummary,
+    SmartFollowup,
+} from "../../agent/search/schema/answerEnhancement.mjs";
 
 export class KnowledgeSearchPanel {
     private container: HTMLElement;
@@ -65,16 +68,24 @@ export class KnowledgeSearchPanel {
 
             // Show enhanced AI summary and follow-ups if available
             if (this.currentResults.answerEnhancement) {
-                console.log("KnowledgeSearchPanel: Showing enhanced AI summary and follow-ups");
-                this.showEnhancedSummary(this.currentResults.answerEnhancement.summary);
-                this.showEnhancedFollowups(this.currentResults.answerEnhancement.followups);
+                console.log(
+                    "KnowledgeSearchPanel: Showing enhanced AI summary and follow-ups",
+                );
+                this.showEnhancedSummary(
+                    this.currentResults.answerEnhancement.summary,
+                );
+                this.showEnhancedFollowups(
+                    this.currentResults.answerEnhancement.followups,
+                );
             } else {
                 // Fallback to static summary and insights
                 if (
                     this.currentResults.summary &&
                     this.currentResults.summary.text
                 ) {
-                    console.log("KnowledgeSearchPanel: Showing static AI summary");
+                    console.log(
+                        "KnowledgeSearchPanel: Showing static AI summary",
+                    );
                     this.showAISummary(this.currentResults.summary.text);
                 }
 
@@ -132,7 +143,9 @@ export class KnowledgeSearchPanel {
         const searchButton = document.getElementById("searchButton");
         if (searchButton) {
             searchButton.addEventListener("click", () => {
-                const searchInput = document.getElementById("searchInput") as HTMLInputElement;
+                const searchInput = document.getElementById(
+                    "searchInput",
+                ) as HTMLInputElement;
                 const query = searchInput ? searchInput.value.trim() : "";
                 if (query) {
                     this.performSearch(query);
@@ -667,10 +680,10 @@ export class KnowledgeSearchPanel {
         if (summarySection && summaryContent) {
             // Build enhanced summary with key findings
             let enhancedText = summary.text;
-            
+
             if (summary.keyFindings && summary.keyFindings.length > 0) {
                 enhancedText += "\n\nKey Findings:\n";
-                summary.keyFindings.forEach(finding => {
+                summary.keyFindings.forEach((finding) => {
                     enhancedText += `• ${finding}\n`;
                 });
             }
@@ -680,7 +693,10 @@ export class KnowledgeSearchPanel {
                 if (summary.statistics.timeSpan) {
                     enhancedText += ` from ${summary.statistics.timeSpan}`;
                 }
-                if (summary.statistics.dominantDomains && summary.statistics.dominantDomains.length > 0) {
+                if (
+                    summary.statistics.dominantDomains &&
+                    summary.statistics.dominantDomains.length > 0
+                ) {
                     enhancedText += `, primarily from ${summary.statistics.dominantDomains.join(", ")}`;
                 }
             }
@@ -691,8 +707,12 @@ export class KnowledgeSearchPanel {
     }
 
     private showEnhancedFollowups(followups: SmartFollowup[]): void {
-        const followupsSection = document.getElementById("suggestedFollowupsSection");
-        const followupsContent = document.getElementById("suggestedFollowupsContent");
+        const followupsSection = document.getElementById(
+            "suggestedFollowupsSection",
+        );
+        const followupsContent = document.getElementById(
+            "suggestedFollowupsContent",
+        );
 
         if (followupsSection && followupsContent && followups.length > 0) {
             const followupItemsHtml = followups

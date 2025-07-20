@@ -30,7 +30,8 @@ function getSchemaFileContents(fileName: string): string {
  * Always analyzes queries for maximum accuracy - no optimizations.
  */
 export class QueryAnalyzer {
-    private queryTranslator: TypeChatJsonTranslator<QueryAnalysis> | null = null;
+    private queryTranslator: TypeChatJsonTranslator<QueryAnalysis> | null =
+        null;
     private isInitialized: boolean = false;
     private schemaText: string;
 
@@ -68,7 +69,6 @@ export class QueryAnalyzer {
             this.processTemporalDates(analysis);
 
             return analysis;
-
         } catch (error) {
             debug(`Error analyzing query: ${error}`);
             return null;
@@ -84,17 +84,17 @@ export class QueryAnalyzer {
             // Use the same model configuration as other adapters
             const model = ai.createJsonChatModel(
                 ai.apiSettingsFromEnv(ai.ModelType.Chat),
-                ["queryAnalysis"]
+                ["queryAnalysis"],
             );
 
             const validator = createTypeScriptJsonValidator<QueryAnalysis>(
                 this.schemaText,
-                "QueryAnalysis"
+                "QueryAnalysis",
             );
 
             this.queryTranslator = createJsonTranslator(model, validator);
             this.isInitialized = true;
-            
+
             debug("QueryAnalyzer initialized successfully");
         } catch (error) {
             debug(`Failed to initialize QueryAnalyzer: ${error}`);
@@ -123,17 +123,20 @@ Focus on practical search needs - what would help find the most relevant results
         // If LLM provided date strings, they're already in the correct format
         // No additional processing needed since we'll parse them when needed
     }
-    
+
     /**
      * Utility method to get Date objects from temporal expression
      */
-    getTemporalDates(temporal: TemporalExpression | null): { startDate?: Date; endDate?: Date } {
+    getTemporalDates(temporal: TemporalExpression | null): {
+        startDate?: Date;
+        endDate?: Date;
+    } {
         if (!temporal || temporal.period === "none") {
             return {};
         }
-        
+
         const result: { startDate?: Date; endDate?: Date } = {};
-        
+
         // If LLM provided date strings, parse them
         if (temporal.startDate) {
             result.startDate = new Date(temporal.startDate);
@@ -141,34 +144,44 @@ Focus on practical search needs - what would help find the most relevant results
         if (temporal.endDate) {
             result.endDate = new Date(temporal.endDate);
         }
-        
+
         // If no date strings provided, compute them based on period
         if (!result.startDate && !result.endDate) {
             const now = new Date();
-            
+
             switch (temporal.period) {
                 case "last_week":
-                    result.startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                    result.startDate = new Date(
+                        now.getTime() - 7 * 24 * 60 * 60 * 1000,
+                    );
                     result.endDate = now;
                     break;
-                    
+
                 case "last_month":
-                    result.startDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+                    result.startDate = new Date(
+                        now.getFullYear(),
+                        now.getMonth() - 1,
+                        now.getDate(),
+                    );
                     result.endDate = now;
                     break;
-                    
+
                 case "last_year":
-                    result.startDate = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+                    result.startDate = new Date(
+                        now.getFullYear() - 1,
+                        now.getMonth(),
+                        now.getDate(),
+                    );
                     result.endDate = now;
                     break;
-                    
+
                 case "latest":
                 case "earliest":
                     // These don't need specific date ranges
                     break;
             }
         }
-        
+
         return result;
     }
 }
