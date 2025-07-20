@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 // Mock for QueryAnalyzer that doesn't use import.meta.url
 export class QueryAnalyzer {
     constructor() {

@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 // Mock for MetadataRanker
 export class MetadataRanker {
     constructor() {
