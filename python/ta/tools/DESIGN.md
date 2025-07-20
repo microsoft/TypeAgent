@@ -59,17 +59,30 @@ Let's say we have a global `--debug` flag with the following values:
 - `--debug diff`: only print diff with reference for each stage
 - `--debug full`: print full results of each stage
 
+### Per-stage debug overrides
+
 Then we can also separately have per-stage flags with the same values;
 these override the default set by `--debug`:
 
-- `--debug-1`
-- `--debug-2`
-- `--debug-3`
-- `--debug-4`
+- `--debug1`
+- `--debug2`
+- `--debug3`
+- `--debug4`
 
 (Would it be nicer if we had names for the stages instead of numbers?)
 
-For regular interactive use, we'd have `--debug none --debug-4 full`.
+### Skippable stages
+
+Some of these allow one extra value:
+
+- `--debug1 skip`
+- `--debug2 skip`
+
+These indicate that the corresponding stage is simply skipped, and
+its output is replaced by pre-computed intermediate results read from
+a file (`--srfile`).
+
+For regular interactive use, we'd have `--debug none --debug4 full`.
 For batch comparison runs, we'd use `--debug diff`.
 
 In interactive mode it must be possible to change these flags without
@@ -82,20 +95,20 @@ automatically, use `--batch` -- this changes the default debug flags
 to `--debug diff` and takes its questions from `--qafile`.
 
 In interactive mode the default debug flags are set to
-`--debug none --debug-4 full`. The `--qafile` and `--srfile` arguments
+`--debug none --debug4 full`. The `--qafile` and `--srfile` arguments
 are still used to support `--debug diff` etc.
 
 ### Sketch of the code for `--batch`
 
-1. First we need to define `--debug` and `--debug-N` to have `None`
+1. First we need to define `--debug` and `--debugN` to have `None`
    as the default value. E.g.
    ```py
    parser.add_argument("--debug", type=str, default=None,
                        help="Debug level: none, diff, full")
-   # And ditto for `--debug-1` etc.
+   # And ditto for `--debug1` etc.
    ```
 
-2. Use `--debug` as the default for `--debug-N`.
+2. Use `--debug` as the default for `--debugN`.
    ```py
    for key in "debug_1", "debug_2", "debug_3", "debug_4":
        if getattr(args, key) is None:
