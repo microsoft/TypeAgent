@@ -121,9 +121,16 @@ def main() -> None:
     search_query_index: dict[str, dict[str, object]] = {}
     if args.srfile:
         print(f"Loading search query index from {args.srfile}")
-        with open(args.srfile) as f:
-            # TODO: Add type checks and annotations.
-            srdata = json.load(f)
+        try:
+            with open(args.srfile) as f:
+                # TODO: Add type checks and annotations.
+                srdata = json.load(f)
+        except FileNotFoundError:
+            print(
+                colorama.Fore.RED
+                + f"File {args.srfile!r} not found. Search query index will not be used."
+            )
+        else:
             search_query_index = {item["searchText"]: item for item in srdata}
 
     lang_search_options = LanguageSearchOptions(
