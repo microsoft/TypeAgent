@@ -184,6 +184,8 @@ export type GetWebsiteStats = {
 export type SearchWebMemories = {
     actionName: "searchWebMemories";
     parameters: {
+        // The original user request - overrides query if provided
+        originalUserRequest?: string;
         query: string;
         searchScope?: "current_page" | "all_indexed";
 

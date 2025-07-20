@@ -18,6 +18,7 @@ const debug = registerDebug("typeagent:browser:unified-search");
 
 // Core interfaces for unified search
 export interface SearchWebMemoriesRequest {
+    originalUserRequest?: string | undefined;
     query: string;
     searchScope?: "current_page" | "all_indexed" | undefined;
 
