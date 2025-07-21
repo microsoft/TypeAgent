@@ -5,7 +5,6 @@ __version__ = "0.2"
 
 import argparse
 import asyncio
-from contextlib import AsyncContextDecorator
 from dataclasses import dataclass
 import difflib
 import json
@@ -16,8 +15,6 @@ import typing
 from colorama import init as colorama_init, Fore
 import numpy as np
 
-from typeagent.demo.ui import print_result
-
 try:
     import readline
 except ImportError:
@@ -27,14 +24,22 @@ import typechat
 from typeagent.aitools import embeddings
 from typeagent.aitools import utils
 
-from typeagent.knowpro.interfaces import ScoredMessageOrdinal, ScoredSemanticRefOrdinal
+from typeagent.knowpro.interfaces import (
+    IConversation,
+    IMessage,
+    ITermToSemanticRefIndex,
+    ScoredMessageOrdinal,
+    ScoredSemanticRefOrdinal,
+    SemanticRef,
+    Topic,
+)
 from typeagent.knowpro import answers, answer_response_schema
 from typeagent.knowpro import convknowledge
-from typeagent.knowpro import serialization
-from typeagent.knowpro import search, searchlang
 from typeagent.knowpro import importing
+from typeagent.knowpro import kplib
 from typeagent.knowpro import query
-from typeagent.knowpro import search_query_schema
+from typeagent.knowpro import search, search_query_schema, searchlang
+from typeagent.knowpro import serialization
 
 from typeagent.podcasts import podcast
 
@@ -402,6 +407,105 @@ def load_index_file(file: str, selector: str) -> dict[str, dict[str, object]]:
             + Fore.RESET
         )
     return res
+
+
+def print_result[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
+    result: search.ConversationSearchResult,
+    conversation: IConversation[TMessage, TIndex],
+) -> None:
+    print(
+        f"Raw query: {result.raw_query_text};",
+        f"{len(result.message_matches)} message matches,",
+        f"{len(result.knowledge_matches)} knowledge matches",
+    )
+    if result.message_matches:
+        print("Message matches:")
+        for scored_ord in sorted(
+            result.message_matches, key=lambda x: x.score, reverse=True
+        ):
+            score = scored_ord.score
+            msg_ord = scored_ord.message_ordinal
+            msg = conversation.messages[msg_ord]
+            assert msg.metadata is not None  # For type checkers
+            text = " ".join(msg.text_chunks).strip()
+            print(
+                f"({score:5.1f}) M={msg_ord:d}: "
+                f"{msg.metadata.source!s:>15.15s}: "
+                f"{repr(text)[1:-1]:<150.150s}  "
+            )
+    if result.knowledge_matches:
+        print(f"Knowledge matches ({', '.join(sorted(result.knowledge_matches))}):")
+        for key, value in sorted(result.knowledge_matches.items()):
+            print(f"Type {key} -- {value.term_matches}:")
+            for scored_sem_ref_ord in value.semantic_ref_matches:
+                score = scored_sem_ref_ord.score
+                sem_ref_ord = scored_sem_ref_ord.semantic_ref_ordinal
+                if conversation.semantic_refs is None:
+                    print(f"  Ord: {sem_ref_ord} (score {score})")
+                else:
+                    sem_ref = conversation.semantic_refs[sem_ref_ord]
+                    msg_ord = sem_ref.range.start.message_ordinal
+                    chunk_ord = sem_ref.range.start.chunk_ordinal
+                    msg = conversation.messages[msg_ord]
+                    print(
+                        f"({score:5.1f}) M={msg_ord}: "
+                        # f"{msg.speaker:>15.15s}: "  # type: ignore  # It's a PodcastMessage
+                        # f"{repr(msg.text_chunks[chunk_ord].strip())[1:-1]:<50.50s}  "
+                        f"S={summarize_knowledge(sem_ref)}"
+                    )
+
+
+def summarize_knowledge(sem_ref: SemanticRef) -> str:
+    """Summarize the knowledge in a SemanticRef."""
+    knowledge = sem_ref.knowledge
+    if knowledge is None:
+        return f"{sem_ref.semantic_ref_ordinal}: <No knowledge>"
+    match sem_ref.knowledge_type:
+        case "entity":
+            entity = knowledge
+            assert isinstance(entity, kplib.ConcreteEntity)
+            res = [f"{entity.name} [{', '.join(entity.type)}]"]
+            if entity.facets:
+                for facet in entity.facets:
+                    value = facet.value
+                    if isinstance(value, kplib.Quantity):
+                        value = f"{value.amount} {value.units}"
+                    elif isinstance(value, float) and value.is_integer():
+                        value = int(value)
+                    res.append(f"<{facet.name}:{value}>")
+            return f"{sem_ref.semantic_ref_ordinal}: {' '.join(res)}"
+        case "action":
+            action = knowledge
+            assert isinstance(action, kplib.Action)
+            res = []
+            res.append("/".join(repr(verb) for verb in action.verbs))
+            if action.verb_tense:
+                res.append(f"[{action.verb_tense}]")
+            if action.subject_entity_name != "none":
+                res.append(f"subj={action.subject_entity_name!r}")
+            if action.object_entity_name != "none":
+                res.append(f"obj={action.object_entity_name!r}")
+            if action.indirect_object_entity_name != "none":
+                res.append(f"ind_obj={action.indirect_object_entity_name}")
+            if action.params:
+                for param in action.params:
+                    if isinstance(param, kplib.ActionParam):
+                        res.append(f"<{param.name}:{param.value}>")
+                    else:
+                        res.append(f"<{param}>")
+            if action.subject_entity_facet is not None:
+                res.append(f"subj_facet={action.subject_entity_facet}")
+            return f"{sem_ref.semantic_ref_ordinal}: {' '.join(res)}"
+        case "topic":
+            topic = knowledge
+            assert isinstance(topic, Topic)
+            return f"{sem_ref.semantic_ref_ordinal}: {topic.text!r}]"
+        case "tag":
+            tag = knowledge
+            assert isinstance(tag, str)
+            return f"{sem_ref.semantic_ref_ordinal}: #{tag!r}"
+        case _:
+            return f"{sem_ref.semantic_ref_ordinal}: {sem_ref.knowledge!r}"
 
 
 def compare_results(
