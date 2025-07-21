@@ -67,8 +67,8 @@ class RawSearchResultData(typing.TypedDict):
 
 class SearchResultData(typing.TypedDict):
     searchText: str
-    searchQueryExpr: dict[str, typing.Any]  # SearchQueryExpr
-    compiledQueryExpr: list[dict[str, typing.Any]]  # list[SearchQueryExpr]
+    searchQueryExpr: dict[str, typing.Any]  # Serialized search_query_schema.SearchQuery
+    compiledQueryExpr: list[dict[str, typing.Any]]  # list[search.SearchQueryExpr]
     results: list[RawSearchResultData]
 
 
