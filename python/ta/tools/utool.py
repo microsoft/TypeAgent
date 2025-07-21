@@ -9,14 +9,13 @@ from contextlib import AsyncContextDecorator
 from dataclasses import dataclass
 import difflib
 import json
+import re
 import sys
 import typing
 
 from colorama import init as colorama_init, Fore
 import numpy as np
 
-# TODO: These imports must be copied to this file.
-from test.cmpsearch import RawSearchResult, compare_and_print_diff, compare_results
 from typeagent.demo.ui import print_result
 
 try:
@@ -28,7 +27,7 @@ import typechat
 from typeagent.aitools import embeddings
 from typeagent.aitools import utils
 
-from typeagent.knowpro.interfaces import IMessage, ITermToSemanticRefIndex
+from typeagent.knowpro.interfaces import ScoredMessageOrdinal, ScoredSemanticRefOrdinal
 from typeagent.knowpro import answers, answer_response_schema
 from typeagent.knowpro import convknowledge
 from typeagent.knowpro import serialization
@@ -68,6 +67,13 @@ class ProcessingContext:
         args.append(f"lang_search_options={self.lang_search_options}")
         args.append(f"answer_context_options={self.answer_context_options}")
         return f"Context({', '.join(args)})"
+
+
+class RawSearchResult(typing.TypedDict):
+    messageMatches: list[int]
+    entityMatches: list[int]
+    topicMatches: list[int]
+    actionMatches: list[int]
 
 
 def main():
@@ -208,7 +214,7 @@ async def process_query(context: ProcessingContext, query_text: str) -> None:
                 expected1 = serialization.deserialize_object(
                     search_query_schema.SearchQuery, record["searchQueryExpr"]
                 )
-                compare_and_print_diff(expected1, actual1, "stage 1 mismatch")
+                compare_and_print_diff(expected1, actual1, "Stage 1 mismatch")
             else:
                 print("Stage 1 diff unavailable")
 
@@ -222,7 +228,7 @@ async def process_query(context: ProcessingContext, query_text: str) -> None:
             expected2 = serialization.deserialize_object(
                 list[search.SearchQueryExpr], record["compiledQueryExpr"]
             )
-            compare_and_print_diff(expected2, actual2, "stage 2 mismatch")
+            compare_and_print_diff(expected2, actual2, "Stage 2 mismatch")
         else:
             print("Stage 2 diff unavailable")
 
@@ -238,7 +244,7 @@ async def process_query(context: ProcessingContext, query_text: str) -> None:
         if record and "results" in record:
             print("Stage 3 diff:")
             expected3: list[RawSearchResult] = record["results"]
-            compare_results(expected3, actual3, "stage 3 mismatch")
+            compare_results(expected3, actual3, "Stage 3 mismatch")
         else:
             print("Stage 3 diff unavailable")
 
@@ -269,9 +275,7 @@ async def process_query(context: ProcessingContext, query_text: str) -> None:
                     actual4 = (combined_answer.whyNoAnswer or "", False)
                 case "Answered":
                     actual4 = (combined_answer.answer or "", True)
-            score = await compare_answers(
-                context, expected4, actual4, "stage 4 mismatch"
-            )
+            score = await compare_answers(context, expected4, actual4)
             print(f"Score: {score:.3f}")
         else:
             print("Stage 4 diff unavailable")
@@ -400,19 +404,115 @@ def load_index_file(file: str, selector: str) -> dict[str, dict[str, object]]:
     return res
 
 
+def compare_results(
+    matches_records: list[RawSearchResult],
+    results: list[search.ConversationSearchResult],
+    message: str,
+) -> bool:
+    if len(results) != len(matches_records):
+        print(
+            f"Warning: {message} "
+            f"(Result sizes mismatch, {len(results)} != {len(matches_records)})"
+        )
+        return False
+    res = True
+    for result, record in zip(results, matches_records):
+        if not compare_message_ordinals(
+            result.message_matches, record["messageMatches"]
+        ):
+            res = False
+        if not compare_semantic_ref_ordinals(
+            (
+                []
+                if "entity" not in result.knowledge_matches
+                else result.knowledge_matches["entity"].semantic_ref_matches
+            ),
+            record.get("entityMatches", []),
+            "entity",
+        ):
+            res = False
+        if not compare_semantic_ref_ordinals(
+            (
+                []
+                if "action" not in result.knowledge_matches
+                else result.knowledge_matches["action"].semantic_ref_matches
+            ),
+            record.get("actionMatches", []),
+            "action",
+        ):
+            res = False
+        if not compare_semantic_ref_ordinals(
+            (
+                []
+                if "topic" not in result.knowledge_matches
+                else result.knowledge_matches["topic"].semantic_ref_matches
+            ),
+            record.get("topicMatches", []),
+            "topic",
+        ):
+            res = False
+    if not res:
+        print(f"Warning: {message}")
+    return res
+
+
+# Special case: In the Podcast, these messages are all Kevin saying "Yeah",
+# so if the difference is limited to these, we consider it a match.
+NOISE_MESSAGES = frozenset({42, 46, 52, 68, 70})
+
+
+def compare_message_ordinals(aa: list[ScoredMessageOrdinal], b: list[int]) -> bool:
+    a = [aai.message_ordinal for aai in aa]
+    if set(a) ^ set(b) <= NOISE_MESSAGES:
+        return True
+    print("Message ordinals do not match:")
+    utils.list_diff("  Expected:", b, "  Actual:", a, max_items=20)
+    return False
+
+
+def compare_semantic_ref_ordinals(
+    aa: list[ScoredSemanticRefOrdinal], b: list[int], label: str
+) -> bool:
+    a = [aai.semantic_ref_ordinal for aai in aa]
+    if sorted(a) == sorted(b):
+        return True
+    print(f"{label.capitalize()} SemanticRef ordinals do not match:")
+    utils.list_diff("  Expected:", b, "  Actual:", a, max_items=20)
+    return False
+
+
+def compare_and_print_diff(a: object, b: object, message: str) -> bool:  # True if equal
+    """Diff two objects whose repr() is a valid Python expression."""
+    if a == b:
+        return True
+    a_repr = repr(a)
+    b_repr = repr(b)
+    if a_repr == b_repr:
+        return True
+    # Shorten floats so slight differences in score etc. don't cause false positives.
+    a_repr = re.sub(r"\b\d\.\d\d+", lambda m: f"{float(m.group()):.3f}", a_repr)
+    b_repr = re.sub(r"\b\d\.\d\d+", lambda m: f"{float(m.group()):.3f}", b_repr)
+    if a_repr == b_repr:
+        return True
+    print("Warning:", message)
+    a_formatted = utils.format_code(a_repr)
+    b_formatted = utils.format_code(b_repr)
+    print_diff(a_formatted, b_formatted, n=2)
+    return False
+
+
 async def compare_answers(
     context: ProcessingContext,
     expected: tuple[str, bool],
     actual: tuple[str, bool],
-    message: str,
 ) -> float:
     expected_text, expected_success = expected
-    actual_answer, actual_success = actual
+    actual_text, actual_success = actual
 
     if expected_success != actual_success:
         print(
             Fore.RED
-            + f"Success mismatch {expected_success}, {actual_success}"
+            + f"Warning: Success mismatch {expected_success}, {actual_success}"
             + Fore.RESET
         )
         return 0.000
@@ -421,7 +521,7 @@ async def compare_answers(
         print(Fore.GREEN + f"Both failed" + Fore.RESET)
         return 1.001
 
-    if expected_text == actual_answer:
+    if expected_text == actual_text:
         print(Fore.GREEN + f"Both equal" + Fore.RESET)
         return 1.000
 
@@ -429,13 +529,22 @@ async def compare_answers(
     #     print(Fore.GREEN + f"{message}: Both equal except case" + Fore.RESET)
     #     return 0.999
 
-    print(f"Answer mismatch")
+    print(f"Warning: Answer text mismatch")
+    if len(expected_text.splitlines()) <= 100 and len(actual_text.splitlines()) <= 100:
+        n = 100
+    else:
+        n = 2
+    print_diff(expected_text, actual_text, n=n)
+    return await equality_score(context, expected_text, actual_text)
+
+
+def print_diff(a: str, b: str, n: int) -> None:
     diff = difflib.unified_diff(
-        expected_text.splitlines(),
-        actual_answer.splitlines(),
+        a.splitlines(),
+        b.splitlines(),
         fromfile="expected",
         tofile="actual",
-        n=1000000000,  # Show all lines in the diff
+        n=n,
     )
     for x in diff:
         if x.startswith("-"):
@@ -444,7 +553,6 @@ async def compare_answers(
             print(Fore.GREEN + x.rstrip("\n") + Fore.RESET)
         else:
             print(x.rstrip("\n"))
-    return await equality_score(context, expected_text, actual_answer)
 
 
 async def equality_score(context: ProcessingContext, a: str, b: str) -> float:
