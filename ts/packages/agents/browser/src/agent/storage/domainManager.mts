@@ -520,7 +520,6 @@ export class DomainManager {
         if (
             lowerDomain.includes("social") ||
             lowerDomain.includes("facebook") ||
-            lowerDomain.includes("twitter") ||
             lowerDomain.includes("linkedin") ||
             lowerUrl.includes("/profile") ||
             lowerUrl.includes("/feed")

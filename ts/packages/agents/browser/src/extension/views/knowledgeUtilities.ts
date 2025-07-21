@@ -793,6 +793,18 @@ export interface DiscoveryServices {
     loadDiscoverData(): Promise<any>;
 }
 
+export interface EntityGraphServices {
+    searchByEntity(entityName: string, options?: any): Promise<any>;
+    getEntityGraph(centerEntity: string, depth: number): Promise<any>;
+    refreshEntityData(entityName: string): Promise<any>;
+}
+
+export interface EntityCacheServices {
+    getEntity(entityName: string): Promise<any>;
+    getCacheStats(): Promise<any>;
+    clearAll(): Promise<void>;
+}
+
 // Default implementations using the existing ChromeExtensionService
 export class DefaultAnalyticsServices implements AnalyticsServices {
     constructor(private chromeService: ChromeExtensionService) {}
@@ -925,5 +937,62 @@ export class DefaultDiscoveryServices implements DiscoveryServices {
                 topDomains: [],
             };
         }
+    }
+}
+
+// Default implementations for entity services (these would be implemented with proper backend integration)
+export class DefaultEntityGraphServices implements EntityGraphServices {
+    async searchByEntity(entityName: string, options: any = {}): Promise<any> {
+        // This would integrate with the real enhanced search
+        console.log(
+            "Searching for entity:",
+            entityName,
+            "with options:",
+            options,
+        );
+        return {
+            entities: [],
+            centerEntity: entityName,
+            relationships: [],
+        };
+    }
+
+    async getEntityGraph(centerEntity: string, depth: number): Promise<any> {
+        // This would integrate with the real entity graph
+        console.log("Getting entity graph for:", centerEntity, "depth:", depth);
+        return {
+            centerEntity,
+            entities: [],
+            relationships: [],
+        };
+    }
+
+    async refreshEntityData(entityName: string): Promise<any> {
+        // This would refresh real entity data
+        console.log("Refreshing entity data for:", entityName);
+        return null;
+    }
+}
+
+export class DefaultEntityCacheServices implements EntityCacheServices {
+    async getEntity(entityName: string): Promise<any> {
+        // This would get from real entity cache
+        console.log("Getting cached entity:", entityName);
+        return null;
+    }
+
+    async getCacheStats(): Promise<any> {
+        // This would return real cache stats
+        return {
+            entityCount: 0,
+            relationshipCount: 0,
+            cacheSize: 0,
+            hitRate: 0,
+        };
+    }
+
+    async clearAll(): Promise<void> {
+        // This would clear real cache
+        console.log("Clearing entity cache");
     }
 }
