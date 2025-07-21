@@ -404,8 +404,9 @@ export async function importWebsiteDataFromSession(
         }
 
         if (!context.agentContext.websiteCollection) {
-            context.agentContext.websiteCollection =
-                new website.WebsiteCollection();
+            const { EnhancedWebsiteCollection } = await import("./knowledge/enhancedWebsiteCollection.mjs");
+            context.agentContext.websiteCollection = new EnhancedWebsiteCollection();
+            await (context.agentContext.websiteCollection as any).initializeEntityGraph();
         }
 
         context.agentContext.websiteCollection.addWebsites(websites);
@@ -417,6 +418,18 @@ export async function importWebsiteDataFromSession(
                 `Incremental indexing failed, falling back to full rebuild: ${error}`,
             );
             await context.agentContext.websiteCollection.buildIndex();
+        }
+
+        // Update entity graph with new websites if using enhanced collection
+        if ((context.agentContext.websiteCollection as any).initializeEntityGraph) {
+            try {
+                debug("Updating entity graph with new websites...");
+                await (context.agentContext.websiteCollection as any).updateEntityGraphFromWebsites(websites);
+                debug(`Entity graph updated with ${websites.length} new websites`);
+            } catch (error) {
+                debug("Entity graph update failed:", error);
+                // Don't fail the import if entity processing fails
+            }
         }
 
         // Persist the website collection to disk
@@ -583,8 +596,9 @@ export async function importHtmlFolderFromSession(
 
         // Ensure we have a website collection
         if (!context.agentContext.websiteCollection) {
-            context.agentContext.websiteCollection =
-                new website.WebsiteCollection();
+            const { EnhancedWebsiteCollection } = await import("./knowledge/enhancedWebsiteCollection.mjs");
+            context.agentContext.websiteCollection = new EnhancedWebsiteCollection();
+            await (context.agentContext.websiteCollection as any).initializeEntityGraph();
         }
 
         // Process files in batches for better performance and progress reporting
@@ -744,6 +758,18 @@ export async function importHtmlFolderFromSession(
                     `Incremental indexing failed, falling back to full rebuild: ${error}`,
                 );
                 await context.agentContext.websiteCollection.buildIndex();
+            }
+
+            // Update entity graph with new websites if using enhanced collection
+            if ((context.agentContext.websiteCollection as any).initializeEntityGraph) {
+                try {
+                    debug("Updating entity graph with imported HTML files...");
+                    await (context.agentContext.websiteCollection as any).updateEntityGraphFromWebsites(websites);
+                    debug(`Entity graph updated with ${websites.length} new websites from HTML import`);
+                } catch (error) {
+                    debug("Entity graph update failed:", error);
+                    // Don't fail the import if entity processing fails
+                }
             }
 
             try {

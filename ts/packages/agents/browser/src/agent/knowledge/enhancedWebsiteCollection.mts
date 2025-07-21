@@ -237,35 +237,76 @@ export class EnhancedWebsiteCollection extends website.WebsiteCollection {
      * This will be called when new websites are added to the collection
      */
     async updateEntityGraphWithNewWebsite(websiteData: any): Promise<void> {
-        if (!this.entityGraphInitialized || this.mockMode) {
-            return; // Skip updates in mock mode or if not initialized
-        }
-
-        // TODO: Phase 4 implementation
-        // - Extract entities from the new website
-        // - Update existing entities or create new ones
-        // - Build/update relationships
-        // - Update graph metrics
-
-        console.log("Entity graph update not yet implemented for real data");
+        await this.updateEntityGraphFromWebsites([websiteData]);
     }
 
     /**
-     * Override the addWebsites method to integrate with entity graph
+     * Update entity graph from a batch of websites
+     */
+    async updateEntityGraphFromWebsites(websites: any[]): Promise<void> {
+        if (!this.entityGraphInitialized || this.mockMode) {
+            return;
+        }
+
+        try {
+            const { RealTimeEntityExtractor } = await import("./entityExtractor.js");
+            const entityExtractor = new RealTimeEntityExtractor();
+
+            // Convert websites to the format expected by entity extractor
+            const websiteInputs = websites.map((site) => ({
+                url: site.metadata?.url || site.url || "",
+                title: site.metadata?.title || site.title || "",
+                content: site.textChunks?.join("\n") || site.metadata?.description || "",
+                timestamp: site.metadata?.visitDate || site.metadata?.bookmarkDate || new Date().toISOString(),
+            }));
+
+            // Extract entities from all websites
+            const extractedEntities = await entityExtractor.extractEntitiesFromWebsites(websiteInputs);
+
+            // Convert to canonical entity format and add to the graph
+            for (const entity of extractedEntities) {
+                // Convert the entity to match the canonical EntityGraph types
+                const canonicalEntity: EnhancedEntity = {
+                    ...entity,
+                    coOccurringEntities: entity.coOccurringEntities.map(coOcc => ({
+                        entityName: (coOcc as any).entity || (coOcc as any).entityName,
+                        coOccurrenceCount: coOcc.coOccurrenceCount,
+                        contexts: coOcc.contexts,
+                        confidence: (coOcc as any).strength || (coOcc as any).confidence || 0.5
+                    }))
+                };
+                this.entityGraphManager.addEntity(canonicalEntity);
+            }
+
+            // Build relationships between entities
+            const relationships = await entityExtractor.buildEntityRelationships(extractedEntities, websiteInputs);
+
+            // Update relationship mappings
+            for (const relationship of relationships) {
+                // Find the entity that this relationship belongs to
+                const sourceEntity = extractedEntities.find(e => 
+                    e.strongRelationships.some(r => r.relatedEntity === relationship.relatedEntity)
+                );
+                if (sourceEntity) {
+                    this.entityGraphManager.addRelationship(sourceEntity.name, relationship.relatedEntity, relationship);
+                }
+            }
+
+        } catch (error) {
+            console.warn("Failed to update entity graph from websites:", error);
+        }
+    }
+
+    /**
+     * Override addWebsites to integrate with entity graph
      */
     addWebsites(websites: any[]): void {
         super.addWebsites(websites);
 
         // Update entity graph if not in mock mode
         if (this.entityGraphInitialized && !this.mockMode) {
-            // TODO: Phase 4 - extract entities from new websites
-            websites.forEach((website) => {
-                this.updateEntityGraphWithNewWebsite(website).catch((error) => {
-                    console.warn(
-                        "Failed to update entity graph for website:",
-                        error,
-                    );
-                });
+            this.updateEntityGraphFromWebsites(websites).catch((error) => {
+                console.warn("Failed to update entity graph for websites:", error);
             });
         }
     }
