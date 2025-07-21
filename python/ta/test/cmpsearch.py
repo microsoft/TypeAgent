@@ -294,7 +294,7 @@ async def compare_actual_to_expected(
                     "Compiled search query expression from LLM does not match reference.",
                 )
             compare_results(
-                result.value, qr, "Search results from index do not match reference,"
+                qr, result.value, "Search results from index do not match reference,"
             )
         all_answers, combined_answer = await answers.generate_answers(
             context.answer_translator,
@@ -340,8 +340,8 @@ async def equality_score(context: Context, a: str, b: str) -> float:
 
 
 def compare_results(
-    results: list[ConversationSearchResult],
     matches_records: list[RawSearchResult],
+    results: list[ConversationSearchResult],
     message: str,
 ) -> bool:
     if len(results) != len(matches_records):
@@ -440,7 +440,12 @@ def compare_and_print_diff(a: object, b: object, message: str) -> bool:  # True 
         n=2,
     )
     for x in diff:
-        print(x.rstrip("\n"))
+        if x.startswith("-"):
+            print(colorama.Fore.RED + x.rstrip("\n") + colorama.Fore.RESET)
+        elif x.startswith("+"):
+            print(colorama.Fore.GREEN + x.rstrip("\n") + colorama.Fore.RESET)
+        else:
+            print(x.rstrip("\n"))
     return False
 
 
