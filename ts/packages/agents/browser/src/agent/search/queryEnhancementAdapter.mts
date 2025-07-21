@@ -243,30 +243,6 @@ export class QueryEnhancementAdapter {
             );
         }
 
-        // Apply content-based filters
-        if (analysis.content) {
-            if (analysis.content.domain) {
-                const mappedDomain = this.mapDomainFromAnalysis(
-                    analysis.content.domain,
-                );
-                if (mappedDomain) {
-                    enhanced.domain = mappedDomain;
-                    debug(`Applied domain filter: ${mappedDomain}`);
-                }
-            }
-        }
-
-        // Apply source preference
-        if (
-            analysis.ranking?.sourcePreference &&
-            analysis.ranking.sourcePreference !== "any"
-        ) {
-            enhanced.source = analysis.ranking.sourcePreference as
-                | "bookmark"
-                | "history";
-            debug(`Applied source filter: ${enhanced.source}`);
-        }
-
         // Apply temporal filters
         if (analysis.temporal) {
             const { startDate, endDate } = this.queryAnalyzer.getTemporalDates(
@@ -315,17 +291,5 @@ export class QueryEnhancementAdapter {
         }
 
         return enhanced;
-    }
-
-    private mapDomainFromAnalysis(analysisDomain: string): string {
-        // Map LLM analysis domain to actual domain filters
-        const domainMap: Record<string, string> = {
-            "github.com": "github.com",
-            "stackoverflow.com": "stackoverflow.com",
-            "reddit.com": "reddit.com",
-            "medium.com": "medium.com",
-        };
-
-        return domainMap[analysisDomain] || "";
     }
 }

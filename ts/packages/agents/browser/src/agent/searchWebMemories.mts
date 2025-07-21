@@ -18,15 +18,9 @@ const debug = registerDebug("typeagent:browser:unified-search");
 
 // Core interfaces for unified search
 export interface SearchWebMemoriesRequest {
+    originalUserRequest?: string | undefined;
     query: string;
     searchScope?: "current_page" | "all_indexed" | undefined;
-
-    // Discovery filters
-    domain?: string | undefined;
-    pageType?: string | undefined;
-    source?: "bookmark" | "history" | undefined;
-    temporalSort?: "ascend" | "descend" | "none" | undefined;
-    frequencySort?: "ascend" | "descend" | "none" | undefined;
 
     // Temporal filters
     dateFrom?: string | undefined;
@@ -789,76 +783,18 @@ async function applyDiscoveryFilters(
     results: website.Website[],
     request: SearchWebMemoriesRequest,
 ): Promise<website.Website[]> {
-    let filtered = results;
-
-    // Apply domain filter
-    if (request.domain) {
-        filtered = filtered.filter((site) => {
-            const metadata = site.metadata as any;
-            return metadata.domain === request.domain;
-        });
-    }
-
-    // Apply source filter
-    if (request.source) {
-        filtered = filtered.filter((site) => {
-            const metadata = site.metadata as any;
-            return metadata.websiteSource === request.source;
-        });
-    }
-
-    // Apply page type filter
-    if (request.pageType) {
-        filtered = filtered.filter((site) => {
-            const metadata = site.metadata as any;
-            return metadata.pageType === request.pageType;
-        });
-    }
-
-    return filtered;
+    // All discovery filtering is now handled by AI analysis
+    // No manual filters to apply since domain, pageType, and source were removed
+    return results;
 }
 
 function applySorting(
     results: website.Website[],
     request: SearchWebMemoriesRequest,
 ): website.Website[] {
-    let sorted = [...results];
-
-    // Apply temporal sorting
-    if (request.temporalSort && request.temporalSort !== "none") {
-        sorted.sort((a, b) => {
-            const aMetadata = a.metadata as any;
-            const bMetadata = b.metadata as any;
-
-            const aDate = new Date(
-                aMetadata.visitDate || aMetadata.bookmarkDate || 0,
-            );
-            const bDate = new Date(
-                bMetadata.visitDate || bMetadata.bookmarkDate || 0,
-            );
-
-            return request.temporalSort === "ascend"
-                ? aDate.getTime() - bDate.getTime()
-                : bDate.getTime() - aDate.getTime();
-        });
-    }
-
-    // Apply frequency sorting
-    if (request.frequencySort && request.frequencySort !== "none") {
-        sorted.sort((a, b) => {
-            const aMetadata = a.metadata as any;
-            const bMetadata = b.metadata as any;
-
-            const aFreq = aMetadata.visitCount || 0;
-            const bFreq = bMetadata.visitCount || 0;
-
-            return request.frequencySort === "ascend"
-                ? aFreq - bFreq
-                : bFreq - aFreq;
-        });
-    }
-
-    return sorted;
+    // All sorting is now handled by AI analysis and LLM-informed ranking
+    // No manual sorting to apply since temporalSort and frequencySort were removed
+    return results;
 }
 
 function convertToWebsiteResults(websites: website.Website[]): WebsiteResult[] {

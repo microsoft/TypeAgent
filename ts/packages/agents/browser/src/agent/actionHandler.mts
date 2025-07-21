@@ -49,7 +49,10 @@ import registerDebug from "debug";
 import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 import * as website from "website-memory";
 import { handleKnowledgeAction } from "./knowledge/knowledgeHandler.mjs";
-import { searchWebMemories } from "./searchWebMemories.mjs";
+import {
+    searchWebMemories,
+    SearchWebMemoriesResponse,
+} from "./searchWebMemories.mjs";
 
 import {
     loadAllowDynamicAgentDomains,
@@ -676,6 +679,94 @@ async function closeWebPage(context: ActionContext<BrowserActionContext>) {
     return result;
 }
 
+async function searchWebMemoriesAction(
+    context: ActionContext<BrowserActionContext>,
+    action: TypeAgentAction<any>,
+) {
+    context.actionIO.setDisplay("Searching web memories...");
+
+    try {
+        // Use originalUserRequest to override query if provided
+        const searchParams = { ...action.parameters };
+        if (searchParams.originalUserRequest) {
+            searchParams.query = searchParams.originalUserRequest;
+            debug(
+                `Using originalUserRequest as query: "${searchParams.originalUserRequest}"`,
+            );
+        }
+
+        const searchResponse: SearchWebMemoriesResponse =
+            await searchWebMemories(searchParams, context.sessionContext);
+
+        if (searchResponse.websites.length === 0) {
+            const message =
+                searchResponse.answer || "No results found for your search.";
+            return createActionResult(message);
+        }
+
+        // Format the response for display
+        const summary = `Found ${searchResponse.websites.length} result(s) in ${searchResponse.summary.searchTime}ms`;
+        let displayText = `${summary}\n\n`;
+
+        // Add answer if available
+        if (searchResponse.answer && searchResponse.answerType !== "noAnswer") {
+            displayText += `**Answer:** ${searchResponse.answer}\n\n`;
+        }
+
+        // Add top results
+        const topResults = searchResponse.websites.slice(0, 5);
+        if (topResults.length > 0) {
+            displayText += "**Top Results:**\n";
+            topResults.forEach((site: any, index: number) => {
+                displayText += `${index + 1}. [${site.title}](${site.url})\n`;
+                if (site.snippet) {
+                    displayText += `   ${site.snippet}\n`;
+                }
+                displayText += "\n";
+            });
+        }
+
+        // Add entities if available
+        if (
+            searchResponse.relatedEntities &&
+            searchResponse.relatedEntities.length > 0
+        ) {
+            displayText += "\n**Related Entities:**\n";
+            const topEntities = searchResponse.relatedEntities.slice(0, 3);
+            topEntities.forEach((entity: any) => {
+                displayText += `• ${entity.name}\n`;
+            });
+        }
+
+        // Add topics if available
+        if (searchResponse.topTopics && searchResponse.topTopics.length > 0) {
+            displayText += "\n**Top Topics:**\n";
+            const topTopics = searchResponse.topTopics.slice(0, 3);
+            topTopics.forEach((topic: string) => {
+                displayText += `• ${topic}\n`;
+            });
+        }
+
+        // Add follow-up suggestions if available
+        if (
+            searchResponse.suggestedFollowups &&
+            searchResponse.suggestedFollowups.length > 0
+        ) {
+            displayText += "\n**Suggested follow-ups:**\n";
+            searchResponse.suggestedFollowups.forEach((followup: string) => {
+                displayText += `• ${followup}\n`;
+            });
+        }
+
+        return createActionResultFromMarkdownDisplay(displayText, summary);
+    } catch (error) {
+        const errorMessage =
+            error instanceof Error ? error.message : "Unknown error occurred";
+        context.actionIO.appendDisplay(`Search failed: ${errorMessage}`);
+        return createActionResult(`Search failed: ${errorMessage}`);
+    }
+}
+
 async function executeBrowserAction(
     action:
         | TypeAgentAction<BrowserActions, "browser">
@@ -700,6 +791,8 @@ async function executeBrowserAction(
                     return importHtmlFolder(context, action);
                 case "getWebsiteStats":
                     return getWebsiteStats(context, action);
+                case "searchWebMemories":
+                    return searchWebMemoriesAction(context, action);
                 case "goForward":
                     await getActionBrowserControl(context).goForward();
                     return;

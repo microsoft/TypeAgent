@@ -184,15 +184,10 @@ export type GetWebsiteStats = {
 export type SearchWebMemories = {
     actionName: "searchWebMemories";
     parameters: {
+        // The original user request - overrides query if provided
+        originalUserRequest?: string;
         query: string;
         searchScope?: "current_page" | "all_indexed";
-
-        // Discovery filters
-        domain?: string;
-        pageType?: string;
-        source?: "bookmark" | "history";
-        temporalSort?: "ascend" | "descend" | "none";
-        frequencySort?: "ascend" | "descend" | "none";
 
         // Search configuration
         limit?: number;

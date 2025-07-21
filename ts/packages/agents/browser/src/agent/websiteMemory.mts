@@ -117,7 +117,6 @@ export async function resolveURLWithHistory(
             includeRelatedEntities: false, // Don't need entities for URL resolution
             enableAdvancedSearch: true, // Use enhanced search if available
             searchScope: "all_indexed",
-            temporalSort: "descend", // Slight preference for recent matches
             debug: false, // Keep false for production URL resolution
         };
 
