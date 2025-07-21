@@ -4,6 +4,7 @@
 export type ParamSpec =
     | "wildcard"
     | "checked_wildcard"
+    | "entity_wildcard"
     | "number"
     | "percentage"
     | "ordinal"

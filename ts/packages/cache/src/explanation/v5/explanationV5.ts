@@ -481,6 +481,35 @@ function addPolitePrefixParts(
     }
 }
 
+/* true if the property value is a direct copy of the sub-phrase text. */
+function isValueCopiedFromSubPhrase(
+    phrase: SubPhrase,
+    paramInfo: PropertyValue,
+) {
+    const ltext = normalizeParamString(phrase.text);
+    const lval = normalizeParamString(paramInfo.propertyValue.toString());
+    return (
+        // Only handle direct copy of the text to value
+        ltext === lval ||
+        // REVIEW: a hack to ignore quote mismatch
+        ltext === `'${lval}'` ||
+        ltext === `"${lval}"`
+    );
+}
+
+function getWildcardMode(spec: string | undefined): WildcardMode {
+    switch (spec) {
+        case "wildcard":
+            return WildcardMode.Enabled;
+        case "checked_wildcard":
+            return WildcardMode.Checked;
+        case "entity_wildcard":
+            return WildcardMode.Entity;
+        default:
+            return WildcardMode.Disabled;
+    }
+}
+
 export function createConstructionV5(
     requestAction: RequestAction,
     explanation: Explanation,
@@ -607,31 +636,16 @@ export function createConstructionV5(
         }
     }
 
-    // We can only do wildcard if all the parameters that this sub-phrase maps to are wildcard in the schema config
-    // and they are direct copy of the text value.
-    const shouldValueBeCopied = (
-        phrase: SubPhrase,
-        paramInfo: PropertyValue,
-    ) => {
-        const ltext = normalizeParamString(phrase.text);
-        const lval = normalizeParamString(paramInfo.propertyValue.toString());
-        return (
-            // Only handle direct copy of the text to value
-            ltext === lval ||
-            // REVIEW: a hack to ignore quote mismatch
-            ltext === `'${lval}'` ||
-            ltext === `"${lval}"`
-        );
-    };
-
     const updateWildcardMode = (
         wildcardMode: WildcardMode,
         phrase: SubPhrase,
         paramInfo: PropertyValue,
     ) => {
+        // We can only do wildcard if all the parameters that this sub-phrase maps to are wildcard in the schema config
+        // and they are direct copy of the text value.
         if (
             wildcardMode === WildcardMode.Disabled ||
-            !shouldValueBeCopied(phrase, paramInfo)
+            !isValueCopiedFromSubPhrase(phrase, paramInfo)
         ) {
             return WildcardMode.Disabled;
         }
@@ -640,11 +654,8 @@ export function createConstructionV5(
             actions,
             schemaInfoProvider,
         );
-        return spec === "wildcard"
-            ? WildcardMode.Enabled
-            : spec === "checked_wildcard"
-              ? wildcardMode
-              : WildcardMode.Disabled;
+
+        return Math.min(wildcardMode, getWildcardMode(spec));
     };
 
     const parts = explanation.subPhrases.map((phrase) => {
@@ -669,7 +680,7 @@ export function createConstructionV5(
                     return createParsePart(propertyName, parser);
                 }
             }
-            let wildcardMode = WildcardMode.Checked;
+            let wildcardMode = WildcardMode.Entity;
 
             // REVIEW: can the match set be merged if it is for multiple param names?
             let canBeMerged = hasSinglePropertyName;

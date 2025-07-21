@@ -7,7 +7,7 @@ import {
     JSONAction,
     ParamValueType,
 } from "../explanation/requestAction.js";
-import { ConstructionPart } from "./constructions.js";
+import { ConstructionPart, WildcardMode } from "./constructions.js";
 import {
     TransformInfo,
     getPropertyNameFromTransformInfo,
@@ -15,7 +15,7 @@ import {
     toTransformInfoKey,
 } from "./matchPart.js";
 import { ParsePart, isParsePart } from "./parsePart.js";
-import { MatchConfig } from "./constructionMatch.js";
+import { isWildcardEnabled, MatchConfig } from "./constructionMatch.js";
 
 export type MatchedValueTranslator = {
     transform(
@@ -33,6 +33,7 @@ export type MatchedValueTranslator = {
 export type MatchedValues = {
     values: [string, ParamValueType][];
     conflictValues: [string, ParamValueType[]][] | undefined;
+    entityWildcardPropertyNames: string[];
     matchedCount: number;
     wildcardCharCount: number;
     partialPartCount?: number; // Only used for partial match
@@ -58,13 +59,17 @@ export function matchedValues(
     const values: [string, ParamValueType][] = [];
     const conflictValues: [string, ParamValueType[]][] | undefined =
         config.conflicts ? [] : undefined;
+    const entityWildcardPropertyNames: string[] = [];
     let matchedCount = 0;
     let wildcardCharCount = 0;
 
-    const wildcardNames = new Set<string>();
     const matchedTransformText = new Map<
         string,
-        { transformInfo: TransformInfo; text: string[] }
+        {
+            transformInfo: TransformInfo;
+            text: string[];
+            wildcardMode: WildcardMode;
+        }
     >();
     for (let i = 0; i < matched.length; i++) {
         const part = matchedParts[i];
@@ -77,11 +82,12 @@ export function matchedValues(
                 if (entry !== undefined) {
                     entry.text.push(match);
                 } else {
-                    entry = { transformInfo: info, text: [match] };
+                    entry = {
+                        transformInfo: info,
+                        text: [match],
+                        wildcardMode: part.wildcardMode,
+                    };
                     matchedTransformText.set(key, entry);
-                    if (config.enableWildcard && part.wildcardMode) {
-                        wildcardNames.add(key);
-                    }
                 }
             }
         } else if (isParsePart(part)) {
@@ -95,7 +101,7 @@ export function matchedValues(
         }
     }
 
-    for (const [key, matches] of matchedTransformText.entries()) {
+    for (const matches of matchedTransformText.values()) {
         // See if there are known entities
         const value = matchValueTranslator.transform(
             matches.transformInfo,
@@ -122,15 +128,21 @@ export function matchedValues(
         }
 
         // Try wildcard
-        if (wildcardNames.has(key)) {
-            // Wildcard match
-            if (matches.text.length > 1) {
-                // TODO: Don't support multiple subphrase wildcard match for now.
-                return undefined;
-            }
+        if (
+            isWildcardEnabled(config, matches.wildcardMode) &&
+            // TODO: Don't support multiple subphrase wildcard match for now.
+            matches.text.length === 1
+        ) {
             const match = matches.text.join(" ");
             values.push([propertyName, match]);
-            wildcardCharCount += match.length;
+
+            if (matches.wildcardMode === WildcardMode.Entity) {
+                // Don't include entity wildcard in the wildcard char count
+                // It should be rejected if there is not a matched entity.
+                entityWildcardPropertyNames.push(propertyName);
+            } else {
+                wildcardCharCount += match.length;
+            }
             continue;
         }
 
@@ -139,6 +151,7 @@ export function matchedValues(
     }
     return {
         values,
+        entityWildcardPropertyNames,
         conflictValues,
         matchedCount,
         wildcardCharCount,

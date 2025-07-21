@@ -26,7 +26,7 @@ import {
     displayStatus,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
-import { MatchResult, PromptEntity } from "agent-cache";
+import { PromptEntity } from "agent-cache";
 import { IncrementalJsonValueCallBack } from "common-utils";
 import { ProfileNames } from "../utils/profileNames.js";
 import { UnknownAction } from "../context/dispatcher/schema/dispatcherActionSchema.js";
@@ -521,34 +521,6 @@ function getAdditionalExecutableActions(
         executableActions.push({ action: fullAction });
     }
     return executableActions;
-}
-
-export async function validateWildcardMatch(
-    match: MatchResult,
-    context: CommandHandlerContext,
-) {
-    const actions = match.match.actions;
-    for (const { action } of actions) {
-        const schemaName = action.schemaName;
-        if (schemaName === undefined) {
-            continue;
-        }
-        const appAgentName = getAppAgentName(schemaName);
-        if (!context.agents.isActionActive(appAgentName)) {
-            // Assume validateWildcardMatch is true.
-            continue;
-        }
-        const appAgent = context.agents.getAppAgent(appAgentName);
-        const sessionContext = context.agents.getSessionContext(appAgentName);
-        const validate = await appAgent.validateWildcardMatch?.(
-            action,
-            sessionContext,
-        );
-        if (validate === false) {
-            return false;
-        }
-    }
-    return true;
 }
 
 export function startStreamPartialAction(
