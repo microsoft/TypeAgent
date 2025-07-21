@@ -189,13 +189,6 @@ export type SearchWebMemories = {
         query: string;
         searchScope?: "current_page" | "all_indexed";
 
-        // Discovery filters
-        domain?: string;
-        pageType?: string;
-        source?: "bookmark" | "history";
-        temporalSort?: "ascend" | "descend" | "none";
-        frequencySort?: "ascend" | "descend" | "none";
-
         // Search configuration
         limit?: number;
         minScore?: number;
