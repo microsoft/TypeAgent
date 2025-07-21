@@ -6,7 +6,7 @@ import asyncio
 from dataclasses import dataclass
 import json
 import sys
-from typing import Any, Literal
+import typing
 
 from colorama import init as colorama_init, Fore
 import typechat
@@ -31,10 +31,10 @@ class ProcessingContext[TMessage: IMessage, TIndex: ITermToSemanticRefIndex]:
     query_context: query.QueryEvalContext[TMessage, TIndex]
     qa_index: dict[str, dict[str, object]]
     sr_index: dict[str, dict[str, object]]
-    debug1: Literal["none", "diff", "full", "skip"]
-    debug2: Literal["none", "diff", "full", "skip"]
-    debug3: Literal["none", "diff", "full"]
-    debug4: Literal["none", "diff", "nice", "full"]
+    debug1: typing.Literal["none", "diff", "full", "skip"]
+    debug2: typing.Literal["none", "diff", "full", "skip"]
+    debug3: typing.Literal["none", "diff", "full"]
+    debug4: typing.Literal["none", "diff", "full", "nice"]
     query_translator: typechat.TypeChatJsonTranslator[search_query_schema.SearchQuery]
     answer_translator: typechat.TypeChatJsonTranslator[
         answer_response_schema.AnswerResponse
@@ -235,33 +235,34 @@ def make_arg_parser(description: str) -> argparse.ArgumentParser:
         help="Default debug level: 'none' for no debug output, 'diff' for diff output, "
         "'full' for full debug output.",
     )
+    helper = lambda key: typing.get_args(ProcessingContext.__annotations__[key])
     parser.add_argument(
         "--debug1",
         type=str,
         default=None,
-        choices=["none", "diff", "full", "skip"],
+        choices=helper("debug1"),
         help="Debug level override for stage 1: like --debug; or 'skip' to skip stage 1.",
     )
     parser.add_argument(
         "--debug2",
         type=str,
         default=None,
-        choices=["none", "diff", "full", "skip"],
+        choices=helper("debug2"),
         help="Debug level override for stage 2: like --debug; or 'skip' to skip stages 1-2.",
     )
     parser.add_argument(
         "--debug3",
         type=str,
         default=None,
-        choices=["none", "diff", "full"],
+        choices=helper("debug3"),
         help="Debug level override for stage 3: like --debug.",
     )
     parser.add_argument(
         "--debug4",
         type=str,
         default=None,
-        choices=["none", "diff", "full", "nice"],
-        help="Debug level override for stage 4: like --debug; or 'nice'.",
+        choices=helper("debug4"),
+        help="Debug level override for stage 4: like --debug; or 'nice' to print answer only.",
     )
 
     return parser
@@ -297,7 +298,7 @@ def load_index_file(file: str, selector: str) -> dict[str, dict[str, object]]:
     res = {item[selector]: item for item in data}
     if len(res) != len(data):
         # TODO: What else to do? Use 'cmd' as key?
-        print(Fore.YELLOW + f"Duplicate items found in {file!r}. " + Fore.RESET)
+        print(Fore.YELLOW + f"{len(data) - len(res)} duplicate items found in {file!r}. " + Fore.RESET)
     return res
 
 
