@@ -189,6 +189,9 @@ export class KnowProPrinter extends MemoryConsoleWriter {
             case "topic":
                 this.writeTopic(semanticRef.knowledge as kp.Topic);
                 break;
+            case "tag":
+                this.writeTag(semanticRef.knowledge as kp.Tag);
+                break;
         }
         return this;
     }

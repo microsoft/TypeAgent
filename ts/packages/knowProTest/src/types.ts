@@ -31,7 +31,7 @@ export interface SearchRequest {
     when?: string; // A manually supplied 'when'. We will do a word break on this
 
     // Do a search using the new scoping (v2) search translator
-    scopeSearch?: boolean | undefined;
+    scoped?: boolean | undefined;
 }
 
 export function searchRequestDef(): CommandMetadata {
@@ -53,7 +53,10 @@ export function searchRequestDef(): CommandMetadata {
                 "Thread description: scope matches to the thread best matching this description",
             ),
             when: arg("Sub-query to scope matches (early experimental)"),
-            scoped: arg("Translate NL queries into scoped search expressions"),
+            scoped: argBool(
+                "Translate NL queries into scoped search expressions",
+                false,
+            ),
         },
     };
 }

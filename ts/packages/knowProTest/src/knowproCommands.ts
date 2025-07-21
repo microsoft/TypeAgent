@@ -105,10 +105,7 @@ export async function execSearchRequest(
         debugContext.searchQueryExpr = compiledQueries;
         searchResults = success(queryResults.flat());
     } else {
-        if (
-            request.scopeSearch === undefined ||
-            request.scopeSearch === false
-        ) {
+        if (request.scoped === undefined || request.scoped === false) {
             //
             // Run raw NLP query
             //
@@ -450,7 +447,7 @@ async function getLangSearchResult2(
     langFilter?: kp.LanguageSearchFilter,
     debugContext?: kp.LanguageSearchDebugContext,
 ) {
-    return await kp.searchConversationWithLanguage(
+    return await kp.searchConversationWithLanguage2(
         conversation,
         langQuery,
         queryTranslator,
