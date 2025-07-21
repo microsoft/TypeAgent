@@ -123,6 +123,12 @@ def main():
         interactive_loop(context)
 
 
+async def batch_loop(context: ProcessingContext) -> None:
+    for query_text in context.sr_index:
+        print("-" * 20, repr(query_text), "-" * 20)
+        await process_query(context, query_text)
+
+
 def interactive_loop(context: ProcessingContext) -> None:
     if sys.stdin.isatty():
         print(f"TypeAgent demo UI {__version__} (type 'q' to exit)")
