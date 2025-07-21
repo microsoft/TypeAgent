@@ -8,11 +8,11 @@ all: venv format check test build
 
 .PHONY: format
 format: venv
-	.venv/bin/black typeagent test
+	.venv/bin/black typeagent test tools
 
 .PHONY: check
 check: venv
-	.venv/bin/pyright --pythonpath .venv/bin/python typeagent test
+	.venv/bin/pyright --pythonpath .venv/bin/python typeagent test tools
 
 .PHONY: test
 test: venv
