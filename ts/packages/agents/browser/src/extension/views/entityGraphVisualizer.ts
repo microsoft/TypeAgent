@@ -480,11 +480,26 @@ export class EntityGraphVisualizer {
     exportGraph(): any {
         if (!this.cy) return null;
 
+        // Extract only the data portions of nodes and edges to avoid circular references
+        const nodes = this.cy.nodes().map((node: any) => ({
+            data: node.data(),
+            position: node.position(),
+            classes: node.classes()
+        }));
+
+        const edges = this.cy.edges().map((edge: any) => ({
+            data: edge.data(),
+            classes: edge.classes()
+        }));
+
         return {
-            elements: this.cy.elements().jsons(),
+            nodes: nodes,
+            edges: edges,
             layout: this.currentLayout,
             zoom: this.cy.zoom(),
             center: this.cy.center(),
+            exportedAt: new Date().toISOString(),
+            version: "1.0"
         };
     }
 
@@ -503,6 +518,85 @@ export class EntityGraphVisualizer {
             this.cy.resize();
             this.cy.fit();
         }
+    }
+
+    /**
+     * Zoom in the graph
+     */
+    zoomIn(): void {
+        console.log("zoomIn() called, cy instance exists:", !!this.cy);
+        if (this.cy) {
+            const currentZoom = this.cy.zoom();
+            console.log("Current zoom:", currentZoom, "-> New zoom:", currentZoom * 1.25);
+            this.cy.zoom(currentZoom * 1.25);
+        } else {
+            console.warn("Cannot zoom in: Cytoscape instance not available");
+        }
+    }
+
+    /**
+     * Zoom out the graph
+     */
+    zoomOut(): void {
+        console.log("zoomOut() called, cy instance exists:", !!this.cy);
+        if (this.cy) {
+            const currentZoom = this.cy.zoom();
+            console.log("Current zoom:", currentZoom, "-> New zoom:", currentZoom * 0.8);
+            this.cy.zoom(currentZoom * 0.8);
+        } else {
+            console.warn("Cannot zoom out: Cytoscape instance not available");
+        }
+    }
+
+    /**
+     * Fit graph to view
+     */
+    fitToView(): void {
+        console.log("fitToView() called, cy instance exists:", !!this.cy);
+        if (this.cy) {
+            this.cy.fit();
+            console.log("Graph fitted to view");
+        } else {
+            console.warn("Cannot fit to view: Cytoscape instance not available");
+        }
+    }
+
+    /**
+     * Center the graph
+     */
+    centerGraph(): void {
+        console.log("centerGraph() called, cy instance exists:", !!this.cy);
+        if (this.cy) {
+            this.cy.center();
+            console.log("Graph centered");
+        } else {
+            console.warn("Cannot center graph: Cytoscape instance not available");
+        }
+    }
+
+    /**
+     * Reset graph zoom and position
+     */
+    resetView(): void {
+        if (this.cy) {
+            this.cy.fit();
+            this.cy.center();
+        }
+    }
+
+    /**
+     * Take a screenshot of the graph
+     */
+    takeScreenshot(): string {
+        if (this.cy) {
+            return this.cy.png({
+                output: 'base64uri',
+                bg: 'white',
+                full: true,
+                scale: 2
+            });
+        }
+        return '';
     }
 
     /**

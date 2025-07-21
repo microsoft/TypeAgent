@@ -137,10 +137,106 @@ class EntityGraphView {
      * Set up graph control handlers
      */
     private setupControlHandlers(): void {
+        console.log("Setting up control handlers...");
+        
+        // Zoom controls
+        const zoomInBtn = document.getElementById("zoomInBtn");
+        const zoomOutBtn = document.getElementById("zoomOutBtn");
+        const fitBtn = document.getElementById("fitBtn");
+        const centerBtn = document.getElementById("centerBtn");
+        const resetBtn = document.getElementById("resetBtn");
+
+        console.log("Control button elements:", {
+            zoomInBtn: !!zoomInBtn,
+            zoomOutBtn: !!zoomOutBtn,
+            fitBtn: !!fitBtn,
+            centerBtn: !!centerBtn,
+            resetBtn: !!resetBtn
+        });
+
+        if (zoomInBtn) {
+            zoomInBtn.addEventListener("click", () => {
+                console.log("Zoom in button clicked");
+                this.visualizer.zoomIn();
+            });
+        }
+
+        if (zoomOutBtn) {
+            zoomOutBtn.addEventListener("click", () => {
+                console.log("Zoom out button clicked");
+                this.visualizer.zoomOut();
+            });
+        }
+
+        if (fitBtn) {
+            fitBtn.addEventListener("click", () => {
+                console.log("Fit to view button clicked");
+                this.visualizer.fitToView();
+            });
+        }
+
+        if (centerBtn) {
+            centerBtn.addEventListener("click", () => {
+                console.log("Center graph button clicked");
+                this.visualizer.centerGraph();
+            });
+        }
+
+        if (resetBtn) {
+            resetBtn.addEventListener("click", () => {
+                console.log("Reset view button clicked");
+                this.visualizer.resetView();
+            });
+        }
+
+        // Screenshot control
+        const screenshotBtn = document.getElementById("screenshotBtn");
+        console.log("Screenshot button element:", !!screenshotBtn);
+        
+        if (screenshotBtn) {
+            screenshotBtn.addEventListener("click", () => {
+                console.log("Screenshot button clicked");
+                this.takeScreenshot();
+            });
+        }
+
+        // Expand/Collapse controls (placeholder for future implementation)
+        const expandBtn = document.getElementById("expandBtn");
+        const collapseBtn = document.getElementById("collapseBtn");
+        
+        if (expandBtn) {
+            expandBtn.addEventListener("click", () => {
+                console.log("Expand functionality - to be implemented");
+                // TODO: Implement expand selected entities
+            });
+        }
+
+        if (collapseBtn) {
+            collapseBtn.addEventListener("click", () => {
+                console.log("Collapse functionality - to be implemented");
+                // TODO: Implement collapse selected entities
+            });
+        }
+
         // Export controls
         const exportButton = document.getElementById("exportGraph");
+        const exportBtn = document.getElementById("exportBtn");
+        console.log("Export button elements:", {
+            exportButton: !!exportButton,
+            exportBtn: !!exportBtn
+        });
+        
         if (exportButton) {
-            exportButton.addEventListener("click", () => this.exportGraph());
+            exportButton.addEventListener("click", () => {
+                console.log("Export graph button clicked");
+                this.exportGraph();
+            });
+        }
+        if (exportBtn) {
+            exportBtn.addEventListener("click", () => {
+                console.log("Export button clicked");
+                this.exportGraph();
+            });
         }
 
         // Refresh controls
@@ -333,14 +429,56 @@ class EntityGraphView {
      * Export graph
      */
     exportGraph(): void {
-        const graphData = this.visualizer.exportGraph();
-        const dataStr = JSON.stringify(graphData, null, 2);
-        const dataBlob = new Blob([dataStr], { type: "application/json" });
+        try {
+            console.log("Exporting graph data...");
+            const graphData = this.visualizer.exportGraph();
+            
+            if (!graphData) {
+                console.warn("No graph data to export");
+                this.showMessage("No graph data available to export", "warning");
+                return;
+            }
 
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(dataBlob);
-        link.download = `entity-graph-${this.currentEntity || "export"}.json`;
-        link.click();
+            console.log("Graph data to export:", {
+                nodeCount: graphData.nodes?.length || 0,
+                edgeCount: graphData.edges?.length || 0,
+                layout: graphData.layout,
+                zoom: graphData.zoom
+            });
+
+            const dataStr = JSON.stringify(graphData, null, 2);
+            const dataBlob = new Blob([dataStr], { type: "application/json" });
+
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(dataBlob);
+            link.download = `entity-graph-${this.currentEntity || "export"}-${new Date().toISOString().split('T')[0]}.json`;
+            link.click();
+
+            console.log("Graph exported successfully");
+            this.showMessage("Graph exported successfully", "success");
+        } catch (error) {
+            console.error("Failed to export graph:", error);
+            this.showMessage("Failed to export graph: " + (error instanceof Error ? error.message : "Unknown error"), "error");
+        }
+    }
+
+    /**
+     * Take screenshot of the graph
+     */
+    takeScreenshot(): void {
+        try {
+            const imageData = this.visualizer.takeScreenshot();
+            if (imageData) {
+                const link = document.createElement("a");
+                link.href = imageData;
+                link.download = `entity-graph-${this.currentEntity || "screenshot"}.png`;
+                link.click();
+            } else {
+                console.warn("Failed to generate screenshot");
+            }
+        } catch (error) {
+            console.error("Error taking screenshot:", error);
+        }
     }
 
     /**
