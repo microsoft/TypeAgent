@@ -365,7 +365,11 @@ async def process_query(context: ProcessingContext, query_text: str) -> float | 
             print(f"Score: {score:.3f}; Question: {query_text}")
             return score
         else:
-            print("Stage 4 diff unavailable")
+            print("Stage 4 diff unavailable; nice answer:")
+            if combined_answer.type == "NoAnswer":
+                print(Fore.RED + f"Failure: {combined_answer.whyNoAnswer}" + Fore.RESET)
+            else:
+                print(Fore.GREEN + f"{combined_answer.answer}" + Fore.RESET)
         prsep()
 
 
