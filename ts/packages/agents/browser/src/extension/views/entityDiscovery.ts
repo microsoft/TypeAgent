@@ -59,7 +59,6 @@ export class EntityDiscovery {
     private searchInput: HTMLInputElement | null = null;
     private suggestionsContainer: HTMLElement | null = null;
     private searchResults: HTMLElement | null = null;
-    private mockMode: boolean = true;
     private currentQuery: string = "";
     private searchTimeout: number | null = null;
     private entityGraphService: EntityGraphServices;
@@ -195,11 +194,7 @@ export class EntityDiscovery {
      * Search entities (with mock data support)
      */
     async searchEntities(query: string): Promise<any[]> {
-        if (this.mockMode) {
-            return this.searchMockEntities(query);
-        } else {
-            return this.searchRealEntities(query);
-        }
+        return this.searchRealEntities(query);
     }
 
     /**
@@ -363,11 +358,7 @@ export class EntityDiscovery {
             strengthThreshold: 0.3,
         };
 
-        if (this.mockMode) {
-            return this.mockAdvancedSearch(query, searchPattern);
-        } else {
-            return this.realAdvancedSearch(query, searchPattern);
-        }
+        return this.realAdvancedSearch(query, searchPattern);
     }
 
     /**
@@ -746,13 +737,6 @@ export class EntityDiscovery {
         const div = document.createElement("div");
         div.textContent = text;
         return div.innerHTML;
-    }
-
-    /**
-     * Set mock mode
-     */
-    setMockMode(enabled: boolean): void {
-        this.mockMode = enabled;
     }
 
     /**

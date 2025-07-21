@@ -42,7 +42,6 @@ export class MultiHopExplorer {
     private maxDepth: number = 3;
     private expansionHistory: ExpansionHistory[] = [];
     private networkCache: Map<string, EntityExpansionData> = new Map();
-    private mockMode: boolean = true;
     private isExpanding: boolean = false;
     private entityGraphService: EntityGraphServices;
 
@@ -186,11 +185,7 @@ export class MultiHopExplorer {
         entityName: string,
         depth: number,
     ): Promise<EntityExpansionData> {
-        if (this.mockMode) {
-            return this.generateMockExpansionData(entityName, depth);
-        } else {
-            return this.generateRealExpansionData(entityName, depth);
-        }
+        return this.generateRealExpansionData(entityName, depth);
     }
 
     /**
@@ -315,13 +310,5 @@ export class MultiHopExplorer {
         type: "success" | "warning" | "error",
     ): void {
         console.log(`${type.toUpperCase()}: ${message}`);
-    }
-
-    /**
-     * Set mock mode
-     */
-    setMockMode(enabled: boolean): void {
-        this.mockMode = enabled;
-        this.networkCache.clear(); // Clear cache when switching modes
     }
 }

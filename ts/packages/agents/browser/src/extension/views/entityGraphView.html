@@ -51,27 +51,6 @@
           </div>
 
           <div class="view-controls">
-            <!-- Mock Mode Toggle -->
-            <div class="mock-mode-controls">
-              <div class="form-check form-switch">
-                <input
-                  class="form-check-input"
-                  type="checkbox"
-                  id="mockModeToggle"
-                  checked
-                />
-                <label class="form-check-label" for="mockModeToggle">
-                  Mock Data
-                </label>
-              </div>
-              <select
-                id="mockScenarioSelect"
-                class="form-select mock-scenario-select"
-              >
-                <option value="">Select Scenario...</option>
-              </select>
-            </div>
-
             <!-- Layout Controls -->
             <div class="layout-controls">
               <div class="btn-group" role="group">
@@ -288,15 +267,9 @@
               <i class="bi bi-diagram-2"></i>
               <h3>No Entity Graph</h3>
               <p>
-                Select a mock scenario or enable real data to view the entity
+                Search for an entity or import website data to view the entity
                 graph.
               </p>
-              <button
-                class="btn btn-primary"
-                id="chooseScenarioBtn"
-              >
-                Choose Scenario
-              </button>
             </div>
           </div>
         </main>
@@ -342,18 +315,6 @@
             </div>
           </div>
         </aside>
-      </div>
-    </div>
-
-    <!-- Mock Mode Indicator -->
-    <div id="mockModeIndicator" class="mock-mode-indicator">
-      <div class="indicator-content">
-        <i class="bi bi-eye"></i>
-        <span>Viewing Mock Data</span>
-        <span id="mockScenarioName" class="scenario-name"></span>
-        <button id="switchToRealData" class="btn btn-sm btn-outline-light">
-          Switch to Real Data
-        </button>
       </div>
     </div>
 

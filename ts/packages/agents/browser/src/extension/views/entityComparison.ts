@@ -53,7 +53,6 @@ export class EntityComparisonManager {
     private comparisonPanel: HTMLElement | null = null;
     private selectedEntities: any[] = [];
     private currentComparison: EntityComparison | null = null;
-    private mockMode: boolean = true;
     private maxComparisonEntities: number = 5;
 
     constructor() {
@@ -67,13 +66,6 @@ export class EntityComparisonManager {
     private initializeComparisonPanel(): void {
         this.createComparisonPanel();
         this.setupComparisonControls();
-    }
-
-    /**
-     * Set mock mode
-     */
-    setMockMode(enabled: boolean): void {
-        this.mockMode = enabled;
     }
 
     /**

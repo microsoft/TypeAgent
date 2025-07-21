@@ -13,12 +13,6 @@ import {
     ChromeExtensionService,
 } from "./knowledgeUtilities";
 
-interface MockScenario {
-    id: string;
-    name: string;
-    description: string;
-}
-
 /**
  * Main class for the Entity Graph View page
  */
@@ -30,33 +24,8 @@ class EntityGraphView {
     private relationshipManager: RelationshipDetailsManager;
     private comparisonManager: EntityComparisonManager;
     private currentEntity: string | null = null;
-    private mockMode: boolean = false; // Use real data by default
-    private currentMockScenario: string | null = null;
     private entityGraphService: EntityGraphServices;
     private entityCacheService: EntityCacheServices;
-
-    private mockScenarios: MockScenario[] = [
-        {
-            id: "tech_ecosystem",
-            name: "Tech Ecosystem",
-            description: "Microsoft, Azure, and tech innovation",
-        },
-        {
-            id: "ai_research",
-            name: "AI Research",
-            description: "OpenAI, Anthropic, and AI development",
-        },
-        {
-            id: "startup_valley",
-            name: "Startup Valley",
-            description: "Y Combinator, venture capital, and entrepreneurship",
-        },
-        {
-            id: "academic_research",
-            name: "Academic Research",
-            description: "MIT, research institutions, and academia",
-        },
-    ];
 
     constructor() {
         try {
@@ -67,6 +36,9 @@ class EntityGraphView {
             this.entityGraphService = new DefaultEntityGraphServices(chromeService);
             this.entityCacheService = new DefaultEntityCacheServices();
             console.log("Services initialized with Chrome extension connection");
+
+            // Handle URL parameters to get the entity from query params
+            this.handleUrlParameters();
 
             // Initialize components
             const graphContainer = document.getElementById("cytoscape-container")!;
@@ -96,10 +68,6 @@ class EntityGraphView {
             this.relationshipManager = new RelationshipDetailsManager();
             console.log("Creating comparison manager...");
             this.comparisonManager = new EntityComparisonManager();
-
-            // Set initial data mode
-            this.setComponentDataModes();
-            console.log("Component data modes set");
 
             console.log("EntityGraphView constructor completed, starting initialization...");
             this.initialize().catch((error: any) => {
@@ -135,25 +103,19 @@ class EntityGraphView {
 
             // Set up event handlers
             this.setupEventHandlers();
-            this.setupMockScenarios();
             this.setupControlHandlers();
             this.setupLayoutControls();
             this.setupSearchHandlers();
             this.setupInteractiveHandlers();
 
-            // Initialize with default mock scenario if none specified
-            // Show loading state initially
-            this.showGraphLoading();
-
-            // Update URL parameters and load entity if specified
-            this.handleUrlParameters();
-
-            // Load entity from URL or initialize with a default entity search
+            // Load entity from URL - entity parameter is required
+            console.log(`Current entity after URL parsing: ${this.currentEntity}`);
             if (this.currentEntity) {
+                console.log(`Loading specific entity from URL: ${this.currentEntity}`);
                 await this.navigateToEntity(this.currentEntity);
             } else {
-                // Try to load some real entity data as default
-                await this.loadDefaultEntityData();
+                console.log("No entity parameter provided in URL - showing error");
+                this.showEntityParameterError();
             }
         } catch (error) {
             console.error("Failed to initialize entity graph view:", error);
@@ -165,56 +127,9 @@ class EntityGraphView {
      * Set up event handlers
      */
     private setupEventHandlers(): void {
-        // Mock mode toggle
-        const mockToggle = document.getElementById(
-            "mockModeToggle",
-        ) as HTMLButtonElement;
-        if (mockToggle) {
-            mockToggle.addEventListener("click", () => this.toggleMockMode());
-        }
-
         // Entity click navigation
         this.visualizer.onEntityClick((entityData) => {
             this.navigateToEntity(entityData.name);
-        });
-
-        // Choose scenario button
-        const chooseScenarioBtn = document.getElementById("chooseScenarioBtn");
-        if (chooseScenarioBtn) {
-            chooseScenarioBtn.addEventListener("click", () => {
-                const scenarioSelect = document.getElementById("mockScenarioSelect") as HTMLSelectElement;
-                if (scenarioSelect) {
-                    scenarioSelect.focus();
-                }
-            });
-        }
-    }
-
-    /**
-     * Set up mock scenario controls
-     */
-    private setupMockScenarios(): void {
-        const scenarioSelect = document.getElementById("mockScenarioSelect") as HTMLSelectElement;
-        if (!scenarioSelect) return;
-
-        // Clear existing options (except the first placeholder)
-        scenarioSelect.innerHTML = '<option value="">Select Scenario...</option>';
-
-        // Add scenario options
-        this.mockScenarios.forEach((scenario) => {
-            const option = document.createElement("option");
-            option.value = scenario.id;
-            option.textContent = scenario.name;
-            option.title = scenario.description;
-            scenarioSelect.appendChild(option);
-        });
-
-        // Add change event listener
-        scenarioSelect.addEventListener("change", (e) => {
-            const target = e.target as HTMLSelectElement;
-            if (target.value) {
-                this.loadMockScenario(target.value);
-            }
         });
     }
 
@@ -281,316 +196,24 @@ class EntityGraphView {
     private handleUrlParameters(): void {
         const urlParams = new URLSearchParams(window.location.search);
         const entityParam = urlParams.get("entity");
-        const mockParam = urlParams.get("mock");
+
+        console.log("Handling URL parameters:", {
+            fullUrl: window.location.href,
+            search: window.location.search,
+            entityParam: entityParam
+        });
 
         if (entityParam) {
             this.currentEntity = entityParam;
+            console.log(`Entity from URL: ${entityParam}`);
             // Update breadcrumb to show entity name
             const entityBreadcrumb = document.getElementById("entityNameBreadcrumb");
             if (entityBreadcrumb) {
                 entityBreadcrumb.textContent = ` > ${entityParam}`;
             }
+        } else {
+            console.log("No entity parameter found in URL, will use default fallback");
         }
-
-        if (mockParam !== null) {
-            this.mockMode = mockParam === "true";
-        }
-    }
-
-    /**
-     * Load a mock scenario
-     */
-    async loadMockScenario(scenarioId: string, centerEntity?: string): Promise<void> {
-        try {
-            this.currentMockScenario = scenarioId;
-            this.showGraphLoading();
-
-            // Load mock data for the scenario or specific entity
-            const mockData = await this.generateMockData(scenarioId, centerEntity);
-            
-            console.log("Loading entity graph with data:", mockData);
-
-            // Validate mock data
-            if (!mockData || !mockData.entities || mockData.entities.length === 0) {
-                throw new Error("No mock data generated");
-            }
-
-            // Update visualizer
-            await this.visualizer.loadEntityGraph(mockData);
-            console.log("Graph loaded successfully");
-
-            // Update sidebar with center entity
-            if (mockData.centerEntity) {
-                await this.sidebar.loadEntity(mockData.centerEntity);
-                console.log("Sidebar loaded for:", mockData.centerEntity);
-            }
-
-            this.hideGraphLoading();
-            this.updateScenarioButtons();
-            console.log("Mock scenario loading completed successfully");
-        } catch (error: any) {
-            console.error("Failed to load mock scenario:", error);
-            this.hideGraphLoading();
-            this.showGraphError(`Failed to load scenario: ${error.message || error}`);
-        }
-    }
-
-    /**
-     * Generate mock data for a scenario or specific entity
-     */
-    private async generateMockData(scenarioId: string, centerEntity?: string): Promise<any> {
-        // If we have a specific entity from URL, create mock data for it
-        if (centerEntity) {
-            return this.generateMockEntityData(centerEntity);
-        }
-
-        // Otherwise use predefined scenarios
-        switch (scenarioId) {
-            case "tech_ecosystem":
-                return {
-                    centerEntity: "Microsoft",
-                    entities: [
-                        {
-                            name: "Microsoft",
-                            type: "organization",
-                            confidence: 0.95,
-                        },
-                        {
-                            name: "Satya Nadella",
-                            type: "person",
-                            confidence: 0.98,
-                        },
-                        { name: "Azure", type: "product", confidence: 0.92 },
-                        {
-                            name: "Office365",
-                            type: "product",
-                            confidence: 0.85,
-                        },
-                        {
-                            name: "Visual Studio",
-                            type: "product",
-                            confidence: 0.8,
-                        },
-                    ],
-                    relationships: [
-                        {
-                            from: "Satya Nadella",
-                            to: "Microsoft",
-                            type: "CEO_of",
-                            strength: 0.95,
-                        },
-                        {
-                            from: "Microsoft",
-                            to: "Azure",
-                            type: "develops",
-                            strength: 0.98,
-                        },
-                        {
-                            from: "Microsoft",
-                            to: "Office365",
-                            type: "develops",
-                            strength: 0.9,
-                        },
-                        {
-                            from: "Microsoft",
-                            to: "Visual Studio",
-                            type: "develops",
-                            strength: 0.85,
-                        },
-                    ],
-                };
-
-            case "ai_research":
-                return {
-                    centerEntity: "OpenAI",
-                    entities: [
-                        {
-                            name: "OpenAI",
-                            type: "organization",
-                            confidence: 0.98,
-                        },
-                        {
-                            name: "Sam Altman",
-                            type: "person",
-                            confidence: 0.95,
-                        },
-                        { name: "ChatGPT", type: "product", confidence: 0.92 },
-                        { name: "GPT-4", type: "product", confidence: 0.9 },
-                        {
-                            name: "Anthropic",
-                            type: "organization",
-                            confidence: 0.88,
-                        },
-                        { name: "Claude", type: "product", confidence: 0.85 },
-                    ],
-                    relationships: [
-                        {
-                            from: "Sam Altman",
-                            to: "OpenAI",
-                            type: "CEO_of",
-                            strength: 0.95,
-                        },
-                        {
-                            from: "OpenAI",
-                            to: "ChatGPT",
-                            type: "created",
-                            strength: 0.85,
-                        },
-                        {
-                            from: "OpenAI",
-                            to: "GPT-4",
-                            type: "developed",
-                            strength: 0.9,
-                        },
-                        {
-                            from: "Anthropic",
-                            to: "Claude",
-                            type: "developed",
-                            strength: 0.92,
-                        },
-                    ],
-                };
-
-            default:
-                return {
-                    centerEntity: "Example Entity",
-                    entities: [
-                        {
-                            name: "Example Entity",
-                            type: "organization",
-                            confidence: 0.8,
-                        },
-                    ],
-                    relationships: [],
-                };
-        }
-    }
-
-    /**
-     * Load default entity data when no specific entity is requested
-     */
-    private async loadDefaultEntityData(): Promise<void> {
-        try {
-            this.showGraphLoading();
-            console.log("Loading default entity data...");
-
-            // Try to search for some common technology entities that are likely to have data
-            const commonEntities = [
-                'TypeScript', 'JavaScript', 'React', 'Node.js', 'Microsoft', 
-                'OpenAI', 'GitHub', 'Stack Overflow', 'Visual Studio Code'
-            ];
-            
-            let foundEntity = false;
-            for (const entity of commonEntities) {
-                try {
-                    console.log(`Trying to find data for: ${entity}`);
-                    const result = await this.entityGraphService.searchByEntity(entity, { maxResults: 5 });
-                    
-                    if (result.entities && result.entities.length > 0) {
-                        console.log(`Found ${result.entities.length} entities for ${entity}, loading as default`);
-                        await this.navigateToEntity(entity);
-                        foundEntity = true;
-                        break;
-                    }
-                } catch (error) {
-                    console.warn(`Failed to search for ${entity}:`, error);
-                    continue;
-                }
-            }
-
-            if (!foundEntity) {
-                console.log("No default entity data found, showing empty state with instructions");
-                this.hideGraphLoading();
-                this.showEmptyStateWithInstructions();
-            }
-            
-        } catch (error) {
-            console.error("Failed to load default entity data:", error);
-            this.hideGraphLoading();
-            this.showEmptyStateWithInstructions();
-        }
-    }
-
-    private showEmptyStateWithInstructions(): void {
-        const emptyElement = document.getElementById("graphEmpty");
-        if (emptyElement) {
-            emptyElement.innerHTML = `
-                <div class="empty-state">
-                    <h3>No Entity Data Available</h3>
-                    <p>To see entity graphs, you need to:</p>
-                    <ol>
-                        <li>Import some website data (bookmarks, history, or HTML files)</li>
-                        <li>Search for an entity using the search box above</li>
-                        <li>Or toggle to Mock Data mode for demo purposes</li>
-                    </ol>
-                    <p>Once you have data, entity graphs will show relationships between people, organizations, technologies, and concepts found in your browsing history.</p>
-                </div>
-            `;
-            emptyElement.style.display = "flex";
-        }
-    }
-
-    /**
-     * Generate mock data for a specific entity
-     */
-    private async generateMockEntityData(entityName: string): Promise<any> {
-        // Create mock data based on entity name
-        const entityType = this.inferEntityType(entityName);
-        
-        return {
-            centerEntity: entityName,
-            entities: [
-                {
-                    name: entityName,
-                    type: entityType,
-                    confidence: 0.85,
-                },
-                {
-                    name: `Related to ${entityName}`,
-                    type: "concept",
-                    confidence: 0.75,
-                },
-                {
-                    name: `${entityName} Example`,
-                    type: "product",
-                    confidence: 0.70,
-                },
-            ],
-            relationships: [
-                {
-                    from: `Related to ${entityName}`,
-                    to: entityName,
-                    type: "related_to",
-                    strength: 0.8,
-                },
-                {
-                    from: `${entityName} Example`,
-                    to: entityName,
-                    type: "example_of",
-                    strength: 0.75,
-                },
-            ],
-        };
-    }
-
-    /**
-     * Infer entity type from name
-     */
-    private inferEntityType(entityName: string): string {
-        const lowercaseName = entityName.toLowerCase();
-        
-        if (lowercaseName.includes("site") || lowercaseName.includes("website") || lowercaseName.includes("domain")) {
-            return "website";
-        }
-        if (lowercaseName.includes("corp") || lowercaseName.includes("inc") || lowercaseName.includes("company")) {
-            return "organization";
-        }
-        if (lowercaseName.includes("app") || lowercaseName.includes("software") || lowercaseName.includes("tool")) {
-            return "product";
-        }
-        
-        // Default to organization
-        return "organization";
     }
 
     /**
@@ -605,46 +228,10 @@ class EntityGraphView {
             url.searchParams.set("entity", entityName);
             window.history.pushState({}, "", url.toString());
 
-            // Load entity data
-            if (this.mockMode) {
-                // Load mock data for this specific entity
-                await this.loadMockScenario("entity_specific", entityName);
-            } else {
-                // Load real entity data
-                await this.loadRealEntityData(entityName);
-            }
+            // Load real entity data
+            await this.loadRealEntityData(entityName);
         } catch (error) {
             console.error("Failed to navigate to entity:", error);
-        }
-    }
-
-    /**
-     * Set data modes for all components
-     */
-    private setComponentDataModes(): void {
-        // Component data modes would be set here if the services supported it
-        console.log("Setting data mode to:", this.mockMode ? "mock" : "real");
-        this.discovery.setMockMode(this.mockMode);
-        this.multiHopExplorer.setMockMode(this.mockMode);
-        this.relationshipManager.setMockMode(this.mockMode);
-        this.comparisonManager.setMockMode(this.mockMode);
-        this.sidebar.setMockMode(this.mockMode);
-    }
-    /**
-     * Toggle between mock and real data mode
-     */
-    async toggleMockMode(): Promise<void> {
-        this.mockMode = !this.mockMode;
-
-        // Update all components
-        this.setComponentDataModes();
-
-        // Update UI
-        this.updateMockModeIndicator();
-
-        // Reload current entity with new data mode
-        if (this.currentEntity) {
-            await this.navigateToEntity(this.currentEntity);
         }
     }
 
@@ -720,13 +307,8 @@ class EntityGraphView {
         if (!query.trim()) return;
 
         try {
-            if (this.mockMode) {
-                // Search in current mock scenario
-                await this.searchMockEntity(query);
-            } else {
-                // Search in real data
-                await this.searchRealEntity(query);
-            }
+            // Search in real data
+            await this.searchRealEntity(query);
         } catch (error) {
             console.error("Failed to search entity:", error);
         }
@@ -765,8 +347,8 @@ class EntityGraphView {
      * Refresh graph
      */
     async refreshGraph(): Promise<void> {
-        if (this.currentMockScenario) {
-            await this.loadMockScenario(this.currentMockScenario);
+        if (this.currentEntity) {
+            await this.loadRealEntityData(this.currentEntity);
         }
     }
 
@@ -824,58 +406,39 @@ class EntityGraphView {
         }
     }
 
-    private updateMockModeIndicator(): void {
-        const indicator = document.getElementById("mockModeIndicator");
-        const toggle = document.getElementById(
-            "mockModeToggle",
-        ) as HTMLInputElement;
-
-        if (indicator) {
-            indicator.style.display = this.mockMode ? "block" : "none";
-
-            // Update indicator text
-            const scenarioName = document.getElementById("mockScenarioName");
-            if (scenarioName && this.currentMockScenario) {
-                const scenario = this.mockScenarios.find(
-                    (s) => s.id === this.currentMockScenario,
-                );
-                scenarioName.textContent = scenario
-                    ? ` - ${scenario.name}`
-                    : "";
-            }
+    private showEntityParameterError(): void {
+        this.hideGraphLoading();
+        const container = document.getElementById("cytoscape-container");
+        if (container) {
+            container.innerHTML = `
+                <div class="error-message">
+                    <h3>Entity Parameter Required</h3>
+                    <p>This page requires an entity parameter in the URL.</p>
+                    <p>Please navigate to this page with a URL like:</p>
+                    <code>entityGraphView.html?entity=YourEntityName</code>
+                    <p style="margin-top: 20px;">
+                        <a href="#" onclick="history.back()" style="color: #007acc; text-decoration: underline;">
+                            ← Go Back
+                        </a>
+                    </p>
+                </div>
+            `;
         }
 
-        if (toggle) {
-            toggle.checked = this.mockMode;
+        // Also show in the empty state area if it exists
+        const emptyElement = document.getElementById("graphEmpty");
+        if (emptyElement) {
+            emptyElement.innerHTML = `
+                <div class="empty-state">
+                    <h3>Entity Parameter Required</h3>
+                    <p>This entity graph view requires an entity name to be specified in the URL parameters.</p>
+                    <p><strong>Expected URL format:</strong></p>
+                    <code>entityGraphView.html?entity=YourEntityName</code>
+                    <p>Please check the URL and try again with a valid entity parameter.</p>
+                </div>
+            `;
+            emptyElement.style.display = "flex";
         }
-
-        // Update data source indicator in UI
-        const dataSourceInfo = document.querySelector(".data-source-info");
-        if (dataSourceInfo) {
-            dataSourceInfo.textContent = this.mockMode
-                ? "Mock Data"
-                : "Real Data";
-            dataSourceInfo.className = `data-source-info ${this.mockMode ? "mock-mode" : "real-mode"}`;
-        }
-    }
-
-    private updateScenarioButtons(): void {
-        document.querySelectorAll(".scenario-button").forEach((btn) => {
-            btn.classList.remove("active");
-        });
-
-        const activeBtn = document.querySelector(
-            `[data-scenario="${this.currentMockScenario}"]`,
-        );
-        if (activeBtn) {
-            activeBtn.classList.add("active");
-        }
-    }
-
-    // Mock data methods
-    private async searchMockEntity(query: string): Promise<void> {
-        // Implementation for mock entity search
-        console.log("Searching mock entities for:", query);
     }
 
     // Real data methods
@@ -1005,26 +568,6 @@ class EntityGraphView {
     }
 
     /**
-     * Load entity data with automatic fallback
-     */
-    private async loadEntityData(entityName: string): Promise<void> {
-        if (this.mockMode) {
-            return this.loadMockEntityData(entityName);
-        } else {
-            return this.loadRealEntityData(entityName);
-        }
-    }
-
-    /**
-     * Load mock entity data
-     */
-    private async loadMockEntityData(entityName: string): Promise<void> {
-        // Implementation for loading mock data
-        console.log("Loading mock data for entity:", entityName);
-        // This would integrate with mock data provider
-    }
-
-    /**
      * Refresh entity data from source
      */
     async refreshEntityData(entityName: string): Promise<void> {
@@ -1036,7 +579,7 @@ class EntityGraphView {
                 await this.entityGraphService.refreshEntityData(entityName);
 
             if (refreshedEntity) {
-                await this.loadEntityData(entityName);
+                await this.loadRealEntityData(entityName);
                 this.showMessage(`Refreshed data for ${entityName}`, "success");
             } else {
                 this.showMessage(

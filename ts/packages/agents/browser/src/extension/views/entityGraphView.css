@@ -138,12 +138,6 @@ body {
   gap: 15px;
 }
 
-.mock-mode-controls {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
 .layout-controls .btn-group {
   display: flex;
   border-radius: var(--border-radius);
@@ -517,32 +511,6 @@ body {
   padding-bottom: 8px;
 }
 
-/* Mock Mode Indicator */
-.mock-mode-indicator {
-  position: fixed;
-  top: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: linear-gradient(135deg, var(--info-color), #20c997);
-  color: white;
-  padding: 8px 16px;
-  border-radius: 20px;
-  font-size: 14px;
-  font-weight: 500;
-  z-index: 1000;
-  box-shadow: var(--shadow);
-}
-
-.indicator-content {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.scenario-name {
-  opacity: 0.9;
-}
-
 /* Responsive Design */
 @media (max-width: 1200px) {
   :root {
@@ -581,15 +549,6 @@ body {
     order: 3;
     flex-basis: 100%;
     max-width: none;
-  }
-
-  .mock-mode-controls {
-    flex-wrap: wrap;
-    gap: 5px;
-  }
-
-  .mock-scenario-select {
-    min-width: 120px;
   }
 }
 

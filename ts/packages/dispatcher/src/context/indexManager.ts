@@ -63,13 +63,9 @@ export class IndexManager {
         ensureDirectory(IndexManager.emailRoot!);
 
         IndexManager.websiteRoot = path.join(IndexManager.rootPath, "website");
-        console.log("IndexManager: website root path:", IndexManager.websiteRoot);
         ensureDirectory(IndexManager.websiteRoot!);
 
-        console.log("Indexes to load:", indexesToLoad);
-
         indexesToLoad.forEach((value) => {
-            console.log("IndexManager: loading index:", value.name, value);
             // restart any indexing that's not done
             if (value.state != "finished") {
                 this.getInstance()

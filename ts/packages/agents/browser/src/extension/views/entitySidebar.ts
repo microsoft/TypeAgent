@@ -20,7 +20,6 @@ interface EntityData {
 export class EntitySidebar {
     private container: HTMLElement;
     private currentEntity: any | null = null;
-    private mockMode: boolean = true;
 
     constructor(container: HTMLElement) {
         this.container = container;
@@ -33,8 +32,7 @@ export class EntitySidebar {
         entityData: EntityData | string,
         fullEntityData?: any,
     ): Promise<void> {
-        this.currentEntity =
-            fullEntityData || this.createMockEntityData(entityData);
+        this.currentEntity = fullEntityData || entityData;
         this.renderEntityHeader();
         this.renderEntityMetrics();
         this.renderEntityDetails();
@@ -50,13 +48,6 @@ export class EntitySidebar {
         this.renderEmptyState();
     }
 
-    /**
-     * Set mock mode
-     */
-    setMockMode(enabled: boolean): void {
-        this.mockMode = enabled;
-    }
-
     private renderEntityHeader(): void {
         if (!this.currentEntity) return;
 
@@ -65,25 +56,30 @@ export class EntitySidebar {
         const typeEl = document.getElementById("entityType");
         const confidenceEl = document.getElementById("entityConfidence");
 
+        // Handle entity name - could be name or entityName
+        const entityName = this.currentEntity.name || this.currentEntity.entityName || 'Unknown Entity';
+        const entityType = this.currentEntity.type || this.currentEntity.entityType || 'unknown';
+
         if (iconEl) {
-            iconEl.className = `entity-icon entity-type-${this.currentEntity.type}`;
-            iconEl.innerHTML = this.getEntityIcon(this.currentEntity.type);
+            iconEl.className = `entity-icon entity-type-${entityType}`;
+            iconEl.innerHTML = this.getEntityIcon(entityType);
         }
 
         if (nameEl) {
-            nameEl.textContent = this.currentEntity.name;
+            nameEl.textContent = entityName;
         }
 
         if (typeEl) {
-            typeEl.textContent = this.currentEntity.type;
-            typeEl.className = `entity-type-badge entity-type-${this.currentEntity.type}`;
+            typeEl.textContent = entityType;
+            typeEl.className = `entity-type-badge entity-type-${entityType}`;
         }
 
         if (confidenceEl) {
-            const confidence = Math.round(this.currentEntity.confidence * 100);
+            const confidence = this.currentEntity.confidence || 0.5;
+            const confidencePercent = Math.round(confidence * 100);
             confidenceEl.innerHTML = `
                 <i class="bi bi-shield-check"></i>
-                Confidence: ${confidence}%
+                Confidence: ${confidencePercent}%
             `;
         }
     }
@@ -96,18 +92,27 @@ export class EntitySidebar {
         const centralityEl = document.getElementById("entityCentrality");
 
         if (mentionsEl) {
-            mentionsEl.textContent = this.currentEntity.mentionCount.toString();
+            // Handle both mock structure and real entity structure
+            const mentionCount = this.currentEntity.mentionCount || this.currentEntity.frequency || this.currentEntity.visitCount || 0;
+            const mentionValue = mentionCount != null ? Number(mentionCount) : 0;
+            mentionsEl.textContent = isNaN(mentionValue) ? "0" : mentionValue.toString();
         }
 
         if (relationshipsEl) {
+            // Handle both mock structure and real entity structure  
             const relationshipCount =
-                this.currentEntity.strongRelationships?.length || 0;
-            relationshipsEl.textContent = relationshipCount.toString();
+                this.currentEntity.strongRelationships?.length || 
+                this.currentEntity.relationships?.length || 0;
+            const relationshipValue = relationshipCount != null ? Number(relationshipCount) : 0;
+            relationshipsEl.textContent = isNaN(relationshipValue) ? "0" : relationshipValue.toString();
         }
 
         if (centralityEl) {
-            const centrality = this.currentEntity.centrality || 0;
-            centralityEl.textContent = Math.round(centrality * 100) + "%";
+            // Handle both mock structure and real entity structure
+            const centrality = this.currentEntity.centrality || this.currentEntity.confidence || 0;
+            const centralityValue = centrality != null ? Number(centrality) : 0;
+            const centralityPercent = Math.round(centralityValue * 100);
+            centralityEl.textContent = isNaN(centralityPercent) ? "0%" : centralityPercent + "%";
         }
     }
 
@@ -121,18 +126,21 @@ export class EntitySidebar {
 
     private renderAliases(): void {
         const aliasesSection = document.getElementById("entityAliases");
-        if (!aliasesSection || !this.currentEntity.aliases) return;
+        if (!aliasesSection) return;
 
         const aliasesList = aliasesSection.querySelector(".aliases-list");
         if (!aliasesList) return;
 
-        if (this.currentEntity.aliases.length === 0) {
+        // Handle case where aliases might not exist in real entity data
+        const aliases = this.currentEntity.aliases || [];
+
+        if (aliases.length === 0) {
             aliasesList.innerHTML =
                 '<span class="empty-message">No aliases</span>';
             return;
         }
 
-        const aliasesHtml = this.currentEntity.aliases
+        const aliasesHtml = aliases
             .map(
                 (alias: string) =>
                     `<span class="alias-tag">${this.escapeHtml(alias)}</span>`,
@@ -144,18 +152,21 @@ export class EntitySidebar {
 
     private renderDomains(): void {
         const domainsSection = document.getElementById("entityDomains");
-        if (!domainsSection || !this.currentEntity.dominantDomains) return;
+        if (!domainsSection) return;
 
         const domainsList = domainsSection.querySelector(".domains-list");
         if (!domainsList) return;
 
-        if (this.currentEntity.dominantDomains.length === 0) {
+        // Handle case where dominantDomains might not exist in real entity data
+        const domains = this.currentEntity.dominantDomains || this.currentEntity.domains || [];
+
+        if (domains.length === 0) {
             domainsList.innerHTML =
                 '<span class="empty-message">No domains</span>';
             return;
         }
 
-        const domainsHtml = this.currentEntity.dominantDomains
+        const domainsHtml = domains
             .map(
                 (domain: string) =>
                     `<span class="domain-tag">${this.escapeHtml(domain)}</span>`,
@@ -195,15 +206,21 @@ export class EntitySidebar {
         const lastSeenEl = document.getElementById("entityLastSeen");
 
         if (firstSeenEl) {
-            firstSeenEl.textContent = this.formatDate(
-                this.currentEntity.firstSeen,
-            );
+            // Handle various possible date field names from real entity data
+            const firstSeen = this.currentEntity.firstSeen || 
+                             this.currentEntity.firstVisit || 
+                             this.currentEntity.dateAdded || 
+                             this.currentEntity.createdAt;
+            firstSeenEl.textContent = this.formatDate(firstSeen);
         }
 
         if (lastSeenEl) {
-            lastSeenEl.textContent = this.formatDate(
-                this.currentEntity.lastSeen,
-            );
+            // Handle various possible date field names from real entity data
+            const lastSeen = this.currentEntity.lastSeen || 
+                            this.currentEntity.lastVisit || 
+                            this.currentEntity.lastVisited || 
+                            this.currentEntity.updatedAt;
+            lastSeenEl.textContent = this.formatDate(lastSeen);
         }
     }
 
@@ -211,16 +228,21 @@ export class EntitySidebar {
         const relatedEntitiesList = document.getElementById(
             "relatedEntitiesList",
         );
-        if (!relatedEntitiesList || !this.currentEntity.strongRelationships)
-            return;
+        if (!relatedEntitiesList) return;
 
-        if (this.currentEntity.strongRelationships.length === 0) {
+        // Handle various relationship field names from real entity data
+        const relationships = this.currentEntity?.strongRelationships || 
+                             this.currentEntity?.relationships || 
+                             this.currentEntity?.relatedEntities || 
+                             [];
+
+        if (!relationships || relationships.length === 0) {
             relatedEntitiesList.innerHTML =
                 '<div class="empty-message">No related entities</div>';
             return;
         }
 
-        const relatedHtml = this.currentEntity.strongRelationships
+        const relatedHtml = relationships
             .sort((a: any, b: any) => b.strength - a.strength)
             .slice(0, 10) // Show top 10 relationships
             .map((rel: any) => this.renderRelatedEntityItem(rel))
@@ -245,19 +267,20 @@ export class EntitySidebar {
     }
 
     private renderRelatedEntityItem(relationship: any): string {
-        const strengthClass = this.getRelationshipStrengthClass(
-            relationship.strength,
-        );
-        const strengthPercentage = Math.round(relationship.strength * 100);
+        const strength = relationship.strength || relationship.confidence || 0.5;
+        const strengthClass = this.getRelationshipStrengthClass(strength);
+        const strengthPercentage = Math.round(strength * 100);
+        const entityName = relationship.relatedEntity || relationship.name || relationship.entity || "Unknown";
+        const relationshipType = relationship.relationshipType || relationship.type || "related_to";
 
         return `
-            <div class="related-entity-item" data-entity="${this.escapeHtml(relationship.relatedEntity)}">
+            <div class="related-entity-item" data-entity="${this.escapeHtml(entityName)}">
                 <div class="related-entity-icon">
                     <i class="bi bi-diagram-2"></i>
                 </div>
                 <div class="related-entity-info">
-                    <div class="related-entity-name">${this.escapeHtml(relationship.relatedEntity)}</div>
-                    <div class="related-entity-type">${this.escapeHtml(relationship.relationshipType)}</div>
+                    <div class="related-entity-name">${this.escapeHtml(entityName)}</div>
+                    <div class="related-entity-type">${this.escapeHtml(relationshipType)}</div>
                 </div>
                 <div class="related-entity-strength ${strengthClass}">
                     ${strengthPercentage}%
@@ -270,13 +293,20 @@ export class EntitySidebar {
         const filterSelect = document.getElementById(
             "relationshipTypeFilter",
         ) as HTMLSelectElement;
-        if (!filterSelect || !this.currentEntity.strongRelationships) return;
+        if (!filterSelect) return;
+
+        // Handle various relationship field names from real entity data
+        const relationships = this.currentEntity?.strongRelationships || 
+                             this.currentEntity?.relationships || 
+                             this.currentEntity?.relatedEntities || 
+                             [];
+
+        if (!relationships || relationships.length === 0) return;
 
         // Get unique relationship types
         const relationshipTypes = new Set<string>(
-            this.currentEntity.strongRelationships.map(
-                (rel: any) => rel.relationshipType,
-            ),
+            relationships.map((rel: any) => rel.relationshipType || rel.type || "related_to")
+                         .filter((type: string) => type && type.trim())
         );
 
         // Clear existing options (except "All Relationships")
@@ -352,39 +382,6 @@ export class EntitySidebar {
             iconEl.className = "entity-icon";
             iconEl.innerHTML = '<i class="bi bi-diagram-2"></i>';
         }
-    }
-
-    private createMockEntityData(nodeData: EntityData | string): any {
-        // Create enhanced mock data based on the node data
-        const name = typeof nodeData === "string" ? nodeData : nodeData.name;
-        const type =
-            typeof nodeData === "string" ? "organization" : nodeData.type;
-        const confidence =
-            typeof nodeData === "string" ? 0.8 : nodeData.confidence;
-
-        const mockData = {
-            name: name,
-            type: type,
-            confidence: confidence,
-            mentionCount: Math.floor(Math.random() * 100) + 10,
-            centrality: confidence || 0.5,
-            importance:
-                typeof nodeData === "object" && nodeData.importance
-                    ? nodeData.importance
-                    : 0.5,
-            clusterGroup:
-                typeof nodeData === "object" && nodeData.clusterGroup
-                    ? nodeData.clusterGroup
-                    : "general",
-            aliases: this.generateMockAliases(name, type),
-            dominantDomains: this.generateMockDomains(type),
-            topicAffinity: this.generateMockTopics(type),
-            firstSeen: this.generateMockDate(-90), // 3 months ago
-            lastSeen: this.generateMockDate(-1), // Yesterday
-            strongRelationships: this.generateMockRelationships(name, type),
-        };
-
-        return mockData;
     }
 
     private generateMockAliases(name: string, type: string): string[] {
@@ -549,13 +546,23 @@ export class EntitySidebar {
         return type.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
     }
 
-    private formatDate(dateString: string): string {
-        const date = new Date(dateString);
-        return date.toLocaleDateString("en-US", {
-            year: "numeric",
-            month: "short",
-            day: "numeric",
-        });
+    private formatDate(dateString: string | undefined | null): string {
+        if (!dateString) {
+            return "-";
+        }
+        try {
+            const date = new Date(dateString);
+            if (isNaN(date.getTime())) {
+                return "-";
+            }
+            return date.toLocaleDateString("en-US", {
+                year: "numeric",
+                month: "short",
+                day: "numeric",
+            });
+        } catch {
+            return "-";
+        }
     }
 
     private escapeHtml(text: string): string {
@@ -619,20 +626,29 @@ export class EntitySidebar {
             "relatedEntitiesList",
         );
 
-        if (!relatedEntitiesList || !this.currentEntity?.strongRelationships)
-            return;
+        if (!relatedEntitiesList) return;
+
+        // Handle various relationship field names from real entity data
+        const relationships = this.currentEntity?.strongRelationships || 
+                             this.currentEntity?.relationships || 
+                             this.currentEntity?.relatedEntities || 
+                             [];
+
+        if (!relationships || relationships.length === 0) return;
 
         const relationshipTypeFilter_value =
             relationshipTypeFilter?.value || "";
         const entityTypeFilter_value = entityTypeFilter?.value || "";
 
-        let filteredRelationships = this.currentEntity.strongRelationships;
+        let filteredRelationships = relationships;
 
         // Filter by relationship type
         if (relationshipTypeFilter_value) {
             filteredRelationships = filteredRelationships.filter(
-                (rel: any) =>
-                    rel.relationshipType === relationshipTypeFilter_value,
+                (rel: any) => {
+                    const relType = rel.relationshipType || rel.type || "related_to";
+                    return relType === relationshipTypeFilter_value;
+                }
             );
         }
 

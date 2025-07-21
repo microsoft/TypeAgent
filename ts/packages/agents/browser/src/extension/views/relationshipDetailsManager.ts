@@ -43,7 +43,6 @@ export class RelationshipDetailsManager {
     private comparisonPanel: HTMLElement | null = null;
     private currentRelationship: RelationshipDetails | null = null;
     private selectedRelationships: RelationshipDetails[] = [];
-    private mockMode: boolean = true;
 
     constructor() {
         this.initializeRelationshipPanels();
@@ -253,11 +252,7 @@ export class RelationshipDetailsManager {
     private async generateRelationshipDetails(
         edgeData: any,
     ): Promise<RelationshipDetails> {
-        if (this.mockMode) {
-            return this.generateMockRelationshipDetails(edgeData);
-        } else {
-            return this.generateRealRelationshipDetails(edgeData);
-        }
+        return this.generateRealRelationshipDetails(edgeData);
     }
 
     /**
@@ -853,13 +848,6 @@ export class RelationshipDetailsManager {
         const div = document.createElement("div");
         div.textContent = text;
         return div.innerHTML;
-    }
-
-    /**
-     * Set mock mode
-     */
-    setMockMode(enabled: boolean): void {
-        this.mockMode = enabled;
     }
 
     /**
