@@ -146,8 +146,16 @@ def main():
         embeddings.AsyncEmbeddingModel(),
         query_translator,
         answer_translator,
-        searchlang.LanguageSearchOptions(),
-        answers.AnswerContextOptions(),
+        searchlang.LanguageSearchOptions(
+            compile_options=searchlang.LanguageQueryCompileOptions(
+                exact_scope=False, verb_scope=True, term_filter=None, apply_scope=True
+            ),
+            exact_match=False,
+            max_message_matches=25,
+        ),
+        answers.AnswerContextOptions(
+            entities_top_k=50, topics_top_k=50, messages_top_k=None, chunking=None
+        ),
     )
 
     utils.pretty_print(context, Fore.BLUE, Fore.RESET)
