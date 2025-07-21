@@ -103,11 +103,13 @@ class EntityGraphView {
             // Show loading state initially
             this.showGraphLoading();
 
-            // Update URL parameters
+            // Update URL parameters and load entity if specified
             this.handleUrlParameters();
 
-            // Initialize with default mock scenario if none specified
-            if (!this.currentMockScenario) {
+            // Load entity from URL or initialize with default mock scenario
+            if (this.currentEntity) {
+                await this.navigateToEntity(this.currentEntity);
+            } else if (!this.currentMockScenario) {
                 await this.loadMockScenario("tech_ecosystem");
             }
         } catch (error) {
@@ -132,24 +134,44 @@ class EntityGraphView {
         this.visualizer.onEntityClick((entityData) => {
             this.navigateToEntity(entityData.name);
         });
+
+        // Choose scenario button
+        const chooseScenarioBtn = document.getElementById("chooseScenarioBtn");
+        if (chooseScenarioBtn) {
+            chooseScenarioBtn.addEventListener("click", () => {
+                const scenarioSelect = document.getElementById("mockScenarioSelect") as HTMLSelectElement;
+                if (scenarioSelect) {
+                    scenarioSelect.focus();
+                }
+            });
+        }
     }
 
     /**
      * Set up mock scenario controls
      */
     private setupMockScenarios(): void {
-        const scenarioContainer = document.getElementById("mockScenarios");
-        if (!scenarioContainer) return;
+        const scenarioSelect = document.getElementById("mockScenarioSelect") as HTMLSelectElement;
+        if (!scenarioSelect) return;
 
+        // Clear existing options (except the first placeholder)
+        scenarioSelect.innerHTML = '<option value="">Select Scenario...</option>';
+
+        // Add scenario options
         this.mockScenarios.forEach((scenario) => {
-            const button = document.createElement("button");
-            button.className = "scenario-button";
-            button.textContent = scenario.name;
-            button.title = scenario.description;
-            button.addEventListener("click", () =>
-                this.loadMockScenario(scenario.id),
-            );
-            scenarioContainer.appendChild(button);
+            const option = document.createElement("option");
+            option.value = scenario.id;
+            option.textContent = scenario.name;
+            option.title = scenario.description;
+            scenarioSelect.appendChild(option);
+        });
+
+        // Add change event listener
+        scenarioSelect.addEventListener("change", (e) => {
+            const target = e.target as HTMLSelectElement;
+            if (target.value) {
+                this.loadMockScenario(target.value);
+            }
         });
     }
 
@@ -220,6 +242,11 @@ class EntityGraphView {
 
         if (entityParam) {
             this.currentEntity = entityParam;
+            // Update breadcrumb to show entity name
+            const entityBreadcrumb = document.getElementById("entityNameBreadcrumb");
+            if (entityBreadcrumb) {
+                entityBreadcrumb.textContent = ` > ${entityParam}`;
+            }
         }
 
         if (mockParam !== null) {
@@ -230,13 +257,13 @@ class EntityGraphView {
     /**
      * Load a mock scenario
      */
-    async loadMockScenario(scenarioId: string): Promise<void> {
+    async loadMockScenario(scenarioId: string, centerEntity?: string): Promise<void> {
         try {
             this.currentMockScenario = scenarioId;
             this.showGraphLoading();
 
-            // Load mock data for the scenario
-            const mockData = await this.generateMockData(scenarioId);
+            // Load mock data for the scenario or specific entity
+            const mockData = await this.generateMockData(scenarioId, centerEntity);
 
             // Update visualizer
             await this.visualizer.loadEntityGraph(mockData);
@@ -255,11 +282,15 @@ class EntityGraphView {
     }
 
     /**
-     * Generate mock data for a scenario
+     * Generate mock data for a scenario or specific entity
      */
-    private async generateMockData(scenarioId: string): Promise<any> {
-        // This would integrate with the mock data generator
-        // For now, return basic mock structure
+    private async generateMockData(scenarioId: string, centerEntity?: string): Promise<any> {
+        // If we have a specific entity from URL, create mock data for it
+        if (centerEntity) {
+            return this.generateMockEntityData(centerEntity);
+        }
+
+        // Otherwise use predefined scenarios
         switch (scenarioId) {
             case "tech_ecosystem":
                 return {
@@ -382,6 +413,69 @@ class EntityGraphView {
     }
 
     /**
+     * Generate mock data for a specific entity
+     */
+    private async generateMockEntityData(entityName: string): Promise<any> {
+        // Create mock data based on entity name
+        const entityType = this.inferEntityType(entityName);
+        
+        return {
+            centerEntity: entityName,
+            entities: [
+                {
+                    name: entityName,
+                    type: entityType,
+                    confidence: 0.85,
+                },
+                {
+                    name: `Related to ${entityName}`,
+                    type: "concept",
+                    confidence: 0.75,
+                },
+                {
+                    name: `${entityName} Example`,
+                    type: "product",
+                    confidence: 0.70,
+                },
+            ],
+            relationships: [
+                {
+                    from: `Related to ${entityName}`,
+                    to: entityName,
+                    type: "related_to",
+                    strength: 0.8,
+                },
+                {
+                    from: `${entityName} Example`,
+                    to: entityName,
+                    type: "example_of",
+                    strength: 0.75,
+                },
+            ],
+        };
+    }
+
+    /**
+     * Infer entity type from name
+     */
+    private inferEntityType(entityName: string): string {
+        const lowercaseName = entityName.toLowerCase();
+        
+        if (lowercaseName.includes("site") || lowercaseName.includes("website") || lowercaseName.includes("domain")) {
+            return "website";
+        }
+        if (lowercaseName.includes("corp") || lowercaseName.includes("inc") || lowercaseName.includes("company")) {
+            return "organization";
+        }
+        if (lowercaseName.includes("app") || lowercaseName.includes("software") || lowercaseName.includes("tool")) {
+            return "product";
+        }
+        
+        // Default to organization
+        return "organization";
+    }
+
+    /**
      * Navigate to a specific entity
      */
     async navigateToEntity(entityName: string): Promise<void> {
@@ -395,8 +489,8 @@ class EntityGraphView {
 
             // Load entity data
             if (this.mockMode) {
-                // Find entity in current mock data or load new scenario
-                await this.sidebar.loadEntity(entityName);
+                // Load mock data for this specific entity
+                await this.loadMockScenario("entity_specific", entityName);
             } else {
                 // Load real entity data
                 await this.loadRealEntityData(entityName);

@@ -37,9 +37,9 @@ export class EntityGraphVisualizer {
      * Initialize the visualizer
      */
     async initialize(): Promise<void> {
-        // Load Cytoscape if not already loaded
+        // Check if Cytoscape is available globally (loaded via script tag)
         if (typeof cytoscape === "undefined") {
-            await this.loadCytoscape();
+            throw new Error("Cytoscape.js library is not loaded. Please ensure the script is included in the HTML.");
         }
 
         // Initialize cytoscape instance
@@ -58,21 +58,6 @@ export class EntityGraphVisualizer {
         });
 
         this.setupInteractions();
-    }
-
-    /**
-     * Load Cytoscape.js library
-     */
-    private async loadCytoscape(): Promise<void> {
-        return new Promise((resolve, reject) => {
-            const script = document.createElement("script");
-            script.src =
-                "https://unpkg.com/cytoscape@3.23.0/dist/cytoscape.min.js";
-            script.onload = () => resolve();
-            script.onerror = () =>
-                reject(new Error("Failed to load Cytoscape.js"));
-            document.head.appendChild(script);
-        });
     }
 
     /**
