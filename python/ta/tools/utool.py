@@ -3,12 +3,16 @@
 
 __version__ = "0.2"
 
+### Imports ###
+
 import argparse
 import asyncio
+from collections.abc import Mapping
 from dataclasses import dataclass
 import difflib
 import json
 import re
+import shutil
 import sys
 import typing
 
@@ -44,14 +48,40 @@ from typeagent.knowpro import serialization
 from typeagent.podcasts import podcast
 
 
+### Classes ###
+
+
+class QuestionAnswerData(typing.TypedDict):
+    question: str
+    answer: str
+    hasNoAnswer: bool
+    cmd: str
+
+
+class RawSearchResultData(typing.TypedDict):
+    messageMatches: list[int]
+    entityMatches: list[int]
+    topicMatches: list[int]
+    actionMatches: list[int]
+
+
+class SearchResultData(typing.TypedDict):
+    searchText: str
+    searchQueryExpr: dict[str, typing.Any]  # SearchQueryExpr
+    compiledQueryExpr: list[dict[str, typing.Any]]  # list[SearchQueryExpr]
+    results: list[RawSearchResultData]
+
+
 @dataclass
 class ProcessingContext:
     query_context: query.QueryEvalContext
-    ar_index: dict[str, dict[str, typing.Any]]
-    sr_index: dict[str, dict[str, typing.Any]]
+    ar_list: list[QuestionAnswerData]
+    sr_list: list[SearchResultData]
+    ar_index: dict[str, QuestionAnswerData]
+    sr_index: dict[str, SearchResultData]
     debug1: typing.Literal["none", "diff", "full", "skip"]
     debug2: typing.Literal["none", "diff", "full", "skip"]
-    debug3: typing.Literal["none", "diff", "full"]
+    debug3: typing.Literal["none", "diff", "full", "nice"]
     debug4: typing.Literal["none", "diff", "full", "nice"]
     embedding_model: embeddings.AsyncEmbeddingModel
     query_translator: typechat.TypeChatJsonTranslator[search_query_schema.SearchQuery]
@@ -62,23 +92,21 @@ class ProcessingContext:
     answer_context_options: answers.AnswerContextOptions
 
     def __repr__(self) -> str:
-        args = []
-        args.append(f"ar_index={len(self.ar_index)}")
-        args.append(f"sr_index={len(self.sr_index)}")
-        args.append(f"debug1={self.debug1}")
-        args.append(f"debug2={self.debug2}")
-        args.append(f"debug3={self.debug3}")
-        args.append(f"debug4={self.debug4}")
-        args.append(f"lang_search_options={self.lang_search_options}")
-        args.append(f"answer_context_options={self.answer_context_options}")
-        return f"Context({', '.join(args)})"
+        parts = []
+        parts.append(f"ar_list={len(self.ar_list)}")
+        parts.append(f"sr_list={len(self.sr_list)}")
+        parts.append(f"ar_index={len(self.ar_index)}")
+        parts.append(f"sr_index={len(self.sr_index)}")
+        parts.append(f"debug1={self.debug1}")
+        parts.append(f"debug2={self.debug2}")
+        parts.append(f"debug3={self.debug3}")
+        parts.append(f"debug4={self.debug4}")
+        parts.append(f"lang_search_options={self.lang_search_options}")
+        parts.append(f"answer_context_options={self.answer_context_options}")
+        return f"Context({', '.join(parts)})"
 
 
-class RawSearchResult(typing.TypedDict):
-    messageMatches: list[int]
-    entityMatches: list[int]
-    topicMatches: list[int]
-    actionMatches: list[int]
+### Main logic ###
 
 
 def main():
@@ -87,10 +115,10 @@ def main():
 
     parser = make_arg_parser("TypeAgent Query Tool")
     args = parser.parse_args()
-    fill_in_debug_defaults(args)
+    fill_in_debug_defaults(parser, args)
     query_context = load_podcast_index(args.podcast)
-    ar_index = load_index_file(args.qafile, "question")
-    sr_index = load_index_file(args.srfile, "searchText")
+    ar_list, ar_index = load_index_file(args.qafile, "question", QuestionAnswerData)
+    sr_list, sr_index = load_index_file(args.srfile, "searchText", SearchResultData)
 
     model = convknowledge.create_typechat_model()
     query_translator = utils.create_translator(model, search_query_schema.SearchQuery)
@@ -107,6 +135,8 @@ def main():
 
     context = ProcessingContext(
         query_context,
+        ar_list,
+        sr_list,
         ar_index,
         sr_index,
         args.debug1,
@@ -128,26 +158,54 @@ def main():
             + "Running in batch mode, suppressing interactive prompts."
             + Fore.RESET
         )
-        asyncio.run(batch_loop(context))
+        asyncio.run(batch_loop(context, args.offset, args.limit))
     else:
         print(Fore.YELLOW + "Running in interactive mode." + Fore.RESET)
         interactive_loop(context)
 
 
-async def batch_loop(context: ProcessingContext) -> None:
-    for query_text in context.sr_index:
-        print("-" * 20, repr(query_text), "-" * 20)
-        await process_query(context, query_text)
+async def batch_loop(context: ProcessingContext, offset: int, limit: int) -> None:
+    if limit == 0:
+        limit = len(context.ar_list) - offset
+    sublist = context.ar_list[offset : offset + limit]
+    all_scores = []
+    for counter, qadata in enumerate(sublist, offset + 1):
+        question = qadata["question"]
+        print("-" * 20, counter, question, "-" * 20)
+        score = await process_query(context, question)
+        if score is not None:
+            all_scores.append((score, counter))
+    if not all_scores:
+        return
+    print("=" * 50)
+    all_scores.sort(reverse=True)
+    good_scores = [(score, counter) for score, counter in all_scores if score >= 0.97]
+    bad_scores = [(score, counter) for score, counter in all_scores if score < 0.97]
+    for label, pairs in [("Good", good_scores), ("Bad", bad_scores)]:
+        print(f"{label} scores ({len(pairs)}):")
+        for i in range(0, len(pairs), 10):
+            print(
+                ", ".join(
+                    f"{score:.3f}({counter})" for score, counter in pairs[i : i + 10]
+                )
+            )
 
 
 def interactive_loop(context: ProcessingContext) -> None:
-    if sys.stdin.isatty():
-        print(f"TypeAgent demo UI {__version__} (type 'q' to exit)")
-        if readline:
-            try:
-                readline.read_history_file(".ui_history")
-            except FileNotFoundError:
-                pass  # Ignore if history file does not exist.
+    if not sys.stdin.isatty():
+        for line in sys.stdin:
+            line = line.strip()
+            if not line:
+                continue
+            asyncio.run(process_query(context, line))
+        return
+
+    print(f"TypeAgent demo UI {__version__} (type 'q' to exit)")
+    if readline:
+        try:
+            readline.read_history_file(".ui_history")
+        except FileNotFoundError:
+            pass  # Ignore if history file does not exist.
 
     try:
         while True:
@@ -159,18 +217,23 @@ def interactive_loop(context: ProcessingContext) -> None:
             if not line:
                 continue
             if line.lower() in ("exit", "quit", "q"):
+                if readline:
+                    readline.remove_history_item(
+                        readline.get_current_history_length() - 1
+                    )
                 break
             asyncio.run(process_query(context, line))
 
     finally:
-        if readline and sys.stdin.isatty():
+        if readline:
             readline.write_history_file(".ui_history")
 
 
-async def process_query(context: ProcessingContext, query_text: str) -> None:
+### Query processing logic ###
+
+
+async def process_query(context: ProcessingContext, query_text: str) -> float | None:
     record = context.sr_index.get(query_text)
-    if not record:
-        print("This query has no precomputed results, running all stages.")
     debug_context = searchlang.LanguageSearchDebugContext()
     if context.debug1 == "skip" or context.debug2 == "skip":
         if not record or (
@@ -248,7 +311,7 @@ async def process_query(context: ProcessingContext, query_text: str) -> None:
     elif context.debug3 == "diff":
         if record and "results" in record:
             print("Stage 3 diff:")
-            expected3: list[RawSearchResult] = record["results"]
+            expected3: list[RawSearchResultData] = record["results"]
             compare_results(expected3, actual3, "Stage 3 mismatch")
         else:
             print("Stage 3 diff unavailable")
@@ -281,13 +344,23 @@ async def process_query(context: ProcessingContext, query_text: str) -> None:
                 case "Answered":
                     actual4 = (combined_answer.answer or "", True)
             score = await compare_answers(context, expected4, actual4)
-            print(f"Score: {score:.3f}")
+            print(f"Score: {score:.3f}; Question: {query_text}")
+            return score
         else:
             print("Stage 4 diff unavailable")
 
 
+### CLI processing ###
+
+
 def make_arg_parser(description: str) -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=description)
+    line_width = utils.cap(144, shutil.get_terminal_size().columns)
+    parser = argparse.ArgumentParser(
+        description=description,
+        formatter_class=lambda *a, **b: argparse.HelpFormatter(
+            *a, **b, max_help_position=35 if line_width >= 100 else 28, width=line_width
+        ),
+    )
 
     default_podcast_file = "testdata/Episode_53_AdrianTchaikovsky_index"
     parser.add_argument(
@@ -312,23 +385,34 @@ def make_arg_parser(description: str) -> argparse.ArgumentParser:
         default=default_srfile,
         help=f"Path to the Search_results.json file ({explain_sr})",
     )
-    parser.add_argument(
-        "--alt-schema",
-        type=str,
-        default=None,
-        help="Path to alternate schema file for query translator (modifies stage 1).",
-    )
-    parser.add_argument(
-        "--show-schema",
-        action="store_true",
-        help="Show the TypeScript schema computed by typechat.",
-    )
-    parser.add_argument(
+
+    batch = parser.add_argument_group("Batch mode options")
+    batch.add_argument(
         "--batch",
         action="store_true",
         help="Run in batch mode, suppressing interactive prompts.",
     )
-    parser.add_argument(
+    batch.add_argument(
+        "--offset",
+        type=int,
+        default=0,
+        help="Number of initial Q/A pairs to skip (default none)",
+    )
+    batch.add_argument(
+        "--limit",
+        type=int,
+        default=0,
+        help="Number of Q/A pairs to process (default all)",
+    )
+    batch.add_argument(
+        "--start",
+        type=int,
+        default=0,
+        help="Do just this question (similar to --offset START-1 --limit 1)",
+    )
+
+    debug = parser.add_argument_group("Debug options")
+    debug.add_argument(
         "--debug",
         type=str,
         default=None,
@@ -337,49 +421,75 @@ def make_arg_parser(description: str) -> argparse.ArgumentParser:
         "'full' for full debug output.",
     )
     arg_helper = lambda key: typing.get_args(ProcessingContext.__annotations__[key])
-    parser.add_argument(
+    debug.add_argument(
         "--debug1",
         type=str,
         default=None,
         choices=arg_helper("debug1"),
         help="Debug level override for stage 1: like --debug; or 'skip' to skip stage 1.",
     )
-    parser.add_argument(
+    debug.add_argument(
         "--debug2",
         type=str,
         default=None,
         choices=arg_helper("debug2"),
         help="Debug level override for stage 2: like --debug; or 'skip' to skip stages 1-2.",
     )
-    parser.add_argument(
+    debug.add_argument(
         "--debug3",
         type=str,
         default=None,
         choices=arg_helper("debug3"),
-        help="Debug level override for stage 3: like --debug.",
+        help="Debug level override for stage 3: like --debug; or 'nice' to print answer only.",
     )
-    parser.add_argument(
+    debug.add_argument(
         "--debug4",
         type=str,
         default=None,
         choices=arg_helper("debug4"),
         help="Debug level override for stage 4: like --debug; or 'nice' to print answer only.",
     )
+    debug.add_argument(
+        "--alt-schema",
+        type=str,
+        default=None,
+        help="Path to alternate schema file for query translator (modifies stage 1).",
+    )
+    debug.add_argument(
+        "--show-schema",
+        action="store_true",
+        help="Show the TypeScript schema computed by typechat.",
+    )
 
     return parser
 
 
-def fill_in_debug_defaults(args: argparse.Namespace) -> None:
+def fill_in_debug_defaults(
+    parser: argparse.ArgumentParser, args: argparse.Namespace
+) -> None:
     # In batch mode, defaults are diff, diff, diff, diff.
     # In interactive mode they are none, none, none, nice.
-    if args.batch:
+    if not args.batch:
+        if args.start or args.offset or args.limit:
+            parser.exit(2, "Error: --start, --offset and --limit require --batch")
+    else:
+        if args.start:
+            if args.offset != 0:
+                parser.exit(2, "Error: --start and --offset can't be both set")
+            args.offset = args.start - 1
+            if args.limit == 0:
+                args.limit = 1
         args.debug = args.debug or "diff"
+
     args.debug1 = args.debug1 or args.debug or "none"
     args.debug2 = args.debug2 or args.debug or "none"
     args.debug3 = args.debug3 or args.debug or "none"
     args.debug4 = args.debug4 or args.debug or "nice"
     if args.debug2 == "skip":
         args.debug1 = "skip"  # Skipping stage 2 implies skipping stage 1.
+
+
+### Data loading ###
 
 
 def load_podcast_index(podcast_file: str) -> query.QueryEvalContext:
@@ -390,23 +500,23 @@ def load_podcast_index(podcast_file: str) -> query.QueryEvalContext:
     return query.QueryEvalContext(conversation)
 
 
-def load_index_file(file: str, selector: str) -> dict[str, dict[str, object]]:
+def load_index_file[T: Mapping[str, typing.Any]](
+    file: str, selector: str, cls: type[T]
+) -> tuple[list[T], dict[str, T]]:
     # If this crashes, the file is malformed -- go figure it out.
     try:
         with open(file) as f:
-            data = json.load(f)
+            lst: list[T] = json.load(f)
     except FileNotFoundError as err:
-        print(Fore.RED + str(err), file=sys.stderr)
+        print(err, file=sys.stderr)
         sys.exit(1)
-    res = {item[selector]: item for item in data}
-    if len(res) != len(data):
-        # TODO: What else to do? Use 'cmd' as key?
-        print(
-            Fore.YELLOW
-            + f"{len(data) - len(res)} duplicate items found in {file!r}. "
-            + Fore.RESET
-        )
-    return res
+    index = {item[selector]: item for item in lst}
+    if len(index) != len(lst):
+        print(f"{len(lst) - len(index)} duplicate items found in {file!r}. ")
+    return lst, index
+
+
+### Debug output ###
 
 
 def print_result[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
@@ -509,7 +619,7 @@ def summarize_knowledge(sem_ref: SemanticRef) -> str:
 
 
 def compare_results(
-    matches_records: list[RawSearchResult],
+    matches_records: list[RawSearchResultData],
     results: list[search.ConversationSearchResult],
     message: str,
 ) -> bool:
@@ -614,11 +724,7 @@ async def compare_answers(
     actual_text, actual_success = actual
 
     if expected_success != actual_success:
-        print(
-            Fore.RED
-            + f"Warning: Success mismatch {expected_success}, {actual_success}"
-            + Fore.RESET
-        )
+        print(f"Warning: expected={expected_success}, actual={actual_success}")
         return 0.000
 
     if not actual_success:
@@ -628,10 +734,6 @@ async def compare_answers(
     if expected_text == actual_text:
         print(Fore.GREEN + f"Both equal" + Fore.RESET)
         return 1.000
-
-    # if expected_text.lower() == actual_answer.lower():
-    #     print(Fore.GREEN + f"{message}: Both equal except case" + Fore.RESET)
-    #     return 0.999
 
     print(f"Warning: Answer text mismatch")
     if len(expected_text.splitlines()) <= 100 and len(actual_text.splitlines()) <= 100:
@@ -668,6 +770,8 @@ async def equality_score(context: ProcessingContext, a: str, b: str) -> float:
     assert embeddings.shape[0] == 2, "Expected two embeddings"
     return np.dot(embeddings[0], embeddings[1])
 
+
+### Run main ###
 
 if __name__ == "__main__":
     try:
