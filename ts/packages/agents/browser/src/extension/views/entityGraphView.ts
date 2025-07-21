@@ -58,30 +58,57 @@ class EntityGraphView {
     ];
 
     constructor() {
-        // Initialize services
-        this.entityGraphService = new DefaultEntityGraphServices();
-        this.entityCacheService = new DefaultEntityCacheServices();
+        try {
+            console.log("EntityGraphView constructor starting...");
+            
+            // Initialize services
+            this.entityGraphService = new DefaultEntityGraphServices();
+            this.entityCacheService = new DefaultEntityCacheServices();
+            console.log("Services initialized");
 
-        // Initialize components
-        const graphContainer = document.getElementById("cytoscape-container")!;
-        const sidebarContainer = document.getElementById("entitySidebar")!;
+            // Initialize components
+            const graphContainer = document.getElementById("cytoscape-container")!;
+            const sidebarContainer = document.getElementById("entitySidebar")!;
 
-        this.visualizer = new EnhancedEntityGraphVisualizer(graphContainer);
-        this.sidebar = new EntitySidebar(sidebarContainer);
+            if (!graphContainer) {
+                throw new Error("Graph container 'cytoscape-container' not found");
+            }
+            if (!sidebarContainer) {
+                throw new Error("Sidebar container 'entitySidebar' not found");
+            }
 
-        // Initialize interactive components with real data support
-        this.discovery = new EntityDiscovery(this.entityGraphService);
-        this.multiHopExplorer = new MultiHopExplorer(
-            this.visualizer,
-            this.entityGraphService,
-        );
-        this.relationshipManager = new RelationshipDetailsManager();
-        this.comparisonManager = new EntityComparisonManager();
+            console.log("Creating visualizer...");
+            this.visualizer = new EnhancedEntityGraphVisualizer(graphContainer);
+            console.log("Creating sidebar...");
+            this.sidebar = new EntitySidebar(sidebarContainer);
 
-        // Set initial data mode
-        this.setComponentDataModes();
+            // Initialize interactive components with real data support
+            console.log("Creating discovery component...");
+            this.discovery = new EntityDiscovery(this.entityGraphService);
+            console.log("Creating multi-hop explorer...");
+            this.multiHopExplorer = new MultiHopExplorer(
+                this.visualizer,
+                this.entityGraphService,
+            );
+            console.log("Creating relationship manager...");
+            this.relationshipManager = new RelationshipDetailsManager();
+            console.log("Creating comparison manager...");
+            this.comparisonManager = new EntityComparisonManager();
 
-        this.initialize();
+            // Set initial data mode
+            this.setComponentDataModes();
+            console.log("Component data modes set");
+
+            console.log("EntityGraphView constructor completed, starting initialization...");
+            this.initialize().catch((error: any) => {
+                console.error("EntityGraphView initialization failed:", error);
+                this.hideGraphLoading();
+                this.showGraphError(`Initialization failed: ${error.message || error}`);
+            });
+        } catch (error) {
+            console.error("EntityGraphView constructor failed:", error);
+            throw error;
+        }
     }
 
     /**
@@ -90,7 +117,19 @@ class EntityGraphView {
     private async initialize(): Promise<void> {
         try {
             // Initialize visualizer
+            console.log("Initializing visualizer...");
             await this.visualizer.initialize();
+            console.log("Visualizer initialized successfully");
+            
+            // Ensure container is visible and has size
+            const container = document.getElementById("cytoscape-container");
+            if (container) {
+                container.style.minHeight = "400px";
+                container.style.width = "100%";
+                console.log("Graph container initialized:", container.offsetWidth, "x", container.offsetHeight);
+            } else {
+                throw new Error("Graph container not found");
+            }
 
             // Set up event handlers
             this.setupEventHandlers();
@@ -100,6 +139,7 @@ class EntityGraphView {
             this.setupSearchHandlers();
             this.setupInteractiveHandlers();
 
+            // Initialize with default mock scenario if none specified
             // Show loading state initially
             this.showGraphLoading();
 
@@ -111,6 +151,10 @@ class EntityGraphView {
                 await this.navigateToEntity(this.currentEntity);
             } else if (!this.currentMockScenario) {
                 await this.loadMockScenario("tech_ecosystem");
+            } else {
+                // If no entity and no scenario, show empty state
+                this.hideGraphLoading();
+                this.showGraphEmpty();
             }
         } catch (error) {
             console.error("Failed to initialize entity graph view:", error);
@@ -196,7 +240,7 @@ class EntityGraphView {
      * Set up layout controls
      */
     private setupLayoutControls(): void {
-        const layoutControls = document.querySelectorAll(".layout-control");
+        const layoutControls = document.querySelectorAll(".layout-btn");
         layoutControls.forEach((control) => {
             control.addEventListener("click", (e) => {
                 const target = e.target as HTMLElement;
@@ -264,20 +308,31 @@ class EntityGraphView {
 
             // Load mock data for the scenario or specific entity
             const mockData = await this.generateMockData(scenarioId, centerEntity);
+            
+            console.log("Loading entity graph with data:", mockData);
+
+            // Validate mock data
+            if (!mockData || !mockData.entities || mockData.entities.length === 0) {
+                throw new Error("No mock data generated");
+            }
 
             // Update visualizer
             await this.visualizer.loadEntityGraph(mockData);
+            console.log("Graph loaded successfully");
 
             // Update sidebar with center entity
             if (mockData.centerEntity) {
                 await this.sidebar.loadEntity(mockData.centerEntity);
+                console.log("Sidebar loaded for:", mockData.centerEntity);
             }
 
             this.hideGraphLoading();
             this.updateScenarioButtons();
-        } catch (error) {
+            console.log("Mock scenario loading completed successfully");
+        } catch (error: any) {
             console.error("Failed to load mock scenario:", error);
-            this.showGraphError("Failed to load scenario");
+            this.hideGraphLoading();
+            this.showGraphError(`Failed to load scenario: ${error.message || error}`);
         }
     }
 
@@ -621,7 +676,7 @@ class EntityGraphView {
         this.visualizer.changeLayout(layoutType);
 
         // Update active layout button
-        document.querySelectorAll(".layout-control").forEach((btn) => {
+        document.querySelectorAll(".layout-btn").forEach((btn) => {
             btn.classList.remove("active");
         });
         document
@@ -654,16 +709,48 @@ class EntityGraphView {
 
     // UI Helper Methods
     private showGraphLoading(): void {
+        const loadingElement = document.getElementById("graphLoading");
+        const emptyElement = document.getElementById("graphEmpty");
         const container = document.getElementById("cytoscape-container");
+        
+        if (loadingElement) {
+            loadingElement.style.display = "flex";
+            console.log("Loading state shown");
+        }
+        if (emptyElement) {
+            emptyElement.style.display = "none";
+        }
         if (container) {
             container.classList.add("loading");
         }
     }
 
     private hideGraphLoading(): void {
+        const loadingElement = document.getElementById("graphLoading");
         const container = document.getElementById("cytoscape-container");
+        
+        if (loadingElement) {
+            loadingElement.style.display = "none";
+            console.log("Loading state hidden");
+        }
         if (container) {
             container.classList.remove("loading");
+        }
+        // Also hide the empty state when graph loads
+        this.hideGraphEmpty();
+    }
+
+    private showGraphEmpty(): void {
+        const emptyElement = document.getElementById("graphEmpty");
+        if (emptyElement) {
+            emptyElement.style.display = "flex";
+        }
+    }
+
+    private hideGraphEmpty(): void {
+        const emptyElement = document.getElementById("graphEmpty");
+        if (emptyElement) {
+            emptyElement.style.display = "none";
         }
     }
 
