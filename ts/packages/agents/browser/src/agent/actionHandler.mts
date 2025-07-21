@@ -192,61 +192,102 @@ async function updateBrowserContext(
                     );
                 } else {
                     debug(
-                        "No existing website index found, creating new index for data persistence",
+                        "No existing website index found, checking for index file at target path",
                     );
 
-                    // Create empty collection as fallback
-                    context.agentContext.websiteCollection =
-                        new website.WebsiteCollection();
+                    let indexPath: string | undefined;
+                    let websiteCollection: website.WebsiteCollection | undefined;
 
+                    // Try to determine the target index path
                     try {
                         const sessionDir = await getSessionFolderPath(context);
-
                         if (sessionDir) {
                             // Create index path following IndexManager pattern: sessionDir/indexes/website
-                            const indexPath = path.join(
+                            indexPath = path.resolve(
                                 sessionDir,
+                                "..",
                                 "indexes",
                                 "website",
                                 "index",
                             );
-                            fs.mkdirSync(indexPath, { recursive: true });
-
-                            // Create proper IndexData object
-                            context.agentContext.index = {
-                                source: "website",
-                                name: "website-index",
-                                location: "browser-agent",
-                                size: 0,
-                                path: indexPath,
-                                state: "new",
-                                progress: 0,
-                                sizeOnDisk: 0,
-                            };
-
-                            debug(
-                                `Created website index with sessionStorage-based path: ${indexPath}`,
-                            );
-                        } else {
-                            debug(
-                                "Warning: Could not determine session directory path",
-                            );
-                            // Set index to undefined to prevent path access errors
-                            context.agentContext.index = undefined;
+                            
+                            // Check if the index file exists and try to read it
+                            if (fs.existsSync(indexPath)) {
+                                try {
+                                    websiteCollection = await website.WebsiteCollection.readFromFile(
+                                        indexPath,
+                                        "index",
+                                    );
+                                    
+                                    if (websiteCollection && websiteCollection.messages.length > 0) {
+                                        context.agentContext.websiteCollection = websiteCollection;
+                                        
+                                        // Create proper IndexData object for the loaded collection
+                                        context.agentContext.index = {
+                                            source: "website",
+                                            name: "website-index",
+                                            location: "browser-agent",
+                                            size: websiteCollection.messages.length,
+                                            path: indexPath,
+                                            state: "finished",
+                                            progress: 100,
+                                            sizeOnDisk: 0,
+                                        };
+                                        
+                                        debug(`Loaded existing website collection with ${websiteCollection.messages.length} websites from ${indexPath}`);
+                                    } else {
+                                        debug(`File exists but collection is empty at ${indexPath}, will create new collection`);
+                                        websiteCollection = undefined;
+                                    }
+                                } catch (readError) {
+                                    debug(`Failed to read existing collection: ${readError}`);
+                                    websiteCollection = undefined;
+                                }
+                            } else {
+                                debug(`No existing collection file found at ${indexPath}`);
+                            }
                         }
-                    } catch (error) {
-                        debug(
-                            `Error during sessionStorage path discovery: ${error}`,
-                        );
-                        // Set index to undefined to prevent path access errors
-                        context.agentContext.index = undefined;
+                    } catch (pathError) {
+                        debug(`Error determining index path: ${pathError}`);
+                        indexPath = undefined;
                     }
 
-                    // If index creation failed, log that data will be in-memory only
+                    // If we couldn't load an existing collection, create a new one
+                    if (!websiteCollection) {
+                        context.agentContext.websiteCollection = new website.WebsiteCollection();
+                        
+                        // Set up index if we have a valid path
+                        if (indexPath) {
+                            try {
+                                // Ensure directory exists
+                                fs.mkdirSync(indexPath, { recursive: true });
+
+                                // Create proper IndexData object
+                                context.agentContext.index = {
+                                    source: "website",
+                                    name: "website-index",
+                                    location: "browser-agent",
+                                    size: 0,
+                                    path: indexPath,
+                                    state: "new",
+                                    progress: 0,
+                                    sizeOnDisk: 0,
+                                };
+
+                                debug(`Created index structure at ${indexPath}`);
+                            } catch (createError) {
+                                debug(`Error creating index directory: ${createError}`);
+                                context.agentContext.index = undefined;
+                            }
+                        } else {
+                            context.agentContext.index = undefined;
+                            debug("No index path available, collection will be in-memory only");
+                        }
+                    }
+
+                    // Log final state
                     if (!context.agentContext.index) {
-                        debug(
-                            "Website collection created without persistent index - data will be in-memory only",
-                        );
+                        debug("Website collection created without persistent index - data will be in-memory only");
                     }
                 }
             } catch (error) {

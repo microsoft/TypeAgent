@@ -10,6 +10,7 @@ import {
     EntityCacheServices,
     DefaultEntityGraphServices,
     DefaultEntityCacheServices,
+    ChromeExtensionService,
 } from "./knowledgeUtilities";
 
 interface MockScenario {
@@ -29,7 +30,7 @@ class EntityGraphView {
     private relationshipManager: RelationshipDetailsManager;
     private comparisonManager: EntityComparisonManager;
     private currentEntity: string | null = null;
-    private mockMode: boolean = true; // Default to mock data during integration testing phase
+    private mockMode: boolean = false; // Use real data by default
     private currentMockScenario: string | null = null;
     private entityGraphService: EntityGraphServices;
     private entityCacheService: EntityCacheServices;
@@ -61,10 +62,11 @@ class EntityGraphView {
         try {
             console.log("EntityGraphView constructor starting...");
             
-            // Initialize services
-            this.entityGraphService = new DefaultEntityGraphServices();
+            // Initialize services with Chrome extension connection
+            const chromeService = new ChromeExtensionService();
+            this.entityGraphService = new DefaultEntityGraphServices(chromeService);
             this.entityCacheService = new DefaultEntityCacheServices();
-            console.log("Services initialized");
+            console.log("Services initialized with Chrome extension connection");
 
             // Initialize components
             const graphContainer = document.getElementById("cytoscape-container")!;
@@ -146,15 +148,12 @@ class EntityGraphView {
             // Update URL parameters and load entity if specified
             this.handleUrlParameters();
 
-            // Load entity from URL or initialize with default mock scenario
+            // Load entity from URL or initialize with a default entity search
             if (this.currentEntity) {
                 await this.navigateToEntity(this.currentEntity);
-            } else if (!this.currentMockScenario) {
-                await this.loadMockScenario("tech_ecosystem");
             } else {
-                // If no entity and no scenario, show empty state
-                this.hideGraphLoading();
-                this.showGraphEmpty();
+                // Try to load some real entity data as default
+                await this.loadDefaultEntityData();
             }
         } catch (error) {
             console.error("Failed to initialize entity graph view:", error);
@@ -464,6 +463,70 @@ class EntityGraphView {
                     ],
                     relationships: [],
                 };
+        }
+    }
+
+    /**
+     * Load default entity data when no specific entity is requested
+     */
+    private async loadDefaultEntityData(): Promise<void> {
+        try {
+            this.showGraphLoading();
+            console.log("Loading default entity data...");
+
+            // Try to search for some common technology entities that are likely to have data
+            const commonEntities = [
+                'TypeScript', 'JavaScript', 'React', 'Node.js', 'Microsoft', 
+                'OpenAI', 'GitHub', 'Stack Overflow', 'Visual Studio Code'
+            ];
+            
+            let foundEntity = false;
+            for (const entity of commonEntities) {
+                try {
+                    console.log(`Trying to find data for: ${entity}`);
+                    const result = await this.entityGraphService.searchByEntity(entity, { maxResults: 5 });
+                    
+                    if (result.entities && result.entities.length > 0) {
+                        console.log(`Found ${result.entities.length} entities for ${entity}, loading as default`);
+                        await this.navigateToEntity(entity);
+                        foundEntity = true;
+                        break;
+                    }
+                } catch (error) {
+                    console.warn(`Failed to search for ${entity}:`, error);
+                    continue;
+                }
+            }
+
+            if (!foundEntity) {
+                console.log("No default entity data found, showing empty state with instructions");
+                this.hideGraphLoading();
+                this.showEmptyStateWithInstructions();
+            }
+            
+        } catch (error) {
+            console.error("Failed to load default entity data:", error);
+            this.hideGraphLoading();
+            this.showEmptyStateWithInstructions();
+        }
+    }
+
+    private showEmptyStateWithInstructions(): void {
+        const emptyElement = document.getElementById("graphEmpty");
+        if (emptyElement) {
+            emptyElement.innerHTML = `
+                <div class="empty-state">
+                    <h3>No Entity Data Available</h3>
+                    <p>To see entity graphs, you need to:</p>
+                    <ol>
+                        <li>Import some website data (bookmarks, history, or HTML files)</li>
+                        <li>Search for an entity using the search box above</li>
+                        <li>Or toggle to Mock Data mode for demo purposes</li>
+                    </ol>
+                    <p>Once you have data, entity graphs will show relationships between people, organizations, technologies, and concepts found in your browsing history.</p>
+                </div>
+            `;
+            emptyElement.style.display = "flex";
         }
     }
 
@@ -819,27 +882,54 @@ class EntityGraphView {
     private async loadRealEntityData(entityName: string): Promise<void> {
         try {
             this.showGraphLoading();
+            console.log(`Getting entity graph for: ${entityName} depth: 2`);
 
             // Load entity graph using enhanced search
             const graphData = await this.entityGraphService.getEntityGraph(
                 entityName,
                 2,
             );
+            
+            console.log(`Found ${graphData.entities?.length || 0} websites for center entity`);
 
-            if (graphData.entities.length > 0) {
+            if (graphData.entities && graphData.entities.length > 0) {
+                console.log("Expanding graph with related entities...");
+                
+                // Process and validate the relationships data
+                const validRelationships = graphData.relationships?.filter((r: any) => {
+                    // Ensure all required fields are present and not undefined
+                    const hasValidFrom = r.relatedEntity && typeof r.relatedEntity === 'string';
+                    const hasValidTo = graphData.centerEntity && typeof graphData.centerEntity === 'string';
+                    const hasValidType = r.relationshipType && typeof r.relationshipType === 'string';
+                    
+                    if (!hasValidFrom) {
+                        console.warn("Relationship missing relatedEntity:", r);
+                    }
+                    if (!hasValidTo) {
+                        console.warn("Relationship missing centerEntity:", graphData.centerEntity);
+                    }
+                    if (!hasValidType) {
+                        console.warn("Relationship missing relationshipType:", r);
+                    }
+                    
+                    return hasValidFrom && hasValidTo && hasValidType;
+                }) || [];
+
+                console.log(`Generated entity graph: ${graphData.entities.length} entities, ${validRelationships.length} relationships`);
+
                 // Load the graph into the visualizer
                 await this.visualizer.loadEntityGraph({
                     centerEntity: graphData.centerEntity,
                     entities: graphData.entities.map((e: any) => ({
-                        name: e.name,
-                        type: e.type,
-                        confidence: e.confidence,
+                        name: e.name || e.entityName || 'Unknown',
+                        type: e.type || e.entityType || 'unknown',
+                        confidence: e.confidence || 0.5,
                     })),
-                    relationships: graphData.relationships.map((r: any) => ({
+                    relationships: validRelationships.map((r: any) => ({
                         from: r.relatedEntity,
                         to: graphData.centerEntity,
                         type: r.relationshipType,
-                        strength: r.strength,
+                        strength: r.strength || 0.5,
                     })),
                 });
 
@@ -858,13 +948,15 @@ class EntityGraphView {
 
                 this.hideGraphLoading();
                 console.log(
-                    `Loaded real entity graph for ${entityName}: ${graphData.entities.length} entities, ${graphData.relationships.length} relationships`,
+                    `Loaded real entity graph for ${entityName}: ${graphData.entities.length} entities, ${validRelationships.length} relationships`,
                 );
             } else {
+                this.hideGraphLoading();
                 this.showGraphError(`No data found for entity: ${entityName}`);
             }
         } catch (error) {
-            console.error("Failed to load real entity data:", error);
+            console.error(" Failed to load real entity data:", error);
+            this.hideGraphLoading();
             this.showGraphError(
                 "Failed to load entity data. Please try again.",
             );
@@ -873,31 +965,42 @@ class EntityGraphView {
 
     private async searchRealEntity(query: string): Promise<void> {
         try {
-            const searchResults = await this.entityGraphService.searchByEntity(
-                query,
-                {
-                    maxResults: 10,
-                    includeRelationships: true,
-                    sortBy: "relevance",
-                },
-            );
+            console.log(`Searching for real entity: ${query}`);
+            this.showMessage(`Searching for "${query}"...`, "info");
 
-            if (searchResults.entities.length > 0) {
-                // Navigate to the first result
-                await this.navigateToEntity(searchResults.entities[0].name);
+            const searchResults = await this.entityGraphService.searchByEntity(query, {
+                maxResults: 10,
+                includeRelationships: true,
+                sortBy: "relevance",
+            });
 
-                console.log(
-                    `Real entity search for "${query}" found ${searchResults.entities.length} results`,
-                );
-            } else {
+            if (searchResults.entities && searchResults.entities.length > 0) {
+                console.log(`Found ${searchResults.entities.length} entities for search: ${query}`);
+                
+                // Navigate to the most relevant result
+                const topResult = searchResults.entities[0];
+                await this.navigateToEntity(topResult.name);
+
+                // Show search results summary
                 this.showMessage(
-                    `No entities found for search: ${query}`,
+                    `Found ${searchResults.entities.length} results for "${query}". Showing: ${topResult.name}`, 
+                    "success"
+                );
+
+                console.log(`Real entity search for "${query}" completed successfully`);
+            } else {
+                console.log(`No results found for search: ${query}`);
+                this.showMessage(
+                    `No entities found for search: "${query}". Try different keywords or import more website data.`,
                     "warning",
                 );
             }
         } catch (error) {
             console.error("Real entity search failed:", error);
-            this.showMessage("Search failed. Please try again.", "error");
+            this.showMessage(
+                `Search failed for "${query}". ${error instanceof Error ? error.message : "Please try again."}`, 
+                "error"
+            );
         }
     }
 

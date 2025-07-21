@@ -940,37 +940,392 @@ export class DefaultDiscoveryServices implements DiscoveryServices {
     }
 }
 
-// Default implementations for entity services (these would be implemented with proper backend integration)
+// Default implementations for entity services (connected to real EntityProcessingService)
 export class DefaultEntityGraphServices implements EntityGraphServices {
+    private chromeService: ChromeExtensionService | null = null;
+
+    constructor(chromeService?: ChromeExtensionService) {
+        this.chromeService = chromeService || null;
+    }
+
     async searchByEntity(entityName: string, options: any = {}): Promise<any> {
-        // This would integrate with the real enhanced search
-        console.log(
-            "Searching for entity:",
-            entityName,
-            "with options:",
-            options,
-        );
-        return {
-            entities: [],
-            centerEntity: entityName,
-            relationships: [],
-        };
+        try {
+            console.log("Searching for entity:", entityName, "with options:", options);
+            
+            if (!this.chromeService) {
+                console.warn("ChromeExtensionService not available, using empty result");
+                return { entities: [], centerEntity: entityName, relationships: [] };
+            }
+
+            // Use the Chrome extension service to search for entities in website collection
+            const searchResult = await this.chromeService.searchWebMemories(entityName, {});
+            
+            if (searchResult && searchResult.websites && searchResult.websites.length > 0) {
+                console.log(`Found ${searchResult.websites.length} websites for entity search: ${entityName}`);
+
+                // Convert website search results to entity format
+                const entities = searchResult.websites.map((website: any, index: number) => {
+                    const url = website.url || "";
+                    const title = website.title || website.description || new URL(url).hostname || `Entity ${index + 1}`;
+                    const domain = url ? this.extractDomain(url) : "unknown";
+                    
+                    return {
+                        id: `entity_${index}`,
+                        name: title.slice(0, 50).trim() || `Entity ${index + 1}`, // Ensure non-empty name
+                        type: this.inferEntityType(title, url),
+                        confidence: this.calculateConfidence(website),
+                        url: url,
+                        description: website.description || "",
+                        domain: domain,
+                        visitCount: website.visitCount || 0,
+                        lastVisited: website.lastVisit,
+                        source: website.sourceType || "website"
+                    };
+                }).filter(entity => entity.name && entity.name.trim()).slice(0, options.maxResults || 10); // Filter out entities with empty names
+
+                // If we have related entities from the search result, include them
+                let additionalEntities: any[] = [];
+                if (searchResult.relatedEntities && searchResult.relatedEntities.length > 0) {
+                    additionalEntities = searchResult.relatedEntities.map((entity: any, index: number) => {
+                        const entityName = (typeof entity === 'string' ? entity : entity.name || entity).trim();
+                        return {
+                            id: `related_${index}`,
+                            name: entityName || `Related ${index + 1}`,
+                            type: "concept",
+                            confidence: 0.7,
+                            source: "search_related"
+                        };
+                    }).filter(entity => entity.name && entity.name.trim());
+                }
+
+                return {
+                    entities: [...entities, ...additionalEntities.slice(0, 5)],
+                    centerEntity: entityName,
+                    relationships: this.generateBasicRelationships(entities, entityName),
+                    totalFound: searchResult.websites.length,
+                    searchTime: searchResult.summary?.searchTime || 0
+                };
+            }
+
+            console.log(`No websites found for entity: ${entityName}`);
+            return { entities: [], centerEntity: entityName, relationships: [], totalFound: 0 };
+
+        } catch (error) {
+            console.error("Entity search failed:", error);
+            return { 
+                entities: [], 
+                centerEntity: entityName, 
+                relationships: [], 
+                error: error instanceof Error ? error.message : "Search failed"
+            };
+        }
     }
 
     async getEntityGraph(centerEntity: string, depth: number): Promise<any> {
-        // This would integrate with the real entity graph
-        console.log("Getting entity graph for:", centerEntity, "depth:", depth);
-        return {
-            centerEntity,
-            entities: [],
-            relationships: [],
-        };
+        try {
+            console.log("Getting entity graph for:", centerEntity, "depth:", depth);
+            
+            if (!this.chromeService) {
+                console.warn("ChromeExtensionService not available, using empty result");
+                return { centerEntity, entities: [], relationships: [] };
+            }
+
+            // Search for the center entity and related content
+            const primarySearch = await this.chromeService.searchWebMemories(centerEntity, {});
+            
+            if (!primarySearch || !primarySearch.websites || primarySearch.websites.length === 0) {
+                console.log(`No data found for center entity: ${centerEntity}`);
+                return { centerEntity, entities: [], relationships: [] };
+            }
+
+            console.log(`Found ${primarySearch.websites.length} websites for center entity`);
+
+            // Create entities from primary search results
+            const primaryEntities = primarySearch.websites.map((website: any, index: number) => {
+                const url = website.url || "";
+                const title = website.title || website.description || new URL(url).hostname || `Website ${index + 1}`;
+                const domain = this.extractDomain(url);
+                
+                return {
+                    id: `primary_${index}`,
+                    name: title.slice(0, 60).trim() || `Entity ${index + 1}`,
+                    type: this.inferEntityType(title, url),
+                    confidence: this.calculateConfidence(website),
+                    url: url,
+                    description: website.description || "",
+                    domain: domain,
+                    category: "primary",
+                    visitCount: website.visitCount || 0,
+                    lastVisited: website.lastVisit,
+                };
+            }).filter(entity => entity.name && entity.name.trim()).slice(0, 15); // Filter out entities with empty names
+
+            // Add the center entity itself
+            const centerEntityNode = {
+                id: "center",
+                name: centerEntity.trim() || "Unknown Entity",
+                type: this.inferEntityType(centerEntity),
+                confidence: 0.95,
+                category: "center",
+                description: `Center entity: ${centerEntity}`
+            };
+
+            // If depth > 1, perform related searches
+            let relatedEntities: any[] = [];
+            if (depth > 1 && primarySearch.relatedEntities && primarySearch.relatedEntities.length > 0) {
+                console.log("Expanding graph with related entities...");
+                
+                // Take top related entities and search for them
+                const topRelated = primarySearch.relatedEntities.slice(0, 3);
+                
+                for (const related of topRelated) {
+                    try {
+                        const relatedName = typeof related === 'string' ? related : related.name;
+                        const relatedSearch = await this.chromeService.searchWebMemories(relatedName, {});
+                        if (relatedSearch?.websites?.length > 0) {
+                            const relatedEntityData = relatedSearch.websites.slice(0, 3).map((website: any, index: number) => {
+                                const websiteTitle = website.title || website.url || `Related ${index + 1}`;
+                                return {
+                                    id: `related_${relatedName.replace(/\s+/g, '_')}_${index}`,
+                                    name: websiteTitle.slice(0, 50).trim() || `Related Entity ${index + 1}`,
+                                    type: this.inferEntityType(websiteTitle, website.url),
+                                    confidence: 0.6,
+                                    url: website.url,
+                                    description: website.description || "",
+                                    domain: this.extractDomain(website.url),
+                                    category: "related",
+                                    parentEntity: relatedName
+                                };
+                            }).filter(entity => entity.name && entity.name.trim()); // Filter out entities with empty names
+                            relatedEntities.push(...relatedEntityData);
+                        }
+                    } catch (error) {
+                        console.warn(`Failed to search for related entity ${related}:`, error);
+                    }
+                }
+            }
+
+            // Combine all entities
+            const allEntities = [centerEntityNode, ...primaryEntities, ...relatedEntities];
+
+            // Generate relationships
+            const relationships = this.generateAdvancedRelationships(allEntities, centerEntity);
+
+            console.log(`Generated entity graph: ${allEntities.length} entities, ${relationships.length} relationships`);
+
+            return {
+                centerEntity,
+                entities: allEntities,
+                relationships: relationships,
+                metadata: {
+                    searchDepth: depth,
+                    totalSources: primarySearch.websites.length,
+                    hasRelatedExpansion: relatedEntities.length > 0,
+                    generatedAt: new Date().toISOString()
+                }
+            };
+
+        } catch (error) {
+            console.error("Entity graph retrieval failed:", error);
+            return { 
+                centerEntity, 
+                entities: [], 
+                relationships: [],
+                error: error instanceof Error ? error.message : "Graph generation failed"
+            };
+        }
     }
 
     async refreshEntityData(entityName: string): Promise<any> {
-        // This would refresh real entity data
         console.log("Refreshing entity data for:", entityName);
-        return null;
+        
+        // For now, just trigger a fresh search
+        const refreshedData = await this.searchByEntity(entityName, { maxResults: 5 });
+        
+        return refreshedData.entities.length > 0 ? refreshedData : null;
+    }
+
+    private extractDomain(url: string): string {
+        try {
+            if (!url || typeof url !== 'string') return 'unknown';
+            
+            // Handle URLs that might not have protocol
+            let normalizedUrl = url;
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                normalizedUrl = 'https://' + url;
+            }
+            
+            return new URL(normalizedUrl).hostname.replace('www.', '');
+        } catch {
+            // If URL parsing fails, try to extract domain manually
+            const match = url.match(/([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+            return match ? match[1].replace('www.', '') : 'unknown';
+        }
+    }
+
+    private calculateConfidence(website: any): number {
+        let confidence = 0.5;
+        
+        // Boost confidence for well-structured data
+        if (website.title) confidence += 0.2;
+        if (website.description) confidence += 0.1;
+        if (website.visitCount && website.visitCount > 1) confidence += 0.1;
+        if (website.lastVisit) confidence += 0.1;
+        
+        return Math.min(0.95, confidence);
+    }
+
+    private generateBasicRelationships(entities: any[], centerEntity: string): any[] {
+        if (!centerEntity || !entities || entities.length === 0) {
+            return [];
+        }
+
+        return entities.filter(entity => entity.name && entity.name.trim()).map(entity => ({
+            id: `rel_${entity.id || entity.name.replace(/\s+/g, '_')}`,
+            from: entity.name.trim(),
+            to: centerEntity.trim(),
+            type: "mentioned_in",
+            strength: entity.confidence * 0.8,
+            source: entity.url || "search",
+            direction: "unidirectional"
+        }));
+    }
+
+    private generateAdvancedRelationships(entities: any[], centerEntity: string): any[] {
+        const relationships: any[] = [];
+        
+        if (!centerEntity || !entities || entities.length === 0) {
+            return relationships;
+        }
+
+        const validCenterEntity = centerEntity.trim();
+
+        // Center entity relationships
+        entities.filter(e => e.category === "primary" && e.name && e.name.trim()).forEach(entity => {
+            const entityName = entity.name.trim();
+            relationships.push({
+                id: `rel_center_${entity.id || entityName.replace(/\s+/g, '_')}`,
+                from: validCenterEntity,
+                to: entityName,
+                type: "contains",
+                strength: entity.confidence,
+                source: entity.url,
+                direction: "unidirectional",
+                category: "primary"
+            });
+        });
+
+        // Related entity relationships
+        entities.filter(e => e.category === "related" && e.name && e.name.trim()).forEach(entity => {
+            const entityName = entity.name.trim();
+            const parentEntity = (entity.parentEntity || validCenterEntity).trim();
+            
+            relationships.push({
+                id: `rel_related_${entity.id || entityName.replace(/\s+/g, '_')}`,
+                from: parentEntity,
+                to: entityName,
+                type: "related_to",
+                strength: entity.confidence * 0.7,
+                source: entity.url,
+                direction: "bidirectional", 
+                category: "related"
+            });
+        });
+
+        // Domain-based relationships (entities from same domain)
+        const domainGroups = new Map<string, any[]>();
+        entities.filter(e => e.domain && e.domain !== "unknown" && e.name && e.name.trim()).forEach(entity => {
+            if (!domainGroups.has(entity.domain)) {
+                domainGroups.set(entity.domain, []);
+            }
+            domainGroups.get(entity.domain)!.push(entity);
+        });
+
+        // Create relationships between entities from the same domain
+        domainGroups.forEach((domainEntities, domain) => {
+            if (domainEntities.length > 1) {
+                for (let i = 0; i < domainEntities.length - 1; i++) {
+                    for (let j = i + 1; j < domainEntities.length; j++) {
+                        const entity1 = domainEntities[i];
+                        const entity2 = domainEntities[j];
+                        
+                        if (entity1.name && entity2.name && 
+                            entity1.name.trim() && entity2.name.trim() &&
+                            entity1.name.trim() !== entity2.name.trim()) {
+                            
+                            relationships.push({
+                                id: `rel_domain_${i}_${j}_${domain.replace(/[^a-zA-Z0-9]/g, '_')}`,
+                                from: entity1.name.trim(),
+                                to: entity2.name.trim(),
+                                type: "same_domain",
+                                strength: 0.6,
+                                source: domain,
+                                direction: "bidirectional",
+                                category: "domain"
+                            });
+                        }
+                    }
+                }
+            }
+        });
+
+        return relationships;
+    }
+
+    private inferEntityType(text: string, url?: string): string {
+        const lowerText = text.toLowerCase();
+        
+        // URL-based detection first
+        if (url) {
+            const domain = this.extractDomain(url);
+            
+            // Technology/development sites
+            if (['github.com', 'stackoverflow.com', 'npm.org', 'docs.microsoft.com'].includes(domain)) {
+                return 'technology';
+            }
+            
+            // Social media / person indicators
+            if (['linkedin.com', 'twitter.com', 'github.com'].includes(domain) && lowerText.includes('profile')) {
+                return 'person';
+            }
+            
+            // News/blog sites usually contain concepts
+            if (['medium.com', 'dev.to', 'blog', 'news'].some(term => domain.includes(term))) {
+                return 'concept';
+            }
+        }
+        
+        // Content-based detection
+        // Website/domain detection
+        if (lowerText.includes('.com') || lowerText.includes('.org') || lowerText.includes('http')) {
+            return 'website';
+        }
+        
+        // Organization detection
+        if (lowerText.includes('corp') || lowerText.includes('inc') || lowerText.includes('company') || lowerText.includes('ltd')) {
+            return 'organization';
+        }
+        
+        // Technology detection
+        if (lowerText.includes('api') || lowerText.includes('framework') || lowerText.includes('library') || 
+            lowerText.includes('javascript') || lowerText.includes('typescript') || lowerText.includes('react') ||
+            lowerText.includes('node') || lowerText.includes('python') || lowerText.includes('github')) {
+            return 'technology';
+        }
+        
+        // Product detection
+        if (lowerText.includes('app') || lowerText.includes('tool') || lowerText.includes('platform') || 
+            lowerText.includes('service') || lowerText.includes('software')) {
+            return 'product';
+        }
+        
+        // Person detection (basic heuristics)
+        if (lowerText.split(' ').length === 2 && /^[A-Z][a-z]+ [A-Z][a-z]+/.test(text)) {
+            return 'person';
+        }
+        
+        // Default to concept for general content
+        return 'concept';
     }
 }
 

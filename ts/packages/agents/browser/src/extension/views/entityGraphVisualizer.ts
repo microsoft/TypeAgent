@@ -261,33 +261,42 @@ export class EntityGraphVisualizer {
     private convertToGraphElements(graphData: GraphData): any[] {
         const elements: any[] = [];
 
-        // Add nodes
+        // Add nodes - validate entity data
         graphData.entities.forEach((entity) => {
-            elements.push({
-                group: "nodes",
-                data: {
-                    id: entity.name,
-                    name: entity.name,
-                    type: entity.type,
-                    confidence: entity.confidence,
-                },
-            });
+            if (entity.name && typeof entity.name === 'string') {
+                elements.push({
+                    group: "nodes",
+                    data: {
+                        id: entity.name,
+                        name: entity.name,
+                        type: entity.type || 'unknown',
+                        confidence: entity.confidence || 0.5,
+                    },
+                });
+            } else {
+                console.warn("Skipping invalid entity (missing name):", entity);
+            }
         });
 
-        // Add edges
+        // Add edges - validate relationship data
         graphData.relationships.forEach((rel) => {
-            elements.push({
-                group: "edges",
-                data: {
-                    id: `${rel.from}-${rel.to}`,
-                    source: rel.from,
-                    target: rel.to,
-                    type: rel.type,
-                    strength: rel.strength,
-                },
-            });
+            if (rel.from && rel.to && typeof rel.from === 'string' && typeof rel.to === 'string') {
+                elements.push({
+                    group: "edges",
+                    data: {
+                        id: `${rel.from}-${rel.to}`,
+                        source: rel.from,
+                        target: rel.to,
+                        type: rel.type || 'related',
+                        strength: rel.strength || 0.5,
+                    },
+                });
+            } else {
+                console.warn("Skipping invalid relationship (missing from/to):", rel);
+            }
         });
 
+        console.log(`Converted to Cytoscape format: ${elements.filter(e => e.group === 'nodes').length} nodes, ${elements.filter(e => e.group === 'edges').length} edges`);
         return elements;
     }
 

@@ -11,6 +11,7 @@ import { ensureDir, isDirectoryPath } from "typeagent";
 import { IndexData, IndexSource } from "image-memory";
 import { IndexData as WebsiteIndexData } from "website-memory";
 import { IndexingServiceRegistry } from "./indexingServiceRegistry.js";
+// import { searchConversationKnowledge } from "knowpro";
 
 const debug = registerDebug("typeagent:indexManager");
 
@@ -62,9 +63,13 @@ export class IndexManager {
         ensureDirectory(IndexManager.emailRoot!);
 
         IndexManager.websiteRoot = path.join(IndexManager.rootPath, "website");
+        console.log("IndexManager: website root path:", IndexManager.websiteRoot);
         ensureDirectory(IndexManager.websiteRoot!);
 
+        console.log("Indexes to load:", indexesToLoad);
+
         indexesToLoad.forEach((value) => {
+            console.log("IndexManager: loading index:", value.name, value);
             // restart any indexing that's not done
             if (value.state != "finished") {
                 this.getInstance()
@@ -72,9 +77,9 @@ export class IndexManager {
                     .then((service) => {
                         this.getInstance().indexingServices.set(value, service);
                     });
+            }else{
+                this.getInstance().indexingServices.set(value, undefined);
             }
-
-            this.getInstance().indexingServices.set(value, undefined);
         });
     }
 
