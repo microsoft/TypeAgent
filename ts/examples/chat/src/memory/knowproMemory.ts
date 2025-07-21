@@ -122,6 +122,7 @@ export async function createKnowproCommands(
     commands.kpAnswerTerms = answerTerms;
     commands.kpEntities = entities;
     commands.kpTopics = topics;
+    commands.kpTags = tags;
     commands.kpMessages = showMessages;
     commands.kpAbstractMessage = abstract;
     commands.kpAlias = addAlias;
@@ -571,10 +572,7 @@ export async function createKnowproCommands(
     }
 
     function topicsDef(): CommandMetadata {
-        return searchTermsDef(
-            "Search topics only in current conversation",
-            "topic",
-        );
+        return searchTermsDef("Search topics in current conversation", "topic");
     }
     commands.kpTopics.metadata = topicsDef();
     async function topics(args: string[]): Promise<void> {
@@ -598,6 +596,33 @@ export async function createKnowproCommands(
                 topics = kp.mergeTopics(topics);
                 topics.sort();
                 context.printer.writeList(topics, { type: "ol" });
+            }
+        }
+    }
+
+    function tagsDef(): CommandMetadata {
+        return searchTermsDef("Search tags in current conversation", "tag");
+    }
+    commands.kpTags.metadata = tagsDef();
+    async function tags(args: string[]): Promise<void> {
+        const conversation = ensureConversationLoaded();
+        if (!conversation) {
+            return;
+        }
+        if (args.length > 0) {
+            args.push("--ktype");
+            args.push("tag");
+            await searchTerms(args);
+        } else {
+            if (conversation.semanticRefs !== undefined) {
+                const tagRefs = kp.filterCollection(
+                    conversation.semanticRefs,
+                    (sr) => sr.knowledgeType === "tag",
+                );
+                let tags = tagRefs.map((t) => (t.knowledge as kp.Topic).text);
+                let tagStrings = kp.mergeTopics(tags);
+                tagStrings.sort();
+                context.printer.writeList(tagStrings, { type: "ol" });
             }
         }
     }
