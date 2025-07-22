@@ -151,7 +151,7 @@ interface EntityResolver {
         action: FullAction,
         obj: Record<string, any>,
         key: string | number,
-        value: any,
+        value: string,
         fieldType: ActionParamType,
         existing?: EntityValue,
     ) => Promise<PromptEntity | undefined>;
@@ -165,7 +165,7 @@ function createResultEntityResolver(): EntityResolver {
             action: FullAction,
             obj: Record<string, any>,
             key: string | number,
-            value: any,
+            value: string,
         ): Promise<PromptEntity | undefined> => {
             if (value.startsWith("${result-")) {
                 const resultEntity = resultEntityMap?.get(value);
@@ -578,7 +578,7 @@ function createParameterEntityResolver(
             action: FullAction,
             obj: Record<string, any>,
             key: string | number,
-            value: any,
+            value: string,
             fieldType: ActionParamType,
             existing?: EntityValue,
         ): Promise<PromptEntity | undefined> => {
