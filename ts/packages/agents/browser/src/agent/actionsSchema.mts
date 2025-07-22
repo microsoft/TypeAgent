@@ -138,6 +138,13 @@ export type ImportWebsiteData = {
         days?: number;
         // Specific bookmark folder to import (for bookmarks)
         folder?: string;
+        // Enhancement options
+        extractContent?: boolean;
+        enableIntelligentAnalysis?: boolean;
+        enableActionDetection?: boolean;
+        extractionMode?: "basic" | "content" | "actions" | "full";
+        maxConcurrent?: number;
+        contentTimeout?: number;
     };
 };
 

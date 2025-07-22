@@ -58,6 +58,7 @@ const sharedScripts = {
     options: "options.ts",
     sidepanel: "sidepanel.ts",
     knowledgePanel: "knowledgePanel.ts",
+    websiteLibraryPanel: "websiteLibraryPanel.ts",
     uiEventsDispatcher: "uiEventsDispatcher.ts",
     "sites/paleobiodb": "sites/paleobiodb.ts",
 };
@@ -144,6 +145,10 @@ copyFileSync(
     `${chromeOutDir}/knowledgePanel.html`,
 );
 copyFileSync(`${srcDir}/options.html`, `${chromeOutDir}/options.html`);
+copyFileSync(
+    `${srcDir}/websiteLibraryPanel.html`,
+    `${chromeOutDir}/websiteLibraryPanel.html`,
+);
 mkdirSync(`${chromeOutDir}/sites`, { recursive: true });
 copyFileSync(
     `${srcDir}/sites/paleobiodbSchema.mts`,

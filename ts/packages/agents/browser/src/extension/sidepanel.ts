@@ -665,53 +665,7 @@ class ActionDiscoveryPanel {
 
         const actionElement = document.createElement("div");
         actionElement.className = "action-item mb-3";
-
-        actionElement.innerHTML = `
-            <div class="d-flex justify-content-between align-items-start">
-                <div class="flex-grow-1">
-                    <div class="d-flex align-items-center mb-2">
-                        <span class="fw-semibold">${action.name}</span>
-                    </div>
-                    <p class="mb-2 text-muted">${action.description || ""}</p>
-                    <small class="text-muted">${action.steps?.length || 0} recorded steps</small>
-                </div>
-                <div class="btn-group-vertical btn-group-sm">
-                    <button class="btn btn-outline-primary btn-sm" title="View details" data-action="view">
-                        <i class="bi bi-eye"></i>
-                    </button>
-                    <button class="btn btn-outline-danger btn-sm" title="Delete action" data-action="delete">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                </div>
-            </div>
-            
-            <div class="collapse mt-3" id="actionDetails${index}">
-                <div class="card card-body">
-                    <ul class="nav nav-tabs nav-tabs-sm mb-3">
-                        <li class="nav-item">
-                            <a class="nav-link active" data-bs-toggle="tab" href="#steps${index}">Steps</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" data-bs-toggle="tab" href="#intent${index}">Intent</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" data-bs-toggle="tab" href="#actions${index}">Actions</a>
-                        </li>
-                    </ul>
-                    <div class="tab-content">
-                        <div class="tab-pane fade show active" id="steps${index}">
-                            <div id="stepsContent${index}"></div>
-                        </div>
-                        <div class="tab-pane fade" id="intent${index}">
-                            <pre><code class="language-typescript">${action.intentSchema || "No intent schema available"}</code></pre>
-                        </div>
-                        <div class="tab-pane fade" id="actions${index}">
-                            <pre><code class="language-json">${JSON.stringify(action.actionsJson || {}, null, 2)}</code></pre>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
+        actionElement.innerHTML = this.createUserActionCard(action, index);
 
         const viewButton = actionElement.querySelector('[data-action="view"]');
         const deleteButton = actionElement.querySelector(
@@ -761,63 +715,10 @@ class ActionDiscoveryPanel {
         }
 
         container.innerHTML = `
-  <div class="timeline-container">
-    ${steps
-        .map(
-            (step, index) => `
-      <div class="timeline-item">
-        <div class="d-flex justify-content-between align-items-start">
-          <div>
-            <h6 class="mb-1">${index + 1}. ${step.type}</h6>
-            <small class="text-muted">${new Date(step.timestamp).toLocaleTimeString()}</small>
-          </div>
-          <button class="btn btn-outline-secondary btn-sm toggle-details-btn" data-index="${index}">
-            <i class="bi bi-chevron-down"></i>
-          </button>
-        </div>
-        <div class="collapse mt-2" id="stepDetails${index}">
-          <pre><code class="language-json">${JSON.stringify(this.filterStepData(step), null, 2)}</code></pre>
-        </div>
-      </div>
-    `,
-        )
-        .join("")}
-  </div>
-
-  ${
-      screenshotData && screenshotData.length > 0
-          ? `
-    <div class="mt-3">
-      <h6>Screenshots</h6>
-      <div class="screenshot-gallery">
-        ${screenshotData
-            .map(
-                (screenshot, index) => `
-          <img src="${screenshot}" alt="Step ${index + 1}" class="img-thumbnail me-2 mb-2 screenshot-img" style="max-width: 200px; cursor: pointer;" data-src="${screenshot}">
-        `,
-            )
-            .join("")}
-      </div>
-    </div>
-  `
-          : ""
-  }
-
-  ${
-      actionName
-          ? `
-    <div class="mt-3 text-end">
-      <button class="btn btn-outline-primary btn-sm me-2 export-action-btn" data-action="${actionName}">
-        <i class="bi bi-download"></i> Export
-      </button>
-      <button class="btn btn-outline-danger btn-sm delete-action-btn" data-action="${actionName}">
-        <i class="bi bi-trash"></i> Delete
-      </button>
-    </div>
-  `
-          : ""
-  }
-`;
+            ${this.createTimelineContainer(steps)}
+            ${this.createScreenshotGallery(screenshotData || [])}
+            ${this.createActionControls(actionName || "")}
+        `;
 
         container.querySelectorAll(".toggle-details-btn").forEach((button) => {
             button.addEventListener("click", () => {
@@ -906,10 +807,16 @@ class ActionDiscoveryPanel {
         toast.style.cssText =
             "top: 20px; right: 20px; z-index: 1050; min-width: 300px;";
 
-        toast.innerHTML = `
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        `;
+        const messageSpan = document.createElement("span");
+        messageSpan.textContent = message;
+
+        const closeButton = document.createElement("button");
+        closeButton.type = "button";
+        closeButton.className = "btn-close";
+        closeButton.setAttribute("data-bs-dismiss", "alert");
+
+        toast.appendChild(messageSpan);
+        toast.appendChild(closeButton);
 
         document.body.appendChild(toast);
 
@@ -936,17 +843,7 @@ class ActionDiscoveryPanel {
             schemaActions.forEach((action: any, index: number) => {
                 const actionItem = document.createElement("div");
                 actionItem.className = "action-item";
-
-                actionItem.innerHTML = `
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <span class="fw-semibold">${action.actionName}</span>
-                        </div>
-                        <button class="btn btn-sm btn-outline-primary" title="View details">
-                            <i class="bi bi-eye"></i>
-                        </button>
-                    </div>
-                `;
+                actionItem.innerHTML = this.createSchemaActionItem(action);
 
                 const detailsButton = actionItem.querySelector("button");
                 detailsButton?.addEventListener("click", () => {
@@ -963,6 +860,209 @@ class ActionDiscoveryPanel {
                 "bi-search",
             );
         }
+    }
+
+    private createSchemaActionItem(action: any): string {
+        return `
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <span class="fw-semibold">${action.actionName}</span>
+                </div>
+                ${this.createButton(
+                    '<i class="bi bi-eye"></i>',
+                    "btn btn-sm btn-outline-primary",
+                    { title: "View details" },
+                )}
+            </div>
+        `;
+    }
+
+    // Template utility functions for sidepanel
+    private createButton(
+        text: string,
+        classes: string,
+        attributes: Record<string, string> = {},
+    ): string {
+        const attrs = Object.entries(attributes)
+            .map(([key, value]) => `${key}="${value}"`)
+            .join(" ");
+        return `<button class="${classes}" ${attrs}>${text}</button>`;
+    }
+
+    private createTabNav(
+        tabs: Array<{ id: string; label: string; active?: boolean }>,
+    ): string {
+        return `
+            <ul class="nav nav-tabs nav-tabs-sm mb-3">
+                ${tabs
+                    .map(
+                        (tab) => `
+                    <li class="nav-item">
+                        <a class="nav-link ${tab.active ? "active" : ""}" 
+                           data-bs-toggle="tab" href="#${tab.id}">${tab.label}</a>
+                    </li>
+                `,
+                    )
+                    .join("")}
+            </ul>
+        `;
+    }
+
+    private createTabContent(
+        panes: Array<{ id: string; content: string; active?: boolean }>,
+    ): string {
+        return `
+            <div class="tab-content">
+                ${panes
+                    .map(
+                        (pane) => `
+                    <div class="tab-pane fade ${pane.active ? "show active" : ""}" id="${pane.id}">
+                        ${pane.content}
+                    </div>
+                `,
+                    )
+                    .join("")}
+            </div>
+        `;
+    }
+
+    private createTimelineContainer(steps: any[]): string {
+        return `
+            <div class="timeline-container">
+                ${steps.map((step, index) => this.createTimelineItem(step, index)).join("")}
+            </div>
+        `;
+    }
+
+    private createTimelineItem(step: any, index: number): string {
+        return `
+            <div class="timeline-item">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h6 class="mb-1">${index + 1}. ${step.type}</h6>
+                        <small class="text-muted">${new Date(step.timestamp).toLocaleTimeString()}</small>
+                    </div>
+                    ${this.createButton(
+                        '<i class="bi bi-chevron-down"></i>',
+                        "btn btn-outline-secondary btn-sm toggle-details-btn",
+                        { "data-index": index.toString() },
+                    )}
+                </div>
+                <div class="collapse mt-2" id="stepDetails${index}">
+                    <pre><code class="language-json">${JSON.stringify(this.filterStepData(step), null, 2)}</code></pre>
+                </div>
+            </div>
+        `;
+    }
+
+    private createScreenshotGallery(screenshotData: string[]): string {
+        if (!screenshotData || screenshotData.length === 0) return "";
+
+        return `
+            <div class="mt-3">
+                <h6>Screenshots</h6>
+                <div class="screenshot-gallery">
+                    ${screenshotData
+                        .map(
+                            (screenshot, index) => `
+                        <img src="${screenshot}" alt="Step ${index + 1}" 
+                             class="img-thumbnail me-2 mb-2 screenshot-img" 
+                             style="max-width: 200px; cursor: pointer;" 
+                             data-src="${screenshot}">
+                    `,
+                        )
+                        .join("")}
+                </div>
+            </div>
+        `;
+    }
+
+    private createActionControls(actionName: string): string {
+        if (!actionName) return "";
+
+        return `
+            <div class="mt-3 text-end">
+                ${this.createButton(
+                    '<i class="bi bi-download"></i> Export',
+                    "btn btn-outline-primary btn-sm me-2 export-action-btn",
+                    { "data-action": actionName },
+                )}
+                ${this.createButton(
+                    '<i class="bi bi-trash"></i> Delete',
+                    "btn btn-outline-danger btn-sm delete-action-btn",
+                    { "data-action": actionName },
+                )}
+            </div>
+        `;
+    }
+
+    // User action component methods
+    private createUserActionCard(action: any, index: number): string {
+        return `
+            <div class="action-item mb-3">
+                ${this.createUserActionHeader(action)}
+                ${this.createUserActionDetails(action, index)}
+            </div>
+        `;
+    }
+
+    private createUserActionHeader(action: any): string {
+        return `
+            <div class="d-flex justify-content-between align-items-start">
+                <div class="flex-grow-1">
+                    <div class="d-flex align-items-center mb-2">
+                        <span class="fw-semibold">${action.name}</span>
+                    </div>
+                    <p class="mb-2 text-muted">${action.description || ""}</p>
+                    <small class="text-muted">${action.steps?.length || 0} recorded steps</small>
+                </div>
+                <div class="btn-group-vertical btn-group-sm">
+                    ${this.createButton(
+                        '<i class="bi bi-eye"></i>',
+                        "btn btn-outline-primary btn-sm",
+                        { title: "View details", "data-action": "view" },
+                    )}
+                    ${this.createButton(
+                        '<i class="bi bi-trash"></i>',
+                        "btn btn-outline-danger btn-sm",
+                        { title: "Delete action", "data-action": "delete" },
+                    )}
+                </div>
+            </div>
+        `;
+    }
+
+    private createUserActionDetails(action: any, index: number): string {
+        const tabs = [
+            { id: `steps${index}`, label: "Steps", active: true },
+            { id: `intent${index}`, label: "Intent" },
+            { id: `actions${index}`, label: "Actions" },
+        ];
+
+        const panes = [
+            {
+                id: `steps${index}`,
+                content: `<div id="stepsContent${index}"></div>`,
+                active: true,
+            },
+            {
+                id: `intent${index}`,
+                content: `<pre><code class="language-typescript">${action.intentSchema || "No intent schema available"}</code></pre>`,
+            },
+            {
+                id: `actions${index}`,
+                content: `<pre><code class="language-json">${JSON.stringify(action.actionsJson || {}, null, 2)}</code></pre>`,
+            },
+        ];
+
+        return `
+            <div class="collapse mt-3" id="actionDetails${index}">
+                <div class="card card-body">
+                    ${this.createTabNav(tabs)}
+                    ${this.createTabContent(panes)}
+                </div>
+            </div>
+        `;
     }
 }
 

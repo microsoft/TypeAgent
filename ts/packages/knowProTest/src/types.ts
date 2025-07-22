@@ -9,20 +9,26 @@ import { argSourceFile } from "./common.js";
 /**
  * A Parameterized search request to run against the index
  * Includes several "test" flags that are mapped to their lower level equivalents
+ * @see searchRequestDef for defaults, and explanations for what the fields do
  */
 export interface SearchRequest {
     // Required args
     query: string;
+
     // Optional
-    applyScope?: boolean | undefined;
+
+    // Search processing settings
+    applyScope?: boolean | undefined; // If false, don't infer scopes. Useful for debugging
     charBudget?: number | undefined;
     exact?: boolean | undefined;
     exactScope?: boolean | undefined;
-    fallback?: boolean | undefined;
-    ktype: kp.KnowledgeType;
+    fallback?: boolean | undefined; //
     messageTopK?: number | undefined;
+    // Scope options
+    ktype: kp.KnowledgeType;
     tag?: string | undefined;
     thread?: string | undefined;
+    when?: string;
 }
 
 export function searchRequestDef(): CommandMetadata {
@@ -39,8 +45,11 @@ export function searchRequestDef(): CommandMetadata {
             fallback: argBool("Fallback to text similarity matching", true),
             ktype: arg("Knowledge type"),
             messageTopK: argNum("How many top K message matches", 25),
-            tag: arg("Tag to filter by"),
-            thread: arg("Thread description"),
+            tag: arg("Scope matches to messages with this tag"),
+            thread: arg(
+                "Thread description: scope matches to the thread best matching this description",
+            ),
+            when: arg("Sub-query to scope matches (early experimental)"),
         },
     };
 }
@@ -51,6 +60,9 @@ export interface SearchResponse {
 }
 
 export interface GetAnswerRequest extends SearchRequest {
+    /**
+     * If false, do not include message text when generating answers.
+     */
     messages?: boolean | undefined;
     fastStop?: boolean | undefined;
     knowledgeTopK?: number | undefined;
