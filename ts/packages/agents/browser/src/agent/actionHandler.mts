@@ -441,8 +441,8 @@ async function updateBrowserContext(
                         case "detectPageActions":
                         case "registerPageDynamicAgent":
                         case "getIntentFromRecording":
-                        case "getActionsForUrl":
-                        case "deleteAction": {
+                        case "getMacrosForUrl":
+                        case "deleteMacro": {
                             const discoveryResult =
                                 await handleSchemaDiscoveryAction(
                                     {
@@ -507,12 +507,11 @@ async function updateBrowserContext(
 
                         case "recordActionUsage":
                         case "getActionStatistics": {
-                            const macrosResult =
-                                await handleMacroStoreAction(
-                                    data.method,
-                                    data.params,
-                                    context,
-                                );
+                            const macrosResult = await handleMacroStoreAction(
+                                data.method,
+                                data.params,
+                                context,
+                            );
 
                             webSocket.send(
                                 JSON.stringify({

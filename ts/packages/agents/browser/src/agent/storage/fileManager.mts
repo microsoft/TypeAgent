@@ -293,7 +293,7 @@ export class FileManager {
         scope: { type: string; domain?: string },
     ): string {
         return this.getMacroFilePath(actionId, scope);
-    }/**
+    } /**
      * Get domain config file path
      */
     getDomainConfigPath(domain: string): string {

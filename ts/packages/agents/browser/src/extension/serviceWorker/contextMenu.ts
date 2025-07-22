@@ -27,8 +27,8 @@ export function initializeContextMenu(): void {
     });
 
     chrome.contextMenus.create({
-        title: "Discover page Schema",
-        id: "discoverPageSchema",
+        title: "Discover page actions",
+        id: "discoverPageActions",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
 
@@ -114,7 +114,7 @@ export async function handleContextMenuClick(
             }
             break;
         }
-        case "discoverPageSchema": {
+        case "discoverPageActions": {
             await chrome.sidePanel.open({ tabId: tab.id! });
 
             await chrome.sidePanel.setOptions({

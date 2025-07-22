@@ -607,8 +607,7 @@ export class MacroSearchEngine {
         category: string,
         allMacros: StoredMacro[],
     ): number {
-        return allMacros.filter((macro) => macro.category === category)
-            .length;
+        return allMacros.filter((macro) => macro.category === category).length;
     }
 
     /**

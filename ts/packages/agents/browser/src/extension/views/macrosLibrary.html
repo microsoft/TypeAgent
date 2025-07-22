@@ -268,7 +268,7 @@
         margin-bottom: 1rem;
       }
 
-      .action-title {
+      .macro-title {
         font-size: 1rem;
         font-weight: 600;
         color: var(--dark-color);
@@ -276,7 +276,7 @@
         line-height: 1.4;
       }
 
-      .action-description {
+      .macro-description {
         color: var(--secondary-color);
         font-size: 0.875rem;
         line-height: 1.5;
@@ -287,7 +287,7 @@
         overflow: hidden;
       }
 
-      .action-meta {
+      .macro-meta {
         display: flex;
         flex-wrap: wrap;
         gap: 0.5rem;
@@ -295,13 +295,13 @@
         margin-bottom: 1rem;
       }
 
-      .action-controls {
+      .macro-controls {
         display: flex;
         gap: 0.5rem;
         align-items: flex-start;
       }
 
-      .action-controls button {
+      .macro-controls button {
         padding: 0.5rem;
         border: 1px solid var(--border-color);
         border-radius: 0.375rem;
@@ -312,7 +312,7 @@
         font-size: 0.875rem;
       }
 
-      .action-controls button:hover {
+      .macro-controls button:hover {
         border-color: var(--primary-color);
         color: var(--primary-color);
         background: rgba(37, 99, 235, 0.05);
@@ -504,7 +504,7 @@
           gap: 1rem;
         }
 
-        .action-controls {
+        .macro-controls {
           align-self: flex-start;
         }
       }
@@ -558,7 +558,7 @@
       }
 
       /* Action View Modal Styles */
-      .action-view-iframe {
+      .macro-view-iframe {
         width: 100%;
         height: 100%;
         border: none;
@@ -585,16 +585,16 @@
       }
 
       /* Action View Modal - Hide header for iframe-only display */
-      .action-view-modal .modal-header {
+      .macro-view-modal .modal-header {
         display: none !important;
       }
 
-      .action-view-modal .modal-body {
+      .macro-view-modal .modal-body {
         height: 100vh !important;
         max-height: 100vh !important;
       }
 
-      .action-view-modal .modal-content {
+      .macro-view-modal .modal-content {
         height: 100vh !important;
         max-height: 100vh !important;
       }
@@ -606,7 +606,7 @@
       <nav class="top-navigation">
         <div class="brand">
           <i class="bi bi-collection-fill"></i>
-          Macro Library
+          Macros Library
         </div>
 
         <div class="search-container">
@@ -717,7 +717,7 @@
     </div>
 
     <!-- Macro Details Modal -->
-    <div class="modal fade" id="macroDetailsModal" tabindex="-1">
+    <div class="modal fade" id="actionDetailsModal" tabindex="-1">
       <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content">
           <div class="modal-header" id="actionDetailsModalHeader">

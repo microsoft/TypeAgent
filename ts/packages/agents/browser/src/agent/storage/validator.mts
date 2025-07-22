@@ -55,7 +55,7 @@ export class MacroValidator {
 
         if (!action.name || typeof action.name !== "string") {
             errors.push({
-                field: "name", 
+                field: "name",
                 message: "Name is required and must be a string",
             });
         }
@@ -78,7 +78,7 @@ export class MacroValidator {
 
     createDefaultAction(overrides: Partial<StoredAction> = {}): StoredAction {
         const now = new Date().toISOString();
-        
+
         const defaultAction: StoredAction = {
             id: this.generateActionId(),
             name: "Untitled Action",
@@ -107,8 +107,9 @@ export class MacroValidator {
     }
 
     private generateActionId(): string {
-        return Math.random().toString(36).substring(2) + 
-               Date.now().toString(36);
+        return (
+            Math.random().toString(36).substring(2) + Date.now().toString(36)
+        );
     }
 }
 
@@ -174,14 +175,15 @@ export class MacroIndexManager {
     getStatistics(): StoreStatistics {
         // Return basic statistics for now
         const entries = Object.values(this.index.macros || {});
-        
+
         return {
             totalMacros: entries.length,
             macrosByScope: {
-                global: entries.filter(e => e.scope.type === "global").length,
-                domain: entries.filter(e => e.scope.type === "domain").length,
-                pattern: entries.filter(e => e.scope.type === "pattern").length,
-                page: entries.filter(e => e.scope.type === "page").length,
+                global: entries.filter((e) => e.scope.type === "global").length,
+                domain: entries.filter((e) => e.scope.type === "domain").length,
+                pattern: entries.filter((e) => e.scope.type === "pattern")
+                    .length,
+                page: entries.filter((e) => e.scope.type === "page").length,
             },
             macrosByCategory: {} as any,
             macrosByAuthor: {} as any,
@@ -277,13 +279,13 @@ export class MacroIndexManager {
 
     getActionsForDomain(domain: string): ActionIndexEntry[] {
         return this.getAllActionEntries().filter(
-            entry => entry.scope.domain === domain
+            (entry) => entry.scope.domain === domain,
         );
     }
 
     getActionsByScope(scopeType: string): ActionIndexEntry[] {
         return this.getAllActionEntries().filter(
-            entry => entry.scope.type === scopeType
+            (entry) => entry.scope.type === scopeType,
         );
     }
 }

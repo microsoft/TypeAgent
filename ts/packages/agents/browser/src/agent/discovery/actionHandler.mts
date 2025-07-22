@@ -234,9 +234,7 @@ export async function handleSchemaDiscoveryAction(
                         });
 
                     const result =
-                        await agentContext.macrosStore.saveMacro(
-                            storedMacro,
-                        );
+                        await agentContext.macrosStore.saveMacro(storedMacro);
                     if (result.success) {
                         savedCount++;
                     } else {
@@ -311,10 +309,8 @@ export async function handleSchemaDiscoveryAction(
             );
         }
 
-        console.log("Using ActionsStore for schema registration");
-        const urlActions = await agentContext.macrosStore.getMacrosForUrl(
-            url!,
-        );
+        console.log("Using MacroStore for schema registration");
+        const urlActions = await agentContext.macrosStore.getMacrosForUrl(url!);
 
         const detectedActions = new Map<string, any>();
         const authoredActions = new Map<string, any>();
@@ -370,11 +366,15 @@ export async function handleSchemaDiscoveryAction(
                 await context.removeDynamicAgent(agentName);
             } catch {}
 
-            await context.addDynamicAgent(
-                agentName,
-                manifest,
-                createTempAgentForSchema(browser, agent, context),
-            );
+            try {
+                await context.addDynamicAgent(
+                    agentName,
+                    manifest,
+                    createTempAgentForSchema(browser, agent, context),
+                );
+            } catch (error) {
+                console.error("Failed to register dynamic agent:", error);
+            }
         }, 500);
 
         return { schema: schema, typeDefinitions: typeDefinitions };
@@ -653,8 +653,8 @@ export async function handleSchemaDiscoveryAction(
 
                 const domain = new URL(url).hostname;
 
-                const storedMacro =
-                    agentContext.macrosStore.createDefaultMacro({
+                const storedMacro = agentContext.macrosStore.createDefaultMacro(
+                    {
                         name: intentData.actionName,
                         description:
                             action.parameters.recordedActionDescription ||
@@ -745,7 +745,8 @@ export async function handleSchemaDiscoveryAction(
                             screenshot: action.parameters.screenshots,
                             steps: JSON.parse(recordedSteps || "[]"),
                         },
-                    });
+                    },
+                );
 
                 const result =
                     await agentContext.macrosStore.saveMacro(storedMacro);
@@ -794,6 +795,13 @@ export async function handleSchemaDiscoveryAction(
                 actions = actions.filter((a: any) => a.author === author);
             }
 
+            if (actions.length > 0) {
+                const uniqueItems = new Map(
+                    actions.map((action) => [action.name, action]),
+                );
+                actions = Array.from(uniqueItems.values());
+            }
+
             if (includeGlobal && !author) {
                 const globalMacros =
                     await agentContext.macrosStore.getGlobalMacros();
@@ -823,8 +831,7 @@ export async function handleSchemaDiscoveryAction(
         const { macroId } = action.parameters;
 
         try {
-            const result =
-                await agentContext.macrosStore.deleteMacro(macroId);
+            const result = await agentContext.macrosStore.deleteMacro(macroId);
 
             if (result.success) {
                 console.log(`Deleted macro: ${macroId}`);

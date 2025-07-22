@@ -169,8 +169,7 @@ export class AnalyticsManager {
             );
 
             const totalMacros = filteredUsageData.size;
-            const averageUsage =
-                totalMacros > 0 ? totalUsage / totalMacros : 0;
+            const averageUsage = totalMacros > 0 ? totalUsage / totalMacros : 0;
 
             // Get most used macros
             const mostUsedMacros = Array.from(filteredUsageData.values())

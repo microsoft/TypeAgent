@@ -65,9 +65,7 @@ export class MacroStore {
             await this.analyticsManager.initialize();
 
             this.initialized = true;
-            debug(
-                "MacroStore initialized successfully with enhanced features",
-            );
+            debug("MacroStore initialized successfully with enhanced features");
         } catch (error) {
             debug("Failed to initialize MacroStore:", error);
             console.error("Failed to initialize MacroStore:", error);
@@ -123,9 +121,7 @@ export class MacroStore {
             this.indexManager.addMacro(sanitizedMacro, filePath);
             await this.saveMacroIndex();
 
-            debug(
-                `Macro saved: ${sanitizedMacro.name} (${sanitizedMacro.id})`,
-            );
+            debug(`Macro saved: ${sanitizedMacro.name} (${sanitizedMacro.id})`);
 
             return {
                 success: true,

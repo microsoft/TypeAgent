@@ -100,7 +100,7 @@ export async function getMacrosForUrl(
             author: options.author,
         });
 
-        return response?.macros || [];
+        return response?.actions || [];
     } catch (error) {
         console.error("Failed to get macros for URL:", error);
         return [];
@@ -113,7 +113,7 @@ export async function getAllMacros(): Promise<StoredMacro[]> {
             type: "getAllMacros",
         });
 
-        return response?.macros || [];
+        return response?.actions || [];
     } catch (error) {
         console.error("Failed to get all macros:", error);
         return [];
@@ -132,9 +132,7 @@ export async function getMacroDomains(): Promise<string[]> {
         return [];
     }
 }
-export async function deleteMacro(
-    macroId: string,
-): Promise<DeleteMacroResult> {
+export async function deleteMacro(macroId: string): Promise<DeleteMacroResult> {
     try {
         const response = await chrome.runtime.sendMessage({
             type: "deleteMacro",
@@ -202,9 +200,7 @@ export function filterMacros(
     }
 
     if (options.author && options.author !== "all") {
-        filtered = filtered.filter(
-            (macro) => macro.author === options.author,
-        );
+        filtered = filtered.filter((macro) => macro.author === options.author);
     }
 
     if (options.domain && options.domain !== "all") {

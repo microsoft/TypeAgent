@@ -92,9 +92,7 @@ export function createTempAgentForSchema(
             throw new Error("ActionsStore not available for temp agent");
         }
 
-        const allActions = await agentContext.macrosStore.getMacrosForUrl(
-            url!,
-        );
+        const allActions = await agentContext.macrosStore.getMacrosForUrl(url!);
 
         // Filter for user-authored actions only
         const userActions = allActions.filter(

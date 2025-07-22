@@ -338,10 +338,7 @@ export class DomainManager {
             errors.push({ field: "version", message: "Version is required" });
         }
 
-        if (
-            config.settings.maxMacros < 1 ||
-            config.settings.maxMacros > 1000
-        ) {
+        if (config.settings.maxMacros < 1 || config.settings.maxMacros > 1000) {
             errors.push({
                 field: "settings.maxMacros",
                 message: "Max macros must be between 1 and 1000",

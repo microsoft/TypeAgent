@@ -29,7 +29,10 @@ export { AnalyticsManager } from "./analyticsManager.mjs";
 
 // Backward compatibility exports
 export { MacroStore as ActionsStore } from "./macroStore.mjs";
-export { MacroValidator as ActionValidator, MacroIndexManager as ActionIndexManager } from "./validator.mjs";
+export {
+    MacroValidator as ActionValidator,
+    MacroIndexManager as ActionIndexManager,
+} from "./validator.mjs";
 export { MacroSearchEngine as ActionSearchEngine } from "./searchEngine.mjs";
 
 // Type definitions

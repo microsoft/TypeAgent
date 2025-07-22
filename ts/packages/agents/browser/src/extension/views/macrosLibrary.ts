@@ -623,13 +623,13 @@ class MacroIndexApp {
             return;
         }
 
-        // Add action-view-modal class to hide header
-        modal.classList.add("action-view-modal");
+        // Add macro-view-modal class to hide header
+        modal.classList.add("macro-view-modal");
 
         modalTitle.textContent = actionTitle;
 
         const iframe = document.createElement("iframe");
-        iframe.className = "action-view-iframe";
+        iframe.className = "macro-view-iframe";
         iframe.src = iframeUrl;
         iframe.title = `View ${actionTitle}`;
 
@@ -646,7 +646,7 @@ class MacroIndexApp {
             "hidden.bs.modal",
             () => {
                 modalBody.innerHTML = "";
-                modal.classList.remove("action-view-modal");
+                modal.classList.remove("macro-view-modal");
                 // Remove message listener
                 window.removeEventListener("message", this.handleIframeMessage);
             },

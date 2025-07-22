@@ -90,12 +90,12 @@ const MODE_DESCRIPTIONS: Record<string, ExtractionModeInfo> = {
         ],
         performance: "Fast",
     },
-    actions: {
+    macros: {
         description: "AI analysis plus interaction detection for dynamic pages",
         requiresAI: true,
         features: [
             "AI content analysis",
-            "Action detection",
+            "Macros detection",
             "Interactive elements",
         ],
         performance: "Medium",
@@ -180,7 +180,7 @@ class KnowledgePanel {
                     "basic",
                     "summary",
                     "content",
-                    "actions",
+                    "macros",
                     "full",
                 ];
                 const mode = modeMap[parseInt(slider.value)] as any;
@@ -199,7 +199,7 @@ class KnowledgePanel {
                     "basic",
                     "summary",
                     "content",
-                    "actions",
+                    "macros",
                     "full",
                 ];
                 slider.value = index.toString();
