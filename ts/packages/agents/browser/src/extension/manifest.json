@@ -97,7 +97,7 @@
     "open_in_tab": false
   },
   "side_panel": {
-    "default_path": "views/pageActions.html"
+    "default_path": "views/pageMacros.html"
   },
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"

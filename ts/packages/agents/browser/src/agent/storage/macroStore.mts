@@ -2,14 +2,14 @@
 // Licensed under the MIT License.
 
 import { FileManager } from "./fileManager.mjs";
-import { ActionValidator, ActionIndexManager } from "./validator.mjs";
+import { MacroValidator, MacroIndexManager } from "./validator.mjs";
 import { PatternResolver } from "./patternResolver.mjs";
 import { DomainManager } from "./domainManager.mjs";
-import { ActionSearchEngine } from "./searchEngine.mjs";
+import { MacroSearchEngine } from "./searchEngine.mjs";
 import { AnalyticsManager } from "./analyticsManager.mjs";
 import {
-    StoredAction,
-    ActionIndex,
+    StoredMacro,
+    MacroIndex,
     StoreStatistics,
     SaveResult,
     ValidationResult,
@@ -18,36 +18,36 @@ import {
     UrlPattern,
 } from "./types.mjs";
 import registerDebug from "debug";
-const debug = registerDebug("typeagent:browser:action:store");
+const debug = registerDebug("typeagent:browser:macro:store");
 
 /**
- * ActionsStore - storage system with pattern matching, search, and analytics
+ * MacroStore - storage system with pattern matching, search, and analytics
  *
  */
-export class ActionsStore {
+export class MacroStore {
     private fileManager: FileManager;
-    private validator: ActionValidator;
-    private indexManager: ActionIndexManager;
+    private validator: MacroValidator;
+    private indexManager: MacroIndexManager;
     private patternResolver: PatternResolver;
     private domainManager: DomainManager;
-    private searchEngine: ActionSearchEngine;
+    private searchEngine: MacroSearchEngine;
     private analyticsManager: AnalyticsManager;
     private initialized: boolean = false;
 
     constructor(sessionStorage: any) {
         this.fileManager = new FileManager(sessionStorage);
-        this.validator = new ActionValidator();
-        this.indexManager = new ActionIndexManager();
+        this.validator = new MacroValidator();
+        this.indexManager = new MacroIndexManager();
         this.patternResolver = new PatternResolver();
         this.domainManager = new DomainManager(this.fileManager);
-        this.searchEngine = new ActionSearchEngine();
+        this.searchEngine = new MacroSearchEngine();
         this.analyticsManager = new AnalyticsManager(this.fileManager);
 
         debug(this.searchEngine);
     }
 
     /**
-     * Initialize the ActionsStore with all components
+     * Initialize the MacroStore with all components
      */
     async initialize(): Promise<void> {
         if (this.initialized) {
@@ -58,20 +58,20 @@ export class ActionsStore {
             // Initialize file system structure
             await this.fileManager.initialize();
 
-            // Load existing action index
-            await this.loadActionIndex();
+            // Load existing macro index
+            await this.loadMacroIndex();
 
             // Initialize analytics manager
             await this.analyticsManager.initialize();
 
             this.initialized = true;
             debug(
-                "ActionsStore initialized successfully with enhanced features",
+                "MacroStore initialized successfully with enhanced features",
             );
         } catch (error) {
-            debug("Failed to initialize ActionsStore:", error);
-            console.error("Failed to initialize ActionsStore:", error);
-            throw new Error("ActionsStore initialization failed");
+            debug("Failed to initialize MacroStore:", error);
+            console.error("Failed to initialize MacroStore:", error);
+            throw new Error("MacroStore initialization failed");
         }
     }
 
@@ -83,14 +83,14 @@ export class ActionsStore {
     }
 
     /**
-     * Save an action to storage
+     * Save a macro to storage
      */
-    async saveAction(action: StoredAction): Promise<SaveResult> {
+    async saveMacro(macro: StoredMacro): Promise<SaveResult> {
         this.ensureInitialized();
 
         try {
-            // Validate action data
-            const validation = this.validator.validateAction(action);
+            // Validate macro data
+            const validation = this.validator.validateMacro(macro);
             if (!validation.isValid) {
                 return {
                     success: false,
@@ -98,135 +98,135 @@ export class ActionsStore {
                 };
             }
 
-            // Sanitize action data
-            const sanitizedAction = this.validator.sanitizeAction(action);
+            // Sanitize macro data
+            const sanitizedMacro = this.validator.sanitizeMacro(macro);
 
-            // Ensure domain directory exists for non-global actions
+            // Ensure domain directory exists for non-global macros
             if (
-                sanitizedAction.scope.type !== "global" &&
-                sanitizedAction.scope.domain
+                sanitizedMacro.scope.type !== "global" &&
+                sanitizedMacro.scope.domain
             ) {
-                const domainDir = `actions/domains/${this.fileManager.sanitizeFilename(sanitizedAction.scope.domain)}`;
+                const domainDir = `macros/domains/${this.fileManager.sanitizeFilename(sanitizedMacro.scope.domain)}`;
                 await this.fileManager.createDirectory(domainDir);
             }
 
             // Get file path
-            const filePath = this.fileManager.getActionFilePath(
-                sanitizedAction.id,
-                sanitizedAction.scope,
+            const filePath = this.fileManager.getMacroFilePath(
+                sanitizedMacro.id,
+                sanitizedMacro.scope,
             );
 
-            // Save action to file
-            await this.fileManager.writeJson(filePath, sanitizedAction);
+            // Save macro to file
+            await this.fileManager.writeJson(filePath, sanitizedMacro);
 
             // Update index
-            this.indexManager.addAction(sanitizedAction, filePath);
-            await this.saveActionIndex();
+            this.indexManager.addMacro(sanitizedMacro, filePath);
+            await this.saveMacroIndex();
 
             debug(
-                `Action saved: ${sanitizedAction.name} (${sanitizedAction.id})`,
+                `Macro saved: ${sanitizedMacro.name} (${sanitizedMacro.id})`,
             );
 
             return {
                 success: true,
-                actionId: sanitizedAction.id,
+                macroId: sanitizedMacro.id,
             };
         } catch (error) {
-            console.error("Failed to save action:", error);
+            console.error("Failed to save macro:", error);
             return {
                 success: false,
-                error: `Failed to save action: ${error instanceof Error ? error.message : "Unknown error"}`,
+                error: `Failed to save macro: ${error instanceof Error ? error.message : "Unknown error"}`,
             };
         }
     }
 
     /**
-     * Get an action by ID
+     * Get a macro by ID
      */
-    async getAction(id: string): Promise<StoredAction | null> {
+    async getMacro(id: string): Promise<StoredMacro | null> {
         this.ensureInitialized();
 
         try {
             // Check index first
-            const indexEntry = this.indexManager.getActionEntry(id);
+            const indexEntry = this.indexManager.getMacroEntry(id);
             if (!indexEntry) {
                 return null;
             }
 
-            // Load action from file
-            const action = await this.fileManager.readJson<StoredAction>(
+            // Load macro from file
+            const macro = await this.fileManager.readJson<StoredMacro>(
                 indexEntry.filePath,
             );
 
-            if (!action) {
-                // Action file missing but in index - remove from index
-                this.indexManager.removeAction(id);
-                await this.saveActionIndex();
+            if (!macro) {
+                // Macro file missing but in index - remove from index
+                this.indexManager.removeMacro(id);
+                await this.saveMacroIndex();
                 return null;
             }
 
-            return action;
+            return macro;
         } catch (error) {
-            console.error(`Failed to get action ${id}:`, error);
+            console.error(`Failed to get macro ${id}:`, error);
             return null;
         }
     }
 
     /**
-     * Update an action
+     * Update a macro
      */
-    async updateAction(
+    async updateMacro(
         id: string,
-        updates: Partial<StoredAction>,
+        updates: Partial<StoredMacro>,
     ): Promise<SaveResult> {
         this.ensureInitialized();
 
         try {
-            // Get existing action
-            const existingAction = await this.getAction(id);
-            if (!existingAction) {
+            // Get existing macro
+            const existingMacro = await this.getMacro(id);
+            if (!existingMacro) {
                 return {
                     success: false,
-                    error: `Action not found: ${id}`,
+                    error: `Macro not found: ${id}`,
                 };
             }
 
             // Apply updates
-            const updatedAction: StoredAction = {
-                ...existingAction,
+            const updatedMacro: StoredMacro = {
+                ...existingMacro,
                 ...updates,
-                id: existingAction.id, // Prevent ID changes
+                id: existingMacro.id, // Prevent ID changes
                 metadata: {
-                    ...existingAction.metadata,
+                    ...existingMacro.metadata,
                     ...updates.metadata,
                     updatedAt: new Date().toISOString(), // Always update timestamp
                 },
             };
 
-            // Save updated action
-            return await this.saveAction(updatedAction);
+            // Save updated macro
+            return await this.saveMacro(updatedMacro);
         } catch (error) {
-            console.error(`Failed to update action ${id}:`, error);
+            console.error(`Failed to update macro ${id}:`, error);
             return {
                 success: false,
-                error: `Failed to update action: ${error instanceof Error ? error.message : "Unknown error"}`,
+                error: `Failed to update macro: ${error instanceof Error ? error.message : "Unknown error"}`,
             };
         }
     }
 
     /**
-     * Delete an action
+     * Delete a macro
      */
-    async deleteAction(id: string): Promise<SaveResult> {
+    async deleteMacro(id: string): Promise<SaveResult> {
         this.ensureInitialized();
 
         try {
-            // Check if action exists
-            const indexEntry = this.indexManager.getActionEntry(id);
+            // Check if macro exists
+            const indexEntry = this.indexManager.getMacroEntry(id);
             if (!indexEntry) {
                 return {
                     success: false,
-                    error: `Action not found: ${id}`,
+                    error: `Macro not found: ${id}`,
                 };
             }
 
@@ -234,128 +234,128 @@ export class ActionsStore {
             await this.fileManager.delete(indexEntry.filePath);
 
             // Remove from index
-            this.indexManager.removeAction(id);
-            await this.saveActionIndex();
+            this.indexManager.removeMacro(id);
+            await this.saveMacroIndex();
 
-            debug(`Action deleted: ${id}`);
+            debug(`Macro deleted: ${id}`);
 
             return {
                 success: true,
-                actionId: id,
+                macroId: id,
             };
         } catch (error) {
-            console.error(`Failed to delete action ${id}:`, error);
+            console.error(`Failed to delete macro ${id}:`, error);
             return {
                 success: false,
-                error: `Failed to delete action: ${error instanceof Error ? error.message : "Unknown error"}`,
+                error: `Failed to delete macro: ${error instanceof Error ? error.message : "Unknown error"}`,
             };
         }
     }
 
     /**
-     * Get all actions
+     * Get all macros
      */
-    async getAllActions(): Promise<StoredAction[]> {
+    async getAllMacros(): Promise<StoredMacro[]> {
         this.ensureInitialized();
 
         try {
-            const indexEntries = this.indexManager.getAllActionEntries();
-            const actions: StoredAction[] = [];
+            const indexEntries = this.indexManager.getAllMacroEntries();
+            const macros: StoredMacro[] = [];
 
             for (const entry of indexEntries) {
-                const action = await this.fileManager.readJson<StoredAction>(
+                const macro = await this.fileManager.readJson<StoredMacro>(
                     entry.filePath,
                 );
-                if (action) {
-                    actions.push(action);
+                if (macro) {
+                    macros.push(macro);
                 } else {
-                    // Clean up missing action from index
-                    this.indexManager.removeAction(entry.id);
+                    // Clean up missing macro from index
+                    this.indexManager.removeMacro(entry.id);
                 }
             }
 
-            // Save index if we cleaned up any missing actions
-            if (indexEntries.length !== actions.length) {
-                await this.saveActionIndex();
+            // Save index if we cleaned up any missing macros
+            if (indexEntries.length !== macros.length) {
+                await this.saveMacroIndex();
             }
 
-            return actions;
+            return macros;
         } catch (error) {
-            console.error("Failed to get all actions:", error);
+            console.error("Failed to get all macros:", error);
             return [];
         }
     }
 
     /**
-     * Get actions for a specific URL using pattern matching
+     * Get macros for a specific URL using pattern matching
      */
-    async getActionsForUrl(url: string): Promise<StoredAction[]> {
+    async getMacrosForUrl(url: string): Promise<StoredMacro[]> {
         this.ensureInitialized();
 
         try {
             // Use pattern resolver for enhanced URL matching
-            const resolvedActions =
-                await this.patternResolver.resolveActionsForUrl(
+            const resolvedMacros =
+                await this.patternResolver.resolveMacrosForUrl(
                     url,
-                    (id: string) => this.getAction(id),
+                    (id: string) => this.getMacro(id),
                     () => this.getAllUrlPatterns(),
                     (domain: string) =>
-                        this.indexManager.getActionsForDomain(domain),
-                    () => this.indexManager.getActionsByScope("global"),
+                        this.indexManager.getMacrosForDomain(domain),
+                    () => this.indexManager.getMacrosByScope("global"),
                 );
 
-            // Extract just the actions from resolved results
-            return resolvedActions.map((resolved) => resolved.action);
+            // Extract just the macros from resolved results
+            return resolvedMacros.map((resolved) => resolved.macro);
         } catch (error) {
-            console.error(`Failed to get actions for URL ${url}:`, error);
+            console.error(`Failed to get macros for URL ${url}:`, error);
             return [];
         }
     }
 
     /**
-     * Get actions for a domain
+     * Get macros for a domain
      */
-    async getActionsForDomain(domain: string): Promise<StoredAction[]> {
+    async getMacrosForDomain(domain: string): Promise<StoredMacro[]> {
         this.ensureInitialized();
 
         try {
-            const domainEntries = this.indexManager.getActionsForDomain(domain);
-            const actions: StoredAction[] = [];
+            const domainEntries = this.indexManager.getMacrosForDomain(domain);
+            const macros: StoredMacro[] = [];
 
             for (const entry of domainEntries) {
-                const action = await this.getAction(entry.id);
-                if (action) {
-                    actions.push(action);
+                const macro = await this.getMacro(entry.id);
+                if (macro) {
+                    macros.push(macro);
                 }
             }
 
-            return actions;
+            return macros;
         } catch (error) {
-            console.error(`Failed to get actions for domain ${domain}:`, error);
+            console.error(`Failed to get macros for domain ${domain}:`, error);
             return [];
         }
     }
 
     /**
-     * Get global actions
+     * Get global macros
      */
-    async getGlobalActions(): Promise<StoredAction[]> {
+    async getGlobalMacros(): Promise<StoredMacro[]> {
         this.ensureInitialized();
 
         try {
-            const globalEntries = this.indexManager.getActionsByScope("global");
-            const actions: StoredAction[] = [];
+            const globalEntries = this.indexManager.getMacrosByScope("global");
+            const macros: StoredMacro[] = [];
 
             for (const entry of globalEntries) {
-                const action = await this.getAction(entry.id);
-                if (action) {
-                    actions.push(action);
+                const macro = await this.getMacro(entry.id);
+                if (macro) {
+                    macros.push(macro);
                 }
             }
 
-            return actions;
+            return macros;
         } catch (error) {
-            console.error("Failed to get global actions:", error);
+            console.error("Failed to get global macros:", error);
             return [];
         }
     }
@@ -375,84 +375,84 @@ export class ActionsStore {
                 storage: {
                     ...baseStats.storage,
                     totalSize: storageStats.totalSize,
-                    actionFiles: storageStats.fileCount,
+                    macroFiles: storageStats.fileCount,
                 },
             };
         } catch (error) {
             console.error("Failed to get statistics:", error);
             // Return empty stats on error
             return {
-                totalActions: 0,
-                actionsByScope: {
+                totalMacros: 0,
+                macrosByScope: {
                     global: 0,
                     domain: 0,
                     pattern: 0,
                     page: 0,
                 } as Record<"global" | "domain" | "pattern" | "page", number>,
-                actionsByCategory: {} as any,
-                actionsByAuthor: {} as any,
+                macrosByCategory: {} as any,
+                macrosByAuthor: {} as any,
                 totalDomains: 0,
                 totalPatterns: 0,
                 usage: {
                     totalUsage: 0,
                     averageUsage: 0,
-                    mostUsedActions: [],
+                    mostUsedMacros: [],
                 },
                 storage: {
                     totalSize: 0,
-                    actionFiles: 0,
+                    macroFiles: 0,
                     domainConfigs: 0,
                     indexSize: 0,
                 },
                 health: {
-                    validActions: 0,
-                    invalidActions: 0,
+                    validMacros: 0,
+                    invalidMacros: 0,
                 },
             };
         }
     }
 
     /**
-     * Record action usage (increment usage count)
+     * Record macro usage (increment usage count)
      */
-    async recordUsage(actionId: string): Promise<void> {
+    async recordUsage(macroId: string): Promise<void> {
         this.ensureInitialized();
 
         try {
             // Update index
-            this.indexManager.incrementUsage(actionId);
+            this.indexManager.incrementUsage(macroId);
 
-            // Update action file
-            const action = await this.getAction(actionId);
-            if (action) {
-                action.metadata.usageCount++;
-                action.metadata.lastUsed = new Date().toISOString();
-                await this.saveAction(action);
+            // Update macro file
+            const macro = await this.getMacro(macroId);
+            if (macro) {
+                macro.metadata.usageCount++;
+                macro.metadata.lastUsed = new Date().toISOString();
+                await this.saveMacro(macro);
             }
         } catch (error) {
             console.error(
-                `Failed to record usage for action ${actionId}:`,
+                `Failed to record usage for macro ${macroId}:`,
                 error,
             );
         }
     }
 
     /**
-     * Validate an action without saving it
+     * Validate a macro without saving it
      */
-    validateAction(action: StoredAction): ValidationResult {
-        return this.validator.validateAction(action);
+    validateMacro(macro: StoredMacro): ValidationResult {
+        return this.validator.validateMacro(macro);
     }
 
     /**
-     * Create a new action with default values
+     * Create a new macro with default values
      */
-    createDefaultAction(overrides: Partial<StoredAction> = {}): StoredAction {
-        return this.validator.createDefaultAction(overrides);
+    createDefaultMacro(overrides: Partial<StoredMacro> = {}): StoredMacro {
+        return this.validator.createDefaultMacro(overrides);
     }
 
     /**
-     * Create backup of all actions
+     * Create backup of all macros
      */
     async backup(): Promise<string> {
         this.ensureInitialized();
@@ -522,21 +522,21 @@ export class ActionsStore {
     }
 
     /**
-     * Get actions for a specific pattern
+     * Get macros for a specific pattern
      */
-    async getActionsForPattern(
+    async getMacrosForPattern(
         domain: string,
         pattern: string,
-    ): Promise<StoredAction[]> {
+    ): Promise<StoredMacro[]> {
         this.ensureInitialized();
 
         try {
-            // For now, return actions that match the domain
+            // For now, return macros that match the domain
             // This could be enhanced to match specific patterns
-            return await this.getActionsForDomain(domain);
+            return await this.getMacrosForDomain(domain);
         } catch (error) {
             console.error(
-                `Failed to get actions for pattern ${pattern} in domain ${domain}:`,
+                `Failed to get macros for pattern ${pattern} in domain ${domain}:`,
                 error,
             );
             return [];
@@ -584,39 +584,39 @@ export class ActionsStore {
     }
 
     /**
-     * Load action index from storage
+     * Load macro index from storage
      */
-    private async loadActionIndex(): Promise<void> {
+    private async loadMacroIndex(): Promise<void> {
         try {
-            const indexPath = this.fileManager.getIndexPath("action");
+            const indexPath = this.fileManager.getIndexPath("macro");
             const indexData =
-                await this.fileManager.readJson<ActionIndex>(indexPath);
+                await this.fileManager.readJson<MacroIndex>(indexPath);
             this.indexManager.loadIndex(indexData);
 
             if (indexData) {
                 debug(
-                    `Loaded action index with ${Object.keys(indexData.actions).length} actions`,
+                    `Loaded macro index with ${Object.keys(indexData.macros).length} macros`,
                 );
             } else {
-                debug("No existing action index found, starting fresh");
+                debug("No existing macro index found, starting fresh");
             }
         } catch (error) {
-            console.error("Failed to load action index:", error);
+            console.error("Failed to load macro index:", error);
             // Start with empty index on error
             this.indexManager.loadIndex(null);
         }
     }
 
     /**
-     * Save action index to storage
+     * Save macro index to storage
      */
-    private async saveActionIndex(): Promise<void> {
+    private async saveMacroIndex(): Promise<void> {
         try {
-            const indexPath = this.fileManager.getIndexPath("action");
+            const indexPath = this.fileManager.getIndexPath("macro");
             const index = this.indexManager.getIndex();
             await this.fileManager.writeJson(indexPath, index);
         } catch (error) {
-            console.error("Failed to save action index:", error);
+            console.error("Failed to save macro index:", error);
             // Don't throw here as this would break the main operation
         }
     }
@@ -627,7 +627,7 @@ export class ActionsStore {
     private ensureInitialized(): void {
         if (!this.initialized) {
             throw new Error(
-                "ActionsStore not initialized. Call initialize() first.",
+                "MacroStore not initialized. Call initialize() first.",
             );
         }
     }

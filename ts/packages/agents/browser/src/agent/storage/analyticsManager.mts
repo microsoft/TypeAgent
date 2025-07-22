@@ -56,16 +56,16 @@ export class AnalyticsManager {
     /**
      * Record action usage with context
      */
-    async recordUsage(actionId: string, context: UsageContext): Promise<void> {
+    async recordUsage(macroId: string, context: UsageContext): Promise<void> {
         this.ensureInitialized();
 
         try {
             const timestamp = new Date().toISOString();
 
             // Update action usage stats
-            if (!this.usageData.has(actionId)) {
-                this.usageData.set(actionId, {
-                    actionId,
+            if (!this.usageData.has(macroId)) {
+                this.usageData.set(macroId, {
+                    macroId: macroId,
                     totalUsage: 0,
                     lastUsed: timestamp,
                     usageHistory: [],
@@ -76,7 +76,7 @@ export class AnalyticsManager {
                 });
             }
 
-            const usageStats = this.usageData.get(actionId)!;
+            const usageStats = this.usageData.get(macroId)!;
             usageStats.totalUsage++;
             usageStats.lastUsed = timestamp;
 
@@ -138,7 +138,7 @@ export class AnalyticsManager {
             await this.saveAnalyticsData();
         } catch (error) {
             console.error(
-                `Failed to record usage for action ${actionId}:`,
+                `Failed to record usage for action ${macroId}:`,
                 error,
             );
         }
@@ -168,16 +168,16 @@ export class AnalyticsManager {
                 0,
             );
 
-            const totalActions = filteredUsageData.size;
+            const totalMacros = filteredUsageData.size;
             const averageUsage =
-                totalActions > 0 ? totalUsage / totalActions : 0;
+                totalMacros > 0 ? totalUsage / totalMacros : 0;
 
-            // Get most used actions
-            const mostUsedActions = Array.from(filteredUsageData.values())
+            // Get most used macros
+            const mostUsedMacros = Array.from(filteredUsageData.values())
                 .sort((a, b) => b.totalUsage - a.totalUsage)
                 .slice(0, 10)
                 .map((stats) => ({
-                    actionId: stats.actionId,
+                    macroId: stats.macroId,
                     usageCount: stats.totalUsage,
                     lastUsed: stats.lastUsed,
                     successRate: stats.averageSuccessRate,
@@ -198,9 +198,9 @@ export class AnalyticsManager {
 
             return {
                 totalUsage,
-                totalActions,
+                totalMacros,
                 averageUsage,
-                mostUsedActions,
+                mostUsedMacros,
                 usageTrends,
                 performanceMetrics: performanceData,
                 domainBreakdown: this.getDomainBreakdown(startDate, endDate),
@@ -252,9 +252,9 @@ export class AnalyticsManager {
                 this.domainAnalytics.get(domain) || {
                     domain,
                     totalUsage: 0,
-                    uniqueActions: 0,
+                    uniqueMacros: 0,
                     averageSuccessRate: 0,
-                    popularActions: [],
+                    popularMacros: [],
                     usageTrends: [],
                     lastActivity: new Date().toISOString(),
                 }
@@ -283,7 +283,7 @@ export class AnalyticsManager {
             return {
                 timestamp: new Date().toISOString(),
                 averageSearchTime: 0,
-                averageActionExecutionTime: 0,
+                averageMacroExecutionTime: 0,
                 cacheHitRate: 0,
                 errorRate: 0,
                 memoryUsage: 0,
@@ -296,7 +296,7 @@ export class AnalyticsManager {
             relevantMetrics.length;
         const avgExecTime =
             relevantMetrics.reduce(
-                (sum, m) => sum + m.averageActionExecutionTime,
+                (sum, m) => sum + m.averageMacroExecutionTime,
                 0,
             ) / relevantMetrics.length;
         const avgCacheHitRate =
@@ -315,7 +315,7 @@ export class AnalyticsManager {
         return {
             timestamp: new Date().toISOString(),
             averageSearchTime: avgSearchTime,
-            averageActionExecutionTime: avgExecTime,
+            averageMacroExecutionTime: avgExecTime,
             cacheHitRate: avgCacheHitRate,
             errorRate: avgErrorRate,
             memoryUsage: avgMemoryUsage,
@@ -354,7 +354,7 @@ export class AnalyticsManager {
 
         try {
             // Clean up usage history
-            for (const [actionId, usageStats] of this.usageData.entries()) {
+            for (const [macroId, usageStats] of this.usageData.entries()) {
                 usageStats.usageHistory = usageStats.usageHistory.filter(
                     (entry) => new Date(entry.timestamp) >= cutoffDate,
                 );
@@ -364,7 +364,7 @@ export class AnalyticsManager {
                     usageStats.usageHistory.length === 0 &&
                     new Date(usageStats.lastUsed) < cutoffDate
                 ) {
-                    this.usageData.delete(actionId);
+                    this.usageData.delete(macroId);
                 }
             }
 
@@ -436,9 +436,9 @@ export class AnalyticsManager {
             this.domainAnalytics.set(domain, {
                 domain,
                 totalUsage: 0,
-                uniqueActions: 0,
+                uniqueMacros: 0,
                 averageSuccessRate: 0,
-                popularActions: [],
+                popularMacros: [],
                 usageTrends: [],
                 lastActivity: new Date().toISOString(),
             });
@@ -497,7 +497,7 @@ export class AnalyticsManager {
     ): Map<string, ActionUsageStats> {
         const filtered = new Map<string, ActionUsageStats>();
 
-        for (const [actionId, usageStats] of this.usageData.entries()) {
+        for (const [macroId, usageStats] of this.usageData.entries()) {
             const relevantHistory = usageStats.usageHistory.filter((entry) => {
                 const entryDate = new Date(entry.timestamp);
                 return entryDate >= startDate && entryDate <= endDate;
@@ -525,7 +525,7 @@ export class AnalyticsManager {
                         validTimes.length;
                 }
 
-                filtered.set(actionId, filteredStats);
+                filtered.set(macroId, filteredStats);
             }
         }
 

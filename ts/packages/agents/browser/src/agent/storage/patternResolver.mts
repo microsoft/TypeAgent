@@ -1,14 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { StoredAction, UrlPattern, ActionIndexEntry } from "./types.mjs";
+import { StoredMacro, UrlPattern, MacroIndexEntry } from "./types.mjs";
 import { UrlMatcher, MatchResult } from "./urlMatcher.mjs";
 
 /**
- * Action with pattern matching information
+ * Macro with pattern matching information
  */
-export interface ResolvedAction {
-    action: StoredAction;
+export interface ResolvedMacro {
+    macro: StoredMacro;
     matchedPattern?: UrlPattern;
     priority: number;
     source: "exact" | "pattern" | "domain" | "global";
@@ -18,7 +18,7 @@ export interface ResolvedAction {
  * Cached resolution result
  */
 interface CachedResolution {
-    actions: ResolvedAction[];
+    macros: ResolvedMacro[];
     timestamp: number;
     ttl: number;
 }
@@ -37,15 +37,15 @@ export class PatternResolver {
     }
 
     /**
-     * Resolve all actions that should apply to a given URL
+     * Resolve all macros that should apply to a given URL
      */
-    async resolveActionsForUrl(
+    async resolveMacrosForUrl(
         url: string,
-        getActionById: (id: string) => Promise<StoredAction | null>,
+        getMacroById: (id: string) => Promise<StoredMacro | null>,
         getAllPatterns: () => Promise<UrlPattern[]>,
-        getActionEntriesForDomain: (domain: string) => ActionIndexEntry[],
-        getGlobalActionEntries: () => ActionIndexEntry[],
-    ): Promise<ResolvedAction[]> {
+        getMacroEntriesForDomain: (domain: string) => MacroIndexEntry[],
+        getGlobalMacroEntries: () => MacroIndexEntry[],
+    ): Promise<ResolvedMacro[]> {
         // Check cache first
         const cached = this.getCachedResolution(url);
         if (cached) {
@@ -56,10 +56,10 @@ export class PatternResolver {
             // Perform full resolution
             const resolved = await this.performResolution(
                 url,
-                getActionById,
+                getMacroById,
                 getAllPatterns,
-                getActionEntriesForDomain,
-                getGlobalActionEntries,
+                getMacroEntriesForDomain,
+                getGlobalMacroEntries,
             );
 
             // Cache the result
@@ -67,7 +67,7 @@ export class PatternResolver {
 
             return resolved;
         } catch (error) {
-            console.error(`Failed to resolve actions for URL ${url}:`, error);
+            console.error(`Failed to resolve macros for URL ${url}:`, error);
             return [];
         }
     }
@@ -96,66 +96,66 @@ export class PatternResolver {
      */
     private async performResolution(
         url: string,
-        getActionById: (id: string) => Promise<StoredAction | null>,
+        getMacroById: (id: string) => Promise<StoredMacro | null>,
         getAllPatterns: () => Promise<UrlPattern[]>,
-        getActionEntriesForDomain: (domain: string) => ActionIndexEntry[],
-        getGlobalActionEntries: () => ActionIndexEntry[],
-    ): Promise<ResolvedAction[]> {
-        const resolvedActions: ResolvedAction[] = [];
+        getMacroEntriesForDomain: (domain: string) => MacroIndexEntry[],
+        getGlobalMacroEntries: () => MacroIndexEntry[],
+    ): Promise<ResolvedMacro[]> {
+        const resolvedMacros: ResolvedMacro[] = [];
         const parsedUrl = new URL(url);
         const domain = parsedUrl.hostname;
 
-        // 1. Check for exact URL matches in action patterns
-        const exactActions = await this.findExactUrlActions(
+        // 1. Check for exact URL matches in macro patterns
+        const exactMacros = await this.findExactUrlMacros(
             url,
-            getActionById,
+            getMacroById,
             getAllPatterns,
         );
-        resolvedActions.push(...exactActions);
+        resolvedMacros.push(...exactMacros);
 
         // 2. Find pattern-based matches
-        const patternActions = await this.findPatternActions(
+        const patternMacros = await this.findPatternMacros(
             url,
-            getActionById,
+            getMacroById,
             getAllPatterns,
         );
-        resolvedActions.push(...patternActions);
+        resolvedMacros.push(...patternMacros);
 
-        // 3. Get domain-specific actions (non-pattern)
-        const domainActions = await this.findDomainActions(
+        // 3. Get domain-specific macros (non-pattern)
+        const domainMacros = await this.findDomainMacros(
             domain,
-            getActionById,
-            getActionEntriesForDomain,
+            getMacroById,
+            getMacroEntriesForDomain,
         );
-        resolvedActions.push(...domainActions);
+        resolvedMacros.push(...domainMacros);
 
-        // 4. Get global actions
-        const globalActions = await this.findGlobalActions(
-            getActionById,
-            getGlobalActionEntries,
+        // 4. Get global macros
+        const globalMacros = await this.findGlobalMacros(
+            getMacroById,
+            getGlobalMacroEntries,
         );
-        resolvedActions.push(...globalActions);
+        resolvedMacros.push(...globalMacros);
 
         // Remove duplicates and sort by priority
-        const uniqueActions = this.deduplicateAndSort(resolvedActions);
+        const uniqueMacros = this.deduplicateAndSort(resolvedMacros);
 
-        return uniqueActions;
+        return uniqueMacros;
     }
 
     /**
-     * Find actions with exact URL matches
+     * Find macros with exact URL matches
      */
-    private async findExactUrlActions(
+    private async findExactUrlMacros(
         url: string,
-        getActionById: (id: string) => Promise<StoredAction | null>,
+        getMacroById: (id: string) => Promise<StoredMacro | null>,
         getAllPatterns: () => Promise<UrlPattern[]>,
-    ): Promise<ResolvedAction[]> {
+    ): Promise<ResolvedMacro[]> {
         const patterns = await getAllPatterns();
         const exactPatterns = patterns.filter(
             (p) => p.type === "exact" && p.pattern === url,
         );
 
-        const actions: ResolvedAction[] = [];
+        const macros: ResolvedMacro[] = [];
 
         for (const pattern of exactPatterns) {
             try {
@@ -169,22 +169,22 @@ export class PatternResolver {
             }
         }
 
-        return actions;
+        return macros;
     }
 
     /**
-     * Find actions through pattern matching
+     * Find macros through pattern matching
      */
-    private async findPatternActions(
+    private async findPatternMacros(
         url: string,
-        getActionById: (id: string) => Promise<StoredAction | null>,
+        getMacroById: (id: string) => Promise<StoredMacro | null>,
         getAllPatterns: () => Promise<UrlPattern[]>,
-    ): Promise<ResolvedAction[]> {
+    ): Promise<ResolvedMacro[]> {
         const matchingPatterns = await this.getApplicablePatterns(
             url,
             getAllPatterns,
         );
-        const actions: ResolvedAction[] = [];
+        const macros: ResolvedMacro[] = [];
 
         for (const matchResult of matchingPatterns) {
             if (matchResult.pattern.type !== "exact") {
@@ -199,69 +199,69 @@ export class PatternResolver {
             }
         }
 
-        return actions;
+        return macros;
     }
 
     /**
-     * Find domain-specific actions
+     * Find domain-specific macros
      */
-    private async findDomainActions(
+    private async findDomainMacros(
         domain: string,
-        getActionById: (id: string) => Promise<StoredAction | null>,
-        getActionEntriesForDomain: (domain: string) => ActionIndexEntry[],
-    ): Promise<ResolvedAction[]> {
-        const domainEntries = getActionEntriesForDomain(domain);
-        const actions: ResolvedAction[] = [];
+        getMacroById: (id: string) => Promise<StoredMacro | null>,
+        getMacroEntriesForDomain: (domain: string) => MacroIndexEntry[],
+    ): Promise<ResolvedMacro[]> {
+        const domainEntries = getMacroEntriesForDomain(domain);
+        const macros: ResolvedMacro[] = [];
 
         for (const entry of domainEntries) {
-            const action = await getActionById(entry.id);
-            if (action) {
-                actions.push({
-                    action,
-                    priority: action.scope.priority || 60,
+            const macro = await getMacroById(entry.id);
+            if (macro) {
+                macros.push({
+                    macro,
+                    priority: macro.scope.priority || 60,
                     source: "domain",
                 });
             }
         }
 
-        return actions;
+        return macros;
     }
 
     /**
-     * Find global actions
+     * Find global macros
      */
-    private async findGlobalActions(
-        getActionById: (id: string) => Promise<StoredAction | null>,
-        getGlobalActionEntries: () => ActionIndexEntry[],
-    ): Promise<ResolvedAction[]> {
-        const globalEntries = getGlobalActionEntries();
-        const actions: ResolvedAction[] = [];
+    private async findGlobalMacros(
+        getMacroById: (id: string) => Promise<StoredMacro | null>,
+        getGlobalMacroEntries: () => MacroIndexEntry[],
+    ): Promise<ResolvedMacro[]> {
+        const globalEntries = getGlobalMacroEntries();
+        const macros: ResolvedMacro[] = [];
 
         for (const entry of globalEntries) {
-            const action = await getActionById(entry.id);
-            if (action) {
-                actions.push({
-                    action,
-                    priority: action.scope.priority || 50,
+            const macro = await getMacroById(entry.id);
+            if (macro) {
+                macros.push({
+                    macro,
+                    priority: macro.scope.priority || 50,
                     source: "global",
                 });
             }
         }
 
-        return actions;
+        return macros;
     }
 
     /**
-     * Remove duplicate actions and sort by priority
+     * Remove duplicate macros and sort by priority
      */
-    private deduplicateAndSort(actions: ResolvedAction[]): ResolvedAction[] {
-        // Remove duplicates based on action ID
-        const uniqueMap = new Map<string, ResolvedAction>();
+    private deduplicateAndSort(macros: ResolvedMacro[]): ResolvedMacro[] {
+        // Remove duplicates based on macro ID
+        const uniqueMap = new Map<string, ResolvedMacro>();
 
-        for (const resolvedAction of actions) {
-            const existing = uniqueMap.get(resolvedAction.action.id);
-            if (!existing || resolvedAction.priority > existing.priority) {
-                uniqueMap.set(resolvedAction.action.id, resolvedAction);
+        for (const resolvedMacro of macros) {
+            const existing = uniqueMap.get(resolvedMacro.macro.id);
+            if (!existing || resolvedMacro.priority > existing.priority) {
+                uniqueMap.set(resolvedMacro.macro.id, resolvedMacro);
             }
         }
 
@@ -270,22 +270,22 @@ export class PatternResolver {
             if (a.priority !== b.priority) {
                 return b.priority - a.priority;
             }
-            if (a.action.metadata.usageCount !== b.action.metadata.usageCount) {
+            if (a.macro.metadata.usageCount !== b.macro.metadata.usageCount) {
                 return (
-                    b.action.metadata.usageCount - a.action.metadata.usageCount
+                    b.macro.metadata.usageCount - a.macro.metadata.usageCount
                 );
             }
-            return a.action.name.localeCompare(b.action.name);
+            return a.macro.name.localeCompare(b.macro.name);
         });
     }
 
     /**
      * Get cached resolution result
      */
-    private getCachedResolution(url: string): ResolvedAction[] | null {
+    private getCachedResolution(url: string): ResolvedMacro[] | null {
         const cached = this.resolvedCache.get(url);
         if (cached && Date.now() - cached.timestamp < cached.ttl) {
-            return cached.actions;
+            return cached.macros;
         }
 
         // Remove expired entry
@@ -299,14 +299,14 @@ export class PatternResolver {
     /**
      * Cache resolution result
      */
-    private setCachedResolution(url: string, actions: ResolvedAction[]): void {
+    private setCachedResolution(url: string, macros: ResolvedMacro[]): void {
         // Implement LRU eviction if cache is full
         if (this.resolvedCache.size >= this.MAX_CACHE_SIZE) {
             this.evictOldestCacheEntry();
         }
 
         this.resolvedCache.set(url, {
-            actions,
+            macros,
             timestamp: Date.now(),
             ttl: this.DEFAULT_TTL,
         });

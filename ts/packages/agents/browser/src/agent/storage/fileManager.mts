@@ -269,23 +269,31 @@ export class FileManager {
     }
 
     /**
-     * Get action file path based on scope
+     * Get macro file path based on scope
+     */
+    getMacroFilePath(
+        macroId: string,
+        scope: { type: string; domain?: string },
+    ): string {
+        const fileName = `${macroId}.json`;
+
+        if (scope.type === "global") {
+            return `macros/global/${fileName}`;
+        } else {
+            const domain = this.sanitizeFilename(scope.domain || "unknown");
+            return `macros/domains/${domain}/${fileName}`;
+        }
+    }
+
+    /**
+     * @deprecated Use getMacroFilePath instead
      */
     getActionFilePath(
         actionId: string,
         scope: { type: string; domain?: string },
     ): string {
-        const fileName = `${actionId}.json`;
-
-        if (scope.type === "global") {
-            return `actions/global/${fileName}`;
-        } else {
-            const domain = this.sanitizeFilename(scope.domain || "unknown");
-            return `actions/domains/${domain}/${fileName}`;
-        }
-    }
-
-    /**
+        return this.getMacroFilePath(actionId, scope);
+    }/**
      * Get domain config file path
      */
     getDomainConfigPath(domain: string): string {

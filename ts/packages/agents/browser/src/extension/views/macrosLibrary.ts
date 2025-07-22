@@ -2,23 +2,23 @@
 // Licensed under the MIT License.
 
 import {
-    getActionsForUrl,
-    getAllActions,
-    getActionDomains,
-    deleteAction,
-    deleteMultipleActions,
+    getMacrosForUrl,
+    getAllMacros,
+    getMacroDomains,
+    deleteMacro,
+    deleteMultipleMacros,
     showNotification,
     showLoadingState,
     showEmptyState,
     showErrorState,
     showConfirmationDialog,
     extractDomain,
-    categorizeAction,
+    categorizeMacro,
     formatRelativeDate,
     escapeHtml,
     extractCategories,
-    filterActions,
-} from "./actionUtilities";
+    filterMacros,
+} from "./macroUtilities";
 
 declare global {
     interface Window {
@@ -28,10 +28,10 @@ declare global {
     }
 }
 
-interface ActionIndexState {
+interface MacroIndexState {
     // Data
-    allActions: any[];
-    filteredActions: any[];
+    allMacros: any[];
+    filteredMacros: any[];
     searchQuery: string;
     filters: {
         author: string;
@@ -41,16 +41,16 @@ interface ActionIndexState {
 
     // UI State
     viewMode: "grid" | "list";
-    selectedActions: string[];
+    selectedMacros: string[];
     loading: boolean;
     error: string | null;
 }
 
-class ActionIndexApp {
+class MacroIndexApp {
     private viewHostUrl: string | null = null;
-    private state: ActionIndexState = {
-        allActions: [],
-        filteredActions: [],
+    private state: MacroIndexState = {
+        allMacros: [],
+        filteredMacros: [],
         searchQuery: "",
         filters: {
             author: "all",
@@ -58,7 +58,7 @@ class ActionIndexApp {
             category: "all",
         },
         viewMode: "grid",
-        selectedActions: [],
+        selectedMacros: [],
         loading: false,
         error: null,
     };
@@ -66,12 +66,12 @@ class ActionIndexApp {
     private searchTimeout: number | null = null;
 
     async initialize() {
-        console.log("Initializing Action Index App");
+        console.log("Initializing Macro Index App");
 
         this.viewHostUrl = await this.getViewHostUrl();
 
         this.setupEventListeners();
-        await this.loadAllActions();
+        await this.loadAllMacros();
         this.renderUI();
     }
 
@@ -149,19 +149,19 @@ class ActionIndexApp {
         document
             .getElementById("selectAllBtn")!
             .addEventListener("click", () => {
-                this.selectAllActions();
+                this.selectAllMacros();
             });
 
         document
             .getElementById("deselectAllBtn")!
             .addEventListener("click", () => {
-                this.deselectAllActions();
+                this.deselectAllMacros();
             });
 
         document
             .getElementById("bulkDeleteBtn")!
             .addEventListener("click", () => {
-                this.bulkDeleteActions();
+                this.bulkDeleteMacros();
             });
     }
 
@@ -180,7 +180,7 @@ class ActionIndexApp {
     private setViewMode(mode: "grid" | "list") {
         this.state.viewMode = mode;
         this.updateViewModeUI();
-        this.renderActions();
+        this.renderMacros();
     }
 
     private updateViewModeUI() {
@@ -194,16 +194,16 @@ class ActionIndexApp {
         }
     }
 
-    private async loadAllActions() {
+    private async loadAllMacros() {
         this.state.loading = true;
         this.state.error = null;
-        const container = document.getElementById("actionsContainer")!;
-        showLoadingState(container, "Loading Actions");
+        const container = document.getElementById("macrosContainer")!;
+        showLoadingState(container, "Loading Macros");
 
         try {
-            // Get all actions across all URLs
-            const actions = await getAllActions();
-            this.state.allActions = actions;
+            // Get all macros across all URLs
+            const macros = await getAllMacros();
+            this.state.allMacros = macros;
 
             // Populate filter dropdowns
             this.populateFilterDropdowns();
@@ -211,8 +211,8 @@ class ActionIndexApp {
             // Apply current filters
             this.applyFilters();
         } catch (error) {
-            console.error("Error loading actions:", error);
-            this.state.error = "Failed to load actions. Please try again.";
+            console.error("Error loading macros:", error);
+            this.state.error = "Failed to load macros. Please try again.";
             const container = document.getElementById("actionsContainer")!;
             showErrorState(container, this.state.error);
         } finally {
@@ -227,8 +227,8 @@ class ActionIndexApp {
         ) as HTMLSelectElement;
         const domains = new Set<string>();
 
-        this.state.allActions.forEach((action) => {
-            const domain = extractDomain(action);
+        this.state.allMacros.forEach((macro) => {
+            const domain = extractDomain(macro);
             if (domain) {
                 domains.add(domain);
             }
@@ -253,7 +253,7 @@ class ActionIndexApp {
         const categoryFilter = document.getElementById(
             "categoryFilter",
         ) as HTMLSelectElement;
-        const categories = extractCategories(this.state.allActions);
+        const categories = extractCategories(this.state.allMacros);
 
         // Clear existing options except "All Categories"
         while (categoryFilter.children.length > 1) {
@@ -269,14 +269,14 @@ class ActionIndexApp {
     }
 
     private applyFilters() {
-        this.state.filteredActions = filterActions(this.state.allActions, {
+        this.state.filteredMacros = filterMacros(this.state.allMacros, {
             searchQuery: this.state.searchQuery,
             author: this.state.filters.author,
             domain: this.state.filters.domain,
             category: this.state.filters.category,
         });
 
-        this.renderActions();
+        this.renderMacros();
     }
 
     private clearFilters() {
@@ -303,18 +303,18 @@ class ActionIndexApp {
 
         this.applyFilters();
     }
-    private selectAllActions() {
-        this.state.selectedActions = this.state.filteredActions.map(
-            (action) => action.id || action.name,
+    private selectAllMacros() {
+        this.state.selectedMacros = this.state.filteredMacros.map(
+            (macro) => macro.id || macro.name,
         );
         this.updateBulkOperationsUI();
-        this.updateActionSelectionUI();
+        this.updateMacroSelectionUI();
     }
 
-    private deselectAllActions() {
-        this.state.selectedActions = [];
+    private deselectAllMacros() {
+        this.state.selectedMacros = [];
         this.updateBulkOperationsUI();
-        this.updateActionSelectionUI();
+        this.updateMacroSelectionUI();
     }
 
     private updateBulkOperationsUI() {
@@ -330,10 +330,10 @@ class ActionIndexApp {
         ) as HTMLButtonElement;
 
         if (bulkOpsContainer && selectedCountEl) {
-            if (this.state.selectedActions.length > 0) {
+            if (this.state.selectedMacros.length > 0) {
                 bulkOpsContainer.classList.add("active");
                 selectedCountEl.textContent =
-                    this.state.selectedActions.length.toString();
+                    this.state.selectedMacros.length.toString();
 
                 // Show deselect and delete buttons when items are selected
                 if (deselectBtn) deselectBtn.style.display = "inline-block";
@@ -348,28 +348,28 @@ class ActionIndexApp {
         }
     }
 
-    private updateActionSelectionUI() {
+    private updateMacroSelectionUI() {
         // Update checkboxes in the UI
-        this.state.filteredActions.forEach((action) => {
+        this.state.filteredMacros.forEach((macro) => {
             const checkbox = document.querySelector(
-                `[data-action-checkbox="${action.id || action.name}"]`,
+                `[data-macro-checkbox="${macro.id || macro.name}"]`,
             ) as HTMLInputElement;
             if (checkbox) {
-                checkbox.checked = this.state.selectedActions.includes(
-                    action.id || action.name,
+                checkbox.checked = this.state.selectedMacros.includes(
+                    macro.id || macro.name,
                 );
             }
         });
     }
 
-    private async bulkDeleteActions() {
-        if (this.state.selectedActions.length === 0) {
-            showNotification("No actions selected for deletion", "error");
+    private async bulkDeleteMacros() {
+        if (this.state.selectedMacros.length === 0) {
+            showNotification("No macros selected for deletion", "error");
             return;
         }
 
         const confirmed = await showConfirmationDialog(
-            `Are you sure you want to delete ${this.state.selectedActions.length} selected action(s)? This cannot be undone.`,
+            `Are you sure you want to delete ${this.state.selectedMacros.length} selected macro(s)? This cannot be undone.`,
         );
         if (!confirmed) return;
 
@@ -382,17 +382,17 @@ class ActionIndexApp {
         deleteButton.disabled = true;
 
         try {
-            const result = await deleteMultipleActions(
-                this.state.selectedActions,
+            const result = await deleteMultipleMacros(
+                this.state.selectedMacros,
             );
 
             if (result.successCount > 0) {
                 showNotification(
-                    `Successfully deleted ${result.successCount} action(s)${result.errorCount > 0 ? `, ${result.errorCount} failed` : ""}`,
+                    `Successfully deleted ${result.successCount} macro(s)${result.errorCount > 0 ? `, ${result.errorCount} failed` : ""}`,
                     result.errorCount > 0 ? "warning" : "success",
                 );
-                this.state.selectedActions = [];
-                await this.loadAllActions();
+                this.state.selectedMacros = [];
+                await this.loadAllMacros();
             } else {
                 showNotification("Failed to delete any actions", "error");
             }
@@ -407,31 +407,31 @@ class ActionIndexApp {
     }
 
     private renderUI() {
-        this.renderActions();
+        this.renderMacros();
         this.updateViewModeUI();
     }
 
-    private renderActions() {
-        const container = document.getElementById("actionsContainer")!;
+    private renderMacros() {
+        const container = document.getElementById("macrosContainer")!;
 
         if (this.state.loading) {
-            const container = document.getElementById("actionsContainer")!;
-            showLoadingState(container, "Loading Actions");
+            const container = document.getElementById("macrosContainer")!;
+            showLoadingState(container, "Loading Macros");
             return;
         }
 
         if (this.state.error) {
-            const container = document.getElementById("actionsContainer")!;
+            const container = document.getElementById("macrosContainer")!;
             showErrorState(container, this.state.error);
             return;
         }
 
-        if (this.state.filteredActions.length === 0) {
-            const container = document.getElementById("actionsContainer")!;
-            if (this.state.allActions.length === 0) {
+        if (this.state.filteredMacros.length === 0) {
+            const container = document.getElementById("macrosContainer")!;
+            if (this.state.allMacros.length === 0) {
                 showEmptyState(
                     container,
-                    "You haven't created any actions yet. Use the browser sidepanel to discover and create actions for web pages.",
+                    "You haven't created any macros yet. Use the browser sidepanel to discover and create macros for web pages.",
                     "bi-collection",
                 );
             } else {
@@ -458,12 +458,12 @@ class ActionIndexApp {
         // Create grid container
         const gridContainer = document.createElement("div");
         gridContainer.className =
-            this.state.viewMode === "grid" ? "actions-grid" : "actions-list";
+            this.state.viewMode === "grid" ? "macros-grid" : "macros-list";
 
-        // Render action cards
-        this.state.filteredActions.forEach((action, index) => {
-            const actionCard = this.createActionCard(action, index);
-            gridContainer.appendChild(actionCard);
+        // Render macro cards
+        this.state.filteredMacros.forEach((macro, index) => {
+            const macroCard = this.createMacroCard(macro, index);
+            gridContainer.appendChild(macroCard);
         });
 
         container.innerHTML = "";
@@ -477,41 +477,41 @@ class ActionIndexApp {
             window.Prism.highlightAll();
         }
     }
-    private createActionCard(action: any, index: number): HTMLElement {
+    private createMacroCard(macro: any, index: number): HTMLElement {
         const card = document.createElement("div");
-        card.className = "action-card";
-        card.setAttribute("data-action-id", action.id || action.name);
+        card.className = "macro-card";
+        card.setAttribute("data-macro-id", macro.id || macro.name);
 
-        const domain = extractDomain(action);
-        const category = categorizeAction(action);
-        const isSelected = this.state.selectedActions.includes(
-            action.id || action.name,
+        const domain = extractDomain(macro);
+        const category = categorizeMacro(macro);
+        const isSelected = this.state.selectedMacros.includes(
+            macro.id || macro.name,
         );
 
         card.innerHTML = `
-            <div class="action-card-header">
-                <div class="action-info">
+            <div class="macro-card-header">
+                <div class="macro-info">
                     <div class="form-check" style="margin-bottom: 0.5rem;">
-                        <input class="form-check-input action-checkbox" type="checkbox" 
-                               data-action-checkbox="${action.id || action.name}" 
+                        <input class="form-check-input macro-checkbox" type="checkbox" 
+                               data-macro-checkbox="${macro.id || macro.name}" 
                                ${isSelected ? "checked" : ""}>
                     </div>
-                    <h3 class="action-title">${escapeHtml(action.name)}</h3>
-                    <p class="action-description">${escapeHtml(action.description || "No description available")}</p>
-                    <div class="action-meta">
-                        <span class="badge badge-author ${action.author}">${action.author === "user" ? "Custom" : "Discovered"}</span>
+                    <h3 class="macro-title">${escapeHtml(macro.name)}</h3>
+                    <p class="macro-description">${escapeHtml(macro.description || "No description available")}</p>
+                    <div class="macro-meta">
+                        <span class="badge badge-author ${macro.author}">${macro.author === "user" ? "Custom" : "Discovered"}</span>
                         ${domain ? `<span class="badge badge-domain">${escapeHtml(domain)}</span>` : ""}
                         <span class="badge badge-category">${category}</span>
                     </div>
                 </div>
-                <div class="action-controls">
+                <div class="macro-controls">
                     <button data-action="view" title="View details">
                         <i class="bi bi-eye"></i>
                     </button>
-                    <button data-action="edit" title="Edit action">
+                    <button data-action="edit" title="Edit macro">
                         <i class="bi bi-pencil"></i>
                     </button>
-                    <button data-action="delete" title="Delete action">
+                    <button data-action="delete" title="Delete macro">
                         <i class="bi bi-trash"></i>
                     </button>
                 </div>
@@ -519,60 +519,60 @@ class ActionIndexApp {
         `;
 
         // Add event listeners
-        this.attachCardEventListeners(card, action, index);
+        this.attachCardEventListeners(card, macro, index);
 
         return card;
     }
 
     private attachCardEventListeners(
         card: HTMLElement,
-        action: any,
+        macro: any,
         index: number,
     ) {
         // Checkbox selection
         const checkbox = card.querySelector(
-            ".action-checkbox",
+            ".macro-checkbox",
         ) as HTMLInputElement;
         checkbox?.addEventListener("change", (e) => {
-            this.toggleActionSelection(
-                action.id || action.name,
+            this.toggleMacroSelection(
+                macro.id || macro.name,
                 (e.target as HTMLInputElement).checked,
             );
         });
 
-        // Action buttons
+        // Macro buttons
         const viewBtn = card.querySelector('[data-action="view"]');
         const editBtn = card.querySelector('[data-action="edit"]');
         const deleteBtn = card.querySelector('[data-action="delete"]');
 
         viewBtn?.addEventListener("click", () => {
-            this.viewActionDetails(action);
+            this.viewMacroDetails(macro);
         });
 
         editBtn?.addEventListener("click", () => {
-            this.editAction(action);
+            this.editMacro(macro);
         });
 
         deleteBtn?.addEventListener("click", () => {
-            this.deleteAction(action.id || action.name, action.name);
+            this.deleteMacro(macro.id || macro.name, macro.name);
         });
     }
 
-    private toggleActionSelection(actionId: string, selected: boolean) {
+    private toggleMacroSelection(macroId: string, selected: boolean) {
         if (selected) {
-            if (!this.state.selectedActions.includes(actionId)) {
-                this.state.selectedActions.push(actionId);
+            if (!this.state.selectedMacros.includes(macroId)) {
+                this.state.selectedMacros.push(macroId);
             }
         } else {
-            this.state.selectedActions = this.state.selectedActions.filter(
-                (id) => id !== actionId,
+            this.state.selectedMacros = this.state.selectedMacros.filter(
+                (id) => id !== macroId,
             );
         }
 
         this.updateBulkOperationsUI();
     }
 
-    private async viewActionDetails(action: any) {
+    private async viewMacroDetails(macro: any) {
         try {
             if (!this.viewHostUrl) {
                 showNotification("Loading view service...", "info");
@@ -584,7 +584,7 @@ class ActionIndexApp {
                 }
             }
 
-            if (action.author !== "user") {
+            if (macro.author !== "user") {
                 showNotification(
                     "Viewing is only available for user-defined actions",
                     "info",
@@ -592,14 +592,14 @@ class ActionIndexApp {
                 return;
             }
 
-            const actionId = action.id || action.name;
+            const actionId = macro.id || macro.name;
             if (!actionId) {
                 showNotification("Invalid action ID", "error");
                 return;
             }
 
             const viewUrl = `${this.viewHostUrl}/plans/?actionId=${encodeURIComponent(actionId)}&mode=viewAction`;
-            this.showActionViewModal(action.name, viewUrl);
+            this.showActionViewModal(macro.name, viewUrl);
         } catch (error) {
             console.error("Error opening action view:", error);
             showNotification("Failed to open action view", "error");
@@ -679,28 +679,28 @@ class ActionIndexApp {
 
     private handleIframeMessage: (event: MessageEvent) => void = () => {};
 
-    private editAction(action: any) {
-        // TODO: Implement action editing
-        console.log("Edit action:", action);
-        showNotification("Action editing coming soon!", "info");
+    private editMacro(macro: any) {
+        // TODO: Implement macro editing
+        console.log("Edit macro:", macro);
+        showNotification("Macro editing coming soon!", "info");
     }
 
-    private async deleteAction(actionId: string, actionName: string) {
+    private async deleteMacro(macroId: string, macroName: string) {
         const confirmed = await showConfirmationDialog(
-            `Are you sure you want to delete the action "${actionName}"? This cannot be undone.`,
+            `Are you sure you want to delete the macro "${macroName}"? This cannot be undone.`,
         );
         if (!confirmed) return;
 
         try {
-            const result = await deleteAction(actionId);
+            const result = await deleteMacro(macroId);
             if (result.success) {
                 showNotification(
-                    `Action "${actionName}" deleted successfully!`,
+                    `Macro "${macroName}" deleted successfully!`,
                     "success",
                 );
-                await this.loadAllActions();
+                await this.loadAllMacros();
             } else {
-                throw new Error(result.error || "Failed to delete action");
+                throw new Error(result.error || "Failed to delete macro");
             }
         } catch (error) {
             console.error("Error deleting action:", error);
@@ -711,6 +711,6 @@ class ActionIndexApp {
 
 // Initialize the app when DOM is loaded
 document.addEventListener("DOMContentLoaded", async () => {
-    const app = new ActionIndexApp();
+    const app = new MacroIndexApp();
     await app.initialize();
 });

@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 import {
-    getActionsForUrl,
-    deleteAction,
+    getMacrosForUrl,
+    deleteMacro,
     showNotification,
     showLoadingState,
     showEmptyState,
@@ -11,10 +11,10 @@ import {
     showConfirmationDialog,
     escapeHtml,
     createButton,
-} from "./actionUtilities";
+} from "./macroUtilities";
 
 let recording = false;
-let recordedActions: any[] = [];
+let recordedMacros: any[] = [];
 let launchUrl: string | null = "";
 let autoDiscoveryEnabled = false;
 
@@ -164,7 +164,7 @@ class ActionDiscoveryPanel {
             // Get current discovered actions from ActionsStore
             let currentActions: any[] = [];
             if (!forceRefresh) {
-                currentActions = await getActionsForUrl(launchUrl!, {
+                currentActions = await getMacrosForUrl(launchUrl!, {
                     includeGlobal: false,
                     author: "discovered",
                 });
@@ -532,12 +532,12 @@ class ActionDiscoveryPanel {
                 }
             }
 
-            // Get existing action names from ActionsStore to avoid duplicates
-            const allActions = await getActionsForUrl(launchUrl!, {
+            // Get existing macro names from MacrosStore to avoid duplicates
+            const allMacros = await getMacrosForUrl(launchUrl!, {
                 includeGlobal: true,
             });
-            const existingActionNames: string[] = allActions.map(
-                (action) => action.name,
+            const existingMacroNames: string[] = allMacros.map(
+                (macro) => macro.name,
             );
 
             // Create and auto-save action in one step
@@ -547,7 +547,7 @@ class ActionDiscoveryPanel {
                 screenshot,
                 actionName,
                 actionDescription: stepsDescription,
-                existingActionNames,
+                existingMacroNames,
                 steps: JSON.stringify(steps),
             });
 
@@ -602,7 +602,7 @@ class ActionDiscoveryPanel {
 
         try {
             // Get all user actions and delete them individually from ActionsStore
-            const userActions = await getActionsForUrl(launchUrl!, {
+            const userActions = await getMacrosForUrl(launchUrl!, {
                 includeGlobal: false,
                 author: "user",
             });
@@ -611,7 +611,7 @@ class ActionDiscoveryPanel {
             let deletedCount = 0;
             for (const action of userActions) {
                 const result = await chrome.runtime.sendMessage({
-                    type: "deleteAction",
+                    type: "deleteMacro",
                     actionId: action.id,
                 });
                 if (result?.success) {
@@ -643,7 +643,7 @@ class ActionDiscoveryPanel {
         try {
             console.log("Getting actions after update. URL: ", launchUrl);
             // Get user-authored actions from the new ActionsStore
-            const actions = await getActionsForUrl(launchUrl!, {
+            const actions = await getMacrosForUrl(launchUrl!, {
                 includeGlobal: false,
                 author: "user",
             });
@@ -722,7 +722,7 @@ class ActionDiscoveryPanel {
         deleteButton?.addEventListener("click", () => {
             // Use action ID, fallback to name for compatibility
             const actionId = action.id || action.name;
-            this.deleteAction(actionId);
+            this.deleteMacro(actionId);
         });
 
         userActionsContainer.appendChild(actionElement);
@@ -787,8 +787,8 @@ class ActionDiscoveryPanel {
         if (deleteBtn) {
             deleteBtn.addEventListener("click", () => {
                 const action = deleteBtn.getAttribute("data-action");
-                if (action && typeof this.deleteAction === "function") {
-                    this.deleteAction(action);
+                if (action && typeof this.deleteMacro === "function") {
+                    this.deleteMacro(action);
                 }
             });
         }
@@ -803,16 +803,16 @@ class ActionDiscoveryPanel {
         return filteredStep;
     }
 
-    private async deleteAction(actionId: string) {
+    private async deleteMacro(macroId: string) {
         const confirmed = await showConfirmationDialog(
             "Are you sure you want to delete this action?",
         );
         if (!confirmed) return;
 
         try {
-            const result = await deleteAction(actionId);
+            const result = await deleteMacro(macroId);
             if (result.success) {
-                console.log(`Action deleted: ${actionId}`);
+                console.log(`Action deleted: ${macroId}`);
                 await this.updateUserActionsUI();
                 showNotification("Action deleted successfully!", "success");
             } else {

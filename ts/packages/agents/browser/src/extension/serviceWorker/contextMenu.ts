@@ -33,8 +33,8 @@ export function initializeContextMenu(): void {
     });
 
     chrome.contextMenus.create({
-        title: "Manage Actions",
-        id: "manageActions",
+        title: "Manage Macros",
+        id: "manageMacros",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
 
@@ -42,7 +42,7 @@ export function initializeContextMenu(): void {
         id: "sidepanel-registerAgent",
         title: "Update Page Agent",
         contexts: ["all"],
-        documentUrlPatterns: ["chrome-extension://*/views/pageActions.html"],
+        documentUrlPatterns: ["chrome-extension://*/views/pageMacros.html"],
     });
 
     chrome.contextMenus.create({
@@ -119,15 +119,15 @@ export async function handleContextMenuClick(
 
             await chrome.sidePanel.setOptions({
                 tabId: tab.id!,
-                path: "views/pageActions.html",
+                path: "views/pageMacros.html",
                 enabled: true,
             });
             break;
         }
-        case "manageActions": {
-            // Check if actionsLibrary tab already exists
+        case "manageMacros": {
+            // Check if macrosLibrary tab already exists
             const existingTabs = await chrome.tabs.query({
-                url: chrome.runtime.getURL("views/actionsLibrary.html"),
+                url: chrome.runtime.getURL("views/macrosLibrary.html"),
             });
 
             if (existingTabs.length > 0) {
@@ -139,7 +139,7 @@ export async function handleContextMenuClick(
             } else {
                 // Create new tab
                 await chrome.tabs.create({
-                    url: chrome.runtime.getURL("views/actionsLibrary.html"),
+                    url: chrome.runtime.getURL("views/macrosLibrary.html"),
                     active: true,
                 });
             }

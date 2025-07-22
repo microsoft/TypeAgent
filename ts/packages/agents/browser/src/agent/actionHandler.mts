@@ -81,7 +81,7 @@ import { urlResolver, bingWithGrounding } from "azure-ai-foundry";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 import { deleteCachedSchema } from "./crossword/cachedSchema.mjs";
 import { getCrosswordCommandHandlerTable } from "./crossword/commandHandler.mjs";
-import { ActionsStore } from "./storage/index.mjs";
+import { MacroStore } from "./storage/index.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
 const debugWebSocket = registerDebug("typeagent:browser:ws");
@@ -113,7 +113,7 @@ export type BrowserActionContext = {
     index: website.IndexData | undefined;
     viewProcess?: ChildProcess | undefined;
     localHostPort: number;
-    actionsStore?: ActionsStore | undefined; // Add ActionsStore instance
+    macrosStore?: MacroStore | undefined; // Add MacroStore instance
 };
 
 export interface urlResolutionAction {
@@ -141,7 +141,7 @@ async function initializeBrowserContext(
         useExternalBrowserControl: clientBrowserControl === undefined,
         index: undefined,
         localHostPort,
-        actionsStore: undefined, // Will be initialized in updateBrowserContext
+        macrosStore: undefined, // Will be initialized in updateBrowserContext
     };
 }
 
@@ -160,14 +160,14 @@ async function updateBrowserContext(
             context.agentContext.tabTitleIndex = createTabTitleIndex();
         }
 
-        // Initialize ActionsStore
-        if (!context.agentContext.actionsStore && context.sessionStorage) {
+        // Initialize MacroStore
+        if (!context.agentContext.macrosStore && context.sessionStorage) {
             try {
-                const { ActionsStore } = await import("./storage/index.mjs");
-                context.agentContext.actionsStore = new ActionsStore(
+                const { MacroStore } = await import("./storage/index.mjs");
+                context.agentContext.macrosStore = new MacroStore(
                     context.sessionStorage,
                 );
-                await context.agentContext.actionsStore.initialize();
+                await context.agentContext.macrosStore.initialize();
                 debug("ActionsStore initialized successfully");
             } catch (error) {
                 debug("Failed to initialize ActionsStore:", error);
@@ -507,8 +507,8 @@ async function updateBrowserContext(
 
                         case "recordActionUsage":
                         case "getActionStatistics": {
-                            const actionsResult =
-                                await handleActionsStoreAction(
+                            const macrosResult =
+                                await handleMacroStoreAction(
                                     data.method,
                                     data.params,
                                     context,
@@ -517,7 +517,7 @@ async function updateBrowserContext(
                             webSocket.send(
                                 JSON.stringify({
                                     id: data.id,
-                                    result: actionsResult,
+                                    result: macrosResult,
                                 }),
                             );
                             break;
@@ -1144,17 +1144,17 @@ async function handleGetActionRequest(
             throw new Error("Invalid actionId format");
         }
 
-        debug(`Handling action request for ID: ${actionId}`);
+        debug(`Handling macro request for ID: ${actionId}`);
 
-        // Get the actions store from context
-        const actionsStore = context.agentContext.actionsStore;
-        if (!actionsStore) {
-            throw new Error("ActionsStore not available");
+        // Get the macros store from context
+        const macrosStore = context.agentContext.macrosStore;
+        if (!macrosStore) {
+            throw new Error("MacroStore not available");
         }
 
-        const action = await actionsStore.getAction(actionId);
+        const macro = await macrosStore.getMacro(actionId);
 
-        if (!action) {
+        if (!macro) {
             viewServiceProcess.send({
                 type: "getActionResponse",
                 requestId,
@@ -1169,7 +1169,7 @@ async function handleGetActionRequest(
             type: "getActionResponse",
             requestId,
             success: true,
-            action,
+            action: macro,
             timestamp: Date.now(),
         });
 
@@ -1623,17 +1623,17 @@ async function handleWebsiteAction(
     }
 }
 
-async function handleActionsStoreAction(
+async function handleMacroStoreAction(
     actionName: string,
     parameters: any,
     context: SessionContext<BrowserActionContext>,
 ): Promise<any> {
-    const actionsStore = context.agentContext.actionsStore;
+    const macrosStore = context.agentContext.macrosStore;
 
-    if (!actionsStore) {
+    if (!macrosStore) {
         return {
             success: false,
-            error: "ActionsStore not available",
+            error: "MacroStore not available",
         };
     }
 
@@ -1648,44 +1648,44 @@ async function handleActionsStoreAction(
                     };
                 }
 
-                await actionsStore.recordUsage(actionId);
-                debug(`Recorded usage for action: ${actionId}`);
+                await macrosStore.recordUsage(actionId);
+                debug(`Recorded usage for macro: ${actionId}`);
 
                 return {
                     success: true,
-                    actionId: actionId,
+                    macroId: actionId,
                 };
             }
 
             case "getActionStatistics": {
                 const { url } = parameters;
-                let actions: any[] = [];
-                let totalActions = 0;
+                let macros: any[] = [];
+                let totalMacros = 0;
 
                 if (url) {
-                    // Get actions for specific URL
-                    actions = await actionsStore.getActionsForUrl(url);
-                    totalActions = actions.length;
+                    // Get macros for specific URL
+                    macros = await macrosStore.getMacrosForUrl(url);
+                    totalMacros = macros.length;
                 } else {
-                    // Get all actions
-                    actions = await actionsStore.getAllActions();
-                    totalActions = actions.length;
+                    // Get all macros
+                    macros = await macrosStore.getAllMacros();
+                    totalMacros = macros.length;
                 }
 
                 console.log(
-                    `Retrieved statistics: ${totalActions} total actions`,
+                    `Retrieved statistics: ${totalMacros} total macros`,
                 );
 
                 return {
                     success: true,
-                    totalActions: totalActions,
-                    actions: actions.map((action) => ({
-                        id: action.id,
-                        name: action.name,
-                        author: action.author,
-                        category: action.category,
-                        usageCount: action.metadata.usageCount,
-                        lastUsed: action.metadata.lastUsed,
+                    totalMacros: totalMacros,
+                    macros: macros.map((macro) => ({
+                        id: macro.id,
+                        name: macro.name,
+                        author: macro.author,
+                        category: macro.category,
+                        usageCount: macro.metadata.usageCount,
+                        lastUsed: macro.metadata.lastUsed,
                     })),
                 };
             }
