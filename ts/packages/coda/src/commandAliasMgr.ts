@@ -103,7 +103,6 @@ export class CommandAliasManager {
 }
 
 export let aliasManager: CommandAliasManager;
-
 export function initializeAliasManager(context: vscode.ExtensionContext) {
     aliasManager = new CommandAliasManager(context);
     aliasManager.ready
