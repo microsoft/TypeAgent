@@ -23,8 +23,8 @@ Then combine the ones that most improve effectiveless.  **[DONE]**
 
 ## General: Look for things marked as incomplete in source
 
-- `TODO` comments
-- `raise NotImplementedError` with TODO in arg or comment
+- `TODO` comments (too numerous)
+- `raise NotImplementedError("TODO")` (all part of indexing)
 
 ## Cleanup:
 
