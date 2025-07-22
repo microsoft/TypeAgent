@@ -257,8 +257,8 @@ export class TemporalQueryProcessor {
             const websites = websiteCollection.messages.getAll();
 
             for (const website of websites) {
-                const visitDate =
-                    website.metadata.visitDate || website.metadata.bookmarkDate;
+                const metadata = website.metadata as website.WebsiteDocPartMeta;
+                const visitDate = metadata.visitDate || metadata.bookmarkDate;
                 if (!visitDate) continue;
 
                 const siteDate = new Date(visitDate);
@@ -274,7 +274,7 @@ export class TemporalQueryProcessor {
 
                 // Apply query type filtering
                 if (this.matchesQueryType(website, temporalQuery.queryType)) {
-                    filteredUrls.push(website.metadata.url);
+                    filteredUrls.push(metadata.url);
                 }
             }
         } catch (error) {
@@ -448,7 +448,7 @@ export class TemporalQueryProcessor {
         currentWeek: any[],
         nextWeek: any[],
     ): number {
-        // Simple heuristic: look for increase in technical content or complexity
+        // Simple heuristic: look for increase in content depth or complexity
         const currentComplexity = this.calculateAverageComplexity(currentWeek);
         const nextComplexity = this.calculateAverageComplexity(nextWeek);
 
@@ -466,10 +466,10 @@ export class TemporalQueryProcessor {
             const knowledge = site.getKnowledge();
             let complexity = 0.5; // Default complexity
 
-            // Factors that increase complexity
+            // Factors that indicate content depth
             if (
                 knowledge?.topics?.some((topic: string) =>
-                    /advanced|expert|complex|deep|architecture|internals/i.test(
+                    /advanced|expert|complex|deep|comprehensive|detailed/i.test(
                         topic,
                     ),
                 )
@@ -477,6 +477,7 @@ export class TemporalQueryProcessor {
                 complexity += 0.3;
             }
 
+            // Documentation sites typically have more detailed content
             if (
                 site.metadata.url.includes("docs") ||
                 site.metadata.url.includes("documentation")
@@ -484,11 +485,8 @@ export class TemporalQueryProcessor {
                 complexity += 0.2;
             }
 
-            if (
-                knowledge?.entities?.some((entity: any) =>
-                    /api|framework|architecture|algorithm/i.test(entity.type),
-                )
-            ) {
+            // More entities typically indicate more comprehensive content
+            if (knowledge?.entities?.length > 5) {
                 complexity += 0.2;
             }
 

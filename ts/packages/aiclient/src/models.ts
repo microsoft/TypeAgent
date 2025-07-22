@@ -6,16 +6,17 @@ import { CompletionUsageStats } from "./openai.js";
 
 /**
  * Translation settings for Chat models
+ * https://platform.openai.com/docs/api-reference/chat/create
  */
 export type CompletionSettings = {
     n?: number;
     temperature?: number;
     max_tokens?: number;
     response_format?: { type: "json_object" };
-
     // Use fixed seed parameter to improve determinism
     //https://cookbook.openai.com/examples/reproducible_outputs_with_the_seed_parameter
     seed?: number;
+    top_p?: number;
 };
 
 export type StructuredOutputJsonSchema = {

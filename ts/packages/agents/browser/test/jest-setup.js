@@ -36,6 +36,7 @@ global.chrome = {
         getURL: jest.fn(),
         getManifest: jest.fn(),
         sendMessage: jest.fn(),
+        getContexts: jest.fn(),
         onMessage: {
             addListener: jest.fn(),
             hasListeners: jest.fn(),
@@ -157,6 +158,11 @@ global.chrome = {
             removeListener: jest.fn(),
         },
         WINDOW_ID_NONE: -1,
+    },
+    offscreen: {
+        createDocument: jest.fn(),
+        closeDocument: jest.fn(),
+        hasDocument: jest.fn(),
     },
 };
 

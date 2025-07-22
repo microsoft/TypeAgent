@@ -224,7 +224,6 @@ export class TypeAgentPDFViewerApp {
     private setupScreenshotWorkflows(): void {
         if (!this.screenshotToolbar) return;
 
-        // Set up screenshot toolbar actions - these will replace the default placeholder actions
         const noteAction: ScreenshotAction = {
             id: "note",
             label: "Add Note",
@@ -245,7 +244,6 @@ export class TypeAgentPDFViewerApp {
             },
         };
 
-        // Replace the default actions with working implementations
         this.screenshotToolbar.addAction(noteAction);
         this.screenshotToolbar.addAction(questionAction);
     }
@@ -285,6 +283,9 @@ export class TypeAgentPDFViewerApp {
         event: MouseEvent,
     ): void {
         console.log("🎯 Highlight clicked:", highlightId);
+
+        // Prevent selection manager from closing toolbar immediately after we open it
+        this.selectionManager?.ignoreSelectionChangesFor(300);
 
         // Create a fake selection for the highlight area
         const fakeSelection: SelectionInfo = {
@@ -345,7 +346,6 @@ export class TypeAgentPDFViewerApp {
         selection: SelectionInfo,
         color: HighlightColor,
     ): Promise<void> {
-        // Use PDF.js highlight manager instead of custom annotation manager
         if (!this.pdfJSHighlightManager) {
             console.error("PDF.js highlight manager not initialized");
             return;
@@ -802,8 +802,15 @@ export class TypeAgentPDFViewerApp {
         const toolbar = document.querySelector(".toolbar") as HTMLElement;
         const toolbarHeight = toolbar ? toolbar.offsetHeight : 56;
 
+        // Set container positioning - PDF.js requires absolute positioning
         viewerContainer.style.cssText = `
-            position: absolute; top: ${toolbarHeight}px; left: 0; right: 0; bottom: 0; overflow: auto;
+            position: absolute; 
+            top: ${toolbar ? toolbarHeight : 0}px; 
+            left: 0; 
+            right: 0; 
+            bottom: 0; 
+            overflow: auto;
+            background: #323639;
         `;
 
         const linkService = new window.pdfjsViewer.PDFLinkService({

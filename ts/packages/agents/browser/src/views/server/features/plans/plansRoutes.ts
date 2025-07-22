@@ -87,6 +87,7 @@ export class PlansRoutes {
 
         // API endpoints
         app.get("/api/plans/plan", this.getPlan.bind(this));
+        app.get("/api/plans/action/:actionId", this.getActionById.bind(this));
         app.post("/api/plans/transition", this.addTransition.bind(this));
         app.post("/api/plans/title", this.updateTitle.bind(this));
         app.post("/api/plans/screenshot", this.updateScreenshot.bind(this));
@@ -99,6 +100,12 @@ export class PlansRoutes {
      * Serve the main plans page
      */
     private serveIndex(req: Request, res: Response): void {
+        const { actionId, mode } = req.query;
+
+        if (actionId && mode === "viewAction") {
+            debug(`Serving action view for actionId: ${actionId}`);
+        }
+
         res.sendFile(
             path.join(
                 __dirname,
@@ -216,6 +223,37 @@ export class PlansRoutes {
         } catch (error) {
             debug("Error resetting plan:", error);
             res.status(500).json({ error: "Failed to reset plan" });
+        }
+    }
+
+    /**
+     * Get action data by ID
+     */
+    private async getActionById(req: Request, res: Response): Promise<void> {
+        try {
+            const { actionId } = req.params;
+
+            if (!actionId || typeof actionId !== "string") {
+                res.status(400).json({ error: "Invalid action ID" });
+                return;
+            }
+
+            debug(`Retrieving action data for ID: ${actionId}`);
+
+            const actionData = await this.plansService.getActionData(actionId);
+
+            if (!actionData) {
+                res.status(404).json({ error: "Action not found" });
+                return;
+            }
+
+            res.json(actionData);
+        } catch (error) {
+            debug("Error retrieving action:", error);
+            res.status(500).json({
+                error: "Failed to retrieve action",
+                details: (error as Error).message,
+            });
         }
     }
 }

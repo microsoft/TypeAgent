@@ -55,12 +55,16 @@ const sharedScripts = {
     contentScript: "contentScript/index.ts",
     webTypeAgentMain: "webTypeAgentMain.ts",
     webTypeAgentContentScript: "webTypeAgentContentScript.ts",
-    options: "options.ts",
-    sidepanel: "sidepanel.ts",
-    knowledgePanel: "knowledgePanel.ts",
-    websiteLibraryPanel: "websiteLibraryPanel.ts",
+    "views/options": "views/options.ts",
+    "views/pageActions": "views/pageActions.ts",
+    "views/actionsLibrary": "views/actionsLibrary.ts",
+    "views/entityGraphView": "views/entityGraphView.ts",
+    "views/pageKnowledge": "views/pageKnowledge.ts",
+    "views/knowledgeLibrary": "views/knowledgeLibrary.ts",
+    "views/pdfView": "views/pdfView.ts",
     uiEventsDispatcher: "uiEventsDispatcher.ts",
     "sites/paleobiodb": "sites/paleobiodb.ts",
+    "offscreen/contentProcessor": "offscreen/contentProcessor.ts",
 };
 
 const electronOnlyScripts = {
@@ -85,6 +89,16 @@ const vendorAssets = [
     [
         "node_modules/prismjs/components/prism-json.js",
         "vendor/prism/prism-json.js",
+    ],
+    // Cytoscape libraries for entity graph visualization
+    [
+        "node_modules/cytoscape/dist/cytoscape.min.js",
+        "vendor/cytoscape/cytoscape.min.js",
+    ],
+    ["node_modules/dagre/dist/dagre.min.js", "vendor/dagre/dagre.min.js"],
+    [
+        "node_modules/cytoscape-dagre/cytoscape-dagre.js",
+        "vendor/cytoscape-dagre/cytoscape-dagre.min.js",
     ],
 ];
 
@@ -139,15 +153,50 @@ for (const [name, relPath] of Object.entries(sharedScripts)) {
 // Static file copy
 if (verbose) console.log(chalk.cyan("\n📁 Copying Chrome static files..."));
 copyFileSync(`${srcDir}/manifest.json`, `${chromeOutDir}/manifest.json`);
-copyFileSync(`${srcDir}/sidepanel.html`, `${chromeOutDir}/sidepanel.html`);
+mkdirSync(`${chromeOutDir}/views`, { recursive: true });
 copyFileSync(
-    `${srcDir}/knowledgePanel.html`,
-    `${chromeOutDir}/knowledgePanel.html`,
+    `${srcDir}/views/pageActions.html`,
+    `${chromeOutDir}/views/pageActions.html`,
 );
-copyFileSync(`${srcDir}/options.html`, `${chromeOutDir}/options.html`);
 copyFileSync(
-    `${srcDir}/websiteLibraryPanel.html`,
-    `${chromeOutDir}/websiteLibraryPanel.html`,
+    `${srcDir}/views/actionsLibrary.html`,
+    `${chromeOutDir}/views/actionsLibrary.html`,
+);
+
+copyFileSync(
+    `${srcDir}/views/entityGraphView.css`,
+    `${chromeOutDir}/views/entityGraphView.css`,
+);
+
+copyFileSync(
+    `${srcDir}/views/entityGraphView.html`,
+    `${chromeOutDir}/views/entityGraphView.html`,
+);
+
+copyFileSync(
+    `${srcDir}/views/pageKnowledge.html`,
+    `${chromeOutDir}/views/pageKnowledge.html`,
+);
+copyFileSync(
+    `${srcDir}/views/options.html`,
+    `${chromeOutDir}/views/options.html`,
+);
+copyFileSync(
+    `${srcDir}/views/knowledgeLibrary.html`,
+    `${chromeOutDir}/views/knowledgeLibrary.html`,
+);
+copyFileSync(
+    `${srcDir}/views/pdfView.html`,
+    `${chromeOutDir}/views/pdfView.html`,
+);
+copyFileSync(
+    `${srcDir}/views/knowledgeLibrary.css`,
+    `${chromeOutDir}/views/knowledgeLibrary.css`,
+);
+mkdirSync(`${chromeOutDir}/offscreen`, { recursive: true });
+copyFileSync(
+    `${srcDir}/offscreen/offscreen.html`,
+    `${chromeOutDir}/offscreen/offscreen.html`,
 );
 mkdirSync(`${chromeOutDir}/sites`, { recursive: true });
 copyFileSync(

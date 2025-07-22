@@ -2,32 +2,44 @@
 # Licensed under the MIT License.
 
 from dataclasses import dataclass, field
-from typing import TypedDict
+import json
+import os
+from typing import TypedDict, cast
 
 from ..knowpro import convindex, interfaces, kplib, secindex
 from ..knowpro.convthreads import ConversationThreads
 from ..knowpro.importing import ConversationSettings
 from ..knowpro.interfaces import (
-    Datetime,
     ConversationDataWithIndexes,
+    Datetime,
     ICollection,
     IMessageCollection,
     ISemanticRefCollection,
     MessageOrdinal,
     SemanticRef,
+    Term,
     Timedelta,
 )
 from ..knowpro.messageindex import MessageTextIndex
+from ..knowpro.reltermsindex import TermToRelatedTermsMap
 from ..knowpro import serialization
 from ..knowpro.storage import MessageCollection, SemanticRefCollection
 
 
 @dataclass
-class PodcastMessageBase(interfaces.IKnowledgeSource):
-    """Base class for podcast messages."""
+class PodcastMessageMeta(interfaces.IKnowledgeSource, interfaces.IMessageMetadata):
+    """Metadata class (!= metaclass) for podcast messages."""
 
-    speaker: str
-    listeners: list[str]
+    speaker: str | None = None
+    listeners: list[str] = field(default_factory=list)
+
+    @property
+    def source(self) -> str | None:  # type: ignore[reportIncompatibleVariableOverride]
+        return self.speaker
+
+    @property
+    def dest(self) -> str | list[str] | None:  # type: ignore[reportIncompatibleVariableOverride]
+        return self.listeners
 
     def get_knowledge(self) -> kplib.KnowledgeResponse:
         if not self.speaker:
@@ -66,28 +78,33 @@ class PodcastMessageBase(interfaces.IKnowledgeSource):
             return kplib.KnowledgeResponse(
                 entities=entities,
                 actions=actions,
+                # TODO: Also create inverse actions.
                 inverse_actions=[],
                 topics=[],
             )
 
 
-class PodcastMessageBaseData(TypedDict):
-    speaker: str
+class PodcastMessageMetaData(TypedDict):
+    speaker: str | None
     listeners: list[str]
 
 
 class PodcastMessageData(TypedDict):
-    metadata: PodcastMessageBaseData
+    metadata: PodcastMessageMetaData
     textChunks: list[str]
     tags: list[str]
     timestamp: str | None
 
 
 @dataclass
-class PodcastMessage(interfaces.IMessage, PodcastMessageBase):
+class PodcastMessage(interfaces.IMessage):
     text_chunks: list[str]
+    metadata: PodcastMessageMeta
     tags: list[str] = field(default_factory=list[str])
     timestamp: str | None = None
+
+    def get_knowledge(self) -> kplib.KnowledgeResponse:
+        return self.metadata.get_knowledge()
 
     def add_timestamp(self, timestamp: str) -> None:
         self.timestamp = timestamp
@@ -97,9 +114,9 @@ class PodcastMessage(interfaces.IMessage, PodcastMessageBase):
 
     def serialize(self) -> PodcastMessageData:
         return PodcastMessageData(
-            metadata=PodcastMessageBaseData(
-                speaker=self.speaker,
-                listeners=self.listeners,
+            metadata=PodcastMessageMetaData(
+                speaker=self.metadata.speaker,
+                listeners=self.metadata.listeners,
             ),
             textChunks=self.text_chunks,
             tags=self.tags,
@@ -108,11 +125,13 @@ class PodcastMessage(interfaces.IMessage, PodcastMessageBase):
 
     @staticmethod
     def deserialize(message_data: PodcastMessageData) -> "PodcastMessage":
-        metadata = message_data.get("metadata", {})
+        metadata_data = message_data["metadata"]
         return PodcastMessage(
-            speaker=metadata.get("speaker", ""),
-            listeners=metadata.get("listeners", []),
             text_chunks=message_data["textChunks"],
+            metadata=PodcastMessageMeta(
+                speaker=metadata_data.get("speaker"),
+                listeners=metadata_data.get("listeners"),
+            ),
             tags=message_data["tags"],
             timestamp=message_data["timestamp"],
         )
@@ -274,6 +293,7 @@ class Podcast(
         if build_all:
             secindex.build_transient_secondary_indexes(self)
         self._build_participant_aliases()
+        self._add_synonyms()
 
     def _build_participant_aliases(self) -> None:
         aliases = self.secondary_indexes.term_to_related_terms_index.aliases  # type: ignore  # TODO
@@ -285,6 +305,28 @@ class Podcast(
                 interfaces.Term(text=alias) for alias in name_to_alias_map[name]
             ]
             aliases.add_related_term(name, related_terms)  # type: ignore  # TODO: Same issue as above.
+
+    def _add_synonyms(self) -> None:
+        assert self.secondary_indexes.term_to_related_terms_index is not None
+        aliases = cast(
+            TermToRelatedTermsMap,
+            self.secondary_indexes.term_to_related_terms_index.aliases,
+        )
+        assert aliases is not None
+        synonym_file = os.path.join(os.path.dirname(__file__), "podcastVerbs.json")
+        with open(synonym_file) as f:
+            data: list[dict] = json.load(f)
+        if data:
+            for obj in data:
+                text = obj.get("term")
+                synonyms = obj.get("relatedTerms")
+                if text and synonyms:
+                    related_term = Term(text=text.lower())
+                    for synonym in synonyms:
+                        aliases.add_related_term(
+                            synonym.lower(),
+                            related_term,
+                        )
 
     def _collect_participant_aliases(self) -> dict[str, set[str]]:
 
@@ -304,8 +346,8 @@ class Podcast(
                     )
 
         for message in self.messages:
-            collect_name(message.speaker)
-            for listener in message.listeners:
+            collect_name(message.metadata.speaker)
+            for listener in message.metadata.listeners:
                 collect_name(listener)
 
         return aliases

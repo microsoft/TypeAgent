@@ -6,12 +6,8 @@ import { async, asyncArray } from "typeagent";
 import { error, Result } from "typechat";
 import { ChatModel } from "aiclient";
 import { createKnowledgeModel } from "./conversationIndex.js";
-import {
-    concreteToMergedEntities,
-    mergedToConcreteEntity,
-} from "./knowledgeMerge.js";
 import { BatchTask, runInBatches } from "./taskQueue.js";
-import { SearchSelectExpr } from "./interfaces.js";
+import { SearchSelectExpr, Tag } from "./interfaces.js";
 import {
     createOrMaxTermGroup,
     createOrTermGroup,
@@ -62,24 +58,20 @@ export function extractKnowledgeFromTextBatch(
     );
 }
 
-export function mergeConcreteEntities(
-    entities: kpLib.ConcreteEntity[],
-): kpLib.ConcreteEntity[] {
-    let mergedEntities = concreteToMergedEntities(entities);
-
-    const mergedConcreteEntities: kpLib.ConcreteEntity[] = [];
-    for (const mergedEntity of mergedEntities.values()) {
-        mergedConcreteEntities.push(mergedToConcreteEntity(mergedEntity));
-    }
-    return mergedConcreteEntities;
-}
-
 export function mergeTopics(topics: string[]): string[] {
     let mergedTopics = new Set<string>();
     for (let topic of topics) {
         mergedTopics.add(topic);
     }
     return [...mergedTopics.values()];
+}
+
+export function mergeTags(tags: Tag[]): string[] {
+    let mergedText = new Set<string>();
+    for (let tag of tags) {
+        mergedText.add(tag.text);
+    }
+    return [...mergedText.values()];
 }
 
 export async function extractKnowledgeForTextBatchQ(

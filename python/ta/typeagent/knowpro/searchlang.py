@@ -2,8 +2,8 @@
 # Licensed under the MIT License.
 
 import copy
-from dataclasses import dataclass
-from pyexpat.errors import XML_ERROR_RESERVED_PREFIX_XML
+from dataclasses import dataclass, replace
+import datetime
 from typing import Callable, Literal, TypeGuard, cast
 
 import typechat
@@ -29,6 +29,8 @@ from ..knowpro.search import (
     ConversationSearchResult,
     SearchOptions,
     SearchQueryExpr,
+    has_conversation_result,
+    has_conversation_results,
     run_search_query,
 )
 
@@ -100,6 +102,10 @@ class LanguageSearchDebugContext:
     # For each expr in searchQueryExpr, returns if a raw text similarity match was used:
     # TODO: used_similarity_fallback: list[bool] | None = None
 
+    # Values to override the search query
+    use_search_query: SearchQuery | None = None
+    use_compiled_search_query_exprs: list[SearchQueryExpr] | None = None
+
 
 # NOTE: Arguments 2 and 3 are reversed compared to the TypeScript version
 # for consistency with other similar functions in this file.
@@ -112,29 +118,82 @@ async def search_conversation_with_language(
     lang_search_filter: LanguageSearchFilter | None = None,
     debug_context: LanguageSearchDebugContext | None = None,
 ) -> typechat.Result[list[ConversationSearchResult]]:
-    lang_query_result = await search_query_expr_from_language(
-        conversation,
-        query_translator,
-        search_text,
-        options,
-        lang_search_filter,
-        debug_context,
-    )
-    if not isinstance(lang_query_result, typechat.Success):
-        return lang_query_result
-    search_query_exprs = lang_query_result.value.query_expressions
+    options = options or LanguageSearchOptions()
+    if debug_context and debug_context.use_compiled_search_query_exprs:
+        search_query = debug_context.use_search_query
+        search_query_exprs = debug_context.use_compiled_search_query_exprs
+    else:
+        lang_query_result = await search_query_expr_from_language(
+            conversation,
+            query_translator,
+            search_text,
+            options,
+            lang_search_filter,
+            debug_context,
+        )
+        if not isinstance(lang_query_result, typechat.Success):
+            return lang_query_result
+        search_query = lang_query_result.value.query
+        search_query_exprs = lang_query_result.value.query_expressions
+
     if debug_context:
         debug_context.search_query_expr = search_query_exprs
-    # TODO: Compile fallback query.
+        # TODO: debug_context.used_similarity_fallback = [False] * len(search_query_exprs)
+
+    fallback_query_exprs: list[SearchQueryExpr] | None = None
+    if search_query:
+        fallback_query_exprs = _compile_fallback_query(
+            conversation,
+            search_query,
+            options.compile_options or LanguageQueryCompileOptions(),
+            lang_search_filter,
+        )
+
     search_results: list[ConversationSearchResult] = []
-    for search_query_expr in search_query_exprs:
-        # TODO: fallback query.
+    for i, search_query_expr in enumerate(search_query_exprs):
+        fallback_query = fallback_query_exprs[i] if fallback_query_exprs else None
         query_result = await run_search_query(conversation, search_query_expr, options)
-        # TODO: Use fallback query if no results.
-        # TODO: If no matches and fallback enabled... run the raw query.
+        if fallback_query and not has_conversation_results(query_result):
+            # Rerun the query but with verb matching turned off for scopes.
+            query_result = await run_search_query(
+                conversation,
+                fallback_query,
+                options,
+            )
+        # TODO: If no matches and fallback enabled... run the raw query. (RAG fallback)
         search_results.extend(query_result)
 
     return typechat.Success(search_results)
+
+
+def _compile_fallback_query(
+    conversation: IConversation,
+    query: SearchQuery,
+    compile_options: LanguageQueryCompileOptions,
+    lang_search_filter: LanguageSearchFilter | None = None,
+) -> list[SearchQueryExpr] | None:
+    """
+    Scoping queries can be precise. However, there may be random variations in how LLMs
+    translate some user utterances into queries... particularly verbs.
+    The verbs may not match action verbs actually in the index...
+    related terms may not meet the similarity cutoff.
+    If configured (compile_options.exact_scope == false),
+    we can do a fallback query that does not enforce verb matching.
+    This improves recall while still providing a reasonable level of scoping because it
+    will still match the action subject and object.
+    """
+    # If no exact scope... and verbScope is not provided or true,
+    # then we can build a fallback query that is more forgiving.
+    if compile_options.verb_scope and not compile_options.exact_scope:
+        return compile_search_query(
+            conversation,
+            query,
+            replace(compile_options, verb_scope=False),
+            lang_search_filter,
+        )
+
+    # No fallback query currently possible.
+    return None
 
 
 async def search_query_expr_from_language(
@@ -146,18 +205,22 @@ async def search_query_expr_from_language(
     lang_search_filter: LanguageSearchFilter | None = None,
     debug_context: LanguageSearchDebugContext | None = None,
 ) -> typechat.Result[LanguageQueryExpr]:
-    query_result = await search_query_from_language(
-        conversation,
-        translator,
-        query_text,
-        options.model_instructions if options else None,
-    )
-    if not isinstance(query_result, typechat.Success):
-        return query_result
-    query = query_result.value
+    options = options or LanguageSearchOptions()
+    if debug_context and debug_context.use_search_query:
+        # If the debug context has a use_search query, use it instead of translating.
+        query = debug_context.use_search_query
+    else:
+        query_result = await search_query_from_language(
+            conversation,
+            translator,
+            query_text,
+            options.model_instructions,
+        )
+        if not isinstance(query_result, typechat.Success):
+            return query_result
+        query = query_result.value
     if debug_context:
         debug_context.search_query = query
-    options = options or LanguageSearchOptions()
     query_expressions = compile_search_query(
         conversation,
         query,
@@ -633,14 +696,18 @@ def date_range_from_datetime_range(date_time_range: DateTimeRange) -> DateRange:
 
 
 def datetime_from_date_time(date_time: DateTime) -> Datetime:
-    return Datetime(
+    # We ASSUME that the LLM gave the DateTime in UTC.
+    # If it didn't, well, how would we know???
+    dt = Datetime(
         year=date_time.date.year,
         month=date_time.date.month,
         day=date_time.date.day,
         hour=date_time.time.hour if date_time.time else 0,
         minute=date_time.time.minute if date_time.time else 0,
         second=date_time.time.seconds if date_time.time else 0,
+        tzinfo=datetime.timezone.utc,
     )
+    return dt
 
 
 def create_property_search_term(

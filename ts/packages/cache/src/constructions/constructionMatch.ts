@@ -22,15 +22,17 @@ const wildcardRegex = new RegExp(
 
 type MatchState = {
     capture: string[];
-    matchedStart: number[];
-    matchedEnd: number[];
+    matchedStart: number[]; // array of start indices for each part
+    matchedEnd: number[]; // array of end indices for each part, -1 for wildcard match
     matchedCurrent: number;
     pendingWildcard: number;
 };
 
 export type MatchConfig = {
     readonly enableWildcard: boolean;
+    readonly enableEntityWildcard: boolean;
     readonly rejectReferences: boolean;
+    readonly partial: boolean;
     readonly history?: HistoryContext | undefined;
     readonly matchPartsCache?: MatchPartsCache | undefined;
     readonly conflicts?: boolean | undefined;
@@ -60,6 +62,9 @@ export function matchParts(
                 matchValueTranslator,
             );
             if (values !== undefined) {
+                if (config.partial) {
+                    values.partialPartCount = state.matchedStart.length;
+                }
                 return values;
             }
         }
@@ -124,6 +129,22 @@ function captureWildcardMatch(
     return true;
 }
 
+function isRejectReference(config: MatchConfig, wildcardMode: WildcardMode) {
+    return config.rejectReferences && wildcardMode === WildcardMode.Enabled;
+}
+
+export function isWildcardEnabled(
+    config: MatchConfig,
+    wildcardMode: WildcardMode,
+) {
+    if (!config.enableWildcard || wildcardMode === WildcardMode.Disabled) {
+        return false;
+    }
+    return config.enableEntityWildcard
+        ? true
+        : wildcardMode !== WildcardMode.Entity;
+}
+
 function finishMatchParts(
     state: MatchState,
     request: string,
@@ -146,8 +167,9 @@ function finishMatchParts(
                 state.matchedStart.push(-1);
                 continue;
             }
-
-            return false;
+            // For partial, report as matched if we matched all the text in the request
+            // even when not all the parted are matched yet.
+            return config.partial && state.matchedCurrent === request.length;
         }
 
         // Matched
@@ -158,8 +180,7 @@ function finishMatchParts(
                 !captureWildcardMatch(
                     state,
                     wildcardText,
-                    config.rejectReferences &&
-                        wildpart.wildcardMode !== WildcardMode.Checked,
+                    isRejectReference(config, wildpart.wildcardMode),
                 )
             ) {
                 return false;
@@ -249,14 +270,12 @@ function backtrack(
     config: MatchConfig,
     wildcardQueue: MatchState[],
 ) {
-    if (config.enableWildcard) {
-        // if the part we failed to match could be wildcard, queue up the wildcard match for later
-        const failedPart = parts[state.matchedStart.length];
-        if (failedPart && failedPart.wildcardMode) {
-            // Do not queue up consecutive wildcard.
-            if (state.pendingWildcard === -1) {
-                wildcardQueue.push(cloneMatchState(state));
-            }
+    // if the part we failed to match could be wildcard, queue up the wildcard match for later
+    const failedPart = parts[state.matchedStart.length];
+    if (failedPart && isWildcardEnabled(config, failedPart.wildcardMode)) {
+        // Do not queue up consecutive wildcard.
+        if (state.pendingWildcard === -1) {
+            wildcardQueue.push(cloneMatchState(state));
         }
     }
 
@@ -337,7 +356,7 @@ function backtrack(
         }
 
         // Give up on the current backtrackPart, queue up wildcard match for later if enabled.
-        if (config.enableWildcard && backtrackPart.wildcardMode) {
+        if (isWildcardEnabled(config, backtrackPart.wildcardMode)) {
             // queue up wildcard match
             wildcardQueue.push(cloneMatchState(state));
         }

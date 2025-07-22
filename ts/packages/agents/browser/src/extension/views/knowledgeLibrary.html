@@ -1,0 +1,1168 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>TypeAgent Website Library</title>
+    <link rel="stylesheet" href="../vendor/bootstrap/bootstrap.min.css" />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="knowledgeLibrary.css" />
+  </head>
+  <body>
+    <!-- Top Navigation Bar -->
+    <header class="top-nav">
+      <div class="nav-container">
+        <div class="nav-brand">
+          <i class="bi bi-collection"></i>
+          <span>TypeAgent Website Library</span>
+        </div>
+        <div class="nav-actions">
+          <div class="connection-status" id="connectionStatus">
+            <span class="status-indicator status-connected"></span>
+            <span>Connected</span>
+          </div>
+
+          <!-- Import Dropdown -->
+          <div class="dropdown import-dropdown">
+            <button
+              id="importButton"
+              class="import-btn"
+              title="Import"
+              data-bs-toggle="dropdown"
+              aria-expanded="false"
+            >
+              <i class="bi bi-download"></i>
+            </button>
+            <ul class="dropdown-menu">
+              <li>
+                <a class="dropdown-item" href="#" id="importWebActivityBtn">
+                  <i class="bi bi-download me-2"></i>
+                  Import Web Activity
+                </a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="#" id="importFromFileBtn">
+                  <i class="bi bi-file-earmark-arrow-up me-2"></i>
+                  Import from Files
+                </a>
+              </li>
+            </ul>
+          </div>
+
+          <button id="settingsButton" class="settings-btn" title="Settings">
+            <i class="bi bi-gear"></i>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Container -->
+    <div class="main-container">
+      <!-- Sidebar Navigation -->
+      <aside class="sidebar">
+        <!-- Main Navigation -->
+        <nav class="main-nav">
+          <button class="nav-item active" data-page="search">
+            <i class="bi bi-search"></i>
+            <span>Search</span>
+          </button>
+          <button class="nav-item" data-page="discover">
+            <i class="bi bi-lightbulb"></i>
+            <span>Discover</span>
+          </button>
+          <button class="nav-item" data-page="analytics">
+            <i class="bi bi-graph-up"></i>
+            <span>Analytics</span>
+          </button>
+        </nav>
+      </aside>
+
+      <!-- Main Content Area -->
+      <main class="content-area">
+        <!-- Search Page -->
+        <div id="search-page" class="page-content active">
+          <div class="page-header">
+            <h1 class="page-title">
+              <i class="bi bi-search text-primary"></i>Search Your Library
+            </h1>
+            <p class="page-subtitle">
+              Ask in natural language: "latest github bookmarks", "car reviews
+              last week", "most visited news sites"
+            </p>
+          </div>
+
+          <!-- Search Interface -->
+          <div class="search-interface">
+            <div class="search-bar">
+              <input
+                type="text"
+                id="searchInput"
+                class="search-input"
+                placeholder="Ask in natural language: 'latest github bookmarks', 'car reviews last week'..."
+              />
+              <button id="searchButton" class="search-btn">
+                <i class="bi bi-search"></i>
+              </button>
+            </div>
+
+            <!-- Recent Searches -->
+            <div class="recent-searches" id="recentSearches">
+              <div class="recent-label">Recent searches:</div>
+              <div id="recentSearchesList">
+                <span class="empty-message">No recent searches</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Search Results -->
+          <div id="searchResults" class="search-results" style="display: none">
+            <div class="results-header">
+              <h2 class="results-title">Search Results</h2>
+              <div class="view-controls">
+                <div class="view-modes">
+                  <button
+                    class="view-btn active"
+                    data-view="list"
+                    title="List View"
+                  >
+                    <i class="bi bi-list"></i>
+                    <span>List</span>
+                  </button>
+                  <button class="view-btn" data-view="grid" title="Grid View">
+                    <i class="bi bi-grid"></i>
+                    <span>Grid</span>
+                  </button>
+                  <button
+                    class="view-btn"
+                    data-view="timeline"
+                    title="Timeline View"
+                  >
+                    <i class="bi bi-clock"></i>
+                    <span>Timeline</span>
+                  </button>
+                  <button
+                    class="view-btn"
+                    data-view="domain"
+                    title="Domain View"
+                  >
+                    <i class="bi bi-globe"></i>
+                    <span>Domain</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- AI Summary -->
+            <div id="aiSummary" class="ai-summary" style="display: none">
+              <div class="summary-header">
+                <i class="bi bi-robot"></i>
+                <span>AI Summary</span>
+              </div>
+              <div id="summaryContent" class="summary-content"></div>
+            </div>
+
+            <!-- Results Container -->
+            <div id="resultsContainer" class="results-container"></div>
+
+            <!-- Search Insights Card -->
+            <div
+              id="searchInsightsCard"
+              class="search-insights-card"
+              style="display: none"
+            >
+              <div class="insights-card-header">
+                <h3 class="insights-title">
+                  <i class="bi bi-lightbulb"></i>
+                  Search Insights
+                </h3>
+                <p class="insights-subtitle">
+                  Explore related topics and suggestions
+                </p>
+              </div>
+
+              <div class="insights-content">
+                <!-- Top Topics -->
+                <div
+                  id="topTopicsSection"
+                  class="insight-section"
+                  style="display: none"
+                >
+                  <div class="insight-header">
+                    <i class="bi bi-tags"></i>
+                    <span>Top Topics</span>
+                  </div>
+                  <div id="topTopicsContent" class="insight-content"></div>
+                </div>
+
+                <!-- Suggested Followups -->
+                <div
+                  id="suggestedFollowupsSection"
+                  class="insight-section"
+                  style="display: none"
+                >
+                  <div class="insight-header">
+                    <i class="bi bi-arrow-right-circle"></i>
+                    <span>Suggested Followups</span>
+                  </div>
+                  <div
+                    id="suggestedFollowupsContent"
+                    class="insight-content"
+                  ></div>
+                </div>
+
+                <!-- Related Entities -->
+                <div
+                  id="entitiesSection"
+                  class="insight-section"
+                  style="display: none"
+                >
+                  <div class="insight-header">
+                    <i class="bi bi-diagram-2"></i>
+                    <span>Related Entities</span>
+                  </div>
+                  <div id="entitiesContent" class="insight-content"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Pagination -->
+            <div id="pagination" class="pagination" style="display: none">
+              <div class="pagination-info" id="paginationInfo"></div>
+              <div class="pagination-controls" id="paginationControls"></div>
+            </div>
+          </div>
+
+          <!-- Empty State -->
+          <div class="empty-state" id="searchEmptyState">
+            <i class="bi bi-search"></i>
+            <h6>Search Your Library</h6>
+            <p class="mb-3">
+              Ask in natural language above: "latest github bookmarks",
+              "summarize car reviews last week", "most visited sites"
+            </p>
+          </div>
+        </div>
+
+        <!-- Discover Page -->
+        <div id="discover-page" class="page-content">
+          <div class="page-header">
+            <h1 class="page-title">
+              <i class="bi bi-lightbulb text-primary"></i>Discover Content
+              Trends
+            </h1>
+            <p class="page-subtitle">
+              Explore your reading patterns, popular topics, and content
+              insights
+            </p>
+          </div>
+
+          <!-- Trending Topics -->
+          <div class="content-section">
+            <div class="section-header">
+              <h2 class="section-title">
+                <i class="bi bi-trending-up"></i>Trending in Your Library
+              </h2>
+            </div>
+
+            <div class="discovery-grid" id="trendingContent">
+              <!-- Trending content will be populated here -->
+            </div>
+          </div>
+
+          <!-- Reading Patterns -->
+          <div class="content-section">
+            <div class="section-header">
+              <h2 class="section-title">
+                <i class="bi bi-clock-history"></i>Your Reading Patterns
+              </h2>
+            </div>
+
+            <div class="discovery-grid" id="readingPatterns">
+              <!-- Reading patterns will be populated here -->
+            </div>
+          </div>
+
+          <!-- Recently Popular -->
+          <div class="content-section">
+            <div class="section-header">
+              <h2 class="section-title">
+                <i class="bi bi-fire"></i>Recently Popular Pages
+              </h2>
+            </div>
+
+            <div class="results-grid" id="popularPages">
+              <!-- Popular pages will be populated here -->
+            </div>
+          </div>
+
+          <!-- Empty State -->
+          <div class="empty-state" id="discoverEmptyState">
+            <i class="bi bi-lightbulb"></i>
+            <h6>No Data to Discover</h6>
+            <p class="mb-3">
+              Import your bookmarks or browsing history to see content trends
+              and reading patterns.
+            </p>
+            <button class="action-btn primary" data-action="showImportModal">
+              <i class="bi bi-plus-circle"></i>Import Data
+            </button>
+          </div>
+        </div>
+
+        <!-- Analytics Page -->
+        <div id="analytics-page" class="page-content">
+          <div class="page-header">
+            <h1 class="page-title">
+              <i class="bi bi-graph-up text-primary"></i>Library Analytics
+            </h1>
+            <p class="page-subtitle">
+              Detailed insights into your browsing patterns and content
+              consumption
+            </p>
+          </div>
+
+          <!-- Quick Stats Overview -->
+          <div class="content-section">
+            <div class="section-header">
+              <h2 class="section-title">
+                <i class="bi bi-speedometer2"></i>Quick Stats
+              </h2>
+            </div>
+
+            <div class="quick-stats">
+              <div class="stat-item">
+                <div class="stat-number" id="totalWebsites">0</div>
+                <div class="stat-label">Total Sites</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-number" id="totalBookmarks">0</div>
+                <div class="stat-label">Bookmarks</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-number" id="totalHistory">0</div>
+                <div class="stat-label">History</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-number" id="topDomains">0</div>
+                <div class="stat-label">Domains</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Activity Charts -->
+          <div class="content-section">
+            <div class="section-header">
+              <h2 class="section-title">
+                <i class="bi bi-bar-chart"></i>Activity Trends
+              </h2>
+            </div>
+
+            <div class="analytics-grid" id="activityCharts">
+              <!-- Activity charts will be populated here -->
+            </div>
+          </div>
+
+          <!-- Top Domains -->
+          <div class="content-section">
+            <div class="section-header">
+              <h2 class="section-title">
+                <i class="bi bi-globe"></i>Top Domains
+              </h2>
+            </div>
+
+            <div class="top-domains">
+              <div id="topDomainsList" class="domain-list">
+                <div class="empty-message">No data available</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- AI Insights -->
+          <div class="content-section">
+            <div class="section-header">
+              <h2 class="section-title">
+                <i class="bi bi-brain"></i>AI Insights
+              </h2>
+            </div>
+
+            <div class="ai-insights">
+              <div class="insights-grid">
+                <div class="insight-item">
+                  <div class="insight-number" id="knowledgeExtracted">0</div>
+                  <div class="insight-label">Knowledge Extracted</div>
+                </div>
+                <div class="insight-item">
+                  <div class="insight-number" id="totalEntities">0</div>
+                  <div class="insight-label">Entities</div>
+                </div>
+                <div class="insight-item">
+                  <div class="insight-number" id="totalTopics">0</div>
+                  <div class="insight-label">Topics</div>
+                </div>
+                <div class="insight-item">
+                  <div class="insight-number" id="totalActions">0</div>
+                  <div class="insight-label">Actions</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Knowledge Insights -->
+          <div class="content-section">
+            <div class="section-header">
+              <h2 class="section-title">
+                <i class="bi bi-lightbulb"></i>Advanced Knowledge Insights
+              </h2>
+            </div>
+
+            <div class="discovery-grid" id="knowledgeInsights">
+              <!-- Knowledge insights will be populated here -->
+            </div>
+          </div>
+
+          <!-- Knowledge Visualization Dashboard -->
+          <div class="content-section">
+            <div class="section-header">
+              <h2 class="section-title">
+                <i class="bi bi-diagram-3"></i>Knowledge Visualization
+              </h2>
+            </div>
+
+            <div class="knowledge-dashboard">
+              <div class="knowledge-overview-cards">
+                <div class="knowledge-card entities">
+                  <div class="knowledge-card-header">
+                    <i class="bi bi-diagram-2"></i>
+                    <h3>Entities</h3>
+                  </div>
+                  <div class="knowledge-card-body">
+                    <div class="knowledge-metric" id="totalEntitiesMetric">
+                      0
+                    </div>
+                    <div class="knowledge-label">Total Entities Extracted</div>
+                    <div class="knowledge-breakdown">
+                      <div class="recent-items-header">Recent Entities</div>
+                      <div id="recentEntitiesList" class="recent-items-list">
+                        <div class="empty-message">No recent entities</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="knowledge-card topics">
+                  <div class="knowledge-card-header">
+                    <i class="bi bi-tags"></i>
+                    <h3>Topics</h3>
+                  </div>
+                  <div class="knowledge-card-body">
+                    <div class="knowledge-metric" id="totalTopicsMetric">0</div>
+                    <div class="knowledge-label">Topics Identified</div>
+                    <div class="topic-cloud">
+                      <div class="recent-items-header">Recent Topics</div>
+                      <div id="recentTopicsList" class="recent-items-list">
+                        <div class="empty-message">No recent topics</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="knowledge-card actions">
+                  <div class="knowledge-card-header">
+                    <i class="bi bi-diagram-3"></i>
+                    <h3>Entity Actions</h3>
+                  </div>
+                  <div class="knowledge-card-body">
+                    <div class="knowledge-metric" id="totalActionsMetric">
+                      0
+                    </div>
+                    <div class="knowledge-label">Actionable Items Found</div>
+                    <div class="action-breakdown">
+                      <div class="recent-items-header">
+                        Recent Entity Actions
+                      </div>
+                      <div id="recentActionsList" class="recent-items-list">
+                        <div class="empty-message">
+                          No recent entity actions
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Empty State -->
+          <div class="empty-state" id="analyticsEmptyState">
+            <i class="bi bi-graph-up"></i>
+            <h6>No Analytics Data</h6>
+            <p class="mb-3">
+              Import and analyze your web data to see detailed usage analytics
+              and insights.
+            </p>
+            <button class="action-btn primary" data-action="showImportModal">
+              <i class="bi bi-plus-circle"></i>Import Data
+            </button>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Settings Modal (keeping existing functionality) -->
+    <div
+      class="modal fade"
+      id="settingsModal"
+      tabindex="-1"
+      aria-labelledby="settingsModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div
+            class="modal-header"
+            style="
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              color: white;
+            "
+          >
+            <h5 class="modal-title" id="settingsModalLabel">
+              <i class="bi bi-gear me-2"></i>Settings & Import
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+              style="filter: invert(1)"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <!-- Import interface will be populated here -->
+            <div id="importInterface">
+              <p class="text-muted">
+                Import settings and data management options will be available
+                here.
+              </p>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Web Activity Import Modal -->
+    <div
+      class="modal fade import-modal"
+      id="webActivityImportModal"
+      tabindex="-1"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div
+            class="modal-header"
+            style="
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              color: white;
+            "
+          >
+            <h5 class="modal-title">
+              <i class="bi bi-download me-2"></i>Import Web Activity
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+              style="filter: invert(1)"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <div id="webActivityImportForm">
+              <!-- Browser Selection -->
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Select Browser</label>
+                <div class="row">
+                  <div class="col-md-6">
+                    <div class="import-option" data-browser="chrome">
+                      <div class="d-flex align-items-center">
+                        <i
+                          class="bi bi-browser-chrome text-success me-3 fs-4"
+                        ></i>
+                        <div>
+                          <div class="fw-semibold">Google Chrome</div>
+                          <small class="text-muted"
+                            >Import from Chrome browser</small
+                          >
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="import-option" data-browser="edge">
+                      <div class="d-flex align-items-center">
+                        <i
+                          class="bi bi-browser-edge text-primary me-3 fs-4"
+                        ></i>
+                        <div>
+                          <div class="fw-semibold">Microsoft Edge</div>
+                          <small class="text-muted"
+                            >Import from Edge browser</small
+                          >
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Data Type Selection -->
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Data Type</label>
+                <div class="row">
+                  <div class="col-md-6">
+                    <div class="import-option" data-type="bookmarks">
+                      <div class="d-flex align-items-center">
+                        <i
+                          class="bi bi-bookmark-star text-warning me-3 fs-4"
+                        ></i>
+                        <div>
+                          <div class="fw-semibold">Bookmarks</div>
+                          <small class="text-muted"
+                            >Saved bookmarks and favorites</small
+                          >
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="import-option" data-type="history">
+                      <div class="d-flex align-items-center">
+                        <i class="bi bi-clock-history text-info me-3 fs-4"></i>
+                        <div>
+                          <div class="fw-semibold">Browser History</div>
+                          <small class="text-muted"
+                            >Recently visited pages</small
+                          >
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Advanced Options -->
+              <div class="mb-3">
+                <button
+                  class="btn btn-outline-secondary btn-sm"
+                  type="button"
+                  data-bs-toggle="collapse"
+                  data-bs-target="#webAdvancedOptions"
+                >
+                  <i class="bi bi-gear"></i> Advanced Options
+                </button>
+
+                <div class="collapse mt-3" id="webAdvancedOptions">
+                  <div class="card card-body bg-light">
+                    <div class="row">
+                      <div class="col-md-6">
+                        <label class="form-label">Limit (max items)</label>
+                        <input
+                          type="number"
+                          id="webImportLimit"
+                          class="form-control form-control-sm"
+                          placeholder="e.g., 1000"
+                          min="1"
+                          max="50000"
+                          value="1000"
+                        />
+                      </div>
+                      <div
+                        class="col-md-6"
+                        id="webDaysBackContainer"
+                        style="display: none"
+                      >
+                        <label class="form-label"
+                          >Days back (history only)</label
+                        >
+                        <input
+                          type="number"
+                          id="webDaysBack"
+                          class="form-control form-control-sm"
+                          placeholder="e.g., 30"
+                          min="1"
+                          max="365"
+                          value="30"
+                        />
+                      </div>
+                    </div>
+
+                    <div
+                      class="mt-3"
+                      id="webFolderContainer"
+                      style="display: none"
+                    >
+                      <label class="form-label"
+                        >Bookmark Folder (optional)</label
+                      >
+                      <input
+                        type="text"
+                        id="webBookmarkFolder"
+                        class="form-control form-control-sm"
+                        placeholder="e.g., Work, Personal"
+                      />
+                    </div>
+
+                    <div class="mt-3">
+                      <h6 class="mb-3">Enhancement Options</h6>
+
+                      <div class="mb-3">
+                        <label for="webExtractionMode" class="form-label">
+                          <i class="bi bi-gear"></i> Extraction Mode
+                        </label>
+                        <div class="extraction-mode-slider-container">
+                          <input
+                            type="range"
+                            id="webExtractionMode"
+                            class="extraction-mode-slider"
+                            min="0"
+                            max="4"
+                            value="2"
+                            step="1"
+                            data-mode="content"
+                          />
+                          <div class="slider-labels">
+                            <span class="slider-label" data-value="0"
+                              >Basic</span
+                            >
+                            <span class="slider-label" data-value="1"
+                              >Summary</span
+                            >
+                            <span class="slider-label" data-value="2"
+                              >Content</span
+                            >
+                            <span class="slider-label" data-value="3"
+                              >Actions</span
+                            >
+                            <span class="slider-label" data-value="4"
+                              >Full</span
+                            >
+                          </div>
+                          <div class="slider-ticks">
+                            <span class="slider-tick" data-value="0"></span>
+                            <span class="slider-tick" data-value="1"></span>
+                            <span class="slider-tick" data-value="2"></span>
+                            <span class="slider-tick" data-value="3"></span>
+                            <span class="slider-tick" data-value="4"></span>
+                          </div>
+                        </div>
+                        <small class="text-muted">
+                          <span id="webModeDescription"
+                            >AI-powered content analysis with entity and topic
+                            extraction</span
+                          >
+                        </small>
+                      </div>
+
+                      <div class="row">
+                        <div class="col-md-6">
+                          <label for="webMaxConcurrent" class="form-label"
+                            >Max Concurrent</label
+                          >
+                          <input
+                            type="number"
+                            id="webMaxConcurrent"
+                            class="form-control form-control-sm"
+                            value="5"
+                            min="1"
+                            max="20"
+                          />
+                        </div>
+                        <div class="col-md-6">
+                          <label for="webContentTimeout" class="form-label"
+                            >Timeout (seconds)</label
+                          >
+                          <input
+                            type="number"
+                            id="webContentTimeout"
+                            class="form-control form-control-sm"
+                            value="30"
+                            min="5"
+                            max="120"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Import Controls -->
+              <div class="d-flex gap-2">
+                <button
+                  id="startWebActivityImport"
+                  class="btn btn-primary"
+                  disabled
+                >
+                  <i class="bi bi-download"></i> Start Import
+                </button>
+                <button
+                  id="cancelWebActivityImport"
+                  class="btn btn-outline-secondary d-none"
+                >
+                  <i class="bi bi-x-circle"></i> Cancel
+                </button>
+              </div>
+            </div>
+
+            <!-- Progress Display -->
+            <div id="webActivityImportProgress" class="d-none">
+              <div class="progress-container">
+                <div class="text-center">
+                  <div class="spinner-border text-primary mb-3" role="status">
+                    <span class="visually-hidden">Importing...</span>
+                  </div>
+                  <div>
+                    <span class="fw-semibold">Importing Data...</span>
+                  </div>
+                  <small
+                    id="webImportStatusMessage"
+                    class="text-muted d-block mt-2"
+                  >
+                    Preparing import...
+                  </small>
+                  <div class="progress mt-3" style="height: 6px">
+                    <div
+                      id="webImportProgressBar"
+                      class="progress-bar"
+                      role="progressbar"
+                      style="width: 0%"
+                      aria-valuenow="0"
+                      aria-valuemin="0"
+                      aria-valuemax="100"
+                    ></div>
+                  </div>
+                  <small
+                    id="webImportProgressText"
+                    class="text-muted d-block mt-1"
+                    >0 / 0 items</small
+                  >
+                </div>
+
+                <div class="mt-4 text-center">
+                  <button
+                    id="cancelWebImportProgress"
+                    class="btn btn-outline-danger btn-sm"
+                  >
+                    <i class="bi bi-x-circle"></i> Cancel Import
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Folder Import Modal -->
+    <div
+      class="modal fade import-modal"
+      id="folderImportModal"
+      tabindex="-1"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div
+            class="modal-header"
+            style="
+              background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+              color: white;
+            "
+          >
+            <h5 class="modal-title">
+              <i class="bi bi-folder2-open me-2"></i>Import from Folder
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+              style="filter: invert(1)"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <div id="folderImportForm">
+              <!-- Folder Path Input -->
+              <div class="mb-3">
+                <label for="folderPath" class="form-label fw-semibold">
+                  <i class="bi bi-folder"></i> Folder Path
+                </label>
+                <input
+                  type="text"
+                  id="folderPath"
+                  class="form-control"
+                  placeholder="Enter folder path (e.g., C:\Documents\HTMLFiles or /home/user/html-files)"
+                  autocomplete="off"
+                />
+                <div class="form-text">
+                  <small class="text-muted">
+                    <i class="bi bi-info-circle"></i>
+                    Enter the full path to a folder containing HTML files.
+                    Subfolders will be included if recursive option is enabled.
+                  </small>
+                </div>
+                <div id="folderValidationFeedback"></div>
+              </div>
+
+              <!-- Folder Options -->
+              <div class="mb-3">
+                <h6 class="mb-3">Folder Options</h6>
+
+                <div class="row">
+                  <div class="col-md-6">
+                    <div class="form-check mb-2">
+                      <input
+                        class="form-check-input"
+                        type="checkbox"
+                        id="folderRecursive"
+                        checked
+                      />
+                      <label class="form-check-label" for="folderRecursive">
+                        <i class="bi bi-arrow-down-up"></i> Include subfolders
+                      </label>
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="form-check mb-2">
+                      <input
+                        class="form-check-input"
+                        type="checkbox"
+                        id="folderSkipHidden"
+                        checked
+                      />
+                      <label class="form-check-label" for="folderSkipHidden">
+                        <i class="bi bi-eye-slash"></i> Skip hidden files
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div class="col-md-6">
+                    <label for="folderFileLimit" class="form-label"
+                      >File limit (optional)</label
+                    >
+                    <input
+                      type="number"
+                      id="folderFileLimit"
+                      class="form-control form-control-sm"
+                      placeholder="e.g., 1000"
+                      min="1"
+                      max="10000"
+                      value="1000"
+                    />
+                  </div>
+                  <div class="col-md-6">
+                    <label for="folderMaxFileSize" class="form-label"
+                      >Max file size (MB)</label
+                    >
+                    <input
+                      type="number"
+                      id="folderMaxFileSize"
+                      class="form-control form-control-sm"
+                      placeholder="50"
+                      min="1"
+                      max="500"
+                      value="50"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <!-- Processing Options -->
+              <div class="mb-3">
+                <button
+                  class="btn btn-outline-secondary btn-sm"
+                  type="button"
+                  data-bs-toggle="collapse"
+                  data-bs-target="#folderAdvancedOptions"
+                >
+                  <i class="bi bi-gear"></i> Processing Options
+                </button>
+
+                <div class="collapse mt-3" id="folderAdvancedOptions">
+                  <div class="card card-body bg-light">
+                    <div class="mb-3">
+                      <h6 class="mb-3">Content Processing</h6>
+
+                      <div class="mb-3">
+                        <label for="folderExtractionMode" class="form-label">
+                          <i class="bi bi-gear"></i> Extraction Mode
+                        </label>
+                        <div class="extraction-mode-slider-container">
+                          <input
+                            type="range"
+                            id="folderExtractionMode"
+                            class="extraction-mode-slider"
+                            min="0"
+                            max="4"
+                            value="2"
+                            step="1"
+                            data-mode="content"
+                          />
+                          <div class="slider-labels">
+                            <span class="slider-label" data-value="0"
+                              >Basic</span
+                            >
+                            <span class="slider-label" data-value="1"
+                              >Summary</span
+                            >
+                            <span class="slider-label" data-value="2"
+                              >Content</span
+                            >
+                            <span class="slider-label" data-value="3"
+                              >Actions</span
+                            >
+                            <span class="slider-label" data-value="4"
+                              >Full</span
+                            >
+                          </div>
+                          <div class="slider-ticks">
+                            <span class="slider-tick" data-value="0"></span>
+                            <span class="slider-tick" data-value="1"></span>
+                            <span class="slider-tick" data-value="2"></span>
+                            <span class="slider-tick" data-value="3"></span>
+                            <span class="slider-tick" data-value="4"></span>
+                          </div>
+                        </div>
+                        <small class="text-muted">
+                          <span id="folderModeDescription"
+                            >AI-powered content analysis with entity and topic
+                            extraction</span
+                          >
+                        </small>
+                      </div>
+
+                      <div class="form-check mb-2">
+                        <input
+                          class="form-check-input"
+                          type="checkbox"
+                          id="folderPreserveStructure"
+                          checked
+                        />
+                        <label
+                          class="form-check-label"
+                          for="folderPreserveStructure"
+                        >
+                          <i class="bi bi-diagram-3"></i> Preserve folder
+                          structure
+                        </label>
+                        <small class="text-muted d-block ms-4">
+                          Maintain original folder organization and metadata
+                        </small>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Path Examples -->
+              <div class="mb-3">
+                <details class="text-muted">
+                  <summary class="btn btn-link btn-sm p-0 text-decoration-none">
+                    <i class="bi bi-question-circle"></i> Path Examples
+                  </summary>
+                  <div class="mt-2 small">
+                    <strong>Windows:</strong><br />
+                    <code>C:\Users\YourName\Documents\HTMLFiles</code><br />
+                    <code>D:\Projects\WebsiteArchive</code><br /><br />
+                    <strong>macOS/Linux:</strong><br />
+                    <code>/Users/yourname/Documents/HTMLFiles</code><br />
+                    <code>/home/user/website-archive</code><br /><br />
+                    <strong>Network paths:</strong><br />
+                    <code>\\server\share\htmlfiles</code>
+                  </div>
+                </details>
+              </div>
+
+              <!-- Import Controls -->
+              <div class="d-flex gap-2">
+                <button id="startFolderImport" class="btn btn-success" disabled>
+                  <i class="bi bi-folder-plus"></i> Start Import
+                </button>
+                <button
+                  id="cancelFolderImport"
+                  class="btn btn-outline-secondary d-none"
+                >
+                  <i class="bi bi-x-circle"></i> Cancel
+                </button>
+              </div>
+            </div>
+
+            <!-- Progress Display -->
+            <div id="folderImportProgress" class="d-none">
+              <div class="progress-container">
+                <div class="text-center">
+                  <div class="spinner-border text-success mb-3" role="status">
+                    <span class="visually-hidden">Processing folder...</span>
+                  </div>
+                  <div>
+                    <span class="fw-semibold">Processing Folder...</span>
+                  </div>
+                  <small
+                    id="folderImportStatusMessage"
+                    class="text-muted d-block mt-2"
+                  >
+                    Validating folder...
+                  </small>
+                  <div class="progress mt-3" style="height: 6px">
+                    <div
+                      id="folderImportProgressBar"
+                      class="progress-bar bg-success"
+                      role="progressbar"
+                      style="width: 0%"
+                      aria-valuenow="0"
+                      aria-valuemin="0"
+                      aria-valuemax="100"
+                    ></div>
+                  </div>
+                  <small
+                    id="folderImportProgressText"
+                    class="text-muted d-block mt-1"
+                    >0 / 0 files</small
+                  >
+                </div>
+
+                <div class="mt-4 text-center">
+                  <button
+                    id="cancelFolderImportProgress"
+                    class="btn btn-outline-danger btn-sm"
+                  >
+                    <i class="bi bi-x-circle"></i> Cancel Import
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="../vendor/bootstrap/bootstrap.bundle.min.js"></script>
+    <script src="knowledgeLibrary.js"></script>
+  </body>
+</html>

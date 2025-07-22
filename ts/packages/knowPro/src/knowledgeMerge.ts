@@ -141,6 +141,18 @@ export function mergeScoredConcreteEntities(
     return mergedEntities;
 }
 
+export function mergeConcreteEntities(
+    entities: kpLib.ConcreteEntity[],
+): kpLib.ConcreteEntity[] {
+    let mergedEntities = concreteToMergedEntities(entities);
+
+    const mergedConcreteEntities: kpLib.ConcreteEntity[] = [];
+    for (const mergedEntity of mergedEntities.values()) {
+        mergedConcreteEntities.push(mergedToConcreteEntity(mergedEntity));
+    }
+    return mergedConcreteEntities;
+}
+
 function mergeMessageOrdinals(mergedEntity: MergedKnowledge, sr: SemanticRef) {
     mergedEntity.sourceMessageOrdinals ??= new Set<MessageOrdinal>();
     mergedEntity.sourceMessageOrdinals.add(sr.range.start.messageOrdinal);

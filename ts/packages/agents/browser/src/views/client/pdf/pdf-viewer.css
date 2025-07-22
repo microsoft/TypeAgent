@@ -21,7 +21,7 @@ body {
 }
 
 .toolbar {
-  background: #424242;
+  background: #2c3e50;
   padding: 8px 16px;
   border-bottom: 1px solid #555;
   display: flex;
@@ -29,6 +29,7 @@ body {
   justify-content: space-between;
   min-height: 40px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  z-index: 10;
 }
 
 .toolbar-left {
@@ -153,9 +154,14 @@ body {
   height: 100%;
 }
 
-/* PDF.js viewer container - positioned by JavaScript below toolbar */
+/* PDF.js viewer container - must be absolutely positioned for PDF.js */
 #viewerContainer {
-  /* Position will be set dynamically by JavaScript */
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: auto;
 }
 
 #viewer {

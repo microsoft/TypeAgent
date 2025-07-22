@@ -9,33 +9,75 @@ import {
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import {
     ImportWebsiteData,
-    SearchWebsites,
+    ImportHtmlFolder,
     GetWebsiteStats,
 } from "./actionsSchema.mjs";
+import { BrowserActionContext } from "./actionHandler.mjs";
+import {
+    searchWebMemories,
+    SearchWebMemoriesRequest,
+} from "./searchWebMemories.mjs";
 import * as website from "website-memory";
-import * as kp from "knowpro";
+import * as kpLib from "knowledge-processor";
 import { openai as ai } from "aiclient";
 import registerDebug from "debug";
+import * as path from "path";
 
-export interface BrowserActionContext {
-    browserControl?: any | undefined;
-    webSocket?: any | undefined;
-    webAgentChannels?: any | undefined;
-    crossWordState?: any | undefined;
-    browserConnector?: any | undefined;
-    browserProcess?: any | undefined;
-    tabTitleIndex?: any | undefined;
-    allowDynamicAgentDomains?: string[];
-    websiteCollection?: website.WebsiteCollection | undefined;
-    fuzzyMatchingModel?: any | undefined;
-    index: website.IndexData | undefined;
+/**
+ * Helper function to log structured progress for reliable parsing
+ */
+function logStructuredProgress(
+    current: number,
+    total: number,
+    description: string,
+    phase: string = "processing",
+    displayProgress?: (message: string) => void,
+) {
+    const progressData = {
+        type: "PROGRESS_UPDATE",
+        current: current,
+        total: total,
+        description: description,
+        phase: phase,
+        timestamp: Date.now(),
+    };
+
+    const progressMessage = `PROGRESS_JSON:${JSON.stringify(progressData)}`;
+
+    if (displayProgress) {
+        displayProgress(progressMessage);
+    }
 }
+import { WebsiteData } from "./htmlUtils.mjs";
+import {
+    enumerateHtmlFiles,
+    readHtmlFile,
+    validateHtmlFolder,
+    getFileMetadata,
+    createFileBatches,
+    FolderOptions,
+    DEFAULT_FOLDER_OPTIONS,
+} from "./folderUtils.mjs";
+import {
+    ExtractionInput,
+    BatchProgress,
+    AIModelRequiredError,
+} from "website-memory";
+import { BrowserKnowledgeExtractor } from "./knowledge/browserKnowledgeExtractor.mjs";
+
+import {
+    createContentExtractor,
+    logProcessingStatus,
+    processHtmlFolder,
+} from "./websiteImport.mjs";
 
 const debug = registerDebug("typeagent:browser:website-memory");
 
 /**
  * Resolve URL using website visit history (bookmarks, browser history)
  * This provides a more personalized alternative to web search
+ *
+ * Refactored to use searchWebMemories for consistent search behavior
  */
 export async function resolveURLWithHistory(
     context: { agentContext: BrowserActionContext },
@@ -50,91 +92,58 @@ export async function resolveURLWithHistory(
     }
 
     try {
-        // Use knowpro searchConversationKnowledge for semantic search
-        const matches = await kp.searchConversationKnowledge(
-            websiteCollection,
-            // search group
-            {
-                booleanOp: "or", // Use OR to be more permissive
-                terms: siteQueryToSearchTerms(site),
-            },
-            // when filter
-            {
-                // No specific knowledge type filter - search across all types
-            },
-            // options
-            {
-                exactMatch: false, // Allow fuzzy matching
-            },
+        // Create SessionContext wrapper for searchWebMemories
+        // Use minimal required fields - searchWebMemories only needs agentContext
+        const sessionContext: SessionContext<BrowserActionContext> = {
+            agentContext: context.agentContext,
+            sessionStorage: undefined,
+            instanceStorage: undefined,
+            notify: () => {},
+            popupQuestion: async () => 0,
+            toggleTransientAgent: async () => {},
+            addDynamicAgent: async () => {},
+            removeDynamicAgent: async () => {},
+            getSharedLocalHostPort: async () => 0,
+            indexes: async () => [],
+        };
+
+        // Use searchWebMemories with URL resolution optimized parameters
+        const searchRequest: SearchWebMemoriesRequest = {
+            query: site,
+            limit: 5, // Only need top 5 candidates for URL resolution
+            minScore: 0.3, // Same threshold as before (lower for broader matching)
+            exactMatch: false, // Allow fuzzy matching
+            generateAnswer: false, // Don't need answers for URL resolution
+            includeRelatedEntities: false, // Don't need entities for URL resolution
+            enableAdvancedSearch: true, // Use enhanced search if available
+            searchScope: "all_indexed",
+            debug: false, // Keep false for production URL resolution
+        };
+
+        const response = await searchWebMemories(searchRequest, sessionContext);
+
+        if (response.websites.length === 0) {
+            debug(`No matches found for site: '${site}'`);
+            return undefined;
+        }
+
+        debug(
+            `Found ${response.websites.length} candidates from searchWebMemories for: '${site}'`,
         );
 
-        if (!matches || matches.size === 0) {
-            debug(`No semantic matches found in history for query: '${site}'`);
-            return undefined;
-        }
+        // Use the built-in relevance scores from search results
+        const scoredCandidates = response.websites.map((website) => ({
+            url: website.url,
+            score: website.relevanceScore, // Use native relevance scoring
+            metadata: website,
+        }));
 
-        debug(`Found ${matches.size} semantic matches for: '${site}'`);
-        debug(matches);
-
-        const candidates: { url: string; score: number; metadata: any }[] = [];
-        const processedMessages = new Set<number>();
-
-        matches.forEach((match: kp.SemanticRefSearchResult) => {
-            match.semanticRefMatches.forEach(
-                (refMatch: kp.ScoredSemanticRefOrdinal) => {
-                    if (refMatch.score >= 0.3) {
-                        // Lower threshold for broader matching
-                        const semanticRef: kp.SemanticRef | undefined =
-                            websiteCollection.semanticRefs.get(
-                                refMatch.semanticRefOrdinal,
-                            );
-                        if (semanticRef) {
-                            const messageOrdinal =
-                                semanticRef.range.start.messageOrdinal;
-                            if (
-                                messageOrdinal !== undefined &&
-                                !processedMessages.has(messageOrdinal)
-                            ) {
-                                processedMessages.add(messageOrdinal);
-
-                                const website =
-                                    websiteCollection.messages.get(
-                                        messageOrdinal,
-                                    );
-                                if (website && website.metadata) {
-                                    const metadata = website.metadata;
-                                    let totalScore = refMatch.score;
-
-                                    // Apply additional scoring based on special patterns and recency
-                                    totalScore += calculateWebsiteScore(
-                                        [site],
-                                        metadata,
-                                    );
-
-                                    candidates.push({
-                                        url: metadata.url,
-                                        score: totalScore,
-                                        metadata: metadata,
-                                    });
-                                }
-                            }
-                        }
-                    }
-                },
-            );
-        });
-
-        if (candidates.length === 0) {
-            debug(`No qualifying candidates found for query: '${site}'`);
-            return undefined;
-        }
-
-        // Sort by total score (highest first) and remove duplicates
+        // Sort by relevance score and remove duplicates
         const uniqueCandidates = new Map<
             string,
             { url: string; score: number; metadata: any }
         >();
-        candidates.forEach((candidate) => {
+        scoredCandidates.forEach((candidate) => {
             const existing = uniqueCandidates.get(candidate.url);
             if (!existing || candidate.score > existing.score) {
                 uniqueCandidates.set(candidate.url, candidate);
@@ -148,253 +157,19 @@ export async function resolveURLWithHistory(
         const bestMatch = sortedCandidates[0];
 
         debug(
-            `Found best match from history (score: ${bestMatch.score.toFixed(2)}): '${bestMatch.metadata.title || bestMatch.url}' -> ${bestMatch.url}`,
+            `Found best match from searchWebMemories (score: ${bestMatch.score.toFixed(2)}): '${bestMatch.metadata.title || bestMatch.url}' -> ${bestMatch.url}`,
         );
         debug(
-            `Match details: domain=${bestMatch.metadata.domain}, source=${bestMatch.metadata.websiteSource}`,
+            `Match details: domain=${bestMatch.metadata.domain}, source=${bestMatch.metadata.source}`,
         );
 
         return bestMatch.url;
     } catch (error) {
-        debug(`Error searching website history: ${error}`);
+        debug(
+            `Error in resolveURLWithHistory using searchWebMemories: ${error}`,
+        );
         return undefined;
     }
-}
-
-/**
- * Convert site query to knowpro search terms
- */
-function siteQueryToSearchTerms(site: string): any[] {
-    const terms: any[] = [];
-    const siteQuery = site.toLowerCase().trim();
-
-    // Add the main query as a search term
-    terms.push({ term: { text: siteQuery } });
-
-    // Add individual words if it's a multi-word query
-    /*
-    const words = siteQuery.split(/\s+/).filter((word) => word.length > 2);
-    words.forEach((word) => {
-        if (word !== siteQuery) {
-            terms.push({ term: { text: word } });
-        }
-    });
-*/
-
-    return terms;
-}
-
-/**
- * Calculate additional scoring based on website metadata
- */
-export function calculateWebsiteScore(
-    searchFilters: string[],
-    metadata: any,
-): number {
-    let score = 0;
-
-    const title = metadata.title?.toLowerCase() || "";
-    const domain = metadata.domain?.toLowerCase() || "";
-    const url = metadata.url.toLowerCase();
-    const folder = metadata.folder?.toLowerCase() || "";
-
-    for (const filter of searchFilters) {
-        const queryLower = filter.toLowerCase();
-
-        // Direct domain matches get highest boost
-        if (
-            domain === queryLower ||
-            domain === `www.${queryLower}` ||
-            domain.endsWith(`.${queryLower}`)
-        ) {
-            score += 3.0;
-        } else if (domain.includes(queryLower)) {
-            score += 2.0;
-        }
-
-        if (title.includes(queryLower)) {
-            score += 1.5;
-        }
-
-        if (url.includes(queryLower)) {
-            score += 1.0;
-        }
-
-        if (
-            metadata.websiteSource === "bookmark" &&
-            folder.includes(queryLower)
-        ) {
-            score += 1.0;
-        }
-
-        // Recency bonus
-        if (metadata.visitDate || metadata.bookmarkDate) {
-            const visitDate = new Date(
-                metadata.visitDate || metadata.bookmarkDate,
-            );
-            const daysSinceVisit =
-                (Date.now() - visitDate.getTime()) / (1000 * 60 * 60 * 24);
-            if (daysSinceVisit < 7) score += 0.5;
-            else if (daysSinceVisit < 30) score += 0.3;
-        }
-
-        // Frequency bonus
-        if (metadata.visitCount && metadata.visitCount > 5) {
-            score += Math.min(metadata.visitCount / 20, 0.5);
-        }
-    }
-
-    return score;
-}
-
-/**
- * Find websites matching search criteria using knowpro search utilities
- */
-export async function findRequestedWebsites(
-    searchFilters: string[],
-    context: BrowserActionContext,
-    exactMatch: boolean = false,
-    minScore: number = 0.5,
-): Promise<website.Website[]> {
-    if (
-        !context.websiteCollection ||
-        context.websiteCollection.messages.length === 0
-    ) {
-        return [];
-    }
-
-    try {
-        const matches = await kp.searchConversationKnowledge(
-            context.websiteCollection,
-            // search group
-            {
-                booleanOp: "or", // Use OR to match any of the search filters
-                terms: searchFiltersToSearchTerms(searchFilters),
-            },
-            // when filter
-            {
-                // No specific knowledge type filter - search across all types
-            },
-            // options
-            {
-                exactMatch: exactMatch,
-            },
-        );
-
-        if (!matches || matches.size === 0) {
-            debug(
-                `No semantic matches found for search filters: ${searchFilters.join(", ")}`,
-            );
-            return [];
-        }
-
-        debug(
-            `Found ${matches.size} semantic matches for search filters: ${searchFilters.join(", ")}`,
-        );
-
-        debug(matches);
-
-        const results: { website: website.Website; score: number }[] = [];
-        const processedMessages = new Set<number>();
-
-        matches.forEach((match: kp.SemanticRefSearchResult) => {
-            match.semanticRefMatches.forEach(
-                (refMatch: kp.ScoredSemanticRefOrdinal) => {
-                    if (refMatch.score >= minScore) {
-                        const semanticRef: kp.SemanticRef | undefined =
-                            context.websiteCollection!.semanticRefs.get(
-                                refMatch.semanticRefOrdinal,
-                            );
-                        if (semanticRef) {
-                            const messageOrdinal =
-                                semanticRef.range.start.messageOrdinal;
-                            if (
-                                messageOrdinal !== undefined &&
-                                !processedMessages.has(messageOrdinal)
-                            ) {
-                                processedMessages.add(messageOrdinal);
-
-                                const websiteData =
-                                    context.websiteCollection!.messages.get(
-                                        messageOrdinal,
-                                    );
-                                if (websiteData) {
-                                    let totalScore = refMatch.score;
-
-                                    // Apply additional scoring based on metadata matches
-                                    totalScore += calculateWebsiteScore(
-                                        searchFilters,
-                                        websiteData.metadata,
-                                    );
-
-                                    results.push({
-                                        website: websiteData,
-                                        score: totalScore,
-                                    });
-                                }
-                            }
-                        }
-                    }
-                },
-            );
-        });
-
-        // Sort by score (highest first) and remove duplicates
-        const uniqueResults = new Map<
-            string,
-            { website: website.Website; score: number }
-        >();
-        results.forEach((result) => {
-            const url = result.website.metadata.url;
-            const existing = uniqueResults.get(url);
-            if (!existing || result.score > existing.score) {
-                uniqueResults.set(url, result);
-            }
-        });
-
-        const sortedResults = Array.from(uniqueResults.values()).sort(
-            (a, b) => b.score - a.score,
-        );
-
-        debug(
-            `Filtered to ${sortedResults.length} unique websites after scoring`,
-        );
-
-        debug(sortedResults);
-
-        return sortedResults.map((r) => r.website);
-    } catch (error) {
-        debug(`Error in semantic website search: ${error}`);
-        // Fallback to empty results
-        return [];
-    }
-}
-
-/**
- * Convert search filters to knowpro search terms
- */
-function searchFiltersToSearchTerms(filters: string[]): any[] {
-    const terms: any[] = [];
-
-    filters.forEach((filter) => {
-        // Add the main filter as a search term
-        terms.push({ term: { text: filter } });
-
-        // Add individual words if it's a multi-word filter
-        /*
-        const words = filter
-            .toLowerCase()
-            .split(/\s+/)
-            .filter((word) => word.length > 2);
-        words.forEach((word) => {
-            if (word !== filter.toLowerCase()) {
-                terms.push({ term: { text: word } });
-            }
-        });
-        */
-    });
-
-    return terms;
 }
 
 /**
@@ -406,9 +181,13 @@ export async function importWebsiteDataFromSession(
     displayProgress?: (message: string) => void,
 ) {
     try {
-        if (displayProgress) {
-            displayProgress("Importing website data...");
-        }
+        logStructuredProgress(
+            0,
+            0,
+            "Starting website data import",
+            "initializing",
+            displayProgress,
+        );
 
         const {
             source,
@@ -416,10 +195,7 @@ export async function importWebsiteDataFromSession(
             limit,
             days,
             folder,
-            extractContent,
-            enableIntelligentAnalysis,
-            enableActionDetection,
-            extractionMode,
+            mode,
             maxConcurrent,
             contentTimeout,
         } = parameters;
@@ -438,20 +214,25 @@ export async function importWebsiteDataFromSession(
                     : defaultPaths.edge.history;
         }
 
-        // Enhanced progress callback that uses both debug logging and display callback
+        // Enhanced progress callback that uses structured JSON logging
         const progressCallback = (
             current: number,
             total: number,
             item: string,
         ) => {
-            if (current % 100 === 0) {
-                const message = `Importing... ${current}/${total}: ${item.substring(0, 50)}...`;
-                debug(message);
-                if (displayProgress) {
-                    displayProgress(message);
-                }
-            }
+            logStructuredProgress(
+                current,
+                total,
+                item,
+                "processing",
+                displayProgress,
+            );
         };
+
+        const extractionMode = mode || "basic";
+
+        // Log processing status for debugging
+        logProcessingStatus(context);
 
         // Build options object with only defined values
         const importOptions: any = {};
@@ -459,63 +240,167 @@ export async function importWebsiteDataFromSession(
         if (days !== undefined) importOptions.days = days;
         if (folder !== undefined) importOptions.folder = folder;
 
-        // Add enhancement options
-        if (extractContent !== undefined)
-            importOptions.extractContent = extractContent;
-        if (enableIntelligentAnalysis !== undefined)
-            importOptions.enableIntelligentAnalysis = enableIntelligentAnalysis;
-        if (enableActionDetection !== undefined)
-            importOptions.enableActionDetection = enableActionDetection;
-        if (extractionMode !== undefined)
-            importOptions.extractionMode = extractionMode;
+        // Add extraction mode
+        if (mode !== undefined) importOptions.mode = mode;
         if (maxConcurrent !== undefined)
             importOptions.maxConcurrent = maxConcurrent;
         if (contentTimeout !== undefined)
             importOptions.contentTimeout = contentTimeout;
 
-        // Create chat model for intelligent analysis if enabled
-        if (enableIntelligentAnalysis) {
+        // For AI-enabled modes, validate AI availability before starting import
+        if (extractionMode !== "basic") {
+            try {
+                const extractor = new BrowserKnowledgeExtractor(context);
+                // This will throw AIModelRequiredError if AI model is not available
+                await extractor.extractKnowledge(
+                    {
+                        url: "test://validation",
+                        title: "Validation Test",
+                        textContent: "test content for validation",
+                        source: "direct",
+                    },
+                    extractionMode,
+                );
+            } catch (error) {
+                if (error instanceof AIModelRequiredError) {
+                    throw new Error(
+                        `Cannot import with ${extractionMode} mode: ${error.message}`,
+                    );
+                }
+            }
+        }
+
+        // Create AI model for intelligent analysis if AI mode is enabled
+        if (extractionMode !== "basic") {
             try {
                 const apiSettings = ai.azureApiSettingsFromEnv(
                     ai.ModelType.Chat,
                     undefined,
                     undefined, // Use default model
                 );
-                importOptions.model = ai.createChatModel(
+                const chatModel = ai.createChatModel(
                     apiSettings,
                     undefined,
                     undefined,
                     ["website-analysis"],
                 );
-                debug("Created chat model for intelligent analysis");
+
+                // Create knowledge extractor for ContentExtractor
+                importOptions.knowledgeExtractor =
+                    kpLib.conversation.createKnowledgeExtractor(chatModel);
+
+                debug(
+                    "Created chat model and knowledge extractor for intelligent analysis",
+                );
             } catch (error) {
                 debug(
                     "Failed to create chat model for intelligent analysis:",
                     error,
                 );
-                // Continue without intelligent analysis if model creation fails
+                throw new Error(
+                    `Cannot import with ${extractionMode} mode: AI model required but not available`,
+                );
             }
         }
 
-        let websites;
-        if (extractContent) {
-            // Use enhanced import with content extraction
-            websites = await website.importWebsitesWithContent(
-                source,
-                type,
-                filePath,
-                importOptions,
-                progressCallback,
+        // Import websites using basic import first to get metadata
+        let websites: any[] = await website.importWebsites(
+            source,
+            type,
+            filePath,
+            importOptions,
+            progressCallback,
+        );
+
+        // Enhance with HTML content fetching and AI analysis for non-basic modes
+        if (extractionMode !== "basic" && websites.length > 0) {
+            logStructuredProgress(
+                0,
+                websites.length,
+                "Starting content fetching and AI analysis",
+                "extracting",
+                displayProgress,
             );
-        } else {
-            // Use basic import for fast metadata-only import
-            websites = await website.importWebsites(
-                source,
-                type,
-                filePath,
-                importOptions,
-                progressCallback,
-            );
+
+            // Create inputs that will trigger HTML fetching in ContentExtractor
+            const contentInputs: ExtractionInput[] = websites.map((site) => ({
+                url: site.metadata.url,
+                title: site.metadata.title || site.metadata.url,
+                // NO textContent or htmlContent - let ContentExtractor fetch HTML
+                source: type === "bookmarks" ? "bookmark" : "history",
+                timestamp:
+                    site.metadata.visitDate || site.metadata.bookmarkDate,
+            }));
+
+            try {
+                // Create ContentExtractor with AI model
+                const extractor = createContentExtractor(
+                    {
+                        mode: extractionMode,
+                        knowledgeExtractor: importOptions.knowledgeExtractor,
+                        timeout: importOptions.contentTimeout || 10000,
+                        maxConcurrentExtractions:
+                            importOptions.maxConcurrent || 5,
+                    },
+                    context,
+                );
+
+                // Use BatchProcessor for efficient processing
+                const batchProcessor = new website.BatchProcessor(extractor);
+
+                const enhancedProgressCallback = (progress: BatchProgress) => {
+                    const phase =
+                        progress.processed <= progress.total * 0.6
+                            ? "fetching"
+                            : "extracting";
+                    const description = `${progress.processed <= progress.total * 0.6 ? "Fetching content" : "Analyzing with AI"} (${progress.percentage}%)`;
+                    logStructuredProgress(
+                        progress.processed,
+                        progress.total,
+                        description,
+                        phase,
+                        displayProgress,
+                    );
+                };
+
+                const enhancedResults = await batchProcessor.processBatch(
+                    contentInputs,
+                    extractionMode,
+                    enhancedProgressCallback,
+                );
+
+                // Apply results back to websites
+                enhancedResults.forEach((result, index) => {
+                    if (websites[index] && result.knowledge) {
+                        websites[index].knowledge = result.knowledge;
+
+                        // Update textChunks with actual fetched content
+                        if (result.pageContent?.mainContent) {
+                            websites[index].textChunks = [
+                                result.pageContent.mainContent,
+                            ];
+                        }
+                    }
+                });
+
+                if (displayProgress) {
+                    logStructuredProgress(
+                        enhancedResults.length,
+                        enhancedResults.length,
+                        `Enhanced ${enhancedResults.length} items with ${extractionMode} mode extraction`,
+                        "complete",
+                        displayProgress,
+                    );
+                }
+            } catch (error) {
+                if (error instanceof AIModelRequiredError) {
+                    throw error;
+                }
+                console.warn(
+                    "Enhanced extraction failed, using basic import:",
+                    error,
+                );
+            }
         }
 
         if (!context.agentContext.websiteCollection) {
@@ -524,7 +409,34 @@ export async function importWebsiteDataFromSession(
         }
 
         context.agentContext.websiteCollection.addWebsites(websites);
-        await context.agentContext.websiteCollection.buildIndex();
+
+        try {
+            await context.agentContext.websiteCollection.addToIndex();
+        } catch (error) {
+            debug(
+                `Incremental indexing failed, falling back to full rebuild: ${error}`,
+            );
+            await context.agentContext.websiteCollection.buildIndex();
+        }
+
+        // Update entity graph with new websites using entity processing service
+        try {
+            debug("Processing entities for imported websites...");
+            const { getEntityProcessingService } = await import(
+                "./knowledge/entityProcessingService.mjs"
+            );
+            const entityProcessor = getEntityProcessingService();
+            await entityProcessor.processWebsites(
+                websites,
+                context.agentContext.websiteCollection,
+            );
+            debug(
+                `Entity processing completed for ${websites.length} websites`,
+            );
+        } catch (error) {
+            debug("Entity processing failed:", error);
+            // Don't fail the import if entity processing fails
+        }
 
         // Persist the website collection to disk
         try {
@@ -588,79 +500,448 @@ export async function importWebsiteData(
 }
 
 /**
- * Search through imported website data
+ * Import HTML files from local folder (SessionContext version for service worker calls)
  */
-export async function searchWebsites(
+export async function importHtmlFolderFromSession(
+    parameters: any,
+    context: SessionContext<BrowserActionContext>,
+    displayProgress?: (message: string) => void,
+): Promise<any> {
+    const startTime = Date.now();
+
+    try {
+        logStructuredProgress(
+            0,
+            0,
+            "Validating folder and enumerating HTML files",
+            "initializing",
+            displayProgress,
+        );
+
+        const { folderPath, options = {}, importId } = parameters;
+        const errors: any[] = [];
+        let successCount = 0;
+
+        const extractionMode = options.mode || "basic";
+
+        // Initialize import options for folder processing
+        let importOptions: any = {};
+
+        // For AI-enabled modes, validate AI availability before starting import
+        if (extractionMode !== "basic") {
+            try {
+                // Create and validate the knowledge extractor (same logic as BrowserKnowledgeExtractor)
+                const apiSettings = ai.azureApiSettingsFromEnv(
+                    ai.ModelType.Chat,
+                );
+                const languageModel = ai.createChatModel(apiSettings);
+                const knowledgeExtractor =
+                    kpLib.conversation.createKnowledgeExtractor(languageModel);
+
+                // Validate that the knowledge extractor works by testing extraction
+                const testResult = await knowledgeExtractor.extract(
+                    "test content for validation",
+                );
+                if (!testResult) {
+                    throw new Error("Knowledge extractor validation failed");
+                }
+
+                // Store the validated knowledge extractor in import options
+                importOptions.knowledgeExtractor = knowledgeExtractor;
+            } catch (error) {
+                if (error instanceof AIModelRequiredError) {
+                    throw new Error(
+                        `Cannot import HTML folder with ${extractionMode} mode: ${error.message}`,
+                    );
+                } else {
+                    throw new Error(
+                        `AI model initialization failed for ${extractionMode} mode: ${(error as Error).message}. Please check AI model configuration or use 'basic' mode.`,
+                    );
+                }
+            }
+        }
+
+        // Validate folder path first
+        const validation = await validateHtmlFolder(folderPath, options);
+        if (!validation.valid) {
+            throw new Error(validation.error);
+        }
+
+        if (validation.warning && displayProgress) {
+            displayProgress(`Warning: ${validation.warning}`);
+        }
+
+        // Enumerate HTML files in the folder
+        const folderOptions: FolderOptions = {
+            ...DEFAULT_FOLDER_OPTIONS,
+            ...options,
+        };
+
+        const htmlFiles = await enumerateHtmlFiles(folderPath, folderOptions);
+
+        if (htmlFiles.length === 0) {
+            throw new Error(`No HTML files found in folder: ${folderPath}`);
+        }
+
+        logStructuredProgress(
+            0,
+            htmlFiles.length,
+            `Found ${htmlFiles.length} HTML files`,
+            "initializing",
+            displayProgress,
+        );
+
+        // Send initial progress update with total count
+        logStructuredProgress(
+            0,
+            htmlFiles.length,
+            "Starting import",
+            "processing",
+            displayProgress,
+        );
+
+        // Ensure we have a website collection
+        if (!context.agentContext.websiteCollection) {
+            context.agentContext.websiteCollection =
+                new website.WebsiteCollection();
+        }
+
+        // Process files in batches for better performance and progress reporting
+        const batches = createFileBatches(htmlFiles, 10);
+        const websiteDataResults: WebsiteData[] = [];
+
+        let totalProcessedFiles = 0;
+
+        for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+            const batch = batches[batchIndex];
+
+            logStructuredProgress(
+                totalProcessedFiles,
+                htmlFiles.length,
+                `Processing batch ${batchIndex + 1}/${batches.length}`,
+                "processing",
+                displayProgress,
+            );
+
+            // Read and prepare batch data
+            const batchData = [];
+            for (const filePath of batch) {
+                try {
+                    const htmlContent = await readHtmlFile(filePath);
+                    const fileMetadata = await getFileMetadata(filePath);
+
+                    batchData.push({
+                        html: htmlContent,
+                        identifier: filePath,
+                        metadata: fileMetadata,
+                    });
+                } catch (error: any) {
+                    errors.push({
+                        type: "file_read",
+                        message: `Failed to read ${filePath}: ${error.message}`,
+                        timestamp: Date.now(),
+                    });
+                    debug(`Error reading file ${filePath}:`, error);
+                }
+            }
+
+            // Process the batch using enhanced HTML processing for consistency
+            try {
+                const batchResults = [];
+
+                for (const item of batchData) {
+                    try {
+                        if (displayProgress) {
+                            displayProgress(
+                                `Processing: ${path.basename(item.identifier)}`,
+                            );
+                        }
+
+                        // Try HTML processing first
+                        const enhancedResult = await processHtmlFolder(
+                            item.html,
+                            item.identifier,
+                            context,
+                        );
+
+                        // Create extraction input with processed content
+                        const input: ExtractionInput = {
+                            url: `file://${item.identifier}`,
+                            title: item.metadata.filename,
+                            htmlContent: enhancedResult.html,
+                            textContent: enhancedResult.text,
+                            source: "import",
+                        };
+
+                        // Use extractor for consistent processing
+                        const extractor = createContentExtractor(
+                            {
+                                mode: extractionMode,
+                                knowledgeExtractor:
+                                    importOptions.knowledgeExtractor,
+                            },
+                            context,
+                        );
+
+                        const extractionResult = await extractor.extract(
+                            input,
+                            extractionMode,
+                        );
+
+                        // Convert to WebsiteData format (simplified)
+                        const websiteData: WebsiteData = {
+                            url: input.url,
+                            title: input.title,
+                            content: enhancedResult.text,
+                            domain: "file",
+                            metadata: {
+                                websiteSource: "file_import",
+                                url: input.url,
+                                title: input.title,
+                                domain: "file",
+                                pageType: "document",
+                                importDate: new Date().toISOString(),
+                                lastModified:
+                                    item.metadata.lastModified || new Date(),
+                                filename: item.metadata.filename,
+                                filePath: item.identifier,
+                                processingMethod:
+                                    enhancedResult.processingMethod,
+                            },
+                            visitCount: 1,
+                            lastVisited: new Date(),
+                            extractionResult: extractionResult,
+                        };
+
+                        batchResults.push(websiteData);
+                    } catch (error: any) {
+                        errors.push({
+                            type: "file_processing",
+                            message: `Failed to process ${item.identifier}: ${error.message}`,
+                            timestamp: Date.now(),
+                        });
+                        debug(
+                            `Error processing file ${item.identifier}:`,
+                            error,
+                        );
+                    }
+                }
+
+                websiteDataResults.push(...batchResults);
+                successCount += batchResults.length;
+                totalProcessedFiles += batch.length;
+
+                // Update progress after processing batch
+                logStructuredProgress(
+                    totalProcessedFiles,
+                    htmlFiles.length,
+                    `Completed batch ${batchIndex + 1}/${batches.length}`,
+                    "processing",
+                    displayProgress,
+                );
+            } catch (error: any) {
+                errors.push({
+                    type: "batch_processing",
+                    message: `Failed to process batch ${batchIndex + 1}: ${error.message}`,
+                    timestamp: Date.now(),
+                });
+                debug(`Error processing batch ${batchIndex + 1}:`, error);
+            }
+        }
+
+        // Add all processed websites to the collection
+        if (websiteDataResults.length > 0) {
+            const websites = websiteDataResults.map((data) =>
+                convertWebsiteDataToWebsite(data),
+            );
+            context.agentContext.websiteCollection.addWebsites(websites);
+
+            try {
+                await context.agentContext.websiteCollection.addToIndex();
+            } catch (error) {
+                debug(
+                    `Incremental indexing failed, falling back to full rebuild: ${error}`,
+                );
+                await context.agentContext.websiteCollection.buildIndex();
+            }
+
+            // Process entities for imported HTML files
+            try {
+                debug("Processing entities for imported HTML files...");
+                const { getEntityProcessingService } = await import(
+                    "./knowledge/entityProcessingService.mjs"
+                );
+                const entityProcessor = getEntityProcessingService();
+                await entityProcessor.processWebsites(
+                    websites,
+                    context.agentContext.websiteCollection,
+                );
+                debug(
+                    `Entity processing completed for ${websites.length} HTML files`,
+                );
+            } catch (error) {
+                debug("Entity processing failed:", error);
+                // Don't fail the import if entity processing fails
+            }
+
+            try {
+                if (context.agentContext.index?.path) {
+                    await context.agentContext.websiteCollection.writeToFile(
+                        context.agentContext.index.path,
+                        "index",
+                    );
+                    debug(
+                        `Saved website collection with ${successCount} new files to ${context.agentContext.index.path}`,
+                    );
+                } else {
+                    debug(
+                        "No index path available, HTML folder data not persisted",
+                    );
+                }
+            } catch (error) {
+                debug(`Failed to save website collection: ${error}`);
+                errors.push({
+                    type: "persistence",
+                    message: `Failed to save data: ${(error as Error).message}`,
+                    timestamp: Date.now(),
+                });
+            }
+        }
+
+        const duration = Date.now() - startTime;
+
+        logStructuredProgress(
+            htmlFiles.length,
+            htmlFiles.length,
+            `Import complete - ${successCount} successful`,
+            "complete",
+            displayProgress,
+        );
+
+        return {
+            success: errors.length === 0,
+            importId: importId,
+            itemCount: successCount,
+            duration,
+            errors,
+            summary: {
+                totalFiles: htmlFiles.length,
+                totalProcessed: htmlFiles.length,
+                successfullyImported: successCount,
+                knowledgeExtracted:
+                    options?.mode !== "basic" ? successCount : 0,
+                entitiesFound: 0, // Entities extraction would need different logic
+                topicsIdentified: 0, // Topics extraction would need different logic
+                actionsDetected: websiteDataResults.reduce(
+                    (sum, data) =>
+                        sum +
+                        (data.extractionResult?.detectedActions?.length || 0),
+                    0,
+                ),
+            },
+        };
+    } catch (error: any) {
+        return {
+            success: false,
+            importId: parameters.importId,
+            itemCount: 0,
+            duration: Date.now() - startTime,
+            errors: [
+                {
+                    type: "processing",
+                    message: error.message,
+                    timestamp: Date.now(),
+                },
+            ],
+            summary: {
+                totalFiles: 0,
+                totalProcessed: 0,
+                successfullyImported: 0,
+                knowledgeExtracted: 0,
+                entitiesFound: 0,
+                topicsIdentified: 0,
+                actionsDetected: 0,
+            },
+        };
+    }
+}
+
+/**
+ * Import HTML files from local folder (ActionContext version for regular actions)
+ */
+export async function importHtmlFolder(
     context: ActionContext<BrowserActionContext>,
-    action: TypeAgentAction<SearchWebsites>,
+    action: TypeAgentAction<ImportHtmlFolder>,
 ) {
     try {
-        const websiteCollection =
-            context.sessionContext.agentContext.websiteCollection;
-        if (!websiteCollection || websiteCollection.messages.length === 0) {
-            return createActionResult(
-                "No website data available. Please import website data first.",
-                true,
-            );
-        }
+        context.actionIO.setDisplay("Importing HTML folder...");
 
-        context.actionIO.setDisplay("Searching websites...");
-
-        const {
-            originalUserRequest,
-            //query,
-            domain,
-            pageType,
-            source,
-            limit = 10,
-            minScore = 0.5,
-        } = action.parameters;
-
-        // Build search filters
-        const searchFilters = [originalUserRequest];
-        if (domain) searchFilters.push(domain);
-        if (pageType) searchFilters.push(pageType);
-
-        // Use the improved search function
-        let matchedWebsites = await findRequestedWebsites(
-            searchFilters,
-            context.sessionContext.agentContext,
-            false,
-            minScore,
+        // Use the session-based function and pass actionIO.setDisplay for progress reporting
+        const result = await importHtmlFolderFromSession(
+            action.parameters,
+            context.sessionContext,
+            context.actionIO.setDisplay,
         );
 
-        // Apply additional filters
-        if (source) {
-            matchedWebsites = matchedWebsites.filter(
-                (site) => site.metadata.websiteSource === source,
-            );
-        }
-
-        // Limit results
-        matchedWebsites = matchedWebsites.slice(0, limit);
-
-        if (matchedWebsites.length === 0) {
+        if (result.success) {
             return createActionResult(
-                "No websites found matching the search criteria.",
+                `Successfully imported ${result.itemCount} HTML files from folder.`,
             );
+        } else {
+            const errorCount = result.errors.length;
+            const message = `Folder import completed: ${result.itemCount} successful, ${errorCount} failed.`;
+            return createActionResult(message, errorCount > 0);
         }
-
-        const resultText = matchedWebsites
-            .map((site, i) => {
-                const metadata = site.metadata;
-                return `${i + 1}. ${metadata.title || metadata.url}\n   URL: ${metadata.url}\n   Domain: ${metadata.domain} | Type: ${metadata.pageType} | Source: ${metadata.websiteSource}\n`;
-            })
-            .join("\n");
-
-        return createActionResult(
-            `Found ${matchedWebsites.length} websites:\n\n${resultText}`,
-        );
     } catch (error: any) {
         return createActionResult(
-            `Failed to search websites: ${error.message}`,
+            `Failed to import HTML folder: ${error.message}`,
             true,
         );
     }
+}
+
+/**
+ * Helper function to convert WebsiteData to Website format for collection storage
+ */
+function convertWebsiteDataToWebsite(data: WebsiteData): any {
+    // Create a proper WebsiteVisitInfo object for WebsiteMeta
+    const visitInfo: website.WebsiteVisitInfo = {
+        url: data.url,
+        title: data.title,
+        domain: data.domain,
+        source: data.metadata.websiteSource as
+            | "bookmark"
+            | "history"
+            | "reading_list",
+        visitDate: data.lastVisited
+            ? data.lastVisited.toISOString()
+            : new Date().toISOString(),
+        description: data.content.substring(0, 500), // Use first 500 chars as description
+        visitCount: data.visitCount || 1,
+        lastVisitTime: data.lastVisited
+            ? data.lastVisited.toISOString()
+            : new Date().toISOString(),
+    };
+
+    // Add optional properties only if they exist
+    if (data.metadata.pageType) {
+        visitInfo.pageType = data.metadata.pageType;
+    }
+
+    // Create a proper WebsiteMeta instance
+    const websiteMeta = new website.WebsiteMeta(visitInfo);
+
+    // Create and return a Website instance using the proper constructor
+    const websiteInstance = new website.Website(
+        websiteMeta,
+        data.content,
+        [], // tags
+        data.extractionResult?.knowledge, // knowledge from extraction
+        undefined, // deletionInfo
+        false, // isNew = false since content is already processed
+    );
+
+    return websiteInstance;
 }
 
 /**
@@ -687,7 +968,7 @@ export async function getWebsiteStats(
         let totalCount = websites.length;
 
         for (const site of websites) {
-            const metadata = site.metadata;
+            const metadata = site.metadata as website.WebsiteDocPartMeta;
             let key: string;
 
             switch (groupBy) {
@@ -724,7 +1005,9 @@ export async function getWebsiteStats(
         if (groupBy !== "source") {
             const sourceCounts = { bookmark: 0, history: 0, reading_list: 0 };
             for (const site of websites) {
-                sourceCounts[site.metadata.websiteSource]++;
+                sourceCounts[
+                    (site.metadata as website.WebsiteDocPartMeta).websiteSource
+                ]++;
             }
             resultText += `\nBy Source:\n`;
             for (const [source, count] of Object.entries(sourceCounts)) {

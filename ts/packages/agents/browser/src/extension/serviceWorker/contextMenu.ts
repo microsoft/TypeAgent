@@ -33,10 +33,16 @@ export function initializeContextMenu(): void {
     });
 
     chrome.contextMenus.create({
+        title: "Manage Actions",
+        id: "manageActions",
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
+    });
+
+    chrome.contextMenus.create({
         id: "sidepanel-registerAgent",
         title: "Update Page Agent",
         contexts: ["all"],
-        documentUrlPatterns: ["chrome-extension://*/sidepanel.html"],
+        documentUrlPatterns: ["chrome-extension://*/views/pageActions.html"],
     });
 
     chrome.contextMenus.create({
@@ -113,9 +119,30 @@ export async function handleContextMenuClick(
 
             await chrome.sidePanel.setOptions({
                 tabId: tab.id!,
-                path: "sidepanel.html",
+                path: "views/pageActions.html",
                 enabled: true,
             });
+            break;
+        }
+        case "manageActions": {
+            // Check if actionsLibrary tab already exists
+            const existingTabs = await chrome.tabs.query({
+                url: chrome.runtime.getURL("views/actionsLibrary.html"),
+            });
+
+            if (existingTabs.length > 0) {
+                // Switch to existing tab
+                await chrome.tabs.update(existingTabs[0].id!, { active: true });
+                await chrome.windows.update(existingTabs[0].windowId!, {
+                    focused: true,
+                });
+            } else {
+                // Create new tab
+                await chrome.tabs.create({
+                    url: chrome.runtime.getURL("views/actionsLibrary.html"),
+                    active: true,
+                });
+            }
             break;
         }
         case "sidepanel-registerAgent": {
@@ -131,7 +158,7 @@ export async function handleContextMenuClick(
 
             await chrome.sidePanel.setOptions({
                 tabId: tab.id!,
-                path: "knowledgePanel.html",
+                path: "views/pageKnowledge.html",
                 enabled: true,
             });
 
@@ -139,13 +166,31 @@ export async function handleContextMenuClick(
         }
 
         case "showWebsiteLibrary": {
-            await chrome.sidePanel.open({ tabId: tab.id! });
+            const knowledgeLibraryUrl = chrome.runtime.getURL(
+                "views/knowledgeLibrary.html",
+            );
 
-            await chrome.sidePanel.setOptions({
-                tabId: tab.id!,
-                path: "websiteLibraryPanel.html",
-                enabled: true,
+            // Check if knowledge library tab is already open
+            const existingTabs = await chrome.tabs.query({
+                url: knowledgeLibraryUrl,
             });
+
+            if (existingTabs.length > 0) {
+                // Switch to existing tab
+                await chrome.tabs.update(existingTabs[0].id!, { active: true });
+                // Focus the window containing the tab
+                if (existingTabs[0].windowId) {
+                    await chrome.windows.update(existingTabs[0].windowId, {
+                        focused: true,
+                    });
+                }
+            } else {
+                // Create new tab
+                await chrome.tabs.create({
+                    url: knowledgeLibraryUrl,
+                    active: true,
+                });
+            }
 
             break;
         }

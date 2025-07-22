@@ -20,6 +20,7 @@ import {
     StorageListOptions,
     TemplateSchema,
     TypeAgentAction,
+    CompletionGroup,
 } from "@typeagent/agent-sdk";
 import { ResolveEntityResult } from "../../agentSdk/dist/agentInterface.js";
 import { AgentInterfaceFunctionName } from "./server.js";
@@ -176,7 +177,7 @@ export type AgentInvokeFunctions = {
             params: ParsedCommandParams<ParameterDefinitions>;
             names: string[];
         },
-    ): Promise<string[]>;
+    ): Promise<CompletionGroup[]>;
     executeCommand(
         param: Partial<ActionContextParams> & {
             commands: string[];

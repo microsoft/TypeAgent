@@ -5,10 +5,20 @@ import { TST } from "./prefixTree";
 
 export type SearchMenuItem = {
     matchText: string;
-    selectedText: string;
     emojiChar?: string;
-    groupName?: string;
+
+    selectedText: string;
+    needQuotes?: boolean; // default is true, and will add quote to the selectedText if it has spaces.
 };
+
+function normalizeMatchText(text: string): string {
+    // Remove diacritical marks, and case replace any space characters with the normalized ' '.
+    return text
+        .normalize("NFD")
+        .replace(/\p{Diacritic}/gu, "")
+        .replace(/\s/g, " ")
+        .toLowerCase();
+}
 
 export class SearchMenu {
     private searchContainer: HTMLDivElement;
@@ -113,7 +123,7 @@ export class SearchMenu {
     public setChoices(choices: SearchMenuItem[]) {
         this.trie.init();
         for (const choice of choices) {
-            this.trie.insert(choice.matchText, choice);
+            this.trie.insert(normalizeMatchText(choice.matchText), choice);
         }
     }
 
@@ -130,7 +140,7 @@ export class SearchMenu {
     }
 
     public completePrefix(prefix: string) {
-        const items = this.trie.dataWithPrefix(prefix);
+        const items = this.trie.dataWithPrefix(normalizeMatchText(prefix));
         this.replaceItems(prefix, items);
         return items;
     }

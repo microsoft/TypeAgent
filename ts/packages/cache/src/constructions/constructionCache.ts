@@ -67,9 +67,13 @@ export type MatchOptions = {
     // namespace keys to filter.  If undefined, all constructions are used.
     namespaceKeys?: string[] | undefined;
     wildcard?: boolean; // default is true
+    entityWildcard?: boolean; // default is true
     rejectReferences?: boolean; // default is true
     conflicts?: boolean; // default is false
     history?: HistoryContext | undefined;
+
+    // Partial (prefix) match, for completions.
+    partial?: boolean; // default is false
 };
 
 export class ConstructionCache {
@@ -261,14 +265,54 @@ export class ConstructionCache {
         return count;
     }
 
+    // For completion
+    public getPrefix(namespaceKeys?: string[]): string[] {
+        if (namespaceKeys?.length === 0) {
+            return [];
+        }
+        const prefix = new Set<string>();
+        const filter = namespaceKeys ? new Set(namespaceKeys) : undefined;
+        for (const [
+            name,
+            constructionNamespace,
+        ] of this.constructionNamespaces.entries()) {
+            const keys = getNamespaceKeys(name);
+            if (filter && keys.some((key) => !filter.has(key))) {
+                continue;
+            }
+
+            for (const construction of constructionNamespace.constructions) {
+                for (const part of construction.parts) {
+                    if (part.optional) {
+                        continue;
+                    }
+                    if (isMatchPart(part)) {
+                        // For match parts, we can use the match set name as the prefix
+                        for (const match of part.matchSet.matches.values()) {
+                            prefix.add(match);
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        return [...prefix.values()];
+    }
+
+    // For matching
     public match(request: string, options?: MatchOptions): MatchResult[] {
         const namespaceKeys = options?.namespaceKeys;
+        if (namespaceKeys?.length === 0) {
+            return [];
+        }
         const config = {
             enableWildcard: options?.wildcard ?? true, // default to true.
+            enableEntityWildcard: options?.entityWildcard ?? true, // default to true.
             rejectReferences: options?.rejectReferences ?? true, // default to true.
             history: options?.history,
             conflicts: options?.conflicts,
             matchPartsCache: createMatchPartsCache(request),
+            partial: options?.partial ?? false, // default to false.
         };
 
         // If the useTranslators is undefined use all the translators
@@ -280,7 +324,7 @@ export class ConstructionCache {
             constructionNamespace,
         ] of this.constructionNamespaces.entries()) {
             const keys = getNamespaceKeys(name);
-            if (keys.some((key) => filter?.has(key) === false)) {
+            if (filter && keys.some((key) => !filter.has(key))) {
                 continue;
             }
 

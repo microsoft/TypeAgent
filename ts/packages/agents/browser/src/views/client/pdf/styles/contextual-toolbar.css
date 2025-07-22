@@ -185,27 +185,6 @@
   background: transparent;
   color: #e8eaed;
 }
-color: #5f6368;
-
-.editor-help {
-  margin-top: 8px;
-}
-
-.editor-help details {
-  color: #9aa0a6;
-  font-size: 12px;
-}
-
-.editor-help summary {
-  cursor: pointer;
-  padding: 4px 0;
-  border-radius: 4px;
-  transition: color 0.15s ease;
-}
-
-.editor-help summary:hover {
-  color: #c9d1d9;
-}
 
 .markdown-help-content {
   background: rgba(255, 255, 255, 0.05);

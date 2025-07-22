@@ -35,6 +35,7 @@ export interface WebPlanData {
     links: PlanLink[];
     currentNode: string | null;
     title: string;
+    description?: string;
 }
 
 // Form data for transition API

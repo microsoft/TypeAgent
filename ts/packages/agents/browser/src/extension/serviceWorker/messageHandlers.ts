@@ -3,16 +3,13 @@
 
 import { getActiveTab } from "./tabManager";
 import { getTabHTMLFragments, getTabAnnotatedScreenshot } from "./capture";
-import {
-    getRecordedActions,
-    clearRecordedActions,
-    saveRecordedActions,
-} from "./storage";
+import { getRecordedActions, saveRecordedActions } from "./storage";
 import {
     sendActionToAgent,
     ensureWebsocketConnected,
     getWebSocket,
 } from "./websocket";
+import { BrowserContentDownloader } from "./contentDownloader.js";
 
 /**
  * Handles messages from content scripts
@@ -25,6 +22,37 @@ export async function handleMessage(
     sender: chrome.runtime.MessageSender,
 ): Promise<any> {
     switch (message.type) {
+        case "checkWebSocketConnection": {
+            try {
+                const websocket = getWebSocket();
+                return {
+                    connected:
+                        websocket && websocket.readyState === WebSocket.OPEN,
+                };
+            } catch (error) {
+                return { connected: false };
+            }
+        }
+
+        case "getLibraryStats": {
+            return await handleGetWebsiteLibraryStats();
+        }
+
+        case "getSearchSuggestions": {
+            return await handleGetSearchSuggestions(message);
+        }
+
+        case "getRecentSearches": {
+            return await handleGetSearchHistory();
+        }
+
+        case "saveSearch": {
+            return await handleSaveSearchHistory({
+                query: message.query,
+                results: message.results,
+            });
+        }
+
         case "initialize": {
             console.log("Browser Agent Service Worker started");
             try {
@@ -39,7 +67,8 @@ export async function handleMessage(
             return "Service worker initialize called";
         }
         case "refreshSchema": {
-            const schemaResult = await sendActionToAgent({
+            // Discovery now auto-saves actions
+            const discoveryResult = await sendActionToAgent({
                 actionName: "detectPageActions",
                 parameters: {
                     registerAgent: false,
@@ -47,21 +76,50 @@ export async function handleMessage(
             });
 
             return {
-                schema: schemaResult.schema,
-                actionDefinitions: schemaResult.typeDefinitions,
+                schema: discoveryResult.schema,
+                actionDefinitions: discoveryResult.typeDefinitions,
             };
         }
         case "registerTempSchema": {
+            // First try to get actions from ActionsStore for enhanced schema registration
+            try {
+                const currentTab = await getActiveTab();
+                if (currentTab?.url) {
+                    const actionsResult = await sendActionToAgent({
+                        actionName: "getActionsForUrl",
+                        parameters: {
+                            url: currentTab.url,
+                            includeGlobal: true,
+                        },
+                    });
+
+                    if (
+                        actionsResult.actions &&
+                        actionsResult.actions.length > 0
+                    ) {
+                        console.log(
+                            `Found ${actionsResult.actions.length} actions for schema registration from ActionsStore`,
+                        );
+                    }
+                }
+            } catch (error) {
+                console.warn(
+                    "Failed to get actions from ActionsStore for schema registration:",
+                    error,
+                );
+            }
+
+            // Register the dynamic agent schema
             const schemaResult = await sendActionToAgent({
                 actionName: "registerPageDynamicAgent",
                 parameters: {
                     agentName: message.agentName,
                 },
             });
-
             return { schema: schemaResult };
         }
         case "getIntentFromRecording": {
+            // Authoring now auto-saves actions
             const schemaResult = await sendActionToAgent({
                 actionName: "getIntentFromRecording",
                 parameters: {
@@ -79,7 +137,26 @@ export async function handleMessage(
                 intentJson: schemaResult.intentJson,
                 actions: schemaResult.actions,
                 intentTypeDefinition: schemaResult.intentTypeDefinition,
+                actionId: schemaResult.actionId, // For UI feedback
             };
+        }
+        case "getActionsForUrl": {
+            const result = await sendActionToAgent({
+                actionName: "getActionsForUrl",
+                parameters: {
+                    url: message.url,
+                    includeGlobal: message.includeGlobal ?? true,
+                    author: message.author,
+                },
+            });
+            return result;
+        }
+        case "getViewHostUrl": {
+            const result = await sendActionToAgent({
+                actionName: "getViewHostUrl",
+                parameters: {},
+            });
+            return result;
         }
         case "startRecording": {
             const targetTab = await getActiveTab();
@@ -147,14 +224,6 @@ export async function handleMessage(
             const result = await getRecordedActions();
             return result;
         }
-        case "clearRecordedActions": {
-            try {
-                await clearRecordedActions();
-            } catch (error) {
-                console.error("Error clearing storage data:", error);
-            }
-            return {};
-        }
         case "downloadData": {
             const jsonString = JSON.stringify(message.data, null, 2);
             const dataUrl =
@@ -178,6 +247,9 @@ export async function handleMessage(
                         false,
                         false,
                         true,
+                        false, // useTimestampIds
+                        true, // filterToReadingView - use reading view for knowledge extraction
+                        true, // keepMetaTags - preserve metadata for context
                     );
 
                     const knowledgeResult = await sendActionToAgent({
@@ -189,19 +261,7 @@ export async function handleMessage(
                             extractEntities: true,
                             extractRelationships: true,
                             suggestQuestions: true,
-                            quality:
-                                message.extractionSettings?.quality ||
-                                "balanced",
-                            extractionSettings: {
-                                mode:
-                                    message.extractionSettings?.mode || "full",
-                                enableIntelligentAnalysis:
-                                    message.extractionSettings
-                                        ?.enableIntelligentAnalysis !== false,
-                                enableActionDetection:
-                                    message.extractionSettings
-                                        ?.enableActionDetection !== false,
-                            },
+                            mode: message.extractionSettings?.mode || "content", // Use extraction mode parameter
                         },
                     });
 
@@ -218,6 +278,8 @@ export async function handleMessage(
                             suggestedQuestions:
                                 knowledgeResult.suggestedQuestions || [],
                             summary: knowledgeResult.summary || "",
+                            contentActions:
+                                knowledgeResult.contentActions || [],
                             // Enhanced content data
                             detectedActions:
                                 knowledgeResult.detectedActions || [],
@@ -225,9 +287,6 @@ export async function handleMessage(
                             contentMetrics: knowledgeResult.contentMetrics || {
                                 readingTime: 0,
                                 wordCount: 0,
-                                hasCode: false,
-                                interactivity: "static",
-                                pageType: "other",
                             },
                         },
                     };
@@ -262,35 +321,8 @@ export async function handleMessage(
             }
         }
 
-        case "queryWebKnowledgeEnhanced": {
-            try {
-                const result = await sendActionToAgent({
-                    actionName: "queryWebKnowledgeEnhanced",
-                    parameters: {
-                        query: message.query,
-                        url: message.url,
-                        searchScope: message.searchScope || "all_indexed",
-                        filters: message.filters,
-                        maxResults: message.maxResults || 10,
-                    },
-                });
-
-                return result;
-            } catch (error) {
-                console.error("Enhanced query error:", error);
-                return {
-                    answer: "Error occurred during enhanced search.",
-                    sources: [],
-                    relatedEntities: [],
-                    metadata: {
-                        totalFound: 0,
-                        searchScope: "all_indexed",
-                        filtersApplied: [],
-                        suggestions: [],
-                        processingTime: 0,
-                    },
-                };
-            }
+        case "searchWebMemories": {
+            return await handleSearchWebMemories(message);
         }
 
         // Cross-page intelligence handlers
@@ -354,6 +386,9 @@ export async function handleMessage(
                 const success = await indexPageContent(
                     targetTab,
                     message.showNotification !== false,
+                    {
+                        mode: message.mode,
+                    },
                 );
                 return { success };
             }
@@ -392,6 +427,30 @@ export async function handleMessage(
             }
         }
 
+        case "getPageIndexedKnowledge": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getPageIndexedKnowledge",
+                    parameters: {
+                        url: message.url,
+                    },
+                });
+
+                return {
+                    isIndexed: result.isIndexed || false,
+                    knowledge: result.knowledge || null,
+                    error: result.error || null,
+                };
+            } catch (error) {
+                console.error("Error getting page indexed knowledge:", error);
+                return {
+                    isIndexed: false,
+                    knowledge: null,
+                    error: "Failed to retrieve indexed knowledge",
+                };
+            }
+        }
+
         case "getIndexStats": {
             try {
                 const result = await sendActionToAgent({
@@ -425,47 +484,6 @@ export async function handleMessage(
             };
         }
 
-        case "openPanelWithGesture": {
-            const tabId = message.tabId;
-            const panel = message.panel;
-
-            try {
-                if (panel === "schema") {
-                    await chrome.sidePanel.setOptions({
-                        tabId: tabId,
-                        path: "sidepanel.html",
-                        enabled: true,
-                    });
-                    await chrome.sidePanel.open({ tabId });
-                } else if (panel === "knowledge") {
-                    await chrome.sidePanel.setOptions({
-                        tabId: tabId,
-                        path: "knowledgePanel.html",
-                        enabled: true,
-                    });
-                    await chrome.sidePanel.open({ tabId });
-
-                    // If there's a specific action, trigger it
-                    if (message.action === "extractKnowledge") {
-                        setTimeout(() => {
-                            chrome.tabs.sendMessage(
-                                tabId,
-                                {
-                                    type: "triggerKnowledgeExtraction",
-                                },
-                                { frameId: 0 },
-                            );
-                        }, 500);
-                    }
-                }
-
-                return { success: true };
-            } catch (error) {
-                console.error("Error opening panel with gesture:", error);
-                return { success: false, error: String(error) };
-            }
-        }
-
         case "autoIndexSettingChanged": {
             console.log("Auto-indexing setting changed:", message.enabled);
             return { success: true };
@@ -492,10 +510,6 @@ export async function handleMessage(
             return await handleGetWebsiteLibraryStats();
         }
 
-        case "exportWebsiteLibrary": {
-            return await handleExportWebsiteLibrary();
-        }
-
         case "clearWebsiteLibrary": {
             return await handleClearWebsiteLibrary();
         }
@@ -504,10 +518,33 @@ export async function handleMessage(
             return await handleCancelImport(message.importId);
         }
 
-        // Enhanced search message handlers
-        case "searchWebsitesEnhanced": {
-            return await handleSearchWebsitesEnhanced(message);
+        // HTML Folder Import message handlers
+        case "importHtmlFolder": {
+            return await handleImportHtmlFolder(message);
         }
+
+        case "getFileImportProgress": {
+            return await handleGetFileImportProgress(message.importId);
+        }
+
+        case "cancelFileImport": {
+            return await handleCancelFileImport(message.importId);
+        }
+
+        // Content Download Adapter message handlers
+        case "downloadContentWithBrowser": {
+            return await handleDownloadContentWithBrowser(message);
+        }
+
+        case "processHtmlContent": {
+            return await handleProcessHtmlContent(message);
+        }
+
+        case "testOffscreenDocument": {
+            return await handleTestOffscreenDocument(message);
+        }
+
+        // Enhanced search message handlers (searchWebsitesEnhanced removed - was broken)
 
         case "getSearchSuggestions": {
             return await handleGetSearchSuggestions(message);
@@ -530,16 +567,249 @@ export async function handleMessage(
             return await handleCheckIndexStatus();
         }
 
-        case "createKnowledgeIndex": {
-            return await handleCreateKnowledgeIndex(message);
+        case "deleteAction": {
+            // Handler for deleting actions from the ActionsStore
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "deleteAction",
+                    parameters: {
+                        actionId: message.actionId,
+                    },
+                });
+                return result;
+            } catch (error) {
+                console.error("Failed to delete action:", error);
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error",
+                };
+            }
+        }
+        case "getAllActions": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getActionsForUrl",
+                    parameters: {
+                        url: null,
+                        includeGlobal: true,
+                    },
+                });
+
+                return { actions: result.actions || [] };
+            } catch (error) {
+                console.error("Error getting all actions:", error);
+                return { actions: [] };
+            }
+        }
+        case "getActionDomains": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getActionDomains",
+                    parameters: {},
+                });
+
+                return { domains: result.domains || [] };
+            } catch (error) {
+                console.error("Error getting action domains:", error);
+                return { domains: [] };
+            }
+        }
+        case "deleteAction": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "deleteAction",
+                    parameters: {
+                        actionId: message.actionId,
+                    },
+                });
+
+                return { success: result.success, error: result.error };
+            } catch (error) {
+                console.error("Error deleting action:", error);
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                };
+            }
         }
 
-        case "refreshKnowledgeIndex": {
-            return await handleRefreshKnowledgeIndex(message);
+        case "checkAIModelAvailability": {
+            try {
+                // Check if AI model is available by attempting a simple extraction
+                const result = await sendActionToAgent({
+                    actionName: "extractKnowledgeFromPage",
+                    parameters: {
+                        url: "test://ai-check",
+                        title: "AI Availability Test",
+                        htmlFragments: [
+                            { text: "test content for AI availability check" },
+                        ],
+                        extractEntities: false,
+                        extractRelationships: false,
+                        suggestQuestions: false,
+                        mode: "basic",
+                    },
+                });
+
+                return {
+                    available: !result.error,
+                    version: result.version || "unknown",
+                    endpoint: result.endpoint || "unknown",
+                };
+            } catch (error) {
+                console.error("Error checking AI model availability:", error);
+                return {
+                    available: false,
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                };
+            }
         }
 
-        case "deleteKnowledgeIndex": {
-            return await handleDeleteKnowledgeIndex();
+        case "getPageQualityMetrics": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getKnowledgeIndexStats",
+                    parameters: {
+                        url: message.url,
+                    },
+                });
+
+                // Extract quality metrics for the specific page
+                const pageStats = result.pageStats || {};
+
+                return {
+                    success: !result.error,
+                    quality: {
+                        score: pageStats.qualityScore || 0.5,
+                        entityCount: pageStats.entityCount || 0,
+                        topicCount: pageStats.topicCount || 0,
+                        actionCount: pageStats.actionCount || 0,
+                        extractionMode: pageStats.extractionMode || "unknown",
+                        lastUpdated: pageStats.lastUpdated || null,
+                    },
+                };
+            } catch (error) {
+                console.error("Error getting page quality metrics:", error);
+                return {
+                    success: false,
+                    quality: {
+                        score: 0,
+                        entityCount: 0,
+                        topicCount: 0,
+                        actionCount: 0,
+                        extractionMode: "unknown",
+                        lastUpdated: null,
+                    },
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                };
+            }
+        }
+
+        case "settingsUpdated": {
+            // Handle settings update notification
+            console.log("Settings updated:", message.settings);
+
+            // Store the new settings for use by other handlers
+            await chrome.storage.local.set({
+                knowledgeSettings: message.settings,
+            });
+
+            return { success: true };
+        }
+
+        case "getRecentKnowledgeItems": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getRecentKnowledgeItems",
+                    parameters: {
+                        limit: message.limit || 10,
+                        type: message.itemType || "both",
+                    },
+                });
+
+                return {
+                    success: result.success || false,
+                    entities: result.entities || [],
+                    topics: result.topics || [],
+                };
+            } catch (error) {
+                console.error("Error getting recent knowledge items:", error);
+                return {
+                    success: false,
+                    entities: [],
+                    topics: [],
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                };
+            }
+        }
+
+        case "getDiscoverInsights": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getDiscoverInsights",
+                    parameters: {
+                        limit: message.limit || 10,
+                        timeframe: message.timeframe || "30d",
+                    },
+                });
+
+                return {
+                    success: result.success || false,
+                    trendingTopics: result.trendingTopics || [],
+                    readingPatterns: result.readingPatterns || [],
+                    popularPages: result.popularPages || [],
+                    topDomains: result.topDomains || [],
+                };
+            } catch (error) {
+                console.error("Error getting discover insights:", error);
+                return {
+                    success: false,
+                    trendingTopics: [],
+                    readingPatterns: [],
+                    popularPages: [],
+                    topDomains: [],
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                };
+            }
+        }
+
+        case "getAnalyticsData": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getAnalyticsData",
+                    parameters: {
+                        timeRange: message.timeRange || "30d",
+                        includeQuality: message.includeQuality !== false,
+                        includeProgress: message.includeProgress !== false,
+                        topDomainsLimit: message.topDomainsLimit || 10,
+                        activityGranularity:
+                            message.activityGranularity || "day",
+                    },
+                });
+
+                return {
+                    success: !result.error,
+                    analytics: result,
+                    error: result.error,
+                };
+            } catch (error) {
+                console.error("Error getting analytics data:", error);
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error",
+                };
+            }
         }
 
         default:
@@ -549,37 +819,106 @@ export async function handleMessage(
 
 // Website Library Panel handlers
 async function handleImportWebsiteDataWithProgress(message: any) {
+    const importId = message.importId;
+    const totalItems = message.totalItems || 0;
+
     try {
+        // Send initial progress update
+        sendProgressToUI(importId, {
+            importId,
+            phase: "initializing",
+            totalItems: totalItems,
+            processedItems: 0,
+            errors: [],
+        });
+
+        const startTime = Date.now();
+
         const result = await sendActionToAgent({
-            actionName: "importWebsiteData",
+            actionName: "importWebsiteDataWithProgress",
             parameters: {
                 source: message.parameters.source,
                 type: message.parameters.type,
                 limit: message.parameters.limit,
                 days: message.parameters.days,
                 folder: message.parameters.folder,
-                // Enhancement options
-                extractContent: message.parameters.extractContent,
-                enableIntelligentAnalysis:
-                    message.parameters.enableIntelligentAnalysis,
-                enableActionDetection: message.parameters.enableActionDetection,
-                extractionMode: message.parameters.extractionMode,
+                mode: message.parameters.mode || "basic",
                 maxConcurrent: message.parameters.maxConcurrent,
                 contentTimeout: message.parameters.contentTimeout,
+                importId: importId,
+                totalItems: totalItems,
+                progressCallback: true,
             },
+        });
+
+        // Send completion progress
+        sendProgressToUI(importId, {
+            importId,
+            phase: "complete",
+            totalItems: totalItems,
+            processedItems: totalItems,
+            errors: [],
         });
 
         return {
             success: !result.error,
-            itemCount: result.itemCount || 0,
+            itemCount: result.itemCount || totalItems,
             error: result.error,
         };
     } catch (error) {
         console.error("Error importing website data:", error);
+
+        // Send error progress to UI
+        sendProgressToUI(importId, {
+            importId,
+            phase: "error",
+            totalItems: totalItems,
+            processedItems: 0,
+            errors: [
+                {
+                    type: "processing",
+                    message:
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error",
+                    timestamp: Date.now(),
+                },
+            ],
+        });
+
         return {
             success: false,
             error: error instanceof Error ? error.message : "Unknown error",
         };
+    }
+}
+
+function sendProgressToUI(importId: string, progress: any) {
+    // Ensure progress has required structure
+    const structuredProgress = {
+        importId: importId,
+        phase: progress.phase || "processing",
+        totalItems: progress.totalItems || 0,
+        processedItems: progress.processedItems || 0,
+        currentItem: progress.currentItem,
+        errors: progress.errors || [],
+        ...progress,
+    };
+
+    // Send to all connected library panels via runtime messaging
+    try {
+        chrome.runtime
+            .sendMessage({
+                type: "importProgress",
+                importId,
+                progress: structuredProgress,
+            })
+            .catch((error) => {
+                // Handle case where no listeners are available
+                console.log("No listeners for progress update:", error);
+            });
+    } catch (error) {
+        console.error("Failed to send progress to UI:", error);
     }
 }
 
@@ -606,52 +945,20 @@ async function handleGetWebsiteLibraryStats() {
         );
 
         return {
-            success: true,
-            stats: stats,
+            totalWebsites: stats.totalWebsites,
+            totalBookmarks: stats.totalBookmarks,
+            totalHistory: stats.totalHistory,
+            topDomains: stats.topDomains,
         };
     } catch (error) {
         console.error("Error getting website library stats:", error);
         return {
             success: false,
             error: error instanceof Error ? error.message : "Unknown error",
-        };
-    }
-}
-
-async function handleExportWebsiteLibrary() {
-    try {
-        // Get all website data from the agent
-        const searchResult = await sendActionToAgent({
-            actionName: "searchWebsites",
-            parameters: {
-                originalUserRequest: "export all data",
-                query: "*",
-                limit: 10000,
-                minScore: 0,
-            },
-        });
-
-        const statsResult = await sendActionToAgent({
-            actionName: "exportKnowledgeData",
-            parameters: {},
-        });
-
-        const exportData = {
-            exportDate: new Date().toISOString(),
-            version: "1.0",
-            websites: searchResult.websites || [],
-            stats: parseWebsiteStatsFromText(statsResult.text || ""),
-        };
-
-        return {
-            success: true,
-            data: exportData,
-        };
-    } catch (error) {
-        console.error("Error exporting website library:", error);
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : "Unknown error",
+            totalWebsites: 0,
+            totalBookmarks: 0,
+            totalHistory: 0,
+            topDomains: 0,
         };
     }
 }
@@ -687,53 +994,146 @@ async function handleCancelImport(importId: string) {
     }
 }
 
-// Enhanced search handlers
-async function handleSearchWebsitesEnhanced(message: any) {
+// HTML Folder Import handlers
+async function handleImportHtmlFolder(message: any) {
     try {
-        const startTime = Date.now();
+        const { parameters } = message;
+        const { folderPath, options, importId } = parameters;
 
-        // Perform the search using existing searchWebsites action
-        const searchResult = await sendActionToAgent({
-            actionName: "queryWebKnowledge",
+        // Send action to backend agent using the new ImportHtmlFolder action
+        const result = await sendActionToAgent({
+            actionName: "importHtmlFolder",
             parameters: {
-                originalUserRequest: message.parameters.query,
-                query: message.parameters.query,
-                limit: message.parameters.limit || 50,
-                minScore: message.parameters.filters?.minRelevance || 0,
+                folderPath,
+                options: {
+                    mode: options?.mode || "basic",
+                    preserveStructure: options?.preserveStructure ?? true,
+                    recursive: options?.recursive ?? true,
+                    fileTypes: options?.fileTypes ?? [
+                        ".html",
+                        ".htm",
+                        ".mhtml",
+                    ],
+                    limit: options?.limit,
+                    maxFileSize: options?.maxFileSize,
+                    skipHidden: options?.skipHidden ?? true,
+                },
+                importId,
             },
         });
 
-        const searchTime = Date.now() - startTime;
+        return {
+            success: !result.error,
+            itemCount: result.websiteCount || 0,
+            importId: importId,
+            duration: result.duration || 0,
+            errors: result.errors || [],
+            summary: {
+                totalProcessed: result.websiteCount || 0,
+                successfullyImported: result.websiteCount || 0,
+                knowledgeExtracted: result.knowledgeCount || 0,
+                entitiesFound: result.entityCount || 0,
+                topicsIdentified: result.topicCount || 0,
+                actionsDetected: result.actionCount || 0,
+            },
+        };
+    } catch (error) {
+        console.error("Folder import error:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+            importId: message.parameters?.importId || "unknown",
+            itemCount: 0,
+            errors: [(error as Error).message],
+            summary: {
+                totalProcessed: 0,
+                successfullyImported: 0,
+                knowledgeExtracted: 0,
+                entitiesFound: 0,
+                topicsIdentified: 0,
+                actionsDetected: 0,
+            },
+        };
+    }
+}
 
-        // Generate AI summary if requested
-        let summary = null;
-        if (
-            message.parameters.includeSummary &&
-            searchResult.websites?.length > 0
-        ) {
-            summary = await generateSearchSummary(
-                searchResult.websites,
-                message.parameters.query,
-            );
-        }
+async function handleGetFileImportProgress(importId: string) {
+    try {
+        // For now, return a basic progress response
+        // In a full implementation, this would track actual import progress
+        return {
+            success: true,
+            progress: {
+                importId: importId,
+                phase: "complete",
+                totalItems: 0,
+                processedItems: 0,
+                errors: [],
+            },
+        };
+    } catch (error) {
+        console.error("Error getting file import progress:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+async function handleCancelFileImport(importId: string) {
+    try {
+        // Implementation would depend on how file imports are tracked
+        // For now, just return success
+        return { success: true };
+    } catch (error) {
+        console.error("Error cancelling file import:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+// Enhanced search handlers
+async function handleSearchWebMemories(message: any) {
+    try {
+        const startTime = Date.now();
+
+        // Use the new unified search action
+        const result = await sendActionToAgent({
+            actionName: "searchWebMemories",
+            parameters: {
+                query: message.parameters.query,
+                generateAnswer: true, // Knowledge Library wants answers
+                includeRelatedEntities: true,
+                enableAdvancedSearch: true,
+                limit: message.parameters.limit || 20,
+                minScore: message.parameters.filters?.minRelevance || 0.3,
+                ...message.parameters.filters,
+            },
+        });
 
         return {
             success: true,
             results: {
-                websites: searchResult.websites || [],
+                websites: result.websites || [],
                 summary: {
-                    text: summary || "",
-                    totalFound: searchResult.websites?.length || 0,
-                    searchTime: searchTime,
-                    sources: extractSources(searchResult.websites || []),
-                    entities: searchResult.entities || [],
+                    text: result.answer || "",
+                    totalFound: result.websites?.length || 0,
+                    searchTime:
+                        result.summary?.searchTime || Date.now() - startTime,
+                    sources: result.answerSources || [],
+                    entities: result.relatedEntities || [],
                 },
                 query: message.parameters.query,
                 filters: message.parameters.filters || {},
+                topTopics: result.topTopics || [],
+                suggestedFollowups: result.suggestedFollowups || [],
+                relatedEntities: result.relatedEntities || [],
             },
         };
     } catch (error) {
-        console.error("Error in enhanced search:", error);
+        console.error("Error in unified search:", error);
         return {
             success: false,
             error: error instanceof Error ? error.message : "Unknown error",
@@ -747,10 +1147,10 @@ async function handleGetSearchSuggestions(message: any) {
         const storage = await chrome.storage.local.get(["searchHistory"]);
         const searchHistory = storage.searchHistory || [];
 
-        const query = message.parameters.query.toLowerCase();
+        const query = message.query.toLowerCase();
         const suggestions = searchHistory
             .filter((search: string) => search.toLowerCase().includes(query))
-            .slice(0, message.parameters.limit || 5);
+            .slice(0, message.limit || 5);
 
         return {
             success: true,
@@ -902,6 +1302,7 @@ async function indexPageContent(
     options: {
         quality?: "fast" | "balanced" | "deep";
         textOnly?: boolean;
+        mode?: "basic" | "content" | "actions" | "full";
     } = {},
 ): Promise<boolean> {
     try {
@@ -911,6 +1312,8 @@ async function indexPageContent(
             false,
             true, // extract text
             false, // useTimestampIds
+            true, // filterToReadingView - use reading view for indexing
+            true, // keepMetaTags - preserve metadata for indexing context
         );
 
         await sendActionToAgent({
@@ -923,6 +1326,7 @@ async function indexPageContent(
                 timestamp: new Date().toISOString(),
                 quality: options.quality || "balanced",
                 textOnly: options.textOnly || false,
+                mode: options.mode || "content",
             },
         });
 
@@ -1047,114 +1451,6 @@ async function handleCheckIndexStatus() {
     }
 }
 
-async function handleCreateKnowledgeIndex(message: any) {
-    try {
-        const result = await sendActionToAgent({
-            actionName: "indexWebsiteContent",
-            parameters: {
-                rebuildIndex: true,
-                showProgress: message.parameters?.showProgress || false,
-            },
-        });
-
-        return {
-            success: !result.error,
-            message: result.error
-                ? result.error
-                : "Knowledge index created successfully",
-            itemsIndexed: result.itemsIndexed || 0,
-        };
-    } catch (error) {
-        console.error("Error creating knowledge index:", error);
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : "Unknown error",
-        };
-    }
-}
-
-async function handleRefreshKnowledgeIndex(message: any) {
-    try {
-        // This would refresh/rebuild the existing index
-        const result = await sendActionToAgent({
-            actionName: "refreshWebsiteIndex",
-            parameters: {
-                fullRebuild: true,
-                showProgress: message.parameters?.showProgress || false,
-            },
-        });
-
-        return {
-            success: !result.error,
-            message: result.error
-                ? result.error
-                : "Knowledge index refreshed successfully",
-            itemsReindexed: result.itemsReindexed || 0,
-        };
-    } catch (error) {
-        console.error("Error refreshing knowledge index:", error);
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : "Unknown error",
-        };
-    }
-}
-
-async function handleDeleteKnowledgeIndex() {
-    try {
-        // This would delete the knowledge index but preserve the raw data
-        const result = await sendActionToAgent({
-            actionName: "deleteWebsiteIndex",
-            parameters: {},
-        });
-
-        return {
-            success: !result.error,
-            message: result.error
-                ? result.error
-                : "Knowledge index deleted successfully",
-        };
-    } catch (error) {
-        console.error("Error deleting knowledge index:", error);
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : "Unknown error",
-        };
-    }
-}
-
-// Search helper functions
-async function generateSearchSummary(
-    websites: any[],
-    query: string,
-): Promise<string> {
-    try {
-        // Use the first few websites to generate a summary
-        const topSites = websites.slice(0, 5);
-        const domains = [...new Set(topSites.map((site) => site.domain))];
-        const sources =
-            topSites.filter((site) => site.source === "bookmarks").length > 0
-                ? topSites.filter((site) => site.source === "history").length >
-                  0
-                    ? "bookmarks and browsing history"
-                    : "bookmarks"
-                : "browsing history";
-
-        return `Found ${websites.length} results for "${query}" across ${domains.length} domains from your ${sources}. Top domains include: ${domains.slice(0, 3).join(", ")}.`;
-    } catch (error) {
-        console.error("Error generating search summary:", error);
-        return `Found ${websites.length} results for "${query}".`;
-    }
-}
-
-function extractSources(websites: any[]): any[] {
-    return websites.slice(0, 10).map((site) => ({
-        url: site.url,
-        title: site.title || site.url,
-        relevance: site.score || 0.5,
-    }));
-}
-
 function generateSuggestionsFromStats(statsText: string): any {
     const suggestions = {
         recentFinds: [] as any[],
@@ -1231,4 +1527,134 @@ function generateSuggestionsFromStats(statsText: string): any {
     }
 
     return suggestions;
+}
+
+// Content Download Adapter handler functions
+let contentDownloader: BrowserContentDownloader | null = null;
+
+/**
+ * Get or create a content downloader instance
+ */
+function getContentDownloader(): BrowserContentDownloader {
+    if (!contentDownloader) {
+        contentDownloader = new BrowserContentDownloader();
+    }
+    return contentDownloader;
+}
+
+/**
+ * Handle browser-based content download requests
+ */
+async function handleDownloadContentWithBrowser(message: any): Promise<any> {
+    try {
+        const downloader = getContentDownloader();
+
+        const result = await downloader.downloadContent(message.url, {
+            useAuthentication: message.options?.useAuthentication ?? true,
+            timeout: message.options?.timeout ?? 30000,
+            fallbackToFetch: message.options?.fallbackToFetch ?? true,
+            waitForDynamic: message.options?.waitForDynamic ?? false,
+            scrollBehavior:
+                message.options?.scrollBehavior ?? "capture-initial",
+            processing: message.options?.processing ?? {
+                filterToReadingView: true,
+                keepMetaTags: true,
+                extractText: true,
+            },
+        });
+
+        return result;
+    } catch (error) {
+        console.error("Error in handleDownloadContentWithBrowser:", error);
+        return {
+            success: false,
+            method: "failed",
+            error:
+                error instanceof Error
+                    ? error.message
+                    : "Unknown error occurred",
+        };
+    }
+}
+
+/**
+ * Handle HTML content processing requests (for folder imports)
+ */
+async function handleProcessHtmlContent(message: any): Promise<any> {
+    try {
+        const downloader = getContentDownloader();
+
+        const result = await downloader.processHtmlContent(
+            message.htmlContent,
+            {
+                filterToReadingView:
+                    message.options?.filterToReadingView ?? true,
+                keepMetaTags: message.options?.keepMetaTags ?? true,
+                extractText: message.options?.extractText ?? true,
+                preserveStructure: message.options?.preserveStructure ?? true,
+                maxElements: message.options?.maxElements,
+            },
+        );
+
+        return {
+            success: true,
+            data: result,
+        };
+    } catch (error) {
+        console.error("Error in handleProcessHtmlContent:", error);
+        return {
+            success: false,
+            error:
+                error instanceof Error
+                    ? error.message
+                    : "HTML processing failed",
+        };
+    }
+}
+
+/**
+ * Handle offscreen document testing requests
+ */
+async function handleTestOffscreenDocument(message: any): Promise<any> {
+    try {
+        const downloader = getContentDownloader();
+        const status = downloader.getStatus();
+
+        if (!status.available) {
+            return {
+                success: false,
+                error: "Offscreen document API not available",
+                status,
+            };
+        }
+
+        // Test basic functionality with a simple page
+        const testUrl = message.testUrl || "https://example.com";
+        const result = await downloader.downloadContent(testUrl, {
+            timeout: 10000,
+            fallbackToFetch: false, // Force browser method for testing
+            processing: {
+                filterToReadingView: false,
+                extractText: true,
+            },
+        });
+
+        return {
+            success: result.success,
+            testUrl,
+            method: result.method,
+            contentLength: result.htmlContent?.length || 0,
+            textLength: result.textContent?.length || 0,
+            loadTime: result.metadata?.loadTime || 0,
+            error: result.error,
+            status,
+        };
+    } catch (error) {
+        console.error("Error in handleTestOffscreenDocument:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Test failed",
+            status: { available: false, method: "unknown", capabilities: [] },
+        };
+    }
 }

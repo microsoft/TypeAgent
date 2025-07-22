@@ -185,6 +185,7 @@ function expandActions(
                     createActionProps(
                         [[name, normalizeParamValue(v)]],
                         undefined,
+                        false,
                         e,
                     ),
                 ),

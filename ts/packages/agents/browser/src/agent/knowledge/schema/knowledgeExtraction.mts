@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+import { conversation as kpLib } from "knowledge-processor";
 
 export interface KnowledgeExtractionResult {
     entities: Entity[];
@@ -11,14 +12,12 @@ export interface KnowledgeExtractionResult {
 
 export interface EnhancedKnowledgeExtractionResult
     extends KnowledgeExtractionResult {
+    contentActions?: kpLib.Action[];
     detectedActions?: DetectedAction[];
     actionSummary?: ActionSummary;
     contentMetrics: {
         readingTime: number;
         wordCount: number;
-        hasCode: boolean;
-        interactivity: string;
-        pageType: string;
     };
 }
 
@@ -61,12 +60,8 @@ export interface EnhancedQueryRequest {
     url?: string;
     searchScope: "current_page" | "all_indexed" | "domain" | "topic";
     filters?: {
-        contentType?: string;
-        technicalLevel?: string;
         domain?: string;
         timeRange?: "week" | "month" | "quarter" | "year";
-        hasCode?: boolean;
-        pageType?: string;
     };
     maxResults?: number;
 }

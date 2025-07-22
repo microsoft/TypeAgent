@@ -58,7 +58,6 @@ export default defineConfig({
             "@milkdown/preset-commonmark",
             "@milkdown/preset-gfm",
             "@milkdown/plugin-history",
-            "@milkdown/plugin-math",
             "@milkdown/theme-nord",
             "@milkdown/utils",
         ],

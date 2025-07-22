@@ -6,7 +6,11 @@ import chalk from "chalk";
 import { printTransformNamespaces } from "../utils/print.js";
 import { isMatchPart } from "../constructions/matchPart.js";
 import { isParsePart } from "../constructions/parsePart.js";
-import { Construction, ConstructionPart } from "./constructions.js";
+import {
+    Construction,
+    ConstructionPart,
+    WildcardMode,
+} from "./constructions.js";
 import {
     MatchedValueTranslator,
     createActionProps,
@@ -154,7 +158,7 @@ export function printConstructionCache(
                 const name = names.get(p)!;
                 if (isMatchPart(p)) {
                     const matches = Array.from(p.matchSet.matches.values());
-                    if (p.wildcardMode) {
+                    if (p.wildcardMode !== WildcardMode.Disabled) {
                         matches.unshift(".*");
                     }
                     if (!verbose && !all && matches.length > 5) {
@@ -203,7 +207,9 @@ export function printConstructionCache(
                 symbolicValues,
                 {
                     enableWildcard: false,
+                    enableEntityWildcard: false,
                     rejectReferences: false,
+                    partial: false,
                 },
                 printMatchedValueTranslator,
             );

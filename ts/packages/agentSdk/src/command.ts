@@ -47,8 +47,14 @@ export type CommandDescriptors =
     | CommandDescriptorTable; // multiple commands
 
 //===========================================
-// API exposed APIs
+// Command APIs
 //===========================================
+export type CompletionGroup = {
+    name: string; // The group name for the completion
+    completions: string[]; // The list of completions in the group
+    needQuotes?: boolean; // If true, the completion should be quoted if it has spaces.
+};
+
 export interface AppAgentCommandInterface {
     // Get the command descriptors
     getCommands(context: SessionContext): Promise<CommandDescriptors>;
@@ -58,7 +64,7 @@ export interface AppAgentCommandInterface {
         params: ParsedCommandParams<ParameterDefinitions> | undefined,
         names: string[], // array of <argName> or --<flagName> or --<jsonFlagName>.
         context: SessionContext<unknown>,
-    ): Promise<string[]>;
+    ): Promise<CompletionGroup[]>;
 
     // Execute a resolved command
     executeCommand(

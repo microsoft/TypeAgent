@@ -3,6 +3,7 @@
     "cSpell.words": [
         "aiclient",
         "AUTOINCREMENT",
+        "Chunker",
         "Exif",
         "exifreader",
         "Knowpro",
@@ -12,6 +13,7 @@
         "oclif",
         "openai",
         "regen",
+        "textpro",
         "tsbuildinfo",
         "typeagent",
         "typechat"

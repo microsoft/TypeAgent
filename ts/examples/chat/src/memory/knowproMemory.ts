@@ -23,7 +23,13 @@ import {
     parseFreeAndNamedArguments,
     keyValuesFromNamedArgs,
 } from "../common.js";
-import { collections, dateTime, ensureDir } from "typeagent";
+import {
+    collections,
+    dateTime,
+    ensureDir,
+    isFilePath,
+    readJsonFile,
+} from "typeagent";
 import chalk from "chalk";
 import { KnowProPrinter } from "./knowproPrinter.js";
 import { createKnowproDataFrameCommands } from "./knowproDataFrame.js";
@@ -79,11 +85,12 @@ export class KnowproContext extends kpTest.KnowproContext {
     }
 }
 
+const DefaultMaxToDisplay = 25;
+
 export async function createKnowproCommands(
     commands: Record<string, CommandHandler>,
 ): Promise<void> {
     const context: KnowproContext = new KnowproContext();
-    const DefaultMaxToDisplay = 25;
     const DefaultKnowledgeTopK = 50;
     const MessageCountLarge = 1000;
     const MessageCountMedium = 500;
@@ -115,6 +122,7 @@ export async function createKnowproCommands(
     commands.kpAnswerTerms = answerTerms;
     commands.kpEntities = entities;
     commands.kpTopics = topics;
+    commands.kpTags = tags;
     commands.kpMessages = showMessages;
     commands.kpAbstractMessage = abstract;
     commands.kpAlias = addAlias;
@@ -258,34 +266,43 @@ export async function createKnowproCommands(
         }
     }
 
-    function searchDef(base?: CommandMetadata): CommandMetadata {
-        const def = kpTest.searchRequestDef();
-        def.options ??= {};
-        def.options.debug = argBool("Show debug info", false);
-        def.options.distinct = argBool("Show distinct results", true);
-        def.options.maxToDisplay = argNum(
-            "Maximum to display",
-            DefaultMaxToDisplay,
-        );
-        def.options.showKnowledge = argBool("Show knowledge matches", true);
-        def.options.showMessages = argBool("Show message matches", false);
-        return def;
-    }
     commands.kpSearch.metadata = searchDef();
     async function search(args: string[], io: InteractiveIo): Promise<void> {
         if (!ensureConversationLoaded()) {
             return;
         }
         const namedArgs = parseNamedArguments(args, searchDef());
+        let savedQuery: kp.querySchema.SearchQuery | undefined;
+        if (isFilePath(namedArgs.query)) {
+            const queryPath = namedArgs.query;
+            const savedContext = await loadSavedDebugContext(queryPath);
+            if (!savedContext) {
+                return;
+            }
+            namedArgs.query = savedContext.searchText;
+            savedQuery = savedContext.searchQuery;
+            if (savedQuery) {
+                context.printer.writeSearchQuery(savedQuery);
+            }
+        }
+
         const searchResponse = await kpTest.execSearchRequest(
             context,
             namedArgs,
+            savedQuery,
         );
         const searchResults = searchResponse.searchResults;
         const debugContext = searchResponse.debugContext;
         if (!searchResults.success) {
             context.printer.writeError(searchResults.message);
             return;
+        }
+        // Log any new queries
+        if (!savedQuery) {
+            context.log.writeCommandResult("kpSearch", {
+                searchText: debugContext.searchText,
+                searchQuery: debugContext.searchQuery,
+            });
         }
         if (namedArgs.debug) {
             context.printer.writeInColor(chalk.gray, () => {
@@ -359,7 +376,7 @@ export async function createKnowproCommands(
         );
         getAnswerRequest.searchResponse = searchResponse;
         getAnswerRequest.knowledgeTopK = options.entitiesTopK;
-        await kpTest.execGetAnswerRequest(
+        const answerResponse = await kpTest.execGetAnswerRequest(
             context,
             getAnswerRequest,
             (i: number, q: string, answer) => {
@@ -367,6 +384,7 @@ export async function createKnowproCommands(
                 return;
             },
         );
+        context.log.writeCommandResult("kpAnswer", answerResponse);
         context.printer.writeLine();
     }
 
@@ -554,10 +572,7 @@ export async function createKnowproCommands(
     }
 
     function topicsDef(): CommandMetadata {
-        return searchTermsDef(
-            "Search topics only in current conversation",
-            "topic",
-        );
+        return searchTermsDef("Search topics in current conversation", "topic");
     }
     commands.kpTopics.metadata = topicsDef();
     async function topics(args: string[]): Promise<void> {
@@ -581,6 +596,33 @@ export async function createKnowproCommands(
                 topics = kp.mergeTopics(topics);
                 topics.sort();
                 context.printer.writeList(topics, { type: "ol" });
+            }
+        }
+    }
+
+    function tagsDef(): CommandMetadata {
+        return searchTermsDef("Search tags in current conversation", "tag");
+    }
+    commands.kpTags.metadata = tagsDef();
+    async function tags(args: string[]): Promise<void> {
+        const conversation = ensureConversationLoaded();
+        if (!conversation) {
+            return;
+        }
+        if (args.length > 0) {
+            args.push("--ktype");
+            args.push("tag");
+            await searchTerms(args);
+        } else {
+            if (conversation.semanticRefs !== undefined) {
+                const tagRefs = kp.filterCollection(
+                    conversation.semanticRefs,
+                    (sr) => sr.knowledgeType === "tag",
+                );
+                let tags = tagRefs.map((t) => (t.knowledge as kp.Topic).text);
+                let tagStrings = kp.mergeTopics(tags);
+                tagStrings.sort();
+                context.printer.writeList(tagStrings, { type: "ol" });
             }
         }
     }
@@ -754,7 +796,7 @@ export async function createKnowproCommands(
     function writeAnswer(
         queryIndex: number,
         answerResult: Result<kp.AnswerResponse>,
-        debugContext: AnswerDebugContext,
+        debugContext: kpTest.AnswerDebugContext,
     ) {
         context.printer.writeLine();
         if (answerResult.success) {
@@ -943,8 +985,35 @@ export async function createKnowproCommands(
         }
         return [undefined, ""];
     }
+
+    async function loadSavedDebugContext(
+        filePath: string,
+    ): Promise<kpTest.AnswerDebugContext | undefined> {
+        // Load a saved or logged query
+        const savedContext =
+            await loadObject<kpTest.AnswerDebugContext>(filePath);
+        return savedContext;
+    }
+
+    async function loadObject<T>(filePath: string) {
+        const obj = await readJsonFile<T>(filePath);
+        if (obj === undefined) {
+            context.printer.writeError(`${filePath} not found`);
+        }
+        return obj;
+    }
 }
 
-export interface AnswerDebugContext extends kp.LanguageSearchDebugContext {
-    searchText: string;
+export function searchDef(base?: CommandMetadata): CommandMetadata {
+    const def = kpTest.searchRequestDef();
+    def.options ??= {};
+    def.options.debug = argBool("Show debug info", false);
+    def.options.distinct = argBool("Show distinct results", true);
+    def.options.maxToDisplay = argNum(
+        "Maximum to display",
+        DefaultMaxToDisplay,
+    );
+    def.options.showKnowledge = argBool("Show knowledge matches", true);
+    def.options.showMessages = argBool("Show message matches", false);
+    return def;
 }

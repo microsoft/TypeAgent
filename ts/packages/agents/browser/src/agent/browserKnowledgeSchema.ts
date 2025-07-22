@@ -202,6 +202,10 @@ export type GetKnowledgeStats = {
         limit?: number;
         /** Time range for statistics (in days) */
         timeRange?: number;
+        /** Include quality distribution analysis */
+        includeQuality?: boolean;
+        /** Include progress metrics */
+        includeProgress?: boolean;
     };
 };
 
@@ -275,6 +279,8 @@ export interface KnowledgeStats {
     totalPages: number;
     /** Total number of entities extracted */
     totalEntities: number;
+    /** Total number of unique topics identified */
+    totalTopics: number;
     /** Total number of relationships found */
     totalRelationships: number;
     /** Number of unique domains */
@@ -291,6 +297,28 @@ export interface KnowledgeStats {
         entitiesBytes: number;
         contentBytes: number;
         metadataBytes: number;
+    };
+}
+
+export interface DetailedKnowledgeStats extends KnowledgeStats {
+    /** Knowledge extraction progress percentages */
+    extractionProgress: {
+        entityProgress: number;
+        topicProgress: number;
+        actionProgress: number;
+    };
+    /** Quality distribution metrics */
+    qualityDistribution: {
+        highQuality: number; // >=80% confidence
+        mediumQuality: number; // 50-79% confidence
+        lowQuality: number; // <50% confidence
+    };
+    /** Extraction completion rates */
+    completionRates: {
+        pagesWithEntities: number;
+        pagesWithTopics: number;
+        pagesWithActions: number;
+        totalProcessedPages: number;
     };
 }
 

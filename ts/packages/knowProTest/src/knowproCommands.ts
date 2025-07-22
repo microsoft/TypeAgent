@@ -24,11 +24,13 @@ import { async } from "typeagent";
  * @see ../../knowPro/src/search.ts
  * @param context
  * @param {SearchRequest} request Structured request or Named Arguments
+ * @param {kp.querySchema.SearchQuery} preTranslatedQuery already have turned request.query into query expressions
  * @returns
  */
 export async function execSearchRequest(
     context: KnowproContext,
     request: SearchRequest | string[] | NamedArgs,
+    preTranslatedQuery?: kp.querySchema.SearchQuery | undefined,
 ): Promise<SearchResponse> {
     const conversation = context.ensureConversationLoaded();
     if (shouldParseRequest(request)) {
@@ -37,7 +39,10 @@ export async function execSearchRequest(
             searchRequestDef(),
         );
     }
-    const langQuery = request.query; // Natural language query to run
+    const langQuery = request.query.trim(); // Natural language query to run
+    if (!langQuery) {
+        throw new Error("No query provided");
+    }
     const debugContext: AnswerDebugContext = { searchText: langQuery };
     //
     // Set up options  for the search API Call
@@ -64,10 +69,10 @@ export async function execSearchRequest(
         undefined,
         request,
     );
-    //
-    // If optional "when" subquery provided, run that query to find messages to scope by
-    //
     if (request.when) {
+        //
+        // If optional "when" subquery provided, run that query to find messages to scope by
+        //
         const whenResult = await scopingTermsFromLanguage(
             context,
             request.when,
@@ -82,19 +87,51 @@ export async function execSearchRequest(
         }
     }
 
-    //
-    // Run query
-    //
-    const searchResults = await async.getResultWithRetry(() =>
-        getLangSearchResult(
+    let searchResults: Result<kp.ConversationSearchResult[]>;
+    if (preTranslatedQuery) {
+        // Pre-existing query expr for request.query
+        const compiledQueries = kp.compileSearchQuery(
             conversation,
-            context.queryTranslator,
-            langQuery,
-            options,
+            preTranslatedQuery,
+            options.compileOptions,
             langFilter,
-            debugContext,
-        ),
-    );
+        );
+        const queryResults = await kp.runSearchQueries(
+            conversation,
+            compiledQueries,
+            options,
+        );
+        debugContext.searchQuery = preTranslatedQuery;
+        debugContext.searchQueryExpr = compiledQueries;
+        searchResults = success(queryResults.flat());
+    } else {
+        if (request.scoped === undefined || request.scoped === false) {
+            //
+            // Run raw NLP query
+            //
+            searchResults = await async.getResultWithRetry(() =>
+                getLangSearchResult(
+                    conversation,
+                    context.queryTranslator,
+                    langQuery,
+                    options,
+                    langFilter,
+                    debugContext,
+                ),
+            );
+        } else {
+            searchResults = await async.getResultWithRetry(() =>
+                getLangSearchResult2(
+                    conversation,
+                    context.queryTranslator,
+                    langQuery,
+                    options,
+                    langFilter,
+                    debugContext,
+                ),
+            );
+        }
+    }
 
     return { searchResults, debugContext };
 }
@@ -307,7 +344,7 @@ function createLangFilter(
     return when;
 }
 
-function createSearchOptions(request: SearchRequest): kp.SearchOptions {
+export function createSearchOptions(request: SearchRequest): kp.SearchOptions {
     let options = kp.createSearchOptions();
     options.exactMatch = request.exact;
     options.maxMessageMatches = request.messageTopK;
@@ -400,4 +437,22 @@ export async function getLangSearchResult(
               );
 
     return searchResults;
+}
+
+async function getLangSearchResult2(
+    conversation: kp.IConversation,
+    queryTranslator: kp.SearchQueryTranslator,
+    langQuery: string,
+    options?: kp.LanguageSearchOptions,
+    langFilter?: kp.LanguageSearchFilter,
+    debugContext?: kp.LanguageSearchDebugContext,
+) {
+    return await kp.searchConversationWithLanguage2(
+        conversation,
+        langQuery,
+        queryTranslator,
+        options,
+        langFilter,
+        debugContext,
+    );
 }

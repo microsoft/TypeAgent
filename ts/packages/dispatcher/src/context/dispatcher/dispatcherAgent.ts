@@ -34,7 +34,7 @@ import {
     LookupAndAnswerAction,
 } from "./schema/lookupActionSchema.js";
 import {
-    getHistoryContext,
+    getHistoryContextForTranslation,
     translateRequest,
 } from "../../translation/translateRequest.js";
 import { ActivityActions } from "./schema/activityActionSchema.js";
@@ -188,7 +188,11 @@ async function clarifyWithLookup(
     }
 
     // TODO: This translation can probably more scoped based on the `actionName` field.
-    const history = getHistoryContext(systemContext);
+    const history = getHistoryContextForTranslation(systemContext);
+    if (history === undefined) {
+        // Can't do clarify without history.
+        return undefined;
+    }
 
     history.promptSections.push({
         role: "assistant",

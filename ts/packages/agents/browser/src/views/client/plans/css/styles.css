@@ -27,12 +27,189 @@ body {
 }
 
 h1 {
-  text-align: center;
-  margin-bottom: 20px;
+  text-align: left;
+  margin-bottom: 5px;
   color: #2c3e50;
 }
 
-/* New Toolbar Styles */
+.title-container {
+  display: flex;
+  flex-direction: column;
+  align-items: normal;
+  gap: 0;
+}
+
+.plan-description {
+  font-size: 14px;
+  color: #666;
+  text-align: center;
+  margin: 0;
+  font-style: italic;
+}
+
+/* Enhanced Header Styles */
+.plan-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  padding: 4px;
+  /*
+  padding: 16px;
+  margin-bottom: 20px;
+  */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.plan-info {
+  flex: 1;
+}
+
+.plan-title {
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: #2c3e50;
+}
+
+.plan-description {
+  font-size: 0.9rem;
+  color: #666;
+  font-style: italic;
+  text-align: left;
+  margin: 0;
+}
+
+/* Enhanced View Mode Toggle */
+.view-mode-toggle {
+  display: flex;
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 4px;
+  border: 1px solid #e9ecef;
+  margin: 0 20px;
+}
+
+.view-toggle-btn {
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  color: #6c757d;
+}
+
+.view-toggle-btn.active {
+  background: white;
+  color: #667eea;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.view-toggle-btn:hover:not(.active) {
+  background: rgba(102, 126, 234, 0.1);
+  color: #667eea;
+}
+
+/* Node Selector Enhancement */
+.node-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.node-selector label {
+  font-size: 16px;
+  color: #555;
+}
+
+.node-selector select {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: white;
+  font-size: 14px;
+  min-width: 160px;
+}
+
+.main-content {
+  position: relative; /* Ensure floating controls can be positioned relative to this */
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+#cy-container {
+  flex: 1;
+  background: white;
+  position: relative;
+}
+
+/* Floating Controls */
+.plan-floating-controls {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 100;
+  pointer-events: none; /* Allow clicks to pass through to cytoscape */
+}
+
+.plan-control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background: white;
+  border-radius: 8px;
+  padding: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  pointer-events: auto; /* Re-enable clicks on the actual controls */
+}
+
+.plan-control-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: white;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 16px;
+  color: #555;
+  font-weight: 500;
+}
+
+.plan-control-btn:hover {
+  background: #667eea;
+  color: white;
+  transform: scale(1.05);
+}
+
+.plan-control-btn.active {
+  background: #333;
+  color: white;
+}
+
+.plan-control-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.plan-control-btn:disabled:hover {
+  background: white;
+  color: #555;
+}
+
+/* Legacy Toolbar Styles (for compatibility) */
 .toolbar {
   display: flex;
   justify-content: space-between;
@@ -276,6 +453,12 @@ input[type="text"] {
   border-radius: 4px;
   border: 1px solid #eee;
   overflow: hidden;
+}
+
+/* Ensure proper sizing when in iframe */
+body.iframe-mode #cy-container {
+  height: calc(100vh - 120px);
+  min-height: 400px;
 }
 
 /* Tooltip styles */
@@ -758,6 +941,30 @@ body {
 }
 
 @media (max-width: 768px) {
+  .plan-header {
+    flex-direction: column;
+    gap: 15px;
+    align-items: stretch;
+  }
+
+  .view-mode-toggle {
+    margin: 0;
+    justify-content: center;
+  }
+
+  .plan-floating-controls {
+    position: fixed;
+    top: auto;
+    bottom: 20px;
+    right: 20px;
+  }
+
+  .plan-control-btn {
+    width: 44px;
+    height: 44px;
+    font-size: 18px;
+  }
+
   .toolbar {
     flex-direction: column;
     align-items: flex-start;
@@ -774,6 +981,16 @@ body {
     width: 100%;
     margin-top: 5px;
   }
+}
+
+/* Iframe mode styles */
+body.iframe-mode .plan-floating-controls .plan-control-group:nth-child(3) {
+  display: none; /* Hide export/tools group in iframe */
+}
+
+body.iframe-mode .view-mode-toggle,
+body.iframe-mode .node-selector {
+  display: none;
 }
 
 /* Make sure nodes with screenshots have properly positioned labels */

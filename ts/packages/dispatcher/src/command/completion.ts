@@ -8,6 +8,7 @@ import {
     FlagDefinitions,
     ParameterDefinitions,
     ParsedCommandParams,
+    CompletionGroup,
 } from "@typeagent/agent-sdk";
 import {
     getFlagMultiple,
@@ -17,53 +18,44 @@ import {
 import { parseParams } from "./parameters.js";
 import {
     getDefaultSubCommandDescriptor,
+    normalizeCommand,
     resolveCommand,
     ResolveCommandResult,
 } from "./command.js";
 
+import registerDebug from "debug";
+const debug = registerDebug("typeagent:command:completion");
+const debugError = registerDebug("typeagent:command:completion:error");
+
 export type CommandCompletionResult = {
-    partial: string; // The head part of the completion
-    space: boolean; // require space between partial and prefix
-    prefix: string; // the prefix for completion match
-    completions: string[]; // All the partial completions available after partial (and space if true)
+    startIndex: number; // the index for the input where completion starts
+    completions: CompletionGroup[]; // All the partial completions available after partial (and space if true)
+    space: boolean; // require space before the completion   (e.g. false if we are trying to complete a command)
 };
 
-// Determine the command to resolve for partial completion
-// If there is a trailing space, then it will just be the input (minus the @)
-// If there is no space, then it will the input without the last word
-function getPartialCompletedCommand(input: string) {
+// Return the index of the last incomplete term for completion.
+// if the last term is the '@' command itself, return the index right after the '@'.
+// Input with trailing space doesn't have incomplete term, so return -1.
+function getCompletionStartIndex(input: string) {
     const commandPrefix = input.match(/^\s*@/);
-    if (commandPrefix === null) {
-        return undefined;
-    }
-
-    const command = input.substring(commandPrefix.length);
-    if (!/\s/.test(command)) {
-        // No space no command yet.
-        return { partial: commandPrefix[0], prefix: command };
-    }
-
-    const trimmedEnd = input.trimEnd();
-    if (trimmedEnd !== input) {
-        // There is trailing space, just resolve the whole command
-        return { partial: trimmedEnd, prefix: "" };
+    if (commandPrefix !== null) {
+        // Input is a command
+        const command = input.substring(commandPrefix.length);
+        if (!/\s/.test(command)) {
+            // No space on command yet just return right after the '@' as the start of the last term.
+            return commandPrefix.length;
+        }
     }
 
     const suffix = input.match(/\s\S+$/);
-    if (suffix === null) {
-        // No suffix, resolve the whole command
-        return { partial: trimmedEnd, prefix: "" };
-    }
-    const split = input.length - suffix[0].length;
-    return {
-        partial: input.substring(0, split).trimEnd(),
-        prefix: input.substring(split).trimStart(),
-    };
+    return suffix !== null ? input.length - suffix[0].length : -1;
 }
 
+// Return the full flag name if we are waiting a flag value.  Add boolean values for completions and return undefined if the flag is boolean.
 function getPendingFlag(
     params: ParsedCommandParams<ParameterDefinitions>,
     flags: FlagDefinitions | undefined,
+    completions: CompletionGroup[],
 ) {
     if (params.tokens.length === 0 || flags === undefined) {
         return undefined;
@@ -75,146 +67,232 @@ function getPendingFlag(
     }
     const type = getFlagType(resolvedFlag[1]);
     if (type === "boolean") {
-        return undefined;
+        completions.push({
+            name: `--${resolvedFlag[0]}`,
+            completions: ["true", "false"],
+        });
+        return undefined; // doesn't require a value.
     }
     if (type === "json") {
-        return `${lastToken}`;
+        return lastToken;
     }
 
     return `--${resolvedFlag[0]}`; // use the full flag name in case it was a short flag
+}
+
+// True if surrounded by quotes at both ends (matching single or double quotes).
+// False if only start with a quote.
+// Undefined if no starting quote.
+
+function isFullyQuoted(value: string) {
+    const len = value.length;
+    if (len === 0) {
+        return undefined;
+    }
+    const firstChar = value[0];
+    if (firstChar !== "'" && firstChar !== '"') {
+        return undefined;
+    }
+
+    return (
+        len > 1 &&
+        value[len - 1] === firstChar &&
+        !(len > 2 && value[len - 2] === "\\")
+    );
+}
+
+function collectFlags(
+    agentCommandCompletions: string[],
+    flags: FlagDefinitions,
+    parsedFlags: any,
+) {
+    const flagCompletions: string[] = [];
+    for (const [key, value] of Object.entries(flags)) {
+        const multiple = getFlagMultiple(value);
+        if (!multiple) {
+            if (getFlagType(value) === "json") {
+                // JSON property flags
+                agentCommandCompletions.push(`--${key}.`);
+            }
+            if (parsedFlags?.[key] !== undefined) {
+                // filter out non-multiple flags that is already set.
+                continue;
+            }
+        }
+        flagCompletions.push(`--${key}`);
+        if (value.char !== undefined) {
+            flagCompletions.push(`-${value.char}`);
+        }
+    }
+
+    return flagCompletions;
 }
 
 async function getCommandParameterCompletion(
     descriptor: CommandDescriptor,
     context: CommandHandlerContext,
     result: ResolveCommandResult,
-) {
-    const completions: string[] = [];
+): Promise<CompletionGroup[] | undefined> {
+    const completions: CompletionGroup[] = [];
     if (typeof descriptor.parameters !== "object") {
+        // No more completion, return undefined;
         return undefined;
     }
     const flags = descriptor.parameters.flags;
     const params = parseParams(result.suffix, descriptor.parameters, true);
-    const agent = context.agents.getAppAgent(result.actualAppAgentName);
-    const sessionContext = context.agents.getSessionContext(
-        result.actualAppAgentName,
-    );
-
-    const pendingFlag = getPendingFlag(params, flags);
-
-    const pendingCompletions: string[] = [];
+    const pendingFlag = getPendingFlag(params, flags, completions);
+    const agentCommandCompletions: string[] = [];
     if (pendingFlag === undefined) {
-        pendingCompletions.push(...params.nextArgs);
+        // TODO: auto inject boolean value for boolean args.
+        agentCommandCompletions.push(...params.nextArgs);
         if (flags !== undefined) {
-            const parsedFlags = params.flags;
-            for (const [key, value] of Object.entries(flags)) {
-                const multiple = getFlagMultiple(value);
-                if (!multiple) {
-                    if (getFlagType(value) === "json") {
-                        // JSON property flags
-                        pendingCompletions.push(`--${key}.`);
-                    }
-                    if (parsedFlags?.[key] !== undefined) {
-                        // filter out non-multiple flags that is already set.
-                        continue;
-                    }
-                }
-                completions.push(`--${key}`);
-                if (value.char !== undefined) {
-                    completions.push(`-${value.char}`);
-                }
+            const flagCompletions = collectFlags(
+                agentCommandCompletions,
+                flags,
+                params.flags,
+            );
+            if (flagCompletions.length > 0) {
+                completions.push({
+                    name: "Command Flags",
+                    completions: flagCompletions,
+                });
             }
         }
     } else {
         // get the potential values for the pending flag
-        pendingCompletions.push(pendingFlag);
+        agentCommandCompletions.push(pendingFlag);
     }
 
+    const agent = context.agents.getAppAgent(result.actualAppAgentName);
     if (agent.getCommandCompletion) {
-        completions.push(
-            ...(await agent.getCommandCompletion(
-                result.commands,
-                params,
-                pendingCompletions,
-                sessionContext,
-            )),
-        );
+        const { tokens, lastCompletableParam, lastParamImplicitQuotes } =
+            params;
+
+        if (lastCompletableParam !== undefined && tokens.length > 0) {
+            const valueToken = tokens[tokens.length - 1];
+            const quoted = isFullyQuoted(valueToken);
+            if (
+                quoted === false ||
+                (quoted === undefined && lastParamImplicitQuotes)
+            ) {
+                agentCommandCompletions.push(lastCompletableParam);
+            }
+        }
+        if (agentCommandCompletions.length > 0) {
+            const sessionContext = context.agents.getSessionContext(
+                result.actualAppAgentName,
+            );
+            completions.push(
+                ...(await agent.getCommandCompletion(
+                    result.commands,
+                    params,
+                    agentCommandCompletions,
+                    sessionContext,
+                )),
+            );
+        }
     }
     return completions;
 }
+
 export async function getCommandCompletion(
     input: string,
     context: CommandHandlerContext,
 ): Promise<CommandCompletionResult | undefined> {
-    const partialCompletedCommand = getPartialCompletedCommand(input);
+    try {
+        debug(`Command completion start: '${input}'`);
+        const completionStartIndex = getCompletionStartIndex(input);
+        const commandPrefix =
+            completionStartIndex !== -1
+                ? input.substring(0, completionStartIndex)
+                : input;
 
-    if (partialCompletedCommand === undefined) {
-        // TODO: request completions
-        return undefined;
-    }
+        // Trim spaces and remove leading '@'
+        const partialCommand = normalizeCommand(commandPrefix, context);
 
-    // Trim spaces and remove leading '@'
-    const partialCommand = partialCompletedCommand.partial.trim().substring(1);
+        debug(`Command completion resolve command: '${partialCommand}'`);
+        const result = await resolveCommand(partialCommand, context);
 
-    const result = await resolveCommand(partialCommand, context);
-
-    const table = result.table;
-    if (table === undefined) {
-        // Unknown app agent, or appAgent doesn't support commands
-        return undefined;
-    }
-
-    let completions: string[] = [];
-    const descriptor = result.descriptor;
-    if (descriptor !== undefined) {
-        if (
-            result.suffix.length === 0 &&
-            table !== undefined &&
-            getDefaultSubCommandDescriptor(table) === result.descriptor
-        ) {
-            // Match the default sub command.  Includes additional subcommand names
-            completions.push(...Object.keys(table.commands));
+        const table = result.table;
+        if (table === undefined) {
+            // Unknown app agent, or appAgent doesn't support commands
+            // Return undefined to indicate no more completions for this prefix.
+            return undefined;
         }
-        const parameterCompletions = await getCommandParameterCompletion(
-            descriptor,
-            context,
-            result,
-        );
 
-        if (parameterCompletions === undefined) {
-            if (completions.length === 0) {
-                // No more completion from the descriptor.
-                return undefined;
+        // Collect completions
+        const completions: CompletionGroup[] = [];
+        if (commandPrefix.trim() === "") {
+            completions.push({
+                name: "Command Prefixes",
+                completions: ["@"],
+            });
+        }
+
+        const descriptor = result.descriptor;
+        if (descriptor !== undefined) {
+            if (
+                result.suffix.length === 0 &&
+                table !== undefined &&
+                getDefaultSubCommandDescriptor(table) === result.descriptor
+            ) {
+                // Match the default sub command.  Includes additional subcommand names
+                completions.push({
+                    name: "Subcommands",
+                    completions: Object.keys(table.commands),
+                });
+            }
+            const parameterCompletions = await getCommandParameterCompletion(
+                descriptor,
+                context,
+                result,
+            );
+            if (parameterCompletions === undefined) {
+                if (completions.length === 0) {
+                    // No more completion, return undefined;
+                    return undefined;
+                }
+            } else {
+                completions.push(...parameterCompletions);
             }
         } else {
-            completions.push(...parameterCompletions);
+            if (result.suffix.length !== 0) {
+                // Unknown command
+                // Return undefined to indicate no more completions for this prefix.
+                return undefined;
+            }
+            completions.push({
+                name: "Subcommands",
+                completions: Object.keys(table.commands),
+            });
+            if (
+                result.parsedAppAgentName === undefined &&
+                result.commands.length === 0
+            ) {
+                // Include the agent names
+                completions.push({
+                    name: "Agent Names",
+                    completions: context.agents
+                        .getAppAgentNames()
+                        .filter((name) =>
+                            context.agents.isCommandEnabled(name),
+                        ),
+                });
+            }
         }
-    } else {
-        if (result.suffix.length !== 0) {
-            // Unknown command
-            return undefined;
-        }
-        completions.push(...Object.keys(table.commands));
-        if (
-            result.parsedAppAgentName === undefined &&
-            result.commands.length === 0
-        ) {
-            // Include the agent names
-            completions.push(
-                ...context.agents
-                    .getAppAgentNames()
-                    .filter((name) => context.agents.isCommandEnabled(name)),
-            );
-        }
-        if (completions.length === 0) {
-            // No more completion from the table.
-            return undefined;
-        }
-    }
 
-    return {
-        ...partialCompletedCommand,
-        space: partialCommand !== "",
-        completions,
-    };
+        const space =
+            completionStartIndex > 0 && input[completionStartIndex - 1] !== "@";
+        const completionResult = {
+            startIndex: completionStartIndex,
+            completions,
+            space,
+        };
+
+        debug(`Command completion result:`, completionResult);
+        return completionResult;
+    } catch (e: any) {
+        debugError(`Command completion error: ${e}\n${e.stack}`);
+        return undefined;
+    }
 }

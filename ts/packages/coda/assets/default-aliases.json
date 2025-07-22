@@ -1,0 +1,87 @@
+{
+  "tools": {
+    "pnpm": {
+      "build": "pnpm build",
+      "rebuild": "pnpm rebuild",
+      "lint": "pnpm lint",
+      "format": "pnpm prettier:fix",
+      "test": "pnpm test",
+      "install": "pnpm i",
+      "prettify": "pnpm prettier:fix",
+      "prettier": "pnpm prettier:fix"
+    },
+    "npm": {
+      "build": "npm run build",
+      "lint": "npm run lint",
+      "format": "npm run format",
+      "test": "npm test"
+    },
+    "yarn": {
+      "build": "yarn build",
+      "lint": "yarn lint",
+      "format": "yarn format",
+      "test": "yarn test"
+    },
+    "prettier": {
+      "format": "editor.action.formatDocument",
+      "prettify": "editor.action.formatDocument"
+    },
+    "eslint": {
+      "lint": "eslint.executeAutofix"
+    },
+    "typescript": {
+      "build": "tsc --build",
+      "lint": "tsc --noEmit"
+    },
+    "git": {
+      "add": "git add .",
+      "commit": "git commit -m 'update'",
+      "push": "git push"
+    }
+  },
+  "languages": {
+    "typescript": {
+      "typescript": {
+        "build": "tsc --build",
+        "lint": "tsc --noEmit"
+      },
+      "prettier": {
+        "format": "editor.action.formatDocument"
+      },
+      "eslint": {
+        "lint": "eslint.executeAutofix"
+      }
+    },
+    "javascript": {
+      "prettier": {
+        "format": "editor.action.formatDocument"
+      },
+      "eslint": {
+        "lint": "eslint.executeAutofix"
+      }
+    },
+    "python": {
+      "black": {
+        "format": "black ."
+      },
+      "flake8": {
+        "lint": "flake8 ."
+      }
+    },
+    "rust": {
+      "cargo": {
+        "build": "cargo build",
+        "run": "cargo run",
+        "test": "cargo test",
+        "format": "cargo fmt"
+      }
+    },
+    "git": {
+      "git": {
+        "add": "git add .",
+        "commit": "git commit -m 'update'",
+        "push": "git push"
+      }
+    }
+  }
+}

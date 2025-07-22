@@ -78,6 +78,8 @@ export async function runBatch(settings: InteractiveAppSettings) {
     await app.runApp();
 }
 
+// Global settings for running console app
+let g_settings: InteractiveAppSettings | undefined;
 /**
  * Run an interactive Console app
  * @param settings app settings
@@ -85,6 +87,7 @@ export async function runBatch(settings: InteractiveAppSettings) {
 export async function runConsole(
     settings: InteractiveAppSettings,
 ): Promise<void> {
+    g_settings = settings;
     const args = process.argv;
     if (getArg(args, 2, "") === "batch") {
         await runBatch(settings);
@@ -101,6 +104,7 @@ export async function runConsole(
         }
         await app.runApp();
     }
+    g_settings = undefined;
 }
 
 /**
@@ -158,34 +162,51 @@ class InteractiveApp {
         process.stdin.resume();
         readline.emitKeypressEvents(process.stdin);
 
-        this.lineReader
-            .on("line", async (line) => {
-                if (this.settings.multiline) {
-                    if (!this.isEOLMulti(line)) {
-                        lines.push(line);
-                        return;
+        const promise = new Promise<void>((resolve) => {
+            this.lineReader
+                .on("line", async (line) => {
+                    if (this.settings.multiline) {
+                        if (!this.isEOLMulti(line)) {
+                            lines.push(line);
+                            return;
+                        }
+
+                        line = lines.join("\n");
+                        lines.splice(0);
+                    }
+                    let shouldContinue = false;
+                    try {
+                        this.lineReader.pause();
+                        shouldContinue = await this.processInput(line);
+                    } finally {
+                        this.lineReader.resume();
                     }
 
-                    line = lines.join("\n");
-                    lines.splice(0);
-                }
-                if (await this.processInput(line)) {
-                    this.lineReader.prompt();
-                } else {
+                    if (shouldContinue) {
+                        this.lineReader.prompt();
+                    } else {
+                        this.lineReader.close();
+                    }
+                })
+                .on("close", () => {
                     this.lineReader.close();
-                }
-            })
-            .on("close", () => {
-                this.lineReader.close();
-                fs.writeFileSync(
-                    "command_history.json",
-                    JSON.stringify({
-                        commands: (this.lineReader as any).history,
-                    }),
-                );
-            });
+                    fs.writeFileSync(
+                        "command_history.json",
+                        JSON.stringify({
+                            commands: (this.lineReader as any).history,
+                        }),
+                    );
+                    resolve();
+                });
+        });
+        return promise;
     }
 
+    /**
+     * Process a line of input
+     * @param line
+     * @returns true if processing next line, false if processing should stop
+     */
     public async processInput(line: string): Promise<boolean> {
         line = line.trim();
         if (line.length == 0) {
@@ -301,8 +322,13 @@ export async function defaultInputHandler(
         const args = line.split(" ");
         if (args.length > 0) {
             const cmdName = args[0];
-            io.writer.writeLine(`Did you mean @${cmdName}?`);
-            io.writer.writeLine("Commands must be prefixed with @");
+            const commandPrefix = g_settings?.commandPrefix ?? "";
+            io.writer.writeLine(`Did you mean ${commandPrefix}${cmdName}?`);
+            if (commandPrefix) {
+                io.writer.writeLine(
+                    `Commands must be prefixed with ${commandPrefix}`,
+                );
+            }
             io.writer.writeLine();
             if (
                 handlers !== undefined &&
@@ -951,6 +977,14 @@ export function displayCommands(
     }
     if (title) {
         io.writer.writeLine(title);
+    }
+    const commandPrefix = g_settings?.commandPrefix;
+    if (commandPrefix) {
+        const handlersMod: Record<string, CommandHandler> = {};
+        for (const key in handlers) {
+            handlersMod[commandPrefix + key] = handlers[key];
+        }
+        handlers = handlersMod;
     }
     io.writer.writeRecord(
         handlers,

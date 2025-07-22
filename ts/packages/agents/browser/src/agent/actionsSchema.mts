@@ -19,8 +19,9 @@ export type BrowserActions =
     | CaptureScreenshot
     | ReloadPage
     | ImportWebsiteData
-    | SearchWebsites
-    | GetWebsiteStats;
+    | ImportHtmlFolder
+    | GetWebsiteStats
+    | SearchWebMemories;
 
 export type WebPage = string;
 export type BrowserEntities = WebPage;
@@ -138,38 +139,33 @@ export type ImportWebsiteData = {
         days?: number;
         // Specific bookmark folder to import (for bookmarks)
         folder?: string;
-        // Enhancement options
-        extractContent?: boolean;
-        enableIntelligentAnalysis?: boolean;
-        enableActionDetection?: boolean;
-        extractionMode?: "basic" | "content" | "actions" | "full";
+        // extraction mode
+        mode?: "basic" | "content" | "actions" | "full";
         maxConcurrent?: number;
         contentTimeout?: number;
     };
 };
 
-// Search through imported website data
-export type SearchWebsites = {
-    actionName: "searchWebsites";
+// Import HTML files from local folder path
+export type ImportHtmlFolder = {
+    actionName: "importHtmlFolder";
     parameters: {
-        // The original user request
-        originalUserRequest: string;
-        // Search query terms
-        query: string;
-        // Filter by domain
-        domain?: string;
-        // How to sort by time, if temporal intent present
-        temporalSort: "ascend" | "descend" | "none";
-        // How to sort by frequency of visit, if required
-        frequencySort: "ascend" | "descend" | "none";
-        // Filter by page type (news, commerce, social, etc.)
-        pageType?: string;
-        // Filter by source (bookmark, history)
-        source?: "bookmark" | "history";
-        // Maximum number of results
-        limit?: number;
-        // Minimum relevance score (0-1)
-        minScore?: number;
+        // Folder path containing HTML files
+        folderPath: string;
+        // Import options
+        options?: {
+            // extraction mode
+            mode?: "basic" | "content" | "actions" | "full";
+            preserveStructure?: boolean;
+            // Folder-specific options
+            recursive?: boolean;
+            fileTypes?: string[];
+            limit?: number;
+            maxFileSize?: number;
+            skipHidden?: boolean;
+        };
+        // Import tracking ID
+        importId: string;
     };
 };
 
@@ -181,5 +177,35 @@ export type GetWebsiteStats = {
         groupBy?: "domain" | "pageType" | "source";
         // Limit number of groups returned
         limit?: number;
+    };
+};
+
+// Search web memories (unified search replacing queryWebKnowledge and searchWebsites)
+export type SearchWebMemories = {
+    actionName: "searchWebMemories";
+    parameters: {
+        // The original user request - overrides query if provided
+        originalUserRequest?: string;
+        query: string;
+        searchScope?: "current_page" | "all_indexed";
+
+        // Search configuration
+        limit?: number;
+        minScore?: number;
+        exactMatch?: boolean;
+
+        // Processing options (consumer controls cost)
+        generateAnswer?: boolean; // Default: true
+        includeRelatedEntities?: boolean; // Default: true
+        includeRelationships?: boolean; // Default: false (expensive)
+        enableAdvancedSearch?: boolean; // Use advanced patterns
+
+        // Advanced options
+        knowledgeTopK?: number;
+        chunking?: boolean;
+        fastStop?: boolean;
+        combineAnswers?: boolean;
+        choices?: string; // Multiple choice (semicolon separated)
+        debug?: boolean;
     };
 };

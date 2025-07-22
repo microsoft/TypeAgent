@@ -38,6 +38,20 @@
         "schemaFile": "./vscode/editorCommandActionsSchema.ts",
         "schemaType": "CodeEditorActions"
       }
+    },
+    "code-workbench": {
+      "schema": {
+        "description": "Code agent that helps you perform vscode workbench actions like open a file, close a file etc.",
+        "schemaFile": "./vscode/workbenchCommandActionsSchema.ts",
+        "schemaType": "CodeWorkbenchActions"
+      }
+    },
+    "code-extension": {
+      "schema": {
+        "description": "Code agent that helps you perform vscode extension actions like show, install, update, enable, disable, uninstall extensions etc.",
+        "schemaFile": "./vscode/extensionsActionsSchema.ts",
+        "schemaType": "CodeWorkbenchExtensionActions"
+      }
     }
   }
 }

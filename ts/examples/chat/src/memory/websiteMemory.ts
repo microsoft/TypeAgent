@@ -57,7 +57,14 @@ export async function addMessagesToCollection(
         }
 
         if (updateIndex) {
-            await collection.buildIndex();
+            try {
+                await collection.addToIndex();
+            } catch (error) {
+                console.warn(
+                    `Incremental indexing failed, falling back to full rebuild: ${error}`,
+                );
+                await collection.buildIndex();
+            }
         }
 
         return success(getIndexingState(collection));

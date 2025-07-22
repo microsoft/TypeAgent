@@ -10,7 +10,7 @@ import {
 } from "./actions";
 import { captureUIState, captureAnnotatedScreenshot } from "./capture";
 import { setIdsOnAllElements } from "../domUtils";
-import { getPageHTML } from "../htmlProcessing";
+import { getPageHTML } from "../htmlUtils";
 
 // State variables
 let recording = false;
@@ -126,7 +126,7 @@ export function observeDOMChanges(): void {
 
             // Optional: Send message to background script
             chrome.runtime.sendMessage({
-                action: "spaNavigationDetected",
+                type: "spaNavigationDetected",
                 url: currentUrl,
             });
 

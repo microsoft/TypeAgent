@@ -30,7 +30,6 @@
     "@milkdown/crepe": "^7.3.6",
     "@milkdown/plugin-collab": "^7.3.6",
     "@milkdown/plugin-history": "^7.3.6",
-    "@milkdown/plugin-math": "^7.3.6",
     "@milkdown/preset-commonmark": "^7.3.6",
     "@milkdown/preset-gfm": "^7.3.6",
     "@milkdown/theme-nord": "^7.3.6",

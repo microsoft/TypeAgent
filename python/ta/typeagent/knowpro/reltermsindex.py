@@ -1,7 +1,6 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from collections.abc import Sequence
 from typing import Callable, Protocol
 
 from ..aitools.vectorbase import ScoredInt, TextEmbeddingIndexSettings, VectorBase
@@ -23,24 +22,25 @@ from .interfaces import (
     ListIndexingResult,
     Term,
 )
-from .query import CompiledTermGroup
+from .query import CompiledSearchTerm, CompiledTermGroup
 
 
 class TermToRelatedTermsMap(ITermToRelatedTerms):
     def __init__(self):
-        self.map: dict[str, set[Term]] = {}
+        # The inner dict represents a set of terms disregarding their weights.
+        self.map: dict[str, dict[str, Term]] = {}
 
     def add_related_term(self, text: str, related_terms: Term | list[Term]) -> None:
         if not isinstance(related_terms, list):
             related_terms = [related_terms]
+        terms: dict[str, Term] = self.map.setdefault(text, {})
         for related in related_terms:
-            terms = self.map.setdefault(text, set())
-            terms.add(related)
+            terms.setdefault(related.text, related)
 
     def lookup_term(self, text: str) -> list[Term] | None:
         result = self.map.get(text)
         if result:
-            return list(result)
+            return list(result.values())
         else:
             return None
 
@@ -56,7 +56,7 @@ class TermToRelatedTermsMap(ITermToRelatedTerms):
             related_terms.append(
                 TermsToRelatedTermsDataItem(
                     termText=key,
-                    relatedTerms=[term.serialize() for term in value],
+                    relatedTerms=[term.serialize() for term in value.values()],
                 )
             )
         return TermToRelatedTermsData(relatedTerms=related_terms)
@@ -134,6 +134,17 @@ async def resolve_related_terms(
     ensure_single_occurrence: bool = True,
     should_resolve_fuzzy: Callable[[SearchTerm], bool] | None = None,
 ) -> None:
+    """Resolves related terms for those search terms that don't already have them.
+
+    NOTE: This modifies SearchTerm().related_terms in place.
+
+    Optionally ensures that related terms are not duplicated across search terms
+    because this can skew how semantic references are scored during search
+    (over-counting).
+
+    SUBTLE: If a search terms has related_terms == [], don't touch it;
+    only set related_terms if it is None.
+    """
     all_search_terms = [term for ct in compiled_terms for term in ct.terms]
     searchable_terms = TermSet()
     search_terms_needing_related: list[SearchTerm] = []
@@ -162,8 +173,10 @@ async def resolve_related_terms(
                 [st.term.text for st in search_terms_needing_related]
             )
         )
-        for i, search_term in enumerate(search_terms_needing_related):
-            search_term.related_terms = related_terms_for_search_terms[i]
+        for search_term, related_terms in zip(
+            search_terms_needing_related, related_terms_for_search_terms
+        ):
+            search_term.related_terms = related_terms
 
     # Due to fuzzy matching, a search term may end with related terms that overlap with those of other search terms.
     # This causes scoring problems... duplicate/redundant scoring that can cause items to seem more relevant than they are
@@ -171,17 +184,12 @@ async def resolve_related_terms(
     # - related terms may also already be present as search terms
     for ct in compiled_terms:
         dedupe_related_terms(
-            ct.terms,
-            (
-                ct.boolean_op != "and"
-                if ensure_single_occurrence
-                else ensure_single_occurrence
-            ),
+            ct.terms, ensure_single_occurrence and ct.boolean_op != "and"
         )
 
 
 def dedupe_related_terms(
-    search_terms: list[SearchTerm],
+    compiled_terms: list[CompiledSearchTerm],
     ensure_single_occurrence: bool,
 ) -> None:
     all_search_terms = TermSet()
@@ -189,15 +197,18 @@ def dedupe_related_terms(
 
     # Collect all unique search and related terms.
     # We end up with (term, maximum weight for term) pairs.
-    for st in search_terms:
+    for st in compiled_terms:
         all_search_terms.add(st.term)
     if ensure_single_occurrence:
         all_related_terms = TermSet()
-        for st in search_terms:
+        for st in compiled_terms:
             all_related_terms.add_or_union(st.related_terms)
 
-    for search_term in search_terms:
-        if search_term.related_terms is not None and len(search_term.related_terms) > 0:
+    for search_term in compiled_terms:
+        required = search_term.related_terms_required
+        if required:
+            continue
+        if search_term.related_terms:
             unique_related_for_search_term: list[Term] = []
             for candidate_related_term in search_term.related_terms:
                 if candidate_related_term in all_search_terms:

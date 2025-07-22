@@ -189,6 +189,9 @@ export class KnowProPrinter extends MemoryConsoleWriter {
             case "topic":
                 this.writeTopic(semanticRef.knowledge as kp.Topic);
                 break;
+            case "tag":
+                this.writeTag(semanticRef.knowledge as kp.Tag);
+                break;
         }
         return this;
     }
@@ -569,6 +572,11 @@ export class KnowProPrinter extends MemoryConsoleWriter {
         return this;
     }
 
+    public writeSearchQuery(searchQuery: kp.querySchema.SearchQuery) {
+        this.writeHeading("Search Query");
+        this.writeJson(searchQuery);
+    }
+
     public writeDebugContext(context: kp.LanguageSearchDebugContext) {
         if (context.searchQuery) {
             this.writeHeading("Search Query");
@@ -627,6 +635,10 @@ export class KnowProPrinter extends MemoryConsoleWriter {
     public writeDocPart(docPart: cm.DocPart) {
         for (const text of docPart.textChunks) {
             this.writeLine(text);
+        }
+        if (docPart.tags && docPart.tags.length > 0) {
+            this.writeLineInColor(chalk.cyan, "Tags");
+            this.writeList(docPart.tags, { type: "csv" });
         }
         this.writeKnowledge(docPart.knowledge);
         return this;

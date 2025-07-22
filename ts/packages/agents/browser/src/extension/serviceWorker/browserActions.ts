@@ -14,7 +14,6 @@ import {
     getTabHTMLFragments,
     getFilteredHTMLFragments,
 } from "./capture";
-import { getStoredPageProperty, setStoredPageProperty } from "./storage";
 
 /**
  * Executes a browser action
@@ -182,6 +181,8 @@ export async function runBrowserAction(action: AppAction): Promise<any> {
                 action.parameters?.downloadAsFile,
                 action.parameters?.extractText,
                 action.parameters?.useTimestampIds,
+                action.parameters?.filterToReadingView,
+                action.parameters?.keepMetaTags,
             );
             break;
         }
@@ -234,21 +235,53 @@ export async function runBrowserAction(action: AppAction): Promise<any> {
             });
             break;
         }
-        case "getPageStoredProperty": {
-            responseObject = await getStoredPageProperty(
-                action.parameters.url,
-                action.parameters.key,
-            );
+        case "getActionsForUrl": {
+            // Enhanced action retrieval with ActionsStore support
+            responseObject = await chrome.runtime.sendMessage({
+                type: "getActionsForUrl",
+                url: action.parameters.url,
+                includeGlobal: action.parameters.includeGlobal,
+                author: action.parameters.author,
+            });
             break;
         }
-        case "setPageStoredProperty": {
-            await setStoredPageProperty(
-                action.parameters.url,
-                action.parameters.key,
-                action.parameters.value,
+        case "downloadContentWithBrowser": {
+            // Import and use the existing message handler
+            const { handleMessage } = await import("./messageHandlers.js");
+            const result = await handleMessage(
+                {
+                    type: "downloadContentWithBrowser",
+                    url: action.parameters.url,
+                    options: action.parameters.options,
+                },
+                {} as chrome.runtime.MessageSender,
             );
+
+            responseObject = result;
+            confirmationMessage = result?.success
+                ? "Content downloaded successfully"
+                : "Content download failed";
             break;
         }
+        case "processHtmlContent": {
+            // Import and use the existing message handler
+            const { handleMessage } = await import("./messageHandlers.js");
+            const result = await handleMessage(
+                {
+                    type: "processHtmlContent",
+                    htmlContent: action.parameters.htmlContent,
+                    options: action.parameters.options,
+                },
+                {} as chrome.runtime.MessageSender,
+            );
+
+            responseObject = result;
+            confirmationMessage = result?.success
+                ? "HTML processed successfully"
+                : "HTML processing failed";
+            break;
+        }
+
         default:
             throw new Error(`Unknown action: ${actionName}. `);
     }

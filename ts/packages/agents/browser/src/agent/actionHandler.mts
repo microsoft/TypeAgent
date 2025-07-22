@@ -46,10 +46,13 @@ import {
 
 import registerDebug from "debug";
 
-// import { handleInstacartAction } from "./instacart/actionHandler.mjs";
-import { handleInstacartAction } from "./instacart/planHandler.mjs";
+import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 import * as website from "website-memory";
 import { handleKnowledgeAction } from "./knowledge/knowledgeHandler.mjs";
+import {
+    searchWebMemories,
+    SearchWebMemoriesResponse,
+} from "./searchWebMemories.mjs";
 
 import {
     loadAllowDynamicAgentDomains,
@@ -63,7 +66,8 @@ import {
     resolveURLWithHistory,
     importWebsiteData,
     importWebsiteDataFromSession,
-    searchWebsites,
+    importHtmlFolder,
+    importHtmlFolderFromSession,
     getWebsiteStats,
 } from "./websiteMemory.mjs";
 import { CrosswordActions } from "./crossword/schema/userActions.mjs";
@@ -78,6 +82,7 @@ import { urlResolver, bingWithGrounding } from "azure-ai-foundry";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 import { deleteCachedSchema } from "./crossword/cachedSchema.mjs";
 import { getCrosswordCommandHandlerTable } from "./crossword/commandHandler.mjs";
+import { ActionsStore } from "./storage/index.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
 const debugWebSocket = registerDebug("typeagent:browser:ws");
@@ -109,6 +114,7 @@ export type BrowserActionContext = {
     index: website.IndexData | undefined;
     viewProcess?: ChildProcess | undefined;
     localHostPort: number;
+    actionsStore?: ActionsStore | undefined; // Add ActionsStore instance
 };
 
 export interface urlResolutionAction {
@@ -130,11 +136,13 @@ async function initializeBrowserContext(
     if (localHostPort === undefined) {
         throw new Error("Local view port not assigned.");
     }
+
     return {
         clientBrowserControl,
         useExternalBrowserControl: clientBrowserControl === undefined,
         index: undefined,
         localHostPort,
+        actionsStore: undefined, // Will be initialized in updateBrowserContext
     };
 }
 
@@ -153,73 +161,167 @@ async function updateBrowserContext(
             context.agentContext.tabTitleIndex = createTabTitleIndex();
         }
 
+        // Initialize ActionsStore
+        if (!context.agentContext.actionsStore && context.sessionStorage) {
+            try {
+                const { ActionsStore } = await import("./storage/index.mjs");
+                context.agentContext.actionsStore = new ActionsStore(
+                    context.sessionStorage,
+                );
+                await context.agentContext.actionsStore.initialize();
+                debug("ActionsStore initialized successfully");
+            } catch (error) {
+                debug("Failed to initialize ActionsStore:", error);
+                // Continue without ActionsStore - will fall back to legacy storage
+            }
+        }
+
         // Load the website index from disk
         if (!context.agentContext.websiteCollection) {
-            const websiteIndexes = await context.indexes("website");
+            try {
+                const websiteIndexes = await context.indexes("website");
 
-            if (websiteIndexes.length > 0) {
-                context.agentContext.index = websiteIndexes[0];
-                context.agentContext.websiteCollection =
-                    await website.WebsiteCollection.readFromFile(
-                        websiteIndexes[0].path,
-                        "index",
+                if (websiteIndexes.length > 0) {
+                    context.agentContext.index = websiteIndexes[0];
+                    context.agentContext.websiteCollection =
+                        await website.WebsiteCollection.readFromFile(
+                            websiteIndexes[0].path,
+                            "index",
+                        );
+                    debug(
+                        `Loaded website index with ${context.agentContext.websiteCollection?.messages.length || 0} websites`,
                     );
-                debug(
-                    `Loaded website index with ${context.agentContext.websiteCollection?.messages.length || 0} websites`,
-                );
-            } else {
-                debug(
-                    "No existing website index found, creating new index for data persistence",
-                );
+                } else {
+                    debug(
+                        "No existing website index found, checking for index file at target path",
+                    );
 
-                // Create empty collection as fallback
-                context.agentContext.websiteCollection =
-                    new website.WebsiteCollection();
+                    let indexPath: string | undefined;
+                    let websiteCollection:
+                        | website.WebsiteCollection
+                        | undefined;
 
-                try {
-                    const sessionDir = await getSessionFolderPath(context);
+                    // Try to determine the target index path
+                    try {
+                        const sessionDir = await getSessionFolderPath(context);
+                        if (sessionDir) {
+                            // Create index path following IndexManager pattern: sessionDir/indexes/website
+                            indexPath = path.resolve(
+                                sessionDir,
+                                "..",
+                                "indexes",
+                                "website",
+                                "index",
+                            );
 
-                    if (sessionDir) {
-                        // Create index path following IndexManager pattern: sessionDir/indexes/website-index
-                        const indexPath = path.join(
-                            sessionDir,
-                            "indexes",
-                            "website-index",
-                        );
-                        fs.mkdirSync(indexPath, { recursive: true });
+                            // Check if the index file exists and try to read it
+                            if (fs.existsSync(indexPath)) {
+                                try {
+                                    websiteCollection =
+                                        await website.WebsiteCollection.readFromFile(
+                                            indexPath,
+                                            "index",
+                                        );
 
-                        // Create proper IndexData object
-                        context.agentContext.index = {
-                            source: "website",
-                            name: "website-index",
-                            location: "browser-agent",
-                            size: 0,
-                            path: indexPath,
-                            state: "new",
-                            progress: 0,
-                            sizeOnDisk: 0,
-                        };
+                                    if (
+                                        websiteCollection &&
+                                        websiteCollection.messages.length > 0
+                                    ) {
+                                        context.agentContext.websiteCollection =
+                                            websiteCollection;
 
+                                        // Create proper IndexData object for the loaded collection
+                                        context.agentContext.index = {
+                                            source: "website",
+                                            name: "website-index",
+                                            location: "browser-agent",
+                                            size: websiteCollection.messages
+                                                .length,
+                                            path: indexPath,
+                                            state: "finished",
+                                            progress: 100,
+                                            sizeOnDisk: 0,
+                                        };
+
+                                        debug(
+                                            `Loaded existing website collection with ${websiteCollection.messages.length} websites from ${indexPath}`,
+                                        );
+                                    } else {
+                                        debug(
+                                            `File exists but collection is empty at ${indexPath}, will create new collection`,
+                                        );
+                                        websiteCollection = undefined;
+                                    }
+                                } catch (readError) {
+                                    debug(
+                                        `Failed to read existing collection: ${readError}`,
+                                    );
+                                    websiteCollection = undefined;
+                                }
+                            } else {
+                                debug(
+                                    `No existing collection file found at ${indexPath}`,
+                                );
+                            }
+                        }
+                    } catch (pathError) {
+                        debug(`Error determining index path: ${pathError}`);
+                        indexPath = undefined;
+                    }
+
+                    // If we couldn't load an existing collection, create a new one
+                    if (!websiteCollection) {
+                        context.agentContext.websiteCollection =
+                            new website.WebsiteCollection();
+
+                        // Set up index if we have a valid path
+                        if (indexPath) {
+                            try {
+                                // Ensure directory exists
+                                fs.mkdirSync(indexPath, { recursive: true });
+
+                                // Create proper IndexData object
+                                context.agentContext.index = {
+                                    source: "website",
+                                    name: "website-index",
+                                    location: "browser-agent",
+                                    size: 0,
+                                    path: indexPath,
+                                    state: "new",
+                                    progress: 0,
+                                    sizeOnDisk: 0,
+                                };
+
+                                debug(
+                                    `Created index structure at ${indexPath}`,
+                                );
+                            } catch (createError) {
+                                debug(
+                                    `Error creating index directory: ${createError}`,
+                                );
+                                context.agentContext.index = undefined;
+                            }
+                        } else {
+                            context.agentContext.index = undefined;
+                            debug(
+                                "No index path available, collection will be in-memory only",
+                            );
+                        }
+                    }
+
+                    // Log final state
+                    if (!context.agentContext.index) {
                         debug(
-                            `Created website index with sessionStorage-based path: ${indexPath}`,
-                        );
-                    } else {
-                        debug(
-                            "Warning: Could not determine session directory path",
+                            "Website collection created without persistent index - data will be in-memory only",
                         );
                     }
-                } catch (error) {
-                    debug(
-                        `Error during sessionStorage path discovery: ${error}`,
-                    );
                 }
-
-                // If index creation failed, log that data will be in-memory only
-                if (!context.agentContext.index) {
-                    debug(
-                        "Website collection created without persistent index - data will be in-memory only",
-                    );
-                }
+            } catch (error) {
+                debug("Error initializing website collection:", error);
+                // Fallback to empty collection without index
+                context.agentContext.websiteCollection =
+                    new website.WebsiteCollection();
+                context.agentContext.index = undefined;
             }
         }
 
@@ -339,7 +441,9 @@ async function updateBrowserContext(
 
                         case "detectPageActions":
                         case "registerPageDynamicAgent":
-                        case "getIntentFromRecording": {
+                        case "getIntentFromRecording":
+                        case "getActionsForUrl":
+                        case "deleteAction": {
                             const discoveryResult =
                                 await handleSchemaDiscoveryAction(
                                     {
@@ -360,11 +464,13 @@ async function updateBrowserContext(
 
                         case "extractKnowledgeFromPage":
                         case "indexWebPageContent":
-                        case "queryWebKnowledge":
                         case "checkPageIndexStatus":
+                        case "getPageIndexedKnowledge":
+                        case "getRecentKnowledgeItems":
+                        case "getAnalyticsData":
+                        case "getDiscoverInsights":
                         case "getKnowledgeIndexStats":
-                        case "clearKnowledgeIndex":
-                        case "exportKnowledgeData": {
+                        case "clearKnowledgeIndex": {
                             const knowledgeResult = await handleKnowledgeAction(
                                 data.method,
                                 data.params,
@@ -381,8 +487,10 @@ async function updateBrowserContext(
                         }
 
                         case "importWebsiteData":
-                        case "searchWebsites":
-                        case "getWebsiteStats": {
+                        case "importWebsiteDataWithProgress":
+                        case "importHtmlFolder":
+                        case "getWebsiteStats":
+                        case "searchWebMemories": {
                             const websiteResult = await handleWebsiteAction(
                                 data.method,
                                 data.params,
@@ -393,6 +501,37 @@ async function updateBrowserContext(
                                 JSON.stringify({
                                     id: data.id,
                                     result: websiteResult,
+                                }),
+                            );
+                            break;
+                        }
+
+                        case "recordActionUsage":
+                        case "getActionStatistics": {
+                            const actionsResult =
+                                await handleActionsStoreAction(
+                                    data.method,
+                                    data.params,
+                                    context,
+                                );
+
+                            webSocket.send(
+                                JSON.stringify({
+                                    id: data.id,
+                                    result: actionsResult,
+                                }),
+                            );
+                            break;
+                        }
+
+                        case "getViewHostUrl": {
+                            const actionsResult = {
+                                url: `http://localhost:${context.agentContext.localHostPort}`,
+                            };
+                            webSocket.send(
+                                JSON.stringify({
+                                    id: data.id,
+                                    result: actionsResult,
                                 }),
                             );
                             break;
@@ -617,6 +756,94 @@ async function closeWebPage(context: ActionContext<BrowserActionContext>) {
     return result;
 }
 
+async function searchWebMemoriesAction(
+    context: ActionContext<BrowserActionContext>,
+    action: TypeAgentAction<any>,
+) {
+    context.actionIO.setDisplay("Searching web memories...");
+
+    try {
+        // Use originalUserRequest to override query if provided
+        const searchParams = { ...action.parameters };
+        if (searchParams.originalUserRequest) {
+            searchParams.query = searchParams.originalUserRequest;
+            debug(
+                `Using originalUserRequest as query: "${searchParams.originalUserRequest}"`,
+            );
+        }
+
+        const searchResponse: SearchWebMemoriesResponse =
+            await searchWebMemories(searchParams, context.sessionContext);
+
+        if (searchResponse.websites.length === 0) {
+            const message =
+                searchResponse.answer || "No results found for your search.";
+            return createActionResult(message);
+        }
+
+        // Format the response for display
+        const summary = `Found ${searchResponse.websites.length} result(s) in ${searchResponse.summary.searchTime}ms`;
+        let displayText = `${summary}\n\n`;
+
+        // Add answer if available
+        if (searchResponse.answer && searchResponse.answerType !== "noAnswer") {
+            displayText += `**Answer:** ${searchResponse.answer}\n\n`;
+        }
+
+        // Add top results
+        const topResults = searchResponse.websites.slice(0, 5);
+        if (topResults.length > 0) {
+            displayText += "**Top Results:**\n";
+            topResults.forEach((site: any, index: number) => {
+                displayText += `${index + 1}. [${site.title}](${site.url})\n`;
+                if (site.snippet) {
+                    displayText += `   ${site.snippet}\n`;
+                }
+                displayText += "\n";
+            });
+        }
+
+        // Add entities if available
+        if (
+            searchResponse.relatedEntities &&
+            searchResponse.relatedEntities.length > 0
+        ) {
+            displayText += "\n**Related Entities:**\n";
+            const topEntities = searchResponse.relatedEntities.slice(0, 3);
+            topEntities.forEach((entity: any) => {
+                displayText += `• ${entity.name}\n`;
+            });
+        }
+
+        // Add topics if available
+        if (searchResponse.topTopics && searchResponse.topTopics.length > 0) {
+            displayText += "\n**Top Topics:**\n";
+            const topTopics = searchResponse.topTopics.slice(0, 3);
+            topTopics.forEach((topic: string) => {
+                displayText += `• ${topic}\n`;
+            });
+        }
+
+        // Add follow-up suggestions if available
+        if (
+            searchResponse.suggestedFollowups &&
+            searchResponse.suggestedFollowups.length > 0
+        ) {
+            displayText += "\n**Suggested follow-ups:**\n";
+            searchResponse.suggestedFollowups.forEach((followup: string) => {
+                displayText += `• ${followup}\n`;
+            });
+        }
+
+        return createActionResultFromMarkdownDisplay(displayText, summary);
+    } catch (error) {
+        const errorMessage =
+            error instanceof Error ? error.message : "Unknown error occurred";
+        context.actionIO.appendDisplay(`Search failed: ${errorMessage}`);
+        return createActionResult(`Search failed: ${errorMessage}`);
+    }
+}
+
 async function executeBrowserAction(
     action:
         | TypeAgentAction<BrowserActions, "browser">
@@ -637,10 +864,12 @@ async function executeBrowserAction(
                     return closeWebPage(context);
                 case "importWebsiteData":
                     return importWebsiteData(context, action);
-                case "searchWebsites":
-                    return searchWebsites(context, action);
+                case "importHtmlFolder":
+                    return importHtmlFolder(context, action);
                 case "getWebsiteStats":
                     return getWebsiteStats(context, action);
+                case "searchWebMemories":
+                    return searchWebMemoriesAction(context, action);
                 case "goForward":
                     await getActionBrowserControl(context).goForward();
                     return;
@@ -842,6 +1071,134 @@ async function handleTabIndexActions(
     return undefined;
 }
 
+/**
+ * Progress update helper function
+ */
+function sendProgressUpdateViaWebSocket(
+    webSocket: WebSocket | undefined,
+    importId: string,
+    progress: any,
+) {
+    try {
+        if (webSocket && webSocket.readyState === WebSocket.OPEN) {
+            // Send progress update message via WebSocket
+            const progressMessage = {
+                method: "importProgress",
+                params: {
+                    importId: importId,
+                    progress: progress,
+                },
+                source: "browserAgent",
+            };
+
+            webSocket.send(JSON.stringify(progressMessage));
+            debug(
+                `Progress Update [${importId}] sent via WebSocket:`,
+                progress,
+            );
+        } else {
+            debug(
+                `Progress Update [${importId}] (WebSocket not available):`,
+                progress,
+            );
+        }
+    } catch (error) {
+        console.error("Failed to send progress update via WebSocket:", error);
+    }
+}
+
+/**
+ * Setup IPC communication with view service for action retrieval
+ */
+function setupViewServiceIPC(
+    viewServiceProcess: ChildProcess,
+    context: SessionContext<BrowserActionContext>,
+): void {
+    viewServiceProcess.on("message", async (message: any) => {
+        try {
+            if (message.type === "getAction") {
+                await handleGetActionRequest(
+                    message,
+                    viewServiceProcess,
+                    context,
+                );
+            }
+        } catch (error) {
+            debug("Error handling IPC message:", error);
+        }
+    });
+
+    viewServiceProcess.on("error", (error: Error) => {
+        debug("View service process error:", error);
+    });
+}
+
+/**
+ * Handle action retrieval request from view service
+ */
+async function handleGetActionRequest(
+    message: any,
+    viewServiceProcess: ChildProcess,
+    context: SessionContext<BrowserActionContext>,
+): Promise<void> {
+    const { actionId, requestId } = message;
+    const startTime = Date.now();
+
+    try {
+        if (!actionId || !requestId) {
+            throw new Error(
+                "Missing required parameters: actionId or requestId",
+            );
+        }
+
+        if (typeof actionId !== "string") {
+            throw new Error("Invalid actionId format");
+        }
+
+        debug(`Handling action request for ID: ${actionId}`);
+
+        // Get the actions store from context
+        const actionsStore = context.agentContext.actionsStore;
+        if (!actionsStore) {
+            throw new Error("ActionsStore not available");
+        }
+
+        const action = await actionsStore.getAction(actionId);
+
+        if (!action) {
+            viewServiceProcess.send({
+                type: "getActionResponse",
+                requestId,
+                success: false,
+                error: "Action not found",
+                timestamp: Date.now(),
+            });
+            return;
+        }
+
+        viewServiceProcess.send({
+            type: "getActionResponse",
+            requestId,
+            success: true,
+            action,
+            timestamp: Date.now(),
+        });
+
+        const duration = Date.now() - startTime;
+        debug(`Action request completed in ${duration}ms`);
+    } catch (error) {
+        debug("Error handling action request:", error);
+
+        viewServiceProcess.send({
+            type: "getActionResponse",
+            requestId,
+            success: false,
+            error: (error as Error).message || "Unknown error",
+            timestamp: Date.now(),
+        });
+    }
+}
+
 export async function createViewServiceHost(
     context: SessionContext<BrowserActionContext>,
 ) {
@@ -876,6 +1233,9 @@ export async function createViewServiceHost(
                         TYPEAGENT_BROWSER_FILES: folderPath,
                     },
                 });
+
+                // Setup IPC message handling for action retrieval
+                setupViewServiceIPC(childProcess, context);
 
                 childProcess.on("message", function (message) {
                     if (message === "Success") {
@@ -1031,34 +1391,213 @@ async function handleWebsiteAction(
         case "importWebsiteData":
             return await importWebsiteDataFromSession(parameters, context);
 
-        case "searchWebsites":
-            // Convert to ActionContext format for existing function
-            const searchAction = {
-                schemaName: "browser" as const,
-                actionName: "searchWebsites" as const,
-                parameters: parameters,
+        case "importWebsiteDataWithProgress":
+            // Create progress callback using JSON parsing instead of regex
+            const progressCallback = (message: string) => {
+                debug("Progress message received:", message);
+
+                let current = 0,
+                    total = 0,
+                    item = "",
+                    phase = "processing";
+
+                // Check if message contains structured JSON progress data
+                if (message.includes("PROGRESS_JSON:")) {
+                    try {
+                        const jsonStart =
+                            message.indexOf("PROGRESS_JSON:") +
+                            "PROGRESS_JSON:".length;
+                        const jsonStr = message.substring(jsonStart);
+                        const progressData = JSON.parse(jsonStr);
+
+                        debug("Parsed JSON progress data:", progressData);
+
+                        current = progressData.current || 0;
+                        total = progressData.total || 0;
+                        item = progressData.description || "";
+                        phase = progressData.phase || "processing";
+                    } catch (error) {
+                        console.error(
+                            "Failed to parse JSON progress data:",
+                            error,
+                        );
+                        debug("Raw message:", message);
+
+                        // Fallback to simple message handling
+                        item = message;
+                        total = parameters.totalItems || 0;
+
+                        // Try to determine phase from message content
+                        if (
+                            message.toLowerCase().includes("complete") ||
+                            message.toLowerCase().includes("finished")
+                        ) {
+                            phase = "complete";
+                        } else if (
+                            message.toLowerCase().includes("starting") ||
+                            message.toLowerCase().includes("initializing")
+                        ) {
+                            phase = "initializing";
+                        }
+                    }
+                } else {
+                    // Fallback for non-JSON messages
+                    debug("Non-JSON message, using as description");
+                    item = message;
+                    total = parameters.totalItems || 0;
+
+                    // Try to determine phase from message content
+                    if (
+                        message.toLowerCase().includes("complete") ||
+                        message.toLowerCase().includes("finished")
+                    ) {
+                        phase = "complete";
+                    } else if (
+                        message.toLowerCase().includes("starting") ||
+                        message.toLowerCase().includes("initializing")
+                    ) {
+                        phase = "initializing";
+                    }
+                }
+
+                const structuredProgress = {
+                    phase: phase,
+                    totalItems: total || parameters.totalItems || 0,
+                    processedItems: current || 0,
+                    currentItem: item,
+                    importId: parameters.importId,
+                    errors: [],
+                };
+
+                debug("Sending structured progress:", structuredProgress);
+
+                // Send structured progress update via WebSocket
+                sendProgressUpdateViaWebSocket(
+                    context.agentContext.webSocket,
+                    parameters.importId,
+                    structuredProgress,
+                );
             };
-            const mockActionContext: ActionContext<BrowserActionContext> = {
-                sessionContext: context,
-                actionIO: {
-                    setDisplay: () => {},
-                    appendDisplay: () => {},
-                    clearDisplay: () => {},
-                    setError: () => {},
-                } as any,
-                streamingContext: undefined,
-                activityContext: undefined,
-                queueToggleTransientAgent: async () => {},
-            };
-            const searchResult = await searchWebsites(
-                mockActionContext,
-                searchAction,
+
+            return await importWebsiteDataFromSession(
+                parameters,
+                context,
+                progressCallback,
             );
-            return {
-                success: !searchResult.error,
-                result: searchResult.literalText || "Search completed",
-                error: searchResult.error,
+
+        case "importHtmlFolder":
+            // Create progress callback similar to importWebsiteDataWithProgress
+            const folderProgressCallback = (message: string) => {
+                // Extract progress info from message if possible
+                let current = 0,
+                    total = 0,
+                    item = "";
+                let phase:
+                    | "counting"
+                    | "initializing"
+                    | "fetching"
+                    | "processing"
+                    | "extracting"
+                    | "complete"
+                    | "error" = "processing";
+
+                // Handle JSON progress format from logStructuredProgress
+                if (message.includes("PROGRESS_JSON:")) {
+                    try {
+                        const jsonStart =
+                            message.indexOf("PROGRESS_JSON:") +
+                            "PROGRESS_JSON:".length;
+                        const progressData = JSON.parse(
+                            message.substring(jsonStart),
+                        );
+
+                        current = progressData.current ?? 0;
+                        total = progressData.total ?? 0;
+                        item = progressData.description ?? "";
+                        phase = progressData.phase ?? "processing";
+
+                        debug("Parsed JSON progress data:", progressData);
+                        debug(
+                            "Extracted values - current:",
+                            current,
+                            "total:",
+                            total,
+                            "item:",
+                            item,
+                        );
+                    } catch (error) {
+                        console.warn("Failed to parse JSON progress:", error);
+                        // Fall back to regex parsing
+                    }
+                } else {
+                    // Existing regex logic for other message formats
+                    // Updated regex to match format: "X/Y files processed (Z%): description"
+                    const progressMatch = message.match(
+                        /(\d+)\/(\d+)\s+files\s+processed.*?:\s*(.+)/,
+                    );
+
+                    if (progressMatch) {
+                        current = parseInt(progressMatch[1]);
+                        total = parseInt(progressMatch[2]);
+                        item = progressMatch[3];
+
+                        // Determine phase based on progress
+                        if (current === 0) {
+                            phase = "initializing";
+                        } else if (current === total) {
+                            phase = "complete";
+                        } else {
+                            phase = "processing";
+                        }
+                    } else {
+                        // Fallback: try to extract just the description for other message types
+                        item = message;
+
+                        // Determine phase from message content
+                        if (
+                            message.includes("complete") ||
+                            message.includes("finished")
+                        ) {
+                            phase = "complete";
+                        } else if (
+                            message.includes("Found") ||
+                            message.includes("Starting")
+                        ) {
+                            phase = "initializing";
+                        } else if (message.startsWith("Processing:")) {
+                            phase = "processing";
+                            // For individual file processing, preserve any previously known total
+                            total = parameters.totalItems || 0;
+                        }
+                    }
+                }
+
+                // Create progress data matching ImportProgress interface
+                const progressData = {
+                    phase,
+                    totalItems: total,
+                    processedItems: current,
+                    currentItem: item,
+                    importId: parameters.importId,
+                    errors: [],
+                };
+
+                // Send structured progress update via WebSocket
+                sendProgressUpdateViaWebSocket(
+                    context.agentContext.webSocket,
+                    parameters.importId,
+                    progressData,
+                );
             };
+
+            return await importHtmlFolderFromSession(
+                parameters,
+                context,
+                folderProgressCallback,
+            );
+
+        case "searchWebMemories":
+            return await searchWebMemories(parameters, context);
 
         case "getWebsiteStats":
             // Convert to ActionContext format for existing function
@@ -1092,6 +1631,91 @@ async function handleWebsiteAction(
 
         default:
             throw new Error(`Unknown website action: ${actionName}`);
+    }
+}
+
+async function handleActionsStoreAction(
+    actionName: string,
+    parameters: any,
+    context: SessionContext<BrowserActionContext>,
+): Promise<any> {
+    const actionsStore = context.agentContext.actionsStore;
+
+    if (!actionsStore) {
+        return {
+            success: false,
+            error: "ActionsStore not available",
+        };
+    }
+
+    try {
+        switch (actionName) {
+            case "recordActionUsage": {
+                const { actionId } = parameters;
+                if (!actionId) {
+                    return {
+                        success: false,
+                        error: "Missing actionId parameter",
+                    };
+                }
+
+                await actionsStore.recordUsage(actionId);
+                debug(`Recorded usage for action: ${actionId}`);
+
+                return {
+                    success: true,
+                    actionId: actionId,
+                };
+            }
+
+            case "getActionStatistics": {
+                const { url } = parameters;
+                let actions: any[] = [];
+                let totalActions = 0;
+
+                if (url) {
+                    // Get actions for specific URL
+                    actions = await actionsStore.getActionsForUrl(url);
+                    totalActions = actions.length;
+                } else {
+                    // Get all actions
+                    actions = await actionsStore.getAllActions();
+                    totalActions = actions.length;
+                }
+
+                console.log(
+                    `Retrieved statistics: ${totalActions} total actions`,
+                );
+
+                return {
+                    success: true,
+                    totalActions: totalActions,
+                    actions: actions.map((action) => ({
+                        id: action.id,
+                        name: action.name,
+                        author: action.author,
+                        category: action.category,
+                        usageCount: action.metadata.usageCount,
+                        lastUsed: action.metadata.lastUsed,
+                    })),
+                };
+            }
+
+            default:
+                return {
+                    success: false,
+                    error: `Unknown ActionsStore action: ${actionName}`,
+                };
+        }
+    } catch (error) {
+        console.error(
+            `Failed to execute ActionsStore action ${actionName}:`,
+            error,
+        );
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
     }
 }
 

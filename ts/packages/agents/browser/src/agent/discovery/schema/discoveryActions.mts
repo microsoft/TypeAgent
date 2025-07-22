@@ -55,6 +55,22 @@ export type GetIntentFromRecording = {
     };
 };
 
+export type GetActionsForUrl = {
+    actionName: "getActionsForUrl";
+    parameters: {
+        url: string;
+        includeGlobal?: boolean;
+        author?: "discovered" | "user";
+    };
+};
+
+export type DeleteAction = {
+    actionName: "deleteAction";
+    parameters: {
+        actionId: string;
+    };
+};
+
 export type SchemaDiscoveryActions =
     | FindPageComponents
     | DetectPageActions
@@ -63,4 +79,6 @@ export type SchemaDiscoveryActions =
     | RegisterPageDynamicAgent
     | SummarizePage
     | StartAuthoringSession
-    | GetIntentFromRecording;
+    | GetIntentFromRecording
+    | GetActionsForUrl
+    | DeleteAction;
