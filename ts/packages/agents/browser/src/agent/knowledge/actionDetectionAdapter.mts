@@ -34,7 +34,7 @@ export class ActionDetectionAdapter {
     ): Promise<DetectedAction[]> {
         try {
             // Only perform action detection for modes that support it
-            if (mode !== "actions" && mode !== "full") {
+            if (mode !== "macros" && mode !== "full") {
                 return [];
             }
 

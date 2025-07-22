@@ -64,9 +64,7 @@ import { handleSchemaDiscoveryAction } from "./discovery/actionHandler.mjs";
 import { BrowserActions, OpenWebPage } from "./actionsSchema.mjs";
 import {
     resolveURLWithHistory,
-    importWebsiteData,
     importWebsiteDataFromSession,
-    importHtmlFolder,
     importHtmlFolderFromSession,
     getWebsiteStats,
 } from "./websiteMemory.mjs";
@@ -850,10 +848,6 @@ async function executeBrowserAction(
                     return openWebPage(context, action);
                 case "closeWebPage":
                     return closeWebPage(context);
-                case "importWebsiteData":
-                    return importWebsiteData(context, action);
-                case "importHtmlFolder":
-                    return importHtmlFolder(context, action);
                 case "getWebsiteStats":
                     return getWebsiteStats(context, action);
                 case "searchWebMemories":
