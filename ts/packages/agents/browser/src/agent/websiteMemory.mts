@@ -8,10 +8,12 @@ import {
 } from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import {
-    ImportWebsiteData,
-    ImportHtmlFolder,
     GetWebsiteStats,
 } from "./actionsSchema.mjs";
+import {
+    ImportWebsiteData,
+    ImportHtmlFolder,
+} from "./knowledge/schema/knowledgeImport.mjs";
 import { BrowserActionContext } from "./actionHandler.mjs";
 import {
     searchWebMemories,
