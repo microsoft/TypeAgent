@@ -28,8 +28,11 @@ export {
     ActionFunctionJsonSchema,
 } from "./jsonSchemaGenerator.js";
 export { validateAction } from "./validate.js";
+
+// Utils for any schemas
 export {
-    getParameterType,
+    getPropertyType,
+    getPropertyResolvedType,
     getParameterNames,
     resolveTypeReference,
     resolveUnionType,

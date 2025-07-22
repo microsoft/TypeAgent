@@ -2,4 +2,4 @@
 // Licensed under the MIT License.
 
 export * from "./markdown.js";
-export * from "./htmlProcessing.js";
+export * from "./html.js";

@@ -3,7 +3,7 @@
 
 interface ExtensionSettings {
     websocketHost: string;
-    defaultExtractionMode: "basic" | "content" | "actions" | "full";
+    defaultExtractionMode: "basic" | "content" | "macros" | "full";
     maxConcurrentExtractions: number;
     qualityThreshold: number;
     enableIntelligentAnalysis: boolean;
@@ -151,7 +151,7 @@ class EnhancedOptionsPage {
         }
     }
 
-    private selectMode(mode: "basic" | "content" | "actions" | "full") {
+    private selectMode(mode: "basic" | "content" | "macros" | "full") {
         // Update visual selection
         document.querySelectorAll(".mode-option").forEach((option) => {
             option.classList.remove("selected");

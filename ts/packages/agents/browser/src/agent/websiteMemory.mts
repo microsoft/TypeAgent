@@ -7,14 +7,17 @@ import {
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
+import { GetWebsiteStats } from "./actionsSchema.mjs";
 import {
     ImportWebsiteData,
     ImportHtmlFolder,
-    GetWebsiteStats,
-} from "./actionsSchema.mjs";
+} from "./knowledge/schema/knowledgeImport.mjs";
 import { BrowserActionContext } from "./actionHandler.mjs";
+import {
+    searchWebMemories,
+    SearchWebMemoriesRequest,
+} from "./searchWebMemories.mjs";
 import * as website from "website-memory";
-import * as kp from "knowpro";
 import * as kpLib from "knowledge-processor";
 import { openai as ai } from "aiclient";
 import registerDebug from "debug";
@@ -73,6 +76,8 @@ const debug = registerDebug("typeagent:browser:website-memory");
 /**
  * Resolve URL using website visit history (bookmarks, browser history)
  * This provides a more personalized alternative to web search
+ *
+ * Refactored to use searchWebMemories for consistent search behavior
  */
 export async function resolveURLWithHistory(
     context: { agentContext: BrowserActionContext },
@@ -87,92 +92,58 @@ export async function resolveURLWithHistory(
     }
 
     try {
-        // Use knowpro searchConversationKnowledge for semantic search
-        const matches = await kp.searchConversationKnowledge(
-            websiteCollection,
-            // search group
-            {
-                booleanOp: "or", // Use OR to be more permissive
-                terms: siteQueryToSearchTerms(site),
-            },
-            // when filter
-            {
-                // No specific knowledge type filter - search across all types
-            },
-            // options
-            {
-                exactMatch: false, // Allow fuzzy matching
-            },
+        // Create SessionContext wrapper for searchWebMemories
+        // Use minimal required fields - searchWebMemories only needs agentContext
+        const sessionContext: SessionContext<BrowserActionContext> = {
+            agentContext: context.agentContext,
+            sessionStorage: undefined,
+            instanceStorage: undefined,
+            notify: () => {},
+            popupQuestion: async () => 0,
+            toggleTransientAgent: async () => {},
+            addDynamicAgent: async () => {},
+            removeDynamicAgent: async () => {},
+            getSharedLocalHostPort: async () => 0,
+            indexes: async () => [],
+        };
+
+        // Use searchWebMemories with URL resolution optimized parameters
+        const searchRequest: SearchWebMemoriesRequest = {
+            query: site,
+            limit: 5, // Only need top 5 candidates for URL resolution
+            minScore: 0.3, // Same threshold as before (lower for broader matching)
+            exactMatch: false, // Allow fuzzy matching
+            generateAnswer: false, // Don't need answers for URL resolution
+            includeRelatedEntities: false, // Don't need entities for URL resolution
+            enableAdvancedSearch: true, // Use enhanced search if available
+            searchScope: "all_indexed",
+            debug: false, // Keep false for production URL resolution
+        };
+
+        const response = await searchWebMemories(searchRequest, sessionContext);
+
+        if (response.websites.length === 0) {
+            debug(`No matches found for site: '${site}'`);
+            return undefined;
+        }
+
+        debug(
+            `Found ${response.websites.length} candidates from searchWebMemories for: '${site}'`,
         );
 
-        if (!matches || matches.size === 0) {
-            debug(`No semantic matches found in history for query: '${site}'`);
-            return undefined;
-        }
+        // Use the built-in relevance scores from search results
+        const scoredCandidates = response.websites.map((website) => ({
+            url: website.url,
+            score: website.relevanceScore, // Use native relevance scoring
+            metadata: website,
+        }));
 
-        debug(`Found ${matches.size} semantic matches for: '${site}'`);
-        debug(matches);
-
-        const candidates: { url: string; score: number; metadata: any }[] = [];
-        const processedMessages = new Set<number>();
-
-        matches.forEach((match: kp.SemanticRefSearchResult) => {
-            match.semanticRefMatches.forEach(
-                (refMatch: kp.ScoredSemanticRefOrdinal) => {
-                    if (refMatch.score >= 0.3) {
-                        // Lower threshold for broader matching
-                        const semanticRef: kp.SemanticRef | undefined =
-                            websiteCollection.semanticRefs.get(
-                                refMatch.semanticRefOrdinal,
-                            );
-                        if (semanticRef) {
-                            const messageOrdinal =
-                                semanticRef.range.start.messageOrdinal;
-                            if (
-                                messageOrdinal !== undefined &&
-                                !processedMessages.has(messageOrdinal)
-                            ) {
-                                processedMessages.add(messageOrdinal);
-
-                                const website =
-                                    websiteCollection.messages.get(
-                                        messageOrdinal,
-                                    );
-                                if (website && website.metadata) {
-                                    const metadata =
-                                        website.metadata as website.WebsiteDocPartMeta;
-                                    let totalScore = refMatch.score;
-
-                                    // Apply additional scoring based on special patterns and recency
-                                    totalScore += calculateWebsiteScore(
-                                        [site],
-                                        metadata,
-                                    );
-
-                                    candidates.push({
-                                        url: metadata.url,
-                                        score: totalScore,
-                                        metadata: metadata,
-                                    });
-                                }
-                            }
-                        }
-                    }
-                },
-            );
-        });
-
-        if (candidates.length === 0) {
-            debug(`No qualifying candidates found for query: '${site}'`);
-            return undefined;
-        }
-
-        // Sort by total score (highest first) and remove duplicates
+        // Sort by relevance score and remove duplicates
         const uniqueCandidates = new Map<
             string,
             { url: string; score: number; metadata: any }
         >();
-        candidates.forEach((candidate) => {
+        scoredCandidates.forEach((candidate) => {
             const existing = uniqueCandidates.get(candidate.url);
             if (!existing || candidate.score > existing.score) {
                 uniqueCandidates.set(candidate.url, candidate);
@@ -186,315 +157,19 @@ export async function resolveURLWithHistory(
         const bestMatch = sortedCandidates[0];
 
         debug(
-            `Found best match from history (score: ${bestMatch.score.toFixed(2)}): '${bestMatch.metadata.title || bestMatch.url}' -> ${bestMatch.url}`,
+            `Found best match from searchWebMemories (score: ${bestMatch.score.toFixed(2)}): '${bestMatch.metadata.title || bestMatch.url}' -> ${bestMatch.url}`,
         );
         debug(
-            `Match details: domain=${bestMatch.metadata.domain}, source=${bestMatch.metadata.websiteSource}`,
+            `Match details: domain=${bestMatch.metadata.domain}, source=${bestMatch.metadata.source}`,
         );
 
         return bestMatch.url;
     } catch (error) {
-        debug(`Error searching website history: ${error}`);
+        debug(
+            `Error in resolveURLWithHistory using searchWebMemories: ${error}`,
+        );
         return undefined;
     }
-}
-
-/**
- * Convert site query to knowpro search terms
- */
-function siteQueryToSearchTerms(site: string): any[] {
-    const terms: any[] = [];
-    const siteQuery = site.toLowerCase().trim();
-
-    // Add the main query as a search term
-    terms.push({ term: { text: siteQuery } });
-
-    // Add individual words if it's a multi-word query
-    /*
-    const words = siteQuery.split(/\s+/).filter((word) => word.length > 2);
-    words.forEach((word) => {
-        if (word !== siteQuery) {
-            terms.push({ term: { text: word } });
-        }
-    });
-*/
-
-    return terms;
-}
-
-/**
- * Calculate additional scoring based on website metadata
- */
-export function calculateWebsiteScore(
-    searchFilters: string[],
-    metadata: any,
-): number {
-    let score = 0;
-
-    const title = metadata.title?.toLowerCase() || "";
-    const domain = metadata.domain?.toLowerCase() || "";
-    const url = metadata.url.toLowerCase();
-    const folder = metadata.folder?.toLowerCase() || "";
-
-    for (const filter of searchFilters) {
-        const queryLower = filter.toLowerCase();
-
-        // Direct domain matches get highest boost
-        if (
-            domain === queryLower ||
-            domain === `www.${queryLower}` ||
-            domain.endsWith(`.${queryLower}`)
-        ) {
-            score += 3.0;
-        } else if (domain.includes(queryLower)) {
-            score += 2.0;
-        }
-
-        if (title.includes(queryLower)) {
-            score += 1.5;
-        }
-
-        if (url.includes(queryLower)) {
-            score += 1.0;
-        }
-
-        if (
-            metadata.websiteSource === "bookmark" &&
-            folder.includes(queryLower)
-        ) {
-            score += 1.0;
-        }
-
-        // Recency bonus
-        if (metadata.visitDate || metadata.bookmarkDate) {
-            const visitDate = new Date(
-                metadata.visitDate || metadata.bookmarkDate,
-            );
-            const daysSinceVisit =
-                (Date.now() - visitDate.getTime()) / (1000 * 60 * 60 * 24);
-            if (daysSinceVisit < 7) score += 0.5;
-            else if (daysSinceVisit < 30) score += 0.3;
-        }
-
-        // Frequency bonus
-        if (metadata.visitCount && metadata.visitCount > 5) {
-            score += Math.min(metadata.visitCount / 20, 0.5);
-        }
-    }
-
-    return score;
-}
-
-/**
- * Find websites matching search criteria using enhanced search capabilities
- */
-export async function findRequestedWebsites(
-    searchFilters: string[],
-    context: BrowserActionContext,
-    exactMatch: boolean = false,
-    minScore: number = 0.5,
-): Promise<website.Website[]> {
-    if (
-        !context.websiteCollection ||
-        context.websiteCollection.messages.length === 0
-    ) {
-        return [];
-    }
-
-    try {
-        // Try enhanced search capabilities first
-        if (searchFilters.length === 1 && !exactMatch) {
-            const query = searchFilters[0];
-
-            // Try hybrid search for single term queries
-            try {
-                const hybridResults =
-                    await context.websiteCollection.hybridSearch(query);
-                if (hybridResults.length > 0) {
-                    debug(
-                        `Found ${hybridResults.length} results using hybrid search`,
-                    );
-                    return hybridResults
-                        .filter((result) => result.relevanceScore >= minScore)
-                        .map((result) => result.website.toWebsite())
-                        .slice(0, 20);
-                }
-            } catch (hybridError) {
-                debug(`Hybrid search failed, falling back: ${hybridError}`);
-            }
-        }
-
-        // Try entity search for proper nouns and specific terms
-        if (searchFilters.some((filter) => /^[A-Z]/.test(filter))) {
-            try {
-                const entityResults =
-                    await context.websiteCollection.searchByEntities(
-                        searchFilters,
-                    );
-                if (entityResults.length > 0) {
-                    debug(
-                        `Found ${entityResults.length} results using entity search`,
-                    );
-                    return entityResults
-                        .map((result) => result.toWebsite())
-                        .slice(0, 20);
-                }
-            } catch (entityError) {
-                debug(`Entity search failed, falling back: ${entityError}`);
-            }
-        }
-
-        // Try topic search for conceptual terms
-        try {
-            const topicResults =
-                await context.websiteCollection.searchByTopics(searchFilters);
-            if (topicResults.length > 0) {
-                debug(
-                    `Found ${topicResults.length} results using topic search`,
-                );
-                return topicResults
-                    .map((result) => result.toWebsite())
-                    .slice(0, 20);
-            }
-        } catch (topicError) {
-            debug(`Topic search failed, falling back: ${topicError}`);
-        }
-
-        // Fallback to original semantic search for backward compatibility
-        debug(
-            `Falling back to semantic search for filters: ${searchFilters.join(", ")}`,
-        );
-        const matches = await kp.searchConversationKnowledge(
-            context.websiteCollection,
-            // search group
-            {
-                booleanOp: "or", // Use OR to match any of the search filters
-                terms: searchFiltersToSearchTerms(searchFilters),
-            },
-            // when filter
-            {
-                // No specific knowledge type filter - search across all types
-            },
-            // options
-            {
-                exactMatch: exactMatch,
-            },
-        );
-
-        if (!matches || matches.size === 0) {
-            debug(
-                `No semantic matches found for search filters: ${searchFilters.join(", ")}`,
-            );
-            return [];
-        }
-
-        debug(
-            `Found ${matches.size} semantic matches for search filters: ${searchFilters.join(", ")}`,
-        );
-
-        debug(matches);
-
-        const results: { website: website.Website; score: number }[] = [];
-        const processedMessages = new Set<number>();
-
-        matches.forEach((match: kp.SemanticRefSearchResult) => {
-            match.semanticRefMatches.forEach(
-                (refMatch: kp.ScoredSemanticRefOrdinal) => {
-                    if (refMatch.score >= minScore) {
-                        const semanticRef: kp.SemanticRef | undefined =
-                            context.websiteCollection!.semanticRefs.get(
-                                refMatch.semanticRefOrdinal,
-                            );
-                        if (semanticRef) {
-                            const messageOrdinal =
-                                semanticRef.range.start.messageOrdinal;
-                            if (
-                                messageOrdinal !== undefined &&
-                                !processedMessages.has(messageOrdinal)
-                            ) {
-                                processedMessages.add(messageOrdinal);
-
-                                const websiteData =
-                                    context.websiteCollection!.messages.get(
-                                        messageOrdinal,
-                                    ) as any;
-                                if (websiteData) {
-                                    let totalScore = refMatch.score;
-
-                                    // Apply additional scoring based on metadata matches
-                                    totalScore += calculateWebsiteScore(
-                                        searchFilters,
-                                        websiteData.metadata,
-                                    );
-
-                                    results.push({
-                                        website: websiteData,
-                                        score: totalScore,
-                                    });
-                                }
-                            }
-                        }
-                    }
-                },
-            );
-        });
-
-        // Sort by score (highest first) and remove duplicates
-        const uniqueResults = new Map<
-            string,
-            { website: website.Website; score: number }
-        >();
-        results.forEach((result) => {
-            const url = result.website.metadata.url;
-            const existing = uniqueResults.get(url);
-            if (!existing || result.score > existing.score) {
-                uniqueResults.set(url, result);
-            }
-        });
-
-        const sortedResults = Array.from(uniqueResults.values()).sort(
-            (a, b) => b.score - a.score,
-        );
-
-        debug(
-            `Filtered to ${sortedResults.length} unique websites after scoring`,
-        );
-
-        debug(sortedResults);
-
-        return sortedResults.map((r) => r.website);
-    } catch (error) {
-        debug(`Error in semantic website search: ${error}`);
-        // Fallback to empty results
-        return [];
-    }
-}
-
-/**
- * Convert search filters to knowpro search terms
- */
-function searchFiltersToSearchTerms(filters: string[]): any[] {
-    const terms: any[] = [];
-
-    filters.forEach((filter) => {
-        // Add the main filter as a search term
-        terms.push({ term: { text: filter } });
-
-        // Add individual words if it's a multi-word filter
-        /*
-        const words = filter
-            .toLowerCase()
-            .split(/\s+/)
-            .filter((word) => word.length > 2);
-        words.forEach((word) => {
-            if (word !== filter.toLowerCase()) {
-                terms.push({ term: { text: word } });
-            }
-        });
-        */
-    });
-
-    return terms;
 }
 
 /**
@@ -742,6 +417,25 @@ export async function importWebsiteDataFromSession(
                 `Incremental indexing failed, falling back to full rebuild: ${error}`,
             );
             await context.agentContext.websiteCollection.buildIndex();
+        }
+
+        // Update entity graph with new websites using entity processing service
+        try {
+            debug("Processing entities for imported websites...");
+            const { getEntityProcessingService } = await import(
+                "./knowledge/entityProcessingService.mjs"
+            );
+            const entityProcessor = getEntityProcessingService();
+            await entityProcessor.processWebsites(
+                websites,
+                context.agentContext.websiteCollection,
+            );
+            debug(
+                `Entity processing completed for ${websites.length} websites`,
+            );
+        } catch (error) {
+            debug("Entity processing failed:", error);
+            // Don't fail the import if entity processing fails
         }
 
         // Persist the website collection to disk
@@ -1069,6 +763,25 @@ export async function importHtmlFolderFromSession(
                     `Incremental indexing failed, falling back to full rebuild: ${error}`,
                 );
                 await context.agentContext.websiteCollection.buildIndex();
+            }
+
+            // Process entities for imported HTML files
+            try {
+                debug("Processing entities for imported HTML files...");
+                const { getEntityProcessingService } = await import(
+                    "./knowledge/entityProcessingService.mjs"
+                );
+                const entityProcessor = getEntityProcessingService();
+                await entityProcessor.processWebsites(
+                    websites,
+                    context.agentContext.websiteCollection,
+                );
+                debug(
+                    `Entity processing completed for ${websites.length} HTML files`,
+                );
+            } catch (error) {
+                debug("Entity processing failed:", error);
+                // Don't fail the import if entity processing fails
             }
 
             try {

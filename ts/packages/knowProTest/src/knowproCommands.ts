@@ -69,10 +69,10 @@ export async function execSearchRequest(
         undefined,
         request,
     );
-    //
-    // If optional "when" subquery provided, run that query to find messages to scope by
-    //
     if (request.when) {
+        //
+        // If optional "when" subquery provided, run that query to find messages to scope by
+        //
         const whenResult = await scopingTermsFromLanguage(
             context,
             request.when,
@@ -105,19 +105,32 @@ export async function execSearchRequest(
         debugContext.searchQueryExpr = compiledQueries;
         searchResults = success(queryResults.flat());
     } else {
-        //
-        // Run raw NLP query
-        //
-        searchResults = await async.getResultWithRetry(() =>
-            getLangSearchResult(
-                conversation,
-                context.queryTranslator,
-                langQuery,
-                options,
-                langFilter,
-                debugContext,
-            ),
-        );
+        if (request.scoped === undefined || request.scoped === false) {
+            //
+            // Run raw NLP query
+            //
+            searchResults = await async.getResultWithRetry(() =>
+                getLangSearchResult(
+                    conversation,
+                    context.queryTranslator,
+                    langQuery,
+                    options,
+                    langFilter,
+                    debugContext,
+                ),
+            );
+        } else {
+            searchResults = await async.getResultWithRetry(() =>
+                getLangSearchResult2(
+                    conversation,
+                    context.queryTranslator,
+                    langQuery,
+                    options,
+                    langFilter,
+                    debugContext,
+                ),
+            );
+        }
     }
 
     return { searchResults, debugContext };
@@ -331,7 +344,7 @@ function createLangFilter(
     return when;
 }
 
-function createSearchOptions(request: SearchRequest): kp.SearchOptions {
+export function createSearchOptions(request: SearchRequest): kp.SearchOptions {
     let options = kp.createSearchOptions();
     options.exactMatch = request.exact;
     options.maxMessageMatches = request.messageTopK;
@@ -424,4 +437,22 @@ export async function getLangSearchResult(
               );
 
     return searchResults;
+}
+
+async function getLangSearchResult2(
+    conversation: kp.IConversation,
+    queryTranslator: kp.SearchQueryTranslator,
+    langQuery: string,
+    options?: kp.LanguageSearchOptions,
+    langFilter?: kp.LanguageSearchFilter,
+    debugContext?: kp.LanguageSearchDebugContext,
+) {
+    return await kp.searchConversationWithLanguage2(
+        conversation,
+        langQuery,
+        queryTranslator,
+        options,
+        langFilter,
+        debugContext,
+    );
 }

@@ -17,6 +17,8 @@ import {
     AIModelRequiredError,
     AIExtractionFailedError,
 } from "./types.js";
+import registerDebug from "debug";
+const debug = registerDebug("typeagent:browser:indexing");
 
 /**
  * Enhanced ContentExtractor with extraction mode capabilities
@@ -103,7 +105,7 @@ export class ContentExtractor {
                     content.htmlContent = fetchResult.html;
                 } else if (fetchResult.error) {
                     // Log the error but continue with title-only processing
-                    console.warn(
+                    debug(
                         `Failed to fetch ${content.url}: ${fetchResult.error}`,
                     );
                 }
@@ -525,7 +527,7 @@ export class ContentExtractor {
                 links: [], // Basic extraction doesn't include links
             };
         } catch (error) {
-            console.warn(
+            debug(
                 "Cheerio parsing failed, falling back to simple extraction:",
                 error,
             );

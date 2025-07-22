@@ -18,6 +18,7 @@ import {
     getDefaultAppAgentProviders,
     getDefaultAppAgentInstaller,
     getDefaultConstructionProvider,
+    getIndexingServiceRegistry,
 } from "default-agent-provider";
 import {
     ensureShellDataDir,
@@ -297,6 +298,8 @@ async function initializeDispatcher(
             dblogging: true,
             clientId: getClientId(),
             clientIO,
+            indexingServiceRegistry:
+                await getIndexingServiceRegistry(instanceDir),
             constructionProvider: getDefaultConstructionProvider(),
             allowSharedLocalView: ["browser"],
             portBase: isProd ? 9001 : 9050,

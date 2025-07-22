@@ -32,6 +32,7 @@ const testInput = inputs.flatMap((f) =>
 
 const matchConfig = {
     enableWildcard: false,
+    enableEntityWildcard: false,
     rejectReferences: false,
     partial: false,
 };

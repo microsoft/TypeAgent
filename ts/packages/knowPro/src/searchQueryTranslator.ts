@@ -6,6 +6,7 @@ import {
     PromptSection,
     Result,
     TypeChatLanguageModel,
+    error,
 } from "typechat";
 import * as querySchema from "./searchQuerySchema.js";
 import * as querySchema2 from "./searchQuerySchema_v2.js";
@@ -43,7 +44,7 @@ export function createSearchQueryTranslator(
         import.meta.url,
     );
     const searchActionSchemaScope = loadSchema(
-        ["dateTimeSchema.ts", "searchQuerySchema_V2.ts"],
+        ["dateTimeSchema.ts", "searchQuerySchema_v2.ts"],
         import.meta.url,
     );
 
@@ -83,5 +84,23 @@ export async function searchQueryFromLanguage(
             ? [...promptPreamble, ...timeRange]
             : timeRange;
     const result = await queryTranslator.translate(text, queryContext);
+    return result;
+}
+
+export async function searchQueryWithScopeFromLanguage(
+    conversation: IConversation,
+    queryTranslator: SearchQueryTranslator,
+    text: string,
+    promptPreamble?: PromptSection[],
+): Promise<Result<querySchema2.SearchQuery>> {
+    if (!queryTranslator.translateWithScope) {
+        return error("Scoped queries not supported");
+    }
+    const timeRange = getTimeRangePromptSectionForConversation(conversation);
+    let queryContext: PromptSection[] =
+        promptPreamble && promptPreamble.length > 0
+            ? [...promptPreamble, ...timeRange]
+            : timeRange;
+    const result = await queryTranslator.translateWithScope(text, queryContext);
     return result;
 }

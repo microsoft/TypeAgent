@@ -208,9 +208,8 @@ export class KnowledgeAnalyticsPanel {
         this.updateRecentTopicsDisplay(
             knowledge.recentTopics || knowledge.recentItems?.topics || [],
         );
-        this.updateRecentActionsDisplay(
-            knowledge.recentActions || knowledge.recentItems?.actions || [],
-        );
+        // Use recentRelationships instead of transforming recentActions
+        this.updateRecentActionsDisplay(knowledge.recentRelationships || []);
     }
 
     private updateKnowledgeVisualizationCards(knowledge: any): void {
@@ -539,19 +538,13 @@ export class KnowledgeAnalyticsPanel {
             .slice(0, 10)
             .map(
                 (entity) => `
-            <div class="recent-item entity-item">
-                <div class="item-icon">
+            <div class="entity-pill clickable" data-entity-name="${this.escapeHtml(entity.name || "Unknown Entity")}" title="Click to view in Entity Graph">
+                <div class="pill-icon">
                     <i class="bi bi-diagram-2"></i>
                 </div>
-                <div class="item-content">
-                    <div class="item-name">${this.escapeHtml(entity.name || "Unknown Entity")}</div>
-                    <div class="item-meta">
-                        <span class="entity-type">${this.escapeHtml(entity.type || "Unknown")}</span>
-                        ${entity.confidence ? `<span class="confidence">Confidence: ${Math.round(entity.confidence * 100)}%</span>` : ""}
-                    </div>
-                </div>
-                <div class="item-date">
-                    ${this.formatRelativeDate(entity.extractedAt || entity.createdAt)}
+                <div class="pill-content">
+                    <div class="pill-name">${this.escapeHtml(entity.name || "Unknown Entity")}</div>
+                    <div class="pill-type">${this.escapeHtml(entity.type || "Unknown")}</div>
                 </div>
             </div>
         `,
@@ -559,6 +552,19 @@ export class KnowledgeAnalyticsPanel {
             .join("");
 
         container.innerHTML = entitiesHtml;
+
+        // Add click handlers for entity navigation
+        container.querySelectorAll(".entity-pill.clickable").forEach((pill) => {
+            pill.addEventListener("click", (e) => {
+                const entityName = (
+                    e.currentTarget as HTMLElement
+                ).getAttribute("data-entity-name");
+                if (entityName) {
+                    // Navigate to entity graph view with the selected entity
+                    window.location.href = `entityGraphView.html?entity=${encodeURIComponent(entityName)}`;
+                }
+            });
+        });
     }
 
     private updateRecentTopicsDisplay(recentTopics: any[]): void {
@@ -579,19 +585,13 @@ export class KnowledgeAnalyticsPanel {
             .slice(0, 10)
             .map(
                 (topic) => `
-            <div class="recent-item topic-item">
-                <div class="item-icon">
+            <div class="topic-pill">
+                <div class="pill-icon">
                     <i class="bi bi-tags"></i>
                 </div>
-                <div class="item-content">
-                    <div class="item-name">${this.escapeHtml(topic.name || topic.topic || "Unknown Topic")}</div>
-                    <div class="item-meta">
-                        ${topic.category ? `<span class="topic-category">${this.escapeHtml(topic.category)}</span>` : ""}
-                        ${topic.relevance ? `<span class="relevance">Relevance: ${Math.round(topic.relevance * 100)}%</span>` : ""}
-                    </div>
-                </div>
-                <div class="item-date">
-                    ${this.formatRelativeDate(topic.identifiedAt || topic.createdAt)}
+                <div class="pill-content">
+                    <div class="pill-name">${this.escapeHtml(topic.name || topic.topic || "Unknown Topic")}</div>
+                    ${topic.category ? `<div class="pill-type">${this.escapeHtml(topic.category)}</div>` : ""}
                 </div>
             </div>
         `,
@@ -601,44 +601,37 @@ export class KnowledgeAnalyticsPanel {
         container.innerHTML = topicsHtml;
     }
 
-    private updateRecentActionsDisplay(recentActions: any[]): void {
+    private updateRecentActionsDisplay(recentRelationships: any[]): void {
         const container = document.getElementById("recentActionsList");
         if (!container) return;
 
-        if (!recentActions || recentActions.length === 0) {
+        if (!recentRelationships || recentRelationships.length === 0) {
             container.innerHTML = `
                 <div class="empty-message">
-                    <i class="bi bi-lightning"></i>
-                    <span>No recent actions suggested</span>
+                    <i class="bi bi-diagram-3"></i>
+                    <span>No recent entity actions identified</span>
                 </div>
             `;
             return;
         }
 
-        const actionsHtml = recentActions
+        // Use the relationship data directly (no transformation needed)
+        const relationshipsHtml = recentRelationships
             .slice(0, 10)
             .map(
-                (action) => `
-            <div class="recent-item action-item">
-                <div class="item-icon">
-                    <i class="bi bi-lightning"></i>
+                (rel) => `
+                <div class="relationship-item rounded">
+                    <span class="fw-semibold">${this.escapeHtml(rel.from)}</span>
+                    <i class="bi bi-arrow-right mx-2 text-muted"></i>
+                    <span class="text-muted">${this.escapeHtml(rel.relationship)}</span>
+                    <i class="bi bi-arrow-right mx-2 text-muted"></i>
+                    <span class="fw-semibold">${this.escapeHtml(rel.to)}</span>
                 </div>
-                <div class="item-content">
-                    <div class="item-name">${this.escapeHtml(action.name || action.action || "Unknown Action")}</div>
-                    <div class="item-meta">
-                        ${action.type ? `<span class="action-type">${this.escapeHtml(action.type)}</span>` : ""}
-                        ${action.confidence ? `<span class="confidence">Confidence: ${Math.round(action.confidence * 100)}%</span>` : ""}
-                    </div>
-                </div>
-                <div class="item-date">
-                    ${this.formatRelativeDate(action.suggestedAt || action.createdAt)}
-                </div>
-            </div>
-        `,
+            `,
             )
             .join("");
 
-        container.innerHTML = actionsHtml;
+        container.innerHTML = relationshipsHtml;
     }
 
     private formatRelativeDate(dateString?: string): string {

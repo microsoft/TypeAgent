@@ -4,7 +4,7 @@
 import { conversation as kpLib } from "knowledge-processor";
 import { DetectedAction, ActionSummary } from "./actionExtractor.js";
 
-export type ExtractionMode = "basic" | "content" | "actions" | "full";
+export type ExtractionMode = "basic" | "content" | "macros" | "full";
 
 export interface PageContent {
     title: string;

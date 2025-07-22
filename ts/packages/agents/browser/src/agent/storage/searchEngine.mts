@@ -2,15 +2,15 @@
 // Licensed under the MIT License.
 
 import {
-    StoredAction,
-    ActionSearchQuery,
-    ActionSearchResult,
+    StoredMacro,
+    MacroSearchQuery,
+    MacroSearchResult,
     SearchSuggestion,
-    ActionFilter,
+    MacroFilter,
 } from "./types.mjs";
 
 /**
- * ActionSearchEngine - Advanced search and filtering for actions
+ * MacroSearchEngine - Advanced search and filtering for macros
  *
  * Provides fast, comprehensive search capabilities including:
  * - Text search across action names, descriptions, and tags
@@ -19,7 +19,7 @@ import {
  * - Search suggestions and auto-complete
  * - Performance optimization with caching
  */
-export class ActionSearchEngine {
+export class MacroSearchEngine {
     private searchIndex: Map<string, Set<string>> = new Map();
     private tagIndex: Map<string, Set<string>> = new Map();
     private domainIndex: Map<string, Set<string>> = new Map();
@@ -32,24 +32,24 @@ export class ActionSearchEngine {
     };
 
     /**
-     * Search actions with comprehensive filtering and ranking
+     * Search macros with comprehensive filtering and ranking
      */
-    async searchActions(
-        query: ActionSearchQuery,
-        getAllActions: () => Promise<StoredAction[]>,
-    ): Promise<ActionSearchResult> {
+    async searchMacros(
+        query: MacroSearchQuery,
+        getAllMacros: () => Promise<StoredMacro[]>,
+    ): Promise<MacroSearchResult> {
         const startTime = performance.now();
         this.cacheStats.searchCount++;
 
         try {
-            // Get all actions and ensure search index is up to date
-            const allActions = await getAllActions();
-            await this.ensureSearchIndex(allActions);
+            // Get all macros and ensure search index is up to date
+            const allMacros = await getAllMacros();
+            await this.ensureSearchIndex(allMacros);
 
             // Build candidate set based on text search
             let candidates = this.getTextSearchCandidates(
                 query.text,
-                allActions,
+                allMacros,
             );
 
             // Apply filters
@@ -75,7 +75,7 @@ export class ActionSearchEngine {
             this.updatePerformanceStats(searchTime);
 
             return {
-                actions: paginatedResults,
+                macros: paginatedResults,
                 total: rankedResults.length,
                 hasMore:
                     rankedResults.length > offset + paginatedResults.length,
@@ -87,7 +87,7 @@ export class ActionSearchEngine {
         } catch (error) {
             console.error("Search failed:", error);
             return {
-                actions: [],
+                macros: [],
                 total: 0,
                 hasMore: false,
                 searchStats: {
@@ -103,44 +103,44 @@ export class ActionSearchEngine {
      */
     async getSearchSuggestions(
         partialQuery: string,
-        getAllActions: () => Promise<StoredAction[]>,
+        getAllMacros: () => Promise<StoredMacro[]>,
         limit: number = 10,
     ): Promise<SearchSuggestion[]> {
         if (!partialQuery || partialQuery.length < 2) {
             return [];
         }
 
-        const allActions = await getAllActions();
-        await this.ensureSearchIndex(allActions);
+        const allMacros = await getAllMacros();
+        await this.ensureSearchIndex(allMacros);
 
         const suggestions: SearchSuggestion[] = [];
         const lowerQuery = partialQuery.toLowerCase();
 
-        // Action name suggestions
-        for (const action of allActions) {
-            if (action.name.toLowerCase().includes(lowerQuery)) {
+        // Macro name suggestions
+        for (const macro of allMacros) {
+            if (macro.name.toLowerCase().includes(lowerQuery)) {
                 suggestions.push({
-                    text: action.name,
-                    type: "action",
+                    text: macro.name,
+                    type: "macro",
                     score: this.calculateSuggestionScore(
-                        action.name,
+                        macro.name,
                         lowerQuery,
-                        action.metadata.usageCount,
+                        macro.metadata.usageCount,
                     ),
-                    context: action.category,
+                    context: macro.category,
                 });
             }
         }
 
         // Tag suggestions
-        for (const action of allActions) {
-            for (const tag of action.tags) {
+        for (const macro of allMacros) {
+            for (const tag of macro.tags) {
                 if (tag.toLowerCase().includes(lowerQuery)) {
                     suggestions.push({
                         text: tag,
                         type: "tag",
                         score: this.calculateTagScore(tag, lowerQuery),
-                        context: `${this.getTagUsageCount(tag, allActions)} actions`,
+                        context: `${this.getTagUsageCount(tag, allMacros)} macros`,
                     });
                 }
             }
@@ -148,7 +148,7 @@ export class ActionSearchEngine {
 
         // Domain suggestions
         const domains = new Set(
-            allActions.map((a) => a.scope.domain).filter(Boolean),
+            allMacros.map((a) => a.scope.domain).filter(Boolean),
         );
         for (const domain of domains) {
             if (domain!.toLowerCase().includes(lowerQuery)) {
@@ -158,9 +158,9 @@ export class ActionSearchEngine {
                     score: this.calculateDomainScore(
                         domain!,
                         lowerQuery,
-                        allActions,
+                        allMacros,
                     ),
-                    context: `${this.getDomainActionCount(domain!, allActions)} actions`,
+                    context: `${this.getDomainMacroCount(domain!, allMacros)} macros`,
                 });
             }
         }
@@ -185,9 +185,9 @@ export class ActionSearchEngine {
                     score: this.calculateCategoryScore(
                         category,
                         lowerQuery,
-                        allActions,
+                        allMacros,
                     ),
-                    context: `${this.getCategoryActionCount(category, allActions)} actions`,
+                    context: `${this.getCategoryMacroCount(category, allMacros)} macros`,
                 });
             }
         }
@@ -199,7 +199,7 @@ export class ActionSearchEngine {
     /**
      * Build search index for fast text search
      */
-    private async ensureSearchIndex(actions: StoredAction[]): Promise<void> {
+    private async ensureSearchIndex(macros: StoredMacro[]): Promise<void> {
         // Simple timestamp-based cache invalidation
         const currentTime = Date.now();
         if (currentTime - this.lastIndexUpdate < 5000) {
@@ -207,25 +207,25 @@ export class ActionSearchEngine {
             return;
         }
 
-        await this.buildSearchIndex(actions);
+        await this.buildSearchIndex(macros);
         this.lastIndexUpdate = currentTime;
     }
 
     /**
      * Build search index for fast text search
      */
-    private async buildSearchIndex(actions: StoredAction[]): Promise<void> {
+    private async buildSearchIndex(macros: StoredMacro[]): Promise<void> {
         this.searchIndex.clear();
         this.tagIndex.clear();
         this.domainIndex.clear();
         this.categoryIndex.clear();
 
-        for (const action of actions) {
-            // Index action text content
+        for (const macro of macros) {
+            // Index macro text content
             const searchableText = [
-                action.name,
-                action.description,
-                ...action.tags,
+                macro.name,
+                macro.description,
+                ...macro.tags,
             ]
                 .join(" ")
                 .toLowerCase();
@@ -236,121 +236,121 @@ export class ActionSearchEngine {
                 if (!this.searchIndex.has(term)) {
                     this.searchIndex.set(term, new Set());
                 }
-                this.searchIndex.get(term)!.add(action.id);
+                this.searchIndex.get(term)!.add(macro.id);
             }
 
             // Index tags
-            for (const tag of action.tags) {
+            for (const tag of macro.tags) {
                 const lowerTag = tag.toLowerCase();
                 if (!this.tagIndex.has(lowerTag)) {
                     this.tagIndex.set(lowerTag, new Set());
                 }
-                this.tagIndex.get(lowerTag)!.add(action.id);
+                this.tagIndex.get(lowerTag)!.add(macro.id);
             }
 
             // Index domains
-            if (action.scope.domain) {
-                const domain = action.scope.domain.toLowerCase();
+            if (macro.scope.domain) {
+                const domain = macro.scope.domain.toLowerCase();
                 if (!this.domainIndex.has(domain)) {
                     this.domainIndex.set(domain, new Set());
                 }
-                this.domainIndex.get(domain)!.add(action.id);
+                this.domainIndex.get(domain)!.add(macro.id);
             }
 
             // Index categories
-            const category = action.category.toLowerCase();
+            const category = macro.category.toLowerCase();
             if (!this.categoryIndex.has(category)) {
                 this.categoryIndex.set(category, new Set());
             }
-            this.categoryIndex.get(category)!.add(action.id);
+            this.categoryIndex.get(category)!.add(macro.id);
         }
     }
 
     /**
-     * Get candidate actions based on text search
+     * Get candidate macros based on text search
      */
     private getTextSearchCandidates(
         searchText: string | undefined,
-        allActions: StoredAction[],
-    ): StoredAction[] {
+        allMacros: StoredMacro[],
+    ): StoredMacro[] {
         if (!searchText || searchText.trim().length === 0) {
-            return allActions;
+            return allMacros;
         }
 
         const terms = this.tokenize(searchText.toLowerCase());
         if (terms.length === 0) {
-            return allActions;
+            return allMacros;
         }
 
-        // Get actions that match any search term
-        const matchingActionIds = new Set<string>();
+        // Get macros that match any search term
+        const matchingMacroIds = new Set<string>();
 
         for (const term of terms) {
             // Exact matches in search index
             if (this.searchIndex.has(term)) {
-                for (const actionId of this.searchIndex.get(term)!) {
-                    matchingActionIds.add(actionId);
+                for (const macroId of this.searchIndex.get(term)!) {
+                    matchingMacroIds.add(macroId);
                 }
             }
 
             // Partial matches (slower but more comprehensive)
-            for (const [indexTerm, actionIds] of this.searchIndex.entries()) {
+            for (const [indexTerm, macroIds] of this.searchIndex.entries()) {
                 if (indexTerm.includes(term)) {
-                    for (const actionId of actionIds) {
-                        matchingActionIds.add(actionId);
+                    for (const macroId of macroIds) {
+                        matchingMacroIds.add(macroId);
                     }
                 }
             }
         }
 
-        // Convert action IDs back to action objects
-        const actionMap = new Map(allActions.map((a) => [a.id, a]));
-        return Array.from(matchingActionIds)
-            .map((id) => actionMap.get(id)!)
+        // Convert macro IDs back to macro objects
+        const macroMap = new Map(allMacros.map((m) => [m.id, m]));
+        return Array.from(matchingMacroIds)
+            .map((id) => macroMap.get(id)!)
             .filter(Boolean);
     }
 
     /**
-     * Apply filters to candidate actions
+     * Apply filters to candidate macros
      */
     private applyFilters(
-        actions: StoredAction[],
-        filters: ActionFilter,
-    ): StoredAction[] {
-        let filtered = actions;
+        macros: StoredMacro[],
+        filters: MacroFilter,
+    ): StoredMacro[] {
+        let filtered = macros;
 
         if (filters.categories && filters.categories.length > 0) {
-            filtered = filtered.filter((action) =>
-                filters.categories!.includes(action.category),
+            filtered = filtered.filter((macro) =>
+                filters.categories!.includes(macro.category),
             );
         }
 
         if (filters.authors && filters.authors.length > 0) {
-            filtered = filtered.filter((action) =>
-                filters.authors!.includes(action.author),
+            filtered = filtered.filter((macro) =>
+                filters.authors!.includes(macro.author),
             );
         }
 
         if (filters.domains && filters.domains.length > 0) {
             filtered = filtered.filter(
-                (action) =>
-                    action.scope.domain &&
-                    filters.domains!.includes(action.scope.domain),
+                (macro) =>
+                    macro.scope.domain &&
+                    filters.domains!.includes(macro.scope.domain),
             );
         }
 
         if (filters.scopes && filters.scopes.length > 0) {
-            filtered = filtered.filter((action) =>
-                filters.scopes!.includes(action.scope.type),
+            filtered = filtered.filter((macro) =>
+                filters.scopes!.includes(macro.scope.type),
             );
         }
 
         if (filters.tags && filters.tags.length > 0) {
-            filtered = filtered.filter((action) =>
+            filtered = filtered.filter((macro) =>
                 filters.tags!.some((tag) =>
-                    action.tags.some(
-                        (actionTag) =>
-                            actionTag.toLowerCase() === tag.toLowerCase(),
+                    macro.tags.some(
+                        (macroTag) =>
+                            macroTag.toLowerCase() === tag.toLowerCase(),
                     ),
                 ),
             );
@@ -358,27 +358,27 @@ export class ActionSearchEngine {
 
         if (filters.minUsage !== undefined) {
             filtered = filtered.filter(
-                (action) => action.metadata.usageCount >= filters.minUsage!,
+                (macro) => macro.metadata.usageCount >= filters.minUsage!,
             );
         }
 
         if (filters.maxUsage !== undefined) {
             filtered = filtered.filter(
-                (action) => action.metadata.usageCount <= filters.maxUsage!,
+                (macro) => macro.metadata.usageCount <= filters.maxUsage!,
             );
         }
 
         if (filters.createdAfter) {
             const afterDate = new Date(filters.createdAfter);
             filtered = filtered.filter(
-                (action) => new Date(action.metadata.createdAt) >= afterDate,
+                (macro) => new Date(macro.metadata.createdAt) >= afterDate,
             );
         }
 
         if (filters.createdBefore) {
             const beforeDate = new Date(filters.createdBefore);
             filtered = filtered.filter(
-                (action) => new Date(action.metadata.createdAt) <= beforeDate,
+                (macro) => new Date(macro.metadata.createdAt) <= beforeDate,
             );
         }
 
@@ -398,9 +398,9 @@ export class ActionSearchEngine {
      * Rank search results by relevance
      */
     private rankResults(
-        actions: StoredAction[],
+        actions: StoredMacro[],
         searchText: string,
-    ): StoredAction[] {
+    ): StoredMacro[] {
         if (!searchText || searchText.trim().length === 0) {
             // Sort by usage count when no search text
             return actions.sort(
@@ -428,7 +428,7 @@ export class ActionSearchEngine {
      * Calculate relevance score for an action
      */
     private calculateRelevanceScore(
-        action: StoredAction,
+        action: StoredMacro,
         searchText: string,
         searchTerms: string[],
     ): number {
@@ -539,7 +539,7 @@ export class ActionSearchEngine {
     private calculateDomainScore(
         domain: string,
         query: string,
-        allActions: StoredAction[],
+        allActions: StoredMacro[],
     ): number {
         let score = 0;
 
@@ -547,9 +547,9 @@ export class ActionSearchEngine {
             score += 60;
         }
 
-        // Boost based on number of actions in domain
-        const domainActionCount = this.getDomainActionCount(domain, allActions);
-        score += Math.min(domainActionCount * 2, 40);
+        // Boost based on number of macros in domain
+        const domainMacroCount = this.getDomainMacroCount(domain, allActions);
+        score += Math.min(domainMacroCount * 2, 40);
 
         return score;
     }
@@ -560,7 +560,7 @@ export class ActionSearchEngine {
     private calculateCategoryScore(
         category: string,
         query: string,
-        allActions: StoredAction[],
+        allActions: StoredMacro[],
     ): number {
         let score = 0;
 
@@ -568,12 +568,12 @@ export class ActionSearchEngine {
             score += 70;
         }
 
-        // Boost based on number of actions in category
-        const categoryActionCount = this.getCategoryActionCount(
+        // Boost based on number of macros in category
+        const categoryMacroCount = this.getCategoryMacroCount(
             category,
             allActions,
         );
-        score += Math.min(categoryActionCount * 2, 30);
+        score += Math.min(categoryMacroCount * 2, 30);
 
         return score;
     }
@@ -581,7 +581,7 @@ export class ActionSearchEngine {
     /**
      * Get number of times a tag is used
      */
-    private getTagUsageCount(tag: string, allActions: StoredAction[]): number {
+    private getTagUsageCount(tag: string, allActions: StoredMacro[]): number {
         return allActions.filter((action) =>
             action.tags.some(
                 (actionTag) => actionTag.toLowerCase() === tag.toLowerCase(),
@@ -592,23 +592,22 @@ export class ActionSearchEngine {
     /**
      * Get number of actions in a domain
      */
-    private getDomainActionCount(
+    private getDomainMacroCount(
         domain: string,
-        allActions: StoredAction[],
+        allMacros: StoredMacro[],
     ): number {
-        return allActions.filter((action) => action.scope.domain === domain)
+        return allMacros.filter((macro) => macro.scope.domain === domain)
             .length;
     }
 
     /**
      * Get number of actions in a category
      */
-    private getCategoryActionCount(
+    private getCategoryMacroCount(
         category: string,
-        allActions: StoredAction[],
+        allMacros: StoredMacro[],
     ): number {
-        return allActions.filter((action) => action.category === category)
-            .length;
+        return allMacros.filter((macro) => macro.category === category).length;
     }
 
     /**

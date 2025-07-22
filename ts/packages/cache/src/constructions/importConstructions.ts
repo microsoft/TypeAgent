@@ -106,6 +106,7 @@ function createConstructions(
             }
             const matched = construction.match(entry.request, {
                 enableWildcard: false,
+                enableEntityWildcard: false,
                 rejectReferences: false,
                 partial: false,
             });

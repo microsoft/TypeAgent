@@ -49,7 +49,10 @@ import registerDebug from "debug";
 import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 import * as website from "website-memory";
 import { handleKnowledgeAction } from "./knowledge/knowledgeHandler.mjs";
-import { searchWebMemories } from "./searchWebMemories.mjs";
+import {
+    searchWebMemories,
+    SearchWebMemoriesResponse,
+} from "./searchWebMemories.mjs";
 
 import {
     loadAllowDynamicAgentDomains,
@@ -61,9 +64,7 @@ import { handleSchemaDiscoveryAction } from "./discovery/actionHandler.mjs";
 import { BrowserActions, OpenWebPage } from "./actionsSchema.mjs";
 import {
     resolveURLWithHistory,
-    importWebsiteData,
     importWebsiteDataFromSession,
-    importHtmlFolder,
     importHtmlFolderFromSession,
     getWebsiteStats,
 } from "./websiteMemory.mjs";
@@ -78,7 +79,7 @@ import { urlResolver, bingWithGrounding } from "azure-ai-foundry";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 import { deleteCachedSchema } from "./crossword/cachedSchema.mjs";
 import { getCrosswordCommandHandlerTable } from "./crossword/commandHandler.mjs";
-import { ActionsStore } from "./storage/index.mjs";
+import { MacroStore } from "./storage/index.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
 const debugWebSocket = registerDebug("typeagent:browser:ws");
@@ -110,7 +111,7 @@ export type BrowserActionContext = {
     index: website.IndexData | undefined;
     viewProcess?: ChildProcess | undefined;
     localHostPort: number;
-    actionsStore?: ActionsStore | undefined; // Add ActionsStore instance
+    macrosStore?: MacroStore | undefined; // Add MacroStore instance
 };
 
 export interface urlResolutionAction {
@@ -138,7 +139,7 @@ async function initializeBrowserContext(
         useExternalBrowserControl: clientBrowserControl === undefined,
         index: undefined,
         localHostPort,
-        actionsStore: undefined, // Will be initialized in updateBrowserContext
+        macrosStore: undefined, // Will be initialized in updateBrowserContext
     };
 }
 
@@ -157,14 +158,14 @@ async function updateBrowserContext(
             context.agentContext.tabTitleIndex = createTabTitleIndex();
         }
 
-        // Initialize ActionsStore
-        if (!context.agentContext.actionsStore && context.sessionStorage) {
+        // Initialize MacroStore
+        if (!context.agentContext.macrosStore && context.sessionStorage) {
             try {
-                const { ActionsStore } = await import("./storage/index.mjs");
-                context.agentContext.actionsStore = new ActionsStore(
+                const { MacroStore } = await import("./storage/index.mjs");
+                context.agentContext.macrosStore = new MacroStore(
                     context.sessionStorage,
                 );
-                await context.agentContext.actionsStore.initialize();
+                await context.agentContext.macrosStore.initialize();
                 debug("ActionsStore initialized successfully");
             } catch (error) {
                 debug("Failed to initialize ActionsStore:", error);
@@ -189,57 +190,123 @@ async function updateBrowserContext(
                     );
                 } else {
                     debug(
-                        "No existing website index found, creating new index for data persistence",
+                        "No existing website index found, checking for index file at target path",
                     );
 
-                    // Create empty collection as fallback
-                    context.agentContext.websiteCollection =
-                        new website.WebsiteCollection();
+                    let indexPath: string | undefined;
+                    let websiteCollection:
+                        | website.WebsiteCollection
+                        | undefined;
 
+                    // Try to determine the target index path
                     try {
                         const sessionDir = await getSessionFolderPath(context);
-
                         if (sessionDir) {
                             // Create index path following IndexManager pattern: sessionDir/indexes/website
-                            const indexPath = path.join(
+                            indexPath = path.resolve(
                                 sessionDir,
+                                "..",
                                 "indexes",
                                 "website",
                                 "index",
                             );
-                            fs.mkdirSync(indexPath, { recursive: true });
 
-                            // Create proper IndexData object
-                            context.agentContext.index = {
-                                source: "website",
-                                name: "website-index",
-                                location: "browser-agent",
-                                size: 0,
-                                path: indexPath,
-                                state: "new",
-                                progress: 0,
-                                sizeOnDisk: 0,
-                            };
+                            // Check if the index file exists and try to read it
+                            if (fs.existsSync(indexPath)) {
+                                try {
+                                    websiteCollection =
+                                        await website.WebsiteCollection.readFromFile(
+                                            indexPath,
+                                            "index",
+                                        );
 
-                            debug(
-                                `Created website index with sessionStorage-based path: ${indexPath}`,
-                            );
-                        } else {
-                            debug(
-                                "Warning: Could not determine session directory path",
-                            );
-                            // Set index to undefined to prevent path access errors
-                            context.agentContext.index = undefined;
+                                    if (
+                                        websiteCollection &&
+                                        websiteCollection.messages.length > 0
+                                    ) {
+                                        context.agentContext.websiteCollection =
+                                            websiteCollection;
+
+                                        // Create proper IndexData object for the loaded collection
+                                        context.agentContext.index = {
+                                            source: "website",
+                                            name: "website-index",
+                                            location: "browser-agent",
+                                            size: websiteCollection.messages
+                                                .length,
+                                            path: indexPath,
+                                            state: "finished",
+                                            progress: 100,
+                                            sizeOnDisk: 0,
+                                        };
+
+                                        debug(
+                                            `Loaded existing website collection with ${websiteCollection.messages.length} websites from ${indexPath}`,
+                                        );
+                                    } else {
+                                        debug(
+                                            `File exists but collection is empty at ${indexPath}, will create new collection`,
+                                        );
+                                        websiteCollection = undefined;
+                                    }
+                                } catch (readError) {
+                                    debug(
+                                        `Failed to read existing collection: ${readError}`,
+                                    );
+                                    websiteCollection = undefined;
+                                }
+                            } else {
+                                debug(
+                                    `No existing collection file found at ${indexPath}`,
+                                );
+                            }
                         }
-                    } catch (error) {
-                        debug(
-                            `Error during sessionStorage path discovery: ${error}`,
-                        );
-                        // Set index to undefined to prevent path access errors
-                        context.agentContext.index = undefined;
+                    } catch (pathError) {
+                        debug(`Error determining index path: ${pathError}`);
+                        indexPath = undefined;
                     }
 
-                    // If index creation failed, log that data will be in-memory only
+                    // If we couldn't load an existing collection, create a new one
+                    if (!websiteCollection) {
+                        context.agentContext.websiteCollection =
+                            new website.WebsiteCollection();
+
+                        // Set up index if we have a valid path
+                        if (indexPath) {
+                            try {
+                                // Ensure directory exists
+                                fs.mkdirSync(indexPath, { recursive: true });
+
+                                // Create proper IndexData object
+                                context.agentContext.index = {
+                                    source: "website",
+                                    name: "website-index",
+                                    location: "browser-agent",
+                                    size: 0,
+                                    path: indexPath,
+                                    state: "new",
+                                    progress: 0,
+                                    sizeOnDisk: 0,
+                                };
+
+                                debug(
+                                    `Created index structure at ${indexPath}`,
+                                );
+                            } catch (createError) {
+                                debug(
+                                    `Error creating index directory: ${createError}`,
+                                );
+                                context.agentContext.index = undefined;
+                            }
+                        } else {
+                            context.agentContext.index = undefined;
+                            debug(
+                                "No index path available, collection will be in-memory only",
+                            );
+                        }
+                    }
+
+                    // Log final state
                     if (!context.agentContext.index) {
                         debug(
                             "Website collection created without persistent index - data will be in-memory only",
@@ -372,8 +439,8 @@ async function updateBrowserContext(
                         case "detectPageActions":
                         case "registerPageDynamicAgent":
                         case "getIntentFromRecording":
-                        case "getActionsForUrl":
-                        case "deleteAction": {
+                        case "getMacrosForUrl":
+                        case "deleteMacro": {
                             const discoveryResult =
                                 await handleSchemaDiscoveryAction(
                                     {
@@ -438,17 +505,16 @@ async function updateBrowserContext(
 
                         case "recordActionUsage":
                         case "getActionStatistics": {
-                            const actionsResult =
-                                await handleActionsStoreAction(
-                                    data.method,
-                                    data.params,
-                                    context,
-                                );
+                            const macrosResult = await handleMacroStoreAction(
+                                data.method,
+                                data.params,
+                                context,
+                            );
 
                             webSocket.send(
                                 JSON.stringify({
                                     id: data.id,
-                                    result: actionsResult,
+                                    result: macrosResult,
                                 }),
                             );
                             break;
@@ -676,6 +742,94 @@ async function closeWebPage(context: ActionContext<BrowserActionContext>) {
     return result;
 }
 
+async function searchWebMemoriesAction(
+    context: ActionContext<BrowserActionContext>,
+    action: TypeAgentAction<any>,
+) {
+    context.actionIO.setDisplay("Searching web memories...");
+
+    try {
+        // Use originalUserRequest to override query if provided
+        const searchParams = { ...action.parameters };
+        if (searchParams.originalUserRequest) {
+            searchParams.query = searchParams.originalUserRequest;
+            debug(
+                `Using originalUserRequest as query: "${searchParams.originalUserRequest}"`,
+            );
+        }
+
+        const searchResponse: SearchWebMemoriesResponse =
+            await searchWebMemories(searchParams, context.sessionContext);
+
+        if (searchResponse.websites.length === 0) {
+            const message =
+                searchResponse.answer || "No results found for your search.";
+            return createActionResult(message);
+        }
+
+        // Format the response for display
+        const summary = `Found ${searchResponse.websites.length} result(s) in ${searchResponse.summary.searchTime}ms`;
+        let displayText = `${summary}\n\n`;
+
+        // Add answer if available
+        if (searchResponse.answer && searchResponse.answerType !== "noAnswer") {
+            displayText += `**Answer:** ${searchResponse.answer}\n\n`;
+        }
+
+        // Add top results
+        const topResults = searchResponse.websites.slice(0, 5);
+        if (topResults.length > 0) {
+            displayText += "**Top Results:**\n";
+            topResults.forEach((site: any, index: number) => {
+                displayText += `${index + 1}. [${site.title}](${site.url})\n`;
+                if (site.snippet) {
+                    displayText += `   ${site.snippet}\n`;
+                }
+                displayText += "\n";
+            });
+        }
+
+        // Add entities if available
+        if (
+            searchResponse.relatedEntities &&
+            searchResponse.relatedEntities.length > 0
+        ) {
+            displayText += "\n**Related Entities:**\n";
+            const topEntities = searchResponse.relatedEntities.slice(0, 3);
+            topEntities.forEach((entity: any) => {
+                displayText += `• ${entity.name}\n`;
+            });
+        }
+
+        // Add topics if available
+        if (searchResponse.topTopics && searchResponse.topTopics.length > 0) {
+            displayText += "\n**Top Topics:**\n";
+            const topTopics = searchResponse.topTopics.slice(0, 3);
+            topTopics.forEach((topic: string) => {
+                displayText += `• ${topic}\n`;
+            });
+        }
+
+        // Add follow-up suggestions if available
+        if (
+            searchResponse.suggestedFollowups &&
+            searchResponse.suggestedFollowups.length > 0
+        ) {
+            displayText += "\n**Suggested follow-ups:**\n";
+            searchResponse.suggestedFollowups.forEach((followup: string) => {
+                displayText += `• ${followup}\n`;
+            });
+        }
+
+        return createActionResultFromMarkdownDisplay(displayText, summary);
+    } catch (error) {
+        const errorMessage =
+            error instanceof Error ? error.message : "Unknown error occurred";
+        context.actionIO.appendDisplay(`Search failed: ${errorMessage}`);
+        return createActionResult(`Search failed: ${errorMessage}`);
+    }
+}
+
 async function executeBrowserAction(
     action:
         | TypeAgentAction<BrowserActions, "browser">
@@ -694,12 +848,10 @@ async function executeBrowserAction(
                     return openWebPage(context, action);
                 case "closeWebPage":
                     return closeWebPage(context);
-                case "importWebsiteData":
-                    return importWebsiteData(context, action);
-                case "importHtmlFolder":
-                    return importHtmlFolder(context, action);
                 case "getWebsiteStats":
                     return getWebsiteStats(context, action);
+                case "searchWebMemories":
+                    return searchWebMemoriesAction(context, action);
                 case "goForward":
                     await getActionBrowserControl(context).goForward();
                     return;
@@ -985,17 +1137,17 @@ async function handleGetActionRequest(
             throw new Error("Invalid actionId format");
         }
 
-        debug(`Handling action request for ID: ${actionId}`);
+        debug(`Handling macro request for ID: ${actionId}`);
 
-        // Get the actions store from context
-        const actionsStore = context.agentContext.actionsStore;
-        if (!actionsStore) {
-            throw new Error("ActionsStore not available");
+        // Get the macros store from context
+        const macrosStore = context.agentContext.macrosStore;
+        if (!macrosStore) {
+            throw new Error("MacroStore not available");
         }
 
-        const action = await actionsStore.getAction(actionId);
+        const macro = await macrosStore.getMacro(actionId);
 
-        if (!action) {
+        if (!macro) {
             viewServiceProcess.send({
                 type: "getActionResponse",
                 requestId,
@@ -1010,7 +1162,7 @@ async function handleGetActionRequest(
             type: "getActionResponse",
             requestId,
             success: true,
-            action,
+            action: macro,
             timestamp: Date.now(),
         });
 
@@ -1224,7 +1376,7 @@ async function handleWebsiteAction(
         case "importWebsiteDataWithProgress":
             // Create progress callback using JSON parsing instead of regex
             const progressCallback = (message: string) => {
-                console.log("Progress message received:", message);
+                debug("Progress message received:", message);
 
                 let current = 0,
                     total = 0,
@@ -1240,10 +1392,7 @@ async function handleWebsiteAction(
                         const jsonStr = message.substring(jsonStart);
                         const progressData = JSON.parse(jsonStr);
 
-                        console.log(
-                            "✅ Parsed JSON progress data:",
-                            progressData,
-                        );
+                        debug("Parsed JSON progress data:", progressData);
 
                         current = progressData.current || 0;
                         total = progressData.total || 0;
@@ -1251,10 +1400,10 @@ async function handleWebsiteAction(
                         phase = progressData.phase || "processing";
                     } catch (error) {
                         console.error(
-                            "❌ Failed to parse JSON progress data:",
+                            "Failed to parse JSON progress data:",
                             error,
                         );
-                        console.log("Raw message:", message);
+                        debug("Raw message:", message);
 
                         // Fallback to simple message handling
                         item = message;
@@ -1275,7 +1424,7 @@ async function handleWebsiteAction(
                     }
                 } else {
                     // Fallback for non-JSON messages
-                    console.log("📝 Non-JSON message, using as description");
+                    debug("Non-JSON message, using as description");
                     item = message;
                     total = parameters.totalItems || 0;
 
@@ -1302,10 +1451,7 @@ async function handleWebsiteAction(
                     errors: [],
                 };
 
-                console.log(
-                    "📤 Sending structured progress:",
-                    structuredProgress,
-                );
+                debug("Sending structured progress:", structuredProgress);
 
                 // Send structured progress update via WebSocket
                 sendProgressUpdateViaWebSocket(
@@ -1325,10 +1471,6 @@ async function handleWebsiteAction(
             // Create progress callback similar to importWebsiteDataWithProgress
             const folderProgressCallback = (message: string) => {
                 // Extract progress info from message if possible
-                // Updated regex to match format: "X/Y files processed (Z%): description"
-                const progressMatch = message.match(
-                    /(\d+)\/(\d+)\s+files\s+processed.*?:\s*(.+)/,
-                );
                 let current = 0,
                     total = 0,
                     item = "";
@@ -1341,46 +1483,82 @@ async function handleWebsiteAction(
                     | "complete"
                     | "error" = "processing";
 
-                if (progressMatch) {
-                    current = parseInt(progressMatch[1]);
-                    total = parseInt(progressMatch[2]);
-                    item = progressMatch[3];
+                // Handle JSON progress format from logStructuredProgress
+                if (message.includes("PROGRESS_JSON:")) {
+                    try {
+                        const jsonStart =
+                            message.indexOf("PROGRESS_JSON:") +
+                            "PROGRESS_JSON:".length;
+                        const progressData = JSON.parse(
+                            message.substring(jsonStart),
+                        );
 
-                    // Determine phase based on progress
-                    if (current === 0) {
-                        phase = "initializing";
-                    } else if (current === total) {
-                        phase = "complete";
-                    } else {
-                        phase = "processing";
+                        current = progressData.current ?? 0;
+                        total = progressData.total ?? 0;
+                        item = progressData.description ?? "";
+                        phase = progressData.phase ?? "processing";
+
+                        debug("Parsed JSON progress data:", progressData);
+                        debug(
+                            "Extracted values - current:",
+                            current,
+                            "total:",
+                            total,
+                            "item:",
+                            item,
+                        );
+                    } catch (error) {
+                        console.warn("Failed to parse JSON progress:", error);
+                        // Fall back to regex parsing
                     }
                 } else {
-                    // Fallback: try to extract just the description for other message types
-                    item = message;
+                    // Existing regex logic for other message formats
+                    // Updated regex to match format: "X/Y files processed (Z%): description"
+                    const progressMatch = message.match(
+                        /(\d+)\/(\d+)\s+files\s+processed.*?:\s*(.+)/,
+                    );
 
-                    // Determine phase from message content
-                    if (
-                        message.includes("complete") ||
-                        message.includes("finished")
-                    ) {
-                        phase = "complete";
-                    } else if (
-                        message.includes("Found") ||
-                        message.includes("Starting")
-                    ) {
-                        phase = "initializing";
-                    } else if (message.startsWith("Processing:")) {
-                        phase = "processing";
-                        // For individual file processing, preserve any previously known total
-                        total = parameters.totalItems || 0;
+                    if (progressMatch) {
+                        current = parseInt(progressMatch[1]);
+                        total = parseInt(progressMatch[2]);
+                        item = progressMatch[3];
+
+                        // Determine phase based on progress
+                        if (current === 0) {
+                            phase = "initializing";
+                        } else if (current === total) {
+                            phase = "complete";
+                        } else {
+                            phase = "processing";
+                        }
+                    } else {
+                        // Fallback: try to extract just the description for other message types
+                        item = message;
+
+                        // Determine phase from message content
+                        if (
+                            message.includes("complete") ||
+                            message.includes("finished")
+                        ) {
+                            phase = "complete";
+                        } else if (
+                            message.includes("Found") ||
+                            message.includes("Starting")
+                        ) {
+                            phase = "initializing";
+                        } else if (message.startsWith("Processing:")) {
+                            phase = "processing";
+                            // For individual file processing, preserve any previously known total
+                            total = parameters.totalItems || 0;
+                        }
                     }
                 }
 
                 // Create progress data matching ImportProgress interface
                 const progressData = {
                     phase,
-                    totalItems: total || parameters.totalItems || 0,
-                    processedItems: current || 0,
+                    totalItems: total,
+                    processedItems: current,
                     currentItem: item,
                     importId: parameters.importId,
                     errors: [],
@@ -1438,17 +1616,17 @@ async function handleWebsiteAction(
     }
 }
 
-async function handleActionsStoreAction(
+async function handleMacroStoreAction(
     actionName: string,
     parameters: any,
     context: SessionContext<BrowserActionContext>,
 ): Promise<any> {
-    const actionsStore = context.agentContext.actionsStore;
+    const macrosStore = context.agentContext.macrosStore;
 
-    if (!actionsStore) {
+    if (!macrosStore) {
         return {
             success: false,
-            error: "ActionsStore not available",
+            error: "MacroStore not available",
         };
     }
 
@@ -1463,44 +1641,44 @@ async function handleActionsStoreAction(
                     };
                 }
 
-                await actionsStore.recordUsage(actionId);
-                console.log(`Recorded usage for action: ${actionId}`);
+                await macrosStore.recordUsage(actionId);
+                debug(`Recorded usage for macro: ${actionId}`);
 
                 return {
                     success: true,
-                    actionId: actionId,
+                    macroId: actionId,
                 };
             }
 
             case "getActionStatistics": {
                 const { url } = parameters;
-                let actions: any[] = [];
-                let totalActions = 0;
+                let macros: any[] = [];
+                let totalMacros = 0;
 
                 if (url) {
-                    // Get actions for specific URL
-                    actions = await actionsStore.getActionsForUrl(url);
-                    totalActions = actions.length;
+                    // Get macros for specific URL
+                    macros = await macrosStore.getMacrosForUrl(url);
+                    totalMacros = macros.length;
                 } else {
-                    // Get all actions
-                    actions = await actionsStore.getAllActions();
-                    totalActions = actions.length;
+                    // Get all macros
+                    macros = await macrosStore.getAllMacros();
+                    totalMacros = macros.length;
                 }
 
                 console.log(
-                    `Retrieved statistics: ${totalActions} total actions`,
+                    `Retrieved statistics: ${totalMacros} total macros`,
                 );
 
                 return {
                     success: true,
-                    totalActions: totalActions,
-                    actions: actions.map((action) => ({
-                        id: action.id,
-                        name: action.name,
-                        author: action.author,
-                        category: action.category,
-                        usageCount: action.metadata.usageCount,
-                        lastUsed: action.metadata.lastUsed,
+                    totalMacros: totalMacros,
+                    macros: macros.map((macro) => ({
+                        id: macro.id,
+                        name: macro.name,
+                        author: macro.author,
+                        category: macro.category,
+                        usageCount: macro.metadata.usageCount,
+                        lastUsed: macro.metadata.lastUsed,
                     })),
                 };
             }

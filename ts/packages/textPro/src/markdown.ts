@@ -306,7 +306,7 @@ class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
             this.knowledgeBlock.knowledge.entities.push(
                 headingToEntity(headerText, headerLevel),
             );
-            // Also make he header text a tag
+            // Also make header text a tag
             this.knowledgeBlock.tags.add(headerText);
         }
         //

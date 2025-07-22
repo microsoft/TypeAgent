@@ -620,8 +620,8 @@
         background: linear-gradient(
           to right,
           #28a745 0%,
-          #28a745 33.33%,
-          #e9ecef 33.33%,
+          #28a745 20%,
+          #e9ecef 20%,
           #e9ecef 100%
         );
       }
@@ -634,15 +634,38 @@
         background: #28a745;
       }
 
+      /* Summary mode color - yellow for enhanced processing */
+      .extraction-mode-slider[data-mode="summary"] {
+        background: linear-gradient(
+          to right,
+          #28a745 0%,
+          #28a745 20%,
+          #ffc107 20%,
+          #ffc107 40%,
+          #e9ecef 40%,
+          #e9ecef 100%
+        );
+      }
+
+      .extraction-mode-slider[data-mode="summary"]::-webkit-slider-thumb {
+        background: #ffc107;
+      }
+
+      .extraction-mode-slider[data-mode="summary"]::-moz-range-thumb {
+        background: #ffc107;
+      }
+
       /* Content mode color - blue for standard */
       .extraction-mode-slider[data-mode="content"] {
         background: linear-gradient(
           to right,
           #28a745 0%,
-          #28a745 33.33%,
-          #667eea 33.33%,
-          #667eea 66.66%,
-          #e9ecef 66.66%,
+          #28a745 20%,
+          #ffc107 20%,
+          #ffc107 40%,
+          #667eea 40%,
+          #667eea 60%,
+          #e9ecef 60%,
           #e9ecef 100%
         );
       }
@@ -660,11 +683,15 @@
         background: linear-gradient(
           to right,
           #28a745 0%,
-          #28a745 33.33%,
-          #667eea 33.33%,
-          #667eea 66.66%,
-          #fd7e14 66.66%,
-          #fd7e14 100%
+          #28a745 20%,
+          #ffc107 20%,
+          #ffc107 40%,
+          #667eea 40%,
+          #667eea 60%,
+          #fd7e14 60%,
+          #fd7e14 80%,
+          #e9ecef 80%,
+          #e9ecef 100%
         );
       }
 
@@ -681,12 +708,14 @@
         background: linear-gradient(
           to right,
           #28a745 0%,
-          #28a745 25%,
-          #667eea 25%,
-          #667eea 50%,
-          #fd7e14 50%,
-          #fd7e14 75%,
-          #dc3545 75%,
+          #28a745 20%,
+          #ffc107 20%,
+          #ffc107 40%,
+          #667eea 40%,
+          #667eea 60%,
+          #fd7e14 60%,
+          #fd7e14 80%,
+          #dc3545 80%,
           #dc3545 100%
         );
       }
@@ -751,9 +780,10 @@
             <div class="extraction-mode-slider-container">
               <div class="slider-labels">
                 <span class="slider-label" data-value="0">Basic</span>
-                <span class="slider-label" data-value="1">Content</span>
-                <span class="slider-label" data-value="2">Actions</span>
-                <span class="slider-label" data-value="3">Full</span>
+                <span class="slider-label" data-value="1">Summary</span>
+                <span class="slider-label" data-value="2">Content</span>
+                <span class="slider-label" data-value="3">Macros</span>
+                <span class="slider-label" data-value="4">Full</span>
               </div>
 
               <input
@@ -761,8 +791,8 @@
                 id="extractionMode"
                 class="extraction-mode-slider"
                 min="0"
-                max="3"
-                value="1"
+                max="4"
+                value="2"
                 step="1"
                 data-mode="content"
               />
@@ -772,6 +802,7 @@
                 <span class="slider-tick" data-value="1"></span>
                 <span class="slider-tick" data-value="2"></span>
                 <span class="slider-tick" data-value="3"></span>
+                <span class="slider-tick" data-value="4"></span>
               </div>
             </div>
             <div class="form-text" id="modeDescription">

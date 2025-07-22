@@ -7,7 +7,7 @@ import { error, Result } from "typechat";
 import { ChatModel } from "aiclient";
 import { createKnowledgeModel } from "./conversationIndex.js";
 import { BatchTask, runInBatches } from "./taskQueue.js";
-import { SearchSelectExpr } from "./interfaces.js";
+import { SearchSelectExpr, Tag } from "./interfaces.js";
 import {
     createOrMaxTermGroup,
     createOrTermGroup,
@@ -64,6 +64,14 @@ export function mergeTopics(topics: string[]): string[] {
         mergedTopics.add(topic);
     }
     return [...mergedTopics.values()];
+}
+
+export function mergeTags(tags: Tag[]): string[] {
+    let mergedText = new Set<string>();
+    for (let tag of tags) {
+        mergedText.add(tag.text);
+    }
+    return [...mergedText.values()];
 }
 
 export async function extractKnowledgeForTextBatchQ(

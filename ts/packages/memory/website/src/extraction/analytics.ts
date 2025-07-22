@@ -143,20 +143,23 @@ export class Analytics {
         // Calculate mode-specific metrics
         const modeUsage: Record<ExtractionMode, number> = {
             basic: 0,
+            summary: 0,
             content: 0,
-            actions: 0,
+            macros: 0,
             full: 0,
         };
         const modeTimeSum: Record<ExtractionMode, number> = {
             basic: 0,
+            summary: 0,
             content: 0,
-            actions: 0,
+            macros: 0,
             full: 0,
         };
         const modeSuccesses: Record<ExtractionMode, number> = {
             basic: 0,
+            summary: 0,
             content: 0,
-            actions: 0,
+            macros: 0,
             full: 0,
         };
 
@@ -171,13 +174,17 @@ export class Analytics {
         const modeAverageTime: Record<ExtractionMode, number> = {
             basic:
                 modeUsage.basic > 0 ? modeTimeSum.basic / modeUsage.basic : 0,
+            summary:
+                modeUsage.summary > 0
+                    ? modeTimeSum.summary / modeUsage.summary
+                    : 0,
             content:
                 modeUsage.content > 0
                     ? modeTimeSum.content / modeUsage.content
                     : 0,
-            actions:
-                modeUsage.actions > 0
-                    ? modeTimeSum.actions / modeUsage.actions
+            macros:
+                modeUsage.macros > 0
+                    ? modeTimeSum.macros / modeUsage.macros
                     : 0,
             full: modeUsage.full > 0 ? modeTimeSum.full / modeUsage.full : 0,
         };
@@ -187,13 +194,17 @@ export class Analytics {
                 modeUsage.basic > 0
                     ? (modeSuccesses.basic / modeUsage.basic) * 100
                     : 0,
+            summary:
+                modeUsage.summary > 0
+                    ? (modeSuccesses.summary / modeUsage.summary) * 100
+                    : 0,
             content:
                 modeUsage.content > 0
                     ? (modeSuccesses.content / modeUsage.content) * 100
                     : 0,
-            actions:
-                modeUsage.actions > 0
-                    ? (modeSuccesses.actions / modeUsage.actions) * 100
+            macros:
+                modeUsage.macros > 0
+                    ? (modeSuccesses.macros / modeUsage.macros) * 100
                     : 0,
             full:
                 modeUsage.full > 0
@@ -391,9 +402,27 @@ export class Analytics {
             successRate: 0,
             averageProcessingTime: 0,
             averageConfidence: 0,
-            modeUsage: { basic: 0, content: 0, actions: 0, full: 0 },
-            modeAverageTime: { basic: 0, content: 0, actions: 0, full: 0 },
-            modeSuccessRate: { basic: 0, content: 0, actions: 0, full: 0 },
+            modeUsage: {
+                basic: 0,
+                summary: 0,
+                content: 0,
+                macros: 0,
+                full: 0,
+            },
+            modeAverageTime: {
+                basic: 0,
+                summary: 0,
+                content: 0,
+                macros: 0,
+                full: 0,
+            },
+            modeSuccessRate: {
+                basic: 0,
+                summary: 0,
+                content: 0,
+                macros: 0,
+                full: 0,
+            },
             averageEntityCount: 0,
             averageTopicCount: 0,
             averageActionCount: 0,

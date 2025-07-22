@@ -28,7 +28,12 @@ import { DetectedAction, ActionSummary } from "../actionExtractor.js";
  * await extractor.extract(content, "full");
  * ```
  */
-export type ExtractionMode = "basic" | "content" | "actions" | "full";
+export type ExtractionMode =
+    | "basic"
+    | "summary"
+    | "content"
+    | "macros"
+    | "full";
 
 /**
  * Configuration for content extraction operations
@@ -90,6 +95,16 @@ export const EXTRACTION_MODE_CONFIGS: Record<
         defaultQualityThreshold: 0.2,
         defaultConcurrentExtractions: 10,
     },
+    summary: {
+        description: "HTML download + text summary + AI knowledge extraction",
+        usesAI: true,
+        extractsActions: false,
+        extractsRelationships: true,
+        knowledgeStrategy: "hybrid",
+        defaultChunkSize: 2000,
+        defaultQualityThreshold: 0.25,
+        defaultConcurrentExtractions: 5,
+    },
     content: {
         description: "Full content extraction with AI knowledge processing",
         usesAI: true,
@@ -100,8 +115,8 @@ export const EXTRACTION_MODE_CONFIGS: Record<
         defaultQualityThreshold: 0.3,
         defaultConcurrentExtractions: 5,
     },
-    actions: {
-        description: "Content + action detection with AI knowledge processing",
+    macros: {
+        description: "Content + macros detection with AI knowledge processing",
         usesAI: true,
         extractsActions: true,
         extractsRelationships: false,

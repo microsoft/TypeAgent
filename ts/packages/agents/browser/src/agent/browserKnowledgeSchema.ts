@@ -279,6 +279,8 @@ export interface KnowledgeStats {
     totalPages: number;
     /** Total number of entities extracted */
     totalEntities: number;
+    /** Total number of unique topics identified */
+    totalTopics: number;
     /** Total number of relationships found */
     totalRelationships: number;
     /** Number of unique domains */

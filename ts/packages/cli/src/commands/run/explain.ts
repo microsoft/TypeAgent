@@ -9,7 +9,10 @@ import {
     getAllActionConfigProvider,
 } from "agent-dispatcher/internal";
 import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
-import { getDefaultAppAgentProviders } from "default-agent-provider";
+import {
+    getDefaultAppAgentProviders,
+    getIndexingServiceRegistry,
+} from "default-agent-provider";
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
 import { ClientIO, createDispatcher } from "agent-dispatcher";
 
@@ -103,6 +106,8 @@ export default class ExplainCommand extends Command {
                 },
                 cache: { enabled: false },
                 clientIO,
+                indexingServiceRegistry:
+                    await getIndexingServiceRegistry(instanceDir),
                 persistDir: instanceDir,
                 dblogging: true,
                 clientId: getClientId(),

@@ -9,6 +9,7 @@ import { createGenericChannel } from "agent-rpc/channel";
 import {
     getDefaultAppAgentProviders,
     getDefaultConstructionProvider,
+    getIndexingServiceRegistry,
 } from "default-agent-provider";
 import WebSocket from "ws";
 
@@ -39,6 +40,7 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
         clientId: getClientId(),
         clientIO: clientIO,
         constructionProvider: getDefaultConstructionProvider(),
+        indexingServiceRegistry: await getIndexingServiceRegistry(instanceDir),
     });
 
     let settingSummary: string = "";

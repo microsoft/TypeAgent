@@ -91,7 +91,8 @@
               <i class="bi bi-search text-primary"></i>Search Your Library
             </h1>
             <p class="page-subtitle">
-              Find websites, bookmarks, and pages using AI-powered search
+              Ask in natural language: "latest github bookmarks", "car reviews
+              last week", "most visited news sites"
             </p>
           </div>
 
@@ -102,81 +103,12 @@
                 type="text"
                 id="searchInput"
                 class="search-input"
-                placeholder="Search websites, bookmarks, and pages using AI..."
+                placeholder="Ask in natural language: 'latest github bookmarks', 'car reviews last week'..."
               />
               <button id="searchButton" class="search-btn">
                 <i class="bi bi-search"></i>
               </button>
             </div>
-
-            <!-- Advanced Filters -->
-            <details class="search-filters">
-              <summary class="filter-toggle">
-                <i class="bi bi-funnel"></i>Advanced Filters
-              </summary>
-              <div class="filter-content">
-                <div class="filter-row">
-                  <div class="filter-group">
-                    <label>Date Range</label>
-                    <div class="date-inputs">
-                      <input type="date" id="dateFrom" />
-                      <input type="date" id="dateTo" />
-                    </div>
-                  </div>
-                  <div class="filter-group">
-                    <label>Source Type</label>
-                    <select id="sourceFilter">
-                      <option value="">All Sources</option>
-                      <option value="bookmarks">Bookmarks Only</option>
-                      <option value="history">History Only</option>
-                    </select>
-                  </div>
-                  <div class="filter-group">
-                    <label>Domain</label>
-                    <input
-                      type="text"
-                      id="domainFilter"
-                      placeholder="e.g., github.com"
-                    />
-                  </div>
-                  <div class="filter-group">
-                    <label
-                      >Min Relevance: <span id="relevanceValue">0%</span></label
-                    >
-                    <input
-                      type="range"
-                      id="relevanceFilter"
-                      min="0"
-                      max="100"
-                      value="0"
-                    />
-                  </div>
-                </div>
-                <div class="filter-row">
-                  <div class="filter-group">
-                    <label>Knowledge Filters</label>
-                    <div class="checkbox-group">
-                      <label class="checkbox-item">
-                        <input type="checkbox" id="hasEntitiesFilter" />
-                        <i class="bi bi-diagram-2"></i>Has Entities
-                      </label>
-                      <label class="checkbox-item">
-                        <input type="checkbox" id="hasTopicsFilter" />
-                        <i class="bi bi-tags"></i>Has Topics
-                      </label>
-                      <label class="checkbox-item">
-                        <input type="checkbox" id="hasActionsFilter" />
-                        <i class="bi bi-lightning"></i>Has Actions
-                      </label>
-                      <label class="checkbox-item">
-                        <input type="checkbox" id="knowledgeExtractedFilter" />
-                        <i class="bi bi-check-circle"></i>Knowledge Extracted
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </details>
 
             <!-- Recent Searches -->
             <div class="recent-searches" id="recentSearches">
@@ -310,8 +242,8 @@
             <i class="bi bi-search"></i>
             <h6>Search Your Library</h6>
             <p class="mb-3">
-              Enter a search term above to find websites, bookmarks, and pages
-              using AI-powered search.
+              Ask in natural language above: "latest github bookmarks",
+              "summarize car reviews last week", "most visited sites"
             </p>
           </div>
         </div>
@@ -541,8 +473,8 @@
 
                 <div class="knowledge-card actions">
                   <div class="knowledge-card-header">
-                    <i class="bi bi-lightning"></i>
-                    <h3>Actions</h3>
+                    <i class="bi bi-diagram-3"></i>
+                    <h3>Entity Actions</h3>
                   </div>
                   <div class="knowledge-card-body">
                     <div class="knowledge-metric" id="totalActionsMetric">
@@ -550,9 +482,13 @@
                     </div>
                     <div class="knowledge-label">Actionable Items Found</div>
                     <div class="action-breakdown">
-                      <div class="recent-items-header">Recent Actions</div>
+                      <div class="recent-items-header">
+                        Recent Entity Actions
+                      </div>
                       <div id="recentActionsList" class="recent-items-list">
-                        <div class="empty-message">No recent actions</div>
+                        <div class="empty-message">
+                          No recent entity actions
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -803,8 +739,8 @@
                             id="webExtractionMode"
                             class="extraction-mode-slider"
                             min="0"
-                            max="3"
-                            value="1"
+                            max="4"
+                            value="2"
                             step="1"
                             data-mode="content"
                           />
@@ -813,12 +749,15 @@
                               >Basic</span
                             >
                             <span class="slider-label" data-value="1"
-                              >Content</span
+                              >Summary</span
                             >
                             <span class="slider-label" data-value="2"
-                              >Actions</span
+                              >Content</span
                             >
                             <span class="slider-label" data-value="3"
+                              >Actions</span
+                            >
+                            <span class="slider-label" data-value="4"
                               >Full</span
                             >
                           </div>
@@ -827,6 +766,7 @@
                             <span class="slider-tick" data-value="1"></span>
                             <span class="slider-tick" data-value="2"></span>
                             <span class="slider-tick" data-value="3"></span>
+                            <span class="slider-tick" data-value="4"></span>
                           </div>
                         </div>
                         <small class="text-muted">
@@ -1079,8 +1019,8 @@
                             id="folderExtractionMode"
                             class="extraction-mode-slider"
                             min="0"
-                            max="3"
-                            value="1"
+                            max="4"
+                            value="2"
                             step="1"
                             data-mode="content"
                           />
@@ -1089,12 +1029,15 @@
                               >Basic</span
                             >
                             <span class="slider-label" data-value="1"
-                              >Content</span
+                              >Summary</span
                             >
                             <span class="slider-label" data-value="2"
-                              >Actions</span
+                              >Content</span
                             >
                             <span class="slider-label" data-value="3"
+                              >Actions</span
+                            >
+                            <span class="slider-label" data-value="4"
                               >Full</span
                             >
                           </div>
@@ -1103,6 +1046,7 @@
                             <span class="slider-tick" data-value="1"></span>
                             <span class="slider-tick" data-value="2"></span>
                             <span class="slider-tick" data-value="3"></span>
+                            <span class="slider-tick" data-value="4"></span>
                           </div>
                         </div>
                         <small class="text-muted">

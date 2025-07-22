@@ -71,6 +71,14 @@ interface AnalyticsDataResponse {
             fromPage: string;
             extractedAt: string;
         }>;
+        recentRelationships?: Array<{
+            from: string;
+            relationship: string;
+            to: string;
+            confidence: number;
+            fromPage: string;
+            extractedAt: string;
+        }>;
     };
     domains: {
         topDomains: Array<{
@@ -386,7 +394,7 @@ export async function extractKnowledgeFromPage(
         extractEntities: boolean;
         extractRelationships: boolean;
         suggestQuestions: boolean;
-        mode?: "basic" | "content" | "actions" | "full";
+        mode?: "basic" | "summary" | "content" | "actions" | "full";
     },
     context: SessionContext<BrowserActionContext>,
 ): Promise<EnhancedKnowledgeExtractionResult> {
@@ -413,7 +421,7 @@ export async function extractKnowledgeFromPage(
     }
 
     try {
-        const extractionMode = parameters.mode || "content";
+        const extractionMode = (parameters.mode || "content") as ExtractionMode;
         const extractor = new BrowserKnowledgeExtractor(context);
 
         // Process each fragment individually using batch processing
@@ -444,7 +452,7 @@ export async function indexWebPageContent(
         extractKnowledge: boolean;
         timestamp: string;
         textOnly?: boolean;
-        mode?: "basic" | "content" | "actions" | "full";
+        mode?: "basic" | "content" | "macros" | "full";
     },
     context: SessionContext<BrowserActionContext>,
 ): Promise<{
@@ -1272,7 +1280,7 @@ export async function checkActionDetectionStatus(
 export async function getRecentKnowledgeItems(
     parameters: {
         limit?: number;
-        type?: "entities" | "topics" | "actions" | "all";
+        type?: "entities" | "topics" | "actions" | "relationships" | "all";
     },
     context: SessionContext<BrowserActionContext>,
 ): Promise<{
@@ -1291,6 +1299,14 @@ export async function getRecentKnowledgeItems(
         fromPage: string;
         extractedAt: string;
     }>;
+    relationships: Array<{
+        from: string;
+        relationship: string;
+        to: string;
+        confidence: number;
+        fromPage: string;
+        extractedAt: string;
+    }>;
     success: boolean;
 }> {
     try {
@@ -1301,6 +1317,7 @@ export async function getRecentKnowledgeItems(
                 entities: [],
                 topics: [],
                 actions: [],
+                relationships: [],
                 success: false,
             };
         }
@@ -1324,6 +1341,14 @@ export async function getRecentKnowledgeItems(
             type: string;
             element: string;
             text?: string;
+            confidence: number;
+            fromPage: string;
+            extractedAt: string;
+        }> = [];
+        const recentRelationships: Array<{
+            from: string;
+            relationship: string;
+            to: string;
             confidence: number;
             fromPage: string;
             extractedAt: string;
@@ -1407,6 +1432,34 @@ export async function getRecentKnowledgeItems(
                         }
                     }
                 }
+
+                // Extract relationships from actions data
+                // This provides properly formatted relationship data for the UI
+                if (type === "relationships" || type === "all") {
+                    const actions = (knowledge as any).actions || [];
+
+                    if (Array.isArray(actions)) {
+                        for (const action of actions) {
+                            // Transform action data to relationship format
+                            const from =
+                                action.subjectEntityName || "Unknown Entity";
+                            const relationship =
+                                action.verbs?.join(", ") || "related to";
+                            const to =
+                                action.objectEntityName || "Unknown Target";
+                            const confidence = action.confidence || 0.8;
+
+                            recentRelationships.push({
+                                from: from,
+                                relationship: relationship,
+                                to: to,
+                                confidence: confidence,
+                                fromPage: pageTitle,
+                                extractedAt: extractedAt,
+                            });
+                        }
+                    }
+                }
             }
         }
 
@@ -1422,6 +1475,11 @@ export async function getRecentKnowledgeItems(
                 new Date(a.extractedAt).getTime(),
         );
         recentActions.sort(
+            (a, b) =>
+                new Date(b.extractedAt).getTime() -
+                new Date(a.extractedAt).getTime(),
+        );
+        recentRelationships.sort(
             (a, b) =>
                 new Date(b.extractedAt).getTime() -
                 new Date(a.extractedAt).getTime(),
@@ -1460,10 +1518,23 @@ export async function getRecentKnowledgeItems(
             )
             .slice(0, limit);
 
+        const uniqueRelationships = recentRelationships
+            .filter(
+                (relationship, index, arr) =>
+                    arr.findIndex(
+                        (r) =>
+                            r.from === relationship.from &&
+                            r.relationship === relationship.relationship &&
+                            r.to === relationship.to,
+                    ) === index,
+            )
+            .slice(0, limit);
+
         return {
             entities: uniqueEntities,
             topics: uniqueTopics,
             actions: uniqueActions,
+            relationships: uniqueRelationships,
             success: true,
         };
     } catch (error) {
@@ -1472,6 +1543,7 @@ export async function getRecentKnowledgeItems(
             entities: [],
             topics: [],
             actions: [],
+            relationships: [],
             success: false,
         };
     }
@@ -2262,6 +2334,7 @@ function createEmptyKnowledgeStats(): DetailedKnowledgeStats {
     return {
         totalPages: 0,
         totalEntities: 0,
+        totalTopics: 0,
         totalRelationships: 0,
         uniqueDomains: 0,
         topEntityTypes: [],
@@ -2295,6 +2368,7 @@ function createEmptyKnowledgeStats(): DetailedKnowledgeStats {
 async function calculateBaseStats(websites: any[]): Promise<{
     totalPages: number;
     totalEntities: number;
+    totalTopics: number;
     totalRelationships: number;
     uniqueDomains: number;
     topEntityTypes: Array<{ type: string; count: number }>;
@@ -2308,10 +2382,12 @@ async function calculateBaseStats(websites: any[]): Promise<{
     };
 }> {
     let totalEntities = 0;
+    let totalTopics = 0;
     let totalRelationships = 0;
     const domains = new Set<string>();
     const entityTypeCounts = new Map<string, number>();
     const domainCounts = new Map<string, number>();
+    const uniqueTopicsSet = new Set<string>();
     let totalContent = 0;
 
     for (const site of websites) {
@@ -2346,6 +2422,13 @@ async function calculateBaseStats(websites: any[]): Promise<{
                     });
                 }
 
+                // Count unique topics
+                if (knowledge.topics?.length > 0) {
+                    knowledge.topics.forEach((topic: string) => {
+                        uniqueTopicsSet.add(topic.toLowerCase().trim());
+                    });
+                }
+
                 // Count relationships/actions
                 if (knowledge.actions?.length > 0) {
                     totalRelationships += knowledge.actions.length;
@@ -2359,6 +2442,9 @@ async function calculateBaseStats(websites: any[]): Promise<{
             console.warn("Error processing site for stats:", error);
         }
     }
+
+    // Set totalTopics to the count of unique topics found
+    totalTopics = uniqueTopicsSet.size;
 
     // Convert entity types to sorted array
     const topEntityTypes = Array.from(entityTypeCounts.entries())
@@ -2378,6 +2464,7 @@ async function calculateBaseStats(websites: any[]): Promise<{
     return {
         totalPages: websites.length,
         totalEntities,
+        totalTopics,
         totalRelationships,
         uniqueDomains: domains.size,
         topEntityTypes,
@@ -2646,13 +2733,14 @@ export async function getAnalyticsData(
                     lowQuality: 0,
                 },
                 totalEntities: knowledgeStats.totalEntities || 0,
-                totalTopics: knowledgeStats.topEntityTypes?.length || 0,
+                totalTopics: knowledgeStats.totalTopics || 0,
                 totalActions: totalActions,
                 totalRelationships: knowledgeStats.totalRelationships || 0,
                 recentItems: knowledgeStats.recentActivity || [],
                 recentEntities: recentKnowledgeItems.entities || [],
                 recentTopics: recentKnowledgeItems.topics || [],
                 recentActions: recentKnowledgeItems.actions || [],
+                recentRelationships: recentKnowledgeItems.relationships || [],
             },
             domains: {
                 topDomains: topDomains.domains || [],

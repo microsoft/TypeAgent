@@ -469,6 +469,35 @@ export async function createKnowproTestCommands(
             if (error !== undefined) {
                 context.printer.writeError(error);
             }
+            const request = parseTypedArguments<kpTest.SearchRequest>(
+                args,
+                searchDef(),
+            );
+            const options: kp.LanguageSearchOptions = {
+                ...kpTest.createSearchOptions(request),
+                compileOptions: {
+                    exactScope: request.exactScope,
+                    applyScope: request.applyScope,
+                },
+            };
+            const query = kp.compileSearchQuery2(
+                context.conversation!,
+                resultScope.data,
+                options.compileOptions,
+            );
+            const results = (
+                await kp.runSearchQueries(context.conversation!, query, options)
+            ).flat();
+            for (let i = 0; i < results.length; ++i) {
+                context.printer.writeConversationSearchResult(
+                    context.conversation!,
+                    results[i],
+                    namedArgs.showKnowledge,
+                    namedArgs.showMessages,
+                    namedArgs.maxToDisplay,
+                    namedArgs.distinct,
+                );
+            }
         }
     }
 
