@@ -2,77 +2,37 @@
 // Licensed under the MIT License.
 
 import dotenv from "dotenv";
-import { MongoClient } from "mongodb";
 
 // Load environment variables from .env file
 const envPath = new URL("../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
 
-// Run database query to get all issued commands
-const query = {
-    "event.originalInput": { $regex: "^@" },
-};
+// go get top 500 sites
+const topSitesUrl = "https://moz.com/top-500/download/?table=top500Domains";
+const response = await fetch(topSitesUrl);
+if (!response.ok) {
+    throw new Error(`Failed to fetch top sites: ${response.statusText}`);
+}
 
-const histogram: Record<string, number> = {};
-await queryMongoDB(query).then((commands) => {
-    console.log(`Found ${commands.length} documents.`);
-
-    commands.forEach((command) => {
-        //const commandName = command.event.originalInput.split(" ");
-        const commandName = command.event.originalInput.substring(0, 50);
-        //console.log(commandName);
-        if (commandName) {
-            histogram[commandName] = (histogram[commandName] || 0) + 1;
-        }
-    });
+// extract the site names from the response
+const csv_domains = await response.text();
+const lines = csv_domains.split("\n").slice(1); // skip header
+const sites = lines.map((line) => {
+    const parts = line.split(",");
+    return parts[1].trim(); // get the domain name
 });
 
-// sort and then print the command histogram
-const sortedHistogram = sortHistogram(histogram);
-printHistogram(Object.fromEntries(sortedHistogram));
+// go get the aliases for each site
+const aliases: Record<string, string[]> = {};
+sites.forEach(async (site) => {
+    aliases[site] = [];
 
-function sortHistogram(histogram: Record<string, number>): [string, number][] {
-    return Object.entries(histogram).sort((a, b) => b[1] - a[1]);
-}
+    response = await fetch(`https://moz.com/domain-analysis/${site}`);
 
-function printHistogram(histogram: Record<string, number>) {
-    console.log("\nCommand Histogram:");
-    const maxLabelLength = Math.max(
-        ...Object.keys(histogram).map((key) => key.length),
-    );
-    const maxValue = Math.max(...Object.values(histogram));
-    const scaleFactor = maxValue > 50 ? 50 / maxValue : 1;
-
-    for (const [command, count] of Object.entries(histogram)) {
-        const barLength = Math.round(count * scaleFactor);
-        const bar = "#".repeat(barLength);
-        console.log(`${command.padEnd(maxLabelLength)} | ${bar} (${count})`);
-    }
-}
-
-async function queryMongoDB(query: object) {
-    const dbUrl = process.env["MONGODB_CONNECTION_STRING"] ?? null;
-    if (dbUrl === null || dbUrl === "") {
-        throw new Error(
-            "MONGODB_CONNECTION_STRING environment variable not set",
-        );
+    if (response.ok) {
+        
     }
 
-    const client = new MongoClient(dbUrl);
+});
 
-    try {
-        await client.connect();
-        // TODO: move DB name to .env/config?
-        const database = client.db("telemetrydb");
-        // TODO: move collection name to .env/config?
-        const collection = database.collection("dispatcherlogs");
 
-        const documents = await collection.find(query).toArray();
-        return documents;
-    } catch (error) {
-        console.error("Error querying MongoDB:", error);
-        throw error;
-    } finally {
-        await client.close();
-    }
-}
