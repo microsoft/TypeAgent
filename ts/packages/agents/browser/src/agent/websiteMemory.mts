@@ -404,7 +404,8 @@ export async function importWebsiteDataFromSession(
         }
 
         if (!context.agentContext.websiteCollection) {
-            context.agentContext.websiteCollection = new website.WebsiteCollection();
+            context.agentContext.websiteCollection =
+                new website.WebsiteCollection();
         }
 
         context.agentContext.websiteCollection.addWebsites(websites);
@@ -421,10 +422,17 @@ export async function importWebsiteDataFromSession(
         // Update entity graph with new websites using entity processing service
         try {
             debug("Processing entities for imported websites...");
-            const { getEntityProcessingService } = await import("./knowledge/entityProcessingService.mjs");
+            const { getEntityProcessingService } = await import(
+                "./knowledge/entityProcessingService.mjs"
+            );
             const entityProcessor = getEntityProcessingService();
-            await entityProcessor.processWebsites(websites, context.agentContext.websiteCollection);
-            debug(`Entity processing completed for ${websites.length} websites`);
+            await entityProcessor.processWebsites(
+                websites,
+                context.agentContext.websiteCollection,
+            );
+            debug(
+                `Entity processing completed for ${websites.length} websites`,
+            );
         } catch (error) {
             debug("Entity processing failed:", error);
             // Don't fail the import if entity processing fails
@@ -594,7 +602,8 @@ export async function importHtmlFolderFromSession(
 
         // Ensure we have a website collection
         if (!context.agentContext.websiteCollection) {
-            context.agentContext.websiteCollection = new website.WebsiteCollection();
+            context.agentContext.websiteCollection =
+                new website.WebsiteCollection();
         }
 
         // Process files in batches for better performance and progress reporting
@@ -759,10 +768,17 @@ export async function importHtmlFolderFromSession(
             // Process entities for imported HTML files
             try {
                 debug("Processing entities for imported HTML files...");
-                const { getEntityProcessingService } = await import("./knowledge/entityProcessingService.mjs");
+                const { getEntityProcessingService } = await import(
+                    "./knowledge/entityProcessingService.mjs"
+                );
                 const entityProcessor = getEntityProcessingService();
-                await entityProcessor.processWebsites(websites, context.agentContext.websiteCollection);
-                debug(`Entity processing completed for ${websites.length} HTML files`);
+                await entityProcessor.processWebsites(
+                    websites,
+                    context.agentContext.websiteCollection,
+                );
+                debug(
+                    `Entity processing completed for ${websites.length} HTML files`,
+                );
             } catch (error) {
                 debug("Entity processing failed:", error);
                 // Don't fail the import if entity processing fails

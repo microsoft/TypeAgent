@@ -95,10 +95,7 @@ const vendorAssets = [
         "node_modules/cytoscape/dist/cytoscape.min.js",
         "vendor/cytoscape/cytoscape.min.js",
     ],
-    [
-        "node_modules/dagre/dist/dagre.min.js",
-        "vendor/dagre/dagre.min.js",
-    ],
+    ["node_modules/dagre/dist/dagre.min.js", "vendor/dagre/dagre.min.js"],
     [
         "node_modules/cytoscape-dagre/cytoscape-dagre.js",
         "vendor/cytoscape-dagre/cytoscape-dagre.min.js",

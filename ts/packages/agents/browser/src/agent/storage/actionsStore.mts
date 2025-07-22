@@ -582,7 +582,7 @@ export class ActionsStore {
         this.ensureInitialized();
         return await this.domainManager.initializeDomain(domain);
     }
-    
+
     /**
      * Load action index from storage
      */

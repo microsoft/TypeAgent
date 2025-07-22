@@ -73,7 +73,7 @@ export class IndexManager {
                     .then((service) => {
                         this.getInstance().indexingServices.set(value, service);
                     });
-            }else{
+            } else {
                 this.getInstance().indexingServices.set(value, undefined);
             }
         });

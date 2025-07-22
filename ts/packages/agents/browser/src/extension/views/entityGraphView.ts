@@ -30,22 +30,30 @@ class EntityGraphView {
     constructor() {
         try {
             console.log("EntityGraphView constructor starting...");
-            
+
             // Initialize services with Chrome extension connection
             const chromeService = new ChromeExtensionService();
-            this.entityGraphService = new DefaultEntityGraphServices(chromeService);
+            this.entityGraphService = new DefaultEntityGraphServices(
+                chromeService,
+            );
             this.entityCacheService = new DefaultEntityCacheServices();
-            console.log("Services initialized with Chrome extension connection");
+            console.log(
+                "Services initialized with Chrome extension connection",
+            );
 
             // Handle URL parameters to get the entity from query params
             this.handleUrlParameters();
 
             // Initialize components
-            const graphContainer = document.getElementById("cytoscape-container")!;
+            const graphContainer = document.getElementById(
+                "cytoscape-container",
+            )!;
             const sidebarContainer = document.getElementById("entitySidebar")!;
 
             if (!graphContainer) {
-                throw new Error("Graph container 'cytoscape-container' not found");
+                throw new Error(
+                    "Graph container 'cytoscape-container' not found",
+                );
             }
             if (!sidebarContainer) {
                 throw new Error("Sidebar container 'entitySidebar' not found");
@@ -69,11 +77,15 @@ class EntityGraphView {
             console.log("Creating comparison manager...");
             this.comparisonManager = new EntityComparisonManager();
 
-            console.log("EntityGraphView constructor completed, starting initialization...");
+            console.log(
+                "EntityGraphView constructor completed, starting initialization...",
+            );
             this.initialize().catch((error: any) => {
                 console.error("EntityGraphView initialization failed:", error);
                 this.hideGraphLoading();
-                this.showGraphError(`Initialization failed: ${error.message || error}`);
+                this.showGraphError(
+                    `Initialization failed: ${error.message || error}`,
+                );
             });
         } catch (error) {
             console.error("EntityGraphView constructor failed:", error);
@@ -90,13 +102,18 @@ class EntityGraphView {
             console.log("Initializing visualizer...");
             await this.visualizer.initialize();
             console.log("Visualizer initialized successfully");
-            
+
             // Ensure container is visible and has size
             const container = document.getElementById("cytoscape-container");
             if (container) {
                 container.style.minHeight = "400px";
                 container.style.width = "100%";
-                console.log("Graph container initialized:", container.offsetWidth, "x", container.offsetHeight);
+                console.log(
+                    "Graph container initialized:",
+                    container.offsetWidth,
+                    "x",
+                    container.offsetHeight,
+                );
             } else {
                 throw new Error("Graph container not found");
             }
@@ -109,12 +126,18 @@ class EntityGraphView {
             this.setupInteractiveHandlers();
 
             // Load entity from URL - entity parameter is required
-            console.log(`Current entity after URL parsing: ${this.currentEntity}`);
+            console.log(
+                `Current entity after URL parsing: ${this.currentEntity}`,
+            );
             if (this.currentEntity) {
-                console.log(`Loading specific entity from URL: ${this.currentEntity}`);
+                console.log(
+                    `Loading specific entity from URL: ${this.currentEntity}`,
+                );
                 await this.navigateToEntity(this.currentEntity);
             } else {
-                console.log("No entity parameter provided in URL - showing error");
+                console.log(
+                    "No entity parameter provided in URL - showing error",
+                );
                 this.showEntityParameterError();
             }
         } catch (error) {
@@ -138,7 +161,7 @@ class EntityGraphView {
      */
     private setupControlHandlers(): void {
         console.log("Setting up control handlers...");
-        
+
         // Zoom controls
         const zoomInBtn = document.getElementById("zoomInBtn");
         const zoomOutBtn = document.getElementById("zoomOutBtn");
@@ -151,7 +174,7 @@ class EntityGraphView {
             zoomOutBtn: !!zoomOutBtn,
             fitBtn: !!fitBtn,
             centerBtn: !!centerBtn,
-            resetBtn: !!resetBtn
+            resetBtn: !!resetBtn,
         });
 
         if (zoomInBtn) {
@@ -192,7 +215,7 @@ class EntityGraphView {
         // Screenshot control
         const screenshotBtn = document.getElementById("screenshotBtn");
         console.log("Screenshot button element:", !!screenshotBtn);
-        
+
         if (screenshotBtn) {
             screenshotBtn.addEventListener("click", () => {
                 console.log("Screenshot button clicked");
@@ -203,7 +226,7 @@ class EntityGraphView {
         // Expand/Collapse controls (placeholder for future implementation)
         const expandBtn = document.getElementById("expandBtn");
         const collapseBtn = document.getElementById("collapseBtn");
-        
+
         if (expandBtn) {
             expandBtn.addEventListener("click", () => {
                 console.log("Expand functionality - to be implemented");
@@ -223,9 +246,9 @@ class EntityGraphView {
         const exportBtn = document.getElementById("exportBtn");
         console.log("Export button elements:", {
             exportButton: !!exportButton,
-            exportBtn: !!exportBtn
+            exportBtn: !!exportBtn,
         });
-        
+
         if (exportButton) {
             exportButton.addEventListener("click", () => {
                 console.log("Export graph button clicked");
@@ -296,19 +319,23 @@ class EntityGraphView {
         console.log("Handling URL parameters:", {
             fullUrl: window.location.href,
             search: window.location.search,
-            entityParam: entityParam
+            entityParam: entityParam,
         });
 
         if (entityParam) {
             this.currentEntity = entityParam;
             console.log(`Entity from URL: ${entityParam}`);
             // Update breadcrumb to show entity name
-            const entityBreadcrumb = document.getElementById("entityNameBreadcrumb");
+            const entityBreadcrumb = document.getElementById(
+                "entityNameBreadcrumb",
+            );
             if (entityBreadcrumb) {
                 entityBreadcrumb.textContent = ` > ${entityParam}`;
             }
         } else {
-            console.log("No entity parameter found in URL, will use default fallback");
+            console.log(
+                "No entity parameter found in URL, will use default fallback",
+            );
         }
     }
 
@@ -432,10 +459,13 @@ class EntityGraphView {
         try {
             console.log("Exporting graph data...");
             const graphData = this.visualizer.exportGraph();
-            
+
             if (!graphData) {
                 console.warn("No graph data to export");
-                this.showMessage("No graph data available to export", "warning");
+                this.showMessage(
+                    "No graph data available to export",
+                    "warning",
+                );
                 return;
             }
 
@@ -443,7 +473,7 @@ class EntityGraphView {
                 nodeCount: graphData.nodes?.length || 0,
                 edgeCount: graphData.edges?.length || 0,
                 layout: graphData.layout,
-                zoom: graphData.zoom
+                zoom: graphData.zoom,
             });
 
             const dataStr = JSON.stringify(graphData, null, 2);
@@ -451,14 +481,18 @@ class EntityGraphView {
 
             const link = document.createElement("a");
             link.href = URL.createObjectURL(dataBlob);
-            link.download = `entity-graph-${this.currentEntity || "export"}-${new Date().toISOString().split('T')[0]}.json`;
+            link.download = `entity-graph-${this.currentEntity || "export"}-${new Date().toISOString().split("T")[0]}.json`;
             link.click();
 
             console.log("Graph exported successfully");
             this.showMessage("Graph exported successfully", "success");
         } catch (error) {
             console.error("Failed to export graph:", error);
-            this.showMessage("Failed to export graph: " + (error instanceof Error ? error.message : "Unknown error"), "error");
+            this.showMessage(
+                "Failed to export graph: " +
+                    (error instanceof Error ? error.message : "Unknown error"),
+                "error",
+            );
         }
     }
 
@@ -495,7 +529,7 @@ class EntityGraphView {
         const loadingElement = document.getElementById("graphLoading");
         const emptyElement = document.getElementById("graphEmpty");
         const container = document.getElementById("cytoscape-container");
-        
+
         if (loadingElement) {
             loadingElement.style.display = "flex";
             console.log("Loading state shown");
@@ -511,7 +545,7 @@ class EntityGraphView {
     private hideGraphLoading(): void {
         const loadingElement = document.getElementById("graphLoading");
         const container = document.getElementById("cytoscape-container");
-        
+
         if (loadingElement) {
             loadingElement.style.display = "none";
             console.log("Loading state hidden");
@@ -590,40 +624,60 @@ class EntityGraphView {
                 entityName,
                 2,
             );
-            
-            console.log(`Found ${graphData.entities?.length || 0} websites for center entity`);
+
+            console.log(
+                `Found ${graphData.entities?.length || 0} websites for center entity`,
+            );
 
             if (graphData.entities && graphData.entities.length > 0) {
                 console.log("Expanding graph with related entities...");
-                
-                // Process and validate the relationships data
-                const validRelationships = graphData.relationships?.filter((r: any) => {
-                    // Ensure all required fields are present and not undefined
-                    const hasValidFrom = r.relatedEntity && typeof r.relatedEntity === 'string';
-                    const hasValidTo = graphData.centerEntity && typeof graphData.centerEntity === 'string';
-                    const hasValidType = r.relationshipType && typeof r.relationshipType === 'string';
-                    
-                    if (!hasValidFrom) {
-                        console.warn("Relationship missing relatedEntity:", r);
-                    }
-                    if (!hasValidTo) {
-                        console.warn("Relationship missing centerEntity:", graphData.centerEntity);
-                    }
-                    if (!hasValidType) {
-                        console.warn("Relationship missing relationshipType:", r);
-                    }
-                    
-                    return hasValidFrom && hasValidTo && hasValidType;
-                }) || [];
 
-                console.log(`Generated entity graph: ${graphData.entities.length} entities, ${validRelationships.length} relationships`);
+                // Process and validate the relationships data
+                const validRelationships =
+                    graphData.relationships?.filter((r: any) => {
+                        // Ensure all required fields are present and not undefined
+                        const hasValidFrom =
+                            r.relatedEntity &&
+                            typeof r.relatedEntity === "string";
+                        const hasValidTo =
+                            graphData.centerEntity &&
+                            typeof graphData.centerEntity === "string";
+                        const hasValidType =
+                            r.relationshipType &&
+                            typeof r.relationshipType === "string";
+
+                        if (!hasValidFrom) {
+                            console.warn(
+                                "Relationship missing relatedEntity:",
+                                r,
+                            );
+                        }
+                        if (!hasValidTo) {
+                            console.warn(
+                                "Relationship missing centerEntity:",
+                                graphData.centerEntity,
+                            );
+                        }
+                        if (!hasValidType) {
+                            console.warn(
+                                "Relationship missing relationshipType:",
+                                r,
+                            );
+                        }
+
+                        return hasValidFrom && hasValidTo && hasValidType;
+                    }) || [];
+
+                console.log(
+                    `Generated entity graph: ${graphData.entities.length} entities, ${validRelationships.length} relationships`,
+                );
 
                 // Load the graph into the visualizer
                 await this.visualizer.loadEntityGraph({
                     centerEntity: graphData.centerEntity,
                     entities: graphData.entities.map((e: any) => ({
-                        name: e.name || e.entityName || 'Unknown',
-                        type: e.type || e.entityType || 'unknown',
+                        name: e.name || e.entityName || "Unknown",
+                        type: e.type || e.entityType || "unknown",
                         confidence: e.confidence || 0.5,
                     })),
                     relationships: validRelationships.map((r: any) => ({
@@ -669,26 +723,33 @@ class EntityGraphView {
             console.log(`Searching for real entity: ${query}`);
             this.showMessage(`Searching for "${query}"...`, "info");
 
-            const searchResults = await this.entityGraphService.searchByEntity(query, {
-                maxResults: 10,
-                includeRelationships: true,
-                sortBy: "relevance",
-            });
+            const searchResults = await this.entityGraphService.searchByEntity(
+                query,
+                {
+                    maxResults: 10,
+                    includeRelationships: true,
+                    sortBy: "relevance",
+                },
+            );
 
             if (searchResults.entities && searchResults.entities.length > 0) {
-                console.log(`Found ${searchResults.entities.length} entities for search: ${query}`);
-                
+                console.log(
+                    `Found ${searchResults.entities.length} entities for search: ${query}`,
+                );
+
                 // Navigate to the most relevant result
                 const topResult = searchResults.entities[0];
                 await this.navigateToEntity(topResult.name);
 
                 // Show search results summary
                 this.showMessage(
-                    `Found ${searchResults.entities.length} results for "${query}". Showing: ${topResult.name}`, 
-                    "success"
+                    `Found ${searchResults.entities.length} results for "${query}". Showing: ${topResult.name}`,
+                    "success",
                 );
 
-                console.log(`Real entity search for "${query}" completed successfully`);
+                console.log(
+                    `Real entity search for "${query}" completed successfully`,
+                );
             } else {
                 console.log(`No results found for search: ${query}`);
                 this.showMessage(
@@ -699,8 +760,8 @@ class EntityGraphView {
         } catch (error) {
             console.error("Real entity search failed:", error);
             this.showMessage(
-                `Search failed for "${query}". ${error instanceof Error ? error.message : "Please try again."}`, 
-                "error"
+                `Search failed for "${query}". ${error instanceof Error ? error.message : "Please try again."}`,
+                "error",
             );
         }
     }

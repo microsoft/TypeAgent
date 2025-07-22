@@ -39,7 +39,9 @@ export class EntityGraphVisualizer {
     async initialize(): Promise<void> {
         // Check if Cytoscape is available globally (loaded via script tag)
         if (typeof cytoscape === "undefined") {
-            throw new Error("Cytoscape.js library is not loaded. Please ensure the script is included in the HTML.");
+            throw new Error(
+                "Cytoscape.js library is not loaded. Please ensure the script is included in the HTML.",
+            );
         }
 
         // Initialize cytoscape instance
@@ -263,13 +265,13 @@ export class EntityGraphVisualizer {
 
         // Add nodes - validate entity data
         graphData.entities.forEach((entity) => {
-            if (entity.name && typeof entity.name === 'string') {
+            if (entity.name && typeof entity.name === "string") {
                 elements.push({
                     group: "nodes",
                     data: {
                         id: entity.name,
                         name: entity.name,
-                        type: entity.type || 'unknown',
+                        type: entity.type || "unknown",
                         confidence: entity.confidence || 0.5,
                     },
                 });
@@ -280,23 +282,33 @@ export class EntityGraphVisualizer {
 
         // Add edges - validate relationship data
         graphData.relationships.forEach((rel) => {
-            if (rel.from && rel.to && typeof rel.from === 'string' && typeof rel.to === 'string') {
+            if (
+                rel.from &&
+                rel.to &&
+                typeof rel.from === "string" &&
+                typeof rel.to === "string"
+            ) {
                 elements.push({
                     group: "edges",
                     data: {
                         id: `${rel.from}-${rel.to}`,
                         source: rel.from,
                         target: rel.to,
-                        type: rel.type || 'related',
+                        type: rel.type || "related",
                         strength: rel.strength || 0.5,
                     },
                 });
             } else {
-                console.warn("Skipping invalid relationship (missing from/to):", rel);
+                console.warn(
+                    "Skipping invalid relationship (missing from/to):",
+                    rel,
+                );
             }
         });
 
-        console.log(`Converted to Cytoscape format: ${elements.filter(e => e.group === 'nodes').length} nodes, ${elements.filter(e => e.group === 'edges').length} edges`);
+        console.log(
+            `Converted to Cytoscape format: ${elements.filter((e) => e.group === "nodes").length} nodes, ${elements.filter((e) => e.group === "edges").length} edges`,
+        );
         return elements;
     }
 
@@ -484,12 +496,12 @@ export class EntityGraphVisualizer {
         const nodes = this.cy.nodes().map((node: any) => ({
             data: node.data(),
             position: node.position(),
-            classes: node.classes()
+            classes: node.classes(),
         }));
 
         const edges = this.cy.edges().map((edge: any) => ({
             data: edge.data(),
-            classes: edge.classes()
+            classes: edge.classes(),
         }));
 
         return {
@@ -499,7 +511,7 @@ export class EntityGraphVisualizer {
             zoom: this.cy.zoom(),
             center: this.cy.center(),
             exportedAt: new Date().toISOString(),
-            version: "1.0"
+            version: "1.0",
         };
     }
 
@@ -527,7 +539,12 @@ export class EntityGraphVisualizer {
         console.log("zoomIn() called, cy instance exists:", !!this.cy);
         if (this.cy) {
             const currentZoom = this.cy.zoom();
-            console.log("Current zoom:", currentZoom, "-> New zoom:", currentZoom * 1.25);
+            console.log(
+                "Current zoom:",
+                currentZoom,
+                "-> New zoom:",
+                currentZoom * 1.25,
+            );
             this.cy.zoom(currentZoom * 1.25);
         } else {
             console.warn("Cannot zoom in: Cytoscape instance not available");
@@ -541,7 +558,12 @@ export class EntityGraphVisualizer {
         console.log("zoomOut() called, cy instance exists:", !!this.cy);
         if (this.cy) {
             const currentZoom = this.cy.zoom();
-            console.log("Current zoom:", currentZoom, "-> New zoom:", currentZoom * 0.8);
+            console.log(
+                "Current zoom:",
+                currentZoom,
+                "-> New zoom:",
+                currentZoom * 0.8,
+            );
             this.cy.zoom(currentZoom * 0.8);
         } else {
             console.warn("Cannot zoom out: Cytoscape instance not available");
@@ -557,7 +579,9 @@ export class EntityGraphVisualizer {
             this.cy.fit();
             console.log("Graph fitted to view");
         } else {
-            console.warn("Cannot fit to view: Cytoscape instance not available");
+            console.warn(
+                "Cannot fit to view: Cytoscape instance not available",
+            );
         }
     }
 
@@ -570,7 +594,9 @@ export class EntityGraphVisualizer {
             this.cy.center();
             console.log("Graph centered");
         } else {
-            console.warn("Cannot center graph: Cytoscape instance not available");
+            console.warn(
+                "Cannot center graph: Cytoscape instance not available",
+            );
         }
     }
 
@@ -590,13 +616,13 @@ export class EntityGraphVisualizer {
     takeScreenshot(): string {
         if (this.cy) {
             return this.cy.png({
-                output: 'base64uri',
-                bg: 'white',
+                output: "base64uri",
+                bg: "white",
                 full: true,
-                scale: 2
+                scale: 2,
             });
         }
-        return '';
+        return "";
     }
 
     /**

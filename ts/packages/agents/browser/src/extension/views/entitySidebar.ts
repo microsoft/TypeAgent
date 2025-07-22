@@ -57,8 +57,14 @@ export class EntitySidebar {
         const confidenceEl = document.getElementById("entityConfidence");
 
         // Handle entity name - could be name or entityName
-        const entityName = this.currentEntity.name || this.currentEntity.entityName || 'Unknown Entity';
-        const entityType = this.currentEntity.type || this.currentEntity.entityType || 'unknown';
+        const entityName =
+            this.currentEntity.name ||
+            this.currentEntity.entityName ||
+            "Unknown Entity";
+        const entityType =
+            this.currentEntity.type ||
+            this.currentEntity.entityType ||
+            "unknown";
 
         if (iconEl) {
             iconEl.className = `entity-icon entity-type-${entityType}`;
@@ -93,26 +99,42 @@ export class EntitySidebar {
 
         if (mentionsEl) {
             // Handle both mock structure and real entity structure
-            const mentionCount = this.currentEntity.mentionCount || this.currentEntity.frequency || this.currentEntity.visitCount || 0;
-            const mentionValue = mentionCount != null ? Number(mentionCount) : 0;
-            mentionsEl.textContent = isNaN(mentionValue) ? "0" : mentionValue.toString();
+            const mentionCount =
+                this.currentEntity.mentionCount ||
+                this.currentEntity.frequency ||
+                this.currentEntity.visitCount ||
+                0;
+            const mentionValue =
+                mentionCount != null ? Number(mentionCount) : 0;
+            mentionsEl.textContent = isNaN(mentionValue)
+                ? "0"
+                : mentionValue.toString();
         }
 
         if (relationshipsEl) {
-            // Handle both mock structure and real entity structure  
+            // Handle both mock structure and real entity structure
             const relationshipCount =
-                this.currentEntity.strongRelationships?.length || 
-                this.currentEntity.relationships?.length || 0;
-            const relationshipValue = relationshipCount != null ? Number(relationshipCount) : 0;
-            relationshipsEl.textContent = isNaN(relationshipValue) ? "0" : relationshipValue.toString();
+                this.currentEntity.strongRelationships?.length ||
+                this.currentEntity.relationships?.length ||
+                0;
+            const relationshipValue =
+                relationshipCount != null ? Number(relationshipCount) : 0;
+            relationshipsEl.textContent = isNaN(relationshipValue)
+                ? "0"
+                : relationshipValue.toString();
         }
 
         if (centralityEl) {
             // Handle both mock structure and real entity structure
-            const centrality = this.currentEntity.centrality || this.currentEntity.confidence || 0;
+            const centrality =
+                this.currentEntity.centrality ||
+                this.currentEntity.confidence ||
+                0;
             const centralityValue = centrality != null ? Number(centrality) : 0;
             const centralityPercent = Math.round(centralityValue * 100);
-            centralityEl.textContent = isNaN(centralityPercent) ? "0%" : centralityPercent + "%";
+            centralityEl.textContent = isNaN(centralityPercent)
+                ? "0%"
+                : centralityPercent + "%";
         }
     }
 
@@ -158,7 +180,10 @@ export class EntitySidebar {
         if (!domainsList) return;
 
         // Handle case where dominantDomains might not exist in real entity data
-        const domains = this.currentEntity.dominantDomains || this.currentEntity.domains || [];
+        const domains =
+            this.currentEntity.dominantDomains ||
+            this.currentEntity.domains ||
+            [];
 
         if (domains.length === 0) {
             domainsList.innerHTML =
@@ -207,19 +232,21 @@ export class EntitySidebar {
 
         if (firstSeenEl) {
             // Handle various possible date field names from real entity data
-            const firstSeen = this.currentEntity.firstSeen || 
-                             this.currentEntity.firstVisit || 
-                             this.currentEntity.dateAdded || 
-                             this.currentEntity.createdAt;
+            const firstSeen =
+                this.currentEntity.firstSeen ||
+                this.currentEntity.firstVisit ||
+                this.currentEntity.dateAdded ||
+                this.currentEntity.createdAt;
             firstSeenEl.textContent = this.formatDate(firstSeen);
         }
 
         if (lastSeenEl) {
             // Handle various possible date field names from real entity data
-            const lastSeen = this.currentEntity.lastSeen || 
-                            this.currentEntity.lastVisit || 
-                            this.currentEntity.lastVisited || 
-                            this.currentEntity.updatedAt;
+            const lastSeen =
+                this.currentEntity.lastSeen ||
+                this.currentEntity.lastVisit ||
+                this.currentEntity.lastVisited ||
+                this.currentEntity.updatedAt;
             lastSeenEl.textContent = this.formatDate(lastSeen);
         }
     }
@@ -231,10 +258,11 @@ export class EntitySidebar {
         if (!relatedEntitiesList) return;
 
         // Handle various relationship field names from real entity data
-        const relationships = this.currentEntity?.strongRelationships || 
-                             this.currentEntity?.relationships || 
-                             this.currentEntity?.relatedEntities || 
-                             [];
+        const relationships =
+            this.currentEntity?.strongRelationships ||
+            this.currentEntity?.relationships ||
+            this.currentEntity?.relatedEntities ||
+            [];
 
         if (!relationships || relationships.length === 0) {
             relatedEntitiesList.innerHTML =
@@ -267,11 +295,17 @@ export class EntitySidebar {
     }
 
     private renderRelatedEntityItem(relationship: any): string {
-        const strength = relationship.strength || relationship.confidence || 0.5;
+        const strength =
+            relationship.strength || relationship.confidence || 0.5;
         const strengthClass = this.getRelationshipStrengthClass(strength);
         const strengthPercentage = Math.round(strength * 100);
-        const entityName = relationship.relatedEntity || relationship.name || relationship.entity || "Unknown";
-        const relationshipType = relationship.relationshipType || relationship.type || "related_to";
+        const entityName =
+            relationship.relatedEntity ||
+            relationship.name ||
+            relationship.entity ||
+            "Unknown";
+        const relationshipType =
+            relationship.relationshipType || relationship.type || "related_to";
 
         return `
             <div class="related-entity-item" data-entity="${this.escapeHtml(entityName)}">
@@ -296,17 +330,22 @@ export class EntitySidebar {
         if (!filterSelect) return;
 
         // Handle various relationship field names from real entity data
-        const relationships = this.currentEntity?.strongRelationships || 
-                             this.currentEntity?.relationships || 
-                             this.currentEntity?.relatedEntities || 
-                             [];
+        const relationships =
+            this.currentEntity?.strongRelationships ||
+            this.currentEntity?.relationships ||
+            this.currentEntity?.relatedEntities ||
+            [];
 
         if (!relationships || relationships.length === 0) return;
 
         // Get unique relationship types
         const relationshipTypes = new Set<string>(
-            relationships.map((rel: any) => rel.relationshipType || rel.type || "related_to")
-                         .filter((type: string) => type && type.trim())
+            relationships
+                .map(
+                    (rel: any) =>
+                        rel.relationshipType || rel.type || "related_to",
+                )
+                .filter((type: string) => type && type.trim()),
         );
 
         // Clear existing options (except "All Relationships")
@@ -629,10 +668,11 @@ export class EntitySidebar {
         if (!relatedEntitiesList) return;
 
         // Handle various relationship field names from real entity data
-        const relationships = this.currentEntity?.strongRelationships || 
-                             this.currentEntity?.relationships || 
-                             this.currentEntity?.relatedEntities || 
-                             [];
+        const relationships =
+            this.currentEntity?.strongRelationships ||
+            this.currentEntity?.relationships ||
+            this.currentEntity?.relatedEntities ||
+            [];
 
         if (!relationships || relationships.length === 0) return;
 
@@ -644,12 +684,11 @@ export class EntitySidebar {
 
         // Filter by relationship type
         if (relationshipTypeFilter_value) {
-            filteredRelationships = filteredRelationships.filter(
-                (rel: any) => {
-                    const relType = rel.relationshipType || rel.type || "related_to";
-                    return relType === relationshipTypeFilter_value;
-                }
-            );
+            filteredRelationships = filteredRelationships.filter((rel: any) => {
+                const relType =
+                    rel.relationshipType || rel.type || "related_to";
+                return relType === relationshipTypeFilter_value;
+            });
         }
 
         // For entity type filtering, we'd need more data about the related entities
