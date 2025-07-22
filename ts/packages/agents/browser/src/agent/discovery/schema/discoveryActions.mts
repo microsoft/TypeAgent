@@ -55,8 +55,8 @@ export type GetIntentFromRecording = {
     };
 };
 
-export type GetActionsForUrl = {
-    actionName: "getActionsForUrl";
+export type GetMacrosForUrl = {
+    actionName: "getMacrosForUrl";
     parameters: {
         url: string;
         includeGlobal?: boolean;
@@ -64,10 +64,10 @@ export type GetActionsForUrl = {
     };
 };
 
-export type DeleteAction = {
-    actionName: "deleteAction";
+export type DeleteMacro = {
+    actionName: "deleteMacro";
     parameters: {
-        actionId: string;
+        macroId: string;
     };
 };
 
@@ -80,5 +80,5 @@ export type SchemaDiscoveryActions =
     | SummarizePage
     | StartAuthoringSession
     | GetIntentFromRecording
-    | GetActionsForUrl
-    | DeleteAction;
+    | GetMacrosForUrl
+    | DeleteMacro;

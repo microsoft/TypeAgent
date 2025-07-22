@@ -259,7 +259,7 @@ export class DomainManager {
                 autoDiscovery: true,
                 inheritGlobal: true,
                 defaultCategory: "utility" as ActionCategory,
-                maxActions: 100,
+                maxMacros: 100,
                 customSelectors: {},
             },
             patterns: [],
@@ -338,13 +338,10 @@ export class DomainManager {
             errors.push({ field: "version", message: "Version is required" });
         }
 
-        if (
-            config.settings.maxActions < 1 ||
-            config.settings.maxActions > 1000
-        ) {
+        if (config.settings.maxMacros < 1 || config.settings.maxMacros > 1000) {
             errors.push({
-                field: "settings.maxActions",
-                message: "Max actions must be between 1 and 1000",
+                field: "settings.maxMacros",
+                message: "Max macros must be between 1 and 1000",
             });
         }
 
@@ -449,9 +446,9 @@ export class DomainManager {
             version: config.version.trim(),
             settings: {
                 ...config.settings,
-                maxActions: Math.max(
+                maxMacros: Math.max(
                     1,
-                    Math.min(1000, config.settings.maxActions),
+                    Math.min(1000, config.settings.maxMacros),
                 ),
             },
             patterns: config.patterns.map((p) => ({
@@ -627,7 +624,7 @@ export class DomainManager {
         const baseSettings: Partial<DomainSettings> = {
             autoDiscovery: true,
             inheritGlobal: true,
-            maxActions: 100,
+            maxMacros: 100,
         };
 
         switch (siteType) {
@@ -635,25 +632,25 @@ export class DomainManager {
                 return {
                     ...baseSettings,
                     defaultCategory: "commerce",
-                    maxActions: 150,
+                    maxMacros: 150,
                 };
             case "social":
                 return {
                     ...baseSettings,
                     defaultCategory: "social",
-                    maxActions: 80,
+                    maxMacros: 80,
                 };
             case "productivity":
                 return {
                     ...baseSettings,
                     defaultCategory: "utility",
-                    maxActions: 200,
+                    maxMacros: 200,
                 };
             case "news":
                 return {
                     ...baseSettings,
                     defaultCategory: "content",
-                    maxActions: 60,
+                    maxMacros: 60,
                 };
             default:
                 return {

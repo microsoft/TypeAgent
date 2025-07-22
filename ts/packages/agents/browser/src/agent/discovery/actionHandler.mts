@@ -23,8 +23,8 @@ import { createTempAgentForSchema } from "./tempAgentActionHandler.mjs";
 import {
     GetIntentFromRecording,
     SchemaDiscoveryActions,
-    GetActionsForUrl,
-    DeleteAction,
+    GetMacrosForUrl,
+    DeleteMacro,
 } from "./schema/discoveryActions.mjs";
 import { UserIntent } from "./schema/recordedActions.mjs";
 import { createSchemaAuthoringAgent } from "./authoringActionHandler.mjs";
@@ -71,11 +71,11 @@ export async function handleSchemaDiscoveryAction(
         case "startAuthoringSession":
             actionData = await handleRegisterAuthoringAgent(action);
             break;
-        case "getActionsForUrl":
-            actionData = await handleGetActionsForUrl(action);
+        case "getMacrosForUrl":
+            actionData = await handleGetMacrosForUrl(action);
             break;
-        case "deleteAction":
-            actionData = await handleDeleteAction(action);
+        case "deleteMacro":
+            actionData = await handleDeleteMacro(action);
             break;
     }
 
@@ -167,9 +167,9 @@ export async function handleSchemaDiscoveryAction(
             try {
                 const url = await getBrowserControl(agentContext).getPageUrl();
 
-                // Direct save to ActionsStore (no longer using separate handler)
-                if (!agentContext.actionsStore) {
-                    throw new Error("ActionsStore not available");
+                // Direct save to MacroStore (no longer using separate handler)
+                if (!agentContext.macrosStore) {
+                    throw new Error("MacroStore not available");
                 }
 
                 const domain = new URL(url!).hostname;
@@ -178,11 +178,11 @@ export async function handleSchemaDiscoveryAction(
 
                 // Get existing actions for this URL to check for duplicates
                 const existingActions =
-                    await agentContext.actionsStore.getActionsForUrl(url!);
+                    await agentContext.macrosStore.getMacrosForUrl(url!);
                 const existingActionNames = new Set(
                     existingActions
-                        .filter((action) => action.author === "discovered")
-                        .map((action) => action.name),
+                        .filter((action: any) => action.author === "discovered")
+                        .map((action: any) => action.name),
                 );
 
                 for (const actionData of Array.from(
@@ -199,8 +199,8 @@ export async function handleSchemaDiscoveryAction(
                         continue;
                     }
 
-                    const storedAction =
-                        agentContext.actionsStore.createDefaultAction({
+                    const storedMacro =
+                        agentContext.macrosStore.createDefaultMacro({
                             name: actionData.actionName,
                             description: `Auto-discovered: ${actionData.actionName}`,
                             category: "utility",
@@ -228,15 +228,13 @@ export async function handleSchemaDiscoveryAction(
                                                   ],
                                               ),
                                 }),
-                                actionDefinition:
+                                macroDefinition:
                                     typeDefinitions[actionData.actionName],
                             },
                         });
 
                     const result =
-                        await agentContext.actionsStore.saveAction(
-                            storedAction,
-                        );
+                        await agentContext.macrosStore.saveMacro(storedMacro);
                     if (result.success) {
                         savedCount++;
                     } else {
@@ -305,25 +303,23 @@ export async function handleSchemaDiscoveryAction(
     async function handleRegisterSiteSchema(action: any) {
         const url = await getBrowserControl(agentContext).getPageUrl();
 
-        if (!agentContext.actionsStore) {
+        if (!agentContext.macrosStore) {
             throw new Error(
                 "ActionsStore not available - please ensure TypeAgent server is running",
             );
         }
 
-        console.log("Using ActionsStore for schema registration");
-        const urlActions = await agentContext.actionsStore.getActionsForUrl(
-            url!,
-        );
+        console.log("Using MacroStore for schema registration");
+        const urlActions = await agentContext.macrosStore.getMacrosForUrl(url!);
 
         const detectedActions = new Map<string, any>();
         const authoredActions = new Map<string, any>();
 
-        for (const storedAction of urlActions) {
-            if (storedAction.definition.actionDefinition) {
+        for (const storedMacro of urlActions) {
+            if (storedMacro.definition.macroDefinition) {
                 detectedActions.set(
-                    storedAction.name,
-                    storedAction.definition.actionDefinition,
+                    storedMacro.name,
+                    storedMacro.definition.macroDefinition,
                 );
             }
         }
@@ -370,11 +366,15 @@ export async function handleSchemaDiscoveryAction(
                 await context.removeDynamicAgent(agentName);
             } catch {}
 
-            await context.addDynamicAgent(
-                agentName,
-                manifest,
-                createTempAgentForSchema(browser, agent, context),
-            );
+            try {
+                await context.addDynamicAgent(
+                    agentName,
+                    manifest,
+                    createTempAgentForSchema(browser, agent, context),
+                );
+            } catch (error) {
+                console.error("Failed to register dynamic agent:", error);
+            }
         }, 500);
 
         return { schema: schema, typeDefinitions: typeDefinitions };
@@ -647,14 +647,14 @@ export async function handleSchemaDiscoveryAction(
                 const url = await getBrowserControl(agentContext).getPageUrl();
 
                 // Direct save to ActionsStore (no longer using separate handler)
-                if (!agentContext.actionsStore) {
+                if (!agentContext.macrosStore) {
                     throw new Error("ActionsStore not available");
                 }
 
                 const domain = new URL(url).hostname;
 
-                const storedAction =
-                    agentContext.actionsStore.createDefaultAction({
+                const storedMacro = agentContext.macrosStore.createDefaultMacro(
+                    {
                         name: intentData.actionName,
                         description:
                             action.parameters.recordedActionDescription ||
@@ -738,20 +738,21 @@ export async function handleSchemaDiscoveryAction(
                                               : [],
                                     },
                                 }),
-                            actionsJson: stepsResponse.data,
-                            actionDefinition: typeDefinition,
+                            macrosJson: stepsResponse.data,
+                            macroDefinition: typeDefinition,
                             description:
                                 action.parameters.recordedActionDescription,
                             screenshot: action.parameters.screenshots,
                             steps: JSON.parse(recordedSteps || "[]"),
                         },
-                    });
+                    },
+                );
 
                 const result =
-                    await agentContext.actionsStore.saveAction(storedAction);
+                    await agentContext.macrosStore.saveMacro(storedMacro);
 
                 if (result.success) {
-                    actionId = result.actionId;
+                    actionId = result.macroId;
                     console.log(
                         `Auto-saved authored action: ${action.parameters.recordedActionName}`,
                     );
@@ -771,13 +772,13 @@ export async function handleSchemaDiscoveryAction(
             intentJson: intentResponse.data,
             intentTypeDefinition: typeDefinition,
             actions: stepsResponse.data,
-            actionId: actionId, // Include for UI feedback
+            macroId: actionId, // Include for UI feedback
         };
     }
 
-    async function handleGetActionsForUrl(action: GetActionsForUrl) {
-        if (!agentContext.actionsStore) {
-            throw new Error("ActionsStore not available");
+    async function handleGetMacrosForUrl(action: GetMacrosForUrl) {
+        if (!agentContext.macrosStore) {
+            throw new Error("MacroStore not available");
         }
 
         const { url, includeGlobal = true, author } = action.parameters;
@@ -785,28 +786,35 @@ export async function handleSchemaDiscoveryAction(
         try {
             let actions = [];
             if (!url) {
-                actions = await agentContext.actionsStore.getAllActions();
+                actions = await agentContext.macrosStore.getAllMacros();
             } else {
-                actions = await agentContext.actionsStore.getActionsForUrl(url);
+                actions = await agentContext.macrosStore.getMacrosForUrl(url);
             }
 
             if (author) {
-                actions = actions.filter((a) => a.author === author);
+                actions = actions.filter((a: any) => a.author === author);
+            }
+
+            if (actions.length > 0) {
+                const uniqueItems = new Map(
+                    actions.map((action) => [action.name, action]),
+                );
+                actions = Array.from(uniqueItems.values());
             }
 
             if (includeGlobal && !author) {
-                const globalActions =
-                    await agentContext.actionsStore.getGlobalActions();
-                actions.push(...globalActions);
+                const globalMacros =
+                    await agentContext.macrosStore.getGlobalMacros();
+                actions.push(...globalMacros);
             }
 
-            console.log(`Retrieved ${actions.length} actions for URL: ${url}`);
+            console.log(`Retrieved ${actions.length} macros for URL: ${url}`);
             return {
                 actions: actions,
                 count: actions.length,
             };
         } catch (error) {
-            console.error("Failed to get actions for URL:", error);
+            console.error("Failed to get macros for URL:", error);
             return {
                 actions: [],
                 count: 0,
@@ -815,26 +823,25 @@ export async function handleSchemaDiscoveryAction(
         }
     }
 
-    async function handleDeleteAction(action: DeleteAction) {
-        if (!agentContext.actionsStore) {
-            throw new Error("ActionsStore not available");
+    async function handleDeleteMacro(action: DeleteMacro) {
+        if (!agentContext.macrosStore) {
+            throw new Error("MacroStore not available");
         }
 
-        const { actionId } = action.parameters;
+        const { macroId } = action.parameters;
 
         try {
-            const result =
-                await agentContext.actionsStore.deleteAction(actionId);
+            const result = await agentContext.macrosStore.deleteMacro(macroId);
 
             if (result.success) {
-                console.log(`Deleted action: ${actionId}`);
+                console.log(`Deleted macro: ${macroId}`);
                 return {
                     success: true,
-                    actionId: actionId,
+                    macroId: macroId,
                 };
             } else {
                 console.error(
-                    `Failed to delete action ${actionId}:`,
+                    `Failed to delete macro ${macroId}:`,
                     result.error,
                 );
                 return {
@@ -843,7 +850,7 @@ export async function handleSchemaDiscoveryAction(
                 };
             }
         } catch (error) {
-            console.error("Failed to delete action:", error);
+            console.error("Failed to delete macro:", error);
             return {
                 success: false,
                 error: error instanceof Error ? error.message : "Unknown error",

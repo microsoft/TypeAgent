@@ -452,7 +452,7 @@ export async function indexWebPageContent(
         extractKnowledge: boolean;
         timestamp: string;
         textOnly?: boolean;
-        mode?: "basic" | "content" | "actions" | "full";
+        mode?: "basic" | "content" | "macros" | "full";
     },
     context: SessionContext<BrowserActionContext>,
 ): Promise<{

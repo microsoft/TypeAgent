@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 import {
-    getActionsForUrl,
-    deleteAction,
+    getMacrosForUrl,
+    deleteMacro,
     showNotification,
     showLoadingState,
     showEmptyState,
@@ -11,10 +11,10 @@ import {
     showConfirmationDialog,
     escapeHtml,
     createButton,
-} from "./actionUtilities";
+} from "./macroUtilities";
 
 let recording = false;
-let recordedActions: any[] = [];
+let recordedMacros: any[] = [];
 let launchUrl: string | null = "";
 let autoDiscoveryEnabled = false;
 
@@ -164,7 +164,7 @@ class ActionDiscoveryPanel {
             // Get current discovered actions from ActionsStore
             let currentActions: any[] = [];
             if (!forceRefresh) {
-                currentActions = await getActionsForUrl(launchUrl!, {
+                currentActions = await getMacrosForUrl(launchUrl!, {
                     includeGlobal: false,
                     author: "discovered",
                 });
@@ -195,6 +195,7 @@ class ActionDiscoveryPanel {
                     console.log(
                         `Discovered and saved ${response.schema.length} actions`,
                     );
+                    console.log("Discovered actions:", response.schema);
                 }
             } else {
                 const legacySchema = currentActions.map((action) => ({
@@ -222,7 +223,7 @@ class ActionDiscoveryPanel {
             <div class="modal-dialog">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title">${action.actionName}</h5>
+                        <h5 class="modal-title">${action.macroName}</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
@@ -293,18 +294,18 @@ class ActionDiscoveryPanel {
                         </div>
                         <div class="modal-body">
                             <div class="mb-3">
-                                <label class="form-label fw-semibold">Action Name</label>
+                                <label class="form-label fw-semibold">Macro Name</label>
                                 <input
                                     type="text"
-                                    id="modalActionName"
+                                    id="modalMacroName"
                                     class="form-control"
-                                    placeholder="Enter a descriptive name for this action"
+                                    placeholder="Enter a descriptive name for this macro"
                                     required
                                 />
                             </div>
 
                             <div class="mb-3">
-                                <label class="form-label fw-semibold">Action Description</label>
+                                <label class="form-label fw-semibold">Macro Description</label>
                                 <textarea
                                     id="modalActionStepsDescription"
                                     class="form-control"
@@ -315,7 +316,7 @@ class ActionDiscoveryPanel {
 
                             <div id="modalRecordingSection" class="mb-3">
                                 <label class="form-label fw-semibold">Record Steps</label>
-                                <div class="d-flex action-controls align-items-center">
+                                <div class="d-flex macro-controls align-items-center">
                                     <button
                                         id="modalRecordAction"
                                         class="btn btn-outline-danger"
@@ -344,8 +345,8 @@ class ActionDiscoveryPanel {
                             <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
                                 <i class="bi bi-x-circle"></i> Cancel
                             </button>
-                            <button type="button" id="modalSaveAction" class="btn btn-primary">
-                                <i class="bi bi-floppy"></i> Save Action
+                            <button type="button" id="modalSaveMacro" class="btn btn-primary">
+                                <i class="bi bi-floppy"></i> Save Macro
                             </button>
                         </div>
                     </div>
@@ -370,7 +371,7 @@ class ActionDiscoveryPanel {
 
         // Save action
         modalElement
-            .querySelector("#modalSaveAction")!
+            .querySelector("#modalSaveMacro")!
             .addEventListener("click", () => {
                 this.saveModalAction(modal);
             });
@@ -387,7 +388,7 @@ class ActionDiscoveryPanel {
 
     private clearModalFormFields() {
         const nameField = document.getElementById(
-            "modalActionName",
+            "modalMacroName",
         ) as HTMLInputElement;
         const descField = document.getElementById(
             "modalActionStepsDescription",
@@ -488,22 +489,22 @@ class ActionDiscoveryPanel {
 
     private async saveModalAction(modal: any) {
         const nameField = document.getElementById(
-            "modalActionName",
+            "modalMacroName",
         ) as HTMLInputElement;
-        const actionName = nameField?.value.trim();
+        const macroName = nameField?.value.trim();
         const stepsDescription = (
             document.getElementById(
                 "modalActionStepsDescription",
             ) as HTMLTextAreaElement
         )?.value.trim();
 
-        if (!actionName) {
-            showNotification("Please enter an action name", "error");
+        if (!macroName) {
+            showNotification("Please enter a macro name", "error");
             return;
         }
 
         const saveButton = document.getElementById(
-            "modalSaveAction",
+            "modalSaveMacro",
         ) as HTMLButtonElement;
         const originalContent = saveButton?.innerHTML;
 
@@ -532,12 +533,14 @@ class ActionDiscoveryPanel {
                 }
             }
 
-            // Get existing action names from ActionsStore to avoid duplicates
-            const allActions = await getActionsForUrl(launchUrl!, {
+            // Get existing macro names from MacrosStore to avoid duplicates
+            const allMacros = await getMacrosForUrl(launchUrl!, {
                 includeGlobal: true,
             });
-            const existingActionNames: string[] = allActions.map(
-                (action) => action.name,
+            console.log("All Macros", allMacros);
+
+            const existingMacroNames: string[] = allMacros.map(
+                (macro) => macro.name,
             );
 
             // Create and auto-save action in one step
@@ -545,9 +548,9 @@ class ActionDiscoveryPanel {
                 type: "getIntentFromRecording",
                 html: html.map((str: string) => ({ content: str, frameId: 0 })),
                 screenshot,
-                actionName,
+                macroName,
                 actionDescription: stepsDescription,
-                existingActionNames,
+                existingMacroNames,
                 steps: JSON.stringify(steps),
             });
 
@@ -558,15 +561,15 @@ class ActionDiscoveryPanel {
             // Action is automatically saved during processing
             if (response.actionId) {
                 showNotification(
-                    "Action created and saved successfully!",
+                    "Macro created and saved successfully!",
                     "success",
                 );
                 console.log(
-                    `Created and saved action: ${response.intentJson.actionName} (ID: ${response.actionId})`,
+                    `Created and saved macro: ${response.intentJson.macroName} (ID: ${response.macroId})`,
                 );
             } else {
                 showNotification(
-                    "Action created but save status unknown",
+                    "Macro created but save status unknown",
                     "info",
                 );
                 console.warn(
@@ -602,7 +605,7 @@ class ActionDiscoveryPanel {
 
         try {
             // Get all user actions and delete them individually from ActionsStore
-            const userActions = await getActionsForUrl(launchUrl!, {
+            const userActions = await getMacrosForUrl(launchUrl!, {
                 includeGlobal: false,
                 author: "user",
             });
@@ -611,7 +614,7 @@ class ActionDiscoveryPanel {
             let deletedCount = 0;
             for (const action of userActions) {
                 const result = await chrome.runtime.sendMessage({
-                    type: "deleteAction",
+                    type: "deleteMacro",
                     actionId: action.id,
                 });
                 if (result?.success) {
@@ -643,7 +646,7 @@ class ActionDiscoveryPanel {
         try {
             console.log("Getting actions after update. URL: ", launchUrl);
             // Get user-authored actions from the new ActionsStore
-            const actions = await getActionsForUrl(launchUrl!, {
+            const actions = await getMacrosForUrl(launchUrl!, {
                 includeGlobal: false,
                 author: "user",
             });
@@ -683,7 +686,7 @@ class ActionDiscoveryPanel {
         )!;
 
         const actionElement = document.createElement("div");
-        actionElement.className = "action-item mb-3";
+        actionElement.className = "macro-item mb-3";
 
         if (!action.intentSchema) {
             action.intentSchema = action.definition?.intentSchema;
@@ -722,7 +725,7 @@ class ActionDiscoveryPanel {
         deleteButton?.addEventListener("click", () => {
             // Use action ID, fallback to name for compatibility
             const actionId = action.id || action.name;
-            this.deleteAction(actionId);
+            this.deleteMacro(actionId);
         });
 
         userActionsContainer.appendChild(actionElement);
@@ -750,7 +753,7 @@ class ActionDiscoveryPanel {
         container: HTMLElement,
         screenshotData?: string[],
         htmlData?: string[],
-        actionName?: string,
+        macroName?: string,
     ) {
         if (!steps || steps.length === 0) {
             showEmptyState(container, "No steps recorded", "bi-list-ul");
@@ -760,7 +763,7 @@ class ActionDiscoveryPanel {
         container.innerHTML = `
             ${this.createTimelineContainer(steps)}
             ${this.createScreenshotGallery(screenshotData || [])}
-            ${this.createActionControls(actionName || "")}
+            ${this.createActionControls(macroName || "")}
         `;
 
         container.querySelectorAll(".toggle-details-btn").forEach((button) => {
@@ -783,12 +786,12 @@ class ActionDiscoveryPanel {
             });
         });
 
-        const deleteBtn = container.querySelector(".delete-action-btn");
+        const deleteBtn = container.querySelector(".delete-macro-btn");
         if (deleteBtn) {
             deleteBtn.addEventListener("click", () => {
                 const action = deleteBtn.getAttribute("data-action");
-                if (action && typeof this.deleteAction === "function") {
-                    this.deleteAction(action);
+                if (action && typeof this.deleteMacro === "function") {
+                    this.deleteMacro(action);
                 }
             });
         }
@@ -803,16 +806,16 @@ class ActionDiscoveryPanel {
         return filteredStep;
     }
 
-    private async deleteAction(actionId: string) {
+    private async deleteMacro(macroId: string) {
         const confirmed = await showConfirmationDialog(
             "Are you sure you want to delete this action?",
         );
         if (!confirmed) return;
 
         try {
-            const result = await deleteAction(actionId);
+            const result = await deleteMacro(macroId);
             if (result.success) {
-                console.log(`Action deleted: ${actionId}`);
+                console.log(`Action deleted: ${macroId}`);
                 await this.updateUserActionsUI();
                 showNotification("Action deleted successfully!", "success");
             } else {
@@ -846,7 +849,7 @@ class ActionDiscoveryPanel {
 
             schemaActions.forEach((action: any, index: number) => {
                 const actionItem = document.createElement("div");
-                actionItem.className = "action-item";
+                actionItem.className = "macro-item";
                 actionItem.innerHTML = this.createSchemaActionItem(action);
 
                 const detailsButton = actionItem.querySelector("button");
@@ -971,12 +974,12 @@ class ActionDiscoveryPanel {
             <div class="mt-3 text-end">
                 ${createButton(
                     '<i class="bi bi-download"></i> Export',
-                    "btn btn-outline-primary btn-sm me-2 export-action-btn",
+                    "btn btn-outline-primary btn-sm me-2 export-macro-btn",
                     { "data-action": actionName },
                 )}
                 ${createButton(
                     '<i class="bi bi-trash"></i> Delete',
-                    "btn btn-outline-danger btn-sm delete-action-btn",
+                    "btn btn-outline-danger btn-sm delete-macro-btn",
                     { "data-action": actionName },
                 )}
             </div>
@@ -986,7 +989,7 @@ class ActionDiscoveryPanel {
     // User action component methods
     private createUserActionCard(action: any, index: number): string {
         return `
-            <div class="action-item mb-3">
+            <div class="macro-item mb-3">
                 ${this.createUserActionHeader(action)}
                 ${this.createUserActionDetails(action, index)}
             </div>

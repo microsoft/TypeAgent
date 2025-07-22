@@ -6,7 +6,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Action Discovery Panel</title>
+    <title>Macro Discovery Panel</title>
     <link rel="stylesheet" href="../vendor/bootstrap/bootstrap.min.css" />
     <link rel="stylesheet" href="../vendor/prism/prism.css" />
     <link
@@ -26,7 +26,7 @@
       }
 
       /* Header styling */
-      .action-header {
+      .macro-header {
         background: white;
         color: #333;
         padding: 1rem;
@@ -70,21 +70,21 @@
       }
 
       /* Card styling aligned with knowledge panel */
-      .action-card {
+      .macro-card {
         border: none;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         margin-bottom: 1rem;
         border-radius: 0.5rem;
       }
 
-      .action-card .card-header {
+      .macro-card .card-header {
         /* background-color: #fff;
         border-bottom: 1px solid #e9ecef; */
         font-weight: 600;
       }
 
-      /* Action item styling */
-      .action-item {
+      /* macro item styling */
+      .macro-item {
         /* border-left: 3px solid #667eea; */
         background-color: #f8f9fa;
         margin-bottom: 0.5rem;
@@ -93,12 +93,12 @@
         transition: all 0.2s ease;
       }
 
-      .action-item:hover {
+      .macro-item:hover {
         background-color: #e9ecef;
         transform: translateX(2px);
       }
 
-      .action-badge {
+      .macro-badge {
         font-size: 0.75rem;
         margin-right: 0.25rem;
       }
@@ -110,19 +110,19 @@
       }
 
       /* Button group improvements */
-      .action-controls {
+      .macro-controls {
         gap: 0.5rem;
       }
 
       /* Form improvements */
-      .action-form {
+      .macro-form {
         background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
         border-radius: 0.5rem;
         padding: 1rem;
       }
 
       /* Auto-discovery toggle */
-      .auto-discovery-toggle {
+      .macro-discovery-toggle {
         position: absolute;
         top: 1rem;
         right: 1rem;
@@ -220,7 +220,7 @@
           padding: 0.5rem;
         }
 
-        .action-header {
+        .macro-header {
           margin: -0.5rem -0.5rem 1rem -0.5rem;
         }
 
@@ -233,10 +233,10 @@
   <body>
     <div class="container-fluid p-3">
       <!-- Header Section -->
-      <div class="action-header rounded">
+      <div class="macro-header rounded">
         <div class="d-flex justify-content-between align-items-center">
           <div>
-            <h4 class="mb-1">Action Discovery</h4>
+            <h4 class="mb-1">Discover Page Actions</h4>
             <small id="connectionStatus">
               <span class="status-indicator status-connected"></span>
               Ready to discover actions
@@ -261,7 +261,7 @@
       </div>
 
       <!-- Detected Actions Section -->
-      <div class="action-card card">
+      <div class="macro-card card">
         <div
           class="card-header d-flex justify-content-between align-items-center"
         >
@@ -294,7 +294,7 @@
       </div>
 
       <!-- User-Defined Actions Section -->
-      <div class="action-card card">
+      <div class="macro-card card">
         <div
           class="card-header d-flex justify-content-between align-items-center"
         >
@@ -335,7 +335,7 @@
 
       <!-- Screenshot Container (Hidden by default) -->
       <div id="screenshotContainer" class="d-none">
-        <div class="action-card card">
+        <div class="macro-card card">
           <div class="card-header">
             <h6 class="mb-0"><i class="bi bi-camera"></i> Page Screenshot</h6>
           </div>
@@ -349,7 +349,7 @@
     </div>
 
     <!-- Scripts -->
-    <script src="pageActions.js"></script>
+    <script src="pageMacros.js"></script>
     <script src="../vendor/bootstrap/bootstrap.bundle.min.js"></script>
     <script src="../vendor/prism/prism.js"></script>
     <script src="../vendor/prism/prism-typescript.js"></script>

@@ -16,7 +16,6 @@ export function activate(context: vscode.ExtensionContext) {
     console.log('Congratulations, your extension "coda" is now active!');
 
     initializeWS();
-
     initializeAliasManager(context);
 
     // The command has been defined in the package.json file
