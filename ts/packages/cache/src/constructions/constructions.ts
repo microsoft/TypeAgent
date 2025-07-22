@@ -31,10 +31,12 @@ type ImplicitParameter = {
     paramValue: ParamValueType;
 };
 
+// Whether a construction part allow wildcard match.
 export const enum WildcardMode {
     Disabled = 0,
-    Enabled = 1,
-    Checked = 2,
+    Enabled = 1, // disallow reference if config to reject references.
+    Checked = 2, // always allow reference in wildcard regardless of config.
+    Entity = 3, // allow entity wildcard match.
 }
 
 export type ConstructionPart = {
@@ -143,6 +145,8 @@ export class Construction {
                     config.history,
                 ),
                 conflictValues: matchedValues.conflictValues,
+                entityWildcardPropertyNames:
+                    matchedValues.entityWildcardPropertyNames,
                 matchedCount: matchedValues.matchedCount,
                 wildcardCharCount: matchedValues.wildcardCharCount,
                 nonOptionalCount: this.parts.filter((p) => !p.optional).length,
@@ -315,23 +319,7 @@ export type MatchResult = {
     matchedCount: number;
     wildcardCharCount: number;
     nonOptionalCount: number;
+    entityWildcardPropertyNames: string[];
     conflictValues?: [string, ParamValueType[]][] | undefined;
     partialPartCount?: number | undefined; // Only used for partial match
 };
-
-export function convertConstructionV2ToV3(
-    constructions: ConstructionJSON[],
-    matchSetToTransformInfo: Map<string, TransformInfo[]>,
-) {
-    for (const construction of constructions) {
-        construction.parts.forEach((part) => {
-            if (isParsePartJSON(part)) {
-                throw new Error("ParsePart is not supported in V2");
-            }
-            const transformInfos = matchSetToTransformInfo.get(part.matchSet);
-            if (transformInfos) {
-                part.transformInfos = transformInfos;
-            }
-        });
-    }
-}

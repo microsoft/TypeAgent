@@ -26,6 +26,7 @@ import {
     getActionSchemaTypeName,
     getActivitySchemaTypeName,
 } from "./agentTranslators.js";
+import { getEntityPropertyTypeName } from "../execute/pendingActions.js";
 
 const debug = registerDebug("typeagent:dispatcher:schema:cache");
 const debugError = registerDebug("typeagent:dispatcher:schema:cache:error");
@@ -314,14 +315,15 @@ export function createSchemaInfoProvider(
         );
     };
 
-    const getActionSchema = (schemaName: string, actionName: string) => {
+    const getActionSchema = (
+        actionSchemaFile: ActionSchemaFile,
+        actionName: string,
+    ) => {
         const actionSchema =
-            getActionSchemaFile(
-                schemaName,
-            ).parsedActionSchema.actionSchemas.get(actionName);
+            actionSchemaFile.parsedActionSchema.actionSchemas.get(actionName);
         if (actionSchema === undefined) {
             throw new Error(
-                `Invalid action name ${actionName} for schema ${schemaName}`,
+                `Invalid action name ${actionName} for schema ${actionSchemaFile.schemaName}`,
             );
         }
         return actionSchema;
@@ -332,24 +334,39 @@ export function createSchemaInfoProvider(
         getActionNamespace: (schemaName) =>
             getActionSchemaFile(schemaName).parsedActionSchema.actionNamespace,
         getActionCacheEnabled: (schemaName, actionName) =>
-            getActionSchema(schemaName, actionName).paramSpecs !== false,
+            getActionSchema(getActionSchemaFile(schemaName), actionName)
+                .paramSpecs !== false,
         getActionParamSpec: (schemaName, actionName, paramName) => {
-            const actionSchema = getActionSchema(schemaName, actionName);
+            const actionSchemaFile = getActionSchemaFile(schemaName);
+            const actionSchema = getActionSchema(actionSchemaFile, actionName);
             const paramSpecs = actionSchema.paramSpecs;
-            if (typeof paramSpecs !== "object") {
+            if (paramSpecs === false) {
+                // cache is disabled. This shouldn't be called, but just return undefined.
                 return undefined;
             }
-
-            for (const [key, value] of Object.entries(paramSpecs)) {
-                if (key.includes("*")) {
-                    const regex = simpleStarRegex(key);
-                    if (regex.test(paramName)) {
+            // Check the paramSpec if there are explicit entries.
+            if (paramSpecs !== undefined) {
+                for (const [key, value] of Object.entries(paramSpecs)) {
+                    if (key.includes("*")) {
+                        const regex = simpleStarRegex(key);
+                        if (regex.test(paramName)) {
+                            return value;
+                        }
+                    } else if (key === paramName) {
                         return value;
                     }
-                } else if (key === paramName) {
-                    return value;
                 }
             }
+
+            // Check if it is an entity-type.
+            const entityPropertyTypeName = getEntityPropertyTypeName(
+                actionName,
+                paramName,
+                actionSchemaFile,
+            );
+            return entityPropertyTypeName !== undefined
+                ? "entity_wildcard"
+                : undefined;
         },
     };
     return result;

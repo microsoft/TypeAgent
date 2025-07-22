@@ -155,6 +155,7 @@ export type DispatcherConfig = {
         autoSave: boolean;
         builtInCache: boolean;
         matchWildcard: boolean;
+        matchEntityWildcard: boolean;
     };
 };
 
@@ -236,6 +237,7 @@ const defaultSessionConfig: SessionConfig = {
         mergeMatchSets: true, // the session default is different then the default in the cache
         cacheConflicts: true, // the session default is different then the default in the cache
         matchWildcard: true,
+        matchEntityWildcard: true,
         builtInCache: true,
     },
 };

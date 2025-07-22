@@ -16,6 +16,7 @@ import {
     ParsedActionSchema,
     ActionSchemaEntryTypeDefinitions,
     ActionSchemaEntityTypeDefinition,
+    ResolvedSchemaType,
 } from "./type.js";
 import ts from "typescript";
 import { ActionParamSpecs, SchemaConfig } from "./schemaConfig.js";
@@ -27,10 +28,12 @@ function checkParamSpecs(
     paramSpecs: ActionParamSpecs,
     parameterType: SchemaTypeObject<SchemaObjectFields>,
     actionName: string,
+    entitySchemas: Map<string, ActionSchemaEntityTypeDefinition> | undefined,
 ) {
     for (const [propertyName, spec] of Object.entries(paramSpecs)) {
         const properties = propertyName.split(".");
-        let currentType: SchemaType = parameterType;
+        let unresolvedCurrentType: SchemaType = parameterType;
+        let currentType: ResolvedSchemaType = parameterType;
         for (const name of properties) {
             if (
                 name === "__proto__" ||
@@ -53,7 +56,7 @@ function checkParamSpecs(
                         `Schema Config Error: Invalid parameter name '${propertyName}' for action '${actionName}': '*' is only allowed for array types`,
                     );
                 }
-                currentType = currentType.elementType;
+                unresolvedCurrentType = currentType.elementType;
             } else {
                 if (currentType.type !== "object") {
                     throw new Error(
@@ -68,9 +71,9 @@ function checkParamSpecs(
                         `Schema Config Error: Invalid parameter name '${propertyName}' for action '${actionName}': property '${name}' does not exist`,
                     );
                 }
-                currentType = field.type;
+                unresolvedCurrentType = field.type;
             }
-            const resolvedType = resolveTypeReference(currentType);
+            const resolvedType = resolveTypeReference(unresolvedCurrentType);
             if (resolvedType === undefined) {
                 throw new Error(
                     `Schema Config Error: Invalid parameter name '${propertyName}' for action '${actionName}': unresolved type reference for property '${name}'`,
@@ -79,6 +82,18 @@ function checkParamSpecs(
             currentType = resolvedType;
         }
         switch (spec) {
+            case "entity_wildcard":
+                // this is redundant as it is assumed, check for consistency.
+                // REVIEW: invalid for entity wildcard that is a union with other types.
+                if (
+                    unresolvedCurrentType.type !== "type-reference" ||
+                    entitySchemas?.has(unresolvedCurrentType.name) !== true
+                ) {
+                    throw new Error(
+                        `Schema Config Error: Parameter '${propertyName}' for action '${actionName}' is not an entity-type for paramSpec '${spec}'`,
+                    );
+                }
+                break;
             case "wildcard":
             case "checked_wildcard":
             case "time":
@@ -118,6 +133,7 @@ function checkParamSpecs(
 function checkActionSchema(
     definition: SchemaTypeDefinition,
     schemaConfig: SchemaConfig | undefined,
+    entitySchemas: Map<string, ActionSchemaEntityTypeDefinition> | undefined,
 ): [string, ActionSchemaTypeDefinition] {
     const name = definition.name;
 
@@ -148,13 +164,13 @@ function checkActionSchema(
     }
 
     const actionNameString = actionName.type.typeEnum[0];
-    const parameterFieldType = resolveTypeReference(parameters?.type);
+    const actionParametersType = resolveTypeReference(parameters?.type);
     if (
-        parameterFieldType !== undefined &&
-        parameterFieldType.type !== "object"
+        actionParametersType !== undefined &&
+        actionParametersType.type !== "object"
     ) {
         throw new Error(
-            `Schema Error: parameters field must be an object in action schema type ${name}`,
+            `Schema Error: action parameters must be an object in action schema type ${name}`,
         );
     }
 
@@ -163,11 +179,66 @@ function checkActionSchema(
     const paramSpecs = schemaConfig?.paramSpec?.[actionNameString];
     if (paramSpecs !== undefined) {
         if (paramSpecs !== false) {
-            checkParamSpecs(paramSpecs, parameterFieldType!, actionNameString);
+            if (actionParametersType === undefined) {
+                throw new Error(
+                    `Schema Config Error: paramSpecs provided for action '${actionNameString}' with not action parameters`,
+                );
+            }
+            checkParamSpecs(
+                paramSpecs,
+                actionParametersType!,
+                actionNameString,
+                entitySchemas,
+            );
         }
         actionDefinition.paramSpecs = paramSpecs;
     }
     return [actionNameString, actionDefinition];
+}
+
+// Create the mapping of entity type name to type definition.
+function createEntitySchemaMap(entity: SchemaTypeDefinition, strict: boolean) {
+    if (strict && !entity.exported) {
+        throw new Error(
+            `Schema Error: Entity entry type '${entity.name}' must be exported`,
+        );
+    }
+    const entitySchemas = new Map<string, ActionSchemaEntityTypeDefinition>();
+    const addEntityType = (type: SchemaTypeReference) => {
+        const definition = type.definition;
+        if (definition === undefined) {
+            throw new Error(
+                `Schema Error: unresolved type reference '${type.name}' in the entity type`,
+            );
+        }
+        if (!definition.alias || definition.type.type !== "string") {
+            throw new Error(
+                `Schema Error: entity type must be a type alias to string`,
+            );
+        }
+        entitySchemas.set(
+            definition.name,
+            definition as ActionSchemaEntityTypeDefinition,
+        );
+    };
+    const entityEntityTypeType = entity.type.type;
+    if (entityEntityTypeType === "type-reference") {
+        addEntityType(entity.type);
+    } else if (entityEntityTypeType === "type-union") {
+        for (const type of entity.type.types) {
+            if (type.type !== "type-reference") {
+                throw new Error(
+                    `Schema Error: entity type in the entity entry union must be type reference`,
+                );
+            }
+            addEntityType(type);
+        }
+    } else {
+        throw new Error(
+            `Schema Error: entity entry type ${entity.name} must be a reference or union of of entity type`,
+        );
+    }
+    return entitySchemas;
 }
 
 export function createParsedActionSchema(
@@ -193,6 +264,9 @@ export function createParsedActionSchema(
         }
         pending.push(entry.activity);
     }
+    const entitySchemas = entry.entity
+        ? createEntitySchemaMap(entry.entity, strict)
+        : undefined;
     const actionSchemas = new Map<string, ActionSchemaTypeDefinition>();
 
     while (pending.length > 0) {
@@ -202,6 +276,7 @@ export function createParsedActionSchema(
                 const [actionName, actionSchema] = checkActionSchema(
                     current,
                     schemaConfig,
+                    entitySchemas,
                 );
                 if (actionSchemas.get(actionName)) {
                     throw new Error(
@@ -252,52 +327,6 @@ export function createParsedActionSchema(
     }
     if (actionSchemas.size === 0) {
         throw new Error("No action schema found");
-    }
-
-    let entitySchemas:
-        | Map<string, ActionSchemaEntityTypeDefinition>
-        | undefined;
-    if (entry.entity) {
-        entitySchemas = new Map<string, ActionSchemaEntityTypeDefinition>();
-        if (strict && !entry.entity.exported) {
-            throw new Error(
-                `Schema Error: Entity entry type '${entry.entity.name}' must be exported`,
-            );
-        }
-        const addEntityType = (type: SchemaTypeReference) => {
-            const definition = type.definition;
-            if (definition === undefined) {
-                throw new Error(
-                    `Schema Error: unresolved type reference '${type.name}' in the entity type`,
-                );
-            }
-            if (!definition.alias || definition.type.type !== "string") {
-                throw new Error(
-                    `Schema Error: entity type must be a type alias to string`,
-                );
-            }
-            entitySchemas!.set(
-                definition.name,
-                definition as ActionSchemaEntityTypeDefinition,
-            );
-        };
-        const entityEntityTypeType = entry.entity.type.type;
-        if (entityEntityTypeType === "type-reference") {
-            addEntityType(entry.entity.type);
-        } else if (entityEntityTypeType === "type-union") {
-            for (const type of entry.entity.type.types) {
-                if (type.type !== "type-reference") {
-                    throw new Error(
-                        `Schema Error: entity type in the entity entry union must be type reference`,
-                    );
-                }
-                addEntityType(type);
-            }
-        } else {
-            throw new Error(
-                `Schema Error: entity entry type ${entry.entity.name} must be a reference or union of of entity type`,
-            );
-        }
     }
     const parsedActionSchema: ParsedActionSchema = {
         entry: entry as ActionSchemaEntryTypeDefinitions,
@@ -361,9 +390,9 @@ class ActionParser {
         strict: boolean,
     ) {
         const parser = new ActionParser();
-        const definition = parser.parseSchema(sourceFile, schemaType);
+        const definitions = parser.parseSchema(sourceFile, schemaType);
         const result = createParsedActionSchema(
-            definition,
+            definitions,
             parser.typeOrder,
             strict,
             schemaConfig,

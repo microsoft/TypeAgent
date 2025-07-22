@@ -4,7 +4,10 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { getToggleHandlerTable } from "../../../command/handlerUtils.js";
+import {
+    getToggleCommandHandlers,
+    getToggleHandlerTable,
+} from "../../../command/handlerUtils.js";
 import {
     CommandHandlerContext,
     changeContextConfig,
@@ -476,18 +479,38 @@ export function getConstructionCommandHandlers(): CommandHandlerTable {
                     );
                 },
             ),
-            wildcard: getToggleHandlerTable(
-                "wildcard matching",
-                async (
-                    context: ActionContext<CommandHandlerContext>,
-                    enable: boolean,
-                ) => {
-                    await changeContextConfig(
-                        { cache: { matchWildcard: enable } },
-                        context,
-                    );
+            wildcard: {
+                description: "wildcard matching",
+                defaultSubCommand: "on",
+                commands: {
+                    ...getToggleCommandHandlers(
+                        "wildcard matching",
+                        async (
+                            context: ActionContext<CommandHandlerContext>,
+                            enable: boolean,
+                        ) => {
+                            await changeContextConfig(
+                                { cache: { matchWildcard: enable } },
+                                context,
+                            );
+                        },
+                    ),
+                    entity: getToggleHandlerTable(
+                        "entity wildcard matching",
+                        async (
+                            context: ActionContext<CommandHandlerContext>,
+                            enable: boolean,
+                        ) => {
+                            await changeContextConfig(
+                                {
+                                    cache: { matchEntityWildcard: enable },
+                                },
+                                context,
+                            );
+                        },
+                    ),
                 },
-            ),
+            },
         },
     };
 }
