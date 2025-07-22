@@ -25,9 +25,14 @@
     "tsc": "tsc -p src"
   },
   "dependencies": {
+    "@azure/ai-agents": "^1.0.0-beta.3",
+    "@azure/ai-projects": "^1.0.0-beta.8",
+    "@azure/identity": "^4.10.0",    
+    "azure-ai-foundry": "workspace:*",
     "chalk": "^5.4.1",
     "code-processor": "workspace:*",
     "common-utils": "workspace:*",
+    "debug": "^4.4.0",
     "dotenv": "^16.3.1",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",

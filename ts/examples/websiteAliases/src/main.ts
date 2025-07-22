@@ -27,10 +27,15 @@ const aliases: Record<string, string[]> = {};
 sites.forEach(async (site) => {
     aliases[site] = [];
 
-    response = await fetch(`https://moz.com/domain-analysis/${site}`);
+    const aliasResponse = await fetch(`https://moz.com/domain-analysis/${site}`);
 
     if (response.ok) {
+        const data = aliasResponse.text();
+
         
+
+    } else {
+        console.error(`Failed to fetch aliases for ${site}: ${aliasResponse.statusText}`);
     }
 
 });

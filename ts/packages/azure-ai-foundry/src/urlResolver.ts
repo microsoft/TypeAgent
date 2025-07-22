@@ -14,7 +14,7 @@ import {
 import registerDebug from "debug";
 import { wikipedia } from "aiclient";
 
-const debug = registerDebug("typeagent:aiClient:urlResolver");
+const debug = registerDebug("typeagent:azure-ai-foundry:urlResolver");
 
 export interface urlResolutionAction {
     originalRequest: string;

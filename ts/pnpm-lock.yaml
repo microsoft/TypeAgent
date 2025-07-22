@@ -690,9 +690,18 @@ importers:
 
   examples/websiteAliases:
     dependencies:
-      aiclient:
+      '@azure/ai-agents':
+        specifier: ^1.0.0-beta.3
+        version: 1.0.0-beta.3
+      '@azure/ai-projects':
+        specifier: ^1.0.0-beta.8
+        version: 1.0.0-beta.8(encoding@0.1.13)(ws@8.18.2)(zod@3.24.4)
+      '@azure/identity':
+        specifier: ^4.10.0
+        version: 4.10.0
+      azure-ai-foundry:
         specifier: workspace:*
-        version: link:../../packages/aiclient
+        version: link:../../packages/azure-ai-foundry
       chalk:
         specifier: ^5.4.1
         version: 5.4.1
@@ -702,33 +711,12 @@ importers:
       common-utils:
         specifier: workspace:*
         version: link:../../packages/commonUtils
-      conversation-memory:
-        specifier: workspace:*
-        version: link:../../packages/memory/conversation
+      debug:
+        specifier: ^4.4.0
+        version: 4.4.1(supports-color@8.1.1)
       dotenv:
         specifier: ^16.3.1
         version: 16.5.0
-      exifreader:
-        specifier: ^4.30.1
-        version: 4.30.1
-      image-memory:
-        specifier: workspace:*
-        version: link:../../packages/memory/image
-      interactive-app:
-        specifier: workspace:*
-        version: link:../../packages/interactiveApp
-      knowledge-processor:
-        specifier: workspace:*
-        version: link:../../packages/knowledgeProcessor
-      knowpro:
-        specifier: workspace:*
-        version: link:../../packages/knowPro
-      memory-providers:
-        specifier: workspace:*
-        version: link:../memoryProviders
-      mongodb:
-        specifier: ^6.15.0
-        version: 6.16.0(socks@2.8.5)
       typeagent:
         specifier: workspace:*
         version: link:../../packages/typeagent

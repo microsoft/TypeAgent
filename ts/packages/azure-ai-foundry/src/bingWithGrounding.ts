@@ -10,6 +10,7 @@ export type ApiSettings = {
     connectionId?: string;
     validatorAgentId?: string;
     httpEndpointLogicAppConnectionId?: string;
+    aliasKeywordExtractorAgentId?: string;
 };
 
 /**
@@ -22,6 +23,7 @@ export enum EnvVars {
     BING_WITH_GROUNDING_URL_RESOLUTION_CONNECTION_ID = "BING_WITH_GROUNDING_URL_RESOLUTION_CONNECTION_ID",
     AZURE_FOUNDRY_AGENT_ID_VALIDATOR = "AZURE_FOUNDRY_AGENT_ID_VALIDATOR",
     LOGIC_APP_CONNECTION_ID_GET_HTTP_ENDPOINT = "LOGIC_APP_CONNECTION_ID_GET_HTTP_ENDPOINT",
+    AZURE_FOUNDRY_AGENT_ID_ALIAS_KEYWORD_EXTRACTOR = "AZURE_FOUNDRY_AGENT_ID_ALIAS_KEYWORD_EXTRACTOR",
 }
 
 /**
@@ -52,5 +54,9 @@ export function apiSettingsFromEnv(
             env,
             EnvVars.LOGIC_APP_CONNECTION_ID_GET_HTTP_ENDPOINT,
         ),
+        aliasKeywordExtractorAgentId: getEnvSetting(
+            env,
+            EnvVars.AZURE_FOUNDRY_AGENT_ID_ALIAS_KEYWORD_EXTRACTOR,
+        )
     };
 }
