@@ -14,7 +14,7 @@ import { checkOverwriteFile } from "../../../utils/commandHandlerUtils.js";
 import fs from "node:fs";
 import { expandHome } from "../../../utils/fsUtils.js";
 import { isChatHistoryInput } from "../../chatHistory.js";
-import { setActivityContext } from "../../../execute/actionHandlers.js";
+import { setActivityContext } from "../../../execute/activityContext.js";
 
 class HistoryListCommandHandler implements CommandHandlerNoParams {
     public readonly description = "List history";
