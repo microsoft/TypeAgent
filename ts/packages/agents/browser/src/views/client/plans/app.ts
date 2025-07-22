@@ -85,7 +85,9 @@ function hideUIControlsForActionView(): void {
     }
 
     // Hide export/tools group in floating controls
-    const exportGroup = document.querySelector(".plan-floating-controls .plan-control-group:nth-child(3)");
+    const exportGroup = document.querySelector(
+        ".plan-floating-controls .plan-control-group:nth-child(3)",
+    );
     if (exportGroup) {
         (exportGroup as HTMLElement).style.display = "none";
     }
@@ -156,10 +158,18 @@ function setupActionViewEventListeners(
     webPlanData: WebPlanData,
 ): void {
     // Zoom controls
-    const zoomInButton = document.getElementById("zoom-in-button") as HTMLButtonElement;
-    const zoomOutButton = document.getElementById("zoom-out-button") as HTMLButtonElement;
-    const zoomFitButton = document.getElementById("zoom-fit-button") as HTMLButtonElement;
-    const centerButton = document.getElementById("center-button") as HTMLButtonElement;
+    const zoomInButton = document.getElementById(
+        "zoom-in-button",
+    ) as HTMLButtonElement;
+    const zoomOutButton = document.getElementById(
+        "zoom-out-button",
+    ) as HTMLButtonElement;
+    const zoomFitButton = document.getElementById(
+        "zoom-fit-button",
+    ) as HTMLButtonElement;
+    const centerButton = document.getElementById(
+        "center-button",
+    ) as HTMLButtonElement;
 
     if (zoomInButton) {
         zoomInButton.addEventListener("click", () => {
@@ -194,9 +204,15 @@ function setupActionViewEventListeners(
     }
 
     // Path and navigation controls
-    const showPathButton = document.getElementById("show-path-button") as HTMLButtonElement;
-    const goToCurrentButton = document.getElementById("go-to-current-button") as HTMLButtonElement;
-    const resetViewButton = document.getElementById("reset-view-button") as HTMLButtonElement;
+    const showPathButton = document.getElementById(
+        "show-path-button",
+    ) as HTMLButtonElement;
+    const goToCurrentButton = document.getElementById(
+        "go-to-current-button",
+    ) as HTMLButtonElement;
+    const resetViewButton = document.getElementById(
+        "reset-view-button",
+    ) as HTMLButtonElement;
 
     if (showPathButton) {
         showPathButton.addEventListener("click", () => {
@@ -411,7 +427,11 @@ function initializeNormalMode(): void {
 
             // Initialize floating controls only once
             if (!floatingControlsInitialized) {
-                setupFloatingControlsEventHandlers(visualizer, webPlanData, null);
+                setupFloatingControlsEventHandlers(
+                    visualizer,
+                    webPlanData,
+                    null,
+                );
                 floatingControlsInitialized = true;
             }
         } catch (error) {
@@ -590,19 +610,27 @@ function initializeNormalMode(): void {
      * Set up floating controls event handlers
      */
     function setupFloatingControlsEventHandlers(
-        initialVisualizer: Visualizer | null, 
+        initialVisualizer: Visualizer | null,
         initialWebPlanData: WebPlanData,
-        showPathButton: HTMLButtonElement | null
+        showPathButton: HTMLButtonElement | null,
     ): void {
         // Function to get current visualizer (handles updates)
         const getCurrentVisualizer = () => visualizer;
         const getCurrentWebPlanData = () => webPlanData;
 
         // Zoom controls
-        const zoomInButton = document.getElementById("zoom-in-button") as HTMLButtonElement;
-        const zoomOutButton = document.getElementById("zoom-out-button") as HTMLButtonElement;
-        const zoomFitButton = document.getElementById("zoom-fit-button") as HTMLButtonElement;
-        const centerButton = document.getElementById("center-button") as HTMLButtonElement;
+        const zoomInButton = document.getElementById(
+            "zoom-in-button",
+        ) as HTMLButtonElement;
+        const zoomOutButton = document.getElementById(
+            "zoom-out-button",
+        ) as HTMLButtonElement;
+        const zoomFitButton = document.getElementById(
+            "zoom-fit-button",
+        ) as HTMLButtonElement;
+        const centerButton = document.getElementById(
+            "center-button",
+        ) as HTMLButtonElement;
 
         if (zoomInButton) {
             zoomInButton.addEventListener("click", () => {
@@ -641,9 +669,15 @@ function initializeNormalMode(): void {
         }
 
         // Path and navigation controls
-        const showPathButtonFloating = document.getElementById("show-path-button") as HTMLButtonElement;
-        const goToCurrentButton = document.getElementById("go-to-current-button") as HTMLButtonElement;
-        const resetViewButton = document.getElementById("reset-view-button") as HTMLButtonElement;
+        const showPathButtonFloating = document.getElementById(
+            "show-path-button",
+        ) as HTMLButtonElement;
+        const goToCurrentButton = document.getElementById(
+            "go-to-current-button",
+        ) as HTMLButtonElement;
+        const resetViewButton = document.getElementById(
+            "reset-view-button",
+        ) as HTMLButtonElement;
 
         if (showPathButtonFloating) {
             showPathButtonFloating.addEventListener("click", () => {
@@ -653,7 +687,9 @@ function initializeNormalMode(): void {
 
                 if (!currentVisualizer.pathHighlighted) {
                     if (currentData.currentNode) {
-                        currentVisualizer.highlightPath(currentData.currentNode);
+                        currentVisualizer.highlightPath(
+                            currentData.currentNode,
+                        );
                     }
                     showPathButtonFloating.classList.add("active");
                     showPathButtonFloating.title = "Reset Path View";
@@ -670,9 +706,13 @@ function initializeNormalMode(): void {
                 const currentVisualizer = getCurrentVisualizer();
                 const currentData = getCurrentWebPlanData();
                 if (currentVisualizer && currentData.currentNode) {
-                    currentVisualizer.updateCurrentNode(currentData.currentNode);
+                    currentVisualizer.updateCurrentNode(
+                        currentData.currentNode,
+                    );
                     // Update node selector to match
-                    const nodeSelect = document.getElementById("node-select") as HTMLSelectElement;
+                    const nodeSelect = document.getElementById(
+                        "node-select",
+                    ) as HTMLSelectElement;
                     if (nodeSelect) {
                         nodeSelect.value = currentData.currentNode;
                     }
@@ -695,8 +735,12 @@ function initializeNormalMode(): void {
         }
 
         // Export and tools controls
-        const screenshotButton = document.getElementById("screenshot-button") as HTMLButtonElement;
-        const exportButton = document.getElementById("export-button") as HTMLButtonElement;
+        const screenshotButton = document.getElementById(
+            "screenshot-button",
+        ) as HTMLButtonElement;
+        const exportButton = document.getElementById(
+            "export-button",
+        ) as HTMLButtonElement;
 
         if (screenshotButton) {
             screenshotButton.addEventListener("click", () => {
@@ -706,18 +750,18 @@ function initializeNormalMode(): void {
                     if (cy) {
                         // Take screenshot of the graph
                         const png64 = cy.png({
-                            output: 'base64uri',
-                            bg: 'white',
+                            output: "base64uri",
+                            bg: "white",
                             full: true,
-                            scale: 2
+                            scale: 2,
                         });
-                        
+
                         // Create download link
-                        const link = document.createElement('a');
+                        const link = document.createElement("a");
                         link.download = `plan-screenshot-${new Date().toISOString().slice(0, 10)}.png`;
                         link.href = png64;
                         link.click();
-                        
+
                         showStatus("Screenshot saved successfully!");
                     }
                 }
@@ -730,14 +774,16 @@ function initializeNormalMode(): void {
                 if (currentData) {
                     // Export plan data as JSON
                     const dataStr = JSON.stringify(currentData, null, 2);
-                    const dataBlob = new Blob([dataStr], {type: 'application/json'});
-                    
+                    const dataBlob = new Blob([dataStr], {
+                        type: "application/json",
+                    });
+
                     // Create download link
-                    const link = document.createElement('a');
+                    const link = document.createElement("a");
                     link.download = `plan-data-${new Date().toISOString().slice(0, 10)}.json`;
                     link.href = URL.createObjectURL(dataBlob);
                     link.click();
-                    
+
                     showStatus("Plan data exported successfully!");
                 }
             });
@@ -848,8 +894,12 @@ function initializeNormalMode(): void {
     }
 
     // Enhanced view mode toggle handlers
-    const viewModeDynamic = document.getElementById("view-mode-dynamic") as HTMLButtonElement;
-    const viewModeStatic = document.getElementById("view-mode-static") as HTMLButtonElement;
+    const viewModeDynamic = document.getElementById(
+        "view-mode-dynamic",
+    ) as HTMLButtonElement;
+    const viewModeStatic = document.getElementById(
+        "view-mode-static",
+    ) as HTMLButtonElement;
 
     function updateViewModeButtons(mode: string) {
         if (viewModeDynamic && viewModeStatic) {
@@ -859,40 +909,42 @@ function initializeNormalMode(): void {
     }
 
     if (viewModeDynamic) {
-        viewModeDynamic.addEventListener("click", function() {
+        viewModeDynamic.addEventListener("click", function () {
             if (currentViewMode !== "dynamic") {
                 currentViewMode = "dynamic";
                 updateViewModeButtons("dynamic");
                 updateDynamicControls();
                 loadData();
-                
+
                 // Reset path button state
-                const showPathButton = document.getElementById("show-path-button");
+                const showPathButton =
+                    document.getElementById("show-path-button");
                 if (showPathButton) {
                     showPathButton.classList.remove("active");
                     showPathButton.title = "Show Current Path";
                 }
-                
+
                 showStatus("Switched to dynamic plan view");
             }
         });
     }
 
     if (viewModeStatic) {
-        viewModeStatic.addEventListener("click", function() {
+        viewModeStatic.addEventListener("click", function () {
             if (currentViewMode !== "static") {
                 currentViewMode = "static";
                 updateViewModeButtons("static");
                 updateDynamicControls();
                 loadData();
-                
+
                 // Reset path button state
-                const showPathButton = document.getElementById("show-path-button");
+                const showPathButton =
+                    document.getElementById("show-path-button");
                 if (showPathButton) {
                     showPathButton.classList.remove("active");
                     showPathButton.title = "Show Current Path";
                 }
-                
+
                 showStatus("Switched to static plan view");
             }
         });

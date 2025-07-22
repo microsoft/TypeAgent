@@ -26,7 +26,9 @@
         <!-- Enhanced Header section -->
         <div class="plan-header">
           <div class="plan-info">
-            <h1 id="plan-title" class="plan-title">Dynamic Web Plan Visualizer</h1>
+            <h1 id="plan-title" class="plan-title">
+              Dynamic Web Plan Visualizer
+            </h1>
             <p
               id="plan-description"
               class="plan-description"
@@ -38,15 +40,17 @@
             <button id="view-mode-dynamic" class="view-toggle-btn active">
               <span class="toggle-label"><i class="fas fa-sitemap"></i></span>
             </button>
-            <button id="view-mode-static" class="view-toggle-btn"><span class="toggle-label"
+            <button id="view-mode-static" class="view-toggle-btn">
+              <span class="toggle-label"
                 ><i class="fas fa-project-diagram"></i
-              ></span></button>
+              ></span>
+            </button>
           </div>
 
           <div class="node-selector">
             <label for="node-select"
-                ><i class="fas fa-map-marker-alt"></i
-              ></label>
+              ><i class="fas fa-map-marker-alt"></i
+            ></label>
             <select id="node-select"></select>
           </div>
 
@@ -68,30 +72,84 @@
         <div class="main-content">
           <!-- Cytoscape container will resize both horizontally and vertically -->
           <div id="cy-container"></div>
-          
+
           <!-- Floating Controls - positioned outside cytoscape container -->
           <div class="plan-floating-controls">
             <!-- View & Navigation Group -->
             <div class="plan-control-group">
-              <button id="zoom-in-button" class="plan-control-btn" title="Zoom In">+</button>
-              <button id="zoom-out-button" class="plan-control-btn" title="Zoom Out">−</button>
-              <button id="zoom-fit-button" class="plan-control-btn" title="Fit to View">⤢</button>
-              <button id="center-button" class="plan-control-btn" title="Center Graph">⊙</button>
+              <button
+                id="zoom-in-button"
+                class="plan-control-btn"
+                title="Zoom In"
+              >
+                +
+              </button>
+              <button
+                id="zoom-out-button"
+                class="plan-control-btn"
+                title="Zoom Out"
+              >
+                −
+              </button>
+              <button
+                id="zoom-fit-button"
+                class="plan-control-btn"
+                title="Fit to View"
+              >
+                ⤢
+              </button>
+              <button
+                id="center-button"
+                class="plan-control-btn"
+                title="Center Graph"
+              >
+                ⊙
+              </button>
             </div>
-            
+
             <!-- Path & Selection Group -->
             <div class="plan-control-group">
-              <button id="show-path-button" class="plan-control-btn" title="Show/Hide Path"><i class="fas fa-route"></i></button>
-              <button id="go-to-current-button" class="plan-control-btn" title="Go to Current Node"><label for="node-select"
-                ><i class="fas fa-map-marker-alt"></i
-              ></label></button>
-              <button id="reset-view-button" class="plan-control-btn" title="Reset View">↻</button>
+              <button
+                id="show-path-button"
+                class="plan-control-btn"
+                title="Show/Hide Path"
+              >
+                <i class="fas fa-route"></i>
+              </button>
+              <button
+                id="go-to-current-button"
+                class="plan-control-btn"
+                title="Go to Current Node"
+              >
+                <label for="node-select"
+                  ><i class="fas fa-map-marker-alt"></i
+                ></label>
+              </button>
+              <button
+                id="reset-view-button"
+                class="plan-control-btn"
+                title="Reset View"
+              >
+                ↻
+              </button>
             </div>
-            
+
             <!-- Export & Tools Group -->
             <div class="plan-control-group">
-              <button id="screenshot-button" class="plan-control-btn" title="Screenshot">◉</button>
-              <button id="export-button" class="plan-control-btn" title="Export Data">↓</button>
+              <button
+                id="screenshot-button"
+                class="plan-control-btn"
+                title="Screenshot"
+              >
+                ◉
+              </button>
+              <button
+                id="export-button"
+                class="plan-control-btn"
+                title="Export Data"
+              >
+                ↓
+              </button>
             </div>
           </div>
         </div>
