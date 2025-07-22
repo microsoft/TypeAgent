@@ -72,17 +72,11 @@ async function initializeActionView(actionId: string): Promise<void> {
 }
 
 function hideUIControlsForActionView(): void {
-    // Hide toggle container
-    const toggleContainer = document.querySelector(".toggle-container");
-    if (toggleContainer) {
-        (toggleContainer as HTMLElement).style.display = "none";
+    // Hide view mode toggle
+    const viewModeToggle = document.querySelector(".view-mode-toggle");
+    if (viewModeToggle) {
+        (viewModeToggle as HTMLElement).style.display = "none";
     }
-
-    // Hide dynamic-only controls
-    const dynamicControls = document.querySelectorAll(".dynamic-only-control");
-    dynamicControls.forEach((control) => {
-        (control as HTMLElement).style.display = "none";
-    });
 
     // Hide node selector
     const nodeSelector = document.querySelector(".node-selector");
@@ -90,8 +84,13 @@ function hideUIControlsForActionView(): void {
         (nodeSelector as HTMLElement).style.display = "none";
     }
 
-    // Keep zoom fit and show path buttons visible as they're useful for action viewing
-    // These buttons should remain functional in action view mode
+    // Hide export/tools group in floating controls
+    const exportGroup = document.querySelector(".plan-floating-controls .plan-control-group:nth-child(3)");
+    if (exportGroup) {
+        (exportGroup as HTMLElement).style.display = "none";
+    }
+
+    // Keep essential floating controls visible (zoom, path controls)
 }
 
 function initializeActionVisualization(webPlanData: WebPlanData): void {
@@ -156,10 +155,28 @@ function setupActionViewEventListeners(
     visualizer: Visualizer,
     webPlanData: WebPlanData,
 ): void {
-    // Zoom fit button handler
-    const zoomFitButton = document.getElementById(
-        "zoom-fit-button",
-    ) as HTMLButtonElement;
+    // Zoom controls
+    const zoomInButton = document.getElementById("zoom-in-button") as HTMLButtonElement;
+    const zoomOutButton = document.getElementById("zoom-out-button") as HTMLButtonElement;
+    const zoomFitButton = document.getElementById("zoom-fit-button") as HTMLButtonElement;
+    const centerButton = document.getElementById("center-button") as HTMLButtonElement;
+
+    if (zoomInButton) {
+        zoomInButton.addEventListener("click", () => {
+            if (visualizer) {
+                visualizer.zoomIn();
+            }
+        });
+    }
+
+    if (zoomOutButton) {
+        zoomOutButton.addEventListener("click", () => {
+            if (visualizer) {
+                visualizer.zoomOut();
+            }
+        });
+    }
+
     if (zoomFitButton) {
         zoomFitButton.addEventListener("click", () => {
             if (visualizer) {
@@ -168,10 +185,19 @@ function setupActionViewEventListeners(
         });
     }
 
-    // Show path button handler
-    const showPathButton = document.getElementById(
-        "show-path-button",
-    ) as HTMLButtonElement;
+    if (centerButton) {
+        centerButton.addEventListener("click", () => {
+            if (visualizer) {
+                visualizer.centerGraph();
+            }
+        });
+    }
+
+    // Path and navigation controls
+    const showPathButton = document.getElementById("show-path-button") as HTMLButtonElement;
+    const goToCurrentButton = document.getElementById("go-to-current-button") as HTMLButtonElement;
+    const resetViewButton = document.getElementById("reset-view-button") as HTMLButtonElement;
+
     if (showPathButton) {
         showPathButton.addEventListener("click", () => {
             if (!visualizer) return;
@@ -180,14 +206,33 @@ function setupActionViewEventListeners(
                 if (webPlanData.currentNode) {
                     visualizer.highlightPath(webPlanData.currentNode);
                 }
-                // Update button state
                 showPathButton.classList.add("active");
                 showPathButton.title = "Reset Path View";
             } else {
                 visualizer.resetEdgeStyles();
-                // Update button state
                 showPathButton.classList.remove("active");
                 showPathButton.title = "Show Current Path";
+            }
+        });
+    }
+
+    if (goToCurrentButton) {
+        goToCurrentButton.addEventListener("click", () => {
+            if (visualizer && webPlanData.currentNode) {
+                visualizer.updateCurrentNode(webPlanData.currentNode);
+            }
+        });
+    }
+
+    if (resetViewButton) {
+        resetViewButton.addEventListener("click", () => {
+            if (visualizer) {
+                visualizer.fitToView();
+                visualizer.resetEdgeStyles();
+                if (showPathButton) {
+                    showPathButton.classList.remove("active");
+                    showPathButton.title = "Show Current Path";
+                }
             }
         });
     }
@@ -250,30 +295,18 @@ function initializeNormalMode(): void {
         title: "Dynamic Plan",
     };
     let visualizer: Visualizer | null = null;
+    let floatingControlsInitialized = false; // Track if floating controls are set up
 
     // DOM elements
     const cyContainer = document.getElementById("cy-container") as HTMLElement;
     const nodeSelect = document.getElementById(
         "node-select",
     ) as HTMLSelectElement;
-    const zoomFitButton = document.getElementById(
-        "zoom-fit-button",
-    ) as HTMLButtonElement;
-    const showPathButton = document.getElementById(
-        "show-path-button",
-    ) as HTMLButtonElement;
 
     const statusMessage = document.getElementById(
         "status-message",
     ) as HTMLDivElement;
     const tooltip = document.getElementById("tooltip") as HTMLDivElement;
-    const viewModeToggle = document.getElementById(
-        "view-mode-toggle",
-    ) as HTMLInputElement;
-
-    const dynamicOnlyControls = document.querySelectorAll(
-        ".dynamic-only-control",
-    );
 
     // Add application state for screenshot mode
     let currentBase64Screenshot: string | null = null;
@@ -305,15 +338,9 @@ function initializeNormalMode(): void {
     }
 
     function updateDynamicControls() {
-        const isDynamic = viewModeToggle.checked;
-
-        dynamicOnlyControls.forEach(function (element) {
-            if (isDynamic) {
-                element.classList.remove("hidden");
-            } else {
-                element.classList.add("hidden");
-            }
-        });
+        // Dynamic controls functionality can be managed through the view mode buttons
+        // The node selector and other dynamic-only controls are handled in the view mode toggle handlers
+        console.log(`Dynamic controls updated for ${currentViewMode} mode`);
     }
 
     /**
@@ -381,6 +408,12 @@ function initializeNormalMode(): void {
             }
 
             updateDynamicControls();
+
+            // Initialize floating controls only once
+            if (!floatingControlsInitialized) {
+                setupFloatingControlsEventHandlers(visualizer, webPlanData, null);
+                floatingControlsInitialized = true;
+            }
         } catch (error) {
             console.log(error);
             showStatus(
@@ -554,6 +587,164 @@ function initializeNormalMode(): void {
     }
 
     /**
+     * Set up floating controls event handlers
+     */
+    function setupFloatingControlsEventHandlers(
+        initialVisualizer: Visualizer | null, 
+        initialWebPlanData: WebPlanData,
+        showPathButton: HTMLButtonElement | null
+    ): void {
+        // Function to get current visualizer (handles updates)
+        const getCurrentVisualizer = () => visualizer;
+        const getCurrentWebPlanData = () => webPlanData;
+
+        // Zoom controls
+        const zoomInButton = document.getElementById("zoom-in-button") as HTMLButtonElement;
+        const zoomOutButton = document.getElementById("zoom-out-button") as HTMLButtonElement;
+        const zoomFitButton = document.getElementById("zoom-fit-button") as HTMLButtonElement;
+        const centerButton = document.getElementById("center-button") as HTMLButtonElement;
+
+        if (zoomInButton) {
+            zoomInButton.addEventListener("click", () => {
+                const currentVisualizer = getCurrentVisualizer();
+                if (currentVisualizer) {
+                    currentVisualizer.zoomIn();
+                }
+            });
+        }
+
+        if (zoomOutButton) {
+            zoomOutButton.addEventListener("click", () => {
+                const currentVisualizer = getCurrentVisualizer();
+                if (currentVisualizer) {
+                    currentVisualizer.zoomOut();
+                }
+            });
+        }
+
+        if (zoomFitButton) {
+            zoomFitButton.addEventListener("click", () => {
+                const currentVisualizer = getCurrentVisualizer();
+                if (currentVisualizer) {
+                    currentVisualizer.fitToView();
+                }
+            });
+        }
+
+        if (centerButton) {
+            centerButton.addEventListener("click", () => {
+                const currentVisualizer = getCurrentVisualizer();
+                if (currentVisualizer) {
+                    currentVisualizer.centerGraph();
+                }
+            });
+        }
+
+        // Path and navigation controls
+        const showPathButtonFloating = document.getElementById("show-path-button") as HTMLButtonElement;
+        const goToCurrentButton = document.getElementById("go-to-current-button") as HTMLButtonElement;
+        const resetViewButton = document.getElementById("reset-view-button") as HTMLButtonElement;
+
+        if (showPathButtonFloating) {
+            showPathButtonFloating.addEventListener("click", () => {
+                const currentVisualizer = getCurrentVisualizer();
+                const currentData = getCurrentWebPlanData();
+                if (!currentVisualizer) return;
+
+                if (!currentVisualizer.pathHighlighted) {
+                    if (currentData.currentNode) {
+                        currentVisualizer.highlightPath(currentData.currentNode);
+                    }
+                    showPathButtonFloating.classList.add("active");
+                    showPathButtonFloating.title = "Reset Path View";
+                } else {
+                    currentVisualizer.resetEdgeStyles();
+                    showPathButtonFloating.classList.remove("active");
+                    showPathButtonFloating.title = "Show Current Path";
+                }
+            });
+        }
+
+        if (goToCurrentButton) {
+            goToCurrentButton.addEventListener("click", () => {
+                const currentVisualizer = getCurrentVisualizer();
+                const currentData = getCurrentWebPlanData();
+                if (currentVisualizer && currentData.currentNode) {
+                    currentVisualizer.updateCurrentNode(currentData.currentNode);
+                    // Update node selector to match
+                    const nodeSelect = document.getElementById("node-select") as HTMLSelectElement;
+                    if (nodeSelect) {
+                        nodeSelect.value = currentData.currentNode;
+                    }
+                }
+            });
+        }
+
+        if (resetViewButton) {
+            resetViewButton.addEventListener("click", () => {
+                const currentVisualizer = getCurrentVisualizer();
+                if (currentVisualizer) {
+                    currentVisualizer.fitToView();
+                    currentVisualizer.resetEdgeStyles();
+                    if (showPathButtonFloating) {
+                        showPathButtonFloating.classList.remove("active");
+                        showPathButtonFloating.title = "Show Current Path";
+                    }
+                }
+            });
+        }
+
+        // Export and tools controls
+        const screenshotButton = document.getElementById("screenshot-button") as HTMLButtonElement;
+        const exportButton = document.getElementById("export-button") as HTMLButtonElement;
+
+        if (screenshotButton) {
+            screenshotButton.addEventListener("click", () => {
+                const currentVisualizer = getCurrentVisualizer();
+                if (currentVisualizer) {
+                    const cy = currentVisualizer.getCytoscape();
+                    if (cy) {
+                        // Take screenshot of the graph
+                        const png64 = cy.png({
+                            output: 'base64uri',
+                            bg: 'white',
+                            full: true,
+                            scale: 2
+                        });
+                        
+                        // Create download link
+                        const link = document.createElement('a');
+                        link.download = `plan-screenshot-${new Date().toISOString().slice(0, 10)}.png`;
+                        link.href = png64;
+                        link.click();
+                        
+                        showStatus("Screenshot saved successfully!");
+                    }
+                }
+            });
+        }
+
+        if (exportButton) {
+            exportButton.addEventListener("click", () => {
+                const currentData = getCurrentWebPlanData();
+                if (currentData) {
+                    // Export plan data as JSON
+                    const dataStr = JSON.stringify(currentData, null, 2);
+                    const dataBlob = new Blob([dataStr], {type: 'application/json'});
+                    
+                    // Create download link
+                    const link = document.createElement('a');
+                    link.download = `plan-data-${new Date().toISOString().slice(0, 10)}.json`;
+                    link.href = URL.createObjectURL(dataBlob);
+                    link.click();
+                    
+                    showStatus("Plan data exported successfully!");
+                }
+            });
+        }
+    }
+
+    /**
      * Set up all event listeners for the screenshot upload functionality
      */
     function setupScreenshotEventListeners(): void {
@@ -656,21 +847,54 @@ function initializeNormalMode(): void {
         console.log("Screenshot event listeners setup complete");
     }
 
-    // Toggle view mode
-    if (viewModeToggle) {
-        viewModeToggle.addEventListener("change", function () {
-            updateDynamicControls();
+    // Enhanced view mode toggle handlers
+    const viewModeDynamic = document.getElementById("view-mode-dynamic") as HTMLButtonElement;
+    const viewModeStatic = document.getElementById("view-mode-static") as HTMLButtonElement;
 
-            currentViewMode = this.checked ? "dynamic" : "static";
-            loadData();
+    function updateViewModeButtons(mode: string) {
+        if (viewModeDynamic && viewModeStatic) {
+            viewModeDynamic.classList.toggle("active", mode === "dynamic");
+            viewModeStatic.classList.toggle("active", mode === "static");
+        }
+    }
 
-            // Update show path button - using icon now
-            showPathButton.classList.remove("active");
-            showPathButton.innerHTML = '<i class="fas fa-route"></i>';
-            showPathButton.title = "Show Current Path";
+    if (viewModeDynamic) {
+        viewModeDynamic.addEventListener("click", function() {
+            if (currentViewMode !== "dynamic") {
+                currentViewMode = "dynamic";
+                updateViewModeButtons("dynamic");
+                updateDynamicControls();
+                loadData();
+                
+                // Reset path button state
+                const showPathButton = document.getElementById("show-path-button");
+                if (showPathButton) {
+                    showPathButton.classList.remove("active");
+                    showPathButton.title = "Show Current Path";
+                }
+                
+                showStatus("Switched to dynamic plan view");
+            }
+        });
+    }
 
-            // Show a status message
-            showStatus(`Switched to ${currentViewMode} plan view`);
+    if (viewModeStatic) {
+        viewModeStatic.addEventListener("click", function() {
+            if (currentViewMode !== "static") {
+                currentViewMode = "static";
+                updateViewModeButtons("static");
+                updateDynamicControls();
+                loadData();
+                
+                // Reset path button state
+                const showPathButton = document.getElementById("show-path-button");
+                if (showPathButton) {
+                    showPathButton.classList.remove("active");
+                    showPathButton.title = "Show Current Path";
+                }
+                
+                showStatus("Switched to static plan view");
+            }
         });
     }
 
@@ -681,38 +905,6 @@ function initializeNormalMode(): void {
                 visualizer.updateCurrentNode(
                     (e.target as HTMLSelectElement).value,
                 );
-            }
-        });
-    }
-
-    // Zoom fit button handler
-    if (zoomFitButton) {
-        zoomFitButton.addEventListener("click", () => {
-            if (visualizer) {
-                visualizer.fitToView();
-            }
-        });
-    }
-
-    // Show path button handler
-    if (showPathButton) {
-        showPathButton.addEventListener("click", () => {
-            if (!visualizer) return;
-
-            if (!visualizer.pathHighlighted) {
-                if (webPlanData.currentNode) {
-                    visualizer.highlightPath(webPlanData.currentNode);
-                }
-                // Update only the icon instead of the text
-                showPathButton.classList.add("active");
-                showPathButton.innerHTML = '<i class="fas fa-route"></i>';
-                showPathButton.title = "Reset Path View";
-            } else {
-                visualizer.resetEdgeStyles();
-                // Update only the icon instead of the text
-                showPathButton.classList.remove("active");
-                showPathButton.innerHTML = '<i class="fas fa-route"></i>';
-                showPathButton.title = "Show Current Path";
             }
         });
     }
