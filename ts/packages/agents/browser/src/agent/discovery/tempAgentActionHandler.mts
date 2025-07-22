@@ -88,26 +88,24 @@ export function createTempAgentForSchema(
         const url = await getSessionBrowserControl(context).getPageUrl();
         const agentContext = context.agentContext;
 
-        if (!agentContext.actionsStore) {
+        if (!agentContext.macrosStore) {
             throw new Error("ActionsStore not available for temp agent");
         }
 
-        const allActions = await agentContext.actionsStore.getActionsForUrl(
-            url!,
-        );
+        const allActions = await agentContext.macrosStore.getMacrosForUrl(url!);
 
         // Filter for user-authored actions only
         const userActions = allActions.filter(
-            (action) => action.author === "user",
+            (action: any) => action.author === "user",
         );
 
         const intentJson = new Map<string, RecordedUserIntent>();
         const actionsJson = new Map<string, PageActionsPlan>();
 
-        for (const storedAction of userActions) {
-            if (storedAction.definition.intentJson) {
+        for (const storedMacro of userActions) {
+            if (storedMacro.definition.intentJson) {
                 // Convert from StoredUserIntent to RecordedUserIntent
-                const storedIntent = storedAction.definition
+                const storedIntent = storedMacro.definition
                     .intentJson as StoredUserIntent;
                 const recordedIntent: RecordedUserIntent = {
                     actionName: storedIntent.actionName,
@@ -121,17 +119,17 @@ export function createTempAgentForSchema(
                         required: param.required,
                     })),
                 };
-                intentJson.set(storedAction.name, recordedIntent);
+                intentJson.set(storedMacro.name, recordedIntent);
             }
-            if (storedAction.definition.actionSteps) {
-                // Convert ActionStep[] to PageActionsPlan format
+            if (storedMacro.definition.macroSteps) {
+                // Convert MacroStep[] to PageActionsPlan format
                 const actionPlan: PageActionsPlan = {
-                    planName: storedAction.name,
-                    description: storedAction.description,
-                    intentSchemaName: storedAction.name,
-                    steps: storedAction.definition.actionSteps as any, // Type conversion needed here
+                    planName: storedMacro.name,
+                    description: storedMacro.description,
+                    intentSchemaName: storedMacro.name,
+                    steps: storedMacro.definition.macroSteps as any, // Type conversion needed here
                 };
-                actionsJson.set(storedAction.name, actionPlan);
+                actionsJson.set(storedMacro.name, actionPlan);
             }
         }
 

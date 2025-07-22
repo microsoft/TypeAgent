@@ -6,7 +6,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Action Library - TypeAgent</title>
+    <title>Macro Library - TypeAgent</title>
     <link rel="stylesheet" href="../vendor/bootstrap/bootstrap.min.css" />
     <link rel="stylesheet" href="../vendor/prism/prism.css" />
     <link
@@ -236,16 +236,16 @@
         margin-top: 0.25rem;
       }
 
-      /* Action Grid Layout */
-      .actions-grid {
+      /* Macro Grid Layout */
+      .macros-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
         gap: 1.5rem;
         margin-bottom: 2rem;
       }
 
-      /* Action Cards */
-      .action-card {
+      /* Macro Cards */
+      .macro-card {
         background: white;
         border: 1px solid var(--border-color);
         border-radius: 0.75rem;
@@ -255,20 +255,20 @@
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
       }
 
-      .action-card:hover {
+      .macro-card:hover {
         border-color: var(--primary-color);
         box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
         transform: translateY(-2px);
       }
 
-      .action-card-header {
+      .macro-card-header {
         display: flex;
         justify-content: space-between;
         align-items: flex-start;
         margin-bottom: 1rem;
       }
 
-      .action-title {
+      .macro-title {
         font-size: 1rem;
         font-weight: 600;
         color: var(--dark-color);
@@ -276,7 +276,7 @@
         line-height: 1.4;
       }
 
-      .action-description {
+      .macro-description {
         color: var(--secondary-color);
         font-size: 0.875rem;
         line-height: 1.5;
@@ -287,7 +287,7 @@
         overflow: hidden;
       }
 
-      .action-meta {
+      .macro-meta {
         display: flex;
         flex-wrap: wrap;
         gap: 0.5rem;
@@ -295,13 +295,13 @@
         margin-bottom: 1rem;
       }
 
-      .action-controls {
+      .macro-controls {
         display: flex;
         gap: 0.5rem;
         align-items: flex-start;
       }
 
-      .action-controls button {
+      .macro-controls button {
         padding: 0.5rem;
         border: 1px solid var(--border-color);
         border-radius: 0.375rem;
@@ -312,7 +312,7 @@
         font-size: 0.875rem;
       }
 
-      .action-controls button:hover {
+      .macro-controls button:hover {
         border-color: var(--primary-color);
         color: var(--primary-color);
         background: rgba(37, 99, 235, 0.05);
@@ -445,7 +445,7 @@
 
       /* Responsive Design */
       @media (max-width: 1200px) {
-        .actions-grid {
+        .macros-grid {
           grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
           gap: 1rem;
         }
@@ -477,7 +477,7 @@
           margin-right: 1rem;
         }
 
-        .actions-grid {
+        .macros-grid {
           grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
         }
       }
@@ -491,20 +491,20 @@
           max-width: 200px;
         }
 
-        .actions-grid {
+        .macros-grid {
           grid-template-columns: 1fr;
         }
 
-        .action-card {
+        .macro-card {
           padding: 1rem;
         }
 
-        .action-card-header {
+        .macro-card-header {
           flex-direction: column;
           gap: 1rem;
         }
 
-        .action-controls {
+        .macro-controls {
           align-self: flex-start;
         }
       }
@@ -558,7 +558,7 @@
       }
 
       /* Action View Modal Styles */
-      .action-view-iframe {
+      .macro-view-iframe {
         width: 100%;
         height: 100%;
         border: none;
@@ -585,16 +585,16 @@
       }
 
       /* Action View Modal - Hide header for iframe-only display */
-      .action-view-modal .modal-header {
+      .macro-view-modal .modal-header {
         display: none !important;
       }
 
-      .action-view-modal .modal-body {
+      .macro-view-modal .modal-body {
         height: 100vh !important;
         max-height: 100vh !important;
       }
 
-      .action-view-modal .modal-content {
+      .macro-view-modal .modal-content {
         height: 100vh !important;
         max-height: 100vh !important;
       }
@@ -606,7 +606,7 @@
       <nav class="top-navigation">
         <div class="brand">
           <i class="bi bi-collection-fill"></i>
-          Action Library
+          Macros Library
         </div>
 
         <div class="search-container">
@@ -679,7 +679,7 @@
         <div id="bulkOperationsContainer" class="bulk-operations">
           <div class="bulk-operations-content">
             <div class="bulk-info">
-              <strong id="selectedActionsCount">0</strong> action(s) selected
+              <strong id="selectedMacrosCount">0</strong> macro(s) selected
             </div>
             <div class="bulk-controls">
               <button id="selectAllBtn" title="Select all visible actions">
@@ -695,7 +695,7 @@
               <button
                 id="bulkDeleteBtn"
                 class="btn-danger"
-                title="Delete selected actions"
+                title="Delete selected macros"
                 style="display: none"
               >
                 <i class="bi bi-trash"></i> Delete Selected
@@ -704,19 +704,19 @@
           </div>
         </div>
 
-        <!-- Actions Container -->
-        <div id="actionsContainer">
+        <!-- Macros Container -->
+        <div id="macrosContainer">
           <!-- Loading state -->
           <div class="loading-state">
             <div class="spinner"></div>
-            <h6>Loading Actions</h6>
-            <p>Please wait while we load your action library...</p>
+            <h6>Loading Macros</h6>
+            <p>Please wait while we load your macro library...</p>
           </div>
         </div>
       </main>
     </div>
 
-    <!-- Action Details Modal -->
+    <!-- Macro Details Modal -->
     <div class="modal fade" id="actionDetailsModal" tabindex="-1">
       <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content">
@@ -742,7 +742,7 @@
     </div>
 
     <!-- Scripts -->
-    <script src="actionsLibrary.js"></script>
+    <script src="macrosLibrary.js"></script>
     <script src="../vendor/bootstrap/bootstrap.bundle.min.js"></script>
     <script src="../vendor/prism/prism.js"></script>
     <script src="../vendor/prism/prism-typescript.js"></script>

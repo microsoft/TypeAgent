@@ -1,34 +1,34 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export interface StoredAction {
+export interface StoredMacro {
     id: string;
     name: string;
     description?: string;
     author: "user" | "discovered";
     scope?: { pattern: string };
     urlPattern?: string;
-    definition?: ActionDefinition;
-    steps?: ActionStep[];
+    definition?: MacroDefinition;
+    steps?: MacroStep[];
     screenshot?: string[];
     html?: string[];
 }
 
-export interface ActionDefinition {
+export interface MacroDefinition {
     intentSchema?: string;
-    actionsJson?: any;
+    macrosJson?: any;
     screenshot?: string[];
     htmlFragments?: string[];
-    steps?: string | ActionStep[];
+    steps?: string | MacroStep[];
 }
 
-export interface ActionStep {
+export interface MacroStep {
     type: string;
     timestamp: number;
     [key: string]: any;
 }
 
-export interface ActionQueryOptions {
+export interface MacroQueryOptions {
     includeGlobal?: boolean;
     author?: "discovered" | "user";
 }
@@ -61,24 +61,24 @@ export interface ModalButton {
     handler?: () => void;
 }
 
-export interface DeleteActionResult {
+export interface DeleteMacroResult {
     success: boolean;
     error?: string;
-    actionId: string;
+    macroId: string;
 }
 
 export interface BulkDeleteResult {
     successCount: number;
     errorCount: number;
-    errors: Array<{ actionId: string; error: string }>;
+    errors: Array<{ macroId: string; error: string }>;
 }
 
 export interface ActionStats {
-    totalActions: number;
-    actions: StoredAction[];
+    totalMacros: number;
+    macros: StoredMacro[];
 }
 
-export type ActionCategory =
+export type MacroCategory =
     | "Search"
     | "Authentication"
     | "Form Interaction"
@@ -88,13 +88,13 @@ export type ActionCategory =
     | "Other";
 export type NotificationType = "success" | "error" | "warning" | "info";
 
-export async function getActionsForUrl(
+export async function getMacrosForUrl(
     url: string,
-    options: ActionQueryOptions = {},
-): Promise<StoredAction[]> {
+    options: MacroQueryOptions = {},
+): Promise<StoredMacro[]> {
     try {
         const response = await chrome.runtime.sendMessage({
-            type: "getActionsForUrl",
+            type: "getMacrosForUrl",
             url: url,
             includeGlobal: options.includeGlobal ?? true,
             author: options.author,
@@ -102,62 +102,60 @@ export async function getActionsForUrl(
 
         return response?.actions || [];
     } catch (error) {
-        console.error("Failed to get actions for URL:", error);
+        console.error("Failed to get macros for URL:", error);
         return [];
     }
 }
 
-export async function getAllActions(): Promise<StoredAction[]> {
+export async function getAllMacros(): Promise<StoredMacro[]> {
     try {
         const response = await chrome.runtime.sendMessage({
-            type: "getAllActions",
+            type: "getAllMacros",
         });
 
         return response?.actions || [];
     } catch (error) {
-        console.error("Failed to get all actions:", error);
+        console.error("Failed to get all macros:", error);
         return [];
     }
 }
 
-export async function getActionDomains(): Promise<string[]> {
+export async function getMacroDomains(): Promise<string[]> {
     try {
         const response = await chrome.runtime.sendMessage({
-            type: "getActionDomains",
+            type: "getMacroDomains",
         });
 
         return response?.domains || [];
     } catch (error) {
-        console.error("Failed to get action domains:", error);
+        console.error("Failed to get macro domains:", error);
         return [];
     }
 }
-export async function deleteAction(
-    actionId: string,
-): Promise<DeleteActionResult> {
+export async function deleteMacro(macroId: string): Promise<DeleteMacroResult> {
     try {
         const response = await chrome.runtime.sendMessage({
-            type: "deleteAction",
-            actionId: actionId,
+            type: "deleteMacro",
+            macroId: macroId,
         });
 
         return {
             success: response?.success || false,
             error: response?.error,
-            actionId: actionId,
+            macroId: macroId,
         };
     } catch (error) {
-        console.error("Failed to delete action:", error);
+        console.error("Failed to delete macro:", error);
         return {
             success: false,
             error: error instanceof Error ? error.message : "Unknown error",
-            actionId: actionId,
+            macroId: macroId,
         };
     }
 }
 
-export async function deleteMultipleActions(
-    actionIds: string[],
+export async function deleteMultipleMacros(
+    macroIds: string[],
 ): Promise<BulkDeleteResult> {
     const result: BulkDeleteResult = {
         successCount: 0,
@@ -165,14 +163,14 @@ export async function deleteMultipleActions(
         errors: [],
     };
 
-    for (const actionId of actionIds) {
-        const deleteResult = await deleteAction(actionId);
+    for (const macroId of macroIds) {
+        const deleteResult = await deleteMacro(macroId);
         if (deleteResult.success) {
             result.successCount++;
         } else {
             result.errorCount++;
             result.errors.push({
-                actionId,
+                macroId,
                 error: deleteResult.error || "Unknown error",
             });
         }
@@ -181,20 +179,20 @@ export async function deleteMultipleActions(
     return result;
 }
 
-export function filterActions(
-    actions: StoredAction[],
+export function filterMacros(
+    macros: StoredMacro[],
     options: FilterOptions,
-): StoredAction[] {
-    let filtered = [...actions];
+): StoredMacro[] {
+    let filtered = [...macros];
 
     if (options.searchQuery) {
         const query = options.searchQuery.toLowerCase();
-        filtered = filtered.filter((action) => {
-            const nameMatch = action.name.toLowerCase().includes(query);
+        filtered = filtered.filter((macro) => {
+            const nameMatch = macro.name.toLowerCase().includes(query);
             const descMatch =
-                action.description &&
-                action.description.toLowerCase().includes(query);
-            const domain = extractDomain(action);
+                macro.description &&
+                macro.description.toLowerCase().includes(query);
+            const domain = extractDomain(macro);
             const domainMatch = domain && domain.toLowerCase().includes(query);
 
             return nameMatch || descMatch || domainMatch;
@@ -202,21 +200,19 @@ export function filterActions(
     }
 
     if (options.author && options.author !== "all") {
-        filtered = filtered.filter(
-            (action) => action.author === options.author,
-        );
+        filtered = filtered.filter((macro) => macro.author === options.author);
     }
 
     if (options.domain && options.domain !== "all") {
-        filtered = filtered.filter((action) => {
-            const domain = extractDomain(action);
+        filtered = filtered.filter((macro) => {
+            const domain = extractDomain(macro);
             return domain === options.domain;
         });
     }
 
     if (options.category && options.category !== "all") {
-        filtered = filtered.filter((action) => {
-            const category = categorizeAction(action);
+        filtered = filtered.filter((macro) => {
+            const category = categorizeMacro(macro);
             return category === options.category;
         });
     }
@@ -297,8 +293,8 @@ export function showErrorState(container: HTMLElement, message: string): void {
         </div>
     `;
 }
-export function extractDomain(action: StoredAction): string | null {
-    const pattern = action.scope?.pattern || action.urlPattern;
+export function extractDomain(macro: StoredMacro): string | null {
+    const pattern = macro.scope?.pattern || macro.urlPattern;
     if (pattern) {
         try {
             return new URL(pattern).hostname;
@@ -345,8 +341,8 @@ export function getDomainFromUrl(url: string): string | null {
     }
 }
 
-export function categorizeAction(action: StoredAction): ActionCategory {
-    const text = `${action.name} ${action.description || ""}`.toLowerCase();
+export function categorizeMacro(macro: StoredMacro): MacroCategory {
+    const text = `${macro.name} ${macro.description || ""}`.toLowerCase();
 
     if (text.includes("search") || text.includes("find")) return "Search";
     if (
@@ -384,17 +380,17 @@ export function categorizeAction(action: StoredAction): ActionCategory {
     return "Other";
 }
 
-export function groupActionsByDomain(
-    actions: StoredAction[],
-): Map<string, StoredAction[]> {
-    const grouped = new Map<string, StoredAction[]>();
+export function groupMacrosByDomain(
+    macros: StoredMacro[],
+): Map<string, StoredMacro[]> {
+    const grouped = new Map<string, StoredMacro[]>();
 
-    actions.forEach((action) => {
-        const domain = extractDomain(action) || "unknown";
+    macros.forEach((macro) => {
+        const domain = extractDomain(macro) || "unknown";
         if (!grouped.has(domain)) {
             grouped.set(domain, []);
         }
-        grouped.get(domain)!.push(action);
+        grouped.get(domain)!.push(macro);
     });
 
     return grouped;
@@ -451,11 +447,11 @@ export function createButton(
     return `<button class="${classes}" ${attrs}>${text}</button>`;
 }
 
-export function extractCategories(actions: StoredAction[]): string[] {
+export function extractCategories(macros: StoredMacro[]): string[] {
     const categories = new Set<string>();
 
-    actions.forEach((action) => {
-        categories.add(categorizeAction(action));
+    macros.forEach((macro) => {
+        categories.add(categorizeMacro(macro));
     });
 
     return Array.from(categories).sort();

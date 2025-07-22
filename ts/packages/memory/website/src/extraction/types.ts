@@ -32,7 +32,7 @@ export type ExtractionMode =
     | "basic"
     | "summary"
     | "content"
-    | "actions"
+    | "macros"
     | "full";
 
 /**
@@ -115,8 +115,8 @@ export const EXTRACTION_MODE_CONFIGS: Record<
         defaultQualityThreshold: 0.3,
         defaultConcurrentExtractions: 5,
     },
-    actions: {
-        description: "Content + action detection with AI knowledge processing",
+    macros: {
+        description: "Content + macros detection with AI knowledge processing",
         usesAI: true,
         extractsActions: true,
         extractsRelationships: false,

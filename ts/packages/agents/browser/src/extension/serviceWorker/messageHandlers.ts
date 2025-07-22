@@ -86,7 +86,7 @@ export async function handleMessage(
                 const currentTab = await getActiveTab();
                 if (currentTab?.url) {
                     const actionsResult = await sendActionToAgent({
-                        actionName: "getActionsForUrl",
+                        actionName: "getMacrosForUrl",
                         parameters: {
                             url: currentTab.url,
                             includeGlobal: true,
@@ -99,6 +99,11 @@ export async function handleMessage(
                     ) {
                         console.log(
                             `Found ${actionsResult.actions.length} actions for schema registration from ActionsStore`,
+                        );
+
+                        console.log(
+                            "Actions for schema registration:",
+                            actionsResult.actions,
                         );
                     }
                 }
@@ -140,9 +145,9 @@ export async function handleMessage(
                 actionId: schemaResult.actionId, // For UI feedback
             };
         }
-        case "getActionsForUrl": {
+        case "getMacrosForUrl": {
             const result = await sendActionToAgent({
-                actionName: "getActionsForUrl",
+                actionName: "getMacrosForUrl",
                 parameters: {
                     url: message.url,
                     includeGlobal: message.includeGlobal ?? true,
@@ -567,18 +572,18 @@ export async function handleMessage(
             return await handleCheckIndexStatus();
         }
 
-        case "deleteAction": {
-            // Handler for deleting actions from the ActionsStore
+        case "deleteMacro": {
+            // Handler for deleting macros from the MacroStore
             try {
                 const result = await sendActionToAgent({
-                    actionName: "deleteAction",
+                    actionName: "deleteMacro",
                     parameters: {
-                        actionId: message.actionId,
+                        macroId: message.macroId,
                     },
                 });
                 return result;
             } catch (error) {
-                console.error("Failed to delete action:", error);
+                console.error("Failed to delete macro:", error);
                 return {
                     success: false,
                     error:
@@ -588,10 +593,10 @@ export async function handleMessage(
                 };
             }
         }
-        case "getAllActions": {
+        case "getAllMacros": {
             try {
                 const result = await sendActionToAgent({
-                    actionName: "getActionsForUrl",
+                    actionName: "getMacrosForUrl",
                     parameters: {
                         url: null,
                         includeGlobal: true,
@@ -615,25 +620,6 @@ export async function handleMessage(
             } catch (error) {
                 console.error("Error getting action domains:", error);
                 return { domains: [] };
-            }
-        }
-        case "deleteAction": {
-            try {
-                const result = await sendActionToAgent({
-                    actionName: "deleteAction",
-                    parameters: {
-                        actionId: message.actionId,
-                    },
-                });
-
-                return { success: result.success, error: result.error };
-            } catch (error) {
-                console.error("Error deleting action:", error);
-                return {
-                    success: false,
-                    error:
-                        error instanceof Error ? error.message : String(error),
-                };
             }
         }
 
