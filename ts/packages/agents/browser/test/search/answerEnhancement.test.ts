@@ -175,36 +175,36 @@ describe("Answer Enhancement - Complete Unified System", () => {
             // This simulates the actual AnswerEnhancement JSON response
             const llmResponse: AnswerEnhancement = {
                 summary: {
-                    text: "Found 3 articles about Elon Musk's acquisition of Twitter, primarily from tech news sources. Coverage focuses on the business implications and timeline of the acquisition.",
+                    text: "Found 3 articles about Microsoft's acquisition of LinkedIn, primarily from tech news sources. Coverage focuses on the business implications and timeline of the acquisition.",
                     keyFindings: [
                         "Business-focused coverage dominates the discussion",
                         "Timeline and acquisition process well documented",
-                        "Impact on social media landscape emphasized",
+                        "Impact on professional networking landscape emphasized",
                     ],
                     statistics: {
                         totalResults: 3,
-                        timeSpan: "2021-2022",
+                        timeSpan: "2015-2016",
                         dominantDomains: ["techcrunch.com", "reuters.com"],
                     },
                     confidence: 0.89,
                 },
                 followups: [
                     {
-                        query: "Show me all discussions about Elon Musk's acquisition of Twitter from 2020 onwards",
+                        query: "Show me all discussions about Microsoft's acquisition of LinkedIn from 2015 onwards",
                         reasoning:
                             "User is interested in the acquisition, expand timeframe to recent years",
                         type: "temporal",
                         confidence: 0.87,
                     },
                     {
-                        query: "Find articles or blog posts about Elon Musk's impact on Twitter",
+                        query: "Find articles or blog posts about Microsoft's impact on LinkedIn",
                         reasoning:
-                            "User is interested in Elon Musk's activities, explore his influence on Twitter",
+                            "User is interested in Microsoft's activities, explore their influence on LinkedIn",
                         type: "content",
                         confidence: 0.85,
                     },
                     {
-                        query: "Compare Elon Musk's acquisition of Twitter with other major tech acquisitions",
+                        query: "Compare Microsoft's acquisition of LinkedIn with other major tech acquisitions",
                         reasoning:
                             "User might want to understand how this acquisition compares to others in the tech industry",
                         type: "comparative",

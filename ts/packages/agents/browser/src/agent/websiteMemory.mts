@@ -419,6 +419,25 @@ export async function importWebsiteDataFromSession(
             await context.agentContext.websiteCollection.buildIndex();
         }
 
+        // Update entity graph with new websites using entity processing service
+        try {
+            debug("Processing entities for imported websites...");
+            const { getEntityProcessingService } = await import(
+                "./knowledge/entityProcessingService.mjs"
+            );
+            const entityProcessor = getEntityProcessingService();
+            await entityProcessor.processWebsites(
+                websites,
+                context.agentContext.websiteCollection,
+            );
+            debug(
+                `Entity processing completed for ${websites.length} websites`,
+            );
+        } catch (error) {
+            debug("Entity processing failed:", error);
+            // Don't fail the import if entity processing fails
+        }
+
         // Persist the website collection to disk
         try {
             if (context.agentContext.index?.path) {
@@ -744,6 +763,25 @@ export async function importHtmlFolderFromSession(
                     `Incremental indexing failed, falling back to full rebuild: ${error}`,
                 );
                 await context.agentContext.websiteCollection.buildIndex();
+            }
+
+            // Process entities for imported HTML files
+            try {
+                debug("Processing entities for imported HTML files...");
+                const { getEntityProcessingService } = await import(
+                    "./knowledge/entityProcessingService.mjs"
+                );
+                const entityProcessor = getEntityProcessingService();
+                await entityProcessor.processWebsites(
+                    websites,
+                    context.agentContext.websiteCollection,
+                );
+                debug(
+                    `Entity processing completed for ${websites.length} HTML files`,
+                );
+            } catch (error) {
+                debug("Entity processing failed:", error);
+                // Don't fail the import if entity processing fails
             }
 
             try {

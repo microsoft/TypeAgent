@@ -538,7 +538,7 @@ export class KnowledgeAnalyticsPanel {
             .slice(0, 10)
             .map(
                 (entity) => `
-            <div class="entity-pill">
+            <div class="entity-pill clickable" data-entity-name="${this.escapeHtml(entity.name || "Unknown Entity")}" title="Click to view in Entity Graph">
                 <div class="pill-icon">
                     <i class="bi bi-diagram-2"></i>
                 </div>
@@ -552,6 +552,19 @@ export class KnowledgeAnalyticsPanel {
             .join("");
 
         container.innerHTML = entitiesHtml;
+
+        // Add click handlers for entity navigation
+        container.querySelectorAll(".entity-pill.clickable").forEach((pill) => {
+            pill.addEventListener("click", (e) => {
+                const entityName = (
+                    e.currentTarget as HTMLElement
+                ).getAttribute("data-entity-name");
+                if (entityName) {
+                    // Navigate to entity graph view with the selected entity
+                    window.location.href = `entityGraphView.html?entity=${encodeURIComponent(entityName)}`;
+                }
+            });
+        });
     }
 
     private updateRecentTopicsDisplay(recentTopics: any[]): void {

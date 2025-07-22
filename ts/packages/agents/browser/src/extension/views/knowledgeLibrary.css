@@ -2044,6 +2044,44 @@ body {
   margin-top: 0.125rem;
 }
 
+/* Enhanced styles for clickable entity pills */
+.entity-pill.clickable {
+  position: relative;
+  cursor: pointer;
+  user-select: none;
+}
+
+.entity-pill.clickable:hover {
+  background: linear-gradient(135deg, #e1e7ff 0%, #d4dcff 100%);
+  border-color: rgba(23, 162, 184, 0.4);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(23, 162, 184, 0.2);
+}
+
+.entity-pill.clickable:active {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(23, 162, 184, 0.15);
+}
+
+.entity-pill.clickable::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 0.5rem;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-left: 4px solid #17a2b8;
+  border-top: 3px solid transparent;
+  border-bottom: 3px solid transparent;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.entity-pill.clickable:hover::after {
+  opacity: 0.6;
+}
+
 /* Topic Pills */
 .topic-pill {
   display: flex;

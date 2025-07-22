@@ -1,0 +1,326 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Entity Graph - TypeAgent Browser</title>
+    <link rel="stylesheet" href="../vendor/bootstrap/bootstrap.min.css" />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css"
+      rel="stylesheet"
+    />
+    <script src="../vendor/cytoscape/cytoscape.min.js"></script>
+    <script src="../vendor/dagre/dagre.min.js"></script>
+    <script src="../vendor/cytoscape-dagre/cytoscape-dagre.min.js"></script>
+    <link rel="stylesheet" href="entityGraphView.css" />
+  </head>
+  <body>
+    <!-- Entity Graph Container -->
+    <div id="entity-graph-container">
+      <!-- Navigation Bar -->
+      <nav class="entity-nav">
+        <div class="nav-content">
+          <div class="breadcrumbs">
+            <a href="knowledgeLibrary.html" class="breadcrumb-link">
+              <i class="bi bi-collection"></i>
+              Knowledge Library
+            </a>
+            <i class="bi bi-chevron-right breadcrumb-separator"></i>
+            <span class="breadcrumb-current">Entity Graph</span>
+            <span id="entityNameBreadcrumb" class="breadcrumb-entity"></span>
+          </div>
+
+          <div class="entity-search">
+            <div class="search-input-group">
+              <input
+                type="text"
+                id="entitySearchInput"
+                class="entity-search-input"
+                placeholder="Search entities..."
+              />
+              <button id="entitySearchButton" class="entity-search-btn">
+                <i class="bi bi-search"></i>
+              </button>
+            </div>
+            <div
+              id="entitySearchSuggestions"
+              class="entity-search-suggestions"
+            ></div>
+          </div>
+
+          <div class="view-controls">
+            <!-- Layout Controls -->
+            <div class="layout-controls">
+              <div class="btn-group" role="group">
+                <button
+                  type="button"
+                  class="btn btn-outline-primary layout-btn active"
+                  data-layout="force"
+                >
+                  <i class="bi bi-diagram-3"></i>
+                  Force
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-outline-primary layout-btn"
+                  data-layout="hierarchical"
+                >
+                  <i class="bi bi-diagram-2"></i>
+                  Tree
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-outline-primary layout-btn"
+                  data-layout="radial"
+                >
+                  <i class="bi bi-bullseye"></i>
+                  Radial
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-outline-primary layout-btn"
+                  data-layout="grid"
+                >
+                  <i class="bi bi-grid"></i>
+                  Grid
+                </button>
+              </div>
+            </div>
+
+            <button id="fullscreenToggle" class="btn btn-outline-secondary">
+              <i class="bi bi-fullscreen"></i>
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      <!-- Main Content -->
+      <div class="entity-content">
+        <!-- Entity Sidebar -->
+        <aside class="entity-sidebar" id="entitySidebar">
+          <div class="entity-header">
+            <div class="entity-icon" id="entityIcon">
+              <i class="bi bi-diagram-2"></i>
+            </div>
+            <div class="entity-info">
+              <h1 class="entity-name" id="entityName">Select an Entity</h1>
+              <div class="entity-type-badge" id="entityType"></div>
+              <div class="entity-confidence" id="entityConfidence"></div>
+            </div>
+          </div>
+
+          <div class="entity-overview">
+            <div class="entity-metrics">
+              <div class="metric-item">
+                <span class="metric-label">Mentions</span>
+                <span class="metric-value" id="entityMentions">-</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Relationships</span>
+                <span class="metric-value" id="entityRelationships">-</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Centrality</span>
+                <span class="metric-value" id="entityCentrality">-</span>
+              </div>
+            </div>
+
+            <div class="entity-details">
+              <h3>Details</h3>
+              <div id="entityAliases" class="detail-section">
+                <strong>Aliases:</strong>
+                <div class="aliases-list"></div>
+              </div>
+              <div id="entityDomains" class="detail-section">
+                <strong>Domains:</strong>
+                <div class="domains-list"></div>
+              </div>
+              <div id="entityTopics" class="detail-section">
+                <strong>Topics:</strong>
+                <div class="topics-list"></div>
+              </div>
+            </div>
+
+            <div class="entity-timeline">
+              <h3>Timeline</h3>
+              <div class="timeline-item">
+                <span class="timeline-label">First Seen:</span>
+                <span class="timeline-value" id="entityFirstSeen">-</span>
+              </div>
+              <div class="timeline-item">
+                <span class="timeline-label">Last Seen:</span>
+                <span class="timeline-value" id="entityLastSeen">-</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="related-entities">
+            <h3>Related Entities</h3>
+            <div class="entity-filters">
+              <select id="relationshipTypeFilter" class="form-select">
+                <option value="">All Relationships</option>
+              </select>
+              <select id="entityTypeFilter" class="form-select">
+                <option value="">All Types</option>
+                <option value="person">People</option>
+                <option value="organization">Organizations</option>
+                <option value="product">Products</option>
+                <option value="technology">Technologies</option>
+                <option value="concept">Concepts</option>
+                <option value="location">Locations</option>
+              </select>
+            </div>
+            <div id="relatedEntitiesList" class="related-entities-list">
+              <div class="empty-message">
+                Select an entity to see related items
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <!-- Graph Visualization -->
+        <main class="graph-main">
+          <div id="cytoscape-container" class="cytoscape-container"></div>
+
+          <!-- Graph Controls -->
+          <div class="graph-controls">
+            <div class="control-group">
+              <button id="zoomInBtn" class="control-btn" title="Zoom In">
+                <i class="bi bi-zoom-in"></i>
+              </button>
+              <button id="zoomOutBtn" class="control-btn" title="Zoom Out">
+                <i class="bi bi-zoom-out"></i>
+              </button>
+              <button id="fitBtn" class="control-btn" title="Fit to View">
+                <i class="bi bi-arrows-angle-contract"></i>
+              </button>
+              <button id="centerBtn" class="control-btn" title="Center Graph">
+                <i class="bi bi-bullseye"></i>
+              </button>
+            </div>
+
+            <div class="control-group">
+              <button
+                id="expandBtn"
+                class="control-btn"
+                title="Expand Selected"
+              >
+                <i class="bi bi-plus-circle"></i>
+              </button>
+              <button
+                id="collapseBtn"
+                class="control-btn"
+                title="Collapse Selected"
+              >
+                <i class="bi bi-dash-circle"></i>
+              </button>
+              <button id="resetBtn" class="control-btn" title="Reset Graph">
+                <i class="bi bi-arrow-clockwise"></i>
+              </button>
+            </div>
+
+            <div class="control-group">
+              <button
+                id="screenshotBtn"
+                class="control-btn"
+                title="Save Screenshot"
+              >
+                <i class="bi bi-camera"></i>
+              </button>
+              <button id="exportBtn" class="control-btn" title="Export Data">
+                <i class="bi bi-download"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Graph Info Panel -->
+          <div class="graph-info-panel">
+            <div class="info-item">
+              <span class="info-label">Nodes:</span>
+              <span class="info-value" id="nodeCount">0</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Edges:</span>
+              <span class="info-value" id="edgeCount">0</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Layout:</span>
+              <span class="info-value" id="currentLayout">Force</span>
+            </div>
+          </div>
+
+          <!-- Loading State -->
+          <div id="graphLoading" class="graph-loading">
+            <div class="loading-content">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+              <p class="loading-text">Loading entity graph...</p>
+            </div>
+          </div>
+
+          <!-- Empty State -->
+          <div id="graphEmpty" class="graph-empty">
+            <div class="empty-content">
+              <i class="bi bi-diagram-2"></i>
+              <h3>No Entity Graph</h3>
+              <p>
+                Search for an entity or import website data to view the entity
+                graph.
+              </p>
+            </div>
+          </div>
+        </main>
+
+        <!-- Content Panel -->
+        <aside class="content-panel" id="contentPanel">
+          <div class="panel-header">
+            <h3>Entity Content</h3>
+            <button id="closePanelBtn" class="btn-close"></button>
+          </div>
+
+          <div class="entity-content-view">
+            <div class="content-section">
+              <h4>Context Snippets</h4>
+              <div id="contextSnippets" class="context-snippets">
+                <div class="empty-message">No context available</div>
+              </div>
+            </div>
+
+            <div class="content-section">
+              <h4>Related Websites</h4>
+              <div id="relatedWebsites" class="related-websites">
+                <div class="empty-message">No related websites</div>
+              </div>
+            </div>
+
+            <div class="content-section">
+              <h4>Entity Insights</h4>
+              <div id="entityInsights" class="entity-insights">
+                <div class="insight-item">
+                  <span class="insight-label">Importance Score:</span>
+                  <span class="insight-value" id="importanceScore">-</span>
+                </div>
+                <div class="insight-item">
+                  <span class="insight-label">Cluster Group:</span>
+                  <span class="insight-value" id="clusterGroup">-</span>
+                </div>
+                <div class="insight-item">
+                  <span class="insight-label">Co-occurrences:</span>
+                  <span class="insight-value" id="coOccurrences">-</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="../vendor/bootstrap/bootstrap.bundle.min.js"></script>
+    <!-- Entity Graph View JS -->
+    <script src="entityGraphView.js"></script>
+  </body>
+</html>
