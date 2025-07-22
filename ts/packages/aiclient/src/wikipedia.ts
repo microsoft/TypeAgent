@@ -34,7 +34,6 @@ export function apiSettingsFromEnv(
     env ??= process.env;
     return {
         endpoint: getEnvSetting(env, EnvVars.WIKIPEDIA_ENDPOINT),
-        // TODO: refresh token: https://api.wikimedia.org/wiki/Authentication
         clientId: getEnvSetting(env, EnvVars.WIKIPEDIA_CLIENT_ID),
         clientSecret: getEnvSetting(env, EnvVars.WIKIPEDIA_CLIENT_SECRET),
         getToken: async (): Promise<string> => {

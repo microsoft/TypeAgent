@@ -421,6 +421,9 @@ export async function resolveURLWithWikipedia(
         .then((data) => {
             retVal = data;
             console.log(data);
+
+            // TODO: get the "official website" URL from the data (if it exists)
+            // Call Azure function 
         })
         .catch((error) => {
             console.error("Error fetching data:", error);
