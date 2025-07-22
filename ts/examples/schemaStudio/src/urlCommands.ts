@@ -107,7 +107,12 @@ export function createURLResolverCommands(
                 failCount++;
             }
 
-            const rr = resolved === null ? "<CONTENT_FILTERING>" : resolved === undefined ? "<ERROR>" : resolved;
+            const rr =
+                resolved === null
+                    ? "<CONTENT_FILTERING>"
+                    : resolved === undefined
+                      ? "<ERROR>"
+                      : resolved;
 
             io.writer.writeLine(
                 `${passFail}: Resolved '${utterance}' to '${rr}' (expected: ${site})`,
@@ -134,12 +139,18 @@ export function createURLResolverCommands(
     return handler;
 }
 
-function sitesMatch(resolved: string | undefined | null, site: string, io: ConsoleWriter): boolean {
+function sitesMatch(
+    resolved: string | undefined | null,
+    site: string,
+    io: ConsoleWriter,
+): boolean {
     // Check if resolved site matches expected site accounting for varying / at the end
-    if (resolved === site ||
+    if (
+        resolved === site ||
         (site.endsWith("/") && site === `${resolved}/`) ||
-        (resolved?.endsWith("/") && `${site}/` === resolved)) {
-            return true;
+        (resolved?.endsWith("/") && `${site}/` === resolved)
+    ) {
+        return true;
     }
 
     try {
@@ -148,8 +159,8 @@ function sitesMatch(resolved: string | undefined | null, site: string, io: Conso
         const siteUrl = new URL(site);
 
         // Check if resolved is a subdomain of site by reversing the hostname parts and comparing them
-        const resolvedParts = resolvedUrl.hostname.split('.').reverse();
-        const siteParts = siteUrl.hostname.split('.').reverse();
+        const resolvedParts = resolvedUrl.hostname.split(".").reverse();
+        const siteParts = siteUrl.hostname.split(".").reverse();
 
         // we only match subdomains that have one extra part
         if (siteParts.length - resolvedParts.length > 1) {
@@ -168,11 +179,12 @@ function sitesMatch(resolved: string | undefined | null, site: string, io: Conso
         }
 
         for (let i = 0; i < smallParts.length; i++) {
-
             // special case for culture redirects
             if (i == smallParts.length - 1) {
-                if ((smallParts[i] === "en" || bigParts[i] === "en")
-                    && (smallParts[i] === "www" || bigParts[i] === "www")) {
+                if (
+                    (smallParts[i] === "en" || bigParts[i] === "en") &&
+                    (smallParts[i] === "www" || bigParts[i] === "www")
+                ) {
                     return true;
                 }
             }

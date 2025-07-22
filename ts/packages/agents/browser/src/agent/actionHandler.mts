@@ -522,7 +522,10 @@ async function resolveWebPage(
                 return historyUrl;
             }
 
-            const wikiPediaUrl = await urlResolver.resolveURLWithWikipedia(site, wikipedia.apiSettingsFromEnv());
+            const wikiPediaUrl = await urlResolver.resolveURLWithWikipedia(
+                site,
+                wikipedia.apiSettingsFromEnv(),
+            );
             if (wikiPediaUrl) {
                 debug(`Resolved URL using Wikipedia: ${wikiPediaUrl}`);
                 return wikiPediaUrl;
