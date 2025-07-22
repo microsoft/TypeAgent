@@ -45,7 +45,7 @@ describe("Context Menu Module", () => {
     describe("handleContextMenuClick", () => {
         it("should handle discoverPageSchema menu click", async () => {
             const mockTab = { id: 123, url: "https://example.com" };
-            const mockInfo = { menuItemId: "discoverPageSchema" };
+            const mockInfo = { menuItemId: "discoverPageActions" };
 
             chrome.sidePanel.open.mockImplementation(() => Promise.resolve());
 
