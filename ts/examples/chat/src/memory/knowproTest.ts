@@ -458,14 +458,18 @@ export async function createKnowproTestCommands(
     commands.kpTestSearch.metadata = testSearchDef();
     async function testSearchScope(args: string[]) {
         const namedArgs = parseNamedArguments(args, testSearchDef());
+        const queryTranslator =
+            context.conversation! instanceof cm.Memory
+                ? context.conversation!.settings.queryTranslator
+                : context.queryTranslator;
         const result = namedArgs.compare
-            ? await context.queryTranslator.translate!(namedArgs.query)
+            ? await queryTranslator.translate(namedArgs.query)
             : undefined;
         if (result) {
             context.printer.writeTranslation(result);
         }
         context.printer.writeHeading("Scope");
-        const resultScope = await context.queryTranslator.translateWithScope!(
+        const resultScope = await queryTranslator.translateWithScope!(
             namedArgs.query,
         );
         context.printer.writeTranslation(resultScope);

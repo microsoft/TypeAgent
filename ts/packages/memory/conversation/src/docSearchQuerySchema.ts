@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DateTimeRange } from "./dateTimeSchema.js";
+import { DateTimeRange } from "knowpro";
 
 export type FacetTerm = {
     // the name of the facet, such as "color", "profession", "patent number"; "*" means match any facet name
@@ -10,7 +10,7 @@ export type FacetTerm = {
     facetValue: string;
 };
 
-// Use to find information about specific, tangible people, places, institutions or things only..
+// Use to find information about specific, tangible people, places, institutions, things and document parts only.
 // This includes entities with particular facets
 // Abstract concepts or topics are not entities.
 // Any terms will match fuzzily.
@@ -19,6 +19,7 @@ export type EntityTerm = {
     name: string;
     isNamePronoun: boolean;
     // the specific types of the entity such as "book", "movie", "song", "speaker", "person", "artist", "animal", "instrument", "school", "room", "museum", "food" etc.
+    // Document parts have types such as "heading", "section", "link", "image", "list", "table", etc.
     // Do not include generic types such as: "entity", "object", "thing", "concept" etc.
     // An entity can have multiple types; entity types should be single words
     type?: string[];
@@ -69,8 +70,8 @@ export type SearchFilter = {
     // - Phrases like 'email address' or 'first name' are a single term
     // - use empty searchTerms array when use asks for summaries
     searchTerms?: string[];
-    // Use to limit matches to particular sub-set of a conversation, document, etc
-    // E.g. if the user request specifies a particular section or context, use scopeSubQuery to limit the search.
+    // Use to limit matches to particular sub-set of the document
+    // E.g. if the user request specifies a particular section or heading, use scopeSubQuery to limit the search.
     scopeSubQuery?: ScopeFilter | undefined;
 };
 

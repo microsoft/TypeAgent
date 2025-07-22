@@ -5,6 +5,7 @@
 import fs from "fs";
 import ts from "typescript";
 import { fileURLToPath } from "url";
+import path from "path";
 
 /**
  * Schema for a type
@@ -44,7 +45,7 @@ export function loadSchemaFiles(
     const schemaText: string[] = [];
     for (const file of filePaths) {
         let filePath = file;
-        if (basePath) {
+        if (!path.isAbsolute(file) && basePath) {
             filePath = fileURLToPath(new URL(file, basePath));
         }
         const rawText: string = fs.readFileSync(filePath, "utf-8");
