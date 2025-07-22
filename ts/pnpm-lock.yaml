@@ -688,6 +688,64 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
+  examples/websiteAliases:
+    dependencies:
+      aiclient:
+        specifier: workspace:*
+        version: link:../../packages/aiclient
+      chalk:
+        specifier: ^5.4.1
+        version: 5.4.1
+      code-processor:
+        specifier: workspace:*
+        version: link:../../packages/codeProcessor
+      common-utils:
+        specifier: workspace:*
+        version: link:../../packages/commonUtils
+      conversation-memory:
+        specifier: workspace:*
+        version: link:../../packages/memory/conversation
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.5.0
+      exifreader:
+        specifier: ^4.30.1
+        version: 4.30.1
+      image-memory:
+        specifier: workspace:*
+        version: link:../../packages/memory/image
+      interactive-app:
+        specifier: workspace:*
+        version: link:../../packages/interactiveApp
+      knowledge-processor:
+        specifier: workspace:*
+        version: link:../../packages/knowledgeProcessor
+      knowpro:
+        specifier: workspace:*
+        version: link:../../packages/knowPro
+      memory-providers:
+        specifier: workspace:*
+        version: link:../memoryProviders
+      mongodb:
+        specifier: ^6.15.0
+        version: 6.16.0(socks@2.8.5)
+      typeagent:
+        specifier: workspace:*
+        version: link:../../packages/typeagent
+      typechat:
+        specifier: ^0.1.1
+        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+    devDependencies:
+      copyfiles:
+        specifier: ^2.4.1
+        version: 2.4.1
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+
   examples/whisperClient:
     dependencies:
       chalk:
