@@ -13,6 +13,7 @@ import {
     PropertySearchTerm,
     SearchTermGroup,
     Term,
+    SearchTermGroupTypes,
 } from "./interfaces.js";
 import * as q from "./query.js";
 
@@ -100,51 +101,87 @@ export function isSearchGroupTerm(
     return term.hasOwnProperty("booleanOp");
 }
 
-export function verifySearchTermGroup(termGroup: SearchTermGroup): void {
-    if (
-        termGroup === undefined ||
-        termGroup.terms === undefined ||
-        termGroup.terms.length === 0
-    ) {
-        throw new Error("Invalid term group");
+export function validateSearchTermGroup(
+    termGroup: SearchTermGroup,
+): string | undefined {
+    if (termGroup === undefined) {
+        return "SearchTermGroup";
     }
-    for (const term of termGroup.terms) {
+    if (!termGroup.booleanOp) {
+        return "booleanOp";
+    }
+    if (termGroup.terms === undefined || termGroup.terms.length === 0) {
+        return `terms\n${JSON.stringify(termGroup)}`;
+    }
+    let error: string | undefined;
+    let lastValid: SearchTermGroupTypes | undefined;
+    for (let i = 0; i < termGroup.terms.length; ++i) {
+        const term = termGroup.terms[i];
         if (isPropertyTerm(term)) {
             if (term.propertyName === undefined) {
-                throw new Error("Invalid propertyName");
+                error = `propertyName\n${JSON.stringify(term)}`;
+                break;
             }
             if (typeof term.propertyName !== "string") {
-                verifySearchTerm(term.propertyName);
+                error = validateSearchTerm(term.propertyName);
+                if (error !== undefined) {
+                    error = "propertyName\n" + error;
+                    break;
+                }
             }
             if (term.propertyValue === undefined) {
-                throw new Error("Invalid propertyValue");
+                error = `propertyValue\n${JSON.stringify(term)}`;
+                break;
             }
-            verifySearchTerm(term.propertyValue);
+            error = validateSearchTerm(term.propertyValue);
+            if (error !== undefined) {
+                error = "propertyValue\n" + error;
+                break;
+            }
         } else if (isSearchGroupTerm(term)) {
-            verifySearchTermGroup(term);
+            error = validateSearchTermGroup(term);
         } else {
-            verifySearchTerm(term);
+            error = validateSearchTerm(term);
         }
+        if (error !== undefined) {
+            break;
+        }
+        lastValid = term;
     }
+    if (error !== undefined && lastValid !== undefined) {
+        error += `\nLast valid term:\n${JSON.stringify(lastValid)}`;
+    }
+    return error;
 }
 
-export function verifySearchTerm(term: SearchTerm): void {
-    verifyTerm(term.term);
+function validateSearchTerm(term: SearchTerm): string | undefined {
+    if (!validateTerm(term.term)) {
+        return `Invalid SearchTerm\n${JSON.stringify(term)}`;
+    }
     if (term.relatedTerms !== undefined && term.relatedTerms.length > 0) {
-        for (const relatedTerm of term.relatedTerms) {
-            verifyTerm(relatedTerm);
+        for (let i = 0; i < term.relatedTerms.length; ++i) {
+            let relatedTerm = term.relatedTerms[i];
+            if (!validateTerm(relatedTerm)) {
+                let error = `Invalid related term for:\n${JSON.stringify(term.term)}`;
+                if (i > 0) {
+                    error += `\nLast valid related term:\n${JSON.stringify(term.relatedTerms[i - 1])}`;
+                }
+                return error;
+            }
         }
     }
+    return undefined;
 }
 
-export function verifyTerm(term: Term): void {
+function validateTerm(term: Term): boolean {
     if (
         term === undefined ||
         term.text === undefined ||
         term.text.length === 0
     ) {
-        throw new Error("Invalid Term");
+        return false;
     }
+    return true;
 }
 
 export interface CompiledSearchTerm extends SearchTerm {

@@ -39,7 +39,7 @@ import {
     isPropertyTerm,
     isSearchGroupTerm,
     toRequiredSearchTerm,
-    verifySearchTermGroup,
+    validateSearchTermGroup,
 } from "./compileLib.js";
 import { NormalizedEmbedding } from "typeagent";
 import { getTimestampedScoredSemanticRefOrdinals } from "./knowledgeLib.js";
@@ -152,7 +152,10 @@ export async function searchConversationKnowledge(
     if (!q.isConversationSearchable(conversation)) {
         return undefined;
     }
-    verifySearchTermGroup(searchTermGroup);
+    let error = validateSearchTermGroup(searchTermGroup);
+    if (error !== undefined) {
+        throw new Error(error);
+    }
 
     options ??= createSearchOptions();
     const queryBuilder = new QueryCompiler(
