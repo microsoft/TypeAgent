@@ -423,7 +423,7 @@ export async function resolveURLWithWikipedia(
             console.log(data);
 
             // TODO: get the "official website" URL from the data (if it exists)
-            // Call Azure function 
+            // TODO: waiting for Wikipedia arbitration committee to approve Application
         })
         .catch((error) => {
             console.error("Error fetching data:", error);
