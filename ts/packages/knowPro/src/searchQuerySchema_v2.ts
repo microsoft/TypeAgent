@@ -11,6 +11,7 @@ export type FacetTerm = {
 };
 
 // Use to find information about specific, tangible people, places, institutions or things only..
+// Also document specific information: headings, sections
 // This includes entities with particular facets
 // Abstract concepts or topics are not entities.
 // Any terms will match fuzzily.

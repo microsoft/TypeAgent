@@ -39,6 +39,7 @@ import {
     isPropertyTerm,
     isSearchGroupTerm,
     toRequiredSearchTerm,
+    verifySearchTermGroup,
 } from "./compileLib.js";
 import { NormalizedEmbedding } from "typeagent";
 import { getTimestampedScoredSemanticRefOrdinals } from "./knowledgeLib.js";
@@ -151,6 +152,8 @@ export async function searchConversationKnowledge(
     if (!q.isConversationSearchable(conversation)) {
         return undefined;
     }
+    verifySearchTermGroup(searchTermGroup);
+
     options ??= createSearchOptions();
     const queryBuilder = new QueryCompiler(
         conversation,
@@ -816,7 +819,11 @@ class QueryCompiler {
      * Return false if the term should be rejected
      */
     private validateAndPrepareTerm(term: Term | undefined): boolean {
-        if (term) {
+        if (
+            term !== undefined &&
+            term.text !== undefined &&
+            term.text.length > 0
+        ) {
             term.text = term.text.toLowerCase();
         }
         return true;

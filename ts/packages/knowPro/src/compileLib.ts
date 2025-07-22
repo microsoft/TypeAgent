@@ -12,6 +12,7 @@ import {
     SearchTerm,
     PropertySearchTerm,
     SearchTermGroup,
+    Term,
 } from "./interfaces.js";
 import * as q from "./query.js";
 
@@ -97,6 +98,53 @@ export function isSearchGroupTerm(
     term: SearchTerm | PropertySearchTerm | SearchTermGroup,
 ): term is SearchTermGroup {
     return term.hasOwnProperty("booleanOp");
+}
+
+export function verifySearchTermGroup(termGroup: SearchTermGroup): void {
+    if (
+        termGroup === undefined ||
+        termGroup.terms === undefined ||
+        termGroup.terms.length === 0
+    ) {
+        throw new Error("Invalid term group");
+    }
+    for (const term of termGroup.terms) {
+        if (isPropertyTerm(term)) {
+            if (term.propertyName === undefined) {
+                throw new Error("Invalid propertyName");
+            }
+            if (typeof term.propertyName !== "string") {
+                verifySearchTerm(term.propertyName);
+            }
+            if (term.propertyValue === undefined) {
+                throw new Error("Invalid propertyValue");
+            }
+            verifySearchTerm(term.propertyValue);
+        } else if (isSearchGroupTerm(term)) {
+            verifySearchTermGroup(term);
+        } else {
+            verifySearchTerm(term);
+        }
+    }
+}
+
+export function verifySearchTerm(term: SearchTerm): void {
+    verifyTerm(term.term);
+    if (term.relatedTerms !== undefined && term.relatedTerms.length > 0) {
+        for (const relatedTerm of term.relatedTerms) {
+            verifyTerm(relatedTerm);
+        }
+    }
+}
+
+export function verifyTerm(term: Term): void {
+    if (
+        term === undefined ||
+        term.text === undefined ||
+        term.text.length === 0
+    ) {
+        throw new Error("Invalid Term");
+    }
 }
 
 export interface CompiledSearchTerm extends SearchTerm {

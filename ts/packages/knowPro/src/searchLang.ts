@@ -974,6 +974,7 @@ class SearchQueryCompiler {
     private compileScopeFilter(
         filter: querySchema2.ScopeFilter,
         when: WhenFilter | undefined,
+        useTags: boolean = true,
     ): WhenFilter | undefined {
         when ??= {};
         if (filter.timeRange) {
@@ -981,7 +982,21 @@ class SearchQueryCompiler {
         }
         if (filter.searchTerms !== undefined && filter.searchTerms.length > 0) {
             when.tags ??= [];
-            when.tags.push(...filter.searchTerms);
+            if (useTags) {
+                when.tags.push(...filter.searchTerms);
+            } else {
+                const topicTerms = createOrMaxTermGroup();
+                for (const topic of filter.searchTerms) {
+                    topicTerms.terms.push(
+                        createPropertySearchTerm("topic", topic),
+                    );
+                }
+                if (when.scopeDefiningTerms) {
+                    when.scopeDefiningTerms.terms.push(topicTerms);
+                } else {
+                    when.scopeDefiningTerms = topicTerms;
+                }
+            }
         }
         return when;
     }
