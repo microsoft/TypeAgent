@@ -44,7 +44,7 @@ export function createSearchQueryTranslator(
         import.meta.url,
     );
     const searchActionSchemaScope = loadSchema(
-        ["dateTimeSchema.ts", "searchQuerySchema_V2.ts"],
+        ["dateTimeSchema.ts", "searchQuerySchema_v2.ts"],
         import.meta.url,
     );
 

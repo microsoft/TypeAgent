@@ -67,6 +67,7 @@ export type MatchOptions = {
     // namespace keys to filter.  If undefined, all constructions are used.
     namespaceKeys?: string[] | undefined;
     wildcard?: boolean; // default is true
+    entityWildcard?: boolean; // default is true
     rejectReferences?: boolean; // default is true
     conflicts?: boolean; // default is false
     history?: HistoryContext | undefined;
@@ -306,6 +307,7 @@ export class ConstructionCache {
         }
         const config = {
             enableWildcard: options?.wildcard ?? true, // default to true.
+            enableEntityWildcard: options?.entityWildcard ?? true, // default to true.
             rejectReferences: options?.rejectReferences ?? true, // default to true.
             history: options?.history,
             conflicts: options?.conflicts,

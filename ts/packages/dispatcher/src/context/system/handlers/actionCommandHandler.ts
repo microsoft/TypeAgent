@@ -13,7 +13,7 @@ import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import {
     getParameterNames,
-    getParameterType,
+    getPropertyResolvedType,
     validateAction,
 } from "action-schema";
 import { executeActions } from "../../../execute/actionHandlers.js";
@@ -161,7 +161,10 @@ export class ActionCommandHandler implements CommandHandler {
                     continue;
                 }
                 const propertyName = name.substring(2);
-                const fieldType = getParameterType(actionSchema, propertyName);
+                const fieldType = getPropertyResolvedType(
+                    actionSchema.type,
+                    propertyName,
+                );
                 if (fieldType?.type === "string-union") {
                     completions.push({
                         name,

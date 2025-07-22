@@ -17,7 +17,6 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "npm run tsc",
-    "postbuild": "copyfiles -u 1 \"src/**/*Schema*.ts\" dist",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",

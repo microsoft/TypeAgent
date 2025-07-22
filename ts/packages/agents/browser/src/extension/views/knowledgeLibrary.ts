@@ -116,7 +116,7 @@ class WebsiteLibraryPanelFullPage {
 
             await this.checkConnectionStatus();
             await this.loadLibraryStats();
-            this.showPage("search");
+            await this.navigateToPage("search");
         } catch (error) {
             this.isInitialized = false;
             notificationManager.showError(

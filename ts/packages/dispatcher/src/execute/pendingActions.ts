@@ -6,16 +6,18 @@ import {
     ActionParamObject,
     ActionParamType,
     ActionResolvedParamType,
+    getPropertyType,
     resolveTypeReference,
     resolveUnionType,
 } from "action-schema";
 import {
     ExecutableAction,
     FullAction,
+    getPropertyInfo,
     normalizeParamString,
     PromptEntity,
 } from "agent-cache";
-import { getAppAgentName } from "../internal.js";
+import { getAppAgentName } from "../translation/agentTranslators.js";
 import {
     ActionContext,
     Entity,
@@ -31,6 +33,9 @@ import { displayStatus } from "@typeagent/agent-sdk/helpers/display";
 import { ConversationMemory } from "conversation-memory";
 import { SearchSelectExpr } from "knowpro";
 import { conversation as kp } from "knowledge-processor";
+import { getObjectProperty } from "common-utils";
+import { ActionSchemaFile } from "../translation/actionConfigProvider.js";
+import { ActionSchemaEntityTypeDefinition } from "../../../actionSchema/dist/type.js";
 
 const debugEntities = registerDebug("typeagent:dispatcher:actions:entities");
 
@@ -237,6 +242,104 @@ function isEntityType(
     );
 
     return actionSchemaFile.parsedActionSchema.entitySchemas?.has(type);
+}
+
+export function getEntityPropertyTypeName(
+    actionName: string,
+    paramName: string,
+    actionSchemaFile: ActionSchemaFile,
+) {
+    const entitySchemas = actionSchemaFile.parsedActionSchema.entitySchemas;
+    if (entitySchemas === undefined) {
+        return undefined;
+    }
+    const actionParametersType = getActionParametersType(
+        actionName,
+        actionSchemaFile,
+    );
+    return resolveEntityPropertyTypeName(
+        actionParametersType,
+        paramName,
+        entitySchemas,
+    );
+}
+
+export function resolveEntityPropertyTypeName(
+    actionParametersType: ActionParamType,
+    paramName: string,
+    entitySchemas: Map<string, ActionSchemaEntityTypeDefinition>,
+) {
+    const parameterType = getPropertyType(actionParametersType, paramName);
+    if (parameterType === undefined) {
+        throw new Error(`Unable to get type for parameter ${paramName}`);
+    }
+    const resolvedParameterType = resolveTypeReference(parameterType);
+    if (resolvedParameterType === undefined) {
+        throw new Error(
+            `Unable to resolve type reference for parameter ${paramName}`,
+        );
+    }
+    // resolve union type pretending to be a string value for wildcard.
+    // REVIEW: what if the union type include empty string?
+    const resolvedType = resolveUnionType(
+        parameterType,
+        resolvedParameterType,
+        "",
+    );
+
+    if (resolvedType === undefined) {
+        return undefined;
+    }
+
+    // TODO: what if it is an literal type?
+    if (
+        resolvedType.fieldType.type === "type-reference" &&
+        entitySchemas.has(resolvedType.fieldType.name)
+    ) {
+        return resolvedType.fieldType.name;
+    }
+    return undefined;
+}
+
+export async function canResolvePropertyEntity(
+    conversationMemory: ConversationMemory,
+    propertyName: string,
+    actions: ExecutableAction[],
+    agents: AppAgentManager,
+) {
+    const { action, parameterName } = getPropertyInfo(propertyName, actions);
+    if (parameterName === undefined) {
+        throw new Error("Action name cannot be entity wildcard");
+    }
+
+    const appAgentName = getAppAgentName(action.schemaName);
+    if (!agents.isActionActive(appAgentName)) {
+        // Test mode? Assume it is true.
+        return true;
+    }
+
+    const config = agents.getActionConfig(action.schemaName);
+    const actionSchemaFile = agents.getActionSchemaFileForConfig(config);
+    const entityPropertyTypeName = getEntityPropertyTypeName(
+        action.actionName,
+        parameterName,
+        actionSchemaFile,
+    );
+    if (entityPropertyTypeName === undefined) {
+        throw new Error(
+            `Invalid entity wildcard property name ${propertyName}`,
+        );
+    }
+
+    // REVIEW: should we check if with agent as well? (which might take a long time)
+    return (
+        (await resolveEntityWithMemory(
+            conversationMemory,
+            appAgentName,
+            entityPropertyTypeName,
+            getObjectProperty(action.parameters, parameterName),
+        )) !== undefined
+    );
 }
 
 async function resolveEntityWithMemory(
@@ -635,6 +738,28 @@ async function getParameterEntities(
     }
 }
 
+function getActionParametersType(
+    actionName: string,
+    actionSchemaFile: ActionSchemaFile,
+): ActionParamObject {
+    const schema =
+        actionSchemaFile.parsedActionSchema.actionSchemas.get(actionName);
+
+    if (schema === undefined) {
+        throw new Error(
+            `Action schema not found for ${actionSchemaFile.schemaName}.${actionName}`,
+        );
+    }
+
+    const actionParametersType = schema.type.fields.parameters?.type;
+    if (actionParametersType?.type !== "object") {
+        throw new Error(
+            `Action schema parameter type mismatch: ${actionSchemaFile.schemaName}.${actionName}`,
+        );
+    }
+    return actionParametersType;
+}
+
 export async function resolveEntities(
     agents: AppAgentManager,
     action: TypeAgentAction<FullAction>,
@@ -647,23 +772,10 @@ export async function resolveEntities(
 
     const config = agents.getActionConfig(action.schemaName);
     const actionSchemaFile = agents.getActionSchemaFileForConfig(config);
-
-    const schema = actionSchemaFile.parsedActionSchema.actionSchemas.get(
+    const actionParametersType = getActionParametersType(
         action.actionName,
+        actionSchemaFile,
     );
-
-    if (schema === undefined) {
-        throw new Error(
-            `Action schema not found for ${action.schemaName}.${action.actionName}`,
-        );
-    }
-
-    const parameterType = schema.type.fields.parameters?.type;
-    if (parameterType?.type !== "object") {
-        throw new Error(
-            `Action schema parameter type mismatch: ${action.schemaName}.${action.actionName}`,
-        );
-    }
 
     let resolvedEntities: Entity[] | undefined;
     const trackedEntityResolver: EntityResolver = {
@@ -683,7 +795,7 @@ export async function resolveEntities(
     const entities = await getParameterObjectEntities(
         action,
         parameters,
-        parameterType,
+        actionParametersType,
         trackedEntityResolver,
         action.entities as EntityObject | undefined,
     );

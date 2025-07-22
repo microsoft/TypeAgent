@@ -912,6 +912,39 @@ class Visualizer {
     }
 
     /**
+     * Zoom in the graph
+     */
+    zoomIn(): void {
+        if (!this.cy) return;
+        const zoom = this.cy.zoom();
+        this.cy.zoom(zoom * 1.25);
+    }
+
+    /**
+     * Zoom out the graph
+     */
+    zoomOut(): void {
+        if (!this.cy) return;
+        const zoom = this.cy.zoom();
+        this.cy.zoom(zoom * 0.8);
+    }
+
+    /**
+     * Center the graph in the viewport
+     */
+    centerGraph(): void {
+        if (!this.cy) return;
+        this.cy.center();
+    }
+
+    /**
+     * Get the cytoscape instance for advanced operations
+     */
+    getCytoscape(): any {
+        return this.cy;
+    }
+
+    /**
      * Animate highlight for a newly added node
      * @param {string} nodeId - The ID of the node to highlight
      */

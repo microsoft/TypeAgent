@@ -139,9 +139,9 @@ function toTemplate(
     }
     actionName.discriminator = action.actionName;
 
-    const parameterType = actionSchema.type.fields.parameters?.type;
-    if (parameterType) {
-        const type = toTemplateType(parameterType);
+    const actionParametersType = actionSchema.type.fields.parameters?.type;
+    if (actionParametersType) {
+        const type = toTemplateType(actionParametersType);
         if (type !== undefined) {
             template.fields.parameters = {
                 // ActionParam types are compatible with TemplateFields

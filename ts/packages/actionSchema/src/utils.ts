@@ -48,40 +48,55 @@ export function resolveTypeReference(
 
 // Unresolved type references are ignored.
 // Type Union is not supported.
-export function getParameterType(
-    actionType: ActionSchemaTypeDefinition,
-    name: string,
-) {
-    const propertyNames = name.split(".");
-    if (propertyNames.shift() !== "parameters") {
-        return undefined;
-    }
-    let curr = resolveTypeReference(actionType.type.fields.parameters?.type);
-    if (curr === undefined) {
-        return undefined;
-    }
-    for (const propertyName of propertyNames) {
-        const maybeIndex = parseInt(propertyName);
-        let next: SchemaType | undefined;
-        if (maybeIndex.toString() == propertyName) {
-            if (curr.type !== "array") {
-                return undefined;
-            }
-            next = curr.elementType;
-        } else {
-            if (curr.type !== "object") {
-                return undefined;
-            }
-            next = curr.fields[propertyName]?.type;
-        }
-
-        // TODO: doesn't work on union types yet.
-        curr = resolveTypeReference(next);
-        if (curr === undefined) {
+function getPropertyPartType(
+    type: SchemaType,
+    propertyParts: string[],
+): SchemaType | undefined {
+    let curr: SchemaType = type;
+    for (const propertyPart of propertyParts) {
+        const resolved = resolveTypeReference(curr);
+        if (resolved === undefined) {
+            // Unresolved type reference.
+            // TODO: doesn't work on union types yet.
             return undefined;
         }
+        const maybeIndex = parseInt(propertyPart);
+
+        if (maybeIndex.toString() === propertyPart) {
+            if (resolved.type !== "array") {
+                return undefined;
+            }
+            curr = resolved.elementType;
+        } else {
+            if (resolved.type !== "object") {
+                return undefined;
+            }
+            curr = resolved.fields[propertyPart]?.type;
+        }
     }
+    // This may not be an unresolved type reference.
     return curr;
+}
+
+// Return the type of the property.  If the property type is a type-reference, it is kept as is.
+// Unresolved type references are ignored.
+// Type Union is not supported.
+export function getPropertyType(
+    type: SchemaType,
+    propertyName: string,
+): SchemaType | undefined {
+    return getPropertyPartType(type, propertyName.split("."));
+}
+
+// Return the type of the property.  If the property type is a type-reference, it will be resolved.
+// Unresolved type references are ignored.
+// Type Union is not supported.
+export function getPropertyResolvedType(
+    type: SchemaType,
+    propertyName: string,
+): SchemaType | undefined {
+    const propertyType = getPropertyPartType(type, propertyName.split("."));
+    return propertyType ? resolveTypeReference(propertyType) : undefined;
 }
 
 // Unresolved type references are ignored.

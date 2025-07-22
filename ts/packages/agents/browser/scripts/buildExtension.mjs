@@ -58,6 +58,7 @@ const sharedScripts = {
     "views/options": "views/options.ts",
     "views/pageActions": "views/pageActions.ts",
     "views/actionsLibrary": "views/actionsLibrary.ts",
+    "views/entityGraphView": "views/entityGraphView.ts",
     "views/pageKnowledge": "views/pageKnowledge.ts",
     "views/knowledgeLibrary": "views/knowledgeLibrary.ts",
     "views/pdfView": "views/pdfView.ts",
@@ -88,6 +89,16 @@ const vendorAssets = [
     [
         "node_modules/prismjs/components/prism-json.js",
         "vendor/prism/prism-json.js",
+    ],
+    // Cytoscape libraries for entity graph visualization
+    [
+        "node_modules/cytoscape/dist/cytoscape.min.js",
+        "vendor/cytoscape/cytoscape.min.js",
+    ],
+    ["node_modules/dagre/dist/dagre.min.js", "vendor/dagre/dagre.min.js"],
+    [
+        "node_modules/cytoscape-dagre/cytoscape-dagre.js",
+        "vendor/cytoscape-dagre/cytoscape-dagre.min.js",
     ],
 ];
 
@@ -151,6 +162,17 @@ copyFileSync(
     `${srcDir}/views/actionsLibrary.html`,
     `${chromeOutDir}/views/actionsLibrary.html`,
 );
+
+copyFileSync(
+    `${srcDir}/views/entityGraphView.css`,
+    `${chromeOutDir}/views/entityGraphView.css`,
+);
+
+copyFileSync(
+    `${srcDir}/views/entityGraphView.html`,
+    `${chromeOutDir}/views/entityGraphView.html`,
+);
+
 copyFileSync(
     `${srcDir}/views/pageKnowledge.html`,
     `${chromeOutDir}/views/pageKnowledge.html`,
