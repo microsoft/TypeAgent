@@ -574,10 +574,16 @@ class EntityGraphView {
         }
     }
 
+    private escapeHtml(text: string): string {
+        const div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
     private showGraphError(message: string): void {
         const container = document.getElementById("cytoscape-container");
         if (container) {
-            container.innerHTML = `<div class="error-message">${message}</div>`;
+            container.innerHTML = `<div class="error-message">${this.escapeHtml(message)}</div>`;
         }
     }
 
