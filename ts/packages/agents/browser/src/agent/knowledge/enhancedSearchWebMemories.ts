@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 // Enhanced Search Web Memories Implementation
 // Integrates entity graphs with existing TypeAgent search capabilities
 

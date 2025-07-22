@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 // Entity Discovery Implementation
 // Advanced search, discovery, and exploration features for entity graphs
 

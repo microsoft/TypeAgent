@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 // Entity Graph View - Main entry point for entity visualization
 import { EnhancedEntityGraphVisualizer } from "./enhancedEntityGraphVisualizer.js";
 import { EntitySidebar } from "./entitySidebar.js";

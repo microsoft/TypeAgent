@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 // Multi-hop Entity Exploration Implementation
 // Advanced entity network expansion and multi-hop exploration
 

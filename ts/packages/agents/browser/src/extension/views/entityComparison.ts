@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 // Entity Comparison Implementation
 // Advanced entity comparison and analysis features
 

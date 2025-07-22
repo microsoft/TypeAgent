@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 // Real-Time Entity Extractor Implementation
 // Extracts entities and relationships from website data and integrates with existing knowledge
 

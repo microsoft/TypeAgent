@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 // Entity Graph Cache Implementation
 // High-performance caching system for entity graphs and relationships
 

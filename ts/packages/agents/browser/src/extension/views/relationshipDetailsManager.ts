@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 // Relationship Details Implementation
 // Detailed relationship information and analysis for entity graphs
 

@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 // Entity Graph Visualizer - Cytoscape.js integration for entity visualization
 declare var cytoscape: any;
 

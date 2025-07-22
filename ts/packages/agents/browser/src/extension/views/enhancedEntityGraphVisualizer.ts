@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 // Enhanced Entity Graph Visualizer Implementation
 // Extends the basic EntityGraphVisualizer with rich interactive features
 
