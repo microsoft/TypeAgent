@@ -23,8 +23,8 @@ export interface ExpandableTextareaHandlers {
 }
 
 export class ExpandableTextarea {
-    private textEntry: HTMLSpanElement;
-    private entryHandlers: ExpandableTextareaHandlers;
+    private readonly textEntry: HTMLSpanElement;
+    private readonly entryHandlers: ExpandableTextareaHandlers;
 
     constructor(
         id: string,
@@ -33,12 +33,12 @@ export class ExpandableTextarea {
         sendButton?: HTMLButtonElement,
     ) {
         this.entryHandlers = handlers;
-        this.textEntry = document.createElement("span");
-        this.textEntry.className = className;
-        this.textEntry.contentEditable = "true";
-        this.textEntry.role = "textbox";
-        this.textEntry.id = id;
-        this.textEntry.addEventListener("keydown", (event) => {
+        const textEntry = document.createElement("span");
+        textEntry.className = className;
+        textEntry.contentEditable = "true";
+        textEntry.role = "textbox";
+        textEntry.id = id;
+        textEntry.addEventListener("keydown", (event) => {
             if (this.entryHandlers.onKeydown !== undefined) {
                 if (!this.entryHandlers.onKeydown(this, event)) {
                     event.preventDefault();
@@ -49,31 +49,40 @@ export class ExpandableTextarea {
                 event.preventDefault();
                 this.send(sendButton);
             } else if (event.key === "Escape") {
-                this.textEntry.textContent = "";
+                textEntry.textContent = "";
                 event.preventDefault();
             }
 
             if (sendButton !== undefined) {
-                sendButton.disabled = this.textEntry.innerHTML.length === 0;
+                sendButton.disabled = textEntry.innerHTML.length === 0;
             }
 
             return true;
         });
-        this.textEntry.addEventListener("input", () => {
+        textEntry.addEventListener("input", () => {
+            // Remove empty <br> elements that are created when delete the last of the content.
+            if (
+                textEntry.childNodes.length === 1 &&
+                textEntry.childNodes[0].nodeType === Node.ELEMENT_NODE &&
+                textEntry.childNodes[0].nodeName === "BR"
+            ) {
+                textEntry.removeChild(textEntry.childNodes[0]);
+            }
             if (this.entryHandlers.onChange !== undefined) {
                 this.entryHandlers.onChange(this);
             }
         });
-        this.textEntry.onchange = () => {
+        textEntry.onchange = () => {
             if (sendButton !== undefined) {
                 sendButton.disabled = this.textEntry.innerHTML.length === 0;
             }
         };
-        this.textEntry.onwheel = (event) => {
+        textEntry.onwheel = (event) => {
             if (this.entryHandlers.onMouseWheel !== undefined) {
                 this.entryHandlers.onMouseWheel(this, event);
             }
         };
+        this.textEntry = textEntry;
     }
 
     getTextEntry() {
