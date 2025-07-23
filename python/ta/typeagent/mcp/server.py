@@ -34,6 +34,7 @@ class ProcessingContext:
 
 def make_context() -> ProcessingContext:
     utils.load_dotenv()
+    settings = importing.ConversationSettings()
     lang_search_options = searchlang.LanguageSearchOptions(
         compile_options=searchlang.LanguageQueryCompileOptions(
             exact_scope=False, verb_scope=True, term_filter=None, apply_scope=True
@@ -45,9 +46,10 @@ def make_context() -> ProcessingContext:
         entities_top_k=50, topics_top_k=50, messages_top_k=None, chunking=None
     )
 
-    query_context = load_podcast_index("testdata/Episode_53_AdrianTchaikovsky_index")
+    query_context = load_podcast_index(
+        "testdata/Episode_53_AdrianTchaikovsky_index", settings
+    )
 
-    embedding_model = embeddings.AsyncEmbeddingModel()
     model = convknowledge.create_typechat_model()
     query_translator = utils.create_translator(model, SearchQuery)
     answer_translator = utils.create_translator(model, AnswerResponse)
@@ -56,7 +58,7 @@ def make_context() -> ProcessingContext:
         lang_search_options,
         answer_context_options,
         query_context,
-        embedding_model,
+        settings.embedding_model,
         query_translator,
         answer_translator,
     )
@@ -64,8 +66,9 @@ def make_context() -> ProcessingContext:
     return context
 
 
-def load_podcast_index(podcast_file: str) -> query.QueryEvalContext:
-    settings = importing.ConversationSettings()
+def load_podcast_index(
+    podcast_file: str, settings: importing.ConversationSettings
+) -> query.QueryEvalContext:
     conversation = podcast.Podcast.read_from_file(podcast_file, settings)
     assert conversation is not None, f"Failed to load podcast from {podcast_file!r}"
     return query.QueryEvalContext(conversation)
