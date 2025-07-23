@@ -653,7 +653,6 @@ export async function createKnowproCommands(
             );
             context.printer.writeList(uniqueVerbs);
             context.printer.writeLine();
-            s;
             context.printer.writeLineInColor(
                 chalk.cyan,
                 `${uniqueVerbs.length} verbs`,
