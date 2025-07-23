@@ -795,7 +795,7 @@ class IReadonlyCollection[T, TOrdinal](Iterable[T], Protocol):
 
 
 class ICollection[T, TOrdinal](IReadonlyCollection[T, TOrdinal], Protocol):
-    """An append-only collection."""
+    """An APPEND-ONLY collection."""
 
     @property
     def is_persistent(self) -> bool:
@@ -819,3 +819,31 @@ class IMessageCollection[TMessage: IMessage](
 
 class ISemanticRefCollection(ICollection[SemanticRef, SemanticRefOrdinal], Protocol):
     """A collection of SemanticRefs."""
+
+
+class JsonSerializer[T](Protocol):
+    def serialize(self, value: T) -> str:
+        raise NotImplementedError
+
+    def deserialize(self, value: str) -> T:
+        raise NotImplementedError
+
+
+class IStorageProvider(Protocol):
+    def create_message_collection[TMessage: IMessage](
+        self,
+        serializer: JsonSerializer[TMessage] | None = None,
+    ) -> IMessageCollection[TMessage]:
+        raise NotImplementedError
+
+    def create_semantic_ref_collection(self) -> ISemanticRefCollection:
+        raise NotImplementedError
+
+    def close(self) -> None:
+        raise NotImplementedError
+
+
+# TODO: What does this comment by Umesh mean? Who should look?
+# Also look at:
+# search.py
+# searchlang.py (SearchQueryTranslator)
