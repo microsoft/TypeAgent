@@ -244,7 +244,6 @@ class EntityGraphView {
         }
     }
 
-
     /**
      * Set up search handlers
      */
@@ -307,7 +306,9 @@ class EntityGraphView {
             this.currentEntity = entityName;
 
             // Update breadcrumb to show entity name
-            const entityBreadcrumb = document.getElementById("entityNameBreadcrumb");
+            const entityBreadcrumb = document.getElementById(
+                "entityNameBreadcrumb",
+            );
             if (entityBreadcrumb) {
                 entityBreadcrumb.textContent = ` > ${entityName}`;
             }
@@ -595,14 +596,16 @@ class EntityGraphView {
                         // Ensure all required fields are present and not undefined
                         const hasValidFrom =
                             (r.relatedEntity &&
-                            typeof r.relatedEntity === "string")|| (r.from && typeof r.from === "string");
+                                typeof r.relatedEntity === "string") ||
+                            (r.from && typeof r.from === "string");
                         const hasValidTo =
                             (graphData.centerEntity &&
-                            typeof graphData.centerEntity === "string")|| (r.to && typeof r.to === "string");
+                                typeof graphData.centerEntity === "string") ||
+                            (r.to && typeof r.to === "string");
                         const hasValidType =
                             (r.relationshipType &&
-                            typeof r.relationshipType === "string")
-                            || (r.type && typeof r.type === "string");
+                                typeof r.relationshipType === "string") ||
+                            (r.type && typeof r.type === "string");
 
                         if (!hasValidFrom) {
                             console.warn(
@@ -645,21 +648,37 @@ class EntityGraphView {
                         confidence: e.confidence || 0.5,
                     })),
                     // Related entities from search results
-                    ...(graphData.relatedEntities || []).map((entity: any, index: number) => ({
-                        name: typeof entity === "string" ? entity : (entity.name || entity),
-                        type: "related_entity",
-                        confidence: typeof entity === "object" ? (entity.confidence || 0.7) : 0.7,
-                    })),
+                    ...(graphData.relatedEntities || []).map(
+                        (entity: any, index: number) => ({
+                            name:
+                                typeof entity === "string"
+                                    ? entity
+                                    : entity.name || entity,
+                            type: "related_entity",
+                            confidence:
+                                typeof entity === "object"
+                                    ? entity.confidence || 0.7
+                                    : 0.7,
+                        }),
+                    ),
                     // Top topics as entities
-                    ...(graphData.topTopics || []).map((topic: any, index: number) => ({
-                        name: typeof topic === "string" ? topic : (topic.name || topic),
-                        type: "topic",
-                        confidence: typeof topic === "object" ? (topic.confidence || 0.6) : 0.6,
-                    }))
+                    ...(graphData.topTopics || []).map(
+                        (topic: any, index: number) => ({
+                            name:
+                                typeof topic === "string"
+                                    ? topic
+                                    : topic.name || topic,
+                            type: "topic",
+                            confidence:
+                                typeof topic === "object"
+                                    ? topic.confidence || 0.6
+                                    : 0.6,
+                        }),
+                    ),
                 ];
 
                 // Create entity name set for validation
-                const entityNames = new Set(allEntities.map(e => e.name));
+                const entityNames = new Set(allEntities.map((e) => e.name));
 
                 // Validate and deduplicate relationships
                 const validatedRelationships = [];
@@ -669,24 +688,34 @@ class EntityGraphView {
                     const from = r.from || r.relatedEntity || "Unknown";
                     const to = r.to || graphData.centerEntity || "Unknown";
                     const type = r.relationshipType || r.type || "related";
-                    
+
                     // Check if both entities exist in the graph
                     if (!entityNames.has(from)) {
-                        console.warn(`Dropping relationship - 'from' entity not found in graph:`, from);
+                        console.warn(
+                            `Dropping relationship - 'from' entity not found in graph:`,
+                            from,
+                        );
                         continue;
                     }
                     if (!entityNames.has(to)) {
-                        console.warn(`Dropping relationship - 'to' entity not found in graph:`, to);
+                        console.warn(
+                            `Dropping relationship - 'to' entity not found in graph:`,
+                            to,
+                        );
                         continue;
                     }
-                    
+
                     // Create unique key for deduplication
                     const relationshipKey = `${from}:${to}:${type}`;
                     if (relationshipSet.has(relationshipKey)) {
-                        console.warn(`Dropping duplicate relationship:`, { from, to, type });
+                        console.warn(`Dropping duplicate relationship:`, {
+                            from,
+                            to,
+                            type,
+                        });
                         continue;
                     }
-                    
+
                     relationshipSet.add(relationshipKey);
                     validatedRelationships.push({
                         from,
@@ -698,7 +727,10 @@ class EntityGraphView {
 
                 // Add relationships from related entities to center
                 for (const entity of graphData.relatedEntities || []) {
-                    const entityName = typeof entity === "string" ? entity : (entity.name || entity);
+                    const entityName =
+                        typeof entity === "string"
+                            ? entity
+                            : entity.name || entity;
                     const relationshipKey = `${entityName}:${graphData.centerEntity}:related_to`;
                     if (!relationshipSet.has(relationshipKey)) {
                         relationshipSet.add(relationshipKey);
@@ -713,7 +745,8 @@ class EntityGraphView {
 
                 // Add relationships from topics to center
                 for (const topic of graphData.topTopics || []) {
-                    const topicName = typeof topic === "string" ? topic : (topic.name || topic);
+                    const topicName =
+                        typeof topic === "string" ? topic : topic.name || topic;
                     const relationshipKey = `${topicName}:${graphData.centerEntity}:topic_of`;
                     if (!relationshipSet.has(relationshipKey)) {
                         relationshipSet.add(relationshipKey);
@@ -726,8 +759,12 @@ class EntityGraphView {
                     }
                 }
 
-                console.log(`Entity graph: ${allEntities.length} entities, ${validatedRelationships.length} relationships`);
-                console.log(`Entity types: websites=${graphData.entities.length}, related=${graphData.relatedEntities?.length || 0}, topics=${graphData.topTopics?.length || 0}`);
+                console.log(
+                    `Entity graph: ${allEntities.length} entities, ${validatedRelationships.length} relationships`,
+                );
+                console.log(
+                    `Entity types: websites=${graphData.entities.length}, related=${graphData.relatedEntities?.length || 0}, topics=${graphData.topTopics?.length || 0}`,
+                );
 
                 // Load the graph into the visualizer
                 await this.visualizer.loadEntityGraph({
@@ -747,7 +784,7 @@ class EntityGraphView {
                     topicAffinity: graphData.topTopics || [],
                     summary: graphData.summary,
                     metadata: graphData.metadata,
-                    answerSources: graphData.answerSources || []
+                    answerSources: graphData.answerSources || [],
                 };
                 await this.sidebar.loadEntity(centerEntityData);
 

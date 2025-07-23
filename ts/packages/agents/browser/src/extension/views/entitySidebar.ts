@@ -250,8 +250,6 @@ export class EntitySidebar {
         }
     }
 
-
-
     private renderEmptyState(): void {
         const nameEl = document.getElementById("entityName");
         const typeEl = document.getElementById("entityType");
@@ -491,5 +489,4 @@ export class EntitySidebar {
         div.textContent = text;
         return div.innerHTML;
     }
-
 }

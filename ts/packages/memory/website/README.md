@@ -23,7 +23,7 @@ The website-memory package provides a unified extraction system with four distin
 | --------- | ----------------------------------- | ----------- | ---------------- | ---------------------- |
 | `basic`   | URL/title extraction only           | ❌          | ❌               | ❌                     |
 | `content` | Full content + AI knowledge         | ✅          | ❌               | ❌                     |
-| `macros` | Content + action detection          | ✅          | ✅               | ❌                     |
+| `macros`  | Content + action detection          | ✅          | ✅               | ❌                     |
 | `full`    | Complete extraction + relationships | ✅          | ✅               | ✅                     |
 
 ### Quick Start with Extraction

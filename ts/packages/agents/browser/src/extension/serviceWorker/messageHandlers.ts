@@ -1719,7 +1719,8 @@ async function handleSearchByEntities(message: any): Promise<any> {
             relatedEntities: [],
             suggestedFollowups: [],
             topTopics: [],
-            error: error instanceof Error ? error.message : "Entity search failed",
+            error:
+                error instanceof Error ? error.message : "Entity search failed",
             searchMethod: "entity-direct",
             entities: message.entities || [],
         };
@@ -1750,7 +1751,7 @@ async function handleSearchByTopics(message: any): Promise<any> {
                 text: "",
                 keyPoints: [],
                 confidence: 0,
-                sourceCount: 0
+                sourceCount: 0,
             },
             relatedEntities: result.relatedEntities || [],
             topTopics: result.topTopics || [],
@@ -1762,7 +1763,7 @@ async function handleSearchByTopics(message: any): Promise<any> {
             topics: message.topics || [],
             contextualInfo: result.contextualInfo || {},
             metadata: result.metadata || {},
-            suggestedFollowups: result.suggestedFollowups || []
+            suggestedFollowups: result.suggestedFollowups || [],
         };
     } catch (error) {
         console.error("Error in searchByTopics:", error);
@@ -1773,7 +1774,7 @@ async function handleSearchByTopics(message: any): Promise<any> {
                 text: "",
                 keyPoints: [],
                 confidence: 0,
-                sourceCount: 0
+                sourceCount: 0,
             },
             relatedEntities: [],
             topTopics: [],
@@ -1783,7 +1784,8 @@ async function handleSearchByTopics(message: any): Promise<any> {
             contextualInfo: {},
             metadata: {},
             suggestedFollowups: [],
-            error: error instanceof Error ? error.message : "Topic search failed",
+            error:
+                error instanceof Error ? error.message : "Topic search failed",
             searchMethod: "topic-direct",
             topics: message.topics || [],
         };
@@ -1815,7 +1817,7 @@ async function handleHybridSearch(message: any): Promise<any> {
                 text: "",
                 keyPoints: [],
                 confidence: 0,
-                sourceCount: 0
+                sourceCount: 0,
             },
             relatedEntities: result.relatedEntities || [],
             topTopics: result.topTopics || [],
@@ -1827,7 +1829,7 @@ async function handleHybridSearch(message: any): Promise<any> {
             query: message.query || "",
             contextualInfo: result.contextualInfo || {},
             metadata: result.metadata || {},
-            suggestedFollowups: result.suggestedFollowups || []
+            suggestedFollowups: result.suggestedFollowups || [],
         };
     } catch (error) {
         console.error("Error in hybridSearch:", error);
@@ -1838,7 +1840,7 @@ async function handleHybridSearch(message: any): Promise<any> {
                 text: "",
                 keyPoints: [],
                 confidence: 0,
-                sourceCount: 0
+                sourceCount: 0,
             },
             relatedEntities: [],
             topTopics: [],
@@ -1848,7 +1850,8 @@ async function handleHybridSearch(message: any): Promise<any> {
             contextualInfo: {},
             metadata: {},
             suggestedFollowups: [],
-            error: error instanceof Error ? error.message : "Hybrid search failed",
+            error:
+                error instanceof Error ? error.message : "Hybrid search failed",
             searchMethod: "hybrid-direct",
             query: message.query || "",
         };

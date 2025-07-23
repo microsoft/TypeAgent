@@ -986,9 +986,13 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                 // Convert website search results to entity format with rich data
                 const entities = searchResult.websites
                     .map((website: any, index: number) => {
-                        return this.extractRichEntityData(entityName, website, index);
+                        return this.extractRichEntityData(
+                            entityName,
+                            website,
+                            index,
+                        );
                     })
-                    .filter((entity:any) => entity.name && entity.name.trim())
+                    .filter((entity: any) => entity.name && entity.name.trim())
                     .slice(0, options.maxResults || 10);
 
                 // If we have related entities from the search result, include them
@@ -1012,7 +1016,9 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                                 source: "search_related",
                             };
                         })
-                        .filter((entity:any) => entity.name && entity.name.trim());
+                        .filter(
+                            (entity: any) => entity.name && entity.name.trim(),
+                        );
                 }
 
                 return {
@@ -1028,7 +1034,7 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                     summary: searchResult.summary || null,
                     metadata: searchResult.metadata || {},
                     relatedEntities: searchResult.relatedEntities || [],
-                    answerSources: searchResult.answerSources || []
+                    answerSources: searchResult.answerSources || [],
                 };
             }
 
@@ -1042,7 +1048,7 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                 summary: null,
                 metadata: {},
                 relatedEntities: [],
-                answerSources: []
+                answerSources: [],
             };
         } catch (error) {
             console.error("Entity search failed:", error);
@@ -1055,7 +1061,7 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                 summary: null,
                 metadata: {},
                 relatedEntities: [],
-                answerSources: []
+                answerSources: [],
             };
         }
     }
@@ -1098,7 +1104,11 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
             // Create entities from primary search results with rich data
             const primaryEntities = primarySearch.websites
                 .map((website: any, index: number) => {
-                    const richEntity = this.extractRichEntityData(centerEntity, website, index);
+                    const richEntity = this.extractRichEntityData(
+                        centerEntity,
+                        website,
+                        index,
+                    );
                     // Override ID and category for primary entities
                     return {
                         ...richEntity,
@@ -1106,7 +1116,7 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                         category: "primary",
                     };
                 })
-                .filter((entity:any) => entity.name && entity.name.trim())
+                .filter((entity: any) => entity.name && entity.name.trim())
                 .slice(0, 15);
 
             // Add the center entity itself with aggregated rich data
@@ -1142,18 +1152,26 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                             const relatedEntityData = relatedSearch.websites
                                 .slice(0, 3)
                                 .map((website: any, index: number) => {
-                                    const richEntity = this.extractRichEntityData(relatedName, website, index);
+                                    const richEntity =
+                                        this.extractRichEntityData(
+                                            relatedName,
+                                            website,
+                                            index,
+                                        );
                                     // Override properties for related entities
                                     return {
                                         ...richEntity,
                                         id: `related_${relatedName.replace(/\s+/g, "_")}_${index}`,
                                         category: "related",
                                         parentEntity: relatedName,
-                                        confidence: Math.min(richEntity.confidence, 0.8), // Cap confidence for related entities
+                                        confidence: Math.min(
+                                            richEntity.confidence,
+                                            0.8,
+                                        ), // Cap confidence for related entities
                                     };
                                 })
                                 .filter(
-                                    (entity:any) =>
+                                    (entity: any) =>
                                         entity.name && entity.name.trim(),
                                 );
                             relatedEntities.push(...relatedEntityData);
@@ -1193,12 +1211,12 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                     totalSources: primarySearch.websites.length,
                     hasRelatedExpansion: relatedEntities.length > 0,
                     generatedAt: new Date().toISOString(),
-                    ...primarySearch.metadata
+                    ...primarySearch.metadata,
                 },
                 topTopics: primarySearch.topTopics || [],
                 summary: primarySearch.summary || null,
                 answerSources: primarySearch.answerSources || [],
-                relatedEntities: primarySearch.relatedEntities || []
+                relatedEntities: primarySearch.relatedEntities || [],
             };
         } catch (error) {
             console.error("Entity graph retrieval failed:", error);
@@ -1251,20 +1269,24 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                 maxResults,
             );
 
-            if (entityResults && entityResults.websites && entityResults.websites.length > 0) {
+            if (
+                entityResults &&
+                entityResults.websites &&
+                entityResults.websites.length > 0
+            ) {
                 searchResult = {
                     websites: entityResults.websites,
                     relatedEntities: entityResults.relatedEntities || [],
                     topTopics: entityResults.topTopics || [],
                     summary: entityResults.summary || null,
                     metadata: entityResults.metadata || {},
-                    answerSources: entityResults.answerSources || []
+                    answerSources: entityResults.answerSources || [],
                 };
                 searchMethod = "entity";
                 console.log(
                     `✅ Entity search found ${entityResults.websites.length} results for: ${entityName}`,
                     `Related entities: ${entityResults.relatedEntities?.length || 0}`,
-                    `Top topics: ${entityResults.topTopics?.length || 0}`
+                    `Top topics: ${entityResults.topTopics?.length || 0}`,
                 );
             }
         } catch (error) {
@@ -1281,26 +1303,51 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                     maxResults,
                 );
 
-                if (topicResults && topicResults.websites && topicResults.websites.length > 0) {
+                if (
+                    topicResults &&
+                    topicResults.websites &&
+                    topicResults.websites.length > 0
+                ) {
                     // Merge with existing results or use as primary
                     const existingWebsites = searchResult?.websites || [];
-                    const existingRelatedEntities = searchResult?.relatedEntities || [];
+                    const existingRelatedEntities =
+                        searchResult?.relatedEntities || [];
                     const existingTopTopics = searchResult?.topTopics || [];
-                    
+
                     searchResult = {
-                        websites: [...existingWebsites, ...topicResults.websites].slice(0, maxResults),
-                        relatedEntities: [...existingRelatedEntities, ...(topicResults.relatedEntities || [])],
-                        topTopics: [...existingTopTopics, ...(topicResults.topTopics || [])],
-                        summary: topicResults.summary || searchResult?.summary || null,
-                        metadata: { ...searchResult?.metadata, ...topicResults.metadata },
-                        answerSources: [...(searchResult?.answerSources || []), ...(topicResults.answerSources || [])]
+                        websites: [
+                            ...existingWebsites,
+                            ...topicResults.websites,
+                        ].slice(0, maxResults),
+                        relatedEntities: [
+                            ...existingRelatedEntities,
+                            ...(topicResults.relatedEntities || []),
+                        ],
+                        topTopics: [
+                            ...existingTopTopics,
+                            ...(topicResults.topTopics || []),
+                        ],
+                        summary:
+                            topicResults.summary ||
+                            searchResult?.summary ||
+                            null,
+                        metadata: {
+                            ...searchResult?.metadata,
+                            ...topicResults.metadata,
+                        },
+                        answerSources: [
+                            ...(searchResult?.answerSources || []),
+                            ...(topicResults.answerSources || []),
+                        ],
                     };
-                    searchMethod = searchResult.websites.length > existingWebsites.length 
-                        ? "topic" : searchMethod;
+                    searchMethod =
+                        searchResult.websites.length > existingWebsites.length
+                            ? "topic"
+                            : searchMethod;
                     console.log(
                         `✅ Topic search found ${topicResults.websites.length} additional results for: ${entityName}`,
                         `Added related entities: ${topicResults.relatedEntities?.length || 0}`,
-                        `Added topics: ${topicResults.topTopics?.length || 0}`
+                        `Added topics: ${topicResults.topTopics?.length || 0}`,
                     );
                 }
             } catch (error) {
@@ -1318,25 +1365,50 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                     maxResults,
                 );
 
-                if (hybridResults && hybridResults.websites && hybridResults.websites.length > 0) {
+                if (
+                    hybridResults &&
+                    hybridResults.websites &&
+                    hybridResults.websites.length > 0
+                ) {
                     const existingWebsites = searchResult?.websites || [];
-                    const existingRelatedEntities = searchResult?.relatedEntities || [];
+                    const existingRelatedEntities =
+                        searchResult?.relatedEntities || [];
                     const existingTopTopics = searchResult?.topTopics || [];
-                    
+
                     searchResult = {
-                        websites: [...existingWebsites, ...hybridResults.websites].slice(0, maxResults),
-                        relatedEntities: [...existingRelatedEntities, ...(hybridResults.relatedEntities || [])],
-                        topTopics: [...existingTopTopics, ...(hybridResults.topTopics || [])],
-                        summary: hybridResults.summary || searchResult?.summary || null,
-                        metadata: { ...searchResult?.metadata, ...hybridResults.metadata },
-                        answerSources: [...(searchResult?.answerSources || []), ...(hybridResults.answerSources || [])]
+                        websites: [
+                            ...existingWebsites,
+                            ...hybridResults.websites,
+                        ].slice(0, maxResults),
+                        relatedEntities: [
+                            ...existingRelatedEntities,
+                            ...(hybridResults.relatedEntities || []),
+                        ],
+                        topTopics: [
+                            ...existingTopTopics,
+                            ...(hybridResults.topTopics || []),
+                        ],
+                        summary:
+                            hybridResults.summary ||
+                            searchResult?.summary ||
+                            null,
+                        metadata: {
+                            ...searchResult?.metadata,
+                            ...hybridResults.metadata,
+                        },
+                        answerSources: [
+                            ...(searchResult?.answerSources || []),
+                            ...(hybridResults.answerSources || []),
+                        ],
                     };
-                    searchMethod = searchResult.websites.length > existingWebsites.length 
-                        ? "hybrid" : searchMethod;
+                    searchMethod =
+                        searchResult.websites.length > existingWebsites.length
+                            ? "hybrid"
+                            : searchMethod;
                     console.log(
                         `✅ Hybrid search found ${hybridResults.websites.length} additional results for: ${entityName}`,
                         `Added related entities: ${hybridResults.relatedEntities?.length || 0}`,
-                        `Added topics: ${hybridResults.topTopics?.length || 0}`
+                        `Added topics: ${hybridResults.topTopics?.length || 0}`,
                     );
                 }
             } catch (error) {
@@ -1347,9 +1419,7 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
         // Strategy 4: Text search fallback (original slow method)
         if (!searchResult || searchResult.websites.length === 0) {
             try {
-                console.log(
-                    `Falling back to text search for: ${entityName}`,
-                );
+                console.log(`Falling back to text search for: ${entityName}`);
                 searchResult = await this.chromeService.searchWebMemories(
                     entityName,
                     {},
@@ -1359,7 +1429,10 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                     `⚠️ Text fallback found ${searchResult?.websites?.length || 0} results for: ${entityName}`,
                 );
             } catch (error) {
-                console.error(`All search methods failed for ${entityName}:`, error);
+                console.error(
+                    `All search methods failed for ${entityName}:`,
+                    error,
+                );
                 searchResult = { websites: [] };
                 searchMethod = "failed";
             }
@@ -1368,12 +1441,12 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
         // Add metadata about which search method was used
         const endTime = performance.now();
         const searchTime = Math.round(endTime - startTime);
-        
+
         if (searchResult) {
             searchResult.searchMethod = searchMethod;
             searchResult.searchTerm = entityName;
             searchResult.searchTimeMs = searchTime;
-            
+
             console.log(
                 `🚀 Entity search completed in ${searchTime}ms using ${searchMethod} method for: ${entityName} (${searchResult.websites?.length || 0} results)`,
             );
@@ -1414,7 +1487,11 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
         // Extract rich data from website knowledge if available
         const knowledge = website.getKnowledge ? website.getKnowledge() : null;
         if (knowledge) {
-            return this.enhanceEntityWithKnowledge(baseEntity, knowledge, entityName);
+            return this.enhanceEntityWithKnowledge(
+                baseEntity,
+                knowledge,
+                entityName,
+            );
         }
 
         return baseEntity;
@@ -1438,24 +1515,28 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
 
         // Add aliases from extracted entities
         const matchingEntity = knowledge.entities?.find(
-            (e: any) => 
+            (e: any) =>
                 e.name.toLowerCase().includes(searchEntityName.toLowerCase()) ||
-                searchEntityName.toLowerCase().includes(e.name.toLowerCase())
+                searchEntityName.toLowerCase().includes(e.name.toLowerCase()),
         );
-        
+
         if (matchingEntity) {
             enhancedEntity.aliases = matchingEntity.aliases || [];
-            enhancedEntity.entityType = matchingEntity.type || enhancedEntity.type;
+            enhancedEntity.entityType =
+                matchingEntity.type || enhancedEntity.type;
             enhancedEntity.confidence = Math.max(
                 enhancedEntity.confidence,
-                matchingEntity.confidence || 0
+                matchingEntity.confidence || 0,
             );
         }
 
         // Add topic affinity
-        enhancedEntity.topicAffinity = knowledge.topics?.map((t: any) => 
-            typeof t === 'string' ? t : (t.name || t.topic || t)
-        ).slice(0, 5) || [];
+        enhancedEntity.topicAffinity =
+            knowledge.topics
+                ?.map((t: any) =>
+                    typeof t === "string" ? t : t.name || t.topic || t,
+                )
+                .slice(0, 5) || [];
 
         // Add context snippets from text chunks
         if (knowledge.textChunks || knowledge.content) {
@@ -1463,7 +1544,7 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
             enhancedEntity.contextSnippets = this.extractContextSnippets(
                 textContent,
                 searchEntityName,
-                3
+                3,
             );
         }
 
@@ -1474,12 +1555,14 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
         );
 
         // Add temporal data
-        enhancedEntity.firstSeen = knowledge.extractionDate || 
-            knowledge.visitDate || 
+        enhancedEntity.firstSeen =
+            knowledge.extractionDate ||
+            knowledge.visitDate ||
             baseEntity.lastVisited ||
             new Date().toISOString();
-        enhancedEntity.lastSeen = knowledge.lastUpdated || 
-            knowledge.visitDate || 
+        enhancedEntity.lastSeen =
+            knowledge.lastUpdated ||
+            knowledge.visitDate ||
             baseEntity.lastVisited ||
             new Date().toISOString();
 
@@ -1507,7 +1590,7 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
         // Count in text chunks
         if (knowledge.textChunks && Array.isArray(knowledge.textChunks)) {
             knowledge.textChunks.forEach((chunk: string) => {
-                if (typeof chunk === 'string') {
+                if (typeof chunk === "string") {
                     const matches = chunk.toLowerCase().split(searchTerm);
                     count += Math.max(0, matches.length - 1);
                 }
@@ -1517,7 +1600,10 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
         // Count in extracted entities
         if (knowledge.entities && Array.isArray(knowledge.entities)) {
             knowledge.entities.forEach((entity: any) => {
-                if (entity.name && entity.name.toLowerCase().includes(searchTerm)) {
+                if (
+                    entity.name &&
+                    entity.name.toLowerCase().includes(searchTerm)
+                ) {
                     count += entity.mentionCount || 1;
                 }
             });
@@ -1541,23 +1627,26 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
         const snippetLength = 150;
 
         for (const chunk of textChunks) {
-            if (!chunk || typeof chunk !== 'string') continue;
+            if (!chunk || typeof chunk !== "string") continue;
 
             const lowerChunk = chunk.toLowerCase();
             const index = lowerChunk.indexOf(searchTerm);
-            
+
             if (index !== -1 && snippets.length < maxSnippets) {
                 // Extract context around the entity mention
                 const start = Math.max(0, index - 50);
-                const end = Math.min(chunk.length, index + searchTerm.length + 100);
+                const end = Math.min(
+                    chunk.length,
+                    index + searchTerm.length + 100,
+                );
                 let snippet = chunk.slice(start, end).trim();
-                
+
                 // Clean up snippet
-                if (start > 0) snippet = '...' + snippet;
-                if (end < chunk.length) snippet = snippet + '...';
-                
+                if (start > 0) snippet = "..." + snippet;
+                if (end < chunk.length) snippet = snippet + "...";
+
                 // Avoid duplicate snippets
-                if (!snippets.some(s => s.includes(snippet.slice(10, -10)))) {
+                if (!snippets.some((s) => s.includes(snippet.slice(10, -10)))) {
                     snippets.push(snippet);
                 }
             }
@@ -1578,18 +1667,22 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
         // Extract from entities that appear together
         if (knowledge.entities && Array.isArray(knowledge.entities)) {
             knowledge.entities.forEach((entity: any) => {
-                if (entity.name && 
+                if (
+                    entity.name &&
                     !entity.name.toLowerCase().includes(searchTerm) &&
-                    entity.confidence > 0.5) {
-                    
+                    entity.confidence > 0.5
+                ) {
                     relationships.push({
                         relatedEntity: entity.name,
                         relationshipType: "co_occurs_with",
                         confidence: entity.confidence,
                         strength: entity.confidence * 0.8,
                         evidenceSources: [knowledge.url || "content"],
-                        firstObserved: knowledge.extractionDate || new Date().toISOString(),
-                        lastObserved: knowledge.lastUpdated || new Date().toISOString(),
+                        firstObserved:
+                            knowledge.extractionDate ||
+                            new Date().toISOString(),
+                        lastObserved:
+                            knowledge.lastUpdated || new Date().toISOString(),
                     });
                 }
             });
@@ -1598,16 +1691,25 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
         // Extract from topics (entity-topic relationships)
         if (knowledge.topics && Array.isArray(knowledge.topics)) {
             knowledge.topics.slice(0, 3).forEach((topic: any) => {
-                const topicName = typeof topic === 'string' ? topic : (topic.name || topic.topic);
+                const topicName =
+                    typeof topic === "string"
+                        ? topic
+                        : topic.name || topic.topic;
                 if (topicName) {
                     relationships.push({
                         relatedEntity: topicName,
                         relationshipType: "related_to_topic",
-                        confidence: typeof topic === 'object' ? (topic.relevance || 0.7) : 0.7,
+                        confidence:
+                            typeof topic === "object"
+                                ? topic.relevance || 0.7
+                                : 0.7,
                         strength: 0.6,
                         evidenceSources: [knowledge.url || "content"],
-                        firstObserved: knowledge.extractionDate || new Date().toISOString(),
-                        lastObserved: knowledge.lastUpdated || new Date().toISOString(),
+                        firstObserved:
+                            knowledge.extractionDate ||
+                            new Date().toISOString(),
+                        lastObserved:
+                            knowledge.lastUpdated || new Date().toISOString(),
                     });
                 }
             });
@@ -1642,19 +1744,23 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
             maxConfidence = Math.max(maxConfidence, entity.confidence || 0);
 
             if (entity.domain) allDomains.add(entity.domain);
-            
+
             if (entity.topicAffinity) {
-                entity.topicAffinity.forEach((topic: string) => allTopics.add(topic));
+                entity.topicAffinity.forEach((topic: string) =>
+                    allTopics.add(topic),
+                );
             }
-            
+
             if (entity.aliases) {
-                entity.aliases.forEach((alias: string) => allAliases.add(alias));
+                entity.aliases.forEach((alias: string) =>
+                    allAliases.add(alias),
+                );
             }
-            
+
             if (entity.relationships) {
                 allRelationships.push(...entity.relationships);
             }
-            
+
             if (entity.contextSnippets) {
                 allContextSnippets.push(...entity.contextSnippets.slice(0, 2));
             }
@@ -1665,7 +1771,7 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                     earliestSeen = entity.firstSeen;
                 }
             }
-            
+
             if (entity.lastSeen) {
                 if (!latestSeen || entity.lastSeen > latestSeen) {
                     latestSeen = entity.lastSeen;
@@ -1674,8 +1780,12 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
         });
 
         // Deduplicate and limit collections
-        const uniqueRelationships = this.deduplicateRelationships(allRelationships);
-        const uniqueContextSnippets = [...new Set(allContextSnippets)].slice(0, 5);
+        const uniqueRelationships =
+            this.deduplicateRelationships(allRelationships);
+        const uniqueContextSnippets = [...new Set(allContextSnippets)].slice(
+            0,
+            5,
+        );
 
         return {
             id: "center",
@@ -1684,7 +1794,7 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
             confidence: Math.min(0.95, maxConfidence + 0.1), // Boost center entity confidence
             category: "center",
             description: `Center entity: ${centerEntityName}`,
-            
+
             // Aggregated rich data
             mentionCount: Math.max(1, totalMentions),
             visitCount: totalVisitCount,
@@ -1695,10 +1805,12 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
             contextSnippets: uniqueContextSnippets,
             firstSeen: earliestSeen || new Date().toISOString(),
             lastSeen: latestSeen || new Date().toISOString(),
-            
+
             // Center entity specific metadata
             primarySourceCount: primaryEntities.length,
-            aggregatedFromSources: primaryEntities.map(e => e.url).filter(Boolean),
+            aggregatedFromSources: primaryEntities
+                .map((e) => e.url)
+                .filter(Boolean),
         };
     }
 
@@ -1707,18 +1819,19 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
      */
     private deduplicateRelationships(relationships: any[]): any[] {
         const seen = new Map<string, any>();
-        
+
         relationships.forEach((rel) => {
             const key = `${rel.relatedEntity}:${rel.relationshipType}`;
             const existing = seen.get(key);
-            
+
             if (!existing || rel.confidence > existing.confidence) {
                 seen.set(key, rel);
             }
         });
-        
-        return Array.from(seen.values())
-            .sort((a, b) => b.confidence - a.confidence);
+
+        return Array.from(seen.values()).sort(
+            (a, b) => b.confidence - a.confidence,
+        );
     }
 
     private extractDomain(url: string): string {
