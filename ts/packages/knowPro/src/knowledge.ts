@@ -2,8 +2,14 @@
 // Licensed under the MIT License.
 
 import { conversation as kpLib } from "knowledge-processor";
-import { async, asyncArray } from "typeagent";
-import { error, Result } from "typechat";
+import { async, asyncArray, loadSchema } from "typeagent";
+import {
+    createJsonTranslator,
+    error,
+    Result,
+    TypeChatJsonTranslator,
+    TypeChatLanguageModel,
+} from "typechat";
 import { ChatModel } from "aiclient";
 import { createKnowledgeModel } from "./conversationIndex.js";
 import { BatchTask, runInBatches } from "./taskQueue.js";
@@ -15,6 +21,8 @@ import {
 } from "./searchLib.js";
 import { PropertyNames } from "./propertyIndex.js";
 import { facetValueToString } from "./knowledgeLib.js";
+import { createTypeScriptJsonValidator } from "typechat/ts";
+import * as knowledgeSchema2 from "./knowledgeSchema_v2.js";
 
 /**
  * Create a knowledge extractor using the given Chat Model
@@ -176,5 +184,33 @@ export class KnowledgeCompiler {
             }
         }
         return termGroup;
+    }
+}
+
+export function createKnowledgeTranslator2(
+    model: TypeChatLanguageModel,
+): TypeChatJsonTranslator<knowledgeSchema2.KnowledgeResponse> {
+    const schema = loadSchema(["knowledgeSchema_v2.ts"], import.meta.url);
+    const typeName = "KnowledgeResponse";
+    const validator =
+        createTypeScriptJsonValidator<knowledgeSchema2.KnowledgeResponse>(
+            schema,
+            typeName,
+        );
+    const translator = createJsonTranslator<knowledgeSchema2.KnowledgeResponse>(
+        model,
+        validator,
+    );
+    translator.createRequestPrompt = createRequestPrompt;
+    return translator;
+
+    function createRequestPrompt(request: string) {
+        return (
+            `You are a service that translates user messages in a conversation into JSON objects of type "${typeName}" according to the following TypeScript definitions:\n` +
+            `\`\`\`\n${schema}\`\`\`\n` +
+            `The following are messages in a conversation:\n` +
+            `"""\n${request}\n"""\n` +
+            `The following is the user request translated into a JSON object with no spaces of indentation and no properties with the value undefined:\n`
+        );
     }
 }
