@@ -123,6 +123,7 @@ export async function createKnowproCommands(
     commands.kpEntities = entities;
     commands.kpTopics = topics;
     commands.kpTags = tags;
+    commands.kpVerbs = verbs;
     commands.kpMessages = showMessages;
     commands.kpAbstractMessage = abstract;
     commands.kpAlias = addAlias;
@@ -624,6 +625,39 @@ export async function createKnowproCommands(
                 tagStrings.sort();
                 context.printer.writeList(tagStrings, { type: "ol" });
             }
+        }
+    }
+
+    commands.kpVerbs.metadata = "Display all verbs in the conversation";
+    async function verbs(): Promise<void> {
+        const conversation = ensureConversationLoaded();
+        if (!conversation) {
+            return;
+        }
+        if (conversation.semanticRefs !== undefined) {
+            const actions = kp.filterCollection(
+                conversation.semanticRefs,
+                (sr) => sr.knowledgeType === "action",
+            );
+            const uniqueVerbs = [
+                ...new Set(
+                    actions.flatMap(
+                        (t) => (t.knowledge as knowLib.Action).verbs,
+                    ),
+                ).values(),
+            ];
+            uniqueVerbs.sort();
+            context.printer.writeLineInColor(
+                chalk.cyan,
+                `${uniqueVerbs.length} verbs`,
+            );
+            context.printer.writeList(uniqueVerbs);
+            context.printer.writeLine();
+            s;
+            context.printer.writeLineInColor(
+                chalk.cyan,
+                `${uniqueVerbs.length} verbs`,
+            );
         }
     }
 
