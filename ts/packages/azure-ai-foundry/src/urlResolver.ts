@@ -431,3 +431,14 @@ export async function resolveURLWithWikipedia(
 
     return retVal;
 }
+
+// TODO: finish
+export async function resolveURLByKeyword(
+    keyword: string,
+): Promise<string | undefined | null> {
+    
+    // 1. Load the keyword cache
+    // 2. lookup keyword
+
+    return undefined;
+}

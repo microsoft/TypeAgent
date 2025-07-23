@@ -6,6 +6,9 @@ import { bingWithGrounding, extractorAgent } from "azure-ai-foundry";
 import { AIProjectClient } from "@azure/ai-projects";
 import { DefaultAzureCredential } from "@azure/identity";
 import { MessageContentUnion, ThreadMessage } from "@azure/ai-agents";
+import child_process from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { writeFileSync } from "node:fs";
 
 // Load environment variables from .env file
 const envPath = new URL("../../../.env", import.meta.url);
@@ -36,29 +39,45 @@ const sites = lines.map((line) => {
 
 // go get the aliases for each site
 const aliases: Record<string, string[]> = {};
-const fetchHeaders = {
-        "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US;",
-        "Accept-Encoding": "gzip, deflate, br, zstd",
-        "Cache-Control": "max-age=0"
-    };
+const fetchWebPagePath = new URL(
+    "../../../../dotnet/fetchWebPage/bin/Debug/autoShell.exe",
+    import.meta.url,
+)
+
+async function fetchURL(site: string) {
+    return new Promise<any>((resolve, reject) => {
+        const child = child_process.spawn(fileURLToPath(fetchWebPagePath));
+        child.on("error", (err) => {
+            reject(err);
+        });
+        child.on("spawn", () => {
+            resolve(child);
+        });
+        child.on("close", () => {
+            resolve(child);
+        });
+        child.on("message", (data) => {
+            resolve(data);
+        });
+    });
+}
 
 for(const site of sites) {
     if (site) { 
         aliases[site] = [];
 
-        const aliasResponse = await fetch(`https://moz.com/domain-analysis/${site}`,
-        {
-            headers: fetchHeaders,
-        }
-        );
+        // const aliasResponse = await fetch(`https://moz.com/domain-analysis/${site}`,
+        // {
+        //     headers: fetchHeaders,
+        // }
+        // );
 
-        if (response.ok) {
-            const data = await aliasResponse.text();
+        const data = fetchURL(site);
 
-            const extracted: extractorAgent.extractedAliases | null | undefined = await extractAliases(data);
+        if (data) {
+            //const data = await aliasResponse.text();
+
+            const extracted: extractorAgent.extractedAliases | null | undefined = await extractAliases(JSON.stringify(data));
 
             // merge extracted keywords
             if (extracted) {
@@ -66,12 +85,19 @@ for(const site of sites) {
                 console.log(`Extracted ${aliases[site].length} alises for ${site}`);
             }
         } else {
-            console.error(`Failed to fetch aliases for ${site}: ${aliasResponse.statusText}`);
+            console.error(`Failed to fetch aliases for ${site}: ${data}`);
         }
     }
 };
 
-// TODO: write to disk
+// TODO: write to disk, convert RECORD to writeable file
+// TODO: reverse this the other way around so that the keys are the keywords and the values are the URLs
+const aa: any = {};
+for (const [url, keywords] of Object.entries(aliases)) {
+    aa[url] = keywords
+}
+
+writeFileSync("url_aliases.txt", aa);
 
 async function extractAliases(data: string): Promise<extractorAgent.extractedAliases | undefined | null> {
     const agent = await extractorAgent.ensureKeywordExtractorAgent(groundingConfig, project);
