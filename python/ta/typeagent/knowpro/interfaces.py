@@ -29,7 +29,7 @@ class IKnowledgeSource(Protocol):
 
     def get_knowledge(self) -> kplib.KnowledgeResponse:
         """Retrieves knowledge from the source."""
-        raise NotImplementedError
+        ...
 
 
 @dataclass
@@ -105,21 +105,19 @@ class ScoredMessageOrdinal:
 
 
 class ITermToSemanticRefIndex(Protocol):
-    def get_terms(self) -> list[str]:
-        raise NotImplementedError
+    def get_terms(self) -> list[str]: ...
 
     def add_term(
         self,
         term: str,
         semantic_ref_ordinal: SemanticRefOrdinal | ScoredSemanticRefOrdinal,
-    ) -> str:
-        raise NotImplementedError
+    ) -> str: ...
 
-    def remove_term(self, term: str, semantic_ref_ordinal: SemanticRefOrdinal) -> None:
-        raise NotImplementedError
+    def remove_term(
+        self, term: str, semantic_ref_ordinal: SemanticRefOrdinal
+    ) -> None: ...
 
-    def lookup_term(self, term: str) -> list[ScoredSemanticRefOrdinal] | None:
-        raise NotImplementedError
+    def lookup_term(self, term: str) -> list[ScoredSemanticRefOrdinal] | None: ...
 
 
 type KnowledgeType = Literal["entity", "action", "topic", "tag"]
@@ -328,21 +326,18 @@ class ScoredKnowledge:
 
 # Allows for faster retrieval of name, value properties
 class IPropertyToSemanticRefIndex(Protocol):
-    def get_values(self) -> list[str]:
-        raise NotImplementedError
+    def get_values(self) -> list[str]: ...
 
     def add_property(
         self,
         property_name: str,
         value: str,
         semantic_ref_ordinal: SemanticRefOrdinal | ScoredSemanticRefOrdinal,
-    ) -> None:
-        raise NotImplementedError
+    ) -> None: ...
 
     def lookup_property(
         self, property_name: str, value: str
-    ) -> list[ScoredSemanticRefOrdinal] | None:
-        raise NotImplementedError
+    ) -> list[ScoredSemanticRefOrdinal] | None: ...
 
 
 @dataclass
@@ -353,60 +348,51 @@ class TimestampedTextRange:
 
 # Return text ranges in the given date range.
 class ITimestampToTextRangeIndex(Protocol):
-    def add_timestamp(self, message_ordinal: MessageOrdinal, timestamp: str) -> bool:
-        raise NotImplementedError
+    def add_timestamp(
+        self, message_ordinal: MessageOrdinal, timestamp: str
+    ) -> bool: ...
 
     def add_timestamps(
         self, message_timestamps: list[tuple[MessageOrdinal, str]]
-    ) -> "ListIndexingResult":
-        raise NotImplementedError
+    ) -> "ListIndexingResult": ...
 
-    def lookup_range(self, date_range: DateRange) -> list[TimestampedTextRange]:
-        raise NotImplementedError
+    def lookup_range(self, date_range: DateRange) -> list[TimestampedTextRange]: ...
 
 
 class ITermToRelatedTerms(Protocol):
-    def lookup_term(self, text: str) -> list[Term] | None:
-        raise NotImplementedError
+    def lookup_term(self, text: str) -> list[Term] | None: ...
 
 
 class ITermToRelatedTermsFuzzy(Protocol):
     async def add_terms(
         self, texts: list[str], event_handler: "IndexingEventHandlers | None" = None
-    ) -> "ListIndexingResult":
-        raise NotImplementedError
+    ) -> "ListIndexingResult": ...
 
     async def lookup_term(
         self,
         text: str,
         max_hits: int | None = None,
         min_score: float | None = None,
-    ) -> list[Term]:
-        raise NotImplementedError
+    ) -> list[Term]: ...
 
     async def lookup_terms(
         self,
         texts: list[str],
         max_hits: int | None = None,
         min_score: float | None = None,
-    ) -> list[list[Term]]:
-        raise NotImplementedError
+    ) -> list[list[Term]]: ...
 
 
 class ITermToRelatedTermsIndex(Protocol):
     @property
-    def aliases(self) -> ITermToRelatedTerms | None:
-        raise NotImplementedError
+    def aliases(self) -> ITermToRelatedTerms | None: ...
 
     @property
-    def fuzzy_index(self) -> ITermToRelatedTermsFuzzy | None:
-        raise NotImplementedError
+    def fuzzy_index(self) -> ITermToRelatedTermsFuzzy | None: ...
 
-    def serialize(self) -> "TermsToRelatedTermsIndexData":
-        raise NotImplementedError
+    def serialize(self) -> "TermsToRelatedTermsIndexData": ...
 
-    def deserialize(self, data: "TermsToRelatedTermsIndexData") -> None:
-        raise NotImplementedError
+    def deserialize(self, data: "TermsToRelatedTermsIndexData") -> None: ...
 
 
 class ThreadData(TypedDict):
@@ -445,22 +431,18 @@ class ScoredThreadOrdinal:
 class IConversationThreads(Protocol):
     threads: list[Thread]
 
-    async def add_thread(self, thread: Thread) -> None:
-        raise NotImplementedError
+    async def add_thread(self, thread: Thread) -> None: ...
 
     async def lookup_thread(
         self,
         thread_description: str,
         max_matches: int | None = None,
         threshold_score: float | None = None,
-    ) -> list[ScoredThreadOrdinal] | None:
-        raise NotImplementedError
+    ) -> list[ScoredThreadOrdinal] | None: ...
 
-    def serialize(self) -> "ConversationThreadData[ThreadDataItem]":
-        raise NotImplementedError
+    def serialize(self) -> "ConversationThreadData[ThreadDataItem]": ...
 
-    def deserialize(self, data: "ConversationThreadData[ThreadDataItem]") -> None:
-        raise NotImplementedError
+    def deserialize(self, data: "ConversationThreadData[ThreadDataItem]") -> None: ...
 
 
 class IMessageTextIndex[TMessage: IMessage](Protocol):
@@ -469,16 +451,14 @@ class IMessageTextIndex[TMessage: IMessage](Protocol):
         self,
         messages: Iterable[TMessage],
         event_handler: "IndexingEventHandlers | None" = None,
-    ) -> "ListIndexingResult":
-        raise NotImplementedError
+    ) -> "ListIndexingResult": ...
 
     async def lookup_messages(
         self,
         message_text: str,
         max_matches: int | None = None,
         threshold_score: float | None = None,
-    ) -> list[ScoredMessageOrdinal]:
-        raise NotImplementedError
+    ) -> list[ScoredMessageOrdinal]: ...
 
     async def lookup_messages_in_subset(
         self,
@@ -486,16 +466,13 @@ class IMessageTextIndex[TMessage: IMessage](Protocol):
         ordinals_to_search: list[MessageOrdinal],
         max_matches: int | None = None,
         threshold_score: float | None = None,
-    ) -> list[ScoredMessageOrdinal]:
-        raise NotImplementedError
+    ) -> list[ScoredMessageOrdinal]: ...
 
     # TODO: Others?
 
-    def serialize(self) -> "MessageTextIndexData":
-        raise NotImplementedError
+    def serialize(self) -> "MessageTextIndexData": ...
 
-    def deserialize(self, data: "MessageTextIndexData") -> None:
-        raise NotImplementedError
+    def deserialize(self, data: "MessageTextIndexData") -> None: ...
 
 
 class IConversationSecondaryIndexes[TMessage: IMessage](Protocol):
@@ -781,8 +758,7 @@ class IndexingResults:
 
 
 class IReadonlyCollection[T, TOrdinal](Iterable[T], Protocol):
-    def __len__(self) -> int:
-        raise NotImplementedError
+    def __len__(self) -> int: ...
 
     @overload
     def __getitem__(self, arg: TOrdinal) -> T: ...
@@ -790,19 +766,16 @@ class IReadonlyCollection[T, TOrdinal](Iterable[T], Protocol):
     def __getitem__(self, arg: slice) -> list[T]: ...
     @overload
     def __getitem__(self, arg: list[TOrdinal]) -> list[T]: ...
-    def __getitem__(self, arg: Any) -> Any:
-        raise NotImplementedError
+    def __getitem__(self, arg: Any) -> Any: ...
 
 
 class ICollection[T, TOrdinal](IReadonlyCollection[T, TOrdinal], Protocol):
     """An APPEND-ONLY collection."""
 
     @property
-    def is_persistent(self) -> bool:
-        raise NotImplementedError
+    def is_persistent(self) -> bool: ...
 
-    def append(self, item: T) -> None:
-        raise NotImplementedError
+    def append(self, item: T) -> None: ...
 
     def extend(self, items: Iterable[T]) -> None:
         """Append multiple items to the collection."""
@@ -822,25 +795,20 @@ class ISemanticRefCollection(ICollection[SemanticRef, SemanticRefOrdinal], Proto
 
 
 class JsonSerializer[T](Protocol):
-    def serialize(self, value: T) -> str:
-        raise NotImplementedError
+    def serialize(self, value: T) -> str: ...
 
-    def deserialize(self, value: str) -> T:
-        raise NotImplementedError
+    def deserialize(self, value: str) -> T: ...
 
 
 class IStorageProvider(Protocol):
     def create_message_collection[TMessage: IMessage](
         self,
         serializer: JsonSerializer[TMessage] | None = None,
-    ) -> IMessageCollection[TMessage]:
-        raise NotImplementedError
+    ) -> IMessageCollection[TMessage]: ...
 
-    def create_semantic_ref_collection(self) -> ISemanticRefCollection:
-        raise NotImplementedError
+    def create_semantic_ref_collection(self) -> ISemanticRefCollection: ...
 
-    def close(self) -> None:
-        raise NotImplementedError
+    def close(self) -> None: ...
 
 
 # TODO: What does this comment by Umesh mean? Who should look?
