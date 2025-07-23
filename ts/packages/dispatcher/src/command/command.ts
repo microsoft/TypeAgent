@@ -323,7 +323,7 @@ function endProcessCommand(
             context.agents.toggleTransient(agentName, active);
         }
 
-        // Because of the embedded switcher, we need to clear the cache.
+        // Changing active schemas, we need to clear the cache.
         context.translatorCache.clear();
 
         const [agentName, active] = pendingToggleTransientAgents.pop()!;

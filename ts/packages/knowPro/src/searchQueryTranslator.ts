@@ -7,6 +7,7 @@ import {
     Result,
     TypeChatLanguageModel,
     error,
+    TypeChatJsonTranslator,
 } from "typechat";
 import * as querySchema from "./searchQuerySchema.js";
 import * as querySchema2 from "./searchQuerySchema_v2.js";
@@ -38,30 +39,15 @@ export interface SearchQueryTranslator {
 export function createSearchQueryTranslator(
     model: TypeChatLanguageModel,
 ): SearchQueryTranslator {
-    const typeName = "SearchQuery";
-    const searchActionSchema = loadSchema(
-        ["dateTimeSchema.ts", "searchQuerySchema.ts"],
-        import.meta.url,
-    );
-    const searchActionSchemaScope = loadSchema(
-        ["dateTimeSchema.ts", "searchQuerySchema_v2.ts"],
-        import.meta.url,
-    );
-
-    const translator = createJsonTranslator<querySchema.SearchQuery>(
+    const translator = createSearchQueryJsonTranslator<querySchema.SearchQuery>(
         model,
-        createTypeScriptJsonValidator<querySchema.SearchQuery>(
-            searchActionSchema,
-            typeName,
-        ),
+        "searchQuerySchema.ts",
     );
-    const translator_V2 = createJsonTranslator<querySchema2.SearchQuery>(
-        model,
-        createTypeScriptJsonValidator<querySchema2.SearchQuery>(
-            searchActionSchemaScope,
-            typeName,
-        ),
-    );
+    const translator_V2 =
+        createSearchQueryJsonTranslator<querySchema2.SearchQuery>(
+            model,
+            "searchQuerySchema_v2.ts",
+        );
     return {
         translate(request, promptPreamble) {
             return translator.translate(request, promptPreamble);
@@ -70,6 +56,29 @@ export function createSearchQueryTranslator(
             return translator_V2.translate(request, promptPreamble);
         },
     };
+}
+
+/**
+ * Create a query translator using
+ * @param {TypeChatLanguageModel} model
+ * @param schemaFilePath Relative path to schema file
+ * @returns {SearchQueryTranslator}
+ */
+export function createSearchQueryJsonTranslator<
+    T extends querySchema.SearchQuery | querySchema2.SearchQuery,
+>(
+    model: TypeChatLanguageModel,
+    schemaFilePath: string,
+): TypeChatJsonTranslator<T> {
+    const typeName = "SearchQuery";
+    const searchActionSchema = loadSchema(
+        ["dateTimeSchema.ts", schemaFilePath],
+        import.meta.url,
+    );
+    return createJsonTranslator<T>(
+        model,
+        createTypeScriptJsonValidator<T>(searchActionSchema, typeName),
+    );
 }
 
 export async function searchQueryFromLanguage(

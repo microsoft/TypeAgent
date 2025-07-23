@@ -449,26 +449,41 @@ export async function createKnowproTestCommands(
         return undefined;
     }
 
-    commands.kpTestSearch.metadata = searchDef();
+    function testSearchDef(): CommandMetadata {
+        const def = searchDef();
+        def.options ??= {};
+        def.options!.compare = argBool("Compare to V1 mode", false);
+        return def;
+    }
+    commands.kpTestSearch.metadata = testSearchDef();
     async function testSearchScope(args: string[]) {
-        const namedArgs = parseNamedArguments(args, searchDef());
-        const result = await context.queryTranslator.translate!(
-            namedArgs.query,
-        );
-        context.printer.writeTranslation(result);
+        const namedArgs = parseNamedArguments(args, testSearchDef());
+        const queryTranslator =
+            context.conversation! instanceof cm.Memory
+                ? context.conversation!.settings.queryTranslator
+                : context.queryTranslator;
+        const result = namedArgs.compare
+            ? await queryTranslator.translate(namedArgs.query)
+            : undefined;
+        if (result) {
+            context.printer.writeTranslation(result);
+        }
         context.printer.writeHeading("Scope");
-        const resultScope = await context.queryTranslator.translateWithScope!(
+        const resultScope = await queryTranslator.translateWithScope!(
             namedArgs.query,
         );
         context.printer.writeTranslation(resultScope);
-        if (result.success && resultScope.success) {
-            const error = kpTest.compareSearchQueryScope(
-                result.data,
-                resultScope.data,
-            );
-            if (error !== undefined) {
-                context.printer.writeError(error);
+        if ((result === undefined || result.success) && resultScope.success) {
+            if (result !== undefined) {
+                const error = kpTest.compareSearchQueryScope(
+                    result.data,
+                    resultScope.data,
+                );
+                if (error !== undefined) {
+                    context.printer.writeError(error);
+                }
             }
+
             const request = parseTypedArguments<kpTest.SearchRequest>(
                 args,
                 searchDef(),
