@@ -968,10 +968,10 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                 };
             }
 
-            // Use the Chrome extension service to search for entities in website collection
-            const searchResult = await this.chromeService.searchWebMemories(
+            // Use fast entity-based search instead of slow text search
+            const searchResult = await this.performEntitySearchWithFallback(
                 entityName,
-                {},
+                options,
             );
 
             if (
@@ -1011,7 +1011,7 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                             source: website.sourceType || "website",
                         };
                     })
-                    .filter((entity) => entity.name && entity.name.trim())
+                    .filter((entity:any) => entity.name && entity.name.trim())
                     .slice(0, options.maxResults || 10); // Filter out entities with empty names
 
                 // If we have related entities from the search result, include them
@@ -1035,7 +1035,7 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                                 source: "search_related",
                             };
                         })
-                        .filter((entity) => entity.name && entity.name.trim());
+                        .filter((entity:any) => entity.name && entity.name.trim());
                 }
 
                 return {
@@ -1084,10 +1084,10 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                 return { centerEntity, entities: [], relationships: [] };
             }
 
-            // Search for the center entity and related content
-            const primarySearch = await this.chromeService.searchWebMemories(
+            // Use fast entity-based search instead of slow text search
+            const primarySearch = await this.performEntitySearchWithFallback(
                 centerEntity,
-                {},
+                { maxResults: 15 },
             );
 
             if (
@@ -1128,7 +1128,7 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                         lastVisited: website.lastVisit,
                     };
                 })
-                .filter((entity) => entity.name && entity.name.trim())
+                .filter((entity:any) => entity.name && entity.name.trim())
                 .slice(0, 15); // Filter out entities with empty names
 
             // Add the center entity itself
@@ -1160,9 +1160,9 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                                 ? related
                                 : related.name;
                         const relatedSearch =
-                            await this.chromeService.searchWebMemories(
+                            await this.performEntitySearchWithFallback(
                                 relatedName,
-                                {},
+                                { maxResults: 3 },
                             );
                         if (relatedSearch?.websites?.length > 0) {
                             const relatedEntityData = relatedSearch.websites
@@ -1190,7 +1190,7 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                                     };
                                 })
                                 .filter(
-                                    (entity) =>
+                                    (entity:any) =>
                                         entity.name && entity.name.trim(),
                                 ); // Filter out entities with empty names
                             relatedEntities.push(...relatedEntityData);
@@ -1255,6 +1255,150 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
         });
 
         return refreshedData.entities.length > 0 ? refreshedData : null;
+    }
+
+    /**
+     * Smart entity search with fallback strategy
+     * Uses entity search first, then topic search, then hybrid search, then text search
+     */
+    private async performEntitySearchWithFallback(
+        entityName: string,
+        options: any = {},
+    ): Promise<any> {
+        if (!this.chromeService) {
+            throw new Error("ChromeExtensionService not available");
+        }
+
+        const startTime = performance.now();
+        const maxResults = options.maxResults || 10;
+        let searchResult: any = null;
+        let searchMethod = "unknown";
+
+        try {
+            // Strategy 1: Direct entity search (fastest)
+            console.log(`Trying entity search for: ${entityName}`);
+            const entityResults = await this.chromeService.searchByEntities(
+                [entityName],
+                "",
+                maxResults,
+            );
+
+            if (entityResults && entityResults.length > 0) {
+                searchResult = { websites: entityResults };
+                searchMethod = "entity";
+                console.log(
+                    `✅ Entity search found ${entityResults.length} results for: ${entityName}`,
+                );
+            }
+        } catch (error) {
+            console.warn(`Entity search failed for ${entityName}:`, error);
+        }
+
+        // Strategy 2: Topic search if entity search fails or returns few results
+        if (!searchResult || searchResult.websites.length < 3) {
+            try {
+                console.log(`Trying topic search for: ${entityName}`);
+                const topicResults = await this.chromeService.searchByTopics(
+                    [entityName],
+                    "",
+                    maxResults,
+                );
+
+                if (topicResults && topicResults.length > 0) {
+                    // Merge with existing results or use as primary
+                    const existingWebsites = searchResult?.websites || [];
+                    searchResult = {
+                        websites: [...existingWebsites, ...topicResults].slice(
+                            0,
+                            maxResults,
+                        ),
+                    };
+                    searchMethod = searchResult.websites.length > existingWebsites.length 
+                        ? "topic" : searchMethod;
+                    console.log(
+                        `✅ Topic search found ${topicResults.length} additional results for: ${entityName}`,
+                    );
+                }
+            } catch (error) {
+                console.warn(`Topic search failed for ${entityName}:`, error);
+            }
+        }
+
+        // Strategy 3: Hybrid search if still no good results
+        if (!searchResult || searchResult.websites.length < 2) {
+            try {
+                console.log(`Trying hybrid search for: ${entityName}`);
+                const hybridResults = await this.chromeService.hybridSearch(
+                    entityName,
+                    "",
+                    maxResults,
+                );
+
+                if (hybridResults && hybridResults.length > 0) {
+                    // Convert hybrid results to website format
+                    const hybridWebsites = hybridResults.map((result:any) => ({
+                        url: result.url,
+                        title: result.title,
+                        description: result.snippet || result.description,
+                        domain: this.extractDomain(result.url),
+                        score: result.score || result.relevance,
+                        source: "hybrid",
+                    }));
+
+                    const existingWebsites = searchResult?.websites || [];
+                    searchResult = {
+                        websites: [...existingWebsites, ...hybridWebsites].slice(
+                            0,
+                            maxResults,
+                        ),
+                    };
+                    searchMethod = searchResult.websites.length > existingWebsites.length 
+                        ? "hybrid" : searchMethod;
+                    console.log(
+                        `✅ Hybrid search found ${hybridResults.length} additional results for: ${entityName}`,
+                    );
+                }
+            } catch (error) {
+                console.warn(`Hybrid search failed for ${entityName}:`, error);
+            }
+        }
+
+        // Strategy 4: Text search fallback (original slow method)
+        if (!searchResult || searchResult.websites.length === 0) {
+            try {
+                console.log(
+                    `Falling back to text search for: ${entityName}`,
+                );
+                searchResult = await this.chromeService.searchWebMemories(
+                    entityName,
+                    {},
+                );
+                searchMethod = "text_fallback";
+                console.log(
+                    `⚠️ Text fallback found ${searchResult?.websites?.length || 0} results for: ${entityName}`,
+                );
+            } catch (error) {
+                console.error(`All search methods failed for ${entityName}:`, error);
+                searchResult = { websites: [] };
+                searchMethod = "failed";
+            }
+        }
+
+        // Add metadata about which search method was used
+        const endTime = performance.now();
+        const searchTime = Math.round(endTime - startTime);
+        
+        if (searchResult) {
+            searchResult.searchMethod = searchMethod;
+            searchResult.searchTerm = entityName;
+            searchResult.searchTimeMs = searchTime;
+            
+            console.log(
+                `🚀 Entity search completed in ${searchTime}ms using ${searchMethod} method for: ${entityName} (${searchResult.websites?.length || 0} results)`,
+            );
+        }
+
+        return searchResult;
     }
 
     private extractDomain(url: string): string {
