@@ -3,7 +3,7 @@
 
 import WebSocket from "ws";
 import { createWebSocket, keepWebSocketAlive } from "./webSocket";
-import { handleVSCodeActions } from "./handleCodeEditorActions";
+import { handleVSCodeActions } from "./handleVSCodeActions";
 
 type WebSocketMessageV2 = {
     id?: string;

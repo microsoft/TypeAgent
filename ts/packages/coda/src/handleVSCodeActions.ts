@@ -6,6 +6,7 @@ import { ActionResult } from "./helpers";
 import { handleWorkbenchActions } from "./handleWorkBenchActions";
 import { handleDebugActions } from "./handleDebugActions";
 import { handleExtensionActions } from "./handleExtensionActions";
+import { handleEditorCodeActions } from "./handleEditorCodeActions";
 
 async function execChangeEditorColumns(actionData: any): Promise<ActionResult> {
     let actionResult: ActionResult = {
@@ -363,6 +364,7 @@ export async function handleVSCodeActions(action: any) {
             handleDebugActions,
             handleWorkbenchActions,
             handleExtensionActions,
+            handleEditorCodeActions,
         ];
 
         const results = await Promise.all(
