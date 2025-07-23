@@ -12,13 +12,31 @@ export type MatchSetJSON = {
     index: number;
 };
 
-export type TransformInfo = {
-    namespace: string;
-    transformName: string;
-    actionIndex?: number | undefined;
+export type TransformInfoJSON = {
+    readonly namespace: string;
+    readonly transformName: string;
+    readonly actionIndex?: number | undefined;
 };
 
-export function toTransformInfoKey(transformInfo: TransformInfo) {
+export type MatchPartJSON = {
+    matchSet: string;
+    optional: true | undefined;
+    wildcardMode: WildcardMode | undefined;
+    transformInfos?: TransformInfoJSON[] | undefined;
+};
+
+export type TransformInfo = {
+    readonly namespace: string;
+    readonly transformName: string;
+    readonly actionIndex?: number | undefined;
+
+    // Used for partial match. Number of parts that this transform requires.
+    readonly partCount: number;
+};
+
+export function toTransformInfoKey(
+    transformInfo: TransformInfo | TransformInfoJSON,
+) {
     return `${transformInfo.namespace}::${transformInfo.actionIndex ? `${transformInfo.actionIndex}.}` : ""}${transformInfo.transformName}`;
 }
 
@@ -128,13 +146,6 @@ export class MatchSet {
     }
 }
 
-export type MatchPartJSON = {
-    matchSet: string;
-    optional: true | undefined;
-    wildcardMode: WildcardMode | undefined;
-    transformInfos?: TransformInfo[] | undefined;
-};
-
 export function getPropertyNameFromTransformInfo(
     transformInfo: TransformInfo,
 ): string {
@@ -173,7 +184,11 @@ export class MatchPart {
                 this.wildcardMode !== WildcardMode.Disabled
                     ? this.wildcardMode
                     : undefined,
-            transformInfos: this.transformInfos,
+            transformInfos: this.transformInfos?.map((info) => ({
+                namespace: info.namespace,
+                transformName: info.transformName,
+                actionIndex: info.actionIndex,
+            })),
         };
     }
 
