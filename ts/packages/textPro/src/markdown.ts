@@ -263,6 +263,11 @@ class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
                 const link = token as md.Tokens.Link;
                 this.onLink(link.text, link.href);
                 break;
+            case "strong":
+            case "emphasis":
+                // Auto promote to topics
+                this.knowledgeBlock.knowledge.topics.push(token.text);
+                break;
         }
         this.lastToken = token;
     }
