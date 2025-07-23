@@ -10,7 +10,7 @@ import {
     Message,
     MessageMetadata,
 } from "./memory.js";
-import { TypeChatJsonTranslator } from "typechat";
+import { TypeChatLanguageModel } from "typechat";
 import { fileURLToPath } from "url";
 
 export class DocPartMeta extends MessageMetadata {
@@ -65,8 +65,6 @@ export class DocMemory
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
     public indexingState: DocIndexingState;
 
-    private scopeQueryTranslator: TypeChatJsonTranslator<kp.querySchema2.SearchQuery>;
-
     constructor(
         nameTag: string = "",
         docParts: DocPart[] = [],
@@ -91,19 +89,10 @@ export class DocMemory
             lastIndexed: new Date(),
         };
         // Customize the search query translator for scoped queries
-        this.scopeQueryTranslator =
-            kp.createSearchQueryJsonTranslator<kp.querySchema2.SearchQuery>(
-                this.settings.languageModel,
-                fileURLToPath(
-                    new URL("docSearchQuerySchema.ts", import.meta.url),
-                ),
-            );
-        this.settings.queryTranslator!.translateWithScope = (
-            request,
-            preamble,
-        ) => {
-            return this.scopeQueryTranslator.translate(request, preamble);
-        };
+        customizeScopeQueryProcessing(
+            this.settings.queryTranslator!,
+            this.settings.languageModel,
+        );
     }
 
     public override get conversation(): kp.IConversation<DocPart> {
@@ -361,4 +350,19 @@ export class DocPartSerializer implements kp.JsonSerializer<DocPart> {
             jMsg.deletionInfo,
         );
     }
+}
+
+function customizeScopeQueryProcessing(
+    searchQueryTranslator: kp.SearchQueryTranslator,
+    languageModel: TypeChatLanguageModel,
+) {
+    // Customize the search query translator for scoped queries
+    const customScopeTranslator =
+        kp.createSearchQueryJsonTranslator<kp.querySchema2.SearchQuery>(
+            languageModel,
+            fileURLToPath(new URL("docSearchQuerySchema.ts", import.meta.url)),
+        );
+    searchQueryTranslator!.translateWithScope = (request, preamble) => {
+        return customScopeTranslator.translate(request, preamble);
+    };
 }

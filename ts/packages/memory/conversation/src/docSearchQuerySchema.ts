@@ -53,6 +53,7 @@ export type ActionTerm = {
 };
 
 export type ScopeFilter = {
+    // Search terms to use to limit search
     searchTerms?: string[] | undefined;
     // Use only if request explicitly asks for time range, particular year, month etc.
     timeRange?: DateTimeRange | undefined; // in this time range
@@ -70,8 +71,9 @@ export type SearchFilter = {
     // - Phrases like 'email address' or 'first name' are a single term
     // - use empty searchTerms array when use asks for summaries
     searchTerms?: string[];
-    // Use to limit matches to particular sub-set of the document
-    // E.g. if the user request specifies a particular section or heading, use scopeSubQuery to limit the search.
+    // Use to limit matches to particular subset of the document
+    // If the user request specifies a particular section or heading to search within, use their names as scopeSubQuery.searchTerms to limit the search.
+    // E.g. in the phrase "What books were mentioned inside the 'Bestsellers' section, 'BestSellers' is a scoping term
     scopeSubQuery?: ScopeFilter | undefined;
 };
 
