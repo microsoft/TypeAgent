@@ -97,6 +97,7 @@ export function textBlocksFromMarkdown(
                 visitInnerNodes(token);
                 break;
             case "space":
+            case "br":
                 curTextBlock += "\n";
                 break;
             case "text":
@@ -264,12 +265,15 @@ class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
                 this.onLink(link.text, link.href);
                 break;
             case "strong":
-            case "emphasis":
-                // Auto promote to topics
-                this.knowledgeBlock.knowledge.topics.push(token.text);
-                this.knowledgeBlock.knowledge.entities.push(
-                    emphasisToEntity(token.text),
-                );
+            case "em":
+                let text: string = token.text;
+                if (!(text.startsWith("__") || text.startsWith("**"))) {
+                    // Auto promote to topics
+                    this.knowledgeBlock.knowledge.topics.push(text);
+                    this.knowledgeBlock.knowledge.entities.push(
+                        emphasisToEntity(text),
+                    );
+                }
                 break;
         }
         this.lastToken = token;
