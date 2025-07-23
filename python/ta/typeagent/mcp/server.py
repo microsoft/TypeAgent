@@ -4,7 +4,6 @@
 """Fledgling MCP server on top of knowpro."""
 
 from dataclasses import dataclass
-import functools
 import time
 
 from mcp.server.fastmcp import FastMCP
@@ -33,7 +32,6 @@ class ProcessingContext:
         return f"Context({', '.join(parts)})"
 
 
-@functools.lru_cache(maxsize=1)
 def make_context() -> ProcessingContext:
     utils.load_dotenv()
     lang_search_options = searchlang.LanguageSearchOptions(
@@ -49,6 +47,7 @@ def make_context() -> ProcessingContext:
 
     query_context = load_podcast_index("testdata/Episode_53_AdrianTchaikovsky_index")
 
+    embedding_model = embeddings.AsyncEmbeddingModel()
     model = convknowledge.create_typechat_model()
     query_translator = utils.create_translator(model, SearchQuery)
     answer_translator = utils.create_translator(model, AnswerResponse)
@@ -57,7 +56,7 @@ def make_context() -> ProcessingContext:
         lang_search_options,
         answer_context_options,
         query_context,
-        embeddings.AsyncEmbeddingModel(),
+        embedding_model,
         query_translator,
         answer_translator,
     )
@@ -90,7 +89,9 @@ async def answer_question(question: str) -> QuestionResponse:
     question = question.strip()
     if not question:
         dt = int((time.time() - t0) * 1000)  # Convert to milliseconds
-        return QuestionResponse(success=False, answer="No question provided", time_used=dt)
+        return QuestionResponse(
+            success=False, answer="No question provided", time_used=dt
+        )
     context = make_context()
 
     # Stages 1, 2, 3 (LLM -> proto-query, compile, execute query)
@@ -102,7 +103,7 @@ async def answer_question(question: str) -> QuestionResponse:
     )
     if isinstance(result, typechat.Failure):
         dt = int((time.time() - t0) * 1000)  # Convert to milliseconds
-        return QuestionResponse(success=False, answer=str(result), time_used=dt)
+        return QuestionResponse(success=False, answer=result.message, time_used=dt)
 
     # Stages 3a, 4 (ordinals -> messages/semrefs, LLM -> answer)
     _, combined_answer = await answers.generate_answers(
@@ -115,9 +116,13 @@ async def answer_question(question: str) -> QuestionResponse:
     dt = int((time.time() - t0) * 1000)  # Convert to milliseconds
     match combined_answer.type:
         case "NoAnswer":
-            return QuestionResponse(success=False, answer=combined_answer.whyNoAnswer or "", time_used=dt)
+            return QuestionResponse(
+                success=False, answer=combined_answer.whyNoAnswer or "", time_used=dt
+            )
         case "Answered":
-            return QuestionResponse(success=True, answer=combined_answer.answer or "", time_used=dt)
+            return QuestionResponse(
+                success=True, answer=combined_answer.answer or "", time_used=dt
+            )
 
 
 # Run the MCP server
