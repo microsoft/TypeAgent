@@ -8,6 +8,7 @@ import registerDebug from "debug";
 const debugMongo = registerDebug("typeagent:logger:mongodb");
 
 const UPLOAD_DELAY = 1000;
+const MAX_RETRY = 3;
 class MongoDBLoggerSink implements LoggerSink {
     private pendingEvents: LogEvent[] = [];
     private timeout: NodeJS.Timeout | undefined;
@@ -21,10 +22,7 @@ class MongoDBLoggerSink implements LoggerSink {
     ) {}
 
     public logEvent(event: LogEvent) {
-        if (
-            !this.disabled &&
-            (this.isEnabled === undefined || this.isEnabled())
-        ) {
+        if (this.dbUrl && !this.disabled && this.isEnabled?.() !== false) {
             this.pendingEvents.push(event);
             if (this.timeout === undefined) {
                 this.timeout = setTimeout(() => this.upload(), UPLOAD_DELAY);
@@ -33,37 +31,64 @@ class MongoDBLoggerSink implements LoggerSink {
     }
 
     private async upload() {
-        try {
-            this.timeout = undefined;
-            if (this.dbUrl) {
-                const client = await MongoClient.connect(this.dbUrl);
-                try {
-                    const db = client.db(this.dbName);
-                    const collection = db.collection(this.collectionName);
-                    await collection.insertMany(this.pendingEvents);
-                    debugMongo(`${this.pendingEvents.length} events uploaded`);
-                    this.pendingEvents = [];
-                } finally {
-                    await client.close();
-                }
-            }
-        } catch (e: any) {
-            if (
-                typeof e.message === "string" &&
-                e.message.includes("Invalid key")
-            ) {
-                // Disable
-                if (this.onErrorDisable) {
-                    this.onErrorDisable(`DB Logging disabled: ${e.toString()}`);
-                } else {
-                    console.error(`DB Logging disabled: ${e.toString()}`);
+        let attempt = 0;
+        while (attempt < MAX_RETRY) {
+            attempt++;
+            try {
+                await this.drain();
+                break;
+            } catch (e: any) {
+                if (
+                    typeof e.message === "string" &&
+                    e.message.includes("Invalid key")
+                ) {
+                    // Disable
+                    if (this.onErrorDisable) {
+                        this.onErrorDisable(
+                            `DB Logging disabled: ${e.toString()}`,
+                        );
+                    } else {
+                        console.error(`DB Logging disabled: ${e.toString()}`);
+                    }
+
+                    this.disabled = true;
+                    break;
                 }
 
-                this.disabled = true;
-            } else {
-                // TODO: ignore?
+                // Retry
                 debugMongo(`ERROR: ${e}`);
             }
+        }
+        // Clear the timeout so it can schedule after the next log event.
+        this.timeout = undefined;
+    }
+
+    private async drain() {
+        const client = await MongoClient.connect(this.dbUrl);
+        try {
+            const db = client.db(this.dbName);
+            const collection = db.collection(this.collectionName);
+            while (true) {
+                const events = this.pendingEvents;
+                if (events.length === 0) {
+                    // done
+                    return;
+                }
+                this.pendingEvents = [];
+
+                try {
+                    await collection.insertMany(events);
+                    debugMongo(`${events.length} events uploaded`);
+                } catch (e: any) {
+                    if (this.pendingEvents.length !== 0) {
+                        events.push(...this.pendingEvents);
+                    }
+                    this.pendingEvents = events;
+                    throw e;
+                }
+            }
+        } finally {
+            await client.close();
         }
     }
 }

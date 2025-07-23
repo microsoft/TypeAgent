@@ -28,7 +28,10 @@ import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { DispatcherClarifyName } from "../context/dispatcher/dispatcherUtils.js";
 import { AppAgentManager } from "../context/appAgentManager.js";
 import registerDebug from "debug";
-import { filterEntitySelection } from "../translation/entityResolution.js";
+import {
+    DispatcherResolveEntityResult,
+    filterEntitySelection,
+} from "../translation/entityResolution.js";
 import { displayStatus } from "@typeagent/agent-sdk/helpers/display";
 import { ConversationMemory } from "conversation-memory";
 import { SearchSelectExpr } from "knowpro";
@@ -189,7 +192,7 @@ function createResultEntityResolver(): EntityResolver {
 type ClarifyResolvedEntity = {
     type: string;
     name: string;
-    result: ResolveEntityResult;
+    result: DispatcherResolveEntityResult;
 };
 
 interface ParameterEntityResolver extends EntityResolver {
@@ -338,6 +341,7 @@ export async function canResolvePropertyEntity(
             appAgentName,
             entityPropertyTypeName,
             getObjectProperty(action.parameters, parameterName),
+            true, // exact match
         )) !== undefined
     );
 }
@@ -347,6 +351,7 @@ async function resolveEntityWithMemory(
     appAgentName: string,
     type: string,
     name: string,
+    exact: boolean = false,
 ): Promise<ResolveEntityResult | undefined> {
     const searchSelectExpr: SearchSelectExpr = {
         searchTermGroup: {
@@ -384,14 +389,19 @@ async function resolveEntityWithMemory(
         },
     };
 
-    const result = await conversationMemory.searchKnowledge(searchSelectExpr);
+    const options = exact ? { exactMatch: true } : undefined;
+    const result = await conversationMemory.searchKnowledge(
+        searchSelectExpr,
+        options,
+    );
+
     const entityResult = result?.get("entity");
     if (entityResult === undefined) {
         debugMemoryEntities("No entity found in memory");
         return undefined;
     }
 
-    const entities: PromptEntity[] = [];
+    const uniqueEntities: Map<string, PromptEntity> = new Map();
     for (const match of entityResult.semanticRefMatches) {
         const semanticRef = conversationMemory.conversation.semanticRefs?.get(
             match.semanticRefOrdinal,
@@ -436,25 +446,35 @@ async function resolveEntityWithMemory(
                 `Missing uniqueId: ${JSON.stringify(concreteEntity)}`,
             );
         }
+        const key = `${concreteEntity.name}|${uniqueId}`;
+        if (uniqueEntities.has(key)) {
+            // Skip duplicate entities (based on name and uniqueId).
+            continue;
+        }
         const entity: PromptEntity = {
             name: concreteEntity.name,
             type: concreteEntity.type,
             sourceAppAgentName: appAgentName,
             uniqueId,
         };
-        entities.push(entity);
+
+        uniqueEntities.set(key, entity);
     }
-    if (entities.length === 0) {
+    if (uniqueEntities.size === 0) {
         debugMemoryEntities("No entity found in memory");
         return undefined;
     }
-    const exact = entities.filter((e) => e.name === name);
-    if (exact.length > 0) {
+
+    const entities = Array.from(uniqueEntities.values());
+    const exactEntities = exact
+        ? entities
+        : entities.filter((e) => e.name === name);
+    if (exactEntities.length > 0) {
         debugMemoryEntities(
-            `Exact entities found in memory: ${JSON.stringify(exact)}`,
+            `Exact entities found in memory: ${JSON.stringify(exactEntities)}`,
         );
         return {
-            entities: exact,
+            entities: exactEntities,
             match: "exact",
         };
     }
@@ -522,15 +542,11 @@ async function processResolvedEntityResult(
     action: FullAction,
     type: string,
     value: string,
-    result: ResolveEntityResult,
+    result: DispatcherResolveEntityResult,
     clarifyEntities: ClarifyResolvedEntity[],
     options?: ParameterEntityResolverOptions,
 ) {
-    if (
-        options?.filter &&
-        result.match === "fuzzy" &&
-        result.entities.length > 1
-    ) {
+    if (options?.filter && result.match === "fuzzy") {
         // An extra pass to use LLM to narrow down the selection for fuzzy match.
         await filterEntitySelection(action, type, value, result);
     }
@@ -542,19 +558,16 @@ async function processResolvedEntityResult(
         });
         return;
     }
-    if (result.match === "exact") {
-        return {
-            sourceAppAgentName: appAgentName,
-            ...result.entities[0],
-        };
-    } else {
-        // TODO: we should have a heuristic to determine if we should
-        // clarify the fuzzy match or not.
+    if (result.match === "exact" || result.match === "same") {
+        // If it is exact or same match, return the first entity.
+        // TODO: use last access to get the latest one?
         return {
             sourceAppAgentName: appAgentName,
             ...result.entities[0],
         };
     }
+    // TODO: More heuristics or clarification
+    return undefined;
 }
 
 function createParameterEntityResolver(
@@ -634,17 +647,30 @@ function createParameterEntityResolver(
                         fieldType.name,
                         value,
                     );
+
+                    if (resolveEntityResult !== undefined) {
+                        const entity = await processResolvedEntityResult(
+                            appAgentName,
+                            action,
+                            fieldType.name,
+                            value,
+                            resolveEntityResult,
+                            clarifyEntities,
+                            options,
+                        );
+                        if (entity !== undefined) {
+                            return entity;
+                        }
+                    }
                 }
 
-                if (resolveEntityResult === undefined) {
-                    resolveEntityResult = await resolveEntityWithAgent(
-                        agents,
-                        appAgentName,
-                        fieldType.name,
-                        value,
-                        context,
-                    );
-                }
+                resolveEntityResult = await resolveEntityWithAgent(
+                    agents,
+                    appAgentName,
+                    fieldType.name,
+                    value,
+                    context,
+                );
 
                 if (resolveEntityResult !== undefined) {
                     return processResolvedEntityResult(
