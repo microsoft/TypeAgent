@@ -123,6 +123,75 @@ export class KnowledgeSearchPanel {
         }
     }
 
+    /**
+     * Navigate to entity graph view for the specified entity or topic
+     */
+    private navigateToEntityGraph(entityOrTopic: string): void {
+        try {
+            // Build URL to entity graph view
+            const entityGraphUrl = chrome.runtime.getURL('views/entityGraphView.html');
+            const fullUrl = `${entityGraphUrl}?entity=${encodeURIComponent(entityOrTopic)}`;
+            
+            console.log(`Navigating to entity graph for: ${entityOrTopic}`);
+            console.log(`URL: ${fullUrl}`);
+            
+            // Open in new tab
+            chrome.tabs.create({
+                url: fullUrl,
+                active: true
+            });
+        } catch (error) {
+            console.error('Failed to navigate to entity graph:', error);
+            
+            // Fallback: try to open in same window
+            try {
+                const entityGraphUrl = 'entityGraphView.html';
+                const fullUrl = `${entityGraphUrl}?entity=${encodeURIComponent(entityOrTopic)}`;
+                window.open(fullUrl, '_blank');
+            } catch (fallbackError) {
+                console.error('Fallback navigation also failed:', fallbackError);
+                
+                // Show user a message about the failure
+                this.showNavigationError(entityOrTopic);
+            }
+        }
+    }
+
+    /**
+     * Show error message when navigation fails
+     */
+    private showNavigationError(entityOrTopic: string): void {
+        // Create a temporary notification
+        const notification = document.createElement('div');
+        notification.className = 'alert alert-warning position-fixed';
+        notification.style.cssText = `
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            min-width: 300px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        `;
+        notification.innerHTML = `
+            <div class="d-flex align-items-center">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                <div>
+                    <strong>Navigation Failed</strong><br>
+                    <small>Could not open entity graph for "${this.escapeHtml(entityOrTopic)}"</small>
+                </div>
+                <button type="button" class="btn-close ms-auto" onclick="this.parentElement.parentElement.remove()"></button>
+            </div>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            if (notification.parentElement) {
+                notification.remove();
+            }
+        }, 5000);
+    }
+
     private setupEventListeners(): void {
         // Setup search input for Enter key submission only
         const searchInput = document.getElementById(
@@ -763,7 +832,7 @@ export class KnowledgeSearchPanel {
             const topicTagsHtml = topics
                 .map(
                     (topic) => `
-                    <div class="topic-tag" data-topic="${this.escapeHtml(topic)}" title="Search for: ${this.escapeHtml(topic)}">
+                    <div class="topic-tag clickable-topic" data-topic="${this.escapeHtml(topic)}" title="Click to view topic in Entity Graph: ${this.escapeHtml(topic)}">
                         <span>${this.escapeHtml(topic)}</span>
                     </div>
                 `,
@@ -776,12 +845,12 @@ export class KnowledgeSearchPanel {
                 </div>
             `;
 
-            // Add click handlers
-            topicsContent.querySelectorAll(".topic-tag").forEach((tag) => {
-                tag.addEventListener("click", () => {
-                    const topic = tag.getAttribute("data-topic");
-                    if (topic) {
-                        this.performSearchWithQuery(topic);
+            // Add click event listeners to topic tags
+            topicsContent.querySelectorAll('.clickable-topic').forEach(topicElement => {
+                topicElement.addEventListener('click', (e) => {
+                    const topicName = (e.currentTarget as HTMLElement).dataset.topic;
+                    if (topicName) {
+                        this.navigateToEntityGraph(topicName);
                     }
                 });
             });
@@ -849,7 +918,7 @@ export class KnowledgeSearchPanel {
             const entityTagsHtml = sortedEntities
                 .map(
                     (entity) => `
-                    <div class="entity-tag" title="${this.escapeHtml(entity.name)}: confidence ${Math.round(entity.confidence * 100)}%">
+                    <div class="entity-tag clickable-entity" data-entity="${this.escapeHtml(entity.name)}" title="Click to view entity in Entity Graph: ${this.escapeHtml(entity.name)} (confidence ${Math.round(entity.confidence * 100)}%)">
                         <span>${this.escapeHtml(entity.name)}</span>
                         <span class="entity-count">${this.escapeHtml(entity.type)}</span>
                     </div>
@@ -862,6 +931,16 @@ export class KnowledgeSearchPanel {
                     ${entityTagsHtml}
                 </div>
             `;
+
+            // Add click event listeners to entity tags
+            entitiesContent.querySelectorAll('.clickable-entity').forEach(entityElement => {
+                entityElement.addEventListener('click', (e) => {
+                    const entityName = (e.currentTarget as HTMLElement).dataset.entity;
+                    if (entityName) {
+                        this.navigateToEntityGraph(entityName);
+                    }
+                });
+            });
 
             entitiesSection.style.display = "block";
         } else if (entitiesSection) {

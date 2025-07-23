@@ -983,36 +983,13 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                     `Found ${searchResult.websites.length} websites for entity search: ${entityName}`,
                 );
 
-                // Convert website search results to entity format
+                // Convert website search results to entity format with rich data
                 const entities = searchResult.websites
                     .map((website: any, index: number) => {
-                        const url = website.url || "";
-                        const title =
-                            website.title ||
-                            website.description ||
-                            new URL(url).hostname ||
-                            `Entity ${index + 1}`;
-                        const domain = url
-                            ? this.extractDomain(url)
-                            : "unknown";
-
-                        return {
-                            id: `entity_${index}`,
-                            name:
-                                title.slice(0, 50).trim() ||
-                                `Entity ${index + 1}`, // Ensure non-empty name
-                            type: this.inferEntityType(title, url),
-                            confidence: this.calculateConfidence(website),
-                            url: url,
-                            description: website.description || "",
-                            domain: domain,
-                            visitCount: website.visitCount || 0,
-                            lastVisited: website.lastVisit,
-                            source: website.sourceType || "website",
-                        };
+                        return this.extractRichEntityData(entityName, website, index);
                     })
                     .filter((entity:any) => entity.name && entity.name.trim())
-                    .slice(0, options.maxResults || 10); // Filter out entities with empty names
+                    .slice(0, options.maxResults || 10);
 
                 // If we have related entities from the search result, include them
                 let additionalEntities: any[] = [];
@@ -1103,43 +1080,25 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                 `Found ${primarySearch.websites.length} websites for center entity`,
             );
 
-            // Create entities from primary search results
+            // Create entities from primary search results with rich data
             const primaryEntities = primarySearch.websites
                 .map((website: any, index: number) => {
-                    const url = website.url || "";
-                    const title =
-                        website.title ||
-                        website.description ||
-                        new URL(url).hostname ||
-                        `Website ${index + 1}`;
-                    const domain = this.extractDomain(url);
-
+                    const richEntity = this.extractRichEntityData(centerEntity, website, index);
+                    // Override ID and category for primary entities
                     return {
+                        ...richEntity,
                         id: `primary_${index}`,
-                        name:
-                            title.slice(0, 60).trim() || `Entity ${index + 1}`,
-                        type: this.inferEntityType(title, url),
-                        confidence: this.calculateConfidence(website),
-                        url: url,
-                        description: website.description || "",
-                        domain: domain,
                         category: "primary",
-                        visitCount: website.visitCount || 0,
-                        lastVisited: website.lastVisit,
                     };
                 })
                 .filter((entity:any) => entity.name && entity.name.trim())
-                .slice(0, 15); // Filter out entities with empty names
+                .slice(0, 15);
 
-            // Add the center entity itself
-            const centerEntityNode = {
-                id: "center",
-                name: centerEntity.trim() || "Unknown Entity",
-                type: this.inferEntityType(centerEntity),
-                confidence: 0.95,
-                category: "center",
-                description: `Center entity: ${centerEntity}`,
-            };
+            // Add the center entity itself with aggregated rich data
+            const centerEntityNode = this.createRichCenterEntity(
+                centerEntity,
+                primaryEntities,
+            );
 
             // If depth > 1, perform related searches
             let relatedEntities: any[] = [];
@@ -1168,31 +1127,20 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                             const relatedEntityData = relatedSearch.websites
                                 .slice(0, 3)
                                 .map((website: any, index: number) => {
-                                    const websiteTitle =
-                                        website.title ||
-                                        website.url ||
-                                        `Related ${index + 1}`;
+                                    const richEntity = this.extractRichEntityData(relatedName, website, index);
+                                    // Override properties for related entities
                                     return {
+                                        ...richEntity,
                                         id: `related_${relatedName.replace(/\s+/g, "_")}_${index}`,
-                                        name:
-                                            websiteTitle.slice(0, 50).trim() ||
-                                            `Related Entity ${index + 1}`,
-                                        type: this.inferEntityType(
-                                            websiteTitle,
-                                            website.url,
-                                        ),
-                                        confidence: 0.6,
-                                        url: website.url,
-                                        description: website.description || "",
-                                        domain: this.extractDomain(website.url),
                                         category: "related",
                                         parentEntity: relatedName,
+                                        confidence: Math.min(richEntity.confidence, 0.8), // Cap confidence for related entities
                                     };
                                 })
                                 .filter(
                                     (entity:any) =>
                                         entity.name && entity.name.trim(),
-                                ); // Filter out entities with empty names
+                                );
                             relatedEntities.push(...relatedEntityData);
                         }
                     } catch (error) {
@@ -1399,6 +1347,345 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
         }
 
         return searchResult;
+    }
+
+    /**
+     * Extract rich entity data from website knowledge
+     */
+    private extractRichEntityData(
+        entityName: string,
+        website: any,
+        index: number,
+    ): any {
+        const url = website.url || "";
+        const title =
+            website.title ||
+            website.description ||
+            (url ? this.extractDomain(url) : `Entity ${index + 1}`);
+        const domain = url ? this.extractDomain(url) : "unknown";
+
+        // Basic entity structure
+        const baseEntity = {
+            id: `entity_${index}`,
+            name: title.slice(0, 50).trim() || `Entity ${index + 1}`,
+            type: this.inferEntityType(title, url),
+            confidence: this.calculateConfidence(website),
+            url: url,
+            description: website.description || "",
+            domain: domain,
+            visitCount: website.visitCount || 0,
+            lastVisited: website.lastVisited || website.lastVisit,
+            source: website.sourceType || "website",
+        };
+
+        // Extract rich data from website knowledge if available
+        const knowledge = website.getKnowledge ? website.getKnowledge() : null;
+        if (knowledge) {
+            return this.enhanceEntityWithKnowledge(baseEntity, knowledge, entityName);
+        }
+
+        return baseEntity;
+    }
+
+    /**
+     * Enhance entity with rich knowledge data
+     */
+    private enhanceEntityWithKnowledge(
+        baseEntity: any,
+        knowledge: any,
+        searchEntityName: string,
+    ): any {
+        const enhancedEntity = { ...baseEntity };
+
+        // Add mention count
+        enhancedEntity.mentionCount = this.countEntityMentions(
+            knowledge,
+            searchEntityName,
+        );
+
+        // Add aliases from extracted entities
+        const matchingEntity = knowledge.entities?.find(
+            (e: any) => 
+                e.name.toLowerCase().includes(searchEntityName.toLowerCase()) ||
+                searchEntityName.toLowerCase().includes(e.name.toLowerCase())
+        );
+        
+        if (matchingEntity) {
+            enhancedEntity.aliases = matchingEntity.aliases || [];
+            enhancedEntity.entityType = matchingEntity.type || enhancedEntity.type;
+            enhancedEntity.confidence = Math.max(
+                enhancedEntity.confidence,
+                matchingEntity.confidence || 0
+            );
+        }
+
+        // Add topic affinity
+        enhancedEntity.topicAffinity = knowledge.topics?.map((t: any) => 
+            typeof t === 'string' ? t : (t.name || t.topic || t)
+        ).slice(0, 5) || [];
+
+        // Add context snippets from text chunks
+        if (knowledge.textChunks || knowledge.content) {
+            const textContent = knowledge.textChunks || [knowledge.content];
+            enhancedEntity.contextSnippets = this.extractContextSnippets(
+                textContent,
+                searchEntityName,
+                3
+            );
+        }
+
+        // Add relationships from knowledge
+        enhancedEntity.relationships = this.extractRelationships(
+            knowledge,
+            searchEntityName,
+        );
+
+        // Add temporal data
+        enhancedEntity.firstSeen = knowledge.extractionDate || 
+            knowledge.visitDate || 
+            baseEntity.lastVisited ||
+            new Date().toISOString();
+        enhancedEntity.lastSeen = knowledge.lastUpdated || 
+            knowledge.visitDate || 
+            baseEntity.lastVisited ||
+            new Date().toISOString();
+
+        // Add dominant domains
+        enhancedEntity.dominantDomains = [baseEntity.domain];
+
+        return enhancedEntity;
+    }
+
+    /**
+     * Count entity mentions in knowledge content
+     */
+    private countEntityMentions(knowledge: any, entityName: string): number {
+        if (!knowledge || !entityName) return 0;
+
+        let count = 0;
+        const searchTerm = entityName.toLowerCase();
+
+        // Count in text content
+        if (knowledge.content) {
+            const matches = knowledge.content.toLowerCase().split(searchTerm);
+            count += Math.max(0, matches.length - 1);
+        }
+
+        // Count in text chunks
+        if (knowledge.textChunks && Array.isArray(knowledge.textChunks)) {
+            knowledge.textChunks.forEach((chunk: string) => {
+                if (typeof chunk === 'string') {
+                    const matches = chunk.toLowerCase().split(searchTerm);
+                    count += Math.max(0, matches.length - 1);
+                }
+            });
+        }
+
+        // Count in extracted entities
+        if (knowledge.entities && Array.isArray(knowledge.entities)) {
+            knowledge.entities.forEach((entity: any) => {
+                if (entity.name && entity.name.toLowerCase().includes(searchTerm)) {
+                    count += entity.mentionCount || 1;
+                }
+            });
+        }
+
+        return Math.max(1, count); // Ensure at least 1 mention
+    }
+
+    /**
+     * Extract context snippets containing the entity
+     */
+    private extractContextSnippets(
+        textChunks: string[],
+        entityName: string,
+        maxSnippets: number,
+    ): string[] {
+        if (!textChunks || !entityName) return [];
+
+        const snippets: string[] = [];
+        const searchTerm = entityName.toLowerCase();
+        const snippetLength = 150;
+
+        for (const chunk of textChunks) {
+            if (!chunk || typeof chunk !== 'string') continue;
+
+            const lowerChunk = chunk.toLowerCase();
+            const index = lowerChunk.indexOf(searchTerm);
+            
+            if (index !== -1 && snippets.length < maxSnippets) {
+                // Extract context around the entity mention
+                const start = Math.max(0, index - 50);
+                const end = Math.min(chunk.length, index + searchTerm.length + 100);
+                let snippet = chunk.slice(start, end).trim();
+                
+                // Clean up snippet
+                if (start > 0) snippet = '...' + snippet;
+                if (end < chunk.length) snippet = snippet + '...';
+                
+                // Avoid duplicate snippets
+                if (!snippets.some(s => s.includes(snippet.slice(10, -10)))) {
+                    snippets.push(snippet);
+                }
+            }
+        }
+
+        return snippets;
+    }
+
+    /**
+     * Extract entity relationships from knowledge
+     */
+    private extractRelationships(knowledge: any, entityName: string): any[] {
+        if (!knowledge) return [];
+
+        const relationships: any[] = [];
+        const searchTerm = entityName.toLowerCase();
+
+        // Extract from entities that appear together
+        if (knowledge.entities && Array.isArray(knowledge.entities)) {
+            knowledge.entities.forEach((entity: any) => {
+                if (entity.name && 
+                    !entity.name.toLowerCase().includes(searchTerm) &&
+                    entity.confidence > 0.5) {
+                    
+                    relationships.push({
+                        relatedEntity: entity.name,
+                        relationshipType: "co_occurs_with",
+                        confidence: entity.confidence,
+                        strength: entity.confidence * 0.8,
+                        evidenceSources: [knowledge.url || "content"],
+                        firstObserved: knowledge.extractionDate || new Date().toISOString(),
+                        lastObserved: knowledge.lastUpdated || new Date().toISOString(),
+                    });
+                }
+            });
+        }
+
+        // Extract from topics (entity-topic relationships)
+        if (knowledge.topics && Array.isArray(knowledge.topics)) {
+            knowledge.topics.slice(0, 3).forEach((topic: any) => {
+                const topicName = typeof topic === 'string' ? topic : (topic.name || topic.topic);
+                if (topicName) {
+                    relationships.push({
+                        relatedEntity: topicName,
+                        relationshipType: "related_to_topic",
+                        confidence: typeof topic === 'object' ? (topic.relevance || 0.7) : 0.7,
+                        strength: 0.6,
+                        evidenceSources: [knowledge.url || "content"],
+                        firstObserved: knowledge.extractionDate || new Date().toISOString(),
+                        lastObserved: knowledge.lastUpdated || new Date().toISOString(),
+                    });
+                }
+            });
+        }
+
+        return relationships.slice(0, 5); // Limit to top 5 relationships
+    }
+
+    /**
+     * Create rich center entity by aggregating data from primary entities
+     */
+    private createRichCenterEntity(
+        centerEntityName: string,
+        primaryEntities: any[],
+    ): any {
+        // Aggregate data from primary entities
+        let totalMentions = 0;
+        let totalVisitCount = 0;
+        const allDomains = new Set<string>();
+        const allTopics = new Set<string>();
+        const allAliases = new Set<string>();
+        const allRelationships: any[] = [];
+        const allContextSnippets: string[] = [];
+        let earliestSeen: string | null = null;
+        let latestSeen: string | null = null;
+        let maxConfidence = 0;
+
+        // Aggregate from primary entities
+        primaryEntities.forEach((entity) => {
+            totalMentions += entity.mentionCount || 0;
+            totalVisitCount += entity.visitCount || 0;
+            maxConfidence = Math.max(maxConfidence, entity.confidence || 0);
+
+            if (entity.domain) allDomains.add(entity.domain);
+            
+            if (entity.topicAffinity) {
+                entity.topicAffinity.forEach((topic: string) => allTopics.add(topic));
+            }
+            
+            if (entity.aliases) {
+                entity.aliases.forEach((alias: string) => allAliases.add(alias));
+            }
+            
+            if (entity.relationships) {
+                allRelationships.push(...entity.relationships);
+            }
+            
+            if (entity.contextSnippets) {
+                allContextSnippets.push(...entity.contextSnippets.slice(0, 2));
+            }
+
+            // Track temporal bounds
+            if (entity.firstSeen) {
+                if (!earliestSeen || entity.firstSeen < earliestSeen) {
+                    earliestSeen = entity.firstSeen;
+                }
+            }
+            
+            if (entity.lastSeen) {
+                if (!latestSeen || entity.lastSeen > latestSeen) {
+                    latestSeen = entity.lastSeen;
+                }
+            }
+        });
+
+        // Deduplicate and limit collections
+        const uniqueRelationships = this.deduplicateRelationships(allRelationships);
+        const uniqueContextSnippets = [...new Set(allContextSnippets)].slice(0, 5);
+
+        return {
+            id: "center",
+            name: centerEntityName.trim() || "Unknown Entity",
+            type: this.inferEntityType(centerEntityName),
+            confidence: Math.min(0.95, maxConfidence + 0.1), // Boost center entity confidence
+            category: "center",
+            description: `Center entity: ${centerEntityName}`,
+            
+            // Aggregated rich data
+            mentionCount: Math.max(1, totalMentions),
+            visitCount: totalVisitCount,
+            dominantDomains: Array.from(allDomains).slice(0, 5),
+            topicAffinity: Array.from(allTopics).slice(0, 10),
+            aliases: Array.from(allAliases).slice(0, 5),
+            relationships: uniqueRelationships.slice(0, 10),
+            contextSnippets: uniqueContextSnippets,
+            firstSeen: earliestSeen || new Date().toISOString(),
+            lastSeen: latestSeen || new Date().toISOString(),
+            
+            // Center entity specific metadata
+            primarySourceCount: primaryEntities.length,
+            aggregatedFromSources: primaryEntities.map(e => e.url).filter(Boolean),
+        };
+    }
+
+    /**
+     * Deduplicate relationships by entity name and type
+     */
+    private deduplicateRelationships(relationships: any[]): any[] {
+        const seen = new Map<string, any>();
+        
+        relationships.forEach((rel) => {
+            const key = `${rel.relatedEntity}:${rel.relationshipType}`;
+            const existing = seen.get(key);
+            
+            if (!existing || rel.confidence > existing.confidence) {
+                seen.set(key, rel);
+            }
+        });
+        
+        return Array.from(seen.values())
+            .sort((a, b) => b.confidence - a.confidence);
     }
 
     private extractDomain(url: string): string {

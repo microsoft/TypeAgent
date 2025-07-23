@@ -851,6 +851,33 @@ body {
   transform: translateY(-1px);
 }
 
+/* Clickable topic tags */
+.insight-content .clickable-topic {
+  cursor: pointer;
+  position: relative;
+}
+
+.insight-content .clickable-topic::after {
+  content: "🔗";
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  font-size: 0.7rem;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.insight-content .clickable-topic:hover::after {
+  opacity: 0.7;
+}
+
+.insight-content .clickable-topic:hover {
+  background: rgba(255, 152, 0, 0.2);
+  border-color: rgba(255, 152, 0, 0.4);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(255, 152, 0, 0.2);
+}
+
 /* Followup suggestions in card context */
 .insight-content .followup-suggestions {
   display: flex;
@@ -911,6 +938,33 @@ body {
   background: rgba(40, 167, 69, 0.15);
   border-color: rgba(40, 167, 69, 0.3);
   transform: translateY(-1px);
+}
+
+/* Clickable entity tags */
+.insight-content .clickable-entity {
+  cursor: pointer;
+  position: relative;
+}
+
+.insight-content .clickable-entity::after {
+  content: "🔗";
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  font-size: 0.7rem;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.insight-content .clickable-entity:hover::after {
+  opacity: 0.7;
+}
+
+.insight-content .clickable-entity:hover {
+  background: rgba(40, 167, 69, 0.2);
+  border-color: rgba(40, 167, 69, 0.4);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(40, 167, 69, 0.2);
 }
 
 .insight-content .entity-count {
