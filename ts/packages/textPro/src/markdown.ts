@@ -267,6 +267,9 @@ class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
             case "emphasis":
                 // Auto promote to topics
                 this.knowledgeBlock.knowledge.topics.push(token.text);
+                this.knowledgeBlock.knowledge.entities.push(
+                    emphasisToEntity(token.text),
+                );
                 break;
         }
         this.lastToken = token;
@@ -351,6 +354,13 @@ export function linkToEntity(
         name: linkText,
         type: ["link", "url"],
         facets: [{ name: "url", value: url }],
+    };
+}
+
+export function emphasisToEntity(text: string): kpLib.ConcreteEntity {
+    return {
+        name: text,
+        type: ["emphasis"],
     };
 }
 
