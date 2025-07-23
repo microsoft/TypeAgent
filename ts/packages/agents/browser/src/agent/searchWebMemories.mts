@@ -252,6 +252,8 @@ export async function searchWebMemories(
         timing.total = Date.now() - startTime;
 
         // PHASE 5: Answer Enhancement - Generate dynamic summary and smart follow-ups
+        // TODO: re-enable answer generation after perf investigation
+        enhancedRequest.generateAnswer = false;
         let answerEnhancement;
         if (
             enhancedRequest.generateAnswer !== false &&
