@@ -1024,6 +1024,11 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                     ),
                     totalFound: searchResult.websites.length,
                     searchTime: searchResult.summary?.searchTime || 0,
+                    topTopics: searchResult.topTopics || [],
+                    summary: searchResult.summary || null,
+                    metadata: searchResult.metadata || {},
+                    relatedEntities: searchResult.relatedEntities || [],
+                    answerSources: searchResult.answerSources || []
                 };
             }
 
@@ -1033,6 +1038,11 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                 centerEntity: entityName,
                 relationships: [],
                 totalFound: 0,
+                topTopics: [],
+                summary: null,
+                metadata: {},
+                relatedEntities: [],
+                answerSources: []
             };
         } catch (error) {
             console.error("Entity search failed:", error);
@@ -1041,6 +1051,11 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                 centerEntity: entityName,
                 relationships: [],
                 error: error instanceof Error ? error.message : "Search failed",
+                topTopics: [],
+                summary: null,
+                metadata: {},
+                relatedEntities: [],
+                answerSources: []
             };
         }
     }
@@ -1178,7 +1193,12 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                     totalSources: primarySearch.websites.length,
                     hasRelatedExpansion: relatedEntities.length > 0,
                     generatedAt: new Date().toISOString(),
+                    ...primarySearch.metadata
                 },
+                topTopics: primarySearch.topTopics || [],
+                summary: primarySearch.summary || null,
+                answerSources: primarySearch.answerSources || [],
+                relatedEntities: primarySearch.relatedEntities || []
             };
         } catch (error) {
             console.error("Entity graph retrieval failed:", error);
@@ -1231,11 +1251,20 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                 maxResults,
             );
 
-            if (entityResults && entityResults.length > 0) {
-                searchResult = { websites: entityResults };
+            if (entityResults && entityResults.websites && entityResults.websites.length > 0) {
+                searchResult = {
+                    websites: entityResults.websites,
+                    relatedEntities: entityResults.relatedEntities || [],
+                    topTopics: entityResults.topTopics || [],
+                    summary: entityResults.summary || null,
+                    metadata: entityResults.metadata || {},
+                    answerSources: entityResults.answerSources || []
+                };
                 searchMethod = "entity";
                 console.log(
-                    `✅ Entity search found ${entityResults.length} results for: ${entityName}`,
+                    `✅ Entity search found ${entityResults.websites.length} results for: ${entityName}`,
+                    `Related entities: ${entityResults.relatedEntities?.length || 0}`,
+                    `Top topics: ${entityResults.topTopics?.length || 0}`
                 );
             }
         } catch (error) {
@@ -1252,19 +1281,26 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                     maxResults,
                 );
 
-                if (topicResults && topicResults.length > 0) {
+                if (topicResults && topicResults.websites && topicResults.websites.length > 0) {
                     // Merge with existing results or use as primary
                     const existingWebsites = searchResult?.websites || [];
+                    const existingRelatedEntities = searchResult?.relatedEntities || [];
+                    const existingTopTopics = searchResult?.topTopics || [];
+                    
                     searchResult = {
-                        websites: [...existingWebsites, ...topicResults].slice(
-                            0,
-                            maxResults,
-                        ),
+                        websites: [...existingWebsites, ...topicResults.websites].slice(0, maxResults),
+                        relatedEntities: [...existingRelatedEntities, ...(topicResults.relatedEntities || [])],
+                        topTopics: [...existingTopTopics, ...(topicResults.topTopics || [])],
+                        summary: topicResults.summary || searchResult?.summary || null,
+                        metadata: { ...searchResult?.metadata, ...topicResults.metadata },
+                        answerSources: [...(searchResult?.answerSources || []), ...(topicResults.answerSources || [])]
                     };
                     searchMethod = searchResult.websites.length > existingWebsites.length 
                         ? "topic" : searchMethod;
                     console.log(
-                        `✅ Topic search found ${topicResults.length} additional results for: ${entityName}`,
+                        `✅ Topic search found ${topicResults.websites.length} additional results for: ${entityName}`,
+                        `Added related entities: ${topicResults.relatedEntities?.length || 0}`,
+                        `Added topics: ${topicResults.topTopics?.length || 0}`
                     );
                 }
             } catch (error) {
@@ -1282,28 +1318,25 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                     maxResults,
                 );
 
-                if (hybridResults && hybridResults.length > 0) {
-                    // Convert hybrid results to website format
-                    const hybridWebsites = hybridResults.map((result:any) => ({
-                        url: result.url,
-                        title: result.title,
-                        description: result.snippet || result.description,
-                        domain: this.extractDomain(result.url),
-                        score: result.score || result.relevance,
-                        source: "hybrid",
-                    }));
-
+                if (hybridResults && hybridResults.websites && hybridResults.websites.length > 0) {
                     const existingWebsites = searchResult?.websites || [];
+                    const existingRelatedEntities = searchResult?.relatedEntities || [];
+                    const existingTopTopics = searchResult?.topTopics || [];
+                    
                     searchResult = {
-                        websites: [...existingWebsites, ...hybridWebsites].slice(
-                            0,
-                            maxResults,
-                        ),
+                        websites: [...existingWebsites, ...hybridResults.websites].slice(0, maxResults),
+                        relatedEntities: [...existingRelatedEntities, ...(hybridResults.relatedEntities || [])],
+                        topTopics: [...existingTopTopics, ...(hybridResults.topTopics || [])],
+                        summary: hybridResults.summary || searchResult?.summary || null,
+                        metadata: { ...searchResult?.metadata, ...hybridResults.metadata },
+                        answerSources: [...(searchResult?.answerSources || []), ...(hybridResults.answerSources || [])]
                     };
                     searchMethod = searchResult.websites.length > existingWebsites.length 
                         ? "hybrid" : searchMethod;
                     console.log(
-                        `✅ Hybrid search found ${hybridResults.length} additional results for: ${entityName}`,
+                        `✅ Hybrid search found ${hybridResults.websites.length} additional results for: ${entityName}`,
+                        `Added related entities: ${hybridResults.relatedEntities?.length || 0}`,
+                        `Added topics: ${hybridResults.topTopics?.length || 0}`
                     );
                 }
             } catch (error) {

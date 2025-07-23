@@ -51,47 +51,6 @@
           </div>
 
           <div class="view-controls">
-            <!-- Layout Controls -->
-            <div class="layout-controls">
-              <div class="btn-group" role="group">
-                <button
-                  type="button"
-                  class="btn btn-outline-primary layout-btn active"
-                  data-layout="force"
-                >
-                  <i class="bi bi-diagram-3"></i>
-                  Force
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-outline-primary layout-btn"
-                  data-layout="hierarchical"
-                >
-                  <i class="bi bi-diagram-2"></i>
-                  Tree
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-outline-primary layout-btn"
-                  data-layout="radial"
-                >
-                  <i class="bi bi-bullseye"></i>
-                  Radial
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-outline-primary layout-btn"
-                  data-layout="grid"
-                >
-                  <i class="bi bi-grid"></i>
-                  Grid
-                </button>
-              </div>
-            </div>
-
-            <button id="fullscreenToggle" class="btn btn-outline-secondary">
-              <i class="bi bi-fullscreen"></i>
-            </button>
           </div>
         </div>
       </nav>
@@ -156,28 +115,6 @@
             </div>
           </div>
 
-          <div class="related-entities">
-            <h3>Related Entities</h3>
-            <div class="entity-filters">
-              <select id="relationshipTypeFilter" class="form-select">
-                <option value="">All Relationships</option>
-              </select>
-              <select id="entityTypeFilter" class="form-select">
-                <option value="">All Types</option>
-                <option value="person">People</option>
-                <option value="organization">Organizations</option>
-                <option value="product">Products</option>
-                <option value="technology">Technologies</option>
-                <option value="concept">Concepts</option>
-                <option value="location">Locations</option>
-              </select>
-            </div>
-            <div id="relatedEntitiesList" class="related-entities-list">
-              <div class="empty-message">
-                Select an entity to see related items
-              </div>
-            </div>
-          </div>
         </aside>
 
         <!-- Graph Visualization -->
@@ -201,25 +138,6 @@
               </button>
             </div>
 
-            <div class="control-group">
-              <button
-                id="expandBtn"
-                class="control-btn"
-                title="Expand Selected"
-              >
-                <i class="bi bi-plus-circle"></i>
-              </button>
-              <button
-                id="collapseBtn"
-                class="control-btn"
-                title="Collapse Selected"
-              >
-                <i class="bi bi-dash-circle"></i>
-              </button>
-              <button id="resetBtn" class="control-btn" title="Reset Graph">
-                <i class="bi bi-arrow-clockwise"></i>
-              </button>
-            </div>
 
             <div class="control-group">
               <button
@@ -235,21 +153,6 @@
             </div>
           </div>
 
-          <!-- Graph Info Panel -->
-          <div class="graph-info-panel">
-            <div class="info-item">
-              <span class="info-label">Nodes:</span>
-              <span class="info-value" id="nodeCount">0</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">Edges:</span>
-              <span class="info-value" id="edgeCount">0</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">Layout:</span>
-              <span class="info-value" id="currentLayout">Force</span>
-            </div>
-          </div>
 
           <!-- Loading State -->
           <div id="graphLoading" class="graph-loading">
