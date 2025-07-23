@@ -11,6 +11,12 @@ import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:azure-ai-foundry:aliasKeywordExtractor");
 
+export type extractedAliases = {
+  site: string;
+  brandedKeyWords: string[];
+  topRankingKeywords: string[],
+  extractedKeywordsByClick: string[]
+}
 
 /*
  * Attempts to retrive the URL resolution agent from the AI project and creates it if necessary

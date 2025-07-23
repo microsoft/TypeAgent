@@ -402,6 +402,14 @@
       "console": "externalTerminal",
       "outFiles": ["${workspaceFolder}/**/*.js"],
     },
-       
+    {
+      "name": "Launch Website Alias Extractor",
+      "type": "node",
+      "request": "launch",
+      "skipFiles": ["<node_internals>/**"],
+      "program": "${workspaceFolder}/examples/websiteAliases/src/main.ts",
+      "console": "externalTerminal",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },       
   ]
 }
