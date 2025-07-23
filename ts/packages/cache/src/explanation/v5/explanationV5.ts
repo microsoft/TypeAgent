@@ -254,9 +254,10 @@ function getPropertySpec(
     return getParamSpec(action, parameterName, schemaInfoProvider);
 }
 
-function getPropertyTransformInfo(
+function createTransformInfo(
     propertyName: string,
     actions: ExecutableAction[],
+    partCount: number,
     schemaInfoProvider?: SchemaInfoProvider,
 ): TransformInfo {
     const { action, parameterName, actionIndex } = getPropertyInfo(
@@ -281,7 +282,7 @@ function getPropertyTransformInfo(
     const transformName = parameterName
         ? `parameters.${parameterName}`
         : "fullActionName";
-    return { namespace, transformName, actionIndex };
+    return { namespace, transformName, actionIndex, partCount };
 }
 
 async function augmentExplanation(
@@ -571,6 +572,7 @@ export function createConstructionV5(
     // Add the transforms for properties
     const propertyMap = new Map<string, PropertyValue>();
     const explicitPropertyNames = new Set<string>();
+    const transformInfoMap = new Map<string, TransformInfo>();
     for (const param of explanation.propertyAlternatives) {
         // property alternatives are all explicit properties
         const propertyName = param.propertyName;
@@ -588,11 +590,20 @@ export function createConstructionV5(
         }
 
         // Add the transforms for the property
-        const transformInfo = getPropertyTransformInfo(
+        const transformInfo = createTransformInfo(
             propertyName,
             actions,
+            param.propertySubPhrases.length,
             schemaInfoProvider,
         );
+        // Duplicate should already have identified in validateAlternativesExplanationV5
+        if (transformInfoMap.has(propertyName)) {
+            throw new Error(
+                `Internal error: Duplicate transform info for property '${propertyName}'`,
+            );
+        }
+        transformInfoMap.set(propertyName, transformInfo);
+
         const transforms = getTransforms(transformInfo.namespace);
         const entityIndex = entityParamMap.get(param.propertyName);
         if (entityIndex !== undefined) {
@@ -687,11 +698,12 @@ export function createConstructionV5(
             const transformInfos: TransformInfo[] = [];
             // Get the parameter info that this phase maps to
             for (const propertyName of phrase.propertyNames) {
-                const transformInfo = getPropertyTransformInfo(
-                    propertyName,
-                    actions,
-                    schemaInfoProvider,
-                );
+                const transformInfo = transformInfoMap.get(propertyName);
+                if (transformInfo === undefined) {
+                    // validateAlternativesExplanationV5 should have make sure the sub phrase information
+                    // are consistent with property alternatives.
+                    throw new Error("Internal error: transformInfo not found");
+                }
                 transformInfos.push(transformInfo);
                 if (entityParamMap.has(propertyName)) {
                     wildcardMode = WildcardMode.Disabled; // not a wildcard mapping
