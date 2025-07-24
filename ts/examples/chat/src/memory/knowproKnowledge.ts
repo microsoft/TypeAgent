@@ -120,7 +120,8 @@ export async function createKnowproKnowledgeCommands(
 
         let totalTokens1 = 0;
         let totalTokens2 = 0;
-
+        let totalTime1 = 0;
+        let totalTime2 = 0;
         const progressBar = new ProgressBar(context.printer, textChunks.length);
         for (let i = 0; i < textChunks.length; ++i) {
             progressBar.advance();
@@ -135,34 +136,41 @@ export async function createKnowproKnowledgeCommands(
             const [knowledge1, tokenCount1] = await runExtractKnowledge(
                 llmExtractor1,
                 text,
+                (k) => k.inverseActions.length > 0,
             );
             if (!knowledge1) {
                 context.printer.writeError("No knowledge");
                 continue;
             }
-            context.printer.writeJsonInColor(chalk.gray, knowledge1.actions);
+            totalTokens1 += tokenCount1;
+            totalTime1 += kpContext.stopWatch.elapsedSeconds;
+            //context.printer.writeJsonInColor(chalk.gray, knowledge1.actions);
             context.printer.writeJson(knowledge1.inverseActions);
 
             context.printer.writeHeading("V2");
             const [knowledge2, tokenCount2] = await runExtractKnowledge(
                 llmExtractor2,
                 text,
+                (k) => k.inverseActions.length > 0,
             );
             if (!knowledge2) {
                 context.printer.writeError("No knowledge");
                 continue;
             }
-            context.printer.writeJsonInColor(chalk.gray, knowledge2.actions);
+            //context.printer.writeJsonInColor(chalk.gray, knowledge2.actions);
             context.printer.writeJson(knowledge2.inverseActions);
-
-            totalTokens1 += tokenCount1;
             totalTokens2 += tokenCount2;
+            totalTime2 += kpContext.stopWatch.elapsedSeconds;
+            context.printer.writeInColor(
+                chalk.green,
+                `Tokens Delta: ${totalTokens1 - totalTokens2}, V1: ${totalTokens1}, V2: ${totalTokens2}`,
+            );
+            context.printer.writeInColor(
+                chalk.green,
+                `Time Delta: ${totalTime1 - totalTime2} seconds, V1: ${totalTime1}, V2: ${totalTime2}`,
+            );
         }
         progressBar.complete();
-        context.printer.writeInColor(
-            chalk.gray,
-            `Delta: ${totalTokens1 - totalTokens2}, V1: ${totalTokens1}, V2: ${totalTokens2}`,
-        );
     }
 
     function getPodcastTextChunks(srcPath: string) {
@@ -223,17 +231,30 @@ export async function createKnowproKnowledgeCommands(
     async function runExtractKnowledge(
         llmExtractor: LLMKnowledgeExtractor,
         text: string,
+        verify?: (k: kpLib.KnowledgeResponse) => boolean,
     ): Promise<[kpLib.KnowledgeResponse | undefined, number]> {
-        kpContext.startTokenCounter();
-        kpContext.stopWatch.start();
-        const knowledge = await llmExtractor.extractor.extract(text);
-        kpContext.stopWatch.stop();
+        let maxAttempts = 2;
+        let attempts = 1;
+        let knowledge: kpLib.KnowledgeResponse | undefined;
+        while (true) {
+            kpContext.startTokenCounter();
+            kpContext.stopWatch.start();
+            knowledge = await llmExtractor.extractor.extract(text);
+            kpContext.stopWatch.stop();
+            if (
+                attempts >= maxAttempts ||
+                (knowledge && (!verify || verify(knowledge)))
+            ) {
+                break;
+            }
+            attempts++;
+        }
+        //context.printer.writeCompletionStats(kpContext.tokenStats);
         context.printer.writeTiming(
             chalk.cyan,
             kpContext.stopWatch,
             llmExtractor.model.modelName,
         );
-        //context.printer.writeCompletionStats(kpContext.tokenStats);
         context.printer.writeLineInColor(
             chalk.gray,
             `${kpContext.tokenStats.completion_tokens} tokens`,
