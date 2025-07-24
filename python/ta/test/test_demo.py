@@ -36,9 +36,10 @@ def test_main(needs_auth: None):
 async def main(filename_prefix: str):
     print("Create conversation settings ...")
     settings = ConversationSettings()
-    model = settings.thread_settings.embedding_model
+    model = settings.embedding_model
     assert model is not None
     assert isinstance(model, AsyncEmbeddingModel), f"model is {model!r}"
+    assert settings.thread_settings.embedding_model is model
     assert (
         settings.message_text_index_settings.embedding_index_settings.embedding_model
         is model
@@ -50,9 +51,9 @@ async def main(filename_prefix: str):
 
     print(f"Loading {filename_prefix} ...")
     t0 = time.time()
-    pod = podcast.Podcast.read_from_file(filename_prefix, settings)
+    pod = podcast.Podcast.read_from_file(filename_prefix, settings, dbname="podcast.db")
     t1 = time.time()
-    print(f"Loading took {t1-t0:.3f} seconds")
+    raise RuntimeError(f"Loading took {t1-t0:.3f} seconds")
     assert pod is not None, "Failed to load podcast"
     assert isinstance(pod, podcast.Podcast), f"pod is {pod!r}"
 

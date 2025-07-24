@@ -43,16 +43,9 @@ def import_podcast(
     """
     turn_parse_regex = re.compile(regex)
     participants: set[str] = set()
-    if dbname is None:
-        msgs = MessageCollection[PodcastMessage]()
-        semrefs = SemanticRefCollection()
-    else:
-        provider = SqliteStorageProvider(dbname)
-        msgs = provider.create_message_collection(PodcastMessage)
-        semrefs = provider.create_semantic_ref_collection()
-        if len(msgs) or len(semrefs):
-            raise RuntimeError(f"{dbname!r} already has messages or semantic refs.")
+
     cur_msg: PodcastMessage | None = None
+    msgs: list[PodcastMessage] = []
     for line in transcript_lines:
         match = turn_parse_regex.match(line)
         if match:
@@ -78,7 +71,22 @@ def import_podcast(
 
     assign_message_listeners(msgs, participants)
 
-    pod = Podcast(podcast_name, msgs, [podcast_name], semrefs, settings=settings)
+    if dbname is None:
+        msg_coll = MessageCollection[PodcastMessage]()
+        semref_coll = SemanticRefCollection()
+    else:
+        provider = SqliteStorageProvider(dbname)
+        msg_coll = provider.create_message_collection(PodcastMessage)
+        semref_coll = provider.create_semantic_ref_collection()
+        if len(msg_coll) or len(semref_coll):
+            raise RuntimeError(f"{dbname!r} already has messages or semantic refs.")
+
+    for msg in msgs:
+        msg_coll.append(msg)
+
+    pod = Podcast(
+        podcast_name, msg_coll, [podcast_name], semref_coll, settings=settings
+    )
     if start_date:
         pod.generate_timestamps(start_date, length_minutes)
     # TODO: Add more tags.
@@ -86,7 +94,7 @@ def import_podcast(
 
 
 def assign_message_listeners(
-    msgs: IMessageCollection[PodcastMessage],
+    msgs: list[PodcastMessage],
     participants: set[str],
 ) -> None:
     for msg in msgs:
