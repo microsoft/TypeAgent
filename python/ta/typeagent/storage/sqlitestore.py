@@ -102,7 +102,8 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
         cursor = self.db.cursor()
         serialized_message = self._serialize(item)
         cursor.execute(
-            "INSERT INTO Messages (msgdata) VALUES (?)", (serialized_message,)
+            "INSERT INTO Messages (id, msgdata) VALUES (?, ?)",
+            (len(self), serialized_message),
         )
         self.db.commit()
 
@@ -172,7 +173,8 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
         cursor = self.db.cursor()
         serialized_message = self._serialize(item)
         cursor.execute(
-            "INSERT INTO SemanticRefs (srdata) VALUES (?)", (serialized_message,)
+            "INSERT INTO SemanticRefs (id, srdata) VALUES (?, ?)",
+            (item.semantic_ref_ordinal, serialized_message),
         )
         self.db.commit()
 
