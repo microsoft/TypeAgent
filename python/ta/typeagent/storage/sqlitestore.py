@@ -31,8 +31,8 @@ class DefaultSerializer[TMessage: interfaces.IMessage](interfaces.JsonSerializer
     def serialize(self, value: TMessage) -> str:
         return json.dumps(serialization.serialize_object(value))
 
-    def deserialize(self, value: str) -> TMessage:
-        return serialization.deserialize_object(self.cls, json.loads(value))
+    def deserialize(self, data: str) -> TMessage:
+        return serialization.deserialize_object(self.cls, json.loads(data))
 
 
 # TODO: Unify SqliteMessageCollection and SqliteSemanticRefCollection
@@ -83,12 +83,15 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
             # If so, we should probably try to optimize it.
             return [self[i] for i in arg]
         elif isinstance(arg, slice):
-            start, stop, step = arg.indices(999_999_999)
+            start, stop, step = arg.indices(999_999_999)  # Avoid len()
             if step not in (None, 1):
                 raise ValueError("Slice step must be 1")
             if stop <= start:
                 return []
-            cursor.execute("SELECT msgdata FROM Messages WHERE id >= ? LIMIT ?", (start, stop - start))
+            cursor.execute(
+                "SELECT msgdata FROM Messages WHERE id >= ? LIMIT ?",
+                (start, stop - start),
+            )
             rows = cursor.fetchall()
             res = [self._deserialize(row[0]) for row in rows]
             return res
@@ -137,7 +140,9 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
     @typing.overload
     def __getitem__(self, arg: list[int]) -> list[interfaces.SemanticRef]: ...
 
-    def __getitem__(self, arg: int | list[int] | slice) -> interfaces.SemanticRef | list[interfaces.SemanticRef]:
+    def __getitem__(
+        self, arg: int | list[int] | slice
+    ) -> interfaces.SemanticRef | list[interfaces.SemanticRef]:
         cursor = self.db.cursor()
         if isinstance(arg, int):
             cursor.execute("SELECT srdata FROM SemanticRefs WHERE id = ?", (arg,))
@@ -150,12 +155,15 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
             # If so, we should probably try to optimize it.
             return [self[i] for i in arg]
         elif isinstance(arg, slice):
-            start, stop, step = arg.indices(len(self))
+            start, stop, step = arg.indices(999_999_999)  # Avoid len()
             if step not in (None, 1):
                 raise ValueError("Slice step must be 1")
             if stop <= start:
                 return []
-            cursor.execute("SELECT srdata FROM SemanticRefs WHERE id >= ? LIMIT ?", (start, stop - start))
+            cursor.execute(
+                "SELECT srdata FROM SemanticRefs WHERE id >= ? LIMIT ?",
+                (start, stop - start),
+            )
             return [self._deserialize(row[0]) for row in cursor.fetchall()]
         else:
             raise TypeError("Index must be an int, list or slice")
