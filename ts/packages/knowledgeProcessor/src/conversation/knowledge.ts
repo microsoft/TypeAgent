@@ -40,7 +40,7 @@ export function createKnowledgeExtractor(
     extractorSettings?: KnowledgeExtractorSettings | undefined,
 ): KnowledgeExtractor {
     const settings = extractorSettings ?? createKnowledgeExtractorSettings();
-    const translator = createTranslator(model);
+    const translator = createKnowledgeTranslator(model);
     return {
         settings,
         extract,
@@ -80,33 +80,6 @@ export function createKnowledgeExtractor(
         return result;
     }
 
-    function createTranslator(
-        model: TypeChatLanguageModel,
-    ): TypeChatJsonTranslator<KnowledgeResponse> {
-        const schema = loadSchema(["knowledgeSchema.ts"], import.meta.url);
-        const typeName = "KnowledgeResponse";
-        const validator = createTypeScriptJsonValidator<KnowledgeResponse>(
-            schema,
-            typeName,
-        );
-        const translator = createJsonTranslator<KnowledgeResponse>(
-            model,
-            validator,
-        );
-        translator.createRequestPrompt = createRequestPrompt;
-        return translator;
-
-        function createRequestPrompt(request: string) {
-            return (
-                `You are a service that translates user messages in a conversation into JSON objects of type "${typeName}" according to the following TypeScript definitions:\n` +
-                `\`\`\`\n${schema}\`\`\`\n` +
-                `The following are messages in a conversation:\n` +
-                `"""\n${request}\n"""\n` +
-                `The following is the user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:\n`
-            );
-        }
-    }
-
     //
     // Some knowledge found via actions is actually meant for entities...
     //
@@ -138,6 +111,33 @@ export function createKnowledgeExtractor(
                 }
             }
         }
+    }
+}
+
+export function createKnowledgeTranslator(
+    model: TypeChatLanguageModel,
+): TypeChatJsonTranslator<KnowledgeResponse> {
+    const schema = loadSchema(["knowledgeSchema.ts"], import.meta.url);
+    const typeName = "KnowledgeResponse";
+    const validator = createTypeScriptJsonValidator<KnowledgeResponse>(
+        schema,
+        typeName,
+    );
+    const translator = createJsonTranslator<KnowledgeResponse>(
+        model,
+        validator,
+    );
+    translator.createRequestPrompt = createRequestPrompt;
+    return translator;
+
+    function createRequestPrompt(request: string) {
+        return (
+            `You are a service that translates user messages in a conversation into JSON objects of type "${typeName}" according to the following TypeScript definitions:\n` +
+            `\`\`\`\n${schema}\`\`\`\n` +
+            `The following are messages in a conversation:\n` +
+            `"""\n${request}\n"""\n` +
+            `The following is the user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:\n`
+        );
     }
 }
 

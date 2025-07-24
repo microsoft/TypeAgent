@@ -6,7 +6,9 @@ import { async, asyncArray, loadSchema } from "typeagent";
 import {
     createJsonTranslator,
     error,
+    PromptSection,
     Result,
+    success,
     TypeChatJsonTranslator,
     TypeChatLanguageModel,
 } from "typechat";
@@ -187,7 +189,29 @@ export class KnowledgeCompiler {
     }
 }
 
-export function createKnowledgeTranslator2(
+export function createKnowledgeTranslator(
+    model: TypeChatLanguageModel,
+): TypeChatJsonTranslator<kpLib.KnowledgeResponse> {
+    const translator = kpLib.createKnowledgeTranslator(model);
+    const translator2 = createKnowledgeTranslator2(model);
+    translator.createRequestPrompt = translator2.createRequestPrompt;
+    translator.translate = translate;
+    return translator;
+
+    async function translate(
+        request: string,
+        promptPreamble?: string | PromptSection[],
+    ): Promise<Result<kpLib.KnowledgeResponse>> {
+        const result = await translator2.translate(request, promptPreamble);
+        if (!result.success) {
+            return result;
+        }
+        const knowledge = knowledgeResponseFromV2(result.data);
+        return success(knowledge);
+    }
+}
+
+function createKnowledgeTranslator2(
     model: TypeChatLanguageModel,
 ): TypeChatJsonTranslator<knowledgeSchema2.KnowledgeResponse> {
     const schema = loadSchema(["knowledgeSchema_v2.ts"], import.meta.url);
@@ -213,4 +237,77 @@ export function createKnowledgeTranslator2(
             `The following is the user request translated into a JSON object with no spaces of indentation and no properties with the value undefined:\n`
         );
     }
+}
+
+function knowledgeResponseFromV2(
+    response2: knowledgeSchema2.KnowledgeResponse,
+): kpLib.KnowledgeResponse {
+    const response: kpLib.KnowledgeResponse = {
+        entities: response2.entities,
+        topics: response2.topics,
+        actions: response2.actions.map((a) => actionFromAction2(a)),
+        inverseActions: [],
+    };
+    for (const action2 of response2.actions) {
+        const action = inverseActionFromAction2(action2);
+        if (action !== undefined) {
+            response.inverseActions.push(action);
+        }
+    }
+    return response;
+}
+
+function actionFromAction2(action2: knowledgeSchema2.Action): kpLib.Action {
+    const action: kpLib.Action = {
+        verbs: action2.inverseVerbs,
+        verbTense: action2.verbTense,
+        subjectEntityName: action2.subjectEntityName,
+        objectEntityName: action2.objectEntityName,
+        indirectObjectEntityName: action2.indirectObjectEntityName,
+        subjectEntityFacet: action2.subjectEntityFacet,
+    };
+    if (action2.params) {
+        action.params = action2.params;
+    }
+    return action;
+}
+
+function inverseActionFromAction2(
+    action2: knowledgeSchema2.Action,
+): kpLib.Action | undefined {
+    if (
+        action2.inverseVerbs === undefined ||
+        action2.inverseVerbs.length === 0
+    ) {
+        return undefined;
+    }
+
+    let subjectEntityName: string | undefined;
+    let objectEntityName = kpLib.NoEntityName;
+    let indirectObjectEntityName = kpLib.NoEntityName;
+    if (action2.objectEntityName !== undefined) {
+        subjectEntityName = action2.objectEntityName;
+        objectEntityName = action2.subjectEntityName;
+    } else if (action2.indirectObjectEntityName !== undefined) {
+        subjectEntityName = action2.indirectObjectEntityName;
+        indirectObjectEntityName = action2.subjectEntityName;
+    }
+    if (
+        subjectEntityName === undefined ||
+        subjectEntityName === kpLib.NoEntityName
+    ) {
+        return undefined;
+    }
+    const action: kpLib.Action = {
+        verbs: action2.inverseVerbs,
+        verbTense: action2.verbTense,
+        subjectEntityName,
+        objectEntityName,
+        indirectObjectEntityName,
+        subjectEntityFacet: action2.subjectEntityFacet,
+    };
+    if (action2.params) {
+        action.params = action2.params;
+    }
+    return action;
 }
