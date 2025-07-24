@@ -71,60 +71,39 @@ export function getSpeechConfig(token: SpeechToken | undefined) {
     return speechConfig;
 }
 
-function onRecognizing(
-    recognitionEventArgs: speechSDK.SpeechRecognitionEventArgs,
-    inputId: string,
-) {
-    console.log("Running Recognizing step");
-    const result = recognitionEventArgs.result;
-    const phraseDiv = document.querySelector<HTMLDivElement>(`#${inputId}`)!;
-    // Update the hypothesis line in the phrase/result view (only have one)
-    phraseDiv.innerHTML =
-        phraseDiv.innerHTML.replace(
-            /(.*)(^|[\r\n]+).*\[\.\.\.\][\r\n]+/,
-            "$1$2",
-        ) + `${result.text} [...]\r\n`;
-    phraseDiv.scrollTop = phraseDiv.scrollHeight;
-}
-
 function onRecognizedResult(
     result: speechSDK.SpeechRecognitionResult,
-    inputId: string,
-    onStop: () => void,
-    messageHandler: (message: string) => void,
+    onRecognized: (text: string) => void,
+    onError: (error: string) => void,
 ) {
-    onStop();
+    switch (result.reason) {
+        case speechSDK.ResultReason.RecognizedSpeech:
+            onRecognized(result.text);
+            break;
+        case speechSDK.ResultReason.NoMatch:
+            onError("[Speech could not be recognized]");
+            break;
+        case speechSDK.ResultReason.Canceled:
+            const cancellationResult =
+                speechSDK.CancellationDetails.fromResult(result);
+            if (
+                cancellationResult.reason === speechSDK.CancellationReason.Error
+            ) {
+                onError(
+                    `[ERROR: ${cancellationResult.errorDetails} (code:${cancellationResult.ErrorCode})]`,
+                );
 
-    const phraseDiv = document.querySelector<HTMLDivElement>(`#${inputId}`)!;
-    let message: string;
-    let errorMessage: string | undefined = undefined;
-    if (result.reason === speechSDK.ResultReason.RecognizedSpeech) {
-        message = result.text;
-        messageHandler(message);
-        phraseDiv.innerHTML = message;
-        phraseDiv.scrollTop = phraseDiv.scrollHeight;
-    } else if (result.reason == speechSDK.ResultReason.NoMatch) {
-        errorMessage = "[Speech could not be recognized]";
-    } else if (result.reason == speechSDK.ResultReason.Canceled) {
-        const cancellationResult =
-            speechSDK.CancellationDetails.fromResult(result);
-        if (cancellationResult.reason == speechSDK.CancellationReason.Error) {
-            errorMessage = `[ERROR: ${cancellationResult.errorDetails} (code:${cancellationResult.ErrorCode})]`;
-
-            if (cancellationResult.ErrorCode == 4) {
-                errorMessage += `Did you forget to elevate your RBAC role?`;
+                if (cancellationResult.ErrorCode == 4) {
+                    onError(`Did you forget to elevate your RBAC role?`);
+                }
+                break;
             }
-        } else {
-            errorMessage = `[ERROR: Cancelled]`;
-        }
-    } else {
-        errorMessage = `[Unknown reason ${result.reason}]`;
+            onError(`[ERROR: Cancelled]`);
+            break;
+        default:
+            onError(`[Unknown reason ${result.reason}]`);
+            break;
     }
-    if (errorMessage !== undefined) {
-        console.log(errorMessage);
-    }
-    phraseDiv.innerHTML = "";
-    phraseDiv.scrollTop = phraseDiv.scrollHeight;
 }
 
 export function needSpeechToken(useLocalWhisper: boolean) {
@@ -135,24 +114,16 @@ export function needSpeechToken(useLocalWhisper: boolean) {
 }
 export function recognizeOnce(
     token: SpeechToken | undefined,
-    inputId: string,
-    onStop: () => void,
-    messageHandler: (message: string) => void,
+    onRecognizing: (text: string) => void,
+    onRecognized: (text: string) => void,
+    onError: (error: string) => void,
     useLocalWhisper?: boolean,
 ) {
-    const phraseDiv = document.querySelector<HTMLDivElement>(`#${inputId}`)!;
-
     if (useLocalWhisper) {
         const reco = new WhisperRecognizer();
 
         reco.onRecognizing((data) => {
-            const result = new speechSDK.SpeechRecognitionResult(
-                undefined,
-                speechSDK.ResultReason.RecognizedSpeech,
-                data.text,
-            );
-            const e = new speechSDK.SpeechRecognitionEventArgs(result);
-            onRecognizing(e, inputId);
+            onRecognizing(data.text);
         });
 
         reco.onRecognized((data) => {
@@ -161,7 +132,7 @@ export function recognizeOnce(
                 speechSDK.ResultReason.RecognizedSpeech,
                 data.text,
             );
-            onRecognizedResult(result, inputId, onStop, messageHandler);
+            onRecognizedResult(result, onRecognized, onError);
         });
 
         reco.initialize().then(() => {
@@ -186,7 +157,7 @@ export function recognizeOnce(
                 );
             }
 
-            onRecognizedResult(result, inputId, onStop, messageHandler);
+            onRecognizedResult(result, onRecognized, onError);
         });
     } else {
         const audioConfig = getAudioConfig();
@@ -196,17 +167,17 @@ export function recognizeOnce(
         // Intermediate results arrive while audio is being processed and represent the current "best guess" about
         // what's been spoken so far.
         reco.recognizing = (_s, e) => {
-            onRecognizing(e, inputId);
+            onRecognizing(e.result.text);
         };
         // Note: this scenario sample demonstrates result handling via continuation on the recognizeOnceAsync call.
         // The 'recognized' event handler can be used in a similar fashion.
         reco.recognizeOnceAsync(
             (result) => {
-                onRecognizedResult(result, inputId, onStop, messageHandler);
+                onRecognizedResult(result, onRecognized, onError);
             },
-            function (err) {
-                window.console.log(err);
-                phraseDiv.innerHTML += "ERROR: " + err;
+            (err) => {
+                debugError(err);
+                onError(`[ERROR: ${err}]`);
             },
         );
     }

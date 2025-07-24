@@ -16,8 +16,8 @@ import { getSpeechToken } from "./speechToken";
 import { uint8ArrayToBase64 } from "common-utils";
 
 export interface ExpandableTextareaHandlers {
-    onSend: (text: string) => void;
-    onChange?: (eta: ExpandableTextarea) => void;
+    onSend: (html: string) => void;
+    onChange?: (eta: ExpandableTextarea, isInput: boolean) => void;
     onKeydown?: (eta: ExpandableTextarea, event: KeyboardEvent) => boolean;
     onMouseWheel?: (eta: ExpandableTextarea, event: WheelEvent) => void;
 }
@@ -68,9 +68,7 @@ export class ExpandableTextarea {
             ) {
                 textEntry.removeChild(textEntry.childNodes[0]);
             }
-            if (this.entryHandlers.onChange !== undefined) {
-                this.entryHandlers.onChange(this);
-            }
+            this.entryHandlers.onChange?.(this, true);
         });
         textEntry.onchange = () => {
             if (sendButton !== undefined) {
@@ -78,9 +76,7 @@ export class ExpandableTextarea {
             }
         };
         textEntry.onwheel = (event) => {
-            if (this.entryHandlers.onMouseWheel !== undefined) {
-                this.entryHandlers.onMouseWheel(this, event);
-            }
+            this.entryHandlers.onMouseWheel?.(this, event);
         };
         this.textEntry = textEntry;
     }
@@ -89,12 +85,33 @@ export class ExpandableTextarea {
         return this.textEntry;
     }
 
-    setContent(content: string | null) {
-        if (this.textEntry.textContent !== content) {
-            this.textEntry.textContent = content;
-        }
-
+    private updateCursorOnChange() {
         this.moveCursorToEnd();
+        this.entryHandlers.onChange?.(this, false);
+    }
+    public getTextContent() {
+        return this.textEntry.textContent ?? "";
+    }
+    public setTextContent(content: string = "") {
+        this.textEntry.textContent = content;
+        this.updateCursorOnChange();
+    }
+
+    public appendTextContent(content: string) {
+        this.textEntry.textContent += content;
+        this.updateCursorOnChange();
+    }
+
+    public async typeInputText(text: string) {
+        // Clear existing content.
+        this.setTextContent();
+        for (let i = 0; i < text.length; i++) {
+            this.appendTextContent(text[i]);
+            // Simulate a key press delay to make it more natural
+            // This is a random delay between 25 and 40 ms
+            const keyDelay = 25 + Math.floor(Math.random() * 15);
+            await new Promise((f) => setTimeout(f, keyDelay));
+        }
     }
 
     public moveCursorToEnd() {
@@ -112,10 +129,11 @@ export class ExpandableTextarea {
                 s.removeAllRanges();
                 s.addRange(r);
             }
+            this.textEntry.scrollTop = this.textEntry.scrollHeight;
         }
     }
 
-    replaceTextAtCursor(
+    public replaceTextAtCursor(
         text: string,
         cursorOffset: number = 0,
         length: number = 0,
@@ -156,10 +174,10 @@ export class ExpandableTextarea {
         }
     }
     send(sendButton?: HTMLButtonElement) {
-        const text = this.getTextEntry().innerHTML;
-        if (text.length > 0) {
-            this.entryHandlers.onSend(text);
-            this.textEntry.innerText = "";
+        const html = this.getTextEntry().innerHTML;
+        if (html.length > 0) {
+            this.entryHandlers.onSend(html);
+            this.setTextContent();
             if (sendButton) {
                 sendButton.disabled = true;
             }
@@ -189,11 +207,8 @@ export class ChatInput {
     ) => void;
 
     constructor(
-        inputId: string,
-        messageHandler: (message: string) => void,
-        onChange?: (eta: ExpandableTextarea) => void,
-        onKeydown?: (eta: ExpandableTextarea, event: KeyboardEvent) => boolean,
-        onMouseWheel?: (eta: ExpandableTextarea, event: WheelEvent) => void,
+        handlers: ExpandableTextareaHandlers,
+        inputId: string = "phraseDiv",
     ) {
         this.inputContainer = document.createElement("div");
         this.inputContainer.className = "chat-input";
@@ -208,12 +223,7 @@ export class ChatInput {
         this.textarea = new ExpandableTextarea(
             inputId,
             "user-textarea",
-            {
-                onSend: messageHandler,
-                onChange,
-                onKeydown,
-                onMouseWheel,
-            },
+            handlers,
             this.sendButton,
         );
 
@@ -349,11 +359,34 @@ export class ChatInput {
                 return;
             }
             micListening();
+            this.textarea.setTextContent();
             recognizeOnce(
                 token,
-                "phraseDiv",
-                micReady,
-                messageHandler,
+                // onRecognizing
+                (text: string) => {
+                    console.log("Running Recognizing step");
+                    // Update the hypothesis line in the phrase/result view (only have one)
+                    this.textarea.setTextContent(
+                        this.textarea
+                            .getTextContent()
+                            .replace(
+                                /(.*)(^|[\r\n]+).*\[\.\.\.\][\r\n]+/,
+                                "$1$2",
+                            ) + `${text} [...]\r\n`,
+                    );
+                },
+                // onRecognized
+                (text: string) => {
+                    micReady();
+                    this.textarea.setTextContent(text);
+                    this.textarea.send();
+                },
+                // onError
+                (error: string) => {
+                    micReady();
+                    console.log(error);
+                    this.textarea.setTextContent();
+                },
                 useLocalWhisper,
             );
         };
@@ -429,7 +462,9 @@ export class ChatInput {
 
         if (!supportedMimeTypes.has(mimeType)) {
             console.log(`Unsupported MIME type for '${fileName}'`);
-            this.textarea.getTextEntry().innerText = `Unsupported file type '${mimeType}'. Supported types: ${Array.from(supportedMimeTypes).toString()}`;
+            this.textarea.setTextContent(
+                `Unsupported file type '${mimeType}'. Supported types: ${Array.from(supportedMimeTypes).toString()}`,
+            );
             return;
         }
 
@@ -446,6 +481,11 @@ export class ChatInput {
         }
 
         this.textarea.focus();
+    }
+
+    public async showInputText(message: string) {
+        await this.textarea.typeInputText(message);
+        this.textarea.send();
     }
 
     clear() {
