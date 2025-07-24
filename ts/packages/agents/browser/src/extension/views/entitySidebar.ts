@@ -37,7 +37,6 @@ export class EntitySidebar {
         this.renderEntityMetrics();
         this.renderEntityDetails();
         this.renderEntityTimeline();
-        this.renderRelatedEntities();
     }
 
     /**
@@ -251,117 +250,6 @@ export class EntitySidebar {
         }
     }
 
-    private renderRelatedEntities(): void {
-        const relatedEntitiesList = document.getElementById(
-            "relatedEntitiesList",
-        );
-        if (!relatedEntitiesList) return;
-
-        // Handle various relationship field names from real entity data
-        const relationships =
-            this.currentEntity?.strongRelationships ||
-            this.currentEntity?.relationships ||
-            this.currentEntity?.relatedEntities ||
-            [];
-
-        if (!relationships || relationships.length === 0) {
-            relatedEntitiesList.innerHTML =
-                '<div class="empty-message">No related entities</div>';
-            return;
-        }
-
-        const relatedHtml = relationships
-            .sort((a: any, b: any) => b.strength - a.strength)
-            .slice(0, 10) // Show top 10 relationships
-            .map((rel: any) => this.renderRelatedEntityItem(rel))
-            .join("");
-
-        relatedEntitiesList.innerHTML = relatedHtml;
-
-        // Add click handlers
-        relatedEntitiesList
-            .querySelectorAll(".related-entity-item")
-            .forEach((item) => {
-                item.addEventListener("click", () => {
-                    const entityName = item.getAttribute("data-entity");
-                    if (entityName) {
-                        this.onRelatedEntityClick(entityName);
-                    }
-                });
-            });
-
-        // Update relationship type filter
-        this.updateRelationshipTypeFilter();
-    }
-
-    private renderRelatedEntityItem(relationship: any): string {
-        const strength =
-            relationship.strength || relationship.confidence || 0.5;
-        const strengthClass = this.getRelationshipStrengthClass(strength);
-        const strengthPercentage = Math.round(strength * 100);
-        const entityName =
-            relationship.relatedEntity ||
-            relationship.name ||
-            relationship.entity ||
-            "Unknown";
-        const relationshipType =
-            relationship.relationshipType || relationship.type || "related_to";
-
-        return `
-            <div class="related-entity-item" data-entity="${this.escapeHtml(entityName)}">
-                <div class="related-entity-icon">
-                    <i class="bi bi-diagram-2"></i>
-                </div>
-                <div class="related-entity-info">
-                    <div class="related-entity-name">${this.escapeHtml(entityName)}</div>
-                    <div class="related-entity-type">${this.escapeHtml(relationshipType)}</div>
-                </div>
-                <div class="related-entity-strength ${strengthClass}">
-                    ${strengthPercentage}%
-                </div>
-            </div>
-        `;
-    }
-
-    private updateRelationshipTypeFilter(): void {
-        const filterSelect = document.getElementById(
-            "relationshipTypeFilter",
-        ) as HTMLSelectElement;
-        if (!filterSelect) return;
-
-        // Handle various relationship field names from real entity data
-        const relationships =
-            this.currentEntity?.strongRelationships ||
-            this.currentEntity?.relationships ||
-            this.currentEntity?.relatedEntities ||
-            [];
-
-        if (!relationships || relationships.length === 0) return;
-
-        // Get unique relationship types
-        const relationshipTypes = new Set<string>(
-            relationships
-                .map(
-                    (rel: any) =>
-                        rel.relationshipType || rel.type || "related_to",
-                )
-                .filter((type: string) => type && type.trim()),
-        );
-
-        // Clear existing options (except "All Relationships")
-        while (filterSelect.children.length > 1) {
-            filterSelect.removeChild(filterSelect.lastChild!);
-        }
-
-        // Add relationship type options
-        Array.from(relationshipTypes).forEach((type: string) => {
-            const option = document.createElement("option");
-            option.value = type;
-            option.textContent = this.formatRelationshipType(type);
-            filterSelect.appendChild(option);
-        });
-    }
-
     private renderEmptyState(): void {
         const nameEl = document.getElementById("entityName");
         const typeEl = document.getElementById("entityType");
@@ -371,9 +259,6 @@ export class EntitySidebar {
         const centralityEl = document.getElementById("entityCentrality");
         const firstSeenEl = document.getElementById("entityFirstSeen");
         const lastSeenEl = document.getElementById("entityLastSeen");
-        const relatedEntitiesList = document.getElementById(
-            "relatedEntitiesList",
-        );
 
         if (nameEl) nameEl.textContent = "Select an Entity";
         if (typeEl) typeEl.textContent = "";
@@ -383,11 +268,6 @@ export class EntitySidebar {
         if (centralityEl) centralityEl.textContent = "-";
         if (firstSeenEl) firstSeenEl.textContent = "-";
         if (lastSeenEl) lastSeenEl.textContent = "-";
-
-        if (relatedEntitiesList) {
-            relatedEntitiesList.innerHTML =
-                '<div class="empty-message">Select an entity to see related items</div>';
-        }
 
         // Clear details sections
         const aliasesSection = document.getElementById("entityAliases");
@@ -608,116 +488,5 @@ export class EntitySidebar {
         const div = document.createElement("div");
         div.textContent = text;
         return div.innerHTML;
-    }
-
-    private onRelatedEntityClick(entityName: string): void {
-        // Emit custom event for entity navigation
-        const event = new CustomEvent("entityNavigate", {
-            detail: { entityName },
-        });
-        this.container.dispatchEvent(event);
-    }
-
-    /**
-     * Set up entity type and relationship filters
-     */
-    setupFilters(onFilterChange?: (filters: any) => void): void {
-        const relationshipTypeFilter = document.getElementById(
-            "relationshipTypeFilter",
-        ) as HTMLSelectElement;
-        const entityTypeFilter = document.getElementById(
-            "entityTypeFilter",
-        ) as HTMLSelectElement;
-
-        if (relationshipTypeFilter) {
-            relationshipTypeFilter.addEventListener("change", () => {
-                this.applyRelatedEntitiesFilter();
-                if (onFilterChange) {
-                    onFilterChange({
-                        relationshipType: relationshipTypeFilter.value,
-                        entityType: entityTypeFilter?.value,
-                    });
-                }
-            });
-        }
-
-        if (entityTypeFilter) {
-            entityTypeFilter.addEventListener("change", () => {
-                this.applyRelatedEntitiesFilter();
-                if (onFilterChange) {
-                    onFilterChange({
-                        relationshipType: relationshipTypeFilter?.value,
-                        entityType: entityTypeFilter.value,
-                    });
-                }
-            });
-        }
-    }
-
-    private applyRelatedEntitiesFilter(): void {
-        const relationshipTypeFilter = document.getElementById(
-            "relationshipTypeFilter",
-        ) as HTMLSelectElement;
-        const entityTypeFilter = document.getElementById(
-            "entityTypeFilter",
-        ) as HTMLSelectElement;
-        const relatedEntitiesList = document.getElementById(
-            "relatedEntitiesList",
-        );
-
-        if (!relatedEntitiesList) return;
-
-        // Handle various relationship field names from real entity data
-        const relationships =
-            this.currentEntity?.strongRelationships ||
-            this.currentEntity?.relationships ||
-            this.currentEntity?.relatedEntities ||
-            [];
-
-        if (!relationships || relationships.length === 0) return;
-
-        const relationshipTypeFilter_value =
-            relationshipTypeFilter?.value || "";
-        const entityTypeFilter_value = entityTypeFilter?.value || "";
-
-        let filteredRelationships = relationships;
-
-        // Filter by relationship type
-        if (relationshipTypeFilter_value) {
-            filteredRelationships = filteredRelationships.filter((rel: any) => {
-                const relType =
-                    rel.relationshipType || rel.type || "related_to";
-                return relType === relationshipTypeFilter_value;
-            });
-        }
-
-        // For entity type filtering, we'd need more data about the related entities
-        // This would be implemented in Phase 4 with real data
-
-        // Re-render with filtered relationships
-        if (filteredRelationships.length === 0) {
-            relatedEntitiesList.innerHTML =
-                '<div class="empty-message">No matching relationships</div>';
-        } else {
-            const relatedHtml = filteredRelationships
-                .sort((a: any, b: any) => b.strength - a.strength)
-                .slice(0, 10)
-                .map((rel: any) => this.renderRelatedEntityItem(rel))
-                .join("");
-
-            relatedEntitiesList.innerHTML = relatedHtml;
-
-            // Re-add click handlers
-            relatedEntitiesList
-                .querySelectorAll(".related-entity-item")
-                .forEach((item) => {
-                    item.addEventListener("click", () => {
-                        const entityName = item.getAttribute("data-entity");
-                        if (entityName) {
-                            this.onRelatedEntityClick(entityName);
-                        }
-                    });
-                });
-        }
     }
 }
