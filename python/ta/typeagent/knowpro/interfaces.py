@@ -1,6 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+from abc import ABC, abstractmethod
 from collections.abc import Iterable, Sequence
 from dataclasses import field
 from datetime import (
@@ -16,7 +17,6 @@ from typing import (
     Self,
     TypedDict,
     overload,
-    runtime_checkable,
 )
 
 from pydantic.dataclasses import dataclass
@@ -795,11 +795,14 @@ class ISemanticRefCollection(ICollection[SemanticRef, SemanticRefOrdinal], Proto
     """A collection of SemanticRefs."""
 
 
-@runtime_checkable
-class JsonSerializer[T](Protocol):
+# This is an ABC, not a Protocol, because some classes have serialize()/deserialize()
+# but with the wrong signature (using dicts instead of strings).
+class JsonSerializer[T](ABC):
+    @abstractmethod
     def serialize(self, value: T) -> str: ...
 
-    def deserialize(self, value: str) -> T: ...
+    @abstractmethod
+    def deserialize(self, data: str) -> T: ...
 
 
 class IStorageProvider(Protocol):
