@@ -111,11 +111,11 @@ export function createKnowledgeResponse(): kpLib.KnowledgeResponse {
     };
 }
 
-export function createKnowledgeTranslator(
+export function createKnowledgeTranslator2(
     model: TypeChatLanguageModel,
 ): TypeChatJsonTranslator<kpLib.KnowledgeResponse> {
     const translator = kpLib.createKnowledgeTranslator(model);
-    const translator2 = createKnowledgeTranslator2(model);
+    const translator2 = createTranslator2(model);
     translator.createRequestPrompt = translator2.createRequestPrompt;
     translator.translate = translate;
     return translator;
@@ -133,7 +133,7 @@ export function createKnowledgeTranslator(
     }
 }
 
-function createKnowledgeTranslator2(
+function createTranslator2(
     model: TypeChatLanguageModel,
 ): TypeChatJsonTranslator<knowledgeSchema2.KnowledgeResponse> {
     const schema = loadSchema(["knowledgeSchema_v2.ts"], import.meta.url);

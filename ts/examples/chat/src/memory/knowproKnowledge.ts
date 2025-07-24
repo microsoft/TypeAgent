@@ -6,7 +6,6 @@ import {
     argBool,
     CommandHandler,
     CommandMetadata,
-    NamedArgs,
     parseNamedArguments,
 } from "interactive-app";
 import { KnowproContext } from "./knowproMemory.js";
@@ -22,13 +21,17 @@ export type LLMKnowledgeExtractor = {
     model: kpTest.LanguageModel;
 };
 
-export type KnowProKnowledgeContext = {
-    printer: KnowProPrinter;
+type Extractors = {
     extractor?: LLMKnowledgeExtractor | undefined;
     extractor35?: LLMKnowledgeExtractor | undefined;
     extractor41?: LLMKnowledgeExtractor | undefined;
     extractor41Mini?: LLMKnowledgeExtractor | undefined;
+};
 
+export type KnowProKnowledgeContext = {
+    printer: KnowProPrinter;
+    extractors: Extractors;
+    extractors2: Extractors;
     compiler: KnowledgeCompiler;
 };
 
@@ -39,9 +42,9 @@ export async function createKnowproKnowledgeCommands(
     const context: KnowProKnowledgeContext = {
         printer: kpContext.printer,
         compiler: new KnowledgeCompiler(),
+        extractors: createExtractors(),
+        extractors2: createExtractors(true),
     };
-    createExtractors();
-
     commands.kpKnowledgeExtract = extractKnowledge;
 
     function extractKnowledgeDef(): CommandMetadata {
@@ -50,6 +53,7 @@ export async function createKnowproKnowledgeCommands(
             options: {
                 text: arg("Extract from this text OR from this filePath"),
                 model: arg("Model: 4o | 41 | 41m | 35", "4o"),
+                v2: argBool("Run version 2", false),
                 search: argBool("Run knowledge search", false),
             },
         };
@@ -61,7 +65,7 @@ export async function createKnowproKnowledgeCommands(
             return;
         }
         const text = getTextOrFile(namedArgs.text);
-        const llmExtractor = getExtractor(namedArgs);
+        const llmExtractor = getExtractor(namedArgs.model, namedArgs.v2);
         if (!llmExtractor) {
             context.printer.writeError(
                 "Knowledge extractor not available for model",
@@ -116,32 +120,42 @@ export async function createKnowproKnowledgeCommands(
     }
 
     function getExtractor(
-        namedArgs: NamedArgs,
+        model: string,
+        v2: boolean,
     ): LLMKnowledgeExtractor | undefined {
-        let extractor = context.extractor;
-        switch (namedArgs.model) {
+        const extractors = v2 ? context.extractors2 : context.extractors;
+        let extractor = extractors.extractor;
+        switch (model) {
             default:
                 break;
             case "4o":
-                extractor = context.extractor;
+                extractor = extractors.extractor;
                 break;
             case "41":
-                extractor = context.extractor41;
+                extractor = extractors.extractor41;
                 break;
             case "41m":
-                extractor = context.extractor41Mini;
+                extractor = extractors.extractor41Mini;
                 break;
             case "35":
-                extractor = context.extractor35;
+                extractor = extractors.extractor35;
                 break;
         }
 
         return extractor;
     }
 
-    function createExtractors() {
-        context.extractor = {
-            extractor: kpLib.createKnowledgeExtractor(kpContext.knowledgeModel),
+    function createExtractors(v2: boolean = false): Extractors {
+        const translator = v2
+            ? kp.createKnowledgeTranslator2(kpContext.knowledgeModel)
+            : undefined;
+        const extractors: Extractors = {};
+        extractors.extractor = {
+            extractor: kpLib.createKnowledgeExtractor(
+                kpContext.knowledgeModel,
+                undefined,
+                translator,
+            ),
             model: {
                 model: kpContext.knowledgeModel,
                 modelName: "4o",
@@ -149,13 +163,13 @@ export async function createKnowproKnowledgeCommands(
         };
         const models41 = kpTest.createGpt41Models();
         if (models41.gpt41) {
-            context.extractor41 = {
+            extractors.extractor41 = {
                 extractor: kpLib.createKnowledgeExtractor(models41.gpt41.model),
                 model: models41.gpt41,
             };
         }
         if (models41.gpt41Mini) {
-            context.extractor41Mini = {
+            extractors.extractor41Mini = {
                 extractor: kpLib.createKnowledgeExtractor(
                     models41.gpt41Mini.model,
                 ),
@@ -164,11 +178,12 @@ export async function createKnowproKnowledgeCommands(
         }
         const model35 = kpTest.create35Model();
         if (model35) {
-            context.extractor35 = {
+            extractors.extractor35 = {
                 extractor: kpLib.createKnowledgeExtractor(model35.model),
                 model: model35,
             };
         }
+        return extractors;
     }
 
     return;
