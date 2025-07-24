@@ -7,14 +7,17 @@ import {
     CommandHandler,
     CommandMetadata,
     parseNamedArguments,
+    ProgressBar,
 } from "interactive-app";
 import { KnowproContext } from "./knowproMemory.js";
 import { KnowProPrinter } from "./knowproPrinter.js";
 import { conversation as kpLib } from "knowledge-processor";
 import * as kpTest from "knowpro-test";
 import * as kp from "knowpro";
+import * as cm from "conversation-memory";
 import chalk from "chalk";
 import { getTextOrFile } from "examples-lib";
+import * as fs from "fs";
 
 export type LLMKnowledgeExtractor = {
     extractor: kpLib.KnowledgeExtractor;
@@ -77,7 +80,7 @@ export async function createKnowproKnowledgeCommands(
             chalk.cyan,
             `Using ${llmExtractor.model.modelName}; ${text.length} chars`,
         );
-        const knowledge = await runExtractKnowledge(llmExtractor, text);
+        const [knowledge, _] = await runExtractKnowledge(llmExtractor, text);
         if (!knowledge) {
             return;
         }
@@ -95,13 +98,17 @@ export async function createKnowproKnowledgeCommands(
             options: {
                 text: arg("Extract from this text OR from this filePath"),
                 model: arg("Model: 4o | 41 | 41m | 35", "4o"),
+                type: arg("text | podcast", "text"),
             },
         };
     }
     commands.kpKnowledgeActions.metadata = compareInverseActionsDef();
     async function compareInverseActions(args: string[]) {
         const namedArgs = parseNamedArguments(args, compareInverseActionsDef());
-        const text = getTextOrFile(namedArgs.text);
+        const textChunks =
+            namedArgs.type === "podcast"
+                ? getPodcastTextChunks(namedArgs.text)
+                : [getTextOrFile(namedArgs.text)];
         const llmExtractor1 = getExtractor(namedArgs.model, false);
         const llmExtractor2 = getExtractor(namedArgs.model, true);
         if (!llmExtractor1 || !llmExtractor2) {
@@ -110,35 +117,68 @@ export async function createKnowproKnowledgeCommands(
             );
             return;
         }
-        context.printer.writeLineInColor(
-            chalk.cyan,
-            `Using ${llmExtractor1.model.modelName}; ${text.length} chars`,
+
+        let totalTokens1 = 0;
+        let totalTokens2 = 0;
+
+        const progressBar = new ProgressBar(context.printer, textChunks.length);
+        for (let i = 0; i < textChunks.length; ++i) {
+            progressBar.advance();
+            context.printer.writeLine();
+
+            let text = textChunks[i];
+            context.printer.writeLineInColor(
+                chalk.cyan,
+                `${text.length} chars`,
+            );
+            context.printer.writeHeading("V1");
+            const [knowledge1, tokenCount1] = await runExtractKnowledge(
+                llmExtractor1,
+                text,
+            );
+            if (!knowledge1) {
+                context.printer.writeError("No knowledge");
+                continue;
+            }
+            context.printer.writeJsonInColor(chalk.gray, knowledge1.actions);
+            context.printer.writeJson(knowledge1.inverseActions);
+
+            context.printer.writeHeading("V2");
+            const [knowledge2, tokenCount2] = await runExtractKnowledge(
+                llmExtractor2,
+                text,
+            );
+            if (!knowledge2) {
+                context.printer.writeError("No knowledge");
+                continue;
+            }
+            context.printer.writeJsonInColor(chalk.gray, knowledge2.actions);
+            context.printer.writeJson(knowledge2.inverseActions);
+
+            totalTokens1 += tokenCount1;
+            totalTokens2 += tokenCount2;
+
+            const error = kpTest.compareActions(
+                knowledge1.inverseActions,
+                knowledge2.inverseActions,
+                "inverseActions",
+            );
+            if (error !== undefined) {
+                context.printer.writeError(error);
+            }
+        }
+        progressBar.complete();
+        context.printer.writeInColor(
+            chalk.gray,
+            `Delta: ${totalTokens1 - totalTokens2}, V1: ${totalTokens1}, V2: ${totalTokens2}`,
         );
+    }
 
-        context.printer.writeHeading("V1");
-        const knowledge1 = await runExtractKnowledge(llmExtractor1, text);
-        if (!knowledge1) {
-            context.printer.writeError("No knowledge");
-            return;
-        }
-
-        context.printer.writeHeading("V2");
-        const knowledge2 = await runExtractKnowledge(llmExtractor2, text);
-        if (!knowledge2) {
-            context.printer.writeError("No knowledge");
-            return;
-        }
-        context.printer.writeJson(knowledge1.inverseActions);
-        context.printer.writeJson(knowledge2.inverseActions);
-
-        const error = kpTest.compareActions(
-            knowledge1.inverseActions,
-            knowledge2.inverseActions,
-            "inverseActions",
+    function getPodcastTextChunks(srcPath: string) {
+        const [messages, _] = cm.parsePodcastTranscript(
+            fs.readFileSync(srcPath, "utf-8"),
         );
-        if (error !== undefined) {
-            context.printer.writeError(error);
-        }
+        return messages.flatMap((m) => m.textChunks);
     }
 
     async function searchWithKnowledge(knowledge: kpLib.KnowledgeResponse) {
@@ -192,7 +232,7 @@ export async function createKnowproKnowledgeCommands(
     async function runExtractKnowledge(
         llmExtractor: LLMKnowledgeExtractor,
         text: string,
-    ) {
+    ): Promise<[kpLib.KnowledgeResponse | undefined, number]> {
         kpContext.startTokenCounter();
         kpContext.stopWatch.start();
         const knowledge = await llmExtractor.extractor.extract(text);
@@ -202,8 +242,12 @@ export async function createKnowproKnowledgeCommands(
             kpContext.stopWatch,
             llmExtractor.model.modelName,
         );
-        context.printer.writeCompletionStats(kpContext.tokenStats);
-        return knowledge;
+        //context.printer.writeCompletionStats(kpContext.tokenStats);
+        context.printer.writeLineInColor(
+            chalk.gray,
+            `${kpContext.tokenStats.completion_tokens} tokens`,
+        );
+        return [knowledge, kpContext.tokenStats.completion_tokens];
     }
 
     function createExtractors(v2: boolean = false): LLMKnowledgeExtractors {
@@ -211,10 +255,15 @@ export async function createKnowproKnowledgeCommands(
             ? kp.createKnowledgeTranslator2(kpContext.knowledgeModel)
             : undefined;
         const extractors: LLMKnowledgeExtractors = {};
+        const settings: kpLib.KnowledgeExtractorSettings = {
+            mergeActionKnowledge: false,
+            mergeEntityFacets: false,
+            maxContextLength: 8192,
+        };
         extractors.extractor = {
             extractor: kpLib.createKnowledgeExtractor(
                 kpContext.knowledgeModel,
-                undefined,
+                settings,
                 translator,
             ),
             model: {
@@ -225,7 +274,11 @@ export async function createKnowproKnowledgeCommands(
         const models41 = kpTest.createGpt41Models();
         if (models41.gpt41) {
             extractors.extractor41 = {
-                extractor: kpLib.createKnowledgeExtractor(models41.gpt41.model),
+                extractor: kpLib.createKnowledgeExtractor(
+                    models41.gpt41.model,
+                    settings,
+                    translator,
+                ),
                 model: models41.gpt41,
             };
         }
@@ -233,6 +286,8 @@ export async function createKnowproKnowledgeCommands(
             extractors.extractor41Mini = {
                 extractor: kpLib.createKnowledgeExtractor(
                     models41.gpt41Mini.model,
+                    settings,
+                    translator,
                 ),
                 model: models41.gpt41Mini,
             };
@@ -240,7 +295,11 @@ export async function createKnowproKnowledgeCommands(
         const model35 = kpTest.create35Model();
         if (model35) {
             extractors.extractor35 = {
-                extractor: kpLib.createKnowledgeExtractor(model35.model),
+                extractor: kpLib.createKnowledgeExtractor(
+                    model35.model,
+                    settings,
+                    translator,
+                ),
                 model: model35,
             };
         }
