@@ -6,9 +6,10 @@ import { bingWithGrounding, extractorAgent } from "azure-ai-foundry";
 import { AIProjectClient } from "@azure/ai-projects";
 import { DefaultAzureCredential } from "@azure/identity";
 import { MessageContentUnion, ThreadMessage } from "@azure/ai-agents";
-import child_process from "node:child_process";
-import { fileURLToPath } from "node:url";
 import { writeFileSync } from "node:fs";
+import puppeteer, { TimeoutError } from "puppeteer";
+import { exec } from "node:child_process";
+import chalk from "chalk";
 
 // Load environment variables from .env file
 const envPath = new URL("../../../.env", import.meta.url);
@@ -39,44 +40,65 @@ const sites = lines.map((line) => {
 
 // go get the aliases for each site
 const aliases: Record<string, string[]> = {};
-const fetchWebPagePath = new URL(
-    "../../../../dotnet/fetchWebPage/bin/Debug/autoShell.exe",
-    import.meta.url,
-)
 
-async function fetchURL(site: string) {
-    return new Promise<any>((resolve, reject) => {
-        const child = child_process.spawn(fileURLToPath(fetchWebPagePath));
-        child.on("error", (err) => {
-            reject(err);
-        });
-        child.on("spawn", () => {
-            resolve(child);
-        });
-        child.on("close", () => {
-            resolve(child);
-        });
-        child.on("message", (data) => {
-            resolve(data);
-        });
+/**
+ * Fetch the HTML content of a web page.
+ * @param site - The URL whose HTML page to retreive
+ * @returns - The HTML content of the page
+ */
+async function fetchURL(site: string): Promise<string | null> {
+    try {
+        await closeChrome();
+    } catch(e) {
+        console.log(e);
+    }
+
+    const browser = await puppeteer.launch({
+        headless: false
     });
+
+    const page = await browser.newPage();
+    try {
+        await page.goto(`https://moz.com/domain-analysis/${site}`, { waitUntil: "load" });
+        await page.waitForSelector(
+            'div[class="container domain-analysis"]',
+            {
+                timeout: 5000,
+            },
+        );
+
+        const data = await page.$$eval('script[type="application/ld+json"]', `document.documentElement.outerHTML`);
+        if (data) {
+            console.log(`Extracted data for ${site}`);
+        }
+        return data as string;
+    } catch (err) {
+        if (err instanceof TimeoutError) {
+            console.warn("Element did not appear within 5 seconds.");
+        } else {
+            console.warn(`Failed to scrape ${site}: ${err}`);
+        }
+        return null;
+    } finally {
+        await page.close();
+    }
 }
 
+// for(let i = 0; i < 3; i++) {
+//     const site = sites[i];
+let processed = 0;
 for(const site of sites) {
     if (site) { 
+        getRandomDelay(2000, 3000);
+
         aliases[site] = [];
 
-        // const aliasResponse = await fetch(`https://moz.com/domain-analysis/${site}`,
-        // {
-        //     headers: fetchHeaders,
-        // }
-        // );
+        console.info(`Extracting data for ${site}`);
 
-        const data = fetchURL(site);
+        const data = await fetchURL(site);
 
         if (data) {
-            //const data = await aliasResponse.text();
-
+            // extract the aliases using the extractor agent
             const extracted: extractorAgent.extractedAliases | null | undefined = await extractAliases(JSON.stringify(data));
 
             // merge extracted keywords
@@ -88,17 +110,28 @@ for(const site of sites) {
             console.error(`Failed to fetch aliases for ${site}: ${data}`);
         }
     }
+    console.log(`Progress: ${chalk.green(`${++processed} out of ${sites.length} (${Math.round((processed / sites.length) * 100)}%)`)} sites processed.`);
 };
 
-// TODO: write to disk, convert RECORD to writeable file
-// TODO: reverse this the other way around so that the keys are the keywords and the values are the URLs
-const aa: any = {};
-for (const [url, keywords] of Object.entries(aliases)) {
-    aa[url] = keywords
+const keywordToSites: Record<string, string[]> = {};
+
+for (const [site, keywords] of Object.entries(aliases)) {
+    for (const keyword of keywords) {
+        if (!keywordToSites[keyword]) {
+            keywordToSites[keyword] = [];
+        }
+        keywordToSites[keyword].push(site);
+    }
 }
 
-writeFileSync("url_aliases.txt", aa);
+// Serialize keywordToSites to disk in JSON format
+writeFileSync("keyword_to_sites.json", JSON.stringify(keywordToSites, null, 2));
 
+/**
+ * Extract aliases from the provided HTML data using the extractor agent.
+ * @param data - The HTML data to extract aliases from
+ * @returns - The extracted aliases or null if content filter was triggered, or undefined if an error occurred
+ */
 async function extractAliases(data: string): Promise<extractorAgent.extractedAliases | undefined | null> {
     const agent = await extractorAgent.ensureKeywordExtractorAgent(groundingConfig, project);
     let inCompleteReason;
@@ -113,8 +146,13 @@ async function extractAliases(data: string): Promise<extractorAgent.extractedAli
     try {
         const thread = await project.agents.threads.create();
 
-        // the question that needs answering
-        await project.agents.messages.create(thread.id, "user", data);
+        // create the HTML message (chunk it)
+        const chunkSize = 128 * 1024; // 128k chunks
+        for (let i = 0; i < data.length; i += chunkSize) {
+            const chunk = data.slice(i, i + chunkSize);
+            await project.agents.messages.create(thread.id, "user", chunk);
+        }
+        //await project.agents.messages.create(thread.id, "user", data);
 
         // Create run
         const run = await project.agents.runs.createAndPoll(
@@ -130,6 +168,7 @@ async function extractAliases(data: string): Promise<extractorAgent.extractedAli
                     const pb: any = response.parsedBody;
                     if (pb?.incomplete_details?.reason) {
                         inCompleteReason = pb.incomplete_details.reason;
+                        console.warn(`Run incomplete due to: ${inCompleteReason}`);
                     }
                 },
             },
@@ -180,5 +219,46 @@ async function extractAliases(data: string): Promise<extractorAgent.extractedAli
     // return assistant messages
     return retVal;    
 }
+
+async function closeChrome(): Promise<void> {
+
+    return new Promise<void>((resolve) => {
+        let command = "";
+
+        // Determine the command based on the operating system
+        if (process.platform === "win32") {
+            command = "taskkill /F /IM chrome.exe /T";
+        } else if (process.platform === "darwin") {
+            command = 'pkill -9 "Google Chrome"';
+        } else {
+            command = "pkill -9 chrome";
+        }
+
+        console.log(`Attempting to close Chrome with command: ${command}`);
+
+        exec(command, (error: any, stdout: string, stderr: string) => {
+            if (error) {
+                console.log(
+                    `Chrome may not be running or couldn't be closed: ${error.message}`,
+                );
+            }
+
+            if (stderr) {
+                console.log(`Chrome close error output: ${stderr}`);
+            }
+
+            if (stdout) {
+                console.log(`Chrome closed successfully: ${stdout}`);
+            }
+
+            resolve();
+        });
+    });
+}
+
+function getRandomDelay(min: number, max: number): number {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
 
 

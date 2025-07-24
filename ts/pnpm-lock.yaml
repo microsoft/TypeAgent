@@ -717,6 +717,12 @@ importers:
       dotenv:
         specifier: ^16.3.1
         version: 16.5.0
+      fs-extra:
+        specifier: ^11.3.0
+        version: 11.3.0
+      puppeteer:
+        specifier: ^23.11.1
+        version: 23.11.1(typescript@5.4.5)
       typeagent:
         specifier: workspace:*
         version: link:../../packages/typeagent
@@ -727,6 +733,9 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
     devDependencies:
+      '@types/fs-extra':
+        specifier: ^11.0.4
+        version: 11.0.4
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
