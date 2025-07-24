@@ -33,7 +33,7 @@ def test_main(needs_auth: None):
     asyncio.run(main(DEFAULT_FILE))
 
 
-async def main(filename: str):
+async def main(filename_prefix: str):
     print("Create conversation settings ...")
     settings = ConversationSettings()
     model = settings.thread_settings.embedding_model
@@ -48,9 +48,9 @@ async def main(filename: str):
         is model
     )
 
-    print(f"Loading {filename} ...")
+    print(f"Loading {filename_prefix} ...")
     t0 = time.time()
-    pod = podcast.Podcast.read_from_file(filename, settings)
+    pod = podcast.Podcast.read_from_file(filename_prefix, settings)
     t1 = time.time()
     print(f"Loading took {t1-t0:.3f} seconds")
     assert pod is not None, "Failed to load podcast"
