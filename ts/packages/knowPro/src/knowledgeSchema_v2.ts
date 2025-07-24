@@ -35,12 +35,15 @@ export type ActionParam = {
 export type VerbTense = "past" | "present" | "future";
 
 export type Action = {
-    // Each verb is typically a word
+    // Each verb is typically a word.
     verbs: string[];
-    // If this action can be expressed in a reverse way, return the inverse verbs
-    // e.g. "A gave to B" has the inverse "B received from A"
-    inverseVerbs: string[];
     verbTense: VerbTense;
+    // Some actions can ALSO be expressed in a reverse way. Examples:
+    // "A gave B" has the inverse "B received from A"
+    // "A said to B" has the inverse "B heard A"
+    // "A saw B" has the inverse "B seen by A"
+    // If so, also return the inverse form of the verbs, without verb tenses
+    inverseVerbs: string[];
     subjectEntityName: string | "none";
     objectEntityName: string | "none";
     indirectObjectEntityName: string | "none";

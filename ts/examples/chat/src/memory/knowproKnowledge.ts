@@ -157,15 +157,6 @@ export async function createKnowproKnowledgeCommands(
 
             totalTokens1 += tokenCount1;
             totalTokens2 += tokenCount2;
-
-            const error = kpTest.compareActions(
-                knowledge1.inverseActions,
-                knowledge2.inverseActions,
-                "inverseActions",
-            );
-            if (error !== undefined) {
-                context.printer.writeError(error);
-            }
         }
         progressBar.complete();
         context.printer.writeInColor(

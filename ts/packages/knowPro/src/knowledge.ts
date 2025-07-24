@@ -111,11 +111,17 @@ export function createKnowledgeResponse(): kpLib.KnowledgeResponse {
     };
 }
 
+/**
+ * Experimental
+ * A more token efficient knowledge translator.
+ * @param translationModel
+ * @returns
+ */
 export function createKnowledgeTranslator2(
-    model: TypeChatLanguageModel,
+    translationModel: TypeChatLanguageModel,
 ): TypeChatJsonTranslator<kpLib.KnowledgeResponse> {
-    const translator = kpLib.createKnowledgeTranslator(model);
-    const translator2 = createTranslator2(model);
+    const translator = kpLib.createKnowledgeTranslator(translationModel);
+    const translator2 = createTranslator2(translationModel);
     translator.createRequestPrompt = translator2.createRequestPrompt;
     translator.translate = translate;
     return translator;
@@ -181,7 +187,7 @@ function knowledgeResponseFromV2(
 
 function actionFromAction2(action2: knowledgeSchema2.Action): kpLib.Action {
     const action: kpLib.Action = {
-        verbs: action2.inverseVerbs,
+        verbs: action2.verbs,
         verbTense: action2.verbTense,
         subjectEntityName: action2.subjectEntityName,
         objectEntityName: action2.objectEntityName,
@@ -197,13 +203,16 @@ function actionFromAction2(action2: knowledgeSchema2.Action): kpLib.Action {
 function inverseActionFromAction2(
     action2: knowledgeSchema2.Action,
 ): kpLib.Action | undefined {
-    if (
-        action2.inverseVerbs === undefined ||
-        action2.inverseVerbs.length === 0
-    ) {
+    let inverseVerbs = action2.inverseVerbs;
+    if (inverseVerbs === undefined) {
         return undefined;
     }
-
+    inverseVerbs = inverseVerbs.filter(
+        (v) => v !== undefined && v.length > 0 && v !== kpLib.NoEntityName,
+    );
+    if (inverseVerbs.length === 0) {
+        return undefined;
+    }
     let subjectEntityName: string | undefined;
     let objectEntityName = kpLib.NoEntityName;
     let indirectObjectEntityName = kpLib.NoEntityName;
@@ -221,7 +230,7 @@ function inverseActionFromAction2(
         return undefined;
     }
     const action: kpLib.Action = {
-        verbs: action2.inverseVerbs,
+        verbs: inverseVerbs,
         verbTense: action2.verbTense,
         subjectEntityName,
         objectEntityName,
