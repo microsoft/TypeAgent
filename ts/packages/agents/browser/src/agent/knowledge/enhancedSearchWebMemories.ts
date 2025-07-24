@@ -4,11 +4,64 @@
 // Enhanced Search Web Memories Implementation
 // Integrates entity graphs with existing TypeAgent search capabilities
 
-import type { EnhancedEntity, EntityRelationship } from "./entityExtractor.js";
-import { RealTimeEntityExtractor } from "./entityExtractor.js";
-import { EntityGraphCache, globalEntityCache } from "./entityCache.js";
 import { Entity } from "./schema/knowledgeExtraction.mjs";
 import { searchWebMemories } from "../searchWebMemories.mjs";
+
+
+export type EntityType =
+    | "person"
+    | "organization"
+    | "product"
+    | "concept"
+    | "location"
+    | "technology"
+    | "event"
+    | "document";
+
+export interface EntityCoOccurrence {
+    entityName: string;
+    coOccurrenceCount: number;
+    contexts: string[]; // Where they co-occurred
+    confidence: number;
+}
+
+export interface EnhancedEntity {
+    name: string;
+    type: EntityType;
+    confidence: number;
+
+    // Graph properties
+    aliases: string[];
+    mentionCount: number;
+    firstSeen: string;
+    lastSeen: string;
+    dominantDomains: string[];
+
+    // Relationship properties
+    strongRelationships: EntityRelationship[];
+    coOccurringEntities: EntityCoOccurrence[];
+
+    // Content properties
+    contextSnippets: string[];
+    topicAffinity: string[];
+
+    // Data source tracking
+    sourceWebsites: string[];
+    extractionMethod: "nlp" | "pattern" | "manual" | "hybrid";
+    lastUpdated: string;
+}
+
+export interface EntityRelationship {
+    relatedEntity: string;
+    relationshipType: string;
+    confidence: number;
+    evidenceSources: string[];
+    firstObserved: string;
+    lastObserved: string;
+    strength: number;
+    direction: "bidirectional" | "unidirectional";
+}
+
 
 export interface EntitySearchOptions {
     entityType?: string;
@@ -54,14 +107,7 @@ export interface EntityGraphData {
  * Extends existing search capabilities with entity graph functionality
  */
 export class EnhancedSearchWebMemories {
-    private cache: EntityGraphCache;
-    private mockMode: boolean = false;
-    private entityExtractor: RealTimeEntityExtractor;
-
-    constructor(cache: EntityGraphCache = globalEntityCache) {
-        this.cache = cache;
-        this.entityExtractor = new RealTimeEntityExtractor();
-    }
+    private cache: Map<string, any> = new Map();
 
     /**
      * Search entities by name with advanced filtering
@@ -69,23 +115,20 @@ export class EnhancedSearchWebMemories {
     async searchByEntity(
         entityName: string,
         options: EntitySearchOptions = {},
-    ): Promise<EntitySearchResult> {
+    ): Promise<EntitySearchResult|undefined> {
         const startTime = Date.now();
 
         try {
-            if (this.mockMode) {
-                return this.searchMockEntities(entityName, options, startTime);
-            }
 
             // Check cache first
-            const cachedEntity = await this.cache.getEntity(entityName);
+            const cachedEntity = this.cache.get(entityName);
             if (cachedEntity) {
                 return {
                     entities: [cachedEntity],
                     totalCount: 1,
                     searchTime: Date.now() - startTime,
                     cacheHit: true,
-                    suggestions: await this.getEntitySuggestions(entityName),
+                    suggestions: [],
                     filters: await this.getAvailableFilters(),
                 };
             }
@@ -123,29 +166,9 @@ export class EnhancedSearchWebMemories {
                         foundEntities.push(enhancedEntity);
 
                         // Cache the entity
-                        await this.cache.cacheEntity(enhancedEntity);
+                        this.cache.set(enhancedEntity.name, enhancedEntity);
                     }
                 }
-            }
-
-            // If no existing entities found, try to extract from content
-            if (foundEntities.length === 0) {
-                const extractedEntities =
-                    await this.entityExtractor.extractEntitiesFromWebsites(
-                        websiteSearchResults.websites.map((w) => ({
-                            url: w.url,
-                            title: w.title,
-                            content: w.snippet || "",
-                            timestamp:
-                                w.lastVisited || new Date().toISOString(),
-                        })),
-                    );
-
-                foundEntities.push(
-                    ...extractedEntities.filter((e) =>
-                        e.name.toLowerCase().includes(entityName.toLowerCase()),
-                    ),
-                );
             }
 
             const result: EntitySearchResult = {
@@ -153,15 +176,13 @@ export class EnhancedSearchWebMemories {
                 totalCount: foundEntities.length,
                 searchTime: Date.now() - startTime,
                 cacheHit: false,
-                suggestions: await this.getEntitySuggestions(entityName),
+                suggestions: [],
                 filters: await this.getAvailableFilters(),
             };
 
             return result;
         } catch (error) {
             console.error("Error in searchByEntity:", error);
-            // Fallback to mock data on error
-            return this.searchMockEntities(entityName, options, startTime);
         }
     }
 
@@ -171,18 +192,29 @@ export class EnhancedSearchWebMemories {
     async getEntityGraph(
         centerEntity: string,
         depth: number = 2,
-    ): Promise<EntityGraphData> {
+    ): Promise<EntityGraphData | undefined>  {
         const startTime = Date.now();
 
         try {
-            if (this.mockMode) {
-                return this.getMockEntityGraph(centerEntity, depth, startTime);
-            }
 
             // Get the center entity first
             const centerEntityResult = await this.searchByEntity(centerEntity, {
                 maxResults: 1,
             });
+            
+            if(!centerEntityResult || centerEntityResult.entities.length === 0) {
+                console.warn(`Center entity "${centerEntity}" not found.`);
+                return {
+                    centerEntity,
+                    entities: [],
+                    relationships: [],
+                    depth,
+                    totalNodes: 0,
+                    totalEdges: 0,
+                    generationTime: Date.now() - startTime,
+                };
+            }
+
             if (centerEntityResult.entities.length === 0) {
                 // Return empty graph if center entity not found
                 return {
@@ -266,8 +298,6 @@ export class EnhancedSearchWebMemories {
             };
         } catch (error) {
             console.error("Error in getEntityGraph:", error);
-            // Fallback to mock data on error
-            return this.getMockEntityGraph(centerEntity, depth, startTime);
         }
     }
 
@@ -276,21 +306,14 @@ export class EnhancedSearchWebMemories {
      */
     async getEntityData(
         entityName: string,
-        useMockData: boolean = this.mockMode,
     ): Promise<EnhancedEntity | null> {
-        if (useMockData) {
-            const entities = this.getMockEntities();
-            return (
-                entities.find(
-                    (e) => e.name.toLowerCase() === entityName.toLowerCase(),
-                ) || null
-            );
-        }
-
-        // Use real data - search for the entity
         const searchResult = await this.searchByEntity(entityName, {
             maxResults: 1,
         });
+        if(!searchResult || searchResult.entities.length === 0) {
+            console.warn(`Entity "${entityName}" not found.`);
+            return null;
+        }
         return searchResult.entities.length > 0
             ? searchResult.entities[0]
             : null;
@@ -302,22 +325,19 @@ export class EnhancedSearchWebMemories {
     async refreshEntityData(
         entityName: string,
     ): Promise<EnhancedEntity | null> {
-        await this.cache.invalidateEntity(entityName);
-        return this.getEntityData(entityName, false);
+        this.cache.delete(entityName);
+        return this.getEntityData(entityName);
     }
 
-    /**
-     * Set mock mode
-     */
-    setMockMode(enabled: boolean): void {
-        this.mockMode = enabled;
-    }
 
     /**
      * Get cache statistics
      */
     getCacheStats() {
-        return this.cache.getCacheStats();
+        return {
+            entityCount: this.cache.size,
+            cacheSize: this.cache.size
+        };
     }
 
     /**
@@ -351,17 +371,6 @@ export class EnhancedSearchWebMemories {
         };
     }
 
-    /**
-     * Get entity suggestions for search
-     */
-    private async getEntitySuggestions(entityName: string): Promise<string[]> {
-        // This could be enhanced with more sophisticated suggestion logic
-        return [
-            "Related entities",
-            "Similar organizations",
-            "Connected people",
-        ];
-    }
 
     /**
      * Get available filters for search
@@ -377,111 +386,6 @@ export class EnhancedSearchWebMemories {
         };
     }
 
-    /**
-     * Search mock entities (fallback)
-     */
-    private searchMockEntities(
-        entityName: string,
-        options: EntitySearchOptions,
-        startTime: number,
-    ): EntitySearchResult {
-        const entities = this.getMockEntities().filter((e) =>
-            e.name.toLowerCase().includes(entityName.toLowerCase()),
-        );
-
-        return {
-            entities: entities.slice(0, options.maxResults || 10),
-            totalCount: entities.length,
-            searchTime: Date.now() - startTime,
-            cacheHit: false,
-            suggestions: ["Microsoft", "Azure", "Office365"],
-            filters: {
-                availableTypes: ["organization", "person", "product"],
-                availableDomains: ["microsoft.com", "azure.com", "office.com"],
-                dateRange: {
-                    earliest: "2020-01-01T00:00:00.000Z",
-                    latest: new Date().toISOString(),
-                },
-            },
-        };
-    }
-
-    /**
-     * Get mock entity graph (fallback)
-     */
-    private getMockEntityGraph(
-        centerEntity: string,
-        depth: number,
-        startTime: number,
-    ): EntityGraphData {
-        const entities = this.getMockEntities();
-        const relationships = this.getMockRelationships();
-
-        return {
-            centerEntity,
-            entities: entities.slice(0, 5),
-            relationships: relationships.slice(0, 5),
-            depth,
-            totalNodes: entities.length,
-            totalEdges: relationships.length,
-            generationTime: Date.now() - startTime,
-        };
-    }
-
-    // Mock data helpers
-    private getMockEntities(): EnhancedEntity[] {
-        return [
-            {
-                name: "Microsoft",
-                type: "organization",
-                confidence: 0.95,
-                aliases: ["Microsoft Corp"],
-                mentionCount: 150,
-                firstSeen: "2020-01-01T00:00:00.000Z",
-                lastSeen: new Date().toISOString(),
-                dominantDomains: ["microsoft.com"],
-                strongRelationships: [],
-                coOccurringEntities: [],
-                contextSnippets: ["Microsoft is a technology company"],
-                topicAffinity: ["cloud computing"],
-                sourceWebsites: ["https://microsoft.com"],
-                extractionMethod: "hybrid",
-                lastUpdated: new Date().toISOString(),
-            },
-            {
-                name: "Satya Nadella",
-                type: "person",
-                confidence: 0.98,
-                aliases: ["@satyanadella"],
-                mentionCount: 200,
-                firstSeen: "2020-01-01T00:00:00.000Z",
-                lastSeen: new Date().toISOString(),
-                dominantDomains: ["linkedin.com"],
-                strongRelationships: [],
-                coOccurringEntities: [],
-                contextSnippets: ["Satya Nadella is the CEO of Microsoft"],
-                topicAffinity: ["leadership"],
-                sourceWebsites: ["https://linkedin.com/in/satyanadella"],
-                extractionMethod: "hybrid",
-                lastUpdated: new Date().toISOString(),
-            },
-        ];
-    }
-
-    private getMockRelationships(): EntityRelationship[] {
-        return [
-            {
-                relatedEntity: "Microsoft",
-                relationshipType: "CEO_of",
-                confidence: 0.95,
-                evidenceSources: ["microsoft.com"],
-                firstObserved: "2020-01-01T00:00:00.000Z",
-                lastObserved: new Date().toISOString(),
-                strength: 0.95,
-                direction: "unidirectional",
-            },
-        ];
-    }
 }
 
 /**
