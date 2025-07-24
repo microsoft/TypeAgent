@@ -837,7 +837,7 @@ export class KnowledgeSearchPanel {
             const topicTagsHtml = topics
                 .map(
                     (topic) => `
-                    <div class="topic-tag clickable-topic" data-topic="${this.escapeHtml(topic)}" title="Click to view topic in Entity Graph: ${this.escapeHtml(topic)}">
+                    <div class="topic-tag clickable-topic" data-topic="${this.escapeHtml(topic)}" title="Click to search for topic: ${this.escapeHtml(topic)}">
                         <span>${this.escapeHtml(topic)}</span>
                     </div>
                 `,
@@ -858,7 +858,7 @@ export class KnowledgeSearchPanel {
                         const topicName = (e.currentTarget as HTMLElement)
                             .dataset.topic;
                         if (topicName) {
-                            this.navigateToEntityGraph(topicName);
+                            this.performSearchWithQuery(topicName);
                         }
                     });
                 });

@@ -2,12 +2,8 @@
 // Licensed under the MIT License.
 
 // Entity Graph View - Main entry point for entity visualization
-import { EnhancedEntityGraphVisualizer } from "./enhancedEntityGraphVisualizer.js";
+import { EntityGraphVisualizer } from "./entityGraphVisualizer.js";
 import { EntitySidebar } from "./entitySidebar.js";
-import { EntityDiscovery } from "./entityDiscovery.js";
-import { MultiHopExplorer } from "./multiHopExplorer.js";
-import { RelationshipDetailsManager } from "./relationshipDetailsManager.js";
-import { EntityComparisonManager } from "./entityComparison.js";
 import {
     EntityGraphServices,
     EntityCacheServices,
@@ -20,12 +16,8 @@ import {
  * Main class for the Entity Graph View page
  */
 class EntityGraphView {
-    private visualizer: EnhancedEntityGraphVisualizer;
+    private visualizer: EntityGraphVisualizer;
     private sidebar: EntitySidebar;
-    private discovery: EntityDiscovery;
-    private multiHopExplorer: MultiHopExplorer;
-    private relationshipManager: RelationshipDetailsManager;
-    private comparisonManager: EntityComparisonManager;
     private currentEntity: string | null = null;
     private entityGraphService: EntityGraphServices;
     private entityCacheService: EntityCacheServices;
@@ -63,22 +55,9 @@ class EntityGraphView {
             }
 
             console.log("Creating visualizer...");
-            this.visualizer = new EnhancedEntityGraphVisualizer(graphContainer);
+            this.visualizer = new EntityGraphVisualizer(graphContainer);
             console.log("Creating sidebar...");
             this.sidebar = new EntitySidebar(sidebarContainer);
-
-            // Initialize interactive components with real data support
-            console.log("Creating discovery component...");
-            this.discovery = new EntityDiscovery(this.entityGraphService);
-            console.log("Creating multi-hop explorer...");
-            this.multiHopExplorer = new MultiHopExplorer(
-                this.visualizer,
-                this.entityGraphService,
-            );
-            console.log("Creating relationship manager...");
-            this.relationshipManager = new RelationshipDetailsManager();
-            console.log("Creating comparison manager...");
-            this.comparisonManager = new EntityComparisonManager();
 
             console.log(
                 "EntityGraphView constructor completed, starting initialization...",
@@ -329,70 +308,17 @@ class EntityGraphView {
      * Set up interactive event handlers
      */
     private setupInteractiveHandlers(): void {
-        // Entity navigation from discovery
+        // Entity navigation from search/sidebar
         document.addEventListener("entityNavigate", (e: any) => {
             this.navigateToEntity(e.detail.entityName);
         });
 
-        // Entity selection from discovery
+        // Entity selection from search results
         document.addEventListener("entitySelected", (e: any) => {
             this.navigateToEntity(e.detail.entityName);
         });
-
-        // Cluster exploration
-        document.addEventListener("clusterExplore", (e: any) => {
-            this.exploreCluster(e.detail.clusterId);
-        });
-
-        // Discovery path following
-        document.addEventListener("pathFollow", (e: any) => {
-            this.followDiscoveryPath(e.detail.pathId);
-        });
-
-        // Entity comparison requests
-        document.addEventListener("requestEntityComparison", (e: any) => {
-            this.comparisonManager.startComparison(e.detail.entities);
-        });
-
-        // Edge/relationship clicks for details
-        this.visualizer.onEdgeClick((edgeData: any) => {
-            this.relationshipManager.showRelationshipDetails(edgeData);
-        });
-
-        // Sidebar entity navigation
-        document.addEventListener("entityNavigate", (e: any) => {
-            if (e.target.closest(".entity-sidebar")) {
-                this.navigateToEntity(e.detail.entityName);
-            }
-        });
     }
 
-    /**
-     * Explore a cluster
-     */
-    private async exploreCluster(clusterId: string): Promise<void> {
-        try {
-            console.log("Exploring cluster:", clusterId);
-            // This would load and visualize the cluster
-            // For now, just show a message
-            this.showMessage(`Exploring cluster: ${clusterId}`, "info");
-        } catch (error) {
-            console.error("Failed to explore cluster:", error);
-        }
-    }
-
-    /**
-     * Follow a discovery path
-     */
-    private async followDiscoveryPath(pathId: string): Promise<void> {
-        try {
-            console.log("Following discovery path:", pathId);
-            // This would navigate through the discovery path
-            this.showMessage(`Following path: ${pathId}`, "info");
-        } catch (error) {
-            console.error("Failed to follow discovery path:", error);
-        }
-    }
     async searchEntity(query: string): Promise<void> {
         if (!query.trim()) return;
 

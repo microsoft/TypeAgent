@@ -305,7 +305,6 @@ export class BrowserKnowledgeExtractor {
                 const summarizedContent: ExtractionInput = {
                     ...content,
                     textContent: enhancedText,
-                    // Store the summary metadata for potential later use
                     summaryData,
                     summaryProcessingTime: processingTime,
                 } as any;
