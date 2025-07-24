@@ -21,7 +21,7 @@ export type LLMKnowledgeExtractor = {
     model: kpTest.LanguageModel;
 };
 
-type Extractors = {
+export type LLMKnowledgeExtractors = {
     extractor?: LLMKnowledgeExtractor | undefined;
     extractor35?: LLMKnowledgeExtractor | undefined;
     extractor41?: LLMKnowledgeExtractor | undefined;
@@ -30,8 +30,8 @@ type Extractors = {
 
 export type KnowProKnowledgeContext = {
     printer: KnowProPrinter;
-    extractors: Extractors;
-    extractors2: Extractors;
+    extractors: LLMKnowledgeExtractors;
+    extractors2: LLMKnowledgeExtractors;
     compiler: KnowledgeCompiler;
 };
 
@@ -46,6 +46,7 @@ export async function createKnowproKnowledgeCommands(
         extractors2: createExtractors(true),
     };
     commands.kpKnowledgeExtract = extractKnowledge;
+    commands.kpKnowledgeActions = compareInverseActions;
 
     function extractKnowledgeDef(): CommandMetadata {
         return {
@@ -76,17 +77,7 @@ export async function createKnowproKnowledgeCommands(
             chalk.cyan,
             `Using ${llmExtractor.model.modelName}; ${text.length} chars`,
         );
-
-        kpContext.startTokenCounter();
-        kpContext.stopWatch.start();
-        const knowledge = await llmExtractor.extractor.extract(text);
-        kpContext.stopWatch.stop();
-        context.printer.writeTiming(
-            chalk.cyan,
-            kpContext.stopWatch,
-            llmExtractor.model.modelName,
-        );
-        context.printer.writeCompletionStats(kpContext.tokenStats);
+        const knowledge = await runExtractKnowledge(llmExtractor, text);
         if (!knowledge) {
             return;
         }
@@ -94,6 +85,59 @@ export async function createKnowproKnowledgeCommands(
         context.printer.writeJson(knowledge);
         if (namedArgs.search) {
             await searchWithKnowledge(knowledge);
+        }
+    }
+
+    function compareInverseActionsDef(): CommandMetadata {
+        return {
+            description:
+                "Compare inverse actions from v1 and v2 of knowledge extraction",
+            options: {
+                text: arg("Extract from this text OR from this filePath"),
+                model: arg("Model: 4o | 41 | 41m | 35", "4o"),
+            },
+        };
+    }
+    commands.kpKnowledgeActions.metadata = compareInverseActionsDef();
+    async function compareInverseActions(args: string[]) {
+        const namedArgs = parseNamedArguments(args, compareInverseActionsDef());
+        const text = getTextOrFile(namedArgs.text);
+        const llmExtractor1 = getExtractor(namedArgs.model, false);
+        const llmExtractor2 = getExtractor(namedArgs.model, true);
+        if (!llmExtractor1 || !llmExtractor2) {
+            context.printer.writeError(
+                "Knowledge extractor not available for model",
+            );
+            return;
+        }
+        context.printer.writeLineInColor(
+            chalk.cyan,
+            `Using ${llmExtractor1.model.modelName}; ${text.length} chars`,
+        );
+
+        context.printer.writeHeading("V1");
+        const knowledge1 = await runExtractKnowledge(llmExtractor1, text);
+        if (!knowledge1) {
+            context.printer.writeError("No knowledge");
+            return;
+        }
+
+        context.printer.writeHeading("V2");
+        const knowledge2 = await runExtractKnowledge(llmExtractor2, text);
+        if (!knowledge2) {
+            context.printer.writeError("No knowledge");
+            return;
+        }
+        context.printer.writeJson(knowledge1.inverseActions);
+        context.printer.writeJson(knowledge2.inverseActions);
+
+        const error = kpTest.compareActions(
+            knowledge1.inverseActions,
+            knowledge2.inverseActions,
+            "inverseActions",
+        );
+        if (error !== undefined) {
+            context.printer.writeError(error);
         }
     }
 
@@ -145,11 +189,28 @@ export async function createKnowproKnowledgeCommands(
         return extractor;
     }
 
-    function createExtractors(v2: boolean = false): Extractors {
+    async function runExtractKnowledge(
+        llmExtractor: LLMKnowledgeExtractor,
+        text: string,
+    ) {
+        kpContext.startTokenCounter();
+        kpContext.stopWatch.start();
+        const knowledge = await llmExtractor.extractor.extract(text);
+        kpContext.stopWatch.stop();
+        context.printer.writeTiming(
+            chalk.cyan,
+            kpContext.stopWatch,
+            llmExtractor.model.modelName,
+        );
+        context.printer.writeCompletionStats(kpContext.tokenStats);
+        return knowledge;
+    }
+
+    function createExtractors(v2: boolean = false): LLMKnowledgeExtractors {
         const translator = v2
             ? kp.createKnowledgeTranslator2(kpContext.knowledgeModel)
             : undefined;
-        const extractors: Extractors = {};
+        const extractors: LLMKnowledgeExtractors = {};
         extractors.extractor = {
             extractor: kpLib.createKnowledgeExtractor(
                 kpContext.knowledgeModel,

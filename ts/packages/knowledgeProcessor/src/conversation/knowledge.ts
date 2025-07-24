@@ -35,6 +35,13 @@ export type KnowledgeExtractorSettings = {
     mergeEntityFacets?: boolean;
 };
 
+/**
+ * Create a new knowledge extractor
+ * @param model
+ * @param extractorSettings
+ * @param knowledgeTranslator (optional) knowledge translator to use
+ * @returns
+ */
 export function createKnowledgeExtractor(
     model: TypeChatLanguageModel,
     extractorSettings?: KnowledgeExtractorSettings | undefined,

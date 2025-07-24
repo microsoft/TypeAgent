@@ -136,10 +136,12 @@ export interface AnswerDebugContext extends kp.LanguageSearchDebugContext {
     searchText: string;
 }
 
+export type ComparisonResult = string | undefined;
+
 export type Comparison<T> = {
     actual: T;
     expected: T;
-    error?: string | undefined;
+    error?: ComparisonResult;
 };
 
 export type SimilarityComparison<T> = {

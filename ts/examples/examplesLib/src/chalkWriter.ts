@@ -207,9 +207,11 @@ export class ChalkWriter extends ConsoleWriter {
     }
 
     public writeCompletionStats(stats: openai.CompletionUsageStats) {
-        this.writeLine(
-            `${stats.prompt_tokens},${stats.completion_tokens},${stats.total_tokens}`,
-        );
+        this.writeInColor(chalk.gray, () => {
+            this.writeLine(`Prompt tokens: ${stats.prompt_tokens}`);
+            this.writeLine(`Completion tokens: ${stats.completion_tokens}`);
+            this.writeLine(`Total tokens: ${stats.total_tokens}`);
+        });
         return this;
     }
 }

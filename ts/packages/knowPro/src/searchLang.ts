@@ -1057,6 +1057,9 @@ export async function searchQueryExprFromLanguage2(
 }
 
 /**
+ * Experimental...
+ * Allows NLP to specify scoping.
+ *
  * Search a conversation using natural language. Returns {@link ConversationSearchResult} containing
  * relevant knowledge and messages.
  *

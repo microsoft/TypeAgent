@@ -13,6 +13,7 @@ import {
     getFileName,
 } from "typeagent";
 import { error, Result, Error } from "typechat";
+import { ComparisonResult } from "./types.js";
 
 export function ensureDirSync(folderPath: string): string {
     if (!fs.existsSync(folderPath)) {
@@ -260,6 +261,27 @@ export async function compareStringFuzzy(
         return `${label}: ${x} !== ${y}`;
     }
 
+    return undefined;
+}
+
+export function compareArray<T = any>(
+    x: T[] | undefined,
+    y: T[] | undefined,
+    label: string,
+    comparer: (x: T, y: T) => string | undefined,
+): ComparisonResult {
+    if (isUndefinedOrEmpty(x) && isUndefinedOrEmpty(y)) {
+        return undefined;
+    }
+    if (x === undefined || y === undefined || x.length != y.length) {
+        return `${label}: length mismatch`;
+    }
+    for (let i = 0; i < x.length; ++i) {
+        let error = comparer(x[i], y[i]);
+        if (error !== undefined) {
+            return error;
+        }
+    }
     return undefined;
 }
 
