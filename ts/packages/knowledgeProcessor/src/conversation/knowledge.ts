@@ -38,9 +38,10 @@ export type KnowledgeExtractorSettings = {
 export function createKnowledgeExtractor(
     model: TypeChatLanguageModel,
     extractorSettings?: KnowledgeExtractorSettings | undefined,
+    knowledgeTranslator?: TypeChatJsonTranslator<KnowledgeResponse> | undefined,
 ): KnowledgeExtractor {
     const settings = extractorSettings ?? createKnowledgeExtractorSettings();
-    const translator = createKnowledgeTranslator(model);
+    const translator = knowledgeTranslator ?? createKnowledgeTranslator(model);
     return {
         settings,
         extract,
