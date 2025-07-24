@@ -303,11 +303,6 @@ export class EntitySidebar {
         }
     }
 
-
-
-
-
-
     private getEntityIcon(type: string): string {
         const iconMap: { [key: string]: string } = {
             person: '<i class="bi bi-person"></i>',

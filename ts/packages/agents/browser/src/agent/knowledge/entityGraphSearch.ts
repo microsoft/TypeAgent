@@ -7,7 +7,6 @@
 import { Entity } from "./schema/knowledgeExtraction.mjs";
 import { searchWebMemories } from "../searchWebMemories.mjs";
 
-
 export type EntityType =
     | "person"
     | "organization"
@@ -62,7 +61,6 @@ export interface EntityRelationship {
     direction: "bidirectional" | "unidirectional";
 }
 
-
 export interface EntitySearchOptions {
     entityType?: string;
     confidenceThreshold?: number;
@@ -103,10 +101,9 @@ export interface EntityGraphData {
 }
 
 /**
- * Enhanced Search Web Memories
  * Extends existing search capabilities with entity graph functionality
  */
-export class EnhancedSearchWebMemories {
+export class SearchWebEntities {
     private cache: Map<string, any> = new Map();
 
     /**
@@ -115,11 +112,10 @@ export class EnhancedSearchWebMemories {
     async searchByEntity(
         entityName: string,
         options: EntitySearchOptions = {},
-    ): Promise<EntitySearchResult|undefined> {
+    ): Promise<EntitySearchResult | undefined> {
         const startTime = Date.now();
 
         try {
-
             // Check cache first
             const cachedEntity = this.cache.get(entityName);
             if (cachedEntity) {
@@ -192,17 +188,19 @@ export class EnhancedSearchWebMemories {
     async getEntityGraph(
         centerEntity: string,
         depth: number = 2,
-    ): Promise<EntityGraphData | undefined>  {
+    ): Promise<EntityGraphData | undefined> {
         const startTime = Date.now();
 
         try {
-
             // Get the center entity first
             const centerEntityResult = await this.searchByEntity(centerEntity, {
                 maxResults: 1,
             });
-            
-            if(!centerEntityResult || centerEntityResult.entities.length === 0) {
+
+            if (
+                !centerEntityResult ||
+                centerEntityResult.entities.length === 0
+            ) {
                 console.warn(`Center entity "${centerEntity}" not found.`);
                 return {
                     centerEntity,
@@ -304,13 +302,11 @@ export class EnhancedSearchWebMemories {
     /**
      * Get entity data with hybrid mock/real support
      */
-    async getEntityData(
-        entityName: string,
-    ): Promise<EnhancedEntity | null> {
+    async getEntityData(entityName: string): Promise<EnhancedEntity | null> {
         const searchResult = await this.searchByEntity(entityName, {
             maxResults: 1,
         });
-        if(!searchResult || searchResult.entities.length === 0) {
+        if (!searchResult || searchResult.entities.length === 0) {
             console.warn(`Entity "${entityName}" not found.`);
             return null;
         }
@@ -329,14 +325,13 @@ export class EnhancedSearchWebMemories {
         return this.getEntityData(entityName);
     }
 
-
     /**
      * Get cache statistics
      */
     getCacheStats() {
         return {
             entityCount: this.cache.size,
-            cacheSize: this.cache.size
+            cacheSize: this.cache.size,
         };
     }
 
@@ -371,7 +366,6 @@ export class EnhancedSearchWebMemories {
         };
     }
 
-
     /**
      * Get available filters for search
      */
@@ -385,10 +379,9 @@ export class EnhancedSearchWebMemories {
             },
         };
     }
-
 }
 
 /**
  * Global enhanced search instance
  */
-export const globalEnhancedSearch = new EnhancedSearchWebMemories();
+export const globalEnhancedSearch = new SearchWebEntities();
