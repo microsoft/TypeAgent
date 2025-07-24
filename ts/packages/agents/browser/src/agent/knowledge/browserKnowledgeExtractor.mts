@@ -30,7 +30,12 @@ export class BrowserKnowledgeExtractor {
         // Create knowledge extractor from session context
         let knowledgeExtractor: kpLib.KnowledgeExtractor | undefined;
         try {
-            const apiSettings = ai.azureApiSettingsFromEnv(ai.ModelType.Chat);
+            // Use GPT_4_O_MINI endpoint for website knowledge extraction to improve performance
+            const apiSettings = ai.azureApiSettingsFromEnv(
+                ai.ModelType.Chat,
+                undefined,
+                "GPT_4_O_MINI",
+            );
             const languageModel = ai.createChatModel(apiSettings);
             knowledgeExtractor = kpLib.createKnowledgeExtractor(languageModel);
         } catch (error) {
