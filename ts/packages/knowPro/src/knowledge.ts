@@ -15,14 +15,7 @@ import {
 import { ChatModel } from "aiclient";
 import { createKnowledgeModel } from "./conversationIndex.js";
 import { BatchTask, runInBatches } from "./taskQueue.js";
-import { SearchSelectExpr, Tag } from "./interfaces.js";
-import {
-    createOrMaxTermGroup,
-    createOrTermGroup,
-    createPropertySearchTerm,
-} from "./searchLib.js";
-import { PropertyNames } from "./propertyIndex.js";
-import { facetValueToString } from "./knowledgeLib.js";
+import { Tag } from "./interfaces.js";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import * as knowledgeSchema2 from "./knowledgeSchema_v2.js";
 
@@ -116,77 +109,6 @@ export function createKnowledgeResponse(): kpLib.KnowledgeResponse {
         inverseActions: [],
         topics: [],
     };
-}
-
-export class KnowledgeCompiler {
-    constructor() {}
-
-    public compileKnowledge(
-        knowledge: kpLib.KnowledgeResponse,
-    ): SearchSelectExpr {
-        const searchTermGroup = createOrTermGroup();
-        const entityTermGroup = this.compileEntities(knowledge.entities);
-        if (entityTermGroup) {
-            searchTermGroup.terms.push(entityTermGroup);
-        }
-        const topicTermGroup = this.compileTopics(knowledge.topics);
-        if (topicTermGroup) {
-            searchTermGroup.terms.push(topicTermGroup);
-        }
-        return {
-            searchTermGroup,
-        };
-    }
-
-    private compileTopics(topics: string[]) {
-        const termGroup = createOrMaxTermGroup();
-        for (const topic of topics) {
-            termGroup.terms.push(
-                createPropertySearchTerm(PropertyNames.Topic, topic),
-            );
-        }
-        return termGroup;
-    }
-
-    private compileEntities(entities: kpLib.ConcreteEntity[]) {
-        if (entities.length === 0) {
-            return undefined;
-        }
-        const termGroup = createOrTermGroup();
-        for (const entity of entities) {
-            termGroup.terms.push(this.compileEntity(entity));
-        }
-        return termGroup;
-    }
-
-    private compileEntity(entity: kpLib.ConcreteEntity) {
-        const termGroup = createOrMaxTermGroup();
-        termGroup.terms.push(
-            createPropertySearchTerm(PropertyNames.EntityName, entity.name),
-        );
-        for (const type of entity.type) {
-            termGroup.terms.push(
-                createPropertySearchTerm(PropertyNames.EntityType, type),
-            );
-        }
-        if (entity.facets) {
-            for (const facet of entity.facets) {
-                termGroup.terms.push(
-                    createPropertySearchTerm(
-                        PropertyNames.FacetName,
-                        facet.name,
-                    ),
-                );
-                termGroup.terms.push(
-                    createPropertySearchTerm(
-                        PropertyNames.FacetValue,
-                        facetValueToString(facet),
-                    ),
-                );
-            }
-        }
-        return termGroup;
-    }
 }
 
 export function createKnowledgeTranslator(

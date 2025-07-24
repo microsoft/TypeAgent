@@ -78,10 +78,12 @@ export async function runKnowproMemory(): Promise<void> {
 
 export class KnowproContext extends kpTest.KnowproContext {
     public printer: KnowProPrinter;
+    public stopWatch: StopWatch;
 
     constructor() {
         super();
         this.printer = new KnowProPrinter();
+        this.stopWatch = new StopWatch();
     }
 }
 

@@ -8,7 +8,6 @@ import {
     CommandMetadata,
     NamedArgs,
     parseNamedArguments,
-    StopWatch,
 } from "interactive-app";
 import { KnowproContext } from "./knowproMemory.js";
 import { KnowProPrinter } from "./knowproPrinter.js";
@@ -16,6 +15,7 @@ import { conversation as kpLib } from "knowledge-processor";
 import * as kpTest from "knowpro-test";
 import * as kp from "knowpro";
 import chalk from "chalk";
+import { getTextOrFile } from "examples-lib";
 
 export type LLMKnowledgeExtractor = {
     extractor: kpLib.KnowledgeExtractor;
@@ -48,7 +48,7 @@ export async function createKnowproKnowledgeCommands(
         return {
             description: "Extract knowledge",
             options: {
-                text: arg("From this text"),
+                text: arg("Extract from this text OR from this filePath"),
                 model: arg("Model: 4o | 41 | 41m | 35", "4o"),
                 search: argBool("Run knowledge search", false),
             },
@@ -60,6 +60,7 @@ export async function createKnowproKnowledgeCommands(
         if (!namedArgs.text) {
             return;
         }
+        const text = getTextOrFile(namedArgs.text);
         const llmExtractor = getExtractor(namedArgs);
         if (!llmExtractor) {
             context.printer.writeError(
@@ -69,42 +70,49 @@ export async function createKnowproKnowledgeCommands(
         }
         context.printer.writeLineInColor(
             chalk.cyan,
-            `Using ${llmExtractor.model.modelName}`,
+            `Using ${llmExtractor.model.modelName}; ${text.length} chars`,
         );
-        const stopWatch = new StopWatch();
-        stopWatch.start();
-        const knowledge = await llmExtractor.extractor.extract(namedArgs.text);
-        stopWatch.stop();
+
+        kpContext.startTokenCounter();
+        kpContext.stopWatch.start();
+        const knowledge = await llmExtractor.extractor.extract(text);
+        kpContext.stopWatch.stop();
         context.printer.writeTiming(
             chalk.cyan,
-            stopWatch,
+            kpContext.stopWatch,
             llmExtractor.model.modelName,
         );
+        context.printer.writeCompletionStats(kpContext.tokenStats);
         if (!knowledge) {
             return;
         }
+
         context.printer.writeJson(knowledge);
         if (namedArgs.search) {
-            const searchExpr = context.compiler.compileKnowledge(knowledge);
-            context.printer.writeJsonInColor(chalk.gray, searchExpr);
-            if (!kpContext.conversation) {
-                context.printer.writeError("No conversation loaded");
-                return;
-            }
-            const searchResults = await kp.searchConversation(
-                kpContext.conversation,
-                searchExpr.searchTermGroup,
-                searchExpr.when,
-            );
-            context.printer.writeConversationSearchResult(
-                kpContext.conversation,
-                searchResults,
-                true,
-                false,
-                50,
-                true,
-            );
+            await searchWithKnowledge(knowledge);
         }
+    }
+
+    async function searchWithKnowledge(knowledge: kpLib.KnowledgeResponse) {
+        const searchExpr = context.compiler.compileKnowledge(knowledge);
+        context.printer.writeJsonInColor(chalk.gray, searchExpr);
+        if (!kpContext.conversation) {
+            context.printer.writeError("No conversation loaded");
+            return;
+        }
+        const searchResults = await kp.searchConversation(
+            kpContext.conversation,
+            searchExpr.searchTermGroup,
+            searchExpr.when,
+        );
+        context.printer.writeConversationSearchResult(
+            kpContext.conversation,
+            searchResults,
+            true,
+            false,
+            50,
+            true,
+        );
     }
 
     function getExtractor(
