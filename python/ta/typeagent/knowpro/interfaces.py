@@ -16,6 +16,7 @@ from typing import (
     Self,
     TypedDict,
     overload,
+    runtime_checkable,
 )
 
 from pydantic.dataclasses import dataclass
@@ -61,11 +62,11 @@ class IMessage[TMetadata: IMessageMetadata](IKnowledgeSource, Protocol):
     # The text of the message, split into chunks.
     text_chunks: list[str]
 
-    # The (optional) timestamp of the message.
-    timestamp: str | None = None
-
     # (Optional) tags associated with the message.
     tags: list[str]
+
+    # The (optional) timestamp of the message.
+    timestamp: str | None = None
 
     # (Future) Information about the deletion of the message.
     deletion_info: DeletionInfo | None = None
@@ -794,6 +795,7 @@ class ISemanticRefCollection(ICollection[SemanticRef, SemanticRefOrdinal], Proto
     """A collection of SemanticRefs."""
 
 
+@runtime_checkable
 class JsonSerializer[T](Protocol):
     def serialize(self, value: T) -> str: ...
 
