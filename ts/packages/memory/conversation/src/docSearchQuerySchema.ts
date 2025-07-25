@@ -11,11 +11,12 @@ export type FacetTerm = {
 };
 
 // Use to find information about specific, tangible people, places, institutions, things and document parts only.
+// Document parts like headings, sections , links, lists etc. are entities with facets.
 // This includes entities with particular facets
 // Abstract concepts or topics are not entities.
 // Any terms will match fuzzily.
 export type EntityTerm = {
-    // the name of the entity or thing such as "Bach", "Great Gatsby", "frog" or "piano" or "we", "I"; "*" means match any entity name
+    // the name of the entity, thing or document part such as "Overview", "Bach", "Great Gatsby", "frog" or "piano" or "we", "I"; "*" means match any entity name
     name: string;
     isNamePronoun: boolean;
     // the specific types of the entity such as "book", "movie", "song", "speaker", "person", "artist", "animal", "instrument", "school", "room", "museum", "food" etc.
