@@ -406,24 +406,6 @@ export async function searchTracks(
     }
 }
 
-export async function searchAlbum(albumName: string, context: IClientContext) {
-    const query: SpotifyApi.SearchForItemParameterObject = {
-        q: `album:"${albumName}"`,
-        type: "album",
-        limit: 50,
-        offset: 0,
-    };
-    const data = await search(query, context.service);
-    if (data && data.albums && data.albums.items.length > 0) {
-        for (const album of data.albums.items) {
-            if (album.name === albumName) {
-                return album;
-            }
-        }
-    }
-    return undefined;
-}
-
 async function playTrackCollection(
     trackCollection: ITrackCollection,
     clientContext: IClientContext,
