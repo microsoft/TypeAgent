@@ -362,7 +362,7 @@ function customizeScopeQueryProcessing(
             languageModel,
             fileURLToPath(new URL("docSearchQuerySchema.ts", import.meta.url)),
         );
-    searchQueryTranslator!.translateWithScope = (request, preamble) => {
+    searchQueryTranslator!.translate2 = (request, preamble) => {
         return customScopeTranslator.translate(request, preamble);
     };
 }

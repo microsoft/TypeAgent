@@ -22,7 +22,7 @@ import {
 import {
     searchQueryFromLanguage,
     SearchQueryTranslator,
-    searchQueryWithScopeFromLanguage,
+    searchQueryFromLanguage2,
 } from "./searchQueryTranslator.js";
 import * as querySchema from "./searchQuerySchema.js";
 import * as querySchema2 from "./searchQuerySchema_v2.js";
@@ -1029,7 +1029,7 @@ export async function searchQueryExprFromLanguage2(
     languageSearchFilter?: LanguageSearchFilter,
     debugContext?: LanguageSearchDebugContext,
 ): Promise<Result<LanguageQueryExpr>> {
-    const queryResult = await searchQueryWithScopeFromLanguage(
+    const queryResult = await searchQueryFromLanguage2(
         conversation,
         translator,
         queryText,
