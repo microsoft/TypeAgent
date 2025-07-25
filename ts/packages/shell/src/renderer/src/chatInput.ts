@@ -488,8 +488,8 @@ export class ChatInput {
         this.textarea.send();
     }
 
-    clear() {
-        this.textarea.getTextEntry().innerText = "";
+    private clear() {
+        this.textarea.setTextContent();
         this.dragTemp = undefined;
     }
 

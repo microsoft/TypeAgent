@@ -19,8 +19,12 @@ export class ContentService {
     constructor(sessionContext?: SessionContext<BrowserActionContext>) {
         this.sessionContext = sessionContext;
 
-        if (sessionContext) {
-            this.browserConnector = new BrowserConnector(sessionContext);
+        const agentContext = sessionContext?.agentContext;
+        if (agentContext?.webSocket && agentContext.externalBrowserControl) {
+            this.browserConnector = new BrowserConnector(
+                agentContext.webSocket,
+                agentContext.externalBrowserControl,
+            );
             debug("Initialized with browser download capabilities");
         } else {
             debug("Initialized without browser capabilities");
