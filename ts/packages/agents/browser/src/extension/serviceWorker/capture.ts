@@ -140,23 +140,6 @@ export async function getFilteredHTMLFragments(
 }
 
 /**
- * Captures a screenshot of the current tab
- * @param downloadImage Whether to download the image
- * @returns Promise resolving to the data URL of the screenshot
- */
-export async function getTabScreenshot(
-    downloadImage: boolean,
-): Promise<string> {
-    const targetTab = await getActiveTab();
-    const dataUrl = await chrome.tabs.captureVisibleTab({ quality: 100 });
-    if (downloadImage && targetTab) {
-        await downloadImageAsFile(targetTab, dataUrl, "test.jpg");
-    }
-
-    return dataUrl;
-}
-
-/**
  * Captures an annotated screenshot of the current tab with element bounding boxes
  * @param downloadImage Whether to download the image
  * @returns Promise resolving to the data URL of the annotated screenshot

@@ -29,7 +29,7 @@ export type SpotifyQuery = {
     query?: string[] | undefined;
 };
 
-export function quoteString(str: string) {
+function quoteString(str: string) {
     // Ignore quote in the str and put outter quotes.
     return `"${str.replace(/"/g, "")}"`;
 }

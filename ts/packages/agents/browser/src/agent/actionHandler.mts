@@ -905,7 +905,7 @@ async function executeBrowserAction(
                             context,
                         ).captureScreenshot();
                     return createActionResultFromHtmlDisplay(
-                        `<img src="${dataUrl}" alt="Screenshot" />`,
+                        `<img src="${dataUrl}" alt="Screenshot" width="100%" />`,
                     );
                 case "followLinkByText": {
                     const control = getActionBrowserControl(context);

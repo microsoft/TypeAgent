@@ -133,9 +133,9 @@ export function createInlineBrowserControl(
             );
         },
         async captureScreenshot() {
-            throw new Error(
-                "Capturing screenshot is not supported in inline browser.",
-            );
+            const image =
+                await shellWindow.inlineBrowser.webContents.capturePage();
+            return `data:image/png;base64,${image.toPNG().toString("base64")}`;
         },
     };
 }

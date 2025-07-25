@@ -9,7 +9,6 @@ import {
     awaitPageIncrementalUpdates,
 } from "./tabManager";
 import {
-    getTabScreenshot,
     getTabAnnotatedScreenshot,
     getTabHTMLFragments,
     getFilteredHTMLFragments,
@@ -120,12 +119,6 @@ export async function runBrowserAction(action: AppAction): Promise<any> {
             break;
         }
 
-        case "captureScreenshot": {
-            responseObject = await getTabScreenshot(
-                action.parameters?.downloadAsFile,
-            );
-            break;
-        }
         case "captureAnnotatedScreenshot": {
             responseObject = await getTabAnnotatedScreenshot(
                 action.parameters?.downloadAsFile,
