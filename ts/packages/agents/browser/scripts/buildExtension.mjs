@@ -60,6 +60,7 @@ const sharedScripts = {
     "views/macrosLibrary": "views/macrosLibrary.ts",
     "views/entityGraphView": "views/entityGraphView.ts",
     "views/pageKnowledge": "views/pageKnowledge.ts",
+    "views/annotationsLibrary": "views/annotationsLibrary.ts",
     "views/knowledgeLibrary": "views/knowledgeLibrary.ts",
     "views/pdfView": "views/pdfView.ts",
     uiEventsDispatcher: "uiEventsDispatcher.ts",
@@ -192,6 +193,10 @@ copyFileSync(
 copyFileSync(
     `${srcDir}/views/knowledgeLibrary.css`,
     `${chromeOutDir}/views/knowledgeLibrary.css`,
+);
+copyFileSync(
+    `${srcDir}/views/annotationsLibrary.html`,
+    `${chromeOutDir}/views/annotationsLibrary.html`,
 );
 mkdirSync(`${chromeOutDir}/offscreen`, { recursive: true });
 copyFileSync(

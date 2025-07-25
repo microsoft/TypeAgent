@@ -1299,7 +1299,9 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                             ? "topic"
                             : searchMethod;
                     console.log(
-                        `✅ Topic search found ${topicResults.websites.length} additional results for: ${entityName}`,
+                        "✅ Topic search found %d additional results for: %s",
+                        topicResults.websites.length,
+                        entityName,
                         "Added related entities: %d",
                         topicResults.relatedEntities?.length || 0,
                         "Added topics: %d",

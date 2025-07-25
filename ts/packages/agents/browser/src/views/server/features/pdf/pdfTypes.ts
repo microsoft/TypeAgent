@@ -60,6 +60,14 @@ export interface PDFAnnotation {
     createdAt: string;
     updatedAt: string;
     userId?: string;
+    metadata?: {
+        blockquoteContent?: string;
+        screenshotData?: any;
+        hasScreenshot?: boolean;
+        hasBlockquote?: boolean;
+        creationScale?: number;
+        [key: string]: any;
+    };
 }
 
 export interface PDFBookmark {
