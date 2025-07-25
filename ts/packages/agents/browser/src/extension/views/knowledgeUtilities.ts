@@ -839,16 +839,9 @@ export class DefaultSearchServices implements SearchServices {
         };
 
         try {
-            console.log(
-                "DefaultSearchServices: Calling chromeService.searchWebMemories...",
-            );
             const result = await this.chromeService.searchWebMemories(
                 query,
                 searchFilters,
-            );
-            console.log(
-                "DefaultSearchServices: Raw result from chromeService:",
-                result,
             );
 
             // The chromeService returns the full SearchResult, but we need to ensure structure
@@ -869,14 +862,6 @@ export class DefaultSearchServices implements SearchServices {
                     relatedEntities: result.relatedEntities || [],
                     answerEnhancement: result.answerEnhancement, // FIXED: Include answer enhancement data
                 };
-                console.log(
-                    "DefaultSearchServices: Formatted result:",
-                    searchResult,
-                );
-                console.log(
-                    "DefaultSearchServices: Answer enhancement included:",
-                    !!searchResult.answerEnhancement,
-                );
                 return searchResult;
             } else {
                 console.warn(
@@ -950,13 +935,6 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
 
     async searchByEntity(entityName: string, options: any = {}): Promise<any> {
         try {
-            console.log(
-                "Searching for entity:",
-                entityName,
-                "with options:",
-                options,
-            );
-
             if (!this.chromeService) {
                 console.warn(
                     "ChromeExtensionService not available, using empty result",
@@ -979,10 +957,6 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                 searchResult.websites &&
                 searchResult.websites.length > 0
             ) {
-                console.log(
-                    `Found ${searchResult.websites.length} websites for entity search: ${entityName}`,
-                );
-
                 // Convert website search results to entity format with rich data
                 const entities = searchResult.websites
                     .map((website: any, index: number) => {
@@ -1038,7 +1012,6 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                 };
             }
 
-            console.log(`No websites found for entity: ${entityName}`);
             return {
                 entities: [],
                 centerEntity: entityName,
@@ -1068,13 +1041,6 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
 
     async getEntityGraph(centerEntity: string, depth: number): Promise<any> {
         try {
-            console.log(
-                "Getting entity graph for:",
-                centerEntity,
-                "depth:",
-                depth,
-            );
-
             if (!this.chromeService) {
                 console.warn(
                     "ChromeExtensionService not available, using empty result",
@@ -1093,13 +1059,8 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                 !primarySearch.websites ||
                 primarySearch.websites.length === 0
             ) {
-                console.log(`No data found for center entity: ${centerEntity}`);
                 return { centerEntity, entities: [], relationships: [] };
             }
-
-            console.log(
-                `Found ${primarySearch.websites.length} websites for center entity`,
-            );
 
             // Create entities from primary search results with rich data
             const primaryEntities = primarySearch.websites
@@ -1132,8 +1093,6 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                 primarySearch.relatedEntities &&
                 primarySearch.relatedEntities.length > 0
             ) {
-                console.log("Expanding graph with related entities...");
-
                 // Take top related entities and search for them
                 const topRelated = primarySearch.relatedEntities.slice(0, 3);
 
@@ -1198,10 +1157,6 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                 centerEntity,
             );
 
-            console.log(
-                `Generated entity graph: ${allEntities.length} entities, ${relationships.length} relationships`,
-            );
-
             return {
                 centerEntity,
                 entities: allEntities,
@@ -1233,8 +1188,6 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
     }
 
     async refreshEntityData(entityName: string): Promise<any> {
-        console.log("Refreshing entity data for:", entityName);
-
         // For now, just trigger a fresh search
         const refreshedData = await this.searchByEntity(entityName, {
             maxResults: 5,
@@ -1262,7 +1215,6 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
 
         try {
             // Strategy 1: Direct entity search (fastest)
-            console.log(`Trying entity search for: ${entityName}`);
             const entityResults = await this.chromeService.searchByEntities(
                 [entityName],
                 "",
@@ -1284,13 +1236,15 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                 };
                 searchMethod = "entity";
                 console.log(
-                    `✅ Entity search found ${entityResults.websites.length} results for: ${entityName}`,
+                    "✅ Entity search found %d results for: %s",
+                    entityResults.websites.length,
+                    entityName,
                     `Related entities: ${entityResults.relatedEntities?.length || 0}`,
                     `Top topics: ${entityResults.topTopics?.length || 0}`,
                 );
             }
         } catch (error) {
-            console.warn(`Entity search failed for ${entityName}:`, error);
+            console.warn("Entity search failed for %s:", entityName, error);
         }
 
         // Strategy 2: Topic search if entity search fails or returns few results
@@ -1346,12 +1300,14 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                             : searchMethod;
                     console.log(
                         `✅ Topic search found ${topicResults.websites.length} additional results for: ${entityName}`,
-                        `Added related entities: ${topicResults.relatedEntities?.length || 0}`,
-                        `Added topics: ${topicResults.topTopics?.length || 0}`,
+                        "Added related entities: %d",
+                        topicResults.relatedEntities?.length || 0,
+                        "Added topics: %d",
+                        topicResults.topTopics?.length || 0,
                     );
                 }
             } catch (error) {
-                console.warn(`Topic search failed for ${entityName}:`, error);
+                console.warn("Topic search failed for %s:", entityName, error);
             }
         }
 
@@ -1406,13 +1362,17 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                             ? "hybrid"
                             : searchMethod;
                     console.log(
-                        `✅ Hybrid search found ${hybridResults.websites.length} additional results for: ${entityName}`,
-                        `Added related entities: ${hybridResults.relatedEntities?.length || 0}`,
-                        `Added topics: ${hybridResults.topTopics?.length || 0}`,
+                        "✅ Hybrid search found %d additional results for: %s",
+                        hybridResults.websites.length,
+                        entityName,
+                        "Added related entities: %d",
+                        hybridResults.relatedEntities?.length || 0,
+                        "Added topics: %d",
+                        hybridResults.topTopics?.length || 0,
                     );
                 }
             } catch (error) {
-                console.warn(`Hybrid search failed for ${entityName}:`, error);
+                console.warn("Hybrid search failed for: %s", entityName, error);
             }
         }
 
@@ -1430,7 +1390,8 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                 );
             } catch (error) {
                 console.error(
-                    `All search methods failed for ${entityName}:`,
+                    "All search methods failed for: %s",
+                    entityName,
                     error,
                 );
                 searchResult = { websites: [] };
@@ -1446,10 +1407,6 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
             searchResult.searchMethod = searchMethod;
             searchResult.searchTerm = entityName;
             searchResult.searchTimeMs = searchTime;
-
-            console.log(
-                `🚀 Entity search completed in ${searchTime}ms using ${searchMethod} method for: ${entityName} (${searchResult.websites?.length || 0} results)`,
-            );
         }
 
         return searchResult;
