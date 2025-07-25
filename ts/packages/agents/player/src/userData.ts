@@ -225,12 +225,12 @@ async function updateUserData(
             topTracks,
             recentlyPlayed,
         ] = await Promise.all([
-            getFavoriteTracks(service, Infinity),
-            getFavoriteAlbums(service, Infinity),
-            getFollowedArtists(service, Infinity),
-            getTopUserArtists(service, Infinity),
-            getTopUserTracks(service, Infinity),
-            getRecentlyPlayed(service, Infinity),
+            getFavoriteTracks(service, Infinity, true),
+            getFavoriteAlbums(service, Infinity, true),
+            getFollowedArtists(service, Infinity, true),
+            getTopUserArtists(service, Infinity, true),
+            getTopUserTracks(service, Infinity, true),
+            getRecentlyPlayed(service, Infinity, true),
         ]);
 
         const updates: { [key: string]: [number, number, number, number] } = {};
