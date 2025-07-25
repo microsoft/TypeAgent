@@ -33,6 +33,12 @@ export type BrowserControlInvokeFunctions = {
     ): Promise<string | undefined>;
 
     closeWindow(): Promise<void>;
+
+    // REVIEW: external browser only
+    search(query?: string): Promise<void>;
+    readPage(): Promise<void>;
+    stopReadPage(): Promise<void>;
+    captureScreenshot(): Promise<string>;
 };
 
 export type BrowserControlCallFunctions = {
