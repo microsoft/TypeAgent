@@ -20,10 +20,14 @@ export class KnowproContext {
     public retryNoAnswer: boolean;
     public log: KnowproLog;
 
+    public tokenStats: openai.CompletionUsageStats;
+
     constructor(basePath?: string) {
         this.basePath = basePath ?? "/data/testChat/knowpro";
         this.log = new KnowproLog(path.join(this.basePath, "logs"));
         this.knowledgeModel = createKnowledgeModel();
+        this.knowledgeModel.completionCallback = (_, response) =>
+            this.updateTokenCounts(response.usage);
         this.similarityModel = createEmbeddingCache(
             openai.createEmbeddingModel(),
             1024,
@@ -36,6 +40,11 @@ export class KnowproContext {
         );
         this.retryNoAnswer = false;
         this.termParser = new cm.SearchTermParser();
+        this.tokenStats = {
+            completion_tokens: 0,
+            prompt_tokens: 0,
+            total_tokens: 0,
+        };
     }
 
     public ensureConversationLoaded(): kp.IConversation {
@@ -43,5 +52,19 @@ export class KnowproContext {
             throw new Error("No conversation loaded");
         }
         return this.conversation!;
+    }
+
+    public startTokenCounter(): void {
+        this.tokenStats = {
+            completion_tokens: 0,
+            prompt_tokens: 0,
+            total_tokens: 0,
+        };
+    }
+
+    private updateTokenCounts(counter: openai.CompletionUsageStats): void {
+        this.tokenStats.completion_tokens += counter.completion_tokens;
+        this.tokenStats.prompt_tokens += counter.prompt_tokens;
+        this.tokenStats.total_tokens += counter.total_tokens;
     }
 }
