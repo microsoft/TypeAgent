@@ -31,8 +31,7 @@ from ..knowpro.messageindex import MessageTextIndex
 from ..knowpro.reltermsindex import TermToRelatedTermsMap
 from ..knowpro import serialization
 from ..knowpro.storage import MessageCollection, SemanticRefCollection
-
-from ..storage.sqlitestore import SqliteStorageProvider
+from ..storage.sqlitestore import get_storage_provider
 
 
 @dataclass
@@ -252,8 +251,8 @@ class Podcast(
         if semantic_refs_data is not None:
             if self.semantic_refs is None:
                 self.semantic_refs = SemanticRefCollection()
-            for r in semantic_refs_data:
-                self.semantic_refs.append(SemanticRef.deserialize(r))
+            semrefs = [SemanticRef.deserialize(r) for r in semantic_refs_data]
+            self.semantic_refs.extend(semrefs)
 
         self.tags = podcast_data["tags"]
 
@@ -300,17 +299,13 @@ class Podcast(
         )
         if not data:
             return None
-        if dbname is not None:
-            provider = SqliteStorageProvider(dbname)
-            msgs = provider.create_message_collection(PodcastMessage)
-            semrefs = provider.create_semantic_ref_collection()
-            if len(msgs) or len(semrefs):
-                raise RuntimeError(
-                    f"Database {dbname} already has messages or semantic refs."
-                )
-        else:
-            msgs = MessageCollection[PodcastMessage]()
-            semrefs = SemanticRefCollection()
+        provider = get_storage_provider(dbname)
+        msgs = provider.create_message_collection(PodcastMessage)
+        semrefs = provider.create_semantic_ref_collection()
+        if len(msgs) or len(semrefs):
+            raise RuntimeError(
+                f"Database {dbname!r} already has messages or semantic refs."
+            )
         podcast = Podcast(messages=msgs, semantic_refs=semrefs, settings=settings)
         podcast.deserialize(data)
         return podcast

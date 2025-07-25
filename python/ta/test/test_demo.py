@@ -51,9 +51,9 @@ async def main(filename_prefix: str):
 
     print(f"Loading {filename_prefix} ...")
     t0 = time.time()
-    pod = podcast.Podcast.read_from_file(filename_prefix, settings, dbname="podcast.db")
+    pod = podcast.Podcast.read_from_file(filename_prefix, settings)
     t1 = time.time()
-    raise RuntimeError(f"Loading took {t1-t0:.3f} seconds")
+    print(f"Loading took {t1-t0:.3f} seconds")
     assert pod is not None, "Failed to load podcast"
     assert isinstance(pod, podcast.Podcast), f"pod is {pod!r}"
 

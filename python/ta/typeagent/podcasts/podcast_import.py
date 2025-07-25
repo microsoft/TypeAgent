@@ -5,9 +5,8 @@ import os
 import re
 
 from ..knowpro.importing import ConversationSettings
-from ..knowpro.interfaces import Datetime, IMessageCollection, SemanticRef
-from ..knowpro.storage import MessageCollection, SemanticRefCollection
-from ..storage.sqlitestore import SqliteStorageProvider
+from ..knowpro.interfaces import Datetime
+from ..storage.sqlitestore import get_storage_provider
 from .podcast import Podcast, PodcastMessage, PodcastMessageMeta
 
 
@@ -71,18 +70,13 @@ def import_podcast(
 
     assign_message_listeners(msgs, participants)
 
-    if dbname is None:
-        msg_coll = MessageCollection[PodcastMessage]()
-        semref_coll = SemanticRefCollection()
-    else:
-        provider = SqliteStorageProvider(dbname)
-        msg_coll = provider.create_message_collection(PodcastMessage)
-        semref_coll = provider.create_semantic_ref_collection()
-        if len(msg_coll) or len(semref_coll):
-            raise RuntimeError(f"{dbname!r} already has messages or semantic refs.")
+    provider = get_storage_provider(dbname)
+    msg_coll = provider.create_message_collection(PodcastMessage)
+    semref_coll = provider.create_semantic_ref_collection()
+    if len(msg_coll) or len(semref_coll):
+        raise RuntimeError(f"{dbname!r} already has messages or semantic refs.")
 
-    for msg in msgs:
-        msg_coll.append(msg)
+    msg_coll.extend(msgs)
 
     pod = Podcast(
         podcast_name, msg_coll, [podcast_name], semref_coll, settings=settings

@@ -5,6 +5,7 @@ import json
 import sqlite3
 import typing
 
+from ..knowpro.storage import MemoryStorageProvider
 from ..knowpro import interfaces
 from ..knowpro import serialization
 
@@ -35,9 +36,6 @@ class DefaultSerializer[TMessage: interfaces.IMessage](interfaces.JsonSerializer
         return serialization.deserialize_object(self.cls, json.loads(data))
 
 
-# TODO: Unify SqliteMessageCollection and SqliteSemanticRefCollection
-# using a generic common base class. The constructor can set things like
-# the table and column names (or use a common schema).
 class SqliteMessageCollection[TMessage: interfaces.IMessage](
     interfaces.IMessageCollection
 ):
@@ -89,8 +87,8 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
             if stop <= start:
                 return []
             cursor.execute(
-                "SELECT msgdata FROM Messages WHERE id >= ? LIMIT ?",
-                (start, stop - start),
+                "SELECT msgdata FROM Messages WHERE id >= ? AND id < ?",
+                (start, stop),
             )
             rows = cursor.fetchall()
             res = [self._deserialize(row[0]) for row in rows]
@@ -105,6 +103,16 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
             "INSERT INTO Messages (id, msgdata) VALUES (?, ?)",
             (len(self), serialized_message),
         )
+
+    def extend(self, items: typing.Iterable[TMessage]) -> None:
+        self.db.commit()
+        cursor = self.db.cursor()
+        for ord, item in enumerate(items, len(self)):
+            serialized_message = self._serialize(item)
+            cursor.execute(
+                "INSERT INTO Messages (id, msgdata) VALUES (?, ?)",
+                (ord, serialized_message),
+            )
         self.db.commit()
 
 
@@ -162,8 +170,8 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
             if stop <= start:
                 return []
             cursor.execute(
-                "SELECT srdata FROM SemanticRefs WHERE id >= ? LIMIT ?",
-                (start, stop - start),
+                "SELECT srdata FROM SemanticRefs WHERE id >= ? AND id < ?",
+                (start, stop),
             )
             return [self._deserialize(row[0]) for row in cursor.fetchall()]
         else:
@@ -176,6 +184,16 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
             "INSERT INTO SemanticRefs (id, srdata) VALUES (?, ?)",
             (item.semantic_ref_ordinal, serialized_message),
         )
+        self.db.commit()
+
+    def extend(self, items: typing.Iterable[interfaces.SemanticRef]) -> None:
+        cursor = self.db.cursor()
+        for item in items:
+            serialized_message = self._serialize(item)
+            cursor.execute(
+                "INSERT INTO SemanticRefs (id, srdata) VALUES (?, ?)",
+                (item.semantic_ref_ordinal, serialized_message),
+            )
         self.db.commit()
 
 
@@ -215,3 +233,10 @@ class SqliteStorageProvider(interfaces.IStorageProvider):
 
     def create_semantic_ref_collection(self) -> interfaces.ISemanticRefCollection:
         return SqliteSemanticRefCollection(self.get_db())
+
+
+def get_storage_provider(dbname: str | None = None) -> interfaces.IStorageProvider:
+    if dbname is None:
+        return MemoryStorageProvider()
+    else:
+        return SqliteStorageProvider(dbname)

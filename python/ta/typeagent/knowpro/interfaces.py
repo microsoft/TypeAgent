@@ -808,7 +808,7 @@ class JsonSerializer[T](ABC):
 class IStorageProvider(Protocol):
     def create_message_collection[TMessage: IMessage](
         self,
-        serializer: JsonSerializer[TMessage] | None = None,
+        serializer: JsonSerializer[TMessage] | type[TMessage] | None = None,
     ) -> IMessageCollection[TMessage]: ...
 
     def create_semantic_ref_collection(self) -> ISemanticRefCollection: ...
