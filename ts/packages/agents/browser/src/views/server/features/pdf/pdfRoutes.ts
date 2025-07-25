@@ -140,6 +140,13 @@ export class PDFRoutes {
             this.deleteAnnotation.bind(this),
         );
 
+        // Annotation Library - Global annotation endpoints
+        app.get("/api/pdf/annotations/all", this.getAllAnnotations.bind(this));
+        app.get(
+            "/api/pdf/annotations/search",
+            this.searchAnnotations.bind(this),
+        );
+
         // Bookmarks
         app.get("/api/pdf/:documentId/bookmarks", this.getBookmarks.bind(this));
         app.post("/api/pdf/:documentId/bookmarks", this.addBookmark.bind(this));
@@ -573,6 +580,44 @@ export class PDFRoutes {
         } catch (error) {
             debug("Error getting mapping stats:", error);
             res.status(500).json({ error: "Failed to get mapping stats" });
+        }
+    }
+
+    /**
+     * Get all annotations across all documents
+     */
+    private async getAllAnnotations(
+        req: Request,
+        res: Response,
+    ): Promise<void> {
+        try {
+            const annotations = await this.pdfService.getAllAnnotations();
+            res.json(annotations);
+        } catch (error) {
+            debug("Error getting all annotations:", error);
+            res.status(500).json({ error: "Failed to get all annotations" });
+        }
+    }
+
+    /**
+     * Search annotations by content
+     */
+    private async searchAnnotations(
+        req: Request,
+        res: Response,
+    ): Promise<void> {
+        try {
+            const query = req.query.q as string;
+            if (!query) {
+                res.status(400).json({ error: "Search query required" });
+                return;
+            }
+
+            const results = await this.pdfService.searchAnnotations(query);
+            res.json(results);
+        } catch (error) {
+            debug("Error searching annotations:", error);
+            res.status(500).json({ error: "Failed to search annotations" });
         }
     }
 }
