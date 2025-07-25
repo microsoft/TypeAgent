@@ -16,7 +16,9 @@ import {
 } from "@typeagent/agent-sdk";
 import {
     createActionResult,
+    createActionResultFromHtmlDisplay,
     createActionResultFromMarkdownDisplay,
+    createActionResultFromTextDisplay,
 } from "@typeagent/agent-sdk/helpers/action";
 import {
     displayError,
@@ -346,7 +348,8 @@ async function updateBrowserContext(
             const browserControls = createExternalBrowserClient(webSocket);
             context.agentContext.externalBrowserControl = browserControls;
             context.agentContext.browserConnector = new BrowserConnector(
-                context,
+                webSocket,
+                browserControls,
             );
 
             webSocket.onclose = (event: object) => {
@@ -883,6 +886,27 @@ async function executeBrowserAction(
                 case "zoomReset":
                     await getActionBrowserControl(context).zoomReset();
                     return;
+                case "search":
+                    await getActionBrowserControl(context).search(
+                        action.parameters.query,
+                    );
+                    return createActionResultFromTextDisplay(
+                        `Opened new tab with query ${action.parameters.query}`,
+                    );
+                case "readPage":
+                    await getActionBrowserControl(context).readPage();
+                    return;
+                case "stopReadPage":
+                    await getActionBrowserControl(context).stopReadPage();
+                    return;
+                case "captureScreenshot":
+                    const dataUrl =
+                        await getActionBrowserControl(
+                            context,
+                        ).captureScreenshot();
+                    return createActionResultFromHtmlDisplay(
+                        `<img src="${dataUrl}" alt="Screenshot" width="100%" />`,
+                    );
                 case "followLinkByText": {
                     const control = getActionBrowserControl(context);
                     const { keywords, openInNewTab } = action.parameters;
@@ -914,8 +938,12 @@ async function executeBrowserAction(
                         `Navigated to [link](${url}) at position ${action.parameters.position}`,
                         `Navigated to link at position ${action.parameters.position}`,
                     );
+                default:
+                    // Should never happen.
+                    throw new Error(
+                        `Internal error: unknown browser action: ${(action as any).actionName}`,
+                    );
             }
-            break;
         case "browser.external":
             switch (action.actionName) {
                 case "closeWindow": {

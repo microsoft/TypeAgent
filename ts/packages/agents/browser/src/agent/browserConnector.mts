@@ -1,15 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { AppAction, SessionContext } from "@typeagent/agent-sdk";
-import { BrowserActionContext } from "./actionHandler.mjs";
+import { AppAction } from "@typeagent/agent-sdk";
+import { BrowserControl } from "../common/browserControl.mjs";
+import { WebSocket } from "ws";
 
 export class BrowserConnector {
-    private webSocket: any;
-
-    constructor(context: SessionContext<BrowserActionContext>) {
-        this.webSocket = context.agentContext.webSocket;
-    }
+    constructor(
+        private readonly webSocket: WebSocket,
+        private readonly browserControl: BrowserControl,
+    ) {}
 
     async sendActionToBrowser(action: AppAction, schemaName?: string) {
         return new Promise<any | undefined>((resolve, reject) => {
@@ -109,27 +109,16 @@ export class BrowserConnector {
         return htmlFragments;
     }
 
-    async getCurrentPageScreenshot() {
-        const timeoutPromise = new Promise((f) => setTimeout(f, 3000));
-        const screenshotAction = {
-            actionName: "captureScreenshot",
-            parameters: {
-                downloadAsFile: false,
-            },
-        };
-
-        const actionPromise = this.getPageDataFromBrowser(screenshotAction);
-        let screenshot = "";
-        const liveScreenshot = await Promise.race([
-            actionPromise,
-            timeoutPromise,
+    async getCurrentPageScreenshot(): Promise<string> {
+        return await Promise.race<string>([
+            this.browserControl.captureScreenshot(),
+            new Promise((_, reject) =>
+                setTimeout(
+                    () => reject(new Error("Screenshot capture timed out")),
+                    3000,
+                ),
+            ),
         ]);
-
-        if (liveScreenshot && typeof liveScreenshot == "string") {
-            screenshot = liveScreenshot;
-        }
-
-        return screenshot;
     }
 
     async getCurrentPageAnnotatedScreenshot() {

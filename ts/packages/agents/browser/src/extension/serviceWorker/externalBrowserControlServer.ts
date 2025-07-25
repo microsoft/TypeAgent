@@ -201,6 +201,46 @@ export function createExternalBrowserServer(channel: RpcChannel) {
                 throw new Error("No current window found to close.");
             }
         },
+
+        search: async (query?: string) => {
+            await chrome.search.query({
+                disposition: "NEW_TAB",
+                text: query,
+            });
+        },
+        readPage: async () => {
+            const targetTab = await getActiveTab();
+            const article = await chrome.tabs.sendMessage(targetTab?.id!, {
+                type: "read_page_content",
+            });
+
+            if (article.error) {
+                throw new Error(article.error);
+            }
+
+            if (article?.title) {
+                chrome.tts.speak(article?.title, { lang: article?.lang });
+            }
+
+            if (article?.formattedText) {
+                const lines = article.formattedText as string[];
+                lines.forEach((line) => {
+                    chrome.tts.speak(line, {
+                        lang: article?.lang,
+                        enqueue: true,
+                    });
+                });
+            }
+        },
+        stopReadPage: async () => {
+            chrome.tts.stop();
+        },
+        captureScreenshot: async () => {
+            const targetTab = await ensureActiveTab();
+            return chrome.tabs.captureVisibleTab(targetTab.windowId, {
+                quality: 100,
+            });
+        },
     };
     const callFunctions: BrowserControlCallFunctions = {
         setAgentStatus: (isBusy: boolean, message: string) => {

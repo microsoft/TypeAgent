@@ -109,6 +109,7 @@ async function callFetch<T>(
                     case 200:
                     case 201:
                         const content = await result.text();
+                        debugSpotifyRest("Response content:", content);
                         if (content === "") {
                             return {} as T;
                         }
