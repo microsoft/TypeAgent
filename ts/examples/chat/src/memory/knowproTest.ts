@@ -468,10 +468,9 @@ export async function createKnowproTestCommands(
         if (result) {
             context.printer.writeTranslation(result);
         }
+
         context.printer.writeHeading("Scope");
-        const resultScope = await queryTranslator.translateWithScope!(
-            namedArgs.query,
-        );
+        const resultScope = await queryTranslator.translate2!(namedArgs.query);
         context.printer.writeTranslation(resultScope);
         if ((result === undefined || result.success) && resultScope.success) {
             if (result !== undefined) {

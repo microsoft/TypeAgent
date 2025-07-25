@@ -25,7 +25,13 @@ export interface SearchQueryTranslator {
         request: string,
         promptPreamble?: string | PromptSection[],
     ): Promise<Result<querySchema.SearchQuery>>;
-    translateWithScope?: (
+    /**
+     * Experimental. Translate to new schema:  querySchema2.SearchQuery
+     * @param request
+     * @param promptPreamble
+     * @returns {querySchema2.SearchQuery}
+     */
+    translate2?: (
         request: string,
         promptPreamble?: string | PromptSection[],
     ) => Promise<Result<querySchema2.SearchQuery>>;
@@ -52,7 +58,7 @@ export function createSearchQueryTranslator(
         translate(request, promptPreamble) {
             return translator.translate(request, promptPreamble);
         },
-        translateWithScope(request, promptPreamble) {
+        translate2(request, promptPreamble) {
             return translator_V2.translate(request, promptPreamble);
         },
     };
@@ -81,6 +87,14 @@ export function createSearchQueryJsonTranslator<
     );
 }
 
+/**
+ * Translate natural language query into a SearchQuery expression
+ * @param conversation
+ * @param queryTranslator
+ * @param text
+ * @param promptPreamble
+ * @returns
+ */
 export async function searchQueryFromLanguage(
     conversation: IConversation,
     queryTranslator: SearchQueryTranslator,
@@ -96,13 +110,21 @@ export async function searchQueryFromLanguage(
     return result;
 }
 
-export async function searchQueryWithScopeFromLanguage(
+/**
+ * Experimental: translate search query to SearchQuery v2
+ * @param conversation
+ * @param queryTranslator
+ * @param text
+ * @param promptPreamble
+ * @returns {querySchema2.SearchQuery}
+ */
+export async function searchQueryFromLanguage2(
     conversation: IConversation,
     queryTranslator: SearchQueryTranslator,
     text: string,
     promptPreamble?: PromptSection[],
 ): Promise<Result<querySchema2.SearchQuery>> {
-    if (!queryTranslator.translateWithScope) {
+    if (!queryTranslator.translate2) {
         return error("Scoped queries not supported");
     }
     const timeRange = getTimeRangePromptSectionForConversation(conversation);
@@ -110,6 +132,6 @@ export async function searchQueryWithScopeFromLanguage(
         promptPreamble && promptPreamble.length > 0
             ? [...promptPreamble, ...timeRange]
             : timeRange;
-    const result = await queryTranslator.translateWithScope(text, queryContext);
+    const result = await queryTranslator.translate2(text, queryContext);
     return result;
 }
