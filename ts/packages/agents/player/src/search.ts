@@ -649,7 +649,7 @@ export async function findTracks(
     const trackResult = result?.tracks?.items;
 
     const tracks = filterByArtists(trackResult, matchedArtists);
-    if (tracks === undefined) {
+    if (tracks === undefined || tracks.length === 0) {
         throw new Error(
             `Unable find track '${trackName}'${matchedArtistNames !== undefined && matchedArtistNames.length > 0 ? ` by ${matchedArtistNames.join(", ")}` : ""}`,
         );
