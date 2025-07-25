@@ -52,6 +52,9 @@ import { handleKnowledgeAction } from "./knowledge/knowledgeHandler.mjs";
 import {
     searchWebMemories,
     SearchWebMemoriesResponse,
+    searchByEntities,
+    searchByTopics,
+    hybridSearch,
 } from "./searchWebMemories.mjs";
 
 import {
@@ -487,7 +490,10 @@ async function updateBrowserContext(
                         case "importWebsiteDataWithProgress":
                         case "importHtmlFolder":
                         case "getWebsiteStats":
-                        case "searchWebMemories": {
+                        case "searchWebMemories":
+                        case "searchByEntities":
+                        case "searchByTopics":
+                        case "hybridSearch": {
                             const websiteResult = await handleWebsiteAction(
                                 data.method,
                                 data.params,
@@ -1580,6 +1586,15 @@ async function handleWebsiteAction(
 
         case "searchWebMemories":
             return await searchWebMemories(parameters, context);
+
+        case "searchByEntities":
+            return await searchByEntities(parameters, context);
+
+        case "searchByTopics":
+            return await searchByTopics(parameters, context);
+
+        case "hybridSearch":
+            return await hybridSearch(parameters, context);
 
         case "getWebsiteStats":
             // Convert to ActionContext format for existing function

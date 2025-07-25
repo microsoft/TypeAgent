@@ -65,7 +65,7 @@ Storage, registration, chat, memory and other state maintained by examples is **
 
 Example agents that use the Microsoft Graph or similar external services may store state in those services.
 
-Code in this repo doesn't not collect telemetry by default.
+Code in this repo does not collect telemetry by default.
 
 ## Intended Uses
 
