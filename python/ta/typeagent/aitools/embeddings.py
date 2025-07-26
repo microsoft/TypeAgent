@@ -161,10 +161,16 @@ class AsyncEmbeddingModel:
                 for i in range(self.embedding_size):
                     cut = i % length
                     scrambled = item[cut:] + item[:cut]
-                    hashed = abs(hash(scrambled))
-                    floats.append(hashed)
-                array = np.array(floats, dtype=np.float32)
-                fake_data.append(array / np.sqrt(np.dot(array, array)))
+                    hashed = hash(scrambled)
+                    reduced = (hashed % prime) / prime
+                    floats.append(reduced)
+                array = np.array(floats, dtype=np.float64)
+                normalized = array / np.sqrt(np.dot(array, array))
+                dot = np.dot(normalized, normalized)
+                assert (
+                    abs(dot - 1.0) < 1e-15
+                ), f"Embedding {normalized} is not normalized: {dot}"
+                fake_data.append(normalized)
             assert len(fake_data) == len(input), (len(fake_data), "!=", len(input))
             result = np.array(fake_data, dtype=np.float32)
             return result
