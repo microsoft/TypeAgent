@@ -119,9 +119,3 @@ async def main(filename_prefix: str):
     assert len(ser2) > 0, f"ser2 is empty {ser2!r}"
     assert "semanticRefs" in ser2, f"'semantic_refs' is not a key in {ser2.keys()!r}"
     assert str(ser1) == str(ser2), f"ser1 != ser2"
-
-
-if __name__ == "__main__":
-    args = parser.parse_args()
-    needs_auth()
-    asyncio.run(main(args.filename))
