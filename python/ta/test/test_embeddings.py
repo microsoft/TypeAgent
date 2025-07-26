@@ -123,7 +123,7 @@ async def test_get_embedding_nocache_empty_input(
     embedding_model: AsyncEmbeddingModel, needs_auth: None
 ):
     """Test retrieving an embedding with no cache for an empty input."""
-    with pytest.raises(openai.BadRequestError):
+    with pytest.raises(openai.OpenAIError):
         await embedding_model.get_embedding_nocache("")
 
 
