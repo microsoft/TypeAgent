@@ -10,7 +10,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import puppeteer, { TimeoutError } from "puppeteer";
 import { exec } from "node:child_process";
 import chalk from "chalk";
-import { resolveURLWithSearch } from "../../../packages/azure-ai-foundry/dist/urlResolver.js";
+import { urlResolver } from "azure-ai-foundry";
 
 // Load environment variables from .env file
 const envPath = new URL("../../../.env", import.meta.url);
@@ -124,7 +124,7 @@ async function getKeyWords(): Promise<void> {
     }
 
     // Serialize keywordToSites to disk in JSON format
-    writeFileSync("keyword_to_sites.json", JSON.stringify(keywordToSites, null, 2));
+    writeFileSync("examples/websiteAliases/keyword_to_sites.json", JSON.stringify(keywordToSites, null, 2));
 }
 
 if (!existsSync("keyword_to_sites.json")) {
@@ -139,14 +139,14 @@ const keyCount = Object.keys(keywordToSites).length;
 let processed = 0;
 for(const keyword of Object.keys(keywordToSites)) {
     console.log(`Resolving URL for keyword: ${keyword}`);
-    keywordToSiteWithURLResolver[keyword] = await resolveURLWithSearch(keyword, groundingConfig);
+    keywordToSiteWithURLResolver[keyword] = await urlResolver.resolveURLWithSearch(keyword, groundingConfig);
     console.log(`\tResolved URL for keyword ${keyword}: ${keywordToSiteWithURLResolver[keyword]}`);
 
-    console.log(`Progress: ${chalk.green(`${++processed} out of ${sites.length} (${Math.round((processed / keyCount) * 100)}%)`)} keywords processed.`);
+    console.log(`Progress: ${chalk.green(`${++processed} out of ${keyCount} (${Math.round((processed / keyCount) * 100)}%)`)} keywords processed.`);
 }
 
 // Serialize keywordToSites to disk in JSON format
-writeFileSync("keyword_to_sites_with_resolver.json", JSON.stringify(keywordToSiteWithURLResolver, null, 2));
+writeFileSync("examples/websiteAliases/keyword_to_sites_with_resolver.json", JSON.stringify(keywordToSiteWithURLResolver, null, 2));
 
 /**
  * Extract aliases from the provided HTML data using the extractor agent.
