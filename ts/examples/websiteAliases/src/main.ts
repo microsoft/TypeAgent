@@ -6,10 +6,11 @@ import { bingWithGrounding, extractorAgent } from "azure-ai-foundry";
 import { AIProjectClient } from "@azure/ai-projects";
 import { DefaultAzureCredential } from "@azure/identity";
 import { MessageContentUnion, ThreadMessage } from "@azure/ai-agents";
-import { writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import puppeteer, { TimeoutError } from "puppeteer";
 import { exec } from "node:child_process";
 import chalk from "chalk";
+import { resolveURLWithSearch } from "../../../packages/azure-ai-foundry/dist/urlResolver.js";
 
 // Load environment variables from .env file
 const envPath = new URL("../../../.env", import.meta.url);
@@ -40,6 +41,7 @@ const sites = lines.map((line) => {
 
 // go get the aliases for each site
 const aliases: Record<string, string[]> = {};
+let keywordToSites: Record<string, string[]> = {};
 
 /**
  * Fetch the HTML content of a web page.
@@ -84,48 +86,67 @@ async function fetchURL(site: string): Promise<string | null> {
     }
 }
 
-// for(let i = 0; i < 3; i++) {
-//     const site = sites[i];
-let processed = 0;
-for(const site of sites) {
-    if (site) { 
-        getRandomDelay(2000, 3000);
+async function getKeyWords(): Promise<void> {
+    let processed = 0;
+    for(const site of sites) {
+        if (site) { 
+            getRandomDelay(2000, 3000);
 
-        aliases[site] = [];
+            aliases[site] = [];
 
-        console.info(`Extracting data for ${site}`);
+            console.info(`Extracting data for ${site}`);
 
-        const data = await fetchURL(site);
+            const data = await fetchURL(site);
 
-        if (data) {
-            // extract the aliases using the extractor agent
-            const extracted: extractorAgent.extractedAliases | null | undefined = await extractAliases(JSON.stringify(data));
+            if (data) {
+                // extract the aliases using the extractor agent
+                const extracted: extractorAgent.extractedAliases | null | undefined = await extractAliases(JSON.stringify(data));
 
-            // merge extracted keywords
-            if (extracted) {
-                aliases[site] = Array.from(new Set([...extracted.brandedKeyWords, ...extracted.extractedKeywordsByClick, ...extracted.topRankingKeywords]));
-                console.log(`Extracted ${aliases[site].length} alises for ${site}`);
+                // merge extracted keywords
+                if (extracted) {
+                    aliases[site] = Array.from(new Set([...extracted.brandedKeyWords, ...extracted.extractedKeywordsByClick, ...extracted.topRankingKeywords]));
+                    console.log(`Extracted ${aliases[site].length} alises for ${site}`);
+                }
+            } else {
+                console.error(`Failed to fetch aliases for ${site}: ${data}`);
             }
-        } else {
-            console.error(`Failed to fetch aliases for ${site}: ${data}`);
+        }
+        console.log(`Progress: ${chalk.green(`${++processed} out of ${sites.length} (${Math.round((processed / sites.length) * 100)}%)`)} sites processed.`);
+    };
+
+    for (const [site, keywords] of Object.entries(aliases)) {
+        for (const keyword of keywords) {
+            if (!keywordToSites[keyword]) {
+                keywordToSites[keyword] = [];
+            }
+            keywordToSites[keyword].push(site);
         }
     }
-    console.log(`Progress: ${chalk.green(`${++processed} out of ${sites.length} (${Math.round((processed / sites.length) * 100)}%)`)} sites processed.`);
-};
 
-const keywordToSites: Record<string, string[]> = {};
+    // Serialize keywordToSites to disk in JSON format
+    writeFileSync("keyword_to_sites.json", JSON.stringify(keywordToSites, null, 2));
+}
 
-for (const [site, keywords] of Object.entries(aliases)) {
-    for (const keyword of keywords) {
-        if (!keywordToSites[keyword]) {
-            keywordToSites[keyword] = [];
-        }
-        keywordToSites[keyword].push(site);
-    }
+if (!existsSync("keyword_to_sites.json")) {
+    getKeyWords();
+} else {
+    keywordToSites = JSON.parse(readFileSync("keyword_to_sites.json", "utf-8"));
+}
+
+// Now go through the keywords and use the URLResolver to get the URLs for each keyword
+const keywordToSiteWithURLResolver: Record<string, string | null | undefined> = {};
+const keyCount = Object.keys(keywordToSites).length;
+let processed = 0;
+for(const keyword of Object.keys(keywordToSites)) {
+    console.log(`Resolving URL for keyword: ${keyword}`);
+    keywordToSiteWithURLResolver[keyword] = await resolveURLWithSearch(keyword, groundingConfig);
+    console.log(`\tResolved URL for keyword ${keyword}: ${keywordToSiteWithURLResolver[keyword]}`);
+
+    console.log(`Progress: ${chalk.green(`${++processed} out of ${sites.length} (${Math.round((processed / keyCount) * 100)}%)`)} keywords processed.`);
 }
 
 // Serialize keywordToSites to disk in JSON format
-writeFileSync("keyword_to_sites.json", JSON.stringify(keywordToSites, null, 2));
+writeFileSync("keyword_to_sites_with_resolver.json", JSON.stringify(keywordToSiteWithURLResolver, null, 2));
 
 /**
  * Extract aliases from the provided HTML data using the extractor agent.
@@ -152,7 +173,6 @@ async function extractAliases(data: string): Promise<extractorAgent.extractedAli
             const chunk = data.slice(i, i + chunkSize);
             await project.agents.messages.create(thread.id, "user", chunk);
         }
-        //await project.agents.messages.create(thread.id, "user", data);
 
         // Create run
         const run = await project.agents.runs.createAndPoll(
