@@ -92,5 +92,18 @@ export function createExternalBrowserClient(
         closeWindow: async () => {
             return rpc.invoke("closeWindow");
         },
+
+        search: async (query?: string) => {
+            return rpc.invoke("search", query);
+        },
+        readPage: async () => {
+            return rpc.invoke("readPage");
+        },
+        stopReadPage: async () => {
+            return rpc.invoke("stopReadPage");
+        },
+        captureScreenshot: async () => {
+            return rpc.invoke("captureScreenshot");
+        },
     };
 }

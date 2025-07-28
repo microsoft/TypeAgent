@@ -61,6 +61,17 @@ export function initializeContextMenu(): void {
         id: "showWebsiteLibrary",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
+
+    chrome.contextMenus.create({
+        type: "separator",
+        id: "menuSeparator3",
+    });
+
+    chrome.contextMenus.create({
+        title: "View Annotations",
+        id: "showAnnotationsLibrary",
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
+    });
 }
 
 /**
@@ -188,6 +199,36 @@ export async function handleContextMenuClick(
                 // Create new tab
                 await chrome.tabs.create({
                     url: knowledgeLibraryUrl,
+                    active: true,
+                });
+            }
+
+            break;
+        }
+
+        case "showAnnotationsLibrary": {
+            const annotationsLibraryUrl = chrome.runtime.getURL(
+                "views/annotationsLibrary.html",
+            );
+
+            // Check if knowledge library tab is already open
+            const existingTabs = await chrome.tabs.query({
+                url: annotationsLibraryUrl,
+            });
+
+            if (existingTabs.length > 0) {
+                // Switch to existing tab
+                await chrome.tabs.update(existingTabs[0].id!, { active: true });
+                // Focus the window containing the tab
+                if (existingTabs[0].windowId) {
+                    await chrome.windows.update(existingTabs[0].windowId, {
+                        focused: true,
+                    });
+                }
+            } else {
+                // Create new tab
+                await chrome.tabs.create({
+                    url: annotationsLibraryUrl,
                     active: true,
                 });
             }

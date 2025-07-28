@@ -29,12 +29,17 @@ export type SpotifyQuery = {
     query?: string[] | undefined;
 };
 
+function quoteString(str: string) {
+    // Ignore quote in the str and put outter quotes.
+    return `"${str.replace(/"/g, "")}"`;
+}
+
 export function toQueryString(query: SpotifyQuery) {
     const queryParts: string[] = [];
-    query.track?.forEach((track) => queryParts.push(`track:"${track}"`));
-    query.album?.forEach((album) => queryParts.push(`album:"${album}"`));
-    query.artist?.forEach((artist) => queryParts.push(`artist:"${artist}"`));
-    query.genre?.forEach((genre) => queryParts.push(`genre:"${genre}"`));
+    query.track?.forEach((t) => queryParts.push(`track:${quoteString(t)}`));
+    query.album?.forEach((t) => queryParts.push(`album:${quoteString(t)}`));
+    query.artist?.forEach((t) => queryParts.push(`artist:${quoteString(t)}`));
+    query.genre?.forEach((t) => queryParts.push(`genre:${quoteString(t)}`));
     query.query?.forEach((query) => queryParts.push(query));
 
     return queryParts.join(" ");
@@ -49,7 +54,7 @@ export async function searchArtists(
         .replaceAll(/(?:^|\s)the(?:$|\s)/gi, " ")
         .trim();
     const query: SpotifyApi.SearchForItemParameterObject = {
-        q: `artist:"${searchTerm}"`,
+        q: `artist:${quoteString(searchTerm)}`,
         type: "artist",
         limit: 50,
         offset: 0,
@@ -57,7 +62,7 @@ export async function searchArtists(
     return search(query, context.service);
 }
 
-async function searchAlbums(
+export async function searchAlbums(
     albumName: string,
     artists: string[] | undefined,
     context: IClientContext,
@@ -649,7 +654,7 @@ export async function findTracks(
     const trackResult = result?.tracks?.items;
 
     const tracks = filterByArtists(trackResult, matchedArtists);
-    if (tracks === undefined) {
+    if (tracks === undefined || tracks.length === 0) {
         throw new Error(
             `Unable find track '${trackName}'${matchedArtistNames !== undefined && matchedArtistNames.length > 0 ? ` by ${matchedArtistNames.join(", ")}` : ""}`,
         );

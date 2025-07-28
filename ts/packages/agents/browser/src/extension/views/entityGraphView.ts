@@ -2,12 +2,8 @@
 // Licensed under the MIT License.
 
 // Entity Graph View - Main entry point for entity visualization
-import { EnhancedEntityGraphVisualizer } from "./enhancedEntityGraphVisualizer.js";
+import { EntityGraphVisualizer } from "./entityGraphVisualizer.js";
 import { EntitySidebar } from "./entitySidebar.js";
-import { EntityDiscovery } from "./entityDiscovery.js";
-import { MultiHopExplorer } from "./multiHopExplorer.js";
-import { RelationshipDetailsManager } from "./relationshipDetailsManager.js";
-import { EntityComparisonManager } from "./entityComparison.js";
 import {
     EntityGraphServices,
     EntityCacheServices,
@@ -20,12 +16,8 @@ import {
  * Main class for the Entity Graph View page
  */
 class EntityGraphView {
-    private visualizer: EnhancedEntityGraphVisualizer;
+    private visualizer: EntityGraphVisualizer;
     private sidebar: EntitySidebar;
-    private discovery: EntityDiscovery;
-    private multiHopExplorer: MultiHopExplorer;
-    private relationshipManager: RelationshipDetailsManager;
-    private comparisonManager: EntityComparisonManager;
     private currentEntity: string | null = null;
     private entityGraphService: EntityGraphServices;
     private entityCacheService: EntityCacheServices;
@@ -63,22 +55,9 @@ class EntityGraphView {
             }
 
             console.log("Creating visualizer...");
-            this.visualizer = new EnhancedEntityGraphVisualizer(graphContainer);
+            this.visualizer = new EntityGraphVisualizer(graphContainer);
             console.log("Creating sidebar...");
             this.sidebar = new EntitySidebar(sidebarContainer);
-
-            // Initialize interactive components with real data support
-            console.log("Creating discovery component...");
-            this.discovery = new EntityDiscovery(this.entityGraphService);
-            console.log("Creating multi-hop explorer...");
-            this.multiHopExplorer = new MultiHopExplorer(
-                this.visualizer,
-                this.entityGraphService,
-            );
-            console.log("Creating relationship manager...");
-            this.relationshipManager = new RelationshipDetailsManager();
-            console.log("Creating comparison manager...");
-            this.comparisonManager = new EntityComparisonManager();
 
             console.log(
                 "EntityGraphView constructor completed, starting initialization...",
@@ -124,7 +103,6 @@ class EntityGraphView {
             // Set up event handlers
             this.setupEventHandlers();
             this.setupControlHandlers();
-            this.setupLayoutControls();
             this.setupSearchHandlers();
             this.setupInteractiveHandlers();
 
@@ -170,14 +148,12 @@ class EntityGraphView {
         const zoomOutBtn = document.getElementById("zoomOutBtn");
         const fitBtn = document.getElementById("fitBtn");
         const centerBtn = document.getElementById("centerBtn");
-        const resetBtn = document.getElementById("resetBtn");
 
         console.log("Control button elements:", {
             zoomInBtn: !!zoomInBtn,
             zoomOutBtn: !!zoomOutBtn,
             fitBtn: !!fitBtn,
             centerBtn: !!centerBtn,
-            resetBtn: !!resetBtn,
         });
 
         if (zoomInBtn) {
@@ -208,13 +184,6 @@ class EntityGraphView {
             });
         }
 
-        if (resetBtn) {
-            resetBtn.addEventListener("click", () => {
-                console.log("Reset view button clicked");
-                this.visualizer.resetView();
-            });
-        }
-
         // Screenshot control
         const screenshotBtn = document.getElementById("screenshotBtn");
         console.log("Screenshot button element:", !!screenshotBtn);
@@ -223,24 +192,6 @@ class EntityGraphView {
             screenshotBtn.addEventListener("click", () => {
                 console.log("Screenshot button clicked");
                 this.takeScreenshot();
-            });
-        }
-
-        // Expand/Collapse controls (placeholder for future implementation)
-        const expandBtn = document.getElementById("expandBtn");
-        const collapseBtn = document.getElementById("collapseBtn");
-
-        if (expandBtn) {
-            expandBtn.addEventListener("click", () => {
-                console.log("Expand functionality - to be implemented");
-                // TODO: Implement expand selected entities
-            });
-        }
-
-        if (collapseBtn) {
-            collapseBtn.addEventListener("click", () => {
-                console.log("Collapse functionality - to be implemented");
-                // TODO: Implement collapse selected entities
             });
         }
 
@@ -270,22 +221,6 @@ class EntityGraphView {
         if (refreshButton) {
             refreshButton.addEventListener("click", () => this.refreshGraph());
         }
-    }
-
-    /**
-     * Set up layout controls
-     */
-    private setupLayoutControls(): void {
-        const layoutControls = document.querySelectorAll(".layout-btn");
-        layoutControls.forEach((control) => {
-            control.addEventListener("click", (e) => {
-                const target = e.target as HTMLElement;
-                const layout = target.dataset.layout;
-                if (layout) {
-                    this.changeLayout(layout);
-                }
-            });
-        });
     }
 
     /**
@@ -349,6 +284,14 @@ class EntityGraphView {
         try {
             this.currentEntity = entityName;
 
+            // Update breadcrumb to show entity name
+            const entityBreadcrumb = document.getElementById(
+                "entityNameBreadcrumb",
+            );
+            if (entityBreadcrumb) {
+                entityBreadcrumb.textContent = ` > ${entityName}`;
+            }
+
             // Update URL
             const url = new URL(window.location.href);
             url.searchParams.set("entity", entityName);
@@ -365,70 +308,17 @@ class EntityGraphView {
      * Set up interactive event handlers
      */
     private setupInteractiveHandlers(): void {
-        // Entity navigation from discovery
+        // Entity navigation from search/sidebar
         document.addEventListener("entityNavigate", (e: any) => {
             this.navigateToEntity(e.detail.entityName);
         });
 
-        // Entity selection from discovery
+        // Entity selection from search results
         document.addEventListener("entitySelected", (e: any) => {
             this.navigateToEntity(e.detail.entityName);
         });
-
-        // Cluster exploration
-        document.addEventListener("clusterExplore", (e: any) => {
-            this.exploreCluster(e.detail.clusterId);
-        });
-
-        // Discovery path following
-        document.addEventListener("pathFollow", (e: any) => {
-            this.followDiscoveryPath(e.detail.pathId);
-        });
-
-        // Entity comparison requests
-        document.addEventListener("requestEntityComparison", (e: any) => {
-            this.comparisonManager.startComparison(e.detail.entities);
-        });
-
-        // Edge/relationship clicks for details
-        this.visualizer.onEdgeClick((edgeData: any) => {
-            this.relationshipManager.showRelationshipDetails(edgeData);
-        });
-
-        // Sidebar entity navigation
-        document.addEventListener("entityNavigate", (e: any) => {
-            if (e.target.closest(".entity-sidebar")) {
-                this.navigateToEntity(e.detail.entityName);
-            }
-        });
     }
 
-    /**
-     * Explore a cluster
-     */
-    private async exploreCluster(clusterId: string): Promise<void> {
-        try {
-            console.log("Exploring cluster:", clusterId);
-            // This would load and visualize the cluster
-            // For now, just show a message
-            this.showMessage(`Exploring cluster: ${clusterId}`, "info");
-        } catch (error) {
-            console.error("Failed to explore cluster:", error);
-        }
-    }
-
-    /**
-     * Follow a discovery path
-     */
-    private async followDiscoveryPath(pathId: string): Promise<void> {
-        try {
-            console.log("Following discovery path:", pathId);
-            // This would navigate through the discovery path
-            this.showMessage(`Following path: ${pathId}`, "info");
-        } catch (error) {
-            console.error("Failed to follow discovery path:", error);
-        }
-    }
     async searchEntity(query: string): Promise<void> {
         if (!query.trim()) return;
 
@@ -438,21 +328,6 @@ class EntityGraphView {
         } catch (error) {
             console.error("Failed to search entity:", error);
         }
-    }
-
-    /**
-     * Change graph layout
-     */
-    changeLayout(layoutType: string): void {
-        this.visualizer.changeLayout(layoutType);
-
-        // Update active layout button
-        document.querySelectorAll(".layout-btn").forEach((btn) => {
-            btn.classList.remove("active");
-        });
-        document
-            .querySelector(`[data-layout="${layoutType}"]`)
-            ?.classList.add("active");
     }
 
     /**
@@ -646,14 +521,17 @@ class EntityGraphView {
                     graphData.relationships?.filter((r: any) => {
                         // Ensure all required fields are present and not undefined
                         const hasValidFrom =
-                            r.relatedEntity &&
-                            typeof r.relatedEntity === "string";
+                            (r.relatedEntity &&
+                                typeof r.relatedEntity === "string") ||
+                            (r.from && typeof r.from === "string");
                         const hasValidTo =
-                            graphData.centerEntity &&
-                            typeof graphData.centerEntity === "string";
+                            (graphData.centerEntity &&
+                                typeof graphData.centerEntity === "string") ||
+                            (r.to && typeof r.to === "string");
                         const hasValidType =
-                            r.relationshipType &&
-                            typeof r.relationshipType === "string";
+                            (r.relationshipType &&
+                                typeof r.relationshipType === "string") ||
+                            (r.type && typeof r.type === "string");
 
                         if (!hasValidFrom) {
                             console.warn(
@@ -681,34 +559,160 @@ class EntityGraphView {
                     `Generated entity graph: ${graphData.entities.length} entities, ${validRelationships.length} relationships`,
                 );
 
+                // Create entity list with center entity, website entities, related entities, and topics
+                const allEntities = [
+                    // Center entity
+                    {
+                        name: graphData.centerEntity,
+                        type: "center_entity",
+                        confidence: 1.0,
+                    },
+                    // Website-based entities
+                    ...graphData.entities.map((e: any) => ({
+                        name: e.name || e.entityName || "Unknown",
+                        type: e.type || e.entityType || "website",
+                        confidence: e.confidence || 0.5,
+                    })),
+                    // Related entities from search results
+                    ...(graphData.relatedEntities || []).map(
+                        (entity: any, index: number) => ({
+                            name:
+                                typeof entity === "string"
+                                    ? entity
+                                    : entity.name || entity,
+                            type: "related_entity",
+                            confidence:
+                                typeof entity === "object"
+                                    ? entity.confidence || 0.7
+                                    : 0.7,
+                        }),
+                    ),
+                    // Top topics as entities
+                    ...(graphData.topTopics || []).map(
+                        (topic: any, index: number) => ({
+                            name:
+                                typeof topic === "string"
+                                    ? topic
+                                    : topic.name || topic,
+                            type: "topic",
+                            confidence:
+                                typeof topic === "object"
+                                    ? topic.confidence || 0.6
+                                    : 0.6,
+                        }),
+                    ),
+                ];
+
+                // Create entity name set for validation
+                const entityNames = new Set(allEntities.map((e) => e.name));
+
+                // Validate and deduplicate relationships
+                const validatedRelationships = [];
+                const relationshipSet = new Set();
+
+                for (const r of validRelationships) {
+                    const from = r.from || r.relatedEntity || "Unknown";
+                    const to = r.to || graphData.centerEntity || "Unknown";
+                    const type = r.relationshipType || r.type || "related";
+
+                    // Check if both entities exist in the graph
+                    if (!entityNames.has(from)) {
+                        console.warn(
+                            `Dropping relationship - 'from' entity not found in graph:`,
+                            from,
+                        );
+                        continue;
+                    }
+                    if (!entityNames.has(to)) {
+                        console.warn(
+                            `Dropping relationship - 'to' entity not found in graph:`,
+                            to,
+                        );
+                        continue;
+                    }
+
+                    // Create unique key for deduplication
+                    const relationshipKey = `${from}:${to}:${type}`;
+                    if (relationshipSet.has(relationshipKey)) {
+                        console.warn(`Dropping duplicate relationship:`, {
+                            from,
+                            to,
+                            type,
+                        });
+                        continue;
+                    }
+
+                    relationshipSet.add(relationshipKey);
+                    validatedRelationships.push({
+                        from,
+                        to,
+                        type,
+                        strength: r.strength || 0.5,
+                    });
+                }
+
+                // Add relationships from related entities to center
+                for (const entity of graphData.relatedEntities || []) {
+                    const entityName =
+                        typeof entity === "string"
+                            ? entity
+                            : entity.name || entity;
+                    const relationshipKey = `${entityName}:${graphData.centerEntity}:related_to`;
+                    if (!relationshipSet.has(relationshipKey)) {
+                        relationshipSet.add(relationshipKey);
+                        validatedRelationships.push({
+                            from: entityName,
+                            to: graphData.centerEntity,
+                            type: "related_to",
+                            strength: 0.8,
+                        });
+                    }
+                }
+
+                // Add relationships from topics to center
+                for (const topic of graphData.topTopics || []) {
+                    const topicName =
+                        typeof topic === "string" ? topic : topic.name || topic;
+                    const relationshipKey = `${topicName}:${graphData.centerEntity}:topic_of`;
+                    if (!relationshipSet.has(relationshipKey)) {
+                        relationshipSet.add(relationshipKey);
+                        validatedRelationships.push({
+                            from: topicName,
+                            to: graphData.centerEntity,
+                            type: "topic_of",
+                            strength: 0.6,
+                        });
+                    }
+                }
+
+                console.log(
+                    `Entity graph: ${allEntities.length} entities, ${validatedRelationships.length} relationships`,
+                );
+                console.log(
+                    `Entity types: websites=${graphData.entities.length}, related=${graphData.relatedEntities?.length || 0}, topics=${graphData.topTopics?.length || 0}`,
+                );
+
                 // Load the graph into the visualizer
                 await this.visualizer.loadEntityGraph({
                     centerEntity: graphData.centerEntity,
-                    entities: graphData.entities.map((e: any) => ({
-                        name: e.name || e.entityName || "Unknown",
-                        type: e.type || e.entityType || "unknown",
-                        confidence: e.confidence || 0.5,
-                    })),
-                    relationships: validRelationships.map((r: any) => ({
-                        from: r.relatedEntity,
-                        to: graphData.centerEntity,
-                        type: r.relationshipType,
-                        strength: r.strength || 0.5,
-                    })),
+                    entities: allEntities,
+                    relationships: validatedRelationships,
                 });
 
-                // Load entity data into sidebar
-                const entityData = await this.entityGraphService.searchByEntity(
-                    entityName,
-                    { maxResults: 1 },
-                );
-                if (
-                    entityData &&
-                    entityData.entities &&
-                    entityData.entities.length > 0
-                ) {
-                    await this.sidebar.loadEntity(entityData.entities[0]);
-                }
+                // Load entity data into sidebar using rich graph data
+                const centerEntityData = {
+                    name: entityName,
+                    entityName: entityName,
+                    type: "center_entity",
+                    entityType: "center_entity",
+                    confidence: 0.9,
+                    source: "graph",
+                    topicAffinity: graphData.topTopics || [],
+                    summary: graphData.summary,
+                    metadata: graphData.metadata,
+                    answerSources: graphData.answerSources || [],
+                };
+                await this.sidebar.loadEntity(centerEntityData);
 
                 this.hideGraphLoading();
                 console.log(

@@ -10,6 +10,7 @@ import {
 } from "interactive-app";
 import chalk, { ChalkInstance } from "chalk";
 import { Result } from "typechat";
+import { openai } from "aiclient";
 
 export type ChalkColor = {
     foreColor?: ChalkInstance | undefined;
@@ -202,6 +203,15 @@ export class ChalkWriter extends ConsoleWriter {
         label = label ? label + " " : "";
         const text = `[${label}${curCount} / ${total}]`;
         this.writeInColor(chalk.gray, text);
+        return this;
+    }
+
+    public writeCompletionStats(stats: openai.CompletionUsageStats) {
+        this.writeInColor(chalk.gray, () => {
+            this.writeLine(`Prompt tokens: ${stats.prompt_tokens}`);
+            this.writeLine(`Completion tokens: ${stats.completion_tokens}`);
+            this.writeLine(`Total tokens: ${stats.total_tokens}`);
+        });
         return this;
     }
 }

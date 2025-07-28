@@ -14,7 +14,7 @@ import {
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
-import { searchAlbum, searchTracks } from "../client.js";
+import { searchTracks } from "../client.js";
 import { htmlStatus } from "../playback.js";
 import { getPlayerCommandInterface } from "./playerCommands.js";
 import {
@@ -22,6 +22,7 @@ import {
     searchArtists,
     SpotifyQuery,
     toQueryString,
+    searchAlbums,
 } from "../search.js";
 import { PlayerAction } from "./playerSchema.js";
 import registerDebug from "debug";
@@ -203,9 +204,18 @@ async function validateAlbum(
     if (resolvedArtists === undefined) {
         return false;
     }
-    // search album already return exact matches.
-    const album = await searchAlbum(albumName, context);
-    if (album === undefined) {
+    const albums = await searchAlbums(albumName, undefined, context);
+    if (albums === undefined) {
+        return false;
+    }
+
+    const lowerCaseAlbumName = albumName.toLowerCase();
+    // For validation for wildcard match, only allow substring match.
+    const filteredAlbums = albums.filter((album) =>
+        album.name.toLowerCase().includes(lowerCaseAlbumName),
+    );
+
+    if (filteredAlbums.length === 0) {
         return false;
     }
 
@@ -214,7 +224,9 @@ async function validateAlbum(
     }
 
     return resolvedArtists.every((resolvedArtist) =>
-        album.artists.some((artists) => artists.id === resolvedArtist.id),
+        filteredAlbums.some((album) =>
+            album.artists.some((artists) => artists.id === resolvedArtist.id),
+        ),
     );
 }
 

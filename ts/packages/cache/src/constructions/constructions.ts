@@ -17,6 +17,7 @@ import {
     MatchPart,
     MatchPartJSON,
     MatchSet,
+    toTransformInfoKey,
     TransformInfo,
 } from "./matchPart.js";
 import { Transforms } from "./transforms.js";
@@ -262,6 +263,21 @@ export class Construction {
         transformNamespaces: Map<string, Transforms>,
         index: number,
     ) {
+        const partCounts = new Map<string, number>();
+        for (const part of construction.parts) {
+            if (isParsePartJSON(part)) {
+                continue;
+            }
+            const transformInfos = part.transformInfos;
+            if (transformInfos === undefined) {
+                continue;
+            }
+            for (const info of transformInfos) {
+                const key = toTransformInfoKey(info);
+                partCounts.set(key, (partCounts.get(key) ?? 0) + 1);
+            }
+        }
+
         return new Construction(
             construction.parts.map((part) => {
                 if (isParsePartJSON(part)) {
@@ -273,11 +289,15 @@ export class Construction {
                         `Unable to resolve MatchSet ${part.matchSet}`,
                     );
                 }
+                const transformInfos = part.transformInfos?.map((info) => ({
+                    ...info,
+                    partCount: partCounts.get(toTransformInfoKey(info))!,
+                }));
                 return new MatchPart(
                     matchSet,
                     part.optional ?? false,
                     part.wildcardMode ?? WildcardMode.Disabled,
-                    part.transformInfos,
+                    transformInfos,
                 );
             }),
             transformNamespaces,

@@ -383,9 +383,113 @@ export class PDFService {
     }
 
     /**
+     * Get all annotations across all documents (reads from storage)
+     */
+    async getAllAnnotations(): Promise<
+        Array<PDFAnnotation & { documentTitle: string }>
+    > {
+        const allAnnotations: Array<PDFAnnotation & { documentTitle: string }> =
+            [];
+
+        try {
+            // Read all annotation files from disk
+            const files = await fs.readdir(this.annotationsPath);
+            const annotationFiles = files.filter((file) =>
+                file.endsWith(".json"),
+            );
+
+            for (const file of annotationFiles) {
+                const documentId = path.basename(file, ".json");
+                const filePath = path.join(this.annotationsPath, file);
+
+                try {
+                    const data = await fs.readFile(filePath, "utf-8");
+                    const annotations: PDFAnnotation[] = JSON.parse(data);
+
+                    // Get document title (try from memory first, then create meaningful fallback)
+                    const document = this.documents.get(documentId);
+                    let documentTitle = document?.title;
+
+                    if (!documentTitle) {
+                        // Try to extract a meaningful title from the documentId
+                        if (
+                            documentId.includes("/") &&
+                            documentId.includes(".")
+                        ) {
+                            // Looks like a URL path, extract filename
+                            const parts = documentId.split("/");
+                            const filename = parts[parts.length - 1];
+                            documentTitle = filename.replace(
+                                /\.(pdf|PDF)$/,
+                                "",
+                            );
+                        } else {
+                            // Use documentId but make it more readable
+                            documentTitle = `Document ${documentId}`;
+                        }
+                    }
+
+                    // Add enriched annotations
+                    const enrichedAnnotations = annotations.map(
+                        (annotation) => ({
+                            ...annotation,
+                            documentTitle,
+                        }),
+                    );
+
+                    allAnnotations.push(...enrichedAnnotations);
+
+                    debug(
+                        `Loaded ${annotations.length} annotations from ${file} (${documentTitle})`,
+                    );
+                } catch (parseError) {
+                    debug(
+                        `Error parsing annotations file ${file}:`,
+                        parseError,
+                    );
+                }
+            }
+
+            debug(
+                `Loaded total ${allAnnotations.length} annotations from ${annotationFiles.length} documents`,
+            );
+        } catch (error) {
+            debug("Error reading annotations from storage:", error);
+            // Continue with empty array if storage read fails
+        }
+
+        // Sort by creation date (newest first)
+        return allAnnotations.sort(
+            (a, b) =>
+                new Date(b.createdAt).getTime() -
+                new Date(a.createdAt).getTime(),
+        );
+    }
+
+    /**
+     * Search annotations by content
+     */
+    async searchAnnotations(
+        query: string,
+    ): Promise<Array<PDFAnnotation & { documentTitle: string }>> {
+        const allAnnotations = await this.getAllAnnotations();
+        const lowerQuery = query.toLowerCase();
+
+        return allAnnotations.filter((annotation) => {
+            return (
+                annotation.content?.toLowerCase().includes(lowerQuery) ||
+                annotation.metadata?.blockquoteContent
+                    ?.toLowerCase()
+                    .includes(lowerQuery) ||
+                annotation.documentTitle.toLowerCase().includes(lowerQuery)
+            );
+        });
+    }
+
+    /**
      * Generate unique ID
      */
     generateId(): string {
-        return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
     }
 }

@@ -20,7 +20,10 @@ import {
     ScreenshotSelector,
     ScreenshotData,
 } from "./components/ScreenshotSelector";
-import { ScreenshotToolbar } from "./components/ScreenshotToolbar";
+import {
+    ScreenshotToolbar,
+    ScreenshotAction,
+} from "./components/ScreenshotToolbar";
 import {
     AnnotationManager,
     AnnotationCreationData,
@@ -83,6 +86,10 @@ export class TypeAgentPDFViewerApp {
     private annotationManager: AnnotationManager | null = null;
     private pdfJSHighlightManager: PDFJSHighlightManager | null = null;
     private wheelEventHandler: ((event: WheelEvent) => void) | null = null;
+    private navigationParams: {
+        page: string | null;
+        annotation: string | null;
+    } = { page: null, annotation: null };
 
     constructor() {
         this.pdfApiService = new PDFApiService();
@@ -864,6 +871,9 @@ export class TypeAgentPDFViewerApp {
             }
 
             console.log("📝 All annotations loaded and rendered");
+
+            // Handle navigation to specific annotation after loading
+            this.handleAnnotationNavigation();
         } catch (error) {
             console.error("❌ Failed to load annotations:", error);
         }
@@ -953,7 +963,20 @@ export class TypeAgentPDFViewerApp {
     private extractDocumentId(): void {
         const urlParams = new URLSearchParams(window.location.search);
         const fileUrl = urlParams.get("url") || urlParams.get("file");
-        if (fileUrl) this.documentId = fileUrl;
+        const documentId = urlParams.get("documentId");
+
+        // Prioritize documentId parameter for direct document access
+        if (documentId) {
+            this.documentId = documentId;
+        } else if (fileUrl) {
+            this.documentId = fileUrl;
+        }
+
+        // Store navigation parameters for later use
+        this.navigationParams = {
+            page: urlParams.get("page"),
+            annotation: urlParams.get("annotation"),
+        };
     }
 
     async loadDocument(documentId: string): Promise<void> {
@@ -962,7 +985,24 @@ export class TypeAgentPDFViewerApp {
             if (this.isUrl(documentId)) {
                 await this.loadPDFFromUrl(documentId);
             } else {
-                await this.loadSampleDocument();
+                // Try to load by document ID first
+                try {
+                    const document =
+                        await this.pdfApiService.getDocument(documentId);
+                    if (document && document.path) {
+                        // Document has a URL/path, load it
+                        await this.loadPDFFromUrl(document.path);
+                    } else {
+                        // Fallback to sample document
+                        await this.loadSampleDocument();
+                    }
+                } catch (docError) {
+                    console.warn(
+                        "Document not found, loading sample:",
+                        docError,
+                    );
+                    await this.loadSampleDocument();
+                }
             }
             if (this.documentId) this.setupSSEConnection(this.documentId);
         } catch (error) {
@@ -1277,6 +1317,68 @@ export class TypeAgentPDFViewerApp {
             } catch (error) {
                 console.warn("Error closing SSE connection:", error);
             }
+        }
+    }
+
+    /**
+     * Handle navigation to specific page/annotation from URL parameters
+     */
+    private handleAnnotationNavigation(): void {
+        try {
+            // Navigate to specific page if provided
+            if (this.navigationParams.page) {
+                const pageNum = parseInt(this.navigationParams.page, 10);
+                if (pageNum > 0 && pageNum <= this.pdfDoc?.numPages) {
+                    this.pdfViewer.currentPageNumber = pageNum;
+                    console.log(`📍 Navigated to page ${pageNum}`);
+                }
+            }
+
+            // Highlight specific annotation if provided
+            if (this.navigationParams.annotation && this.annotationManager) {
+                setTimeout(() => {
+                    this.highlightTargetAnnotation(
+                        this.navigationParams.annotation!,
+                    );
+                }, 500); // Give time for page to render
+            }
+        } catch (error) {
+            console.warn("⚠️ Failed to navigate to annotation:", error);
+        }
+    }
+
+    /**
+     * Highlight and scroll to a specific annotation
+     */
+    private highlightTargetAnnotation(annotationId: string): void {
+        try {
+            // Find the annotation element
+            const annotationElement = document.querySelector(
+                `[data-annotation-id="${annotationId}"]`,
+            ) as HTMLElement;
+
+            if (annotationElement) {
+                // Add temporary highlight effect
+                annotationElement.style.animation = "pulse 2s ease-in-out 3";
+
+                // Scroll to annotation
+                annotationElement.scrollIntoView({
+                    behavior: "smooth",
+                    block: "center",
+                    inline: "center",
+                });
+
+                console.log(`🎯 Highlighted annotation: ${annotationId}`);
+
+                // Remove animation after completion
+                setTimeout(() => {
+                    annotationElement.style.animation = "";
+                }, 6000);
+            } else {
+                console.warn(`⚠️ Annotation not found: ${annotationId}`);
+            }
+        } catch (error) {
+            console.warn("⚠️ Failed to highlight annotation:", error);
         }
     }
 }

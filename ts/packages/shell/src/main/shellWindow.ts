@@ -19,12 +19,45 @@ import {
     ShellWindowState,
     ShellSettingManager,
 } from "./shellSettings.js";
-import { debugShellError } from "./debug.js";
 import { isProd } from "./index.js";
+
+import registerDebug from "debug";
+const debugShellWindow = registerDebug("typeagent:shell:window");
+const debugShellWindowError = registerDebug("typeagent:shell:window:error");
 
 const userAgent =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0";
 const isMac = process.platform === "darwin";
+const isLinux = process.platform === "linux";
+
+function setupResizeHandler(mainWindow: BrowserWindow, handler: () => void) {
+    let scheduleHandler: (() => void) | undefined;
+    mainWindow.on("resize", handler);
+    if (isLinux) {
+        // Workaround for electron bug where getContentSize isn't updated when "resize" event is fired
+        // https://github.com/electron/electron/issues/42586
+        scheduleHandler = () => {
+            debugShellWindow("Scheduled Maximize/Unmaximize update");
+            setTimeout(() => {
+                debugShellWindow(
+                    "Running scheduled Maximize/Unmaximize update",
+                );
+                handler();
+            }, 100);
+        };
+        mainWindow.on("maximize", scheduleHandler);
+        mainWindow.on("unmaximize", scheduleHandler);
+    }
+
+    // Clean up function for close
+    return () => {
+        mainWindow.removeListener("resize", handler);
+        if (scheduleHandler !== undefined) {
+            mainWindow.removeListener("maximize", scheduleHandler);
+            mainWindow.removeListener("unmaximize", scheduleHandler);
+        }
+    };
+}
 
 export class ShellWindow {
     public static getInstance(): ShellWindow | undefined {
@@ -62,24 +95,22 @@ export class ShellWindow {
         setupDevicePermissions(mainWindow);
         this.setupWebContents(mainWindow.webContents);
 
+        const resizeHandlerCleanup = setupResizeHandler(mainWindow, () =>
+            this.updateContentSize(),
+        );
         mainWindow.on("close", () => {
             this.cleanup();
             this.settings.save(this.getWindowState());
 
             mainWindow.hide();
-            mainWindow.removeAllListeners("move");
-            mainWindow.removeAllListeners("moved");
-            mainWindow.removeAllListeners("resize");
-            mainWindow.removeAllListeners("resized");
-
+            // Remove the handler to avoid update the content size on close
+            resizeHandlerCleanup();
             this.closeInlineBrowser(false);
         });
 
         mainWindow.on("closed", () => {
             ShellWindow.instance = undefined;
         });
-
-        mainWindow.on("resize", () => this.updateContentSize());
 
         const chatView = createChatView(state);
         this.setupWebContents(chatView.webContents);
@@ -160,7 +191,7 @@ export class ShellWindow {
         if (user.canvas) {
             this.openInlineBrowser(new URL(user.canvas)).catch((e) => {
                 // Don't care if this failed.
-                debugShellError(
+                debugShellWindowError(
                     `Failed to open canvas URL ${user.canvas} on app start: ${e}`,
                 );
             });
@@ -247,6 +278,10 @@ export class ShellWindow {
     // ================================================================
     public updateContentSize(newChatWidth?: number) {
         const bounds = this.mainWindow.getContentBounds();
+        debugShellWindow(
+            `Updating content size with window bound: ${JSON.stringify(bounds)}`,
+        );
+
         const { width, height } = bounds;
         let chatWidth = width;
         if (this.inlineWebContentView) {
@@ -258,6 +293,15 @@ export class ShellWindow {
             }
             const inlineWidth = width - chatWidth;
             this.inlineWidth = inlineWidth;
+            const inlineBounds = {
+                x: chatWidth + 4,
+                y: 0,
+                width: inlineWidth,
+                height: height,
+            };
+            debugShellWindow(
+                `Inline browser bounds: ${JSON.stringify(inlineBounds)}`,
+            );
             this.inlineWebContentView.setBounds({
                 x: chatWidth + 4,
                 y: 0,
@@ -266,18 +310,20 @@ export class ShellWindow {
             });
         }
 
-        this.chatView.setBounds({
+        const chatViewBounds = {
             x: 0,
             y: 0,
             width: chatWidth,
             height: height,
-        });
+        };
+
+        debugShellWindow(`Chat view bounds: ${JSON.stringify(chatViewBounds)}`);
+        this.chatView.setBounds(chatViewBounds);
 
         // Set the divider position
-        this.mainWindow.webContents.send(
-            "set-divider-left",
-            this.inlineWebContentView ? chatWidth : -1,
-        );
+        const dividerLeft = this.inlineWebContentView ? chatWidth : -1;
+        debugShellWindow(`Divider left: ${dividerLeft}`);
+        this.mainWindow.webContents.send("set-divider-left", dividerLeft);
     }
 
     public toggleTopMost() {

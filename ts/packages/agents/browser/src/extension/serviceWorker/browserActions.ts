@@ -9,7 +9,6 @@ import {
     awaitPageIncrementalUpdates,
 } from "./tabManager";
 import {
-    getTabScreenshot,
     getTabAnnotatedScreenshot,
     getTabHTMLFragments,
     getFilteredHTMLFragments,
@@ -78,15 +77,6 @@ export async function runBrowserAction(action: AppAction): Promise<any> {
 
             break;
         }
-        case "search": {
-            await chrome.search.query({
-                disposition: "NEW_TAB",
-                text: action.parameters.query,
-            });
-
-            confirmationMessage = `Opened new tab with query ${action.parameters.query}`;
-            break;
-        }
 
         case "openFromHistory": {
             const targetTab = await getActiveTab();
@@ -128,44 +118,7 @@ export async function runBrowserAction(action: AppAction): Promise<any> {
 
             break;
         }
-        case "readPage": {
-            const targetTab = await getActiveTab();
-            const article = await chrome.tabs.sendMessage(targetTab?.id!, {
-                type: "read_page_content",
-            });
 
-            if (article.error) {
-                confirmationMessage = article.error;
-            }
-
-            if (article?.title) {
-                chrome.tts.speak(article?.title, { lang: article?.lang });
-            }
-
-            if (article?.formattedText) {
-                const lines = article.formattedText as string[];
-                lines.forEach((line) => {
-                    chrome.tts.speak(line, {
-                        lang: article?.lang,
-                        enqueue: true,
-                    });
-                });
-            }
-
-            console.log(article);
-            break;
-        }
-        case "stopReadPage": {
-            chrome.tts.stop();
-            break;
-        }
-
-        case "captureScreenshot": {
-            responseObject = await getTabScreenshot(
-                action.parameters?.downloadAsFile,
-            );
-            break;
-        }
         case "captureAnnotatedScreenshot": {
             responseObject = await getTabAnnotatedScreenshot(
                 action.parameters?.downloadAsFile,

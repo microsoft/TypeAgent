@@ -97,84 +97,88 @@ export class ChatView {
                 this.messageDiv.scrollTo(0, 0);
             }
         });
-        this.chatInput = new ChatInput(
-            "phraseDiv",
-            (messageHtml) => {
-                // message from chat input are from innerHTML
-                this.addUserMessage({
-                    type: "html",
-                    content: messageHtml,
-                });
-            },
-            (_eta: ExpandableTextarea) => {
-                if (this.partialCompletion) {
+        const onSend = (messageHtml: string) => {
+            // message from chat input are from innerHTML
+            this.addUserMessage({
+                type: "html",
+                content: messageHtml,
+            });
+        };
+        const onChange = (_eta: ExpandableTextarea, isInput: boolean) => {
+            if (this.partialCompletion) {
+                if (isInput) {
                     this.partialCompletion.update();
+                } else {
+                    this.partialCompletion.close();
                 }
-            },
-            (_eta: ExpandableTextarea, ev: KeyboardEvent) => {
-                if (this.partialCompletion?.handleSpecialKeys(ev) === true) {
+            }
+        };
+        const onMouseWheel = (_eta: ExpandableTextarea, ev: WheelEvent) => {
+            this.partialCompletion?.handleMouseWheel(ev);
+        };
+        const onKeydown = (_eta: ExpandableTextarea, ev: KeyboardEvent) => {
+            if (this.partialCompletion?.handleSpecialKeys(ev) === true) {
+                return false;
+            }
+
+            // history
+            if (!ev.altKey && !ev.ctrlKey) {
+                if (ev.key == "ArrowUp" || ev.key == "ArrowDown") {
+                    const currentContent: string =
+                        this.chatInput.textarea.getTextEntry().innerHTML ?? "";
+
+                    if (
+                        this.commandBackStack.length === 0 ||
+                        this.commandBackStack[this.commandBackStackIndex] !==
+                            currentContent
+                    ) {
+                        const messages: NodeListOf<Element> =
+                            this.messageDiv.querySelectorAll(
+                                ".chat-message-container-user:not(.chat-message-hidden) .chat-message-content",
+                            );
+                        this.commandBackStack = Array.from(messages).map(
+                            (m: Element) =>
+                                m.firstElementChild?.innerHTML.replace(
+                                    'class="chat-input-image"',
+                                    'class="chat-input-dropImage"',
+                                ) ?? "",
+                        );
+
+                        this.commandBackStack.unshift(currentContent);
+                        this.commandBackStackIndex = 0;
+                    }
+
+                    if (
+                        ev.key == "ArrowUp" &&
+                        this.commandBackStackIndex <
+                            this.commandBackStack.length - 1
+                    ) {
+                        this.commandBackStackIndex++;
+                    } else if (
+                        ev.key == "ArrowDown" &&
+                        this.commandBackStackIndex > 0
+                    ) {
+                        this.commandBackStackIndex--;
+                    }
+
+                    const content =
+                        this.commandBackStack[this.commandBackStackIndex];
+                    this.chatInput.textarea.getTextEntry().innerHTML = content;
+
+                    this.chatInput.textarea.moveCursorToEnd();
+
                     return false;
                 }
+            }
 
-                // history
-                if (!ev.altKey && !ev.ctrlKey) {
-                    if (ev.key == "ArrowUp" || ev.key == "ArrowDown") {
-                        const currentContent: string =
-                            this.chatInput.textarea.getTextEntry().innerHTML ??
-                            "";
-
-                        if (
-                            this.commandBackStack.length === 0 ||
-                            this.commandBackStack[
-                                this.commandBackStackIndex
-                            ] !== currentContent
-                        ) {
-                            const messages: NodeListOf<Element> =
-                                this.messageDiv.querySelectorAll(
-                                    ".chat-message-container-user:not(.chat-message-hidden) .chat-message-content",
-                                );
-                            this.commandBackStack = Array.from(messages).map(
-                                (m: Element) =>
-                                    m.firstElementChild?.innerHTML.replace(
-                                        'class="chat-input-image"',
-                                        'class="chat-input-dropImage"',
-                                    ) ?? "",
-                            );
-
-                            this.commandBackStack.unshift(currentContent);
-                            this.commandBackStackIndex = 0;
-                        }
-
-                        if (
-                            ev.key == "ArrowUp" &&
-                            this.commandBackStackIndex <
-                                this.commandBackStack.length - 1
-                        ) {
-                            this.commandBackStackIndex++;
-                        } else if (
-                            ev.key == "ArrowDown" &&
-                            this.commandBackStackIndex > 0
-                        ) {
-                            this.commandBackStackIndex--;
-                        }
-
-                        const content =
-                            this.commandBackStack[this.commandBackStackIndex];
-                        this.chatInput.textarea.getTextEntry().innerHTML =
-                            content;
-
-                        this.chatInput.textarea.moveCursorToEnd();
-
-                        return false;
-                    }
-                }
-
-                return true;
-            },
-            (_eta: ExpandableTextarea, miv: WheelEvent) => {
-                this.partialCompletion?.handleMouseWheel(miv);
-            },
-        );
+            return true;
+        };
+        this.chatInput = new ChatInput({
+            onSend,
+            onChange,
+            onKeydown,
+            onMouseWheel,
+        });
         this.inputContainer = this.chatInput.getInputContainer();
         this.topDiv.appendChild(this.messageDiv);
 
@@ -596,21 +600,7 @@ export class ChatView {
     }
 
     async showInputText(message: string) {
-        const input = this.inputContainer.querySelector(
-            "#phraseDiv",
-        ) as HTMLDivElement;
-
-        for (let i = 0; i < message.length; i++) {
-            input.innerHTML += message.charAt(i);
-            const keyDelay = 25 + Math.floor(Math.random() * 15);
-            await new Promise((f) => setTimeout(f, keyDelay));
-        }
-
-        const keyboardEvent = new KeyboardEvent("keydown", {
-            key: "Enter",
-        });
-
-        input.dispatchEvent(keyboardEvent);
+        return this.chatInput.showInputText(message);
     }
 
     public setMetricsVisible(visible: boolean) {

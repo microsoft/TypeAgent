@@ -171,11 +171,14 @@ export function createPropertySearchTerms(
     return propertySearchTerms;
 }
 
-export function createTagSearchTermGroup(tags: string[]): SearchTermGroup {
+export function createTagSearchTermGroup(
+    tags: string[],
+    exactMatch: boolean = true,
+): SearchTermGroup {
     const termGroup = createOrMaxTermGroup();
     for (const tag of tags) {
         termGroup.terms.push(
-            createPropertySearchTerm(PropertyNames.Tag, tag, true),
+            createPropertySearchTerm(PropertyNames.Tag, tag, exactMatch),
         );
     }
     return termGroup;
