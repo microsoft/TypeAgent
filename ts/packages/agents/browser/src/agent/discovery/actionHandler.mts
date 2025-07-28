@@ -53,15 +53,6 @@ export async function handleSchemaDiscoveryAction(
         case "summarizePage":
             actionData = await handleGetPageSummary(action);
             break;
-        case "findPageComponents":
-            actionData = await handleGetPageComponents(action);
-            break;
-        case "getPageType":
-            actionData = await handleGetPageType(action);
-            break;
-        case "getSiteType":
-            actionData = await handleGetSiteType(action);
-            break;
         case "getIntentFromRecording":
             actionData = await handleGetIntentFromReccording(action);
             break;
@@ -446,74 +437,6 @@ export async function handleSchemaDiscoveryAction(
         return response.data;
     }
 
-    async function handleGetPageComponents(action: any) {
-        const htmlFragments = await browser.getHtmlFragments();
-        const screenshot = await browser.getCurrentPageScreenshot();
-        const timerName = `Getting page layout`;
-        console.time(timerName);
-        const response = await agent.getPageLayout(undefined, htmlFragments, [
-            screenshot,
-        ]);
-
-        if (!response.success) {
-            console.error("Attempt to get page layout failed");
-            console.error(response.message);
-            message = "Action could not be completed";
-            return;
-        }
-
-        console.timeEnd(timerName);
-        message = "Page layout: \n" + JSON.stringify(response.data, null, 2);
-
-        return response.data;
-    }
-
-    async function handleGetPageType(action: any) {
-        const htmlFragments = await browser.getHtmlFragments();
-        const screenshot = await browser.getCurrentPageScreenshot();
-
-        const timerName = `Getting page type`;
-        console.time(timerName);
-        const response = await agent.getPageType(undefined, htmlFragments, [
-            screenshot,
-        ]);
-
-        if (!response.success) {
-            console.error("Attempt to get page type failed");
-            console.error(response.message);
-            message = "Action could not be completed";
-            return;
-        }
-
-        console.timeEnd(timerName);
-        message = "Page type: \n" + JSON.stringify(response.data, null, 2);
-
-        return response.data;
-    }
-
-    async function handleGetSiteType(action: any) {
-        const htmlFragments = await browser.getHtmlFragments();
-        const screenshot = await browser.getCurrentPageScreenshot();
-
-        const timerName = `Getting website category`;
-        console.time(timerName);
-        const response = await agent.getSiteType(undefined, htmlFragments, [
-            screenshot,
-        ]);
-
-        if (!response.success) {
-            console.error("Attempt to get page website category failed");
-            console.error(response.message);
-            message = "Action could not be completed";
-            return;
-        }
-
-        console.timeEnd(timerName);
-        message =
-            "Website Category: \n" + JSON.stringify(response.data, null, 2);
-
-        return response.data;
-    }
 
     async function getIntentSchemaFromJSON(
         userIntentJson: UserIntent,
