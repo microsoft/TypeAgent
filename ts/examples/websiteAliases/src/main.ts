@@ -22,24 +22,9 @@ const project = new AIProjectClient(
     new DefaultAzureCredential(),
 );
 
-// go get top 500 sites
-const topSitesUrl = "https://moz.com/top-500/download/?table=top500Domains";
-const response = await fetch(topSitesUrl);
-if (!response.ok) {
-    throw new Error(`Failed to fetch top sites: ${response.statusText}`);
-}
-
-// extract the site names from the response
-const csv_domains = await response.text();
-const lines = csv_domains.split("\n").slice(1); // skip header
-const sites = lines.map((line) => {
-    if (line.length > 0) {
-        const parts = line.split(",");
-        return parts[1].trim().replaceAll("\"", ""); // get the domain name
-    }
-});
-
 // go get the aliases for each site
+const keywordSiteMapFile: string = "examples/websiteAliases/keyword_to_sites.json";
+const resolvedKeyWordFile: string = "examples/websiteAliases/keyword_to_sites_with_resolver.json";
 const aliases: Record<string, string[]> = {};
 let keywordToSites: Record<string, string[]> = {};
 
@@ -86,10 +71,10 @@ async function fetchURL(site: string): Promise<string | null> {
     }
 }
 
-async function getKeyWords(): Promise<void> {
+async function getKeywords(sites: string[]): Promise<void> {
     let processed = 0;
     for(const site of sites) {
-        if (site) { 
+        if (site && site.length > 0) { 
             getRandomDelay(2000, 3000);
 
             aliases[site] = [];
@@ -124,13 +109,32 @@ async function getKeyWords(): Promise<void> {
     }
 
     // Serialize keywordToSites to disk in JSON format
-    writeFileSync("examples/websiteAliases/keyword_to_sites.json", JSON.stringify(keywordToSites, null, 2));
+    writeFileSync(keywordSiteMapFile, JSON.stringify(keywordToSites, null, 2));
 }
 
-if (!existsSync("keyword_to_sites.json")) {
-    getKeyWords();
+if (!existsSync(keywordSiteMapFile)) {
+    // go get top 500 sites
+    const topSitesUrl = "https://moz.com/top-500/download/?table=top500Domains";
+    const response = await fetch(topSitesUrl);
+    if (!response.ok) {
+        throw new Error(`Failed to fetch top sites: ${response.statusText}`);
+    }
+
+    // extract the site names from the response
+    const csv_domains = await response.text();
+    const lines = csv_domains.split("\n").slice(1); // skip header
+    const sites: string[]= lines.map((line) => {
+        if (line.length > 0) {
+            const parts = line.split(",");
+            return parts[1].trim().replaceAll("\"", ""); // get the domain name
+        } else {
+            return "";
+        }
+    });
+
+    getKeywords(sites);
 } else {
-    keywordToSites = JSON.parse(readFileSync("keyword_to_sites.json", "utf-8"));
+    keywordToSites = JSON.parse(readFileSync(keywordSiteMapFile, "utf-8"));
 }
 
 // Now go through the keywords and use the URLResolver to get the URLs for each keyword
@@ -146,7 +150,7 @@ for(const keyword of Object.keys(keywordToSites)) {
 }
 
 // Serialize keywordToSites to disk in JSON format
-writeFileSync("examples/websiteAliases/keyword_to_sites_with_resolver.json", JSON.stringify(keywordToSiteWithURLResolver, null, 2));
+writeFileSync(resolvedKeyWordFile, JSON.stringify(keywordToSiteWithURLResolver, null, 2));
 
 /**
  * Extract aliases from the provided HTML data using the extractor agent.
