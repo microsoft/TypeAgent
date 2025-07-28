@@ -16,15 +16,18 @@ import { urlResolver } from "azure-ai-foundry";
 const envPath = new URL("../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
 
-const groundingConfig: bingWithGrounding.ApiSettings = bingWithGrounding.apiSettingsFromEnv();
+const groundingConfig: bingWithGrounding.ApiSettings =
+    bingWithGrounding.apiSettingsFromEnv();
 const project = new AIProjectClient(
     groundingConfig.endpoint!,
     new DefaultAzureCredential(),
 );
 
 // go get the aliases for each site
-const keywordSiteMapFile: string = "examples/websiteAliases/keyword_to_sites.json";
-const resolvedKeyWordFile: string = "examples/websiteAliases/resolvedKeywords.json";
+const keywordSiteMapFile: string =
+    "examples/websiteAliases/keyword_to_sites.json";
+const resolvedKeyWordFile: string =
+    "examples/websiteAliases/resolvedKeywords.json";
 const aliases: Record<string, string[]> = {};
 let keywordToSites: Record<string, string[]> = {};
 
@@ -36,25 +39,27 @@ let keywordToSites: Record<string, string[]> = {};
 async function fetchURL(site: string): Promise<string | null> {
     try {
         await closeChrome();
-    } catch(e) {
+    } catch (e) {
         console.log(e);
     }
 
     const browser = await puppeteer.launch({
-        headless: false
+        headless: false,
     });
 
     const page = await browser.newPage();
     try {
-        await page.goto(`https://moz.com/domain-analysis/${site}`, { waitUntil: "load" });
-        await page.waitForSelector(
-            'div[class="container domain-analysis"]',
-            {
-                timeout: 5000,
-            },
-        );
+        await page.goto(`https://moz.com/domain-analysis/${site}`, {
+            waitUntil: "load",
+        });
+        await page.waitForSelector('div[class="container domain-analysis"]', {
+            timeout: 5000,
+        });
 
-        const data = await page.$$eval('script[type="application/ld+json"]', `document.documentElement.outerHTML`);
+        const data = await page.$$eval(
+            'script[type="application/ld+json"]',
+            `document.documentElement.outerHTML`,
+        );
         if (data) {
             console.log(`Extracted data for ${site}`);
         }
@@ -73,8 +78,8 @@ async function fetchURL(site: string): Promise<string | null> {
 
 async function getKeywords(sites: string[]): Promise<void> {
     let processed = 0;
-    for(const site of sites) {
-        if (site && site.length > 0) { 
+    for (const site of sites) {
+        if (site && site.length > 0) {
             getRandomDelay(2000, 3000);
 
             aliases[site] = [];
@@ -85,19 +90,32 @@ async function getKeywords(sites: string[]): Promise<void> {
 
             if (data) {
                 // extract the aliases using the extractor agent
-                const extracted: extractorAgent.extractedAliases | null | undefined = await extractAliases(JSON.stringify(data));
+                const extracted:
+                    | extractorAgent.extractedAliases
+                    | null
+                    | undefined = await extractAliases(JSON.stringify(data));
 
                 // merge extracted keywords
                 if (extracted) {
-                    aliases[site] = Array.from(new Set([...extracted.brandedKeyWords, ...extracted.extractedKeywordsByClick, ...extracted.topRankingKeywords]));
-                    console.log(`Extracted ${aliases[site].length} alises for ${site}`);
+                    aliases[site] = Array.from(
+                        new Set([
+                            ...extracted.brandedKeyWords,
+                            ...extracted.extractedKeywordsByClick,
+                            ...extracted.topRankingKeywords,
+                        ]),
+                    );
+                    console.log(
+                        `Extracted ${aliases[site].length} alises for ${site}`,
+                    );
                 }
             } else {
                 console.error(`Failed to fetch aliases for ${site}: ${data}`);
             }
         }
-        console.log(`Progress: ${chalk.green(`${++processed} out of ${sites.length} (${Math.round((processed / sites.length) * 100)}%)`)} sites processed.`);
-    };
+        console.log(
+            `Progress: ${chalk.green(`${++processed} out of ${sites.length} (${Math.round((processed / sites.length) * 100)}%)`)} sites processed.`,
+        );
+    }
 
     for (const [site, keywords] of Object.entries(aliases)) {
         for (const keyword of keywords) {
@@ -123,10 +141,10 @@ if (!existsSync(keywordSiteMapFile)) {
     // extract the site names from the response
     const csv_domains = await response.text();
     const lines = csv_domains.split("\n").slice(1); // skip header
-    const sites: string[]= lines.map((line) => {
+    const sites: string[] = lines.map((line) => {
         if (line.length > 0) {
             const parts = line.split(",");
-            return parts[1].trim().replaceAll("\"", ""); // get the domain name
+            return parts[1].trim().replaceAll('"', ""); // get the domain name
         } else {
             return "";
         }
@@ -138,36 +156,49 @@ if (!existsSync(keywordSiteMapFile)) {
 }
 
 // Now go through the keywords and use the URLResolver to get the URLs for each keyword
-const keywordToSiteWithURLResolver: Record<string, string | null | undefined> = {};
+const keywordToSiteWithURLResolver: Record<string, string | null | undefined> =
+    {};
 const keyCount = Object.keys(keywordToSites).length;
 let processed = 0;
 const keywords = Object.keys(keywordToSites);
 for (let i = 0; i < 50; i++) {
     const keyword = keywords[i];
-//for(const keyword of Object.keys(keywordToSites)) {
+    //for(const keyword of Object.keys(keywordToSites)) {
     console.log(`Resolving URL for keyword: ${keyword}`);
-    keywordToSiteWithURLResolver[keyword] = await urlResolver.resolveURLWithSearch(keyword, groundingConfig);
-    console.log(`\tResolved URL for keyword ${keyword}: ${keywordToSiteWithURLResolver[keyword]}`);
+    keywordToSiteWithURLResolver[keyword] =
+        await urlResolver.resolveURLWithSearch(keyword, groundingConfig);
+    console.log(
+        `\tResolved URL for keyword ${keyword}: ${keywordToSiteWithURLResolver[keyword]}`,
+    );
 
     // if we don't get a hit for the keyword, remove it from the map
     if (!keywordToSiteWithURLResolver[keyword]) {
         delete keywordToSiteWithURLResolver[keyword];
     }
 
-    console.log(`Progress: ${chalk.green(`${++processed} out of ${keyCount} (${Math.round((processed / keyCount) * 100)}%)`)} keywords processed.`);
+    console.log(
+        `Progress: ${chalk.green(`${++processed} out of ${keyCount} (${Math.round((processed / keyCount) * 100)}%)`)} keywords processed.`,
+    );
 }
 
-
 // Serialize keywordToSites to disk in JSON format
-writeFileSync(resolvedKeyWordFile, JSON.stringify(keywordToSiteWithURLResolver, null, 2));
+writeFileSync(
+    resolvedKeyWordFile,
+    JSON.stringify(keywordToSiteWithURLResolver, null, 2),
+);
 
 /**
  * Extract aliases from the provided HTML data using the extractor agent.
  * @param data - The HTML data to extract aliases from
  * @returns - The extracted aliases or null if content filter was triggered, or undefined if an error occurred
  */
-async function extractAliases(data: string): Promise<extractorAgent.extractedAliases | undefined | null> {
-    const agent = await extractorAgent.ensureKeywordExtractorAgent(groundingConfig, project);
+async function extractAliases(
+    data: string,
+): Promise<extractorAgent.extractedAliases | undefined | null> {
+    const agent = await extractorAgent.ensureKeywordExtractorAgent(
+        groundingConfig,
+        project,
+    );
     let inCompleteReason;
     let retVal: extractorAgent.extractedAliases | undefined | null;
 
@@ -196,12 +227,16 @@ async function extractAliases(data: string): Promise<extractorAgent.extractedAli
                     intervalInMs: 250,
                 },
                 onResponse: (response): void => {
-                    console.debug(`Received response with status: ${response.status}`);
+                    console.debug(
+                        `Received response with status: ${response.status}`,
+                    );
 
                     const pb: any = response.parsedBody;
                     if (pb?.incomplete_details?.reason) {
                         inCompleteReason = pb.incomplete_details.reason;
-                        console.warn(`Run incomplete due to: ${inCompleteReason}`);
+                        console.warn(
+                            `Run incomplete due to: ${inCompleteReason}`,
+                        );
                     }
                 },
             },
@@ -230,7 +265,9 @@ async function extractAliases(data: string): Promise<extractorAgent.extractedAli
                             txt = txt
                                 .replaceAll("```json", "")
                                 .replaceAll("```", "");
-                            retVal = JSON.parse(txt) as extractorAgent.extractedAliases;
+                            retVal = JSON.parse(
+                                txt,
+                            ) as extractorAgent.extractedAliases;
                         }
                     }
                 }
@@ -250,11 +287,10 @@ async function extractAliases(data: string): Promise<extractorAgent.extractedAli
     }
 
     // return assistant messages
-    return retVal;    
+    return retVal;
 }
 
 async function closeChrome(): Promise<void> {
-
     return new Promise<void>((resolve) => {
         let command = "";
 
@@ -292,6 +328,3 @@ async function closeChrome(): Promise<void> {
 function getRandomDelay(min: number, max: number): number {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
-
-
-

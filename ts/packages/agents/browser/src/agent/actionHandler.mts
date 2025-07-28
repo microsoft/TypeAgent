@@ -669,7 +669,10 @@ async function resolveWebPage(
             if (cachehitUrl) {
                 debug(`Resolved URL from cache: ${cachehitUrl}`);
 
-                if (cachehitUrl.indexOf("https://") !== 0 && cachehitUrl.indexOf("http://") !== 0) {
+                if (
+                    cachehitUrl.indexOf("https://") !== 0 &&
+                    cachehitUrl.indexOf("http://") !== 0
+                ) {
                     return "https://" + cachehitUrl;
                 } else {
                     return cachehitUrl;
