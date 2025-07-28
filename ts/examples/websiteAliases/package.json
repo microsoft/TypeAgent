@@ -7,7 +7,7 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/microsoft/TypeAgent.git",
-    "directory": "ts/examples/commandHistogram"
+    "directory": "ts/examples/websiteAliases"
   },
   "license": "MIT",
   "author": "Microsoft",
