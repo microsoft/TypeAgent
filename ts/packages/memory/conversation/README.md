@@ -10,6 +10,10 @@ A **conversation** is defined as sequences of timestamped **messages** between s
 - [Podcasts](./src/podcast.ts)
 - [Email](./src/emailMemory.ts)
 
+A document is conversation like and defined as a sequence of document parts.
+
+- [Document](./src/docMemory.ts)
+
 ## Trademarks
 
 This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft

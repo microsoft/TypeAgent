@@ -187,9 +187,16 @@ export function textBlocksFromMarkdown(
 
 export type MarkdownKnowledgeBlock = {
     tags: Set<string>;
+    sTags: kpLib.ConcreteEntity[];
     knowledge: kpLib.KnowledgeResponse;
 };
 
+/**
+ * Parses the given markdown text and chunks it at logical boundaries.
+ * @param markdown markdown string
+ * @param maxChunkLength
+ * @returns
+ */
 export function textAndKnowledgeBlocksFromMarkdown(
     markdown: string | md.TokensList,
     maxChunkLength?: number,
@@ -305,6 +312,16 @@ class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
     }
 
     onBlockEnd(): void {
+        //
+        // Any headings and links we have collected or are in scope...
+        // We will add those into the current knowledge block
+        //
+        this.addHeadingsToKnowledgeBlock();
+        this.addLinksToKnowledgeBlock();
+        this.knowledgeBlocks.push(this.knowledgeBlock);
+    }
+
+    private addHeadingsToKnowledgeBlock() {
         // Include top K headings in scope.. as topics and entities
         const topK = 2;
         let headingLevelsInScope = [...this.headingsInScope.keys()].sort(
@@ -315,14 +332,19 @@ class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
         for (const headerLevel of headingLevelsInScope) {
             const headerText = this.headingsInScope.get(headerLevel)!;
             this.knowledgeBlock.knowledge.topics.push(headerText);
-            this.knowledgeBlock.knowledge.entities.push(
-                headingToEntity(headerText, headerLevel),
-            );
+
+            const headingEntity = headingToEntity(headerText, headerLevel);
+            this.knowledgeBlock.knowledge.entities.push(headingEntity);
             // Also make header text a tag
             this.knowledgeBlock.tags.add("heading");
             this.knowledgeBlock.tags.add("section");
             this.knowledgeBlock.tags.add(headerText);
+
+            this.knowledgeBlock.sTags.push(headingEntity);
         }
+    }
+
+    private addLinksToKnowledgeBlock() {
         //
         // Also include all links
         //
@@ -331,7 +353,6 @@ class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
                 linkToEntity(linkText, this.linksInScope.get(linkText)!),
             );
         }
-        this.knowledgeBlocks.push(this.knowledgeBlock);
     }
 
     private getPrecedingHeading(): string | undefined {
@@ -382,6 +403,7 @@ function createKnowledgeResponse(): kpLib.KnowledgeResponse {
 function createMarkdownKnowledgeBlock(): MarkdownKnowledgeBlock {
     return {
         tags: new Set<string>(),
+        sTags: [],
         knowledge: createKnowledgeResponse(),
     };
 }
