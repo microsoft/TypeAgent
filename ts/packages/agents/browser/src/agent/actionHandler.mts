@@ -670,6 +670,28 @@ async function resolveWebPage(
                 debug(`Resolved URL from history: ${historyUrl}`);
                 return historyUrl;
             }
+            const cachehitUrl = await urlResolver.resolveURLByKeyword(site);
+            if (cachehitUrl) {
+                debug(`Resolved URL from cache: ${cachehitUrl}`);
+
+                if (
+                    cachehitUrl.indexOf("https://") !== 0 &&
+                    cachehitUrl.indexOf("http://") !== 0
+                ) {
+                    return "https://" + cachehitUrl;
+                } else {
+                    return cachehitUrl;
+                }
+            }
+            // TODO: reenable
+            // const wikiPediaUrl = await urlResolver.resolveURLWithWikipedia(
+            //     site,
+            //     wikipedia.apiSettingsFromEnv(),
+            // );
+            // if (wikiPediaUrl) {
+            //     debug(`Resolved URL using Wikipedia: ${wikiPediaUrl}`);
+            //     return wikiPediaUrl;
+            // }
 
             // try to resolve URL using LLM + internet search
             const url = await urlResolver.resolveURLWithSearch(
@@ -678,6 +700,7 @@ async function resolveWebPage(
             );
 
             if (url) {
+                debug(`Resolved URL using Bing with Grounding: ${url}`);
                 return url;
             }
 
