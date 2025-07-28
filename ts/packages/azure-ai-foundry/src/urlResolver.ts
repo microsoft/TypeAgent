@@ -13,6 +13,7 @@ import {
 } from "@azure/ai-agents";
 import registerDebug from "debug";
 import { wikipedia } from "aiclient";
+import { readFileSync } from "fs";
 
 const debug = registerDebug("typeagent:azure-ai-foundry:urlResolver");
 
@@ -432,13 +433,19 @@ export async function resolveURLWithWikipedia(
     return retVal;
 }
 
-// TODO: finish
+/**
+ * The keyword to site map is a JSON file that maps keywords to sites.
+ */
+export const keyWordsToSites: Record<string, string | undefined> = JSON.parse(readFileSync("../../examples/websiteAliases/resolvedKeywords.json", "utf-8"));
+
+/**
+ * Resolves a URL by keyword using the URL resolver agent.
+ * @param keyword The keyword to resolve.
+ * @returns The resolved URL or undefined if not found.
+ */
 export async function resolveURLByKeyword(
     keyword: string,
 ): Promise<string | undefined | null> {
-    
-    // 1. Load the keyword cache
-    // 2. lookup keyword
 
-    return undefined;
+    return keyWordsToSites[keyword] ?? null;
 }

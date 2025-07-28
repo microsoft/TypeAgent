@@ -24,7 +24,7 @@ const project = new AIProjectClient(
 
 // go get the aliases for each site
 const keywordSiteMapFile: string = "examples/websiteAliases/keyword_to_sites.json";
-const resolvedKeyWordFile: string = "examples/websiteAliases/keyword_to_sites_with_resolver.json";
+const resolvedKeyWordFile: string = "examples/websiteAliases/resolvedKeywords.json";
 const aliases: Record<string, string[]> = {};
 let keywordToSites: Record<string, string[]> = {};
 
@@ -141,13 +141,22 @@ if (!existsSync(keywordSiteMapFile)) {
 const keywordToSiteWithURLResolver: Record<string, string | null | undefined> = {};
 const keyCount = Object.keys(keywordToSites).length;
 let processed = 0;
-for(const keyword of Object.keys(keywordToSites)) {
+const keywords = Object.keys(keywordToSites);
+for (let i = 0; i < 50; i++) {
+    const keyword = keywords[i];
+//for(const keyword of Object.keys(keywordToSites)) {
     console.log(`Resolving URL for keyword: ${keyword}`);
     keywordToSiteWithURLResolver[keyword] = await urlResolver.resolveURLWithSearch(keyword, groundingConfig);
     console.log(`\tResolved URL for keyword ${keyword}: ${keywordToSiteWithURLResolver[keyword]}`);
 
+    // if we don't get a hit for the keyword, remove it from the map
+    if (!keywordToSiteWithURLResolver[keyword]) {
+        delete keywordToSiteWithURLResolver[keyword];
+    }
+
     console.log(`Progress: ${chalk.green(`${++processed} out of ${keyCount} (${Math.round((processed / keyCount) * 100)}%)`)} keywords processed.`);
 }
+
 
 // Serialize keywordToSites to disk in JSON format
 writeFileSync(resolvedKeyWordFile, JSON.stringify(keywordToSiteWithURLResolver, null, 2));
