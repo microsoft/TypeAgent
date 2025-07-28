@@ -32,6 +32,7 @@ import {
     DefaultDiscoveryServices,
     DefaultAnalyticsServices,
 } from "./knowledgeUtilities";
+import { CachedAnalyticsService } from "./services/cachedAnalyticsService";
 
 interface FullPageNavigation {
     currentPage: "search" | "discover" | "analytics";
@@ -95,10 +96,13 @@ class WebsiteLibraryPanelFullPage {
         this.importUI = new WebsiteImportUI();
 
         // Initialize services with default implementations
+        const defaultAnalyticsService = new DefaultAnalyticsServices(
+            chromeExtensionService,
+        );
         this.services = {
             search: new DefaultSearchServices(chromeExtensionService),
             discovery: new DefaultDiscoveryServices(chromeExtensionService),
-            analytics: new DefaultAnalyticsServices(chromeExtensionService),
+            analytics: new CachedAnalyticsService(defaultAnalyticsService),
         };
     }
 
