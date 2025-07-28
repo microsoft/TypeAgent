@@ -143,7 +143,7 @@ export interface Tag {
     text: string;
 }
 
-export interface StructuredTag extends kpLib.ConcreteEntity {}
+export type StructuredTag = kpLib.ConcreteEntity;
 
 /**
  * A conversation is a sequence of messages
