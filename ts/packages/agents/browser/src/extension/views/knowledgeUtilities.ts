@@ -820,6 +820,39 @@ export class DefaultAnalyticsServices implements AnalyticsServices {
     }
 }
 
+// Cached version of analytics services
+export class CachedDefaultAnalyticsServices extends DefaultAnalyticsServices {
+    private cacheManager: any; // Import will be added dynamically
+
+    constructor(chromeService: ChromeExtensionService) {
+        super(chromeService);
+        // Initialize cache manager when available
+        this.initializeCacheManager();
+    }
+
+    private initializeCacheManager() {
+        // This will be dynamically imported to avoid circular dependencies
+        try {
+            import("./services/cachedAnalyticsService").then(
+                ({ CachedAnalyticsService }) => {
+                    this.cacheManager = new CachedAnalyticsService(this);
+                },
+            );
+        } catch (error) {
+            console.warn(
+                "Cache manager not available, falling back to non-cached service",
+            );
+        }
+    }
+
+    async loadAnalyticsData(): Promise<any> {
+        if (this.cacheManager) {
+            return this.cacheManager.loadAnalyticsData();
+        }
+        return super.loadAnalyticsData();
+    }
+}
+
 export class DefaultSearchServices implements SearchServices {
     constructor(private chromeService: ChromeExtensionService) {}
 

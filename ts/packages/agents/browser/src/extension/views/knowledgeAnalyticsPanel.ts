@@ -2,16 +2,28 @@
 // Licensed under the MIT License.
 
 import { AnalyticsServices } from "./knowledgeUtilities";
+import { CachedAnalyticsService } from "./services/cachedAnalyticsService";
+import { CacheStatus, CacheIndicatorType } from "./interfaces/cacheTypes";
 
 export class KnowledgeAnalyticsPanel {
     private container: HTMLElement;
     private services: AnalyticsServices;
+    private cachedService: CachedAnalyticsService;
     private analyticsData: any = null;
     private isConnected: boolean = true;
+    private currentCacheStatus: CacheStatus | null = null;
 
     constructor(container: HTMLElement, services: AnalyticsServices) {
         this.container = container;
         this.services = services;
+        // Wrap the original service with caching
+        this.cachedService = new CachedAnalyticsService(services);
+        this.setupEventListeners();
+    }
+
+    private setupEventListeners(): void {
+        // No UI event listeners needed for cache indicators
+        return;
     }
 
     async initialize(): Promise<void> {
@@ -21,43 +33,80 @@ export class KnowledgeAnalyticsPanel {
             emptyState.style.display = "none";
         }
 
-        await this.loadAnalyticsData();
-        await this.renderContent();
+        await this.loadAnalyticsDataWithCache();
     }
 
-    async loadAnalyticsData(): Promise<void> {
+    async loadAnalyticsDataWithCache(): Promise<void> {
         if (!this.isConnected) {
             this.showAnalyticsConnectionError();
             return;
         }
 
         try {
-            const response = await this.services.loadAnalyticsData();
+            const result = await this.cachedService.loadAnalyticsData();
 
-            // Handle service response structure similar to original
-            if (response && response.success) {
-                this.analyticsData = {
-                    overview: response.analytics?.overview || {},
-                    trends: response.analytics?.activity?.trends || [],
-                    insights: this.transformKnowledgeInsights(
-                        response.analytics?.knowledge || {},
-                    ),
-                    domains: response.analytics?.domains || {},
-                    knowledge: response.analytics?.knowledge || {},
-                    activity: response.analytics?.activity || {},
-                };
-            } else {
-                throw new Error(
-                    response?.error || "Failed to get analytics data",
+            // Always render cached data immediately if available (regardless of age)
+            if (result.cachedData) {
+                this.analyticsData = this.transformAnalyticsData(
+                    result.cachedData,
+                );
+                await this.renderContent({
+                    fromCache: true,
+                    isStale: result.isStale,
+                });
+
+                // Log cache status for debugging (no UI indicator)
+                this.currentCacheStatus = this.cachedService.getCacheStatus();
+            }
+
+            // Wait for fresh data in background
+            try {
+                let freshResponse = await result.freshDataPromise;
+
+                if (freshResponse.freshDataPromise !== undefined) {
+                    freshResponse = await freshResponse.freshDataPromise;
+                }
+
+                if (freshResponse && freshResponse.success) {
+                    this.analyticsData = this.transformAnalyticsData(
+                        freshResponse.analytics,
+                    );
+                    await this.renderContent({ fromCache: false });
+                } else {
+                    throw new Error(
+                        freshResponse?.error ||
+                            "Failed to get fresh analytics data",
+                    );
+                }
+            } catch (error) {
+                console.error("Fresh data fetch failed:", error);
+                this.handleFreshDataError(
+                    error,
+                    !!result.cachedData,
+                    result.isStale,
                 );
             }
         } catch (error) {
-            console.error("Failed to load analytics data:", error);
+            console.error("Failed to initialize analytics cache:", error);
             this.handleAnalyticsDataError(error);
         }
     }
 
-    async renderContent(): Promise<void> {
+    private transformAnalyticsData(data: any): any {
+        return {
+            overview: data?.overview || {},
+            trends: data?.activity?.trends || [],
+            insights: this.transformKnowledgeInsights(data?.knowledge || {}),
+            domains: data?.domains || {},
+            knowledge: data?.knowledge || {},
+            activity: data?.activity || {},
+        };
+    }
+
+    async renderContent(options?: {
+        fromCache?: boolean;
+        isStale?: boolean;
+    }): Promise<void> {
         if (!this.analyticsData) return;
 
         const hasData =
@@ -81,8 +130,28 @@ export class KnowledgeAnalyticsPanel {
     }
 
     async refreshData(): Promise<void> {
-        await this.loadAnalyticsData();
-        await this.renderContent();
+        await this.loadAnalyticsDataWithCache();
+    }
+
+    private handleFreshDataError(
+        error: any,
+        hasCachedData: boolean,
+        isStale: boolean,
+    ): void {
+        console.error("Fresh data fetch failed:", error);
+
+        if (hasCachedData) {
+            // Continue showing cached data - log error status for debugging
+            this.currentCacheStatus = this.cachedService.getCacheErrorStatus();
+        } else {
+            // No cached data available, show error state
+            this.handleAnalyticsDataError(error);
+        }
+    }
+
+    private retryRefresh(): void {
+        console.log("Retrying analytics refresh...");
+        this.refreshData().catch(console.error);
     }
 
     destroy(): void {
