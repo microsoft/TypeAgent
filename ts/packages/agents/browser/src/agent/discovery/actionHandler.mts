@@ -29,6 +29,9 @@ import {
 import { UserIntent } from "./schema/recordedActions.mjs";
 import { createSchemaAuthoringAgent } from "./authoringActionHandler.mjs";
 import { ActionCategory } from "../storage/types.mjs";
+import registerDebug from "debug";
+
+const debug = registerDebug("typeagent:browser:discover:handler");
 
 export async function handleSchemaDiscoveryAction(
     action: SchemaDiscoveryActions,
@@ -150,7 +153,7 @@ export async function handleSchemaDiscoveryAction(
                     manifest,
                     createTempAgentForSchema(browser, agent, context),
                 );
-            }, 500);
+            }, 1000);
         }
 
         // AUTO-SAVE: Save discovered actions immediately
@@ -184,7 +187,7 @@ export async function handleSchemaDiscoveryAction(
                     // Check if action with same name already exists for this URL
                     if (existingActionNames.has(actionData.actionName)) {
                         skippedCount++;
-                        console.log(
+                        debug(
                             `Skipping duplicate discovered action: ${actionData.actionName}`,
                         );
                         continue;
@@ -236,11 +239,11 @@ export async function handleSchemaDiscoveryAction(
                     }
                 }
 
-                console.log(
+                debug(
                     `Auto-saved ${savedCount} new discovered actions for ${domain} (skipped ${skippedCount} existing)`,
                 );
             } catch (error) {
-                console.warn("Failed to auto-save discovered actions:", error);
+                debug("Failed to auto-save discovered actions:", error);
                 // Continue without failing the discovery operation
             }
         }
@@ -288,7 +291,7 @@ export async function handleSchemaDiscoveryAction(
                 manifest,
                 createSchemaAuthoringAgent(browser, agent, context),
             );
-        }, 500);
+        }, 1000);
     }
 
     async function handleRegisterSiteSchema(action: any) {
@@ -300,7 +303,7 @@ export async function handleSchemaDiscoveryAction(
             );
         }
 
-        console.log("Using MacroStore for schema registration");
+        debug("Using MacroStore for schema registration");
         const urlActions = await agentContext.macrosStore.getMacrosForUrl(url!);
 
         const detectedActions = new Map<string, any>();
@@ -321,7 +324,7 @@ export async function handleSchemaDiscoveryAction(
         ];
 
         if (typeDefinitions.length === 0) {
-            console.log("No actions for this schema.");
+            debug("No actions for this schema.");
             return;
         }
 
@@ -366,7 +369,7 @@ export async function handleSchemaDiscoveryAction(
             } catch (error) {
                 console.error("Failed to register dynamic agent:", error);
             }
-        }, 500);
+        }, 1000);
 
         return { schema: schema, typeDefinitions: typeDefinitions };
     }
@@ -437,7 +440,6 @@ export async function handleSchemaDiscoveryAction(
         return response.data;
     }
 
-
     async function getIntentSchemaFromJSON(
         userIntentJson: UserIntent,
         actionDescription: string,
@@ -506,7 +508,7 @@ export async function handleSchemaDiscoveryAction(
                     action.parameters.screenshots,
                 );
             if (descriptionResponse.success) {
-                console.log(descriptionResponse.data);
+                debug(descriptionResponse.data);
                 recordedSteps = JSON.stringify(
                     (descriptionResponse.data as any).actions,
                 );
@@ -676,7 +678,7 @@ export async function handleSchemaDiscoveryAction(
 
                 if (result.success) {
                     actionId = result.macroId;
-                    console.log(
+                    debug(
                         `Auto-saved authored action: ${action.parameters.recordedActionName}`,
                     );
                 } else {
@@ -731,7 +733,7 @@ export async function handleSchemaDiscoveryAction(
                 actions.push(...globalMacros);
             }
 
-            console.log(`Retrieved ${actions.length} macros for URL: ${url}`);
+            debug(`Retrieved ${actions.length} macros for URL: ${url}`);
             return {
                 actions: actions,
                 count: actions.length,
@@ -757,7 +759,7 @@ export async function handleSchemaDiscoveryAction(
             const result = await agentContext.macrosStore.deleteMacro(macroId);
 
             if (result.success) {
-                console.log(`Deleted macro: ${macroId}`);
+                debug(`Deleted macro: ${macroId}`);
                 return {
                     success: true,
                     macroId: macroId,

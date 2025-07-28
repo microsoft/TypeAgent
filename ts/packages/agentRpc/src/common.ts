@@ -161,8 +161,11 @@ export function createChannelProvider(
 
     function deleteChannel(name: string) {
         debug(`deleteChannel ${name}`);
-        if (!channels.delete(name)) {
-            throw new Error(`Channel ${name} does not exist`);
+        if (channels.has(name)) {
+            channels.delete(name);
+            debug(`deleteChannel ${name} - deleted`);
+        } else {
+            debug(`deleteChannel ${name} - already deleted, ignoring`);
         }
     }
     return {

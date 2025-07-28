@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-
 export type DetectPageActions = {
     actionName: "detectPageActions";
     parameters: {
@@ -9,7 +8,6 @@ export type DetectPageActions = {
         agentName?: string;
     };
 };
-
 
 export type SummarizePage = {
     actionName: "summarizePage";
