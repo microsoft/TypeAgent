@@ -447,7 +447,10 @@ async function getLangSearchResult2(
     langFilter?: kp.LanguageSearchFilter,
     debugContext?: kp.LanguageSearchDebugContext,
 ) {
-    return await kp.searchConversationWithLanguage2(
+    if (conversation instanceof cm.Memory) {
+        queryTranslator = conversation.settings.queryTranslator;
+    }
+    const searchResults = await kp.searchConversationWithLanguage2(
         conversation,
         langQuery,
         queryTranslator,
@@ -455,4 +458,5 @@ async function getLangSearchResult2(
         langFilter,
         debugContext,
     );
+    return searchResults;
 }

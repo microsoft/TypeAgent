@@ -252,6 +252,8 @@ export async function searchWebMemories(
         timing.total = Date.now() - startTime;
 
         // PHASE 5: Answer Enhancement - Generate dynamic summary and smart follow-ups
+        // TODO: re-enable answer generation after perf investigation
+        enhancedRequest.generateAnswer = false;
         let answerEnhancement;
         if (
             enhancedRequest.generateAnswer !== false &&
@@ -894,4 +896,406 @@ function createErrorResponse(
         suggestedFollowups: [],
         debugContext: debugContext || undefined,
     };
+}
+
+// Entity-based search function - Uses performEntitySearch directly
+export async function searchByEntities(
+    request: {
+        entities: string[];
+        url?: string;
+        maxResults?: number;
+        searchScope?: "current_page" | "all_indexed";
+        includeMetadata?: boolean;
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<SearchWebMemoriesResponse> {
+    const startTime = Date.now();
+    debug(
+        `Starting performEntitySearch for entities: ${request.entities.join(", ")}`,
+    );
+
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+        if (!websiteCollection || websiteCollection.messages.length === 0) {
+            debug("No website collection available");
+            return createEmptyResponse(
+                "No website data available for entity search",
+                startTime,
+            );
+        }
+
+        // Use performEntitySearch directly - faster and more predictable
+        const searchRequest: SearchWebMemoriesRequest = {
+            query: request.entities.join(" OR "),
+            searchScope: request.searchScope || "all_indexed",
+            limit: request.maxResults || 10,
+            generateAnswer: false,
+            includeRelatedEntities: true,
+            enableAdvancedSearch: false,
+            exactMatch: false,
+            minScore: 0.3,
+        };
+
+        const websites = await performEntitySearch(
+            searchRequest,
+            websiteCollection,
+        );
+
+        if (!websites || websites.length === 0) {
+            debug(
+                `No results found for entities: ${request.entities.join(", ")}`,
+            );
+            return createEmptyResponse(
+                `No websites found containing entities: ${request.entities.join(", ")}`,
+                startTime,
+            );
+        }
+
+        debug(
+            `performEntitySearch found ${websites.length} results for entities: ${request.entities.join(", ")}`,
+        );
+
+        // Convert to expected response format
+        const websiteResults = convertToWebsiteResults(websites);
+        const { entities, topics } =
+            await extractKnowledgeFromResults(websites);
+
+        return {
+            websites: websiteResults,
+            summary: {
+                totalFound: websiteResults.length,
+                searchTime: Date.now() - startTime,
+                strategies: ["entity-direct"],
+                confidence: websiteResults.length > 0 ? 0.9 : 0,
+            },
+            answer:
+                websiteResults.length > 0
+                    ? `Found ${websiteResults.length} websites containing the requested entities.`
+                    : `No websites found containing entities: ${request.entities.join(", ")}`,
+            answerType: websiteResults.length > 0 ? "direct" : "noAnswer",
+            answerSources: [],
+            queryIntent: "discovery",
+            relatedEntities: entities,
+            suggestedFollowups: [],
+            topTopics: topics,
+        };
+    } catch (error) {
+        console.error("Error in performEntitySearch:", error);
+        return createErrorResponse(
+            error instanceof Error ? error.message : "Entity search failed",
+            startTime,
+        );
+    }
+}
+
+// Topic-based search function - Uses performTopicSearch directly
+export async function searchByTopics(
+    request: {
+        topics: string[];
+        url?: string;
+        maxResults?: number;
+        searchScope?: "current_page" | "all_indexed";
+        includeMetadata?: boolean;
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<SearchWebMemoriesResponse> {
+    const startTime = Date.now();
+    debug(
+        `Starting performTopicSearch for topics: ${request.topics.join(", ")}`,
+    );
+
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+        if (!websiteCollection || websiteCollection.messages.length === 0) {
+            debug("No website collection available");
+            return createEmptyResponse(
+                "No website data available for topic search",
+                startTime,
+            );
+        }
+
+        // Use performTopicSearch directly - faster and more predictable
+        const searchRequest: SearchWebMemoriesRequest = {
+            query: request.topics.join(" OR "),
+            searchScope: request.searchScope || "all_indexed",
+            limit: request.maxResults || 10,
+            generateAnswer: false,
+            includeRelatedEntities: true,
+            enableAdvancedSearch: false,
+            exactMatch: false,
+            minScore: 0.25, // Lower threshold for topic matching
+        };
+
+        const websites = await performTopicSearch(
+            searchRequest,
+            websiteCollection,
+        );
+
+        if (!websites || websites.length === 0) {
+            debug(`No results found for topics: ${request.topics.join(", ")}`);
+            return createEmptyResponse(
+                `No websites found containing topics: ${request.topics.join(", ")}`,
+                startTime,
+            );
+        }
+
+        debug(
+            `performTopicSearch found ${websites.length} results for topics: ${request.topics.join(", ")}`,
+        );
+
+        // Convert to expected response format
+        const websiteResults = convertToWebsiteResults(websites);
+        const { entities, topics } =
+            await extractKnowledgeFromResults(websites);
+
+        return {
+            websites: websiteResults,
+            summary: {
+                totalFound: websiteResults.length,
+                searchTime: Date.now() - startTime,
+                strategies: ["topic-direct"],
+                confidence: websiteResults.length > 0 ? 0.9 : 0,
+            },
+            answer:
+                websiteResults.length > 0
+                    ? `Found ${websiteResults.length} websites containing the requested topics.`
+                    : `No websites found containing topics: ${request.topics.join(", ")}`,
+            answerType: websiteResults.length > 0 ? "direct" : "noAnswer",
+            answerSources: [],
+            queryIntent: "discovery",
+            relatedEntities: entities,
+            suggestedFollowups: [],
+            topTopics: topics,
+        };
+    } catch (error) {
+        console.error("Error in performTopicSearch:", error);
+        return createErrorResponse(
+            error instanceof Error ? error.message : "Topic search failed",
+            startTime,
+        );
+    }
+}
+
+// Hybrid search function - combines multiple strategies
+export async function hybridSearch(
+    request: {
+        query: string;
+        url?: string;
+        maxResults?: number;
+        searchScope?: "current_page" | "all_indexed";
+        includeMetadata?: boolean;
+        combineStrategies?: boolean;
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<SearchWebMemoriesResponse> {
+    const startTime = Date.now();
+    debug(`Starting hybrid search for query: ${request.query}`);
+
+    try {
+        // Extract potential entities and topics from query
+        const queryWords = request.query
+            .toLowerCase()
+            .split(/\s+/)
+            .filter((word) => word.length > 2);
+        const potentialEntities = queryWords.filter((word) =>
+            /^[A-Z]/.test(
+                request.query
+                    .split(" ")
+                    .find((w) => w.toLowerCase() === word) || "",
+            ),
+        );
+        const potentialTopics = queryWords;
+
+        const websiteCollection = context.agentContext.websiteCollection;
+        if (!websiteCollection || websiteCollection.messages.length === 0) {
+            debug("No website collection available");
+            return createEmptyResponse(
+                "No website data available for hybrid search",
+                startTime,
+            );
+        }
+
+        // Run multiple search strategies in parallel using direct methods
+        const [textSearchPromise, entitySearchPromise, topicSearchPromise] = [
+            // Standard text search
+            searchWebMemories(
+                {
+                    query: request.query,
+                    searchScope: request.searchScope || "all_indexed",
+                    limit: Math.ceil((request.maxResults || 10) * 0.6),
+                    generateAnswer: true,
+                    includeRelatedEntities: true,
+                    enableAdvancedSearch: true,
+                    minScore: 0.4,
+                },
+                context,
+            ),
+
+            // Direct entity-based search if we detected potential entities
+            potentialEntities.length > 0
+                ? (async () => {
+                      try {
+                          const entityResults =
+                              await websiteCollection.searchByEntities(
+                                  potentialEntities,
+                              );
+                          return entityResults
+                              ? {
+                                    websites: convertToWebsiteResults(
+                                        entityResults
+                                            .map((r) => r.toWebsite())
+                                            .slice(
+                                                0,
+                                                Math.ceil(
+                                                    (request.maxResults || 10) *
+                                                        0.3,
+                                                ),
+                                            ),
+                                    ),
+                                    summary: { strategies: ["entity-direct"] },
+                                }
+                              : null;
+                      } catch (error) {
+                          debug("Entity search failed in hybrid:", error);
+                          return null;
+                      }
+                  })()
+                : Promise.resolve(null),
+
+            // Direct topic-based search
+            potentialTopics.length > 0
+                ? (async () => {
+                      try {
+                          const topicResults =
+                              await websiteCollection.searchByTopics(
+                                  potentialTopics.slice(0, 3),
+                              );
+                          return topicResults
+                              ? {
+                                    websites: convertToWebsiteResults(
+                                        topicResults
+                                            .map((r) => r.toWebsite())
+                                            .slice(
+                                                0,
+                                                Math.ceil(
+                                                    (request.maxResults || 10) *
+                                                        0.3,
+                                                ),
+                                            ),
+                                    ),
+                                    summary: { strategies: ["topic-direct"] },
+                                }
+                              : null;
+                      } catch (error) {
+                          debug("Topic search failed in hybrid:", error);
+                          return null;
+                      }
+                  })()
+                : Promise.resolve(null),
+        ];
+
+        const [textResult, entityResult, topicResult] = await Promise.all([
+            textSearchPromise,
+            entitySearchPromise,
+            topicSearchPromise,
+        ]);
+
+        // Combine and deduplicate results
+        const allWebsites = new Map<string, WebsiteResult>();
+        const strategies = ["hybrid"];
+
+        // Add text search results (highest priority)
+        textResult.websites.forEach((website) => {
+            allWebsites.set(website.url, {
+                ...website,
+                relevanceScore: website.relevanceScore * 1.0, // Full weight
+            });
+        });
+        strategies.push(...textResult.summary.strategies);
+
+        // Add entity search results (medium priority)
+        if (entityResult && entityResult.websites) {
+            entityResult.websites.forEach((website) => {
+                const existing = allWebsites.get(website.url);
+                if (existing) {
+                    // Boost score for multi-strategy matches
+                    existing.relevanceScore = Math.min(
+                        1.0,
+                        existing.relevanceScore + 0.2,
+                    );
+                } else {
+                    allWebsites.set(website.url, {
+                        ...website,
+                        relevanceScore: website.relevanceScore * 0.8, // Slightly lower weight
+                    });
+                }
+            });
+            if (entityResult.summary && entityResult.summary.strategies) {
+                strategies.push(...entityResult.summary.strategies);
+            }
+        }
+
+        // Add topic search results (lower priority)
+        if (topicResult && topicResult.websites) {
+            topicResult.websites.forEach((website) => {
+                const existing = allWebsites.get(website.url);
+                if (existing) {
+                    // Boost score for multi-strategy matches
+                    existing.relevanceScore = Math.min(
+                        1.0,
+                        existing.relevanceScore + 0.15,
+                    );
+                } else {
+                    allWebsites.set(website.url, {
+                        ...website,
+                        relevanceScore: website.relevanceScore * 0.7, // Lower weight
+                    });
+                }
+            });
+            if (topicResult.summary && topicResult.summary.strategies) {
+                strategies.push(...topicResult.summary.strategies);
+            }
+        }
+
+        // Sort by combined relevance score and limit results
+        const combinedWebsites = Array.from(allWebsites.values())
+            .sort((a, b) => b.relevanceScore - a.relevanceScore)
+            .slice(0, request.maxResults || 10);
+
+        debug(
+            `Hybrid search completed: ${combinedWebsites.length} results from ${strategies.length} strategies`,
+        );
+
+        // Use the best answer from text search, as it's most likely to be relevant
+        const finalAnswer =
+            textResult.answer ||
+            "Results found from multiple search strategies.";
+        const finalSources = textResult.answerSources || [];
+
+        return {
+            websites: combinedWebsites,
+            summary: {
+                totalFound: combinedWebsites.length,
+                searchTime: Date.now() - startTime,
+                strategies: Array.from(new Set(strategies)),
+                confidence: Math.min(
+                    1.0,
+                    combinedWebsites.length > 0 ? 0.8 : 0.2,
+                ),
+            },
+            answer: finalAnswer,
+            answerType: textResult.answerType || "synthesized",
+            answerSources: finalSources,
+            queryIntent: textResult.queryIntent || "discovery",
+            relatedEntities: textResult.relatedEntities || [],
+            suggestedFollowups: textResult.suggestedFollowups || [],
+            topTopics: textResult.topTopics || [],
+        };
+    } catch (error) {
+        console.error("Error in hybridSearch:", error);
+        return createErrorResponse(
+            error instanceof Error ? error.message : "Hybrid search failed",
+            startTime,
+        );
+    }
 }

@@ -22,7 +22,7 @@ import {
 import {
     searchQueryFromLanguage,
     SearchQueryTranslator,
-    searchQueryWithScopeFromLanguage,
+    searchQueryFromLanguage2,
 } from "./searchQueryTranslator.js";
 import * as querySchema from "./searchQuerySchema.js";
 import * as querySchema2 from "./searchQuerySchema_v2.js";
@@ -964,6 +964,10 @@ class SearchQueryCompiler {
         let when = this.compileWhen(filter);
         if (filter.scopeSubQuery !== undefined) {
             when = this.compileScopeFilter(filter.scopeSubQuery, when);
+            this.compileScopeFilterAsTerms(
+                filter.scopeSubQuery,
+                searchTermGroup,
+            );
         }
         return {
             searchTermGroup,
@@ -984,6 +988,19 @@ class SearchQueryCompiler {
             when.tags.push(...filter.searchTerms);
         }
         return when;
+    }
+
+    private compileScopeFilterAsTerms(
+        filter: querySchema2.ScopeFilter,
+        searchTermGroup: SearchTermGroup,
+    ): void {
+        if (filter.searchTerms !== undefined && filter.searchTerms.length > 0) {
+            const topicTerms = createOrMaxTermGroup();
+            for (const topic of filter.searchTerms) {
+                topicTerms.terms.push(createPropertySearchTerm("topic", topic));
+            }
+            searchTermGroup.terms.push(topicTerms);
+        }
     }
 }
 
@@ -1012,7 +1029,7 @@ export async function searchQueryExprFromLanguage2(
     languageSearchFilter?: LanguageSearchFilter,
     debugContext?: LanguageSearchDebugContext,
 ): Promise<Result<LanguageQueryExpr>> {
-    const queryResult = await searchQueryWithScopeFromLanguage(
+    const queryResult = await searchQueryFromLanguage2(
         conversation,
         translator,
         queryText,
@@ -1040,6 +1057,9 @@ export async function searchQueryExprFromLanguage2(
 }
 
 /**
+ * Experimental...
+ * Allows NLP to specify scoping.
+ *
  * Search a conversation using natural language. Returns {@link ConversationSearchResult} containing
  * relevant knowledge and messages.
  *

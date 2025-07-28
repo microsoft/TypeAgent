@@ -16,7 +16,9 @@ import {
 } from "@typeagent/agent-sdk";
 import {
     createActionResult,
+    createActionResultFromHtmlDisplay,
     createActionResultFromMarkdownDisplay,
+    createActionResultFromTextDisplay,
 } from "@typeagent/agent-sdk/helpers/action";
 import {
     displayError,
@@ -52,6 +54,9 @@ import { handleKnowledgeAction } from "./knowledge/knowledgeHandler.mjs";
 import {
     searchWebMemories,
     SearchWebMemoriesResponse,
+    searchByEntities,
+    searchByTopics,
+    hybridSearch,
 } from "./searchWebMemories.mjs";
 
 import {
@@ -64,9 +69,7 @@ import { handleSchemaDiscoveryAction } from "./discovery/actionHandler.mjs";
 import { BrowserActions, OpenWebPage } from "./actionsSchema.mjs";
 import {
     resolveURLWithHistory,
-    importWebsiteData,
     importWebsiteDataFromSession,
-    importHtmlFolder,
     importHtmlFolderFromSession,
     getWebsiteStats,
 } from "./websiteMemory.mjs";
@@ -81,7 +84,7 @@ import { urlResolver, bingWithGrounding } from "azure-ai-foundry";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 import { deleteCachedSchema } from "./crossword/cachedSchema.mjs";
 import { getCrosswordCommandHandlerTable } from "./crossword/commandHandler.mjs";
-import { ActionsStore } from "./storage/index.mjs";
+import { MacroStore } from "./storage/index.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
 const debugWebSocket = registerDebug("typeagent:browser:ws");
@@ -113,7 +116,7 @@ export type BrowserActionContext = {
     index: website.IndexData | undefined;
     viewProcess?: ChildProcess | undefined;
     localHostPort: number;
-    actionsStore?: ActionsStore | undefined; // Add ActionsStore instance
+    macrosStore?: MacroStore | undefined; // Add MacroStore instance
 };
 
 export interface urlResolutionAction {
@@ -141,7 +144,7 @@ async function initializeBrowserContext(
         useExternalBrowserControl: clientBrowserControl === undefined,
         index: undefined,
         localHostPort,
-        actionsStore: undefined, // Will be initialized in updateBrowserContext
+        macrosStore: undefined, // Will be initialized in updateBrowserContext
     };
 }
 
@@ -160,14 +163,14 @@ async function updateBrowserContext(
             context.agentContext.tabTitleIndex = createTabTitleIndex();
         }
 
-        // Initialize ActionsStore
-        if (!context.agentContext.actionsStore && context.sessionStorage) {
+        // Initialize MacroStore
+        if (!context.agentContext.macrosStore && context.sessionStorage) {
             try {
-                const { ActionsStore } = await import("./storage/index.mjs");
-                context.agentContext.actionsStore = new ActionsStore(
+                const { MacroStore } = await import("./storage/index.mjs");
+                context.agentContext.macrosStore = new MacroStore(
                     context.sessionStorage,
                 );
-                await context.agentContext.actionsStore.initialize();
+                await context.agentContext.macrosStore.initialize();
                 debug("ActionsStore initialized successfully");
             } catch (error) {
                 debug("Failed to initialize ActionsStore:", error);
@@ -345,7 +348,8 @@ async function updateBrowserContext(
             const browserControls = createExternalBrowserClient(webSocket);
             context.agentContext.externalBrowserControl = browserControls;
             context.agentContext.browserConnector = new BrowserConnector(
-                context,
+                webSocket,
+                browserControls,
             );
 
             webSocket.onclose = (event: object) => {
@@ -441,8 +445,8 @@ async function updateBrowserContext(
                         case "detectPageActions":
                         case "registerPageDynamicAgent":
                         case "getIntentFromRecording":
-                        case "getActionsForUrl":
-                        case "deleteAction": {
+                        case "getMacrosForUrl":
+                        case "deleteMacro": {
                             const discoveryResult =
                                 await handleSchemaDiscoveryAction(
                                     {
@@ -489,7 +493,10 @@ async function updateBrowserContext(
                         case "importWebsiteDataWithProgress":
                         case "importHtmlFolder":
                         case "getWebsiteStats":
-                        case "searchWebMemories": {
+                        case "searchWebMemories":
+                        case "searchByEntities":
+                        case "searchByTopics":
+                        case "hybridSearch": {
                             const websiteResult = await handleWebsiteAction(
                                 data.method,
                                 data.params,
@@ -507,17 +514,16 @@ async function updateBrowserContext(
 
                         case "recordActionUsage":
                         case "getActionStatistics": {
-                            const actionsResult =
-                                await handleActionsStoreAction(
-                                    data.method,
-                                    data.params,
-                                    context,
-                                );
+                            const macrosResult = await handleMacroStoreAction(
+                                data.method,
+                                data.params,
+                                context,
+                            );
 
                             webSocket.send(
                                 JSON.stringify({
                                     id: data.id,
-                                    result: actionsResult,
+                                    result: macrosResult,
                                 }),
                             );
                             break;
@@ -871,10 +877,6 @@ async function executeBrowserAction(
                     return openWebPage(context, action);
                 case "closeWebPage":
                     return closeWebPage(context);
-                case "importWebsiteData":
-                    return importWebsiteData(context, action);
-                case "importHtmlFolder":
-                    return importHtmlFolder(context, action);
                 case "getWebsiteStats":
                     return getWebsiteStats(context, action);
                 case "searchWebMemories":
@@ -904,6 +906,27 @@ async function executeBrowserAction(
                 case "zoomReset":
                     await getActionBrowserControl(context).zoomReset();
                     return;
+                case "search":
+                    await getActionBrowserControl(context).search(
+                        action.parameters.query,
+                    );
+                    return createActionResultFromTextDisplay(
+                        `Opened new tab with query ${action.parameters.query}`,
+                    );
+                case "readPage":
+                    await getActionBrowserControl(context).readPage();
+                    return;
+                case "stopReadPage":
+                    await getActionBrowserControl(context).stopReadPage();
+                    return;
+                case "captureScreenshot":
+                    const dataUrl =
+                        await getActionBrowserControl(
+                            context,
+                        ).captureScreenshot();
+                    return createActionResultFromHtmlDisplay(
+                        `<img src="${dataUrl}" alt="Screenshot" width="100%" />`,
+                    );
                 case "followLinkByText": {
                     const control = getActionBrowserControl(context);
                     const { keywords, openInNewTab } = action.parameters;
@@ -935,8 +958,12 @@ async function executeBrowserAction(
                         `Navigated to [link](${url}) at position ${action.parameters.position}`,
                         `Navigated to link at position ${action.parameters.position}`,
                     );
+                default:
+                    // Should never happen.
+                    throw new Error(
+                        `Internal error: unknown browser action: ${(action as any).actionName}`,
+                    );
             }
-            break;
         case "browser.external":
             switch (action.actionName) {
                 case "closeWindow": {
@@ -1164,17 +1191,17 @@ async function handleGetActionRequest(
             throw new Error("Invalid actionId format");
         }
 
-        debug(`Handling action request for ID: ${actionId}`);
+        debug(`Handling macro request for ID: ${actionId}`);
 
-        // Get the actions store from context
-        const actionsStore = context.agentContext.actionsStore;
-        if (!actionsStore) {
-            throw new Error("ActionsStore not available");
+        // Get the macros store from context
+        const macrosStore = context.agentContext.macrosStore;
+        if (!macrosStore) {
+            throw new Error("MacroStore not available");
         }
 
-        const action = await actionsStore.getAction(actionId);
+        const macro = await macrosStore.getMacro(actionId);
 
-        if (!action) {
+        if (!macro) {
             viewServiceProcess.send({
                 type: "getActionResponse",
                 requestId,
@@ -1189,7 +1216,7 @@ async function handleGetActionRequest(
             type: "getActionResponse",
             requestId,
             success: true,
-            action,
+            action: macro,
             timestamp: Date.now(),
         });
 
@@ -1608,6 +1635,15 @@ async function handleWebsiteAction(
         case "searchWebMemories":
             return await searchWebMemories(parameters, context);
 
+        case "searchByEntities":
+            return await searchByEntities(parameters, context);
+
+        case "searchByTopics":
+            return await searchByTopics(parameters, context);
+
+        case "hybridSearch":
+            return await hybridSearch(parameters, context);
+
         case "getWebsiteStats":
             // Convert to ActionContext format for existing function
             const statsAction = {
@@ -1643,17 +1679,17 @@ async function handleWebsiteAction(
     }
 }
 
-async function handleActionsStoreAction(
+async function handleMacroStoreAction(
     actionName: string,
     parameters: any,
     context: SessionContext<BrowserActionContext>,
 ): Promise<any> {
-    const actionsStore = context.agentContext.actionsStore;
+    const macrosStore = context.agentContext.macrosStore;
 
-    if (!actionsStore) {
+    if (!macrosStore) {
         return {
             success: false,
-            error: "ActionsStore not available",
+            error: "MacroStore not available",
         };
     }
 
@@ -1668,44 +1704,44 @@ async function handleActionsStoreAction(
                     };
                 }
 
-                await actionsStore.recordUsage(actionId);
-                debug(`Recorded usage for action: ${actionId}`);
+                await macrosStore.recordUsage(actionId);
+                debug(`Recorded usage for macro: ${actionId}`);
 
                 return {
                     success: true,
-                    actionId: actionId,
+                    macroId: actionId,
                 };
             }
 
             case "getActionStatistics": {
                 const { url } = parameters;
-                let actions: any[] = [];
-                let totalActions = 0;
+                let macros: any[] = [];
+                let totalMacros = 0;
 
                 if (url) {
-                    // Get actions for specific URL
-                    actions = await actionsStore.getActionsForUrl(url);
-                    totalActions = actions.length;
+                    // Get macros for specific URL
+                    macros = await macrosStore.getMacrosForUrl(url);
+                    totalMacros = macros.length;
                 } else {
-                    // Get all actions
-                    actions = await actionsStore.getAllActions();
-                    totalActions = actions.length;
+                    // Get all macros
+                    macros = await macrosStore.getAllMacros();
+                    totalMacros = macros.length;
                 }
 
                 console.log(
-                    `Retrieved statistics: ${totalActions} total actions`,
+                    `Retrieved statistics: ${totalMacros} total macros`,
                 );
 
                 return {
                     success: true,
-                    totalActions: totalActions,
-                    actions: actions.map((action) => ({
-                        id: action.id,
-                        name: action.name,
-                        author: action.author,
-                        category: action.category,
-                        usageCount: action.metadata.usageCount,
-                        lastUsed: action.metadata.lastUsed,
+                    totalMacros: totalMacros,
+                    macros: macros.map((macro) => ({
+                        id: macro.id,
+                        name: macro.name,
+                        author: macro.author,
+                        category: macro.category,
+                        usageCount: macro.metadata.usageCount,
+                        lastUsed: macro.metadata.lastUsed,
                     })),
                 };
             }

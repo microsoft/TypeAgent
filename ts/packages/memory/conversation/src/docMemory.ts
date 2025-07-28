@@ -10,6 +10,8 @@ import {
     Message,
     MessageMetadata,
 } from "./memory.js";
+import { TypeChatLanguageModel } from "typechat";
+import { fileURLToPath } from "url";
 
 export class DocPartMeta extends MessageMetadata {
     constructor(public sourceUrl?: string | undefined) {
@@ -73,7 +75,6 @@ export class DocMemory
             64,
             () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
         );
-
         super(settings ?? createTextMemorySettings(), nameTag, tags);
         this.messages = new kp.MessageCollection<DocPart>(docParts);
         this.semanticRefs = new kp.SemanticRefCollection();
@@ -87,6 +88,11 @@ export class DocMemory
             lastSemanticRefOrdinal: -1,
             lastIndexed: new Date(),
         };
+        // Customize the search query translator for scoped queries
+        customizeScopeQueryProcessing(
+            this.settings.queryTranslator!,
+            this.settings.languageModel,
+        );
     }
 
     public override get conversation(): kp.IConversation<DocPart> {
@@ -344,4 +350,19 @@ export class DocPartSerializer implements kp.JsonSerializer<DocPart> {
             jMsg.deletionInfo,
         );
     }
+}
+
+function customizeScopeQueryProcessing(
+    searchQueryTranslator: kp.SearchQueryTranslator,
+    languageModel: TypeChatLanguageModel,
+) {
+    // Customize the search query translator for scoped queries
+    const customScopeTranslator =
+        kp.createSearchQueryJsonTranslator<kp.querySchema2.SearchQuery>(
+            languageModel,
+            fileURLToPath(new URL("docSearchQuerySchema.ts", import.meta.url)),
+        );
+    searchQueryTranslator!.translate2 = (request, preamble) => {
+        return customScopeTranslator.translate(request, preamble);
+    };
 }

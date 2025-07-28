@@ -145,21 +145,21 @@ export class Analytics {
             basic: 0,
             summary: 0,
             content: 0,
-            actions: 0,
+            macros: 0,
             full: 0,
         };
         const modeTimeSum: Record<ExtractionMode, number> = {
             basic: 0,
             summary: 0,
             content: 0,
-            actions: 0,
+            macros: 0,
             full: 0,
         };
         const modeSuccesses: Record<ExtractionMode, number> = {
             basic: 0,
             summary: 0,
             content: 0,
-            actions: 0,
+            macros: 0,
             full: 0,
         };
 
@@ -182,9 +182,9 @@ export class Analytics {
                 modeUsage.content > 0
                     ? modeTimeSum.content / modeUsage.content
                     : 0,
-            actions:
-                modeUsage.actions > 0
-                    ? modeTimeSum.actions / modeUsage.actions
+            macros:
+                modeUsage.macros > 0
+                    ? modeTimeSum.macros / modeUsage.macros
                     : 0,
             full: modeUsage.full > 0 ? modeTimeSum.full / modeUsage.full : 0,
         };
@@ -202,9 +202,9 @@ export class Analytics {
                 modeUsage.content > 0
                     ? (modeSuccesses.content / modeUsage.content) * 100
                     : 0,
-            actions:
-                modeUsage.actions > 0
-                    ? (modeSuccesses.actions / modeUsage.actions) * 100
+            macros:
+                modeUsage.macros > 0
+                    ? (modeSuccesses.macros / modeUsage.macros) * 100
                     : 0,
             full:
                 modeUsage.full > 0
@@ -406,21 +406,21 @@ export class Analytics {
                 basic: 0,
                 summary: 0,
                 content: 0,
-                actions: 0,
+                macros: 0,
                 full: 0,
             },
             modeAverageTime: {
                 basic: 0,
                 summary: 0,
                 content: 0,
-                actions: 0,
+                macros: 0,
                 full: 0,
             },
             modeSuccessRate: {
                 basic: 0,
                 summary: 0,
                 content: 0,
-                actions: 0,
+                macros: 0,
                 full: 0,
             },
             averageEntityCount: 0,

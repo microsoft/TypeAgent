@@ -3,6 +3,7 @@
 
 import fs from "fs";
 import path from "path";
+import { isFilePath } from "typeagent";
 
 export function readBatchFile(filePath: string, commentPrefix = "#"): string[] {
     const text = fs.readFileSync(filePath, "utf-8");
@@ -21,4 +22,8 @@ export function getAbsolutePath(relativePath: string): string {
         return relativePath;
     }
     return path.join(process.cwd(), relativePath);
+}
+
+export function getTextOrFile(text: string): string {
+    return isFilePath(text) ? fs.readFileSync(text, "utf-8") : text;
 }

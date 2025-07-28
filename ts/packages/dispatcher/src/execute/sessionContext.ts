@@ -92,7 +92,7 @@ export function createSessionContext<T = unknown>(
             // WARNING: deadlock if this is call because we are processing a request
             return context.commandLock(async () => {
                 context.agents.toggleTransient(subAgentName, enable);
-                // Because of the embedded switcher, we need to clear the cache.
+                // Changing active schemas, we need to clear the cache.
                 context.translatorCache.clear();
                 if (enable) {
                     // REVIEW: is switch current translator the right behavior?

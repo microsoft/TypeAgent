@@ -86,7 +86,7 @@ export async function handleMessage(
                 const currentTab = await getActiveTab();
                 if (currentTab?.url) {
                     const actionsResult = await sendActionToAgent({
-                        actionName: "getActionsForUrl",
+                        actionName: "getMacrosForUrl",
                         parameters: {
                             url: currentTab.url,
                             includeGlobal: true,
@@ -99,6 +99,11 @@ export async function handleMessage(
                     ) {
                         console.log(
                             `Found ${actionsResult.actions.length} actions for schema registration from ActionsStore`,
+                        );
+
+                        console.log(
+                            "Actions for schema registration:",
+                            actionsResult.actions,
                         );
                     }
                 }
@@ -140,9 +145,9 @@ export async function handleMessage(
                 actionId: schemaResult.actionId, // For UI feedback
             };
         }
-        case "getActionsForUrl": {
+        case "getMacrosForUrl": {
             const result = await sendActionToAgent({
-                actionName: "getActionsForUrl",
+                actionName: "getMacrosForUrl",
                 parameters: {
                     url: message.url,
                     includeGlobal: message.includeGlobal ?? true,
@@ -323,6 +328,18 @@ export async function handleMessage(
 
         case "searchWebMemories": {
             return await handleSearchWebMemories(message);
+        }
+
+        case "searchByEntities": {
+            return await handleSearchByEntities(message);
+        }
+
+        case "searchByTopics": {
+            return await handleSearchByTopics(message);
+        }
+
+        case "hybridSearch": {
+            return await handleHybridSearch(message);
         }
 
         // Cross-page intelligence handlers
@@ -567,18 +584,18 @@ export async function handleMessage(
             return await handleCheckIndexStatus();
         }
 
-        case "deleteAction": {
-            // Handler for deleting actions from the ActionsStore
+        case "deleteMacro": {
+            // Handler for deleting macros from the MacroStore
             try {
                 const result = await sendActionToAgent({
-                    actionName: "deleteAction",
+                    actionName: "deleteMacro",
                     parameters: {
-                        actionId: message.actionId,
+                        macroId: message.macroId,
                     },
                 });
                 return result;
             } catch (error) {
-                console.error("Failed to delete action:", error);
+                console.error("Failed to delete macro:", error);
                 return {
                     success: false,
                     error:
@@ -588,10 +605,10 @@ export async function handleMessage(
                 };
             }
         }
-        case "getAllActions": {
+        case "getAllMacros": {
             try {
                 const result = await sendActionToAgent({
-                    actionName: "getActionsForUrl",
+                    actionName: "getMacrosForUrl",
                     parameters: {
                         url: null,
                         includeGlobal: true,
@@ -615,25 +632,6 @@ export async function handleMessage(
             } catch (error) {
                 console.error("Error getting action domains:", error);
                 return { domains: [] };
-            }
-        }
-        case "deleteAction": {
-            try {
-                const result = await sendActionToAgent({
-                    actionName: "deleteAction",
-                    parameters: {
-                        actionId: message.actionId,
-                    },
-                });
-
-                return { success: result.success, error: result.error };
-            } catch (error) {
-                console.error("Error deleting action:", error);
-                return {
-                    success: false,
-                    error:
-                        error instanceof Error ? error.message : String(error),
-                };
             }
         }
 
@@ -1655,6 +1653,207 @@ async function handleTestOffscreenDocument(message: any): Promise<any> {
             success: false,
             error: error instanceof Error ? error.message : "Test failed",
             status: { available: false, method: "unknown", capabilities: [] },
+        };
+    }
+}
+
+// Entity-based search handlers - Preserves full entity graph data
+async function handleSearchByEntities(message: any): Promise<any> {
+    try {
+        const startTime = Date.now();
+
+        // Send action to agent for entity-based search
+        const result = await sendActionToAgent({
+            actionName: "searchByEntities",
+            parameters: {
+                entities: message.entities || [],
+                url: message.url || "",
+                maxResults: message.maxResults || 10,
+                searchScope: "all_indexed",
+                includeMetadata: true,
+            },
+        });
+
+        // Preserve full response data for entity graph view
+        return {
+            success: true,
+            // Core search results
+            websites: result.websites || [],
+            summary: result.summary || {
+                totalFound: 0,
+                searchTime: Date.now() - startTime,
+                strategies: ["entity-direct"],
+                confidence: 0,
+            },
+            // Entity graph specific data
+            answer: result.answer || "Entity search completed",
+            answerType: result.answerType || "direct",
+            answerSources: result.answerSources || [],
+            queryIntent: result.queryIntent || "discovery",
+            relatedEntities: result.relatedEntities || [],
+            suggestedFollowups: result.suggestedFollowups || [],
+            topTopics: result.topTopics || [],
+            // Legacy compatibility
+            results: result.websites || [],
+            searchTime: Date.now() - startTime,
+            totalFound: (result.websites || []).length,
+            searchMethod: "entity-direct",
+            entities: message.entities,
+        };
+    } catch (error) {
+        console.error("Error in searchByEntities:", error);
+        return {
+            success: false,
+            websites: [],
+            results: [],
+            summary: {
+                totalFound: 0,
+                searchTime: 0,
+                strategies: ["entity-direct"],
+                confidence: 0,
+            },
+            answer: "Entity search failed",
+            answerType: "noAnswer",
+            answerSources: [],
+            queryIntent: "discovery",
+            relatedEntities: [],
+            suggestedFollowups: [],
+            topTopics: [],
+            error:
+                error instanceof Error ? error.message : "Entity search failed",
+            searchMethod: "entity-direct",
+            entities: message.entities || [],
+        };
+    }
+}
+
+async function handleSearchByTopics(message: any): Promise<any> {
+    try {
+        const startTime = Date.now();
+
+        // Send action to agent for topic-based search
+        const result = await sendActionToAgent({
+            actionName: "searchByTopics",
+            parameters: {
+                topics: message.topics || [],
+                url: message.url || "",
+                maxResults: message.maxResults || 10,
+                searchScope: "all_indexed",
+                includeMetadata: true,
+            },
+        });
+
+        // Return complete response data needed for entity graph view
+        return {
+            success: true,
+            websites: result.websites || [],
+            summary: result.summary || {
+                text: "",
+                keyPoints: [],
+                confidence: 0,
+                sourceCount: 0,
+            },
+            relatedEntities: result.relatedEntities || [],
+            topTopics: result.topTopics || [],
+            answerSources: result.answerSources || [],
+            searchTime: Date.now() - startTime,
+            totalFound: (result.websites || []).length,
+            searchMethod: "topic-direct",
+            searchScope: "all_indexed",
+            topics: message.topics || [],
+            contextualInfo: result.contextualInfo || {},
+            metadata: result.metadata || {},
+            suggestedFollowups: result.suggestedFollowups || [],
+        };
+    } catch (error) {
+        console.error("Error in searchByTopics:", error);
+        return {
+            success: false,
+            websites: [],
+            summary: {
+                text: "",
+                keyPoints: [],
+                confidence: 0,
+                sourceCount: 0,
+            },
+            relatedEntities: [],
+            topTopics: [],
+            answerSources: [],
+            searchTime: Date.now() - Date.now(),
+            totalFound: 0,
+            contextualInfo: {},
+            metadata: {},
+            suggestedFollowups: [],
+            error:
+                error instanceof Error ? error.message : "Topic search failed",
+            searchMethod: "topic-direct",
+            topics: message.topics || [],
+        };
+    }
+}
+
+async function handleHybridSearch(message: any): Promise<any> {
+    try {
+        const startTime = Date.now();
+
+        // Send action to agent for hybrid search
+        const result = await sendActionToAgent({
+            actionName: "hybridSearch",
+            parameters: {
+                query: message.query || "",
+                url: message.url || "",
+                maxResults: message.maxResults || 10,
+                searchScope: "all_indexed",
+                includeMetadata: true,
+                combineStrategies: true,
+            },
+        });
+
+        // Return complete response data needed for entity graph view
+        return {
+            success: true,
+            websites: result.websites || [],
+            summary: result.summary || {
+                text: "",
+                keyPoints: [],
+                confidence: 0,
+                sourceCount: 0,
+            },
+            relatedEntities: result.relatedEntities || [],
+            topTopics: result.topTopics || [],
+            answerSources: result.answerSources || [],
+            searchTime: Date.now() - startTime,
+            totalFound: (result.websites || []).length,
+            searchMethod: "hybrid-direct",
+            searchScope: "all_indexed",
+            query: message.query || "",
+            contextualInfo: result.contextualInfo || {},
+            metadata: result.metadata || {},
+            suggestedFollowups: result.suggestedFollowups || [],
+        };
+    } catch (error) {
+        console.error("Error in hybridSearch:", error);
+        return {
+            success: false,
+            websites: [],
+            summary: {
+                text: "",
+                keyPoints: [],
+                confidence: 0,
+                sourceCount: 0,
+            },
+            relatedEntities: [],
+            topTopics: [],
+            answerSources: [],
+            searchTime: Date.now() - Date.now(),
+            totalFound: 0,
+            contextualInfo: {},
+            metadata: {},
+            suggestedFollowups: [],
+            error:
+                error instanceof Error ? error.message : "Hybrid search failed",
+            searchMethod: "hybrid-direct",
+            query: message.query || "",
         };
     }
 }

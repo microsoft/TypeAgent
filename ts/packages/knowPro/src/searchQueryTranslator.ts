@@ -7,6 +7,7 @@ import {
     Result,
     TypeChatLanguageModel,
     error,
+    TypeChatJsonTranslator,
 } from "typechat";
 import * as querySchema from "./searchQuerySchema.js";
 import * as querySchema2 from "./searchQuerySchema_v2.js";
@@ -24,7 +25,13 @@ export interface SearchQueryTranslator {
         request: string,
         promptPreamble?: string | PromptSection[],
     ): Promise<Result<querySchema.SearchQuery>>;
-    translateWithScope?: (
+    /**
+     * Experimental. Translate to new schema:  querySchema2.SearchQuery
+     * @param request
+     * @param promptPreamble
+     * @returns {querySchema2.SearchQuery}
+     */
+    translate2?: (
         request: string,
         promptPreamble?: string | PromptSection[],
     ) => Promise<Result<querySchema2.SearchQuery>>;
@@ -38,40 +45,56 @@ export interface SearchQueryTranslator {
 export function createSearchQueryTranslator(
     model: TypeChatLanguageModel,
 ): SearchQueryTranslator {
-    const typeName = "SearchQuery";
-    const searchActionSchema = loadSchema(
-        ["dateTimeSchema.ts", "searchQuerySchema.ts"],
-        import.meta.url,
-    );
-    const searchActionSchemaScope = loadSchema(
-        ["dateTimeSchema.ts", "searchQuerySchema_v2.ts"],
-        import.meta.url,
-    );
-
-    const translator = createJsonTranslator<querySchema.SearchQuery>(
+    const translator = createSearchQueryJsonTranslator<querySchema.SearchQuery>(
         model,
-        createTypeScriptJsonValidator<querySchema.SearchQuery>(
-            searchActionSchema,
-            typeName,
-        ),
+        "searchQuerySchema.ts",
     );
-    const translator_V2 = createJsonTranslator<querySchema2.SearchQuery>(
-        model,
-        createTypeScriptJsonValidator<querySchema2.SearchQuery>(
-            searchActionSchemaScope,
-            typeName,
-        ),
-    );
+    const translator_V2 =
+        createSearchQueryJsonTranslator<querySchema2.SearchQuery>(
+            model,
+            "searchQuerySchema_v2.ts",
+        );
     return {
         translate(request, promptPreamble) {
             return translator.translate(request, promptPreamble);
         },
-        translateWithScope(request, promptPreamble) {
+        translate2(request, promptPreamble) {
             return translator_V2.translate(request, promptPreamble);
         },
     };
 }
 
+/**
+ * Create a query translator using
+ * @param {TypeChatLanguageModel} model
+ * @param schemaFilePath Relative path to schema file
+ * @returns {SearchQueryTranslator}
+ */
+export function createSearchQueryJsonTranslator<
+    T extends querySchema.SearchQuery | querySchema2.SearchQuery,
+>(
+    model: TypeChatLanguageModel,
+    schemaFilePath: string,
+): TypeChatJsonTranslator<T> {
+    const typeName = "SearchQuery";
+    const searchActionSchema = loadSchema(
+        ["dateTimeSchema.ts", schemaFilePath],
+        import.meta.url,
+    );
+    return createJsonTranslator<T>(
+        model,
+        createTypeScriptJsonValidator<T>(searchActionSchema, typeName),
+    );
+}
+
+/**
+ * Translate natural language query into a SearchQuery expression
+ * @param conversation
+ * @param queryTranslator
+ * @param text
+ * @param promptPreamble
+ * @returns
+ */
 export async function searchQueryFromLanguage(
     conversation: IConversation,
     queryTranslator: SearchQueryTranslator,
@@ -87,13 +110,21 @@ export async function searchQueryFromLanguage(
     return result;
 }
 
-export async function searchQueryWithScopeFromLanguage(
+/**
+ * Experimental: translate search query to SearchQuery v2
+ * @param conversation
+ * @param queryTranslator
+ * @param text
+ * @param promptPreamble
+ * @returns {querySchema2.SearchQuery}
+ */
+export async function searchQueryFromLanguage2(
     conversation: IConversation,
     queryTranslator: SearchQueryTranslator,
     text: string,
     promptPreamble?: PromptSection[],
 ): Promise<Result<querySchema2.SearchQuery>> {
-    if (!queryTranslator.translateWithScope) {
+    if (!queryTranslator.translate2) {
         return error("Scoped queries not supported");
     }
     const timeRange = getTimeRangePromptSectionForConversation(conversation);
@@ -101,6 +132,6 @@ export async function searchQueryWithScopeFromLanguage(
         promptPreamble && promptPreamble.length > 0
             ? [...promptPreamble, ...timeRange]
             : timeRange;
-    const result = await queryTranslator.translateWithScope(text, queryContext);
+    const result = await queryTranslator.translate2(text, queryContext);
     return result;
 }

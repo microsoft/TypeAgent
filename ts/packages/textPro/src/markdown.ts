@@ -97,6 +97,7 @@ export function textBlocksFromMarkdown(
                 visitInnerNodes(token);
                 break;
             case "space":
+            case "br":
                 curTextBlock += "\n";
                 break;
             case "text":
@@ -263,6 +264,17 @@ class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
                 const link = token as md.Tokens.Link;
                 this.onLink(link.text, link.href);
                 break;
+            case "strong":
+            case "em":
+                let text: string = token.text;
+                if (!(text.startsWith("__") || text.startsWith("**"))) {
+                    // Auto promote to topics
+                    this.knowledgeBlock.knowledge.topics.push(text);
+                    this.knowledgeBlock.knowledge.entities.push(
+                        emphasisToEntity(text),
+                    );
+                }
+                break;
         }
         this.lastToken = token;
     }
@@ -307,6 +319,8 @@ class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
                 headingToEntity(headerText, headerLevel),
             );
             // Also make header text a tag
+            this.knowledgeBlock.tags.add("heading");
+            this.knowledgeBlock.tags.add("section");
             this.knowledgeBlock.tags.add(headerText);
         }
         //
@@ -346,6 +360,13 @@ export function linkToEntity(
         name: linkText,
         type: ["link", "url"],
         facets: [{ name: "url", value: url }],
+    };
+}
+
+export function emphasisToEntity(text: string): kpLib.ConcreteEntity {
+    return {
+        name: text,
+        type: ["emphasis"],
     };
 }
 

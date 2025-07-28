@@ -8,6 +8,20 @@ export interface ActionResult {
     message: string;
 }
 
+export function normalize(text: string): string {
+    return text.toLowerCase().replace(/[\s\-_.]+/g, "");
+}
+
+export function fuzzyMatchScore(query: string, text: string): number {
+    if (text.includes(query)) return 1.0;
+    let score = 0;
+    const parts = query.split(/\s+/);
+    for (const part of parts) {
+        if (text.includes(part)) score += 1;
+    }
+    return score / parts.length;
+}
+
 export async function findMatchingFiles(
     fileName: string,
     options: {

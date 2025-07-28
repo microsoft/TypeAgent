@@ -9,3 +9,4 @@ export * from "./searchTest.js";
 export * from "./answerTest.js";
 export * from "./knowproCommands.js";
 export * from "./podcastCommands.js";
+export * from "./knowledgeTest.js";

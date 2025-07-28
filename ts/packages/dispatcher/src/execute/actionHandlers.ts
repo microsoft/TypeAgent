@@ -1,7 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ExecutableAction, FullAction, getFullActionName } from "agent-cache";
+import {
+    ExecutableAction,
+    FullAction,
+    getFullActionName,
+    PromptEntity,
+} from "agent-cache";
 import {
     CommandHandlerContext,
     getCommandResult,
@@ -14,7 +19,6 @@ import {
     ParsedCommandParams,
     ParameterDefinitions,
     AppAction,
-    ActionResultActivityContext,
 } from "@typeagent/agent-sdk";
 import {
     createActionResult,
@@ -26,12 +30,10 @@ import {
     displayStatus,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
-import { PromptEntity } from "agent-cache";
 import { IncrementalJsonValueCallBack } from "common-utils";
 import { ProfileNames } from "../utils/profileNames.js";
 import { UnknownAction } from "../context/dispatcher/schema/dispatcherActionSchema.js";
 import {
-    DispatcherActivityName,
     DispatcherName,
     isUnknownAction,
 } from "../context/dispatcher/dispatcherUtils.js";
@@ -52,6 +54,7 @@ import {
     addActionResultToMemory,
     addResultToMemory,
 } from "../context/memory.js";
+import { setActivityContext } from "./activityContext.js";
 
 const debugActions = registerDebug("typeagent:dispatcher:actions");
 
@@ -257,59 +260,6 @@ async function canExecute(
     return true;
 }
 
-export function setActivityContext(
-    schemaName: string,
-    resultActivityContext: ActionResultActivityContext,
-    systemContext: CommandHandlerContext,
-) {
-    if (resultActivityContext === null) {
-        // Clear the activity context.
-        clearActivityContext(systemContext);
-        return undefined;
-    }
-
-    const appAgentName = getAppAgentName(schemaName);
-    // TODO: validation
-    const {
-        activityName,
-        description,
-        state,
-        openLocalView,
-        activityEndAction,
-    } = resultActivityContext;
-
-    let action: AppAction | undefined;
-    if (activityEndAction !== undefined) {
-        action = structuredClone(activityEndAction);
-        if (action.schemaName === undefined) {
-            action.schemaName = schemaName;
-        } else {
-            if (
-                getAppAgentName(action.schemaName) !==
-                getAppAgentName(schemaName)
-            ) {
-                throw new Error(
-                    `Action schema name '${action.schemaName}' does not match the activity app agent name '${getAppAgentName(schemaName)}'.`,
-                );
-            }
-        }
-    }
-
-    const prevOpenLocalView = systemContext.activityContext?.openLocalView;
-    const activityContext = {
-        appAgentName,
-        activityName,
-        description,
-        state,
-        openLocalView: prevOpenLocalView || openLocalView,
-        activityEndAction: action,
-    };
-
-    systemContext.activityContext = activityContext;
-    systemContext.agents.toggleTransient(DispatcherActivityName, true);
-    return activityContext;
-}
-
 export async function executeActions(
     actions: ExecutableAction[],
     entities: PromptEntity[] | undefined,
@@ -334,7 +284,6 @@ export async function executeActions(
 
     debugActions(`Executing actions: ${JSON.stringify(actions, undefined, 2)}`);
     let actionIndex = 0;
-
     while (actionQueue.length !== 0) {
         const pending = actionQueue.shift()!;
         const executableAction = pending.executableAction;
@@ -421,28 +370,40 @@ export async function executeActions(
                 );
             }
 
-            const activityContext = setActivityContext(
+            debugActions(
+                `Result activity context: ${JSON.stringify(result.activityContext, undefined, 2)}`,
+            );
+            const prevActivityContext = systemContext.activityContext;
+            const openLocalView = setActivityContext(
                 action.schemaName,
                 result.activityContext,
                 systemContext,
             );
-            if (activityContext === undefined) {
+            if (openLocalView !== undefined) {
+                if (openLocalView) {
+                    const port =
+                        systemContext.agents.getLocalHostPort(appAgentName);
+                    if (port !== undefined) {
+                        await systemContext.clientIO.openLocalView(port);
+                    }
+                } else if (prevActivityContext !== undefined) {
+                    const port = systemContext.agents.getLocalHostPort(
+                        prevActivityContext.appAgentName,
+                    );
+                    if (port !== undefined) {
+                        await systemContext.clientIO.closeLocalView(port);
+                    }
+                }
+            }
+            if (systemContext.activityContext !== undefined) {
+                debugActions(
+                    `Starting activity: ${JSON.stringify(systemContext.activityContext, undefined, 2)}`,
+                );
+            } else if (prevActivityContext !== undefined) {
                 // Activity context cleared.
                 debugActions(
-                    `Clear activity: ${JSON.stringify(systemContext.activityContext, undefined, 2)}`,
+                    `Stopped activity: ${JSON.stringify(prevActivityContext, undefined, 2)}`,
                 );
-                continue;
-            }
-            debugActions(
-                `Starting activity: ${JSON.stringify(systemContext.activityContext, undefined, 2)}`,
-            );
-
-            if (activityContext.openLocalView) {
-                const port =
-                    systemContext.agents.getLocalHostPort(appAgentName);
-                if (port !== undefined) {
-                    await systemContext.clientIO.openLocalView(port);
-                }
             }
         }
 
@@ -465,22 +426,6 @@ export async function executeActions(
         }
         actionIndex++;
     }
-}
-
-async function clearActivityContext(
-    context: CommandHandlerContext,
-): Promise<void> {
-    const activityContext = context.activityContext;
-    if (activityContext?.openLocalView) {
-        const port = context.agents.getLocalHostPort(
-            activityContext.appAgentName,
-        );
-        if (port !== undefined) {
-            await context.clientIO.closeLocalView(port);
-        }
-    }
-    context.activityContext = undefined;
-    context.agents.toggleTransient(DispatcherActivityName, false);
 }
 
 function getAdditionalExecutableActions(

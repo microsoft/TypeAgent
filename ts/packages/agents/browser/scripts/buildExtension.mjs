@@ -56,10 +56,11 @@ const sharedScripts = {
     webTypeAgentMain: "webTypeAgentMain.ts",
     webTypeAgentContentScript: "webTypeAgentContentScript.ts",
     "views/options": "views/options.ts",
-    "views/pageActions": "views/pageActions.ts",
-    "views/actionsLibrary": "views/actionsLibrary.ts",
+    "views/pageMacros": "views/pageMacros.ts",
+    "views/macrosLibrary": "views/macrosLibrary.ts",
     "views/entityGraphView": "views/entityGraphView.ts",
     "views/pageKnowledge": "views/pageKnowledge.ts",
+    "views/annotationsLibrary": "views/annotationsLibrary.ts",
     "views/knowledgeLibrary": "views/knowledgeLibrary.ts",
     "views/pdfView": "views/pdfView.ts",
     uiEventsDispatcher: "uiEventsDispatcher.ts",
@@ -155,12 +156,12 @@ if (verbose) console.log(chalk.cyan("\n📁 Copying Chrome static files..."));
 copyFileSync(`${srcDir}/manifest.json`, `${chromeOutDir}/manifest.json`);
 mkdirSync(`${chromeOutDir}/views`, { recursive: true });
 copyFileSync(
-    `${srcDir}/views/pageActions.html`,
-    `${chromeOutDir}/views/pageActions.html`,
+    `${srcDir}/views/pageMacros.html`,
+    `${chromeOutDir}/views/pageMacros.html`,
 );
 copyFileSync(
-    `${srcDir}/views/actionsLibrary.html`,
-    `${chromeOutDir}/views/actionsLibrary.html`,
+    `${srcDir}/views/macrosLibrary.html`,
+    `${chromeOutDir}/views/macrosLibrary.html`,
 );
 
 copyFileSync(
@@ -192,6 +193,10 @@ copyFileSync(
 copyFileSync(
     `${srcDir}/views/knowledgeLibrary.css`,
     `${chromeOutDir}/views/knowledgeLibrary.css`,
+);
+copyFileSync(
+    `${srcDir}/views/annotationsLibrary.html`,
+    `${chromeOutDir}/views/annotationsLibrary.html`,
 );
 mkdirSync(`${chromeOutDir}/offscreen`, { recursive: true });
 copyFileSync(

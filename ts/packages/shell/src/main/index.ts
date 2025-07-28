@@ -326,6 +326,9 @@ async function initializeDispatcher(
                 "CommandProcessed",
             );
 
+            // Give the chat view the focus back after the command for the next command.
+            shellWindow.chatView.webContents.focus();
+
             // Update the summary after processing the command in case state changed.
             updateSummary(dispatcher);
             return commandResult;

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 /**
- * Core data structures for the ActionsStore system
+ * Core data structures for the MacroStore system
  */
 
 interface DOMRect {
@@ -16,33 +16,33 @@ interface DOMRect {
     left: number;
 }
 
-export interface StoredAction {
+export interface StoredMacro {
     // Core Identity
     id: string; // UUID v4
     name: string; // Human-readable name (max 100 chars)
     version: string; // Semantic version (e.g., "1.0.0")
 
     // Metadata
-    description: string; // Action description (max 500 chars)
-    category: ActionCategory; // Predefined categories
+    description: string; // Macro description (max 500 chars)
+    category: MacroCategory; // Predefined categories
     tags: string[]; // Searchable tags (max 10, 30 chars each)
-    author: ActionAuthor; // How action was created
+    author: MacroAuthor; // How macro was created
 
     // Scope and Applicability
-    scope: ActionScope; // Where this action applies
+    scope: MacroScope; // Where this macro applies
     urlPatterns: UrlPattern[]; // URL matching rules
 
-    // Action Definition (consolidated from current multi-property storage)
-    definition: ActionDefinition; // All schema and execution data
+    // Macro Definition (consolidated from current multi-property storage)
+    definition: MacroDefinition; // All schema and execution data
 
     // Context Data (from current recording system)
-    context: ActionContext; // HTML, screenshots, selectors
+    context: MacroContext; // HTML, screenshots, selectors
 
     // Management
-    metadata: ActionMetadata; // Timestamps, usage, relationships
+    metadata: MacroMetadata; // Timestamps, usage, relationships
 }
 
-export type ActionCategory =
+export type MacroCategory =
     | "navigation" // Page navigation, links, back/forward
     | "form" // Form filling, input, submission
     | "commerce" // Shopping, cart, checkout, payment
@@ -53,9 +53,9 @@ export type ActionCategory =
     | "utility" // General utilities, tools
     | "custom"; // User-defined category
 
-export type ActionAuthor = "discovered" | "user";
+export type MacroAuthor = "discovered" | "user";
 
-export interface ActionScope {
+export interface MacroScope {
     type: "global" | "domain" | "pattern" | "page";
     domain?: string; // Required for domain/pattern/page
     priority: number; // 1-100, higher = more specific
@@ -68,28 +68,28 @@ export interface UrlPattern {
     description?: string; // Human-readable description
 }
 
-export interface ActionDefinition {
-    // TypeScript type definition for action schema
+export interface MacroDefinition {
+    // TypeScript type definition for macro schema
     intentSchema?: string;
 
     // Structured intent parameters
     intentJson?: UserIntent;
 
-    // Execution steps for the action
-    actionSteps?: ActionStep[];
+    // Execution steps for the macro
+    macroSteps?: MacroStep[];
 
     // Auto-discovered schema data
     detectedSchema?: any;
 
-    actionsJson?: any;
-    actionDefinition?: any;
+    macrosJson?: any;
+    macroDefinition?: any;
     description?: string;
 
     screenshot?: string[] | undefined;
     steps?: any | undefined;
 }
 
-export interface ActionContext {
+export interface MacroContext {
     // From current userActions
     recordedSteps?: RecordedStep[]; // Original recorded interactions
     screenshots?: string[]; // Base64 encoded screenshots
@@ -101,19 +101,19 @@ export interface ActionContext {
     viewport?: ViewportInfo; // Viewport size and settings
 }
 
-export interface ActionMetadata {
+export interface MacroMetadata {
     createdAt: string; // ISO 8601 timestamp
     updatedAt: string; // ISO 8601 timestamp
     usageCount: number; // Usage statistics
     lastUsed?: string; // Last usage timestamp
 
     // Relationships
-    relatedActions?: string[]; // Related action IDs
+    relatedMacros?: string[]; // Related macro IDs
     supersedes?: string;
     supersededBy?: string;
 
     // Validation
-    isValid: boolean; // Whether action is valid
+    isValid: boolean; // Whether macro is valid
     validationErrors?: string[]; // Validation error messages
 }
 
@@ -131,7 +131,7 @@ export interface IntentParameter {
     defaultValue?: any;
 }
 
-export interface ActionStep {
+export interface MacroStep {
     type: string; // Step type (click, type, etc.)
     target?: string; // CSS selector or description
     value?: any; // Step value/parameter
@@ -187,10 +187,10 @@ export interface DomainConfig {
 }
 
 export interface DomainSettings {
-    autoDiscovery: boolean; // Enable automatic action discovery
-    inheritGlobal: boolean; // Inherit global actions
-    defaultCategory: ActionCategory; // Default category for new actions
-    maxActions: number; // Maximum actions for this domain
+    autoDiscovery: boolean; // Enable automatic macro discovery
+    inheritGlobal: boolean; // Inherit global macros
+    defaultCategory: MacroCategory; // Default category for new macros
+    maxMacros: number; // Maximum macros for this domain
 
     // Custom selectors for common elements
     customSelectors: Record<string, string>;
@@ -211,7 +211,7 @@ export interface UrlPatternDefinition {
     pattern: string; // Pattern string
     type: "glob" | "regex"; // Pattern type
     description: string; // Human description
-    category?: ActionCategory; // Default category for this pattern
+    category?: MacroCategory; // Default category for this pattern
     priority: number; // Pattern priority (1-100)
 }
 
@@ -240,17 +240,17 @@ export type SiteType =
 
 // Storage operation interfaces
 export interface StoreStatistics {
-    totalActions: number;
-    actionsByScope: Record<ActionScope["type"], number>;
-    actionsByCategory: Record<ActionCategory, number>;
-    actionsByAuthor: Record<ActionAuthor, number>;
+    totalMacros: number;
+    macrosByScope: Record<MacroScope["type"], number>;
+    macrosByCategory: Record<MacroCategory, number>;
+    macrosByAuthor: Record<MacroAuthor, number>;
     totalDomains: number;
     totalPatterns: number;
 
     usage: {
-        totalUsage: number; // Total action usages
-        averageUsage: number; // Average usage per action
-        mostUsedActions: Array<{
+        totalUsage: number; // Total macro usages
+        averageUsage: number; // Average usage per macro
+        mostUsedMacros: Array<{
             id: string;
             name: string;
             count: number;
@@ -259,32 +259,32 @@ export interface StoreStatistics {
 
     storage: {
         totalSize: number; // Total storage size in bytes
-        actionFiles: number; // Number of action files
+        macroFiles: number; // Number of macro files
         domainConfigs: number; // Number of domain configs
         indexSize: number; // Index file sizes
     };
 
     health: {
-        validActions: number; // Valid actions count
-        invalidActions: number; // Invalid actions count
+        validMacros: number; // Valid macros count
+        invalidMacros: number; // Invalid macros count
         lastCleanup?: string; // Last cleanup timestamp
         lastBackup?: string; // Last backup timestamp
     };
 }
 
-// Action index for fast lookups
-export interface ActionIndex {
+// Macro index for fast lookups
+export interface MacroIndex {
     version: string;
     lastUpdated: string;
-    actions: Record<string, ActionIndexEntry>;
+    macros: Record<string, MacroIndexEntry>;
 }
 
-export interface ActionIndexEntry {
+export interface MacroIndexEntry {
     id: string;
     name: string;
-    scope: ActionScope;
-    category: ActionCategory;
-    author: ActionAuthor;
+    scope: MacroScope;
+    category: MacroCategory;
+    author: MacroAuthor;
     filePath: string;
     lastModified: string;
     usageCount: number;
@@ -306,7 +306,7 @@ export interface ValidationError {
 // Storage operation results
 export interface SaveResult {
     success: boolean;
-    actionId?: string;
+    macroId?: string;
     error?: string;
 }
 
@@ -319,17 +319,17 @@ export interface LoadResult<T> {
 // Advanced Features - Search and Analytics
 
 // Search Types
-export interface ActionSearchQuery {
+export interface MacroSearchQuery {
     text?: string;
-    filters?: ActionFilter;
+    filters?: MacroFilter;
     limit?: number;
     offset?: number;
     sortBy?: "relevance" | "name" | "usage" | "created" | "updated";
     sortOrder?: "asc" | "desc";
 }
 
-export interface ActionSearchResult {
-    actions: StoredAction[];
+export interface MacroSearchResult {
+    macros: StoredMacro[];
     total: number;
     hasMore: boolean;
     searchStats: {
@@ -340,7 +340,7 @@ export interface ActionSearchResult {
 
 export interface SearchSuggestion {
     text: string;
-    type: "action" | "tag" | "domain" | "category";
+    type: "macro" | "tag" | "domain" | "category";
     score: number;
     context?: string;
 }
@@ -355,8 +355,8 @@ export interface UsageContext {
     sessionId?: string;
 }
 
-export interface ActionUsageStats {
-    actionId: string;
+export interface MacroUsageStats {
+    macroId: string;
     totalUsage: number;
     lastUsed: string;
     usageHistory: Array<{
@@ -374,10 +374,10 @@ export interface ActionUsageStats {
 
 export interface UsageStatistics {
     totalUsage: number;
-    totalActions: number;
+    totalMacros: number;
     averageUsage: number;
-    mostUsedActions: Array<{
-        actionId: string;
+    mostUsedMacros: Array<{
+        macroId: string;
         usageCount: number;
         lastUsed: string;
         successRate: number;
@@ -401,10 +401,10 @@ export interface UsageStatistics {
 export interface DomainAnalytics {
     domain: string;
     totalUsage: number;
-    uniqueActions: number;
+    uniqueMacros: number;
     averageSuccessRate: number;
-    popularActions: Array<{
-        actionId: string;
+    popularMacros: Array<{
+        macroId: string;
         name: string;
         usage: number;
     }>;
@@ -420,7 +420,7 @@ export interface DomainAnalytics {
 export interface PerformanceMetrics {
     timestamp: string;
     averageSearchTime: number;
-    averageActionExecutionTime: number;
+    averageMacroExecutionTime: number;
     cacheHitRate: number;
     errorRate: number;
     memoryUsage: number;
@@ -437,7 +437,7 @@ export interface EnhancedStoreStatistics extends StoreStatistics {
     };
     tagStats: {
         totalTags: number;
-        averageTagsPerAction: number;
+        averageTagsPerMacro: number;
         popularTags: TagStatistics[];
     };
     performanceStats: PerformanceMetrics;
@@ -457,11 +457,11 @@ export interface TimeRange {
 }
 
 // Additional types for filtering
-export interface ActionFilter {
-    categories?: ActionCategory[];
-    authors?: ActionAuthor[];
+export interface MacroFilter {
+    categories?: MacroCategory[];
+    authors?: MacroAuthor[];
     domains?: string[];
-    scopes?: ActionScope["type"][];
+    scopes?: MacroScope["type"][];
     tags?: string[];
     minUsage?: number;
     maxUsage?: number;
@@ -485,3 +485,21 @@ export interface TagStatistics {
     lastUsed?: string;
     trending: boolean;
 }
+
+// Backward compatibility exports - these should be removed after full refactoring
+export type StoredAction = StoredMacro;
+export type ActionCategory = MacroCategory;
+export type ActionAuthor = MacroAuthor;
+export type ActionScope = MacroScope;
+export type ActionDefinition = MacroDefinition;
+export type ActionContext = MacroContext;
+export type ActionMetadata = MacroMetadata;
+export type ActionStep = MacroStep;
+export type ActionIndex = MacroIndex;
+export type ActionIndexEntry = MacroIndexEntry;
+export type ActionSearchQuery = MacroSearchQuery;
+export type ActionSearchResult = MacroSearchResult;
+export type ActionFilter = MacroFilter;
+export type ActionUsageStats = MacroUsageStats;
+// Note: ResolvedAction is an alias for ResolvedMacro (defined in patternResolver.mts)
+export type ResolvedAction = import("./patternResolver.mjs").ResolvedMacro;

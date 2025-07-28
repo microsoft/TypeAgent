@@ -12,6 +12,8 @@ import {
     createSearchTerm,
     createAndTermGroup,
     createOrTermGroup,
+    createPropertySearchTerm,
+    createOrMaxTermGroup,
 } from "../src/searchLib.js";
 import {
     emptyConversation,
@@ -31,6 +33,7 @@ import {
     verifySemanticRefResult,
 } from "./verify.js";
 import { hasTestKeys, describeIf } from "test-lib";
+import { validateSearchTermGroup } from "../src/compileLib.js";
 
 /**
  * These tests are designed to run offline.
@@ -140,7 +143,89 @@ describe("search.offline", () => {
         },
         testTimeout,
     );
+    test(
+        "searchTermGroup.validate",
+        () => {
+            let stg = createAndTermGroup();
 
+            let term = createSearchTerm("book");
+            term.relatedTerms = [{ text: "novel" }, { text: "fiction" }];
+            stg.terms.push(term);
+            term = createSearchTerm("movie");
+            stg.terms.push(term);
+            let propertyTerm = createPropertySearchTerm("type", "book");
+            stg.terms.push(propertyTerm);
+
+            let nestedGroup = createOrMaxTermGroup();
+            term = createSearchTerm("bicycle");
+            term.relatedTerms = [{ text: "bike" }, { text: "cycle" }];
+            nestedGroup.terms.push(term);
+            propertyTerm = createPropertySearchTerm("type", "album");
+            nestedGroup.terms.push(term);
+
+            stg.terms.push(nestedGroup);
+
+            let error = validateSearchTermGroup(stg);
+            expect(error).toBeUndefined();
+
+            stg = createOrTermGroup();
+            (stg as any).booleanOp = "";
+            error = validateSearchTermGroup(stg);
+            expect(error).toBeDefined();
+
+            stg = createOrTermGroup();
+            error = validateSearchTermGroup(stg);
+            expect(error).toBeDefined();
+
+            term = createSearchTerm("");
+            stg.terms.push(term);
+            error = validateSearchTermGroup(stg);
+            expect(error).toBeDefined();
+            stg.terms.pop();
+
+            term = createSearchTerm("book");
+            stg.terms.push(term);
+            term.relatedTerms = [];
+            term.relatedTerms.push({ text: "novel" });
+            term.relatedTerms.push({ text: "" });
+            error = validateSearchTermGroup(stg);
+            expect(error).toBeDefined();
+            stg.terms.pop();
+
+            term = createSearchTerm("book");
+            stg.terms.push(term);
+            term.relatedTerms = [];
+            term.relatedTerms.push({ text: "novel" });
+            term.relatedTerms.push({ text: "fiction" });
+            error = validateSearchTermGroup(stg);
+            expect(error).toBeUndefined();
+
+            propertyTerm = createPropertySearchTerm("", "value");
+            stg.terms.push(propertyTerm);
+            error = validateSearchTermGroup(stg);
+            expect(error).toBeDefined();
+            stg.terms.pop();
+
+            propertyTerm = createPropertySearchTerm("name", "");
+            stg.terms.push(propertyTerm);
+            error = validateSearchTermGroup(stg);
+            expect(error).toBeDefined();
+            stg.terms.pop();
+
+            propertyTerm = createPropertySearchTerm("name", "value");
+            stg.terms.push(propertyTerm);
+            error = validateSearchTermGroup(stg);
+            expect(error).toBeUndefined();
+
+            nestedGroup = createOrTermGroup();
+            propertyTerm = createPropertySearchTerm("", "value");
+            nestedGroup.terms.push(propertyTerm);
+            stg.terms.push(nestedGroup);
+            error = validateSearchTermGroup(stg);
+            expect(error).toBeDefined();
+        },
+        testTimeout,
+    );
     async function runSearchKnowledge(
         termGroup: SearchTermGroup,
         knowledgeType: KnowledgeType,

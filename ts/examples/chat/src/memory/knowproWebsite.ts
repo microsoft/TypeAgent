@@ -311,7 +311,7 @@ export async function createKnowproWebsiteCommands(
                 );
 
                 if (
-                    namedArgs.extractionMode === "actions" ||
+                    namedArgs.extractionMode === "macros" ||
                     namedArgs.extractionMode === "full"
                 ) {
                     context.printer.writeLine(
@@ -354,7 +354,7 @@ export async function createKnowproWebsiteCommands(
 
                 // Report action detection results
                 if (
-                    namedArgs.extractionMode === "actions" ||
+                    namedArgs.extractionMode === "macros" ||
                     namedArgs.extractionMode === "full"
                 ) {
                     const actionStats = calculateActionStats(websites);

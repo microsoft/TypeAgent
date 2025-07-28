@@ -121,5 +121,21 @@ export function createInlineBrowserControl(
                 "Closing the inline browser window is not supported.",
             );
         },
+        async search() {
+            throw new Error("Search is not supported in inline browser.");
+        },
+        async readPage() {
+            throw new Error("Reading page is not supported in inline browser.");
+        },
+        async stopReadPage() {
+            throw new Error(
+                "Stopping reading page is not supported in inline browser.",
+            );
+        },
+        async captureScreenshot() {
+            const image =
+                await shellWindow.inlineBrowser.webContents.capturePage();
+            return `data:image/png;base64,${image.toPNG().toString("base64")}`;
+        },
     };
 }

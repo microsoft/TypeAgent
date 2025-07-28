@@ -32,7 +32,7 @@ export type ExtractionMode =
     | "basic"
     | "summary"
     | "content"
-    | "actions"
+    | "macros"
     | "full";
 
 /**
@@ -91,7 +91,7 @@ export const EXTRACTION_MODE_CONFIGS: Record<
         extractsActions: false,
         extractsRelationships: false,
         knowledgeStrategy: "basic",
-        defaultChunkSize: 500,
+        defaultChunkSize: 8000,
         defaultQualityThreshold: 0.2,
         defaultConcurrentExtractions: 10,
     },
@@ -101,7 +101,7 @@ export const EXTRACTION_MODE_CONFIGS: Record<
         extractsActions: false,
         extractsRelationships: true,
         knowledgeStrategy: "hybrid",
-        defaultChunkSize: 2000,
+        defaultChunkSize: 8000,
         defaultQualityThreshold: 0.25,
         defaultConcurrentExtractions: 5,
     },
@@ -111,17 +111,17 @@ export const EXTRACTION_MODE_CONFIGS: Record<
         extractsActions: false,
         extractsRelationships: false,
         knowledgeStrategy: "hybrid",
-        defaultChunkSize: 1000,
+        defaultChunkSize: 8000,
         defaultQualityThreshold: 0.3,
         defaultConcurrentExtractions: 5,
     },
-    actions: {
-        description: "Content + action detection with AI knowledge processing",
+    macros: {
+        description: "Content + macros detection with AI knowledge processing",
         usesAI: true,
         extractsActions: true,
         extractsRelationships: false,
         knowledgeStrategy: "hybrid",
-        defaultChunkSize: 1200,
+        defaultChunkSize: 8000,
         defaultQualityThreshold: 0.35,
         defaultConcurrentExtractions: 3,
     },
@@ -132,7 +132,7 @@ export const EXTRACTION_MODE_CONFIGS: Record<
         extractsActions: true,
         extractsRelationships: true,
         knowledgeStrategy: "hybrid",
-        defaultChunkSize: 1500,
+        defaultChunkSize: 8000,
         defaultQualityThreshold: 0.4,
         defaultConcurrentExtractions: 2,
     },

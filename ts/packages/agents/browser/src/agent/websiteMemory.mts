@@ -7,11 +7,11 @@ import {
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
+import { GetWebsiteStats } from "./actionsSchema.mjs";
 import {
     ImportWebsiteData,
     ImportHtmlFolder,
-    GetWebsiteStats,
-} from "./actionsSchema.mjs";
+} from "./knowledge/schema/knowledgeImport.mjs";
 import { BrowserActionContext } from "./actionHandler.mjs";
 import {
     searchWebMemories,
@@ -419,24 +419,8 @@ export async function importWebsiteDataFromSession(
             await context.agentContext.websiteCollection.buildIndex();
         }
 
-        // Update entity graph with new websites using entity processing service
-        try {
-            debug("Processing entities for imported websites...");
-            const { getEntityProcessingService } = await import(
-                "./knowledge/entityProcessingService.mjs"
-            );
-            const entityProcessor = getEntityProcessingService();
-            await entityProcessor.processWebsites(
-                websites,
-                context.agentContext.websiteCollection,
-            );
-            debug(
-                `Entity processing completed for ${websites.length} websites`,
-            );
-        } catch (error) {
-            debug("Entity processing failed:", error);
-            // Don't fail the import if entity processing fails
-        }
+        // Entity processing is now handled by the website-memory package integration
+        debug(`Website import completed for ${websites.length} websites`);
 
         // Persist the website collection to disk
         try {
@@ -765,24 +749,8 @@ export async function importHtmlFolderFromSession(
                 await context.agentContext.websiteCollection.buildIndex();
             }
 
-            // Process entities for imported HTML files
-            try {
-                debug("Processing entities for imported HTML files...");
-                const { getEntityProcessingService } = await import(
-                    "./knowledge/entityProcessingService.mjs"
-                );
-                const entityProcessor = getEntityProcessingService();
-                await entityProcessor.processWebsites(
-                    websites,
-                    context.agentContext.websiteCollection,
-                );
-                debug(
-                    `Entity processing completed for ${websites.length} HTML files`,
-                );
-            } catch (error) {
-                debug("Entity processing failed:", error);
-                // Don't fail the import if entity processing fails
-            }
+            // Entity processing is now handled by the website-memory package integration
+            debug(`HTML file import completed for ${websites.length} files`);
 
             try {
                 if (context.agentContext.index?.path) {

@@ -102,22 +102,27 @@ export function matchedValues(
     }
 
     for (const matches of matchedTransformText.values()) {
-        // See if there are known entities
+        const transformInfo = matches.transformInfo;
+
+        if (config.partial && matches.text.length !== transformInfo.partCount) {
+            // Partial match, so we don't have all the parts.  Just skip.
+            continue;
+        }
+
+        // Check existing values.
         const value = matchValueTranslator.transform(
-            matches.transformInfo,
+            transformInfo,
             matches.text,
             config.history,
         );
-        const propertyName = getPropertyNameFromTransformInfo(
-            matches.transformInfo,
-        );
+        const propertyName = getPropertyNameFromTransformInfo(transformInfo);
         if (value !== undefined) {
             values.push([propertyName, value]);
             matchedCount++;
 
             if (conflictValues !== undefined) {
                 const v = matchValueTranslator.transformConflicts?.(
-                    matches.transformInfo,
+                    transformInfo,
                     matches.text,
                 );
                 if (v !== undefined) {
