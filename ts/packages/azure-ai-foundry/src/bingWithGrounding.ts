@@ -57,6 +57,6 @@ export function apiSettingsFromEnv(
         aliasKeywordExtractorAgentId: getEnvSetting(
             env,
             EnvVars.AZURE_FOUNDRY_AGENT_ID_ALIAS_KEYWORD_EXTRACTOR,
-        )
+        ),
     };
 }

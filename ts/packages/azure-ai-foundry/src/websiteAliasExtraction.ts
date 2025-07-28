@@ -4,7 +4,12 @@
 import { AIProjectClient } from "@azure/ai-projects";
 import { bingWithGrounding } from "./index.js";
 import * as agents from "./agents.js";
-import { Agent, MessageContentUnion, ThreadMessage, ToolUtility } from "@azure/ai-agents";
+import {
+    Agent,
+    MessageContentUnion,
+    ThreadMessage,
+    ToolUtility,
+} from "@azure/ai-agents";
 import { DefaultAzureCredential } from "@azure/identity";
 import { urlResolutionAction } from "./urlResolver.js";
 import registerDebug from "debug";
@@ -12,11 +17,11 @@ import registerDebug from "debug";
 const debug = registerDebug("typeagent:azure-ai-foundry:aliasKeywordExtractor");
 
 export type extractedAliases = {
-  site: string;
-  brandedKeyWords: string[];
-  topRankingKeywords: string[],
-  extractedKeywordsByClick: string[]
-}
+    site: string;
+    brandedKeyWords: string[];
+    topRankingKeywords: string[];
+    extractedKeywordsByClick: string[];
+};
 
 /*
  * Attempts to retrive the URL resolution agent from the AI project and creates it if necessary
@@ -56,7 +61,6 @@ interface Response {
         },
     );
 }
-
 
 // TODO: IMPLEMENT
 export async function extractAliasesForURL(

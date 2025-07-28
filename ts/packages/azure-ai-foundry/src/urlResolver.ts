@@ -436,7 +436,12 @@ export async function resolveURLWithWikipedia(
 /**
  * The keyword to site map is a JSON file that maps keywords to sites.
  */
-export const keyWordsToSites: Record<string, string | undefined> = JSON.parse(readFileSync("../../examples/websiteAliases/resolvedKeywords.json", "utf-8"));
+export const keyWordsToSites: Record<string, string | undefined> = JSON.parse(
+    readFileSync(
+        "../../examples/websiteAliases/resolvedKeywords.json",
+        "utf-8",
+    ),
+);
 
 /**
  * Resolves a URL by keyword using the URL resolver agent.
@@ -446,6 +451,5 @@ export const keyWordsToSites: Record<string, string | undefined> = JSON.parse(re
 export async function resolveURLByKeyword(
     keyword: string,
 ): Promise<string | undefined | null> {
-
     return keyWordsToSites[keyword] ?? null;
 }
