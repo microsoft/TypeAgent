@@ -28,7 +28,6 @@ import {
 } from "./schema/discoveryActions.mjs";
 import { UserIntent } from "./schema/recordedActions.mjs";
 import { createSchemaAuthoringAgent } from "./authoringActionHandler.mjs";
-import { ActionCategory } from "../storage/types.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:browser:discover:handler");
@@ -401,68 +400,6 @@ async function getIntentSchemaFromJSON(
     };
 }
 
-// Helper function to infer action category
-function inferCategoryFromAction(actionData: any): ActionCategory {
-    const name = actionData.name?.toLowerCase() || "";
-    const description = actionData.description?.toLowerCase() || "";
-    const steps = actionData.steps || [];
-
-    // Check for form-related actions
-    if (
-        name.includes("form") ||
-        name.includes("submit") ||
-        name.includes("input") ||
-        description.includes("form") ||
-        description.includes("submit") ||
-        steps.some(
-            (step: any) => step.type === "type" || step.type === "submit",
-        )
-    ) {
-        return "form";
-    }
-
-    // Check for navigation actions
-    if (
-        name.includes("navigate") ||
-        name.includes("link") ||
-        name.includes("click") ||
-        description.includes("navigate") ||
-        description.includes("link") ||
-        steps.some(
-            (step: any) => step.type === "click" && step.target?.includes("a"),
-        )
-    ) {
-        return "navigation";
-    }
-
-    // Check for commerce actions
-    if (
-        name.includes("buy") ||
-        name.includes("cart") ||
-        name.includes("checkout") ||
-        name.includes("purchase") ||
-        description.includes("buy") ||
-        description.includes("cart") ||
-        description.includes("checkout")
-    ) {
-        return "commerce";
-    }
-
-    // Check for search actions
-    if (
-        name.includes("search") ||
-        name.includes("find") ||
-        name.includes("filter") ||
-        description.includes("search") ||
-        description.includes("find")
-    ) {
-        return "search";
-    }
-
-    // Default to utility
-    return "utility";
-}
-
 async function handleRegisterAuthoringAgent(
     action: any,
     ctx: DiscoveryActionHandlerContext,
@@ -713,11 +650,7 @@ async function handleGetIntentFromReccording(
                     description:
                         action.parameters.recordedActionDescription ||
                         `User action: ${intentData.actionName}`,
-                    category: inferCategoryFromAction({
-                        name: intentData.actionName,
-                        description:
-                            action.parameters.recordedActionDescription,
-                    }) as ActionCategory,
+                    category: "utility",
                     author: "user",
                     scope: {
                         type: "page",
