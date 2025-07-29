@@ -429,6 +429,89 @@ export async function handleOpenInIntegratedTerminal(
     return { handled: true, message: msg };
 }
 
+export async function handleOpenFolderInExplorer(
+    action: any,
+): Promise<ActionResult> {
+    const parameters = action?.parameters;
+    if (!parameters || !parameters.folderName) {
+        return {
+            handled: false,
+            message: "❌ Missing 'folderName' parameter.",
+        };
+    }
+
+    const {
+        folderName,
+        folderRelativeTo,
+        includeGenerated = false,
+    } = parameters;
+    let matches: vscode.Uri[] = [];
+
+    try {
+        if (folderRelativeTo) {
+            const parentFolders = await findMatchingFolders(
+                folderRelativeTo,
+                includeGenerated,
+            );
+            for (const parent of parentFolders) {
+                const childUri = vscode.Uri.joinPath(parent, folderName);
+                try {
+                    const stat = await vscode.workspace.fs.stat(childUri);
+                    if (stat.type === vscode.FileType.Directory) {
+                        matches.push(childUri);
+                    }
+                } catch {
+                    // continue if child folder doesn't exist
+                }
+            }
+        } else {
+            matches = await findMatchingFolders(folderName, includeGenerated);
+        }
+
+        if (matches.length === 0) {
+            return {
+                handled: false,
+                message: `❌ Folder '${folderName}' not found.`,
+            };
+        }
+
+        let selectedUri: vscode.Uri;
+        if (matches.length === 1) {
+            selectedUri = matches[0];
+        } else {
+            const pick = await vscode.window.showQuickPick(
+                matches.map((uri) => ({
+                    label: vscode.workspace.asRelativePath(uri),
+                    uri,
+                })),
+                {
+                    placeHolder: `Multiple matches for '${folderName}', select one to open:`,
+                },
+            );
+
+            if (!pick) {
+                return {
+                    handled: false,
+                    message: "⚠️ Folder selection cancelled by user.",
+                };
+            }
+            selectedUri = pick.uri;
+        }
+
+        await vscode.commands.executeCommand("revealInExplorer", selectedUri);
+
+        return {
+            handled: true,
+            message: `📁 Opened folder '${folderName}' in Explorer.`,
+        };
+    } catch (error) {
+        return {
+            handled: false,
+            message: `❌ Error opening folder: ${error instanceof Error ? error.message : String(error)}`,
+        };
+    }
+}
+
 export async function handleWorkbenchActions(
     action: any,
 ): Promise<ActionResult> {
@@ -443,6 +526,9 @@ export async function handleWorkbenchActions(
     switch (actionName) {
         case "workbenchOpenFile":
             actionResult = await handleOpenFileAction(action);
+            break;
+        case "workbenchOpenFolder":
+            actionResult = await handleOpenFolderInExplorer(action);
             break;
         case "workbenchCreateFolderFromExplorer":
             actionResult = await handleCreateFolderFromExplorer(action);

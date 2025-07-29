@@ -148,3 +148,76 @@ export async function findMatchingFolders(
     );
     return foundFolders;
 }
+
+export async function findMatchingFoldersByName(
+    folderName: string,
+    folderRelativeTo?: string,
+    includeGenerated: boolean = false,
+): Promise<vscode.Uri[]> {
+    const excludeGlobs = includeGenerated
+        ? []
+        : [
+              "node_modules",
+              "dist",
+              "build",
+              "out",
+              ".git",
+              ".next",
+              ".turbo",
+              ".cache",
+              "coverage",
+              ".venv",
+              "__pycache__",
+          ];
+
+    const foundFolders: vscode.Uri[] = [];
+
+    async function scanDirectory(uri: vscode.Uri) {
+        const entries = await vscode.workspace.fs.readDirectory(uri);
+        for (const [name, type] of entries) {
+            const childUri = vscode.Uri.joinPath(uri, name);
+
+            if (type === vscode.FileType.Directory) {
+                if (excludeGlobs.includes(name)) continue;
+
+                if (
+                    name.localeCompare(folderName, undefined, {
+                        sensitivity: "accent",
+                    }) === 0
+                ) {
+                    foundFolders.push(childUri);
+                }
+
+                await scanDirectory(childUri);
+            }
+        }
+    }
+
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (!workspaceFolders) {
+        console.error("❌ No workspace folders open.");
+        return [];
+    }
+
+    for (const rootFolder of workspaceFolders) {
+        let baseUri = rootFolder.uri;
+
+        if (folderRelativeTo) {
+            const matches = await findMatchingFoldersByName(
+                folderRelativeTo,
+                undefined,
+                includeGenerated,
+            );
+            if (matches.length === 0) continue;
+            baseUri = matches[0]; // only use first match
+        }
+
+        console.log(`🔍 Scanning from: ${baseUri.fsPath}`);
+        await scanDirectory(baseUri);
+    }
+
+    console.log(
+        `✅ Found folders: ${foundFolders.map((f) => f.fsPath).join(", ")}`,
+    );
+    return foundFolders;
+}

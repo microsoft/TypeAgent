@@ -4,7 +4,7 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs/promises";
-import { findMatchingFolders, ActionResult } from "./helpers"; // Adjust import
+import { findMatchingFoldersByName, ActionResult } from "./helpers";
 
 export async function handleCreateFileAction(
     action: any,
@@ -19,7 +19,8 @@ export async function handleCreateFileAction(
 
     const {
         fileName,
-        filePath,
+        folderName,
+        folderRelativeTo,
         language,
         untitled,
         openInEditor = true,
@@ -29,49 +30,54 @@ export async function handleCreateFileAction(
     } = params;
 
     try {
-        let uri: vscode.Uri;
+        let baseDir: string | undefined;
 
-        if (untitled) {
-            const doc = await vscode.workspace.openTextDocument({
-                content,
-                language,
-            });
-            if (openInEditor)
-                await vscode.window.showTextDocument(doc, { preview: false });
-            return {
-                handled: true,
-                message: `📄 Created untitled ${language ?? ""} file: ${doc.fileName}`,
-            };
-        }
-
-        let baseDir: string;
-
-        if (filePath) {
-            const matchingFolders = await findMatchingFolders(filePath);
-            if (matchingFolders.length === 0) {
+        if (folderName) {
+            const matches = await findMatchingFoldersByName(
+                folderName,
+                folderRelativeTo,
+            );
+            if (matches.length === 0) {
                 return {
                     handled: false,
-                    message: `❌ Could not find folder matching "${filePath}".`,
+                    message:
+                        `❌ Could not find folder "${folderName}"` +
+                        (folderRelativeTo
+                            ? ` under "${folderRelativeTo}".`
+                            : "."),
                 };
             }
-            baseDir = matchingFolders[0].fsPath; // Choose first match (you can extend this later)
+            baseDir = matches[0].fsPath;
         } else if (vscode.workspace.workspaceFolders?.length) {
             baseDir = vscode.workspace.workspaceFolders[0].uri.fsPath;
         } else {
             baseDir = process.cwd(); // fallback
         }
 
+        if (untitled) {
+            const doc = await vscode.workspace.openTextDocument({
+                content,
+                language,
+            });
+            if (openInEditor) {
+                await vscode.window.showTextDocument(doc, { preview: false });
+            }
+            return {
+                handled: true,
+                message: `📄 Created untitled ${language ?? ""} file: ${doc.fileName}`,
+            };
+        }
+
         if (!fileName) {
             return {
                 handled: false,
                 message:
-                    "❌ 'fileName' is required when creating a saved file.",
+                    "❌ 'fileName' is required for disk-based file creation.",
             };
         }
 
-        // === Build full path and check existence ===
         const fullPath = path.join(baseDir, fileName);
-        uri = vscode.Uri.file(fullPath);
+        const uri = vscode.Uri.file(fullPath);
 
         let fileExists = false;
         try {
@@ -88,7 +94,7 @@ export async function handleCreateFileAction(
                     });
                 return {
                     handled: true,
-                    message: `📄 File already exists. Opened existing file: ${uri.fsPath}`,
+                    message: `📄 File already exists. Opened: ${uri.fsPath}`,
                 };
             }
             return {

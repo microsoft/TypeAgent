@@ -13,8 +13,11 @@ export type EditorActionCreateFile = {
     actionName: "createFile";
     parameters: {
         fileName?: string; // "utils.ts"
-        filePath?: string; // "src/helpers"
-        language?: string; // "typescript", "python", etc.
+        // Name of the folder to create the file in (e.g., "src")
+        folderName?: string;
+        // Optional: restrict to folders under this path or name
+        folderRelativeTo?: string;
+        language?: string; // "typescript", "python", "csharp", "javascript" etc.
         untitled?: boolean; // true → don't save to disk
         openInEditor?: boolean; // default: true
         content?: string; // actual content to write to the file
