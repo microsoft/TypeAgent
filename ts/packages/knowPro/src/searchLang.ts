@@ -592,7 +592,7 @@ class SearchQueryCompiler {
             for (const term of entityTerms) {
                 const orMax = createOrMaxTermGroup();
                 this.addEntityTermToGroup(term, orMax);
-                termGroup.terms.push(optimizeOrMax(orMax));
+                termGroup.terms.push(optimizeTermGroup(orMax));
             }
             this.dedupe = dedupe;
         } else {
@@ -629,7 +629,7 @@ class SearchQueryCompiler {
             for (const term of entityTerms) {
                 this.addEntityTermAsSearchTermsToGroup(term, orMax);
             }
-            termGroup.terms.push(optimizeOrMax(orMax));
+            termGroup.terms.push(optimizeTermGroup(orMax));
         } else {
             for (const term of entityTerms) {
                 this.addEntityTermAsSearchTermsToGroup(term, termGroup);
@@ -986,14 +986,17 @@ class SearchQueryCompiler {
             filter.entitySearchTerms !== undefined &&
             filter.entitySearchTerms.length > 0
         ) {
-            const sTagGroup = createAndTermGroup();
+            let sTagGroup = createAndTermGroup();
             this.compileEntityTerms(
                 filter.entitySearchTerms,
                 sTagGroup,
                 true,
                 false,
             );
-            when.sTags = sTagGroup;
+            when.sTags =
+                sTagGroup.terms.length === 1
+                    ? (sTagGroup.terms[0] as SearchTermGroup)
+                    : sTagGroup;
         }
 
         /*
@@ -1213,7 +1216,7 @@ function isEmptyString(value: string): boolean {
     return value === undefined || value.length === 0;
 }
 
-function optimizeOrMax(termGroup: SearchTermGroup) {
+function optimizeTermGroup(termGroup: SearchTermGroup) {
     if (termGroup.terms.length === 1) {
         return termGroup.terms[0];
     }
