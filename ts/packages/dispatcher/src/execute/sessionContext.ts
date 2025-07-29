@@ -54,7 +54,6 @@ export function createSessionContext<T = unknown>(
                           `Permission denied: dynamic agent '${agentName}' not added by this agent`,
                       );
                   }
-                  dynamicAgentNames.delete(agentName);
                   return context.agents.removeAgent(agentName);
               })
         : () => {
