@@ -305,6 +305,7 @@ class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
             }
         }
         this.headingsInScope.set(level, headingText);
+        this.addHeadingAsTag(headingText, level);
     }
 
     onLink(text: string, url: string): void {
@@ -322,26 +323,30 @@ class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
     }
 
     private addHeadingsToKnowledgeBlock() {
-        // Include top K headings in scope.. as topics and entities
+        // Include top K headings in scope.. as topics, entities
         const topK = 2;
         let headingLevelsInScope = [...this.headingsInScope.keys()].sort(
             (x, y) => y - x, // Descending
         );
 
         headingLevelsInScope = headingLevelsInScope.slice(0, topK);
-        for (const headerLevel of headingLevelsInScope) {
-            const headerText = this.headingsInScope.get(headerLevel)!;
-            this.knowledgeBlock.knowledge.topics.push(headerText);
+        for (let i = 0; i < headingLevelsInScope.length; ++i) {
+            const headerLevel = headingLevelsInScope[i];
+            const headingText = this.headingsInScope.get(headerLevel)!;
+            this.knowledgeBlock.knowledge.topics.push(headingText);
 
-            const headingEntity = headingToEntity(headerText, headerLevel);
+            const headingEntity = headingToEntity(headingText, headerLevel);
             this.knowledgeBlock.knowledge.entities.push(headingEntity);
-            // Also make header text a tag
-            this.knowledgeBlock.tags.add("heading");
-            this.knowledgeBlock.tags.add("section");
-            this.knowledgeBlock.tags.add(headerText);
-
-            this.knowledgeBlock.sTags.push(headingEntity);
         }
+    }
+
+    private addHeadingAsTag(headingText: string, level: number) {
+        this.knowledgeBlock.tags.add("heading");
+        this.knowledgeBlock.tags.add("section");
+        this.knowledgeBlock.tags.add(headingText);
+        // Experimental: structured Tags
+        const headingEntity = headingToEntity(headingText, level);
+        this.knowledgeBlock.sTags.push(headingEntity);
     }
 
     private addLinksToKnowledgeBlock() {
