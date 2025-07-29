@@ -148,6 +148,18 @@ export class KnowProPrinter extends MemoryConsoleWriter {
         return this;
     }
 
+    public writeEntities(
+        entities: knowLib.conversation.ConcreteEntity[] | undefined,
+    ) {
+        if (entities && entities.length > 0) {
+            entities = kp.mergeConcreteEntities(entities);
+            entities.sort((x, y) => x.name.localeCompare(y.name));
+            this.writeNumbered(entities, (printer, ce) =>
+                printer.writeEntity(ce).writeLine(),
+            );
+        }
+    }
+
     public writeAction(
         action: knowLib.conversation.Action | undefined,
     ): KnowProPrinter {
@@ -171,12 +183,22 @@ export class KnowProPrinter extends MemoryConsoleWriter {
         return this;
     }
 
+    public writeTags(tags: kp.Tag[] | undefined) {
+        if (tags && tags.length > 0) {
+            let tagStrings = kp.mergeTags(tags);
+            tagStrings.sort();
+            this.writeList(tagStrings, { type: "ol" });
+        }
+        return this;
+    }
+
     public writeSemanticRef(semanticRef: kp.SemanticRef) {
         switch (semanticRef.knowledgeType) {
             default:
                 this.writeLine(semanticRef.knowledgeType);
                 break;
             case "entity":
+            case "sTag":
                 this.writeEntity(
                     semanticRef.knowledge as knowLib.conversation.ConcreteEntity,
                 );
