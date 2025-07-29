@@ -12,8 +12,10 @@ import {
     ToolUtility,
 } from "@azure/ai-agents";
 import registerDebug from "debug";
+import { wikipedia } from "aiclient";
+import { readFileSync } from "fs";
 
-const debug = registerDebug("typeagent:aiClient:urlResolver");
+const debug = registerDebug("typeagent:azure-ai-foundry:urlResolver");
 
 export interface urlResolutionAction {
     originalRequest: string;
@@ -60,14 +62,15 @@ export async function deleteThreads(
 export async function resolveURLWithSearch(
     site: string,
     groundingConfig: bingWithGrounding.ApiSettings,
-): Promise<string | undefined> {
-    let retVal: string = site;
+): Promise<string | undefined | null> {
+    let retVal: string | undefined | null = site;
     const project = new AIProjectClient(
         groundingConfig.endpoint!,
         new DefaultAzureCredential(),
     );
 
     const agent = await ensureResolverAgent(groundingConfig, project);
+    let inCompleteReason;
 
     if (!agent) {
         throw new Error(
@@ -87,10 +90,15 @@ export async function resolveURLWithSearch(
             agent.id,
             {
                 pollingOptions: {
-                    intervalInMs: 500,
+                    intervalInMs: 250,
                 },
                 onResponse: (response): void => {
                     debug(`Received response with status: ${response.status}`);
+
+                    const pb: any = response.parsedBody;
+                    if (pb?.incomplete_details?.reason) {
+                        inCompleteReason = pb.incomplete_details.reason;
+                    }
                 },
             },
         );
@@ -130,13 +138,19 @@ export async function resolveURLWithSearch(
         project.agents.threads.delete(thread.id);
     } catch (e) {
         debug(`Error resolving URL with search: ${e}`);
+
+        if (inCompleteReason === "content_filter") {
+            retVal = null;
+        } else {
+            retVal = undefined;
+        }
     }
 
     // return assistant messages
     return retVal;
 }
 
-/*
+/**
  * Attempts to retrive the URL resolution agent from the AI project and creates it if necessary
  */
 async function ensureResolverAgent(
@@ -149,13 +163,12 @@ async function ensureResolverAgent(
         groundingConfig.urlResolutionAgentId!,
         project,
         {
-            model: "gpt-4o",
+            model: "gpt-4.1",
             name: "TypeAgent_URLResolverAgent",
             description: "Auto created URL Resolution Agent",
             temperature: 0.01,
             instructions: `
-You are an agent that translates user requests in conjunction with search results to URLs.  If the page does not exist just return an empty URL. Do not make up URLs.  
-Choose to answer the user's question by favoring websites closer to the user. Don't restrict searches to specific domains unless the user provided the domain.
+You are an agent that translates user requests in conjunction with search results to URLs.  If the page does not exist just return an empty URL. Do not make up URLs.  Choose to answer the user's question by favoring websites closer to the user. Don't restrict searches to specific domains unless the user provided the domain. If the user request doesn't specify or imply 'website', add that to the search terms.
 
 Respond strictly with JSON. The JSON should be compatible with the TypeScript type Response from the following:
 
@@ -177,7 +190,7 @@ interface Response {
     );
 }
 
-/*
+/**
  * Attempts to retrive the URL resolution agent from the AI project and creates it if necessary
  */
 async function ensureValidatorAgent(
@@ -190,7 +203,7 @@ async function ensureValidatorAgent(
         groundingConfig.validatorAgentId!,
         project,
         {
-            model: "gpt-4o",
+            model: "gpt-4.1",
             name: "TypeAgent_URLValidatorAgent",
             description: "Auto created URL Validation Agent",
             temperature: 0.01,
@@ -251,6 +264,7 @@ export async function validateURL(
         const maxRetries = 5;
         let success = false;
         let lastResponse;
+        const TIMEOUT = 30_000; // 30 seconds
 
         while (retryCount < maxRetries && !success) {
             try {
@@ -282,19 +296,25 @@ export async function validateURL(
                             // Cancel the run if it has been running for more than 30 seconds
                             if (
                                 Date.now() - new Date(runStarted).getTime() >
-                                    30000 &&
+                                    TIMEOUT &&
                                 (response.parsedBody as any).status !=
                                     "cancelling" &&
                                 (response.parsedBody as any).status !=
                                     "completed"
                             ) {
-                                //if (!run.completedAt) {
-                                await project.agents.runs.cancel(
-                                    thread.id,
-                                    (response.parsedBody as any).id,
-                                );
-                                console.log(`TIMEOUT - Canceled ${utterance}`);
-                                //}
+                                try {
+                                    await project.agents.runs.cancel(
+                                        thread.id,
+                                        (response.parsedBody as any).id,
+                                    );
+                                    console.log(
+                                        `TIMEOUT - Canceled ${utterance}`,
+                                    );
+                                } catch (cancelError) {
+                                    console.error(
+                                        `Error canceling run: ${cancelError}`,
+                                    );
+                                }
                             }
                         },
                     },
@@ -367,4 +387,69 @@ export async function validateURL(
     }
 
     return undefined;
+}
+
+/**
+ * Attempts to resolve a website by looking at wikipedia entries and then determining the correct URL from it
+ */
+export async function resolveURLWithWikipedia(
+    site: string,
+    wikipediaConfig: wikipedia.WikipediaApiSettings,
+): Promise<string | undefined> {
+    // TODO: implement
+    console.log(`${site} ${wikipediaConfig}`);
+
+    const languageCode = Intl.DateTimeFormat()
+        .resolvedOptions()
+        .locale.split("-")[0];
+    const searchQuery = `${site}`;
+    const numberOfResults = 1;
+    const headers = {
+        Authorization: `Bearer ${await wikipediaConfig.getToken()}`,
+    };
+
+    const baseUrl = `${wikipediaConfig.endpoint}`;
+    const search_endpoint = "/search/page";
+    const url = `${baseUrl}${languageCode}${search_endpoint}`;
+    const parameters = new URLSearchParams({
+        q: searchQuery,
+        limit: numberOfResults.toString(),
+    });
+
+    let retVal = undefined;
+    await fetch(`${url}?${parameters}`, { method: "GET", headers: headers })
+        .then((response) => response.json())
+        .then((data) => {
+            retVal = data;
+            console.log(data);
+
+            // TODO: get the "official website" URL from the data (if it exists)
+            // TODO: waiting for Wikipedia arbitration committee to approve Application
+        })
+        .catch((error) => {
+            console.error("Error fetching data:", error);
+        });
+
+    return retVal;
+}
+
+/**
+ * The keyword to site map is a JSON file that maps keywords to sites.
+ */
+export const keyWordsToSites: Record<string, string | undefined> = JSON.parse(
+    readFileSync(
+        "../../examples/websiteAliases/resolvedKeywords.json",
+        "utf-8",
+    ),
+);
+
+/**
+ * Resolves a URL by keyword using the URL resolver agent.
+ * @param keyword The keyword to resolve.
+ * @returns The resolved URL or undefined if not found.
+ */
+export async function resolveURLByKeyword(
+    keyword: string,
+): Promise<string | undefined | null> {
+    return keyWordsToSites[keyword] ?? null;
 }

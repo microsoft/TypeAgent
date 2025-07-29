@@ -19,10 +19,12 @@ export type BrowserActions =
     | CaptureScreenshot
     | ReloadPage
     | GetWebsiteStats
-    | SearchWebMemories;
+    | SearchWebMemories
+    | OpenSearchResult;
 
 export type WebPage = string;
-export type BrowserEntities = WebPage;
+export type WebSearchResult = string;
+export type BrowserEntities = WebPage | WebSearchResult;
 
 // show/open/display web page in the current view.
 export type OpenWebPage = {
@@ -161,5 +163,20 @@ export type SearchWebMemories = {
         combineAnswers?: boolean;
         choices?: string; // Multiple choice (semicolon separated)
         debug?: boolean;
+    };
+};
+
+// Open a specific search result from previous search
+export type OpenSearchResult = {
+    actionName: "openSearchResult";
+    parameters: {
+        // Position/index of the search result (1-based)
+        position?: number;
+        // Name or title of the search result to open
+        title?: string;
+        // URL of the search result to open (if user specifies exact URL)
+        url?: string;
+        // Open in new tab (default: false)
+        openInNewTab?: boolean;
     };
 };
