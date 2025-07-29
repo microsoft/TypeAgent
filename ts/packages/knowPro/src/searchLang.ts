@@ -990,15 +990,12 @@ class SearchQueryCompiler {
             const dedupe = this.dedupe;
             this.dedupe = false;
             for (const term of filter.entitySearchTerms) {
-                const andGroup = createAndTermGroup();
+                const andGroup = createOrMaxTermGroup();
                 this.addEntityTermToGroup(term, andGroup);
                 sTagGroup.terms.push(optimizeTermGroup(andGroup));
             }
             this.dedupe = dedupe;
-            when.sTags =
-                sTagGroup.terms.length === 1
-                    ? (sTagGroup.terms[0] as SearchTermGroup)
-                    : sTagGroup;
+            when.sTags = sTagGroup;
         }
 
         /*
