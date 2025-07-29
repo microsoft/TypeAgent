@@ -87,7 +87,7 @@ export interface DeletionInfo {
 /**
  * Types of knowledge objects {@link Knowledge}
  */
-export type KnowledgeType = "entity" | "action" | "topic" | "tag" | "sTag";
+export type KnowledgeType = "entity" | "action" | "topic" | "tag" | "sTag"; // sTag: Experimental ;
 /**
  * Knowledge objects
  */
@@ -96,7 +96,7 @@ export type Knowledge =
     | kpLib.Action
     | Topic
     | Tag
-    | StructuredTag;
+    | StructuredTag; // Experimental
 
 /**
  * Semantic Refs are referenced by their sequential ordinal numbers
@@ -638,8 +638,11 @@ export type WhenFilter = {
      * If a thread index is available, match in a thread closest to ths description
      */
     threadDescription?: string | undefined;
-
+    /**
+     * Scope matches to only those text ranges matching tags
+     */
     tags?: string[] | undefined;
+    sTags?: SearchTermGroup | undefined; // Experimental
     /**
      * Use this SearchTermGroup as a sub-query to find matching text ranges
      * Match SemanticRefs the scope for this query
