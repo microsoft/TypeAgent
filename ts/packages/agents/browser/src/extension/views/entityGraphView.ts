@@ -564,8 +564,13 @@ class EntityGraphView {
                     // Center entity - get actual type and confidence from graph data
                     {
                         name: graphData.centerEntity,
-                        type: this.inferEntityType(graphData.centerEntity) || "entity",
-                        confidence: this.calculateCenterEntityConfidence(graphData.entities) || 0.8,
+                        type:
+                            this.inferEntityType(graphData.centerEntity) ||
+                            "entity",
+                        confidence:
+                            this.calculateCenterEntityConfidence(
+                                graphData.entities,
+                            ) || 0.8,
                     },
                     // Website-based entities
                     ...graphData.entities.map((e: any) => ({
@@ -705,14 +710,19 @@ class EntityGraphView {
                     entityName: entityName,
                     type: this.inferEntityType(entityName) || "entity",
                     entityType: this.inferEntityType(entityName) || "entity",
-                    confidence: this.calculateCenterEntityConfidence(graphData.entities) || 0.8,
+                    confidence:
+                        this.calculateCenterEntityConfidence(
+                            graphData.entities,
+                        ) || 0.8,
                     source: "graph",
                     topicAffinity: graphData.topTopics || [],
                     summary: graphData.summary,
                     metadata: graphData.metadata,
                     answerSources: graphData.answerSources || [],
                     // Add additional data for sidebar metrics
-                    mentionCount: this.calculateTotalMentions(graphData.entities),
+                    mentionCount: this.calculateTotalMentions(
+                        graphData.entities,
+                    ),
                     relationships: validRelationships || [],
                     dominantDomains: this.extractDomains(graphData.entities),
                     firstSeen: this.getEarliestDate(graphData.entities),
@@ -848,53 +858,69 @@ class EntityGraphView {
      */
     private inferEntityType(entityName: string): string {
         const lowerName = entityName.toLowerCase();
-        
+
         // Technology/framework detection
-        if (lowerName.includes('api') || lowerName.includes('framework') || 
-            lowerName.includes('library') || lowerName.includes('javascript') ||
-            lowerName.includes('typescript') || lowerName.includes('react') ||
-            lowerName.includes('node') || lowerName.includes('python')) {
-            return 'technology';
+        if (
+            lowerName.includes("api") ||
+            lowerName.includes("framework") ||
+            lowerName.includes("library") ||
+            lowerName.includes("javascript") ||
+            lowerName.includes("typescript") ||
+            lowerName.includes("react") ||
+            lowerName.includes("node") ||
+            lowerName.includes("python")
+        ) {
+            return "technology";
         }
-        
+
         // Organization detection
-        if (lowerName.includes('corp') || lowerName.includes('inc') || 
-            lowerName.includes('company') || lowerName.includes('ltd') ||
-            lowerName.includes('microsoft') || lowerName.includes('google')) {
-            return 'organization';
+        if (
+            lowerName.includes("corp") ||
+            lowerName.includes("inc") ||
+            lowerName.includes("company") ||
+            lowerName.includes("ltd") ||
+            lowerName.includes("microsoft") ||
+            lowerName.includes("google")
+        ) {
+            return "organization";
         }
-        
+
         // Product detection
-        if (lowerName.includes('app') || lowerName.includes('tool') || 
-            lowerName.includes('platform') || lowerName.includes('service') ||
-            lowerName.includes('software')) {
-            return 'product';
+        if (
+            lowerName.includes("app") ||
+            lowerName.includes("tool") ||
+            lowerName.includes("platform") ||
+            lowerName.includes("service") ||
+            lowerName.includes("software")
+        ) {
+            return "product";
         }
-        
+
         // Person detection (basic heuristics)
-        const words = lowerName.split(' ');
+        const words = lowerName.split(" ");
         if (words.length === 2 && /^[A-Z][a-z]+ [A-Z][a-z]+/.test(entityName)) {
-            return 'person';
+            return "person";
         }
-        
-        return 'concept'; // Default type
+
+        return "concept"; // Default type
     }
 
     private calculateCenterEntityConfidence(entities: any[]): number {
         if (!entities || entities.length === 0) return 0.8;
-        
+
         // Calculate average confidence of related entities
-        const avgConfidence = entities.reduce((sum, entity) => {
-            return sum + (entity.confidence || 0.5);
-        }, 0) / entities.length;
-        
+        const avgConfidence =
+            entities.reduce((sum, entity) => {
+                return sum + (entity.confidence || 0.5);
+            }, 0) / entities.length;
+
         // Boost center entity confidence slightly above average
         return Math.min(0.95, avgConfidence + 0.1);
     }
 
     private calculateTotalMentions(entities: any[]): number {
         if (!entities || entities.length === 0) return 0;
-        
+
         return entities.reduce((total, entity) => {
             return total + (entity.visitCount || entity.mentionCount || 1);
         }, 0);
@@ -902,53 +928,58 @@ class EntityGraphView {
 
     private extractDomains(entities: any[]): string[] {
         if (!entities || entities.length === 0) return [];
-        
+
         const domains = new Set<string>();
-        entities.forEach(entity => {
+        entities.forEach((entity) => {
             if (entity.url) {
                 try {
-                    const domain = new URL(entity.url).hostname.replace('www.', '');
+                    const domain = new URL(entity.url).hostname.replace(
+                        "www.",
+                        "",
+                    );
                     domains.add(domain);
                 } catch (e) {
                     // Skip invalid URLs
                 }
             }
         });
-        
+
         return Array.from(domains).slice(0, 5);
     }
 
     private getEarliestDate(entities: any[]): string {
         if (!entities || entities.length === 0) return new Date().toISOString();
-        
+
         let earliest: string | null = null;
-        entities.forEach(entity => {
-            const date = entity.lastVisited || entity.dateAdded || entity.createdAt;
+        entities.forEach((entity) => {
+            const date =
+                entity.lastVisited || entity.dateAdded || entity.createdAt;
             if (date && (!earliest || date < earliest)) {
                 earliest = date;
             }
         });
-        
+
         return earliest || new Date().toISOString();
     }
 
     private getLatestDate(entities: any[]): string {
         if (!entities || entities.length === 0) return new Date().toISOString();
-        
+
         let latest: string | null = null;
-        entities.forEach(entity => {
-            const date = entity.lastVisited || entity.updatedAt || entity.lastSeen;
+        entities.forEach((entity) => {
+            const date =
+                entity.lastVisited || entity.updatedAt || entity.lastSeen;
             if (date && (!latest || date > latest)) {
                 latest = date;
             }
         });
-        
+
         return latest || new Date().toISOString();
     }
 
     private calculateTotalVisits(entities: any[]): number {
         if (!entities || entities.length === 0) return 0;
-        
+
         return entities.reduce((total, entity) => {
             return total + (entity.visitCount || 0);
         }, 0);

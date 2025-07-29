@@ -114,14 +114,16 @@ export class EntitySidebar {
             // Handle both mock structure and real entity structure
             let relationshipCount = 0;
             if (this.currentEntity.strongRelationships?.length) {
-                relationshipCount = this.currentEntity.strongRelationships.length;
+                relationshipCount =
+                    this.currentEntity.strongRelationships.length;
             } else if (this.currentEntity.relationships?.length) {
                 relationshipCount = this.currentEntity.relationships.length;
             } else if (Array.isArray(this.currentEntity.relationships)) {
                 relationshipCount = this.currentEntity.relationships.length;
             }
-            
-            const relationshipValue = relationshipCount != null ? Number(relationshipCount) : 0;
+
+            const relationshipValue =
+                relationshipCount != null ? Number(relationshipCount) : 0;
             relationshipsEl.textContent = isNaN(relationshipValue)
                 ? "0"
                 : relationshipValue.toString();
@@ -183,14 +185,18 @@ export class EntitySidebar {
         if (!domainsList) return;
 
         // Handle case where dominantDomains might not exist in real entity data
-        let domains = this.currentEntity.dominantDomains || 
-                     this.currentEntity.domains || 
-                     [];
+        let domains =
+            this.currentEntity.dominantDomains ||
+            this.currentEntity.domains ||
+            [];
 
         // If no domains, try to extract from URL if available
         if (domains.length === 0 && this.currentEntity.url) {
             try {
-                const domain = new URL(this.currentEntity.url).hostname.replace('www.', '');
+                const domain = new URL(this.currentEntity.url).hostname.replace(
+                    "www.",
+                    "",
+                );
                 domains = [domain];
             } catch (e) {
                 // Skip invalid URLs
@@ -249,7 +255,7 @@ export class EntitySidebar {
                 this.currentEntity.firstVisit ||
                 this.currentEntity.dateAdded ||
                 this.currentEntity.createdAt;
-            
+
             if (firstSeen) {
                 firstSeenEl.textContent = this.formatDate(firstSeen);
             } else {
@@ -264,7 +270,7 @@ export class EntitySidebar {
                 this.currentEntity.lastVisit ||
                 this.currentEntity.lastVisited ||
                 this.currentEntity.updatedAt;
-            
+
             if (lastSeen) {
                 lastSeenEl.textContent = this.formatDate(lastSeen);
             } else {
