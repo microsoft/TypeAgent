@@ -51,6 +51,7 @@ export interface IMessage extends IKnowledgeSource {
      * (Optional) tags associated with the message
      */
     tags: string[];
+    sTags?: StructuredTag[] | undefined;
     /**
      * (Future) Information about the deletion of the message.
      */
@@ -86,11 +87,16 @@ export interface DeletionInfo {
 /**
  * Types of knowledge objects {@link Knowledge}
  */
-export type KnowledgeType = "entity" | "action" | "topic" | "tag";
+export type KnowledgeType = "entity" | "action" | "topic" | "tag" | "sTag"; // sTag: Experimental ;
 /**
  * Knowledge objects
  */
-export type Knowledge = kpLib.ConcreteEntity | kpLib.Action | Topic | Tag;
+export type Knowledge =
+    | kpLib.ConcreteEntity
+    | kpLib.Action
+    | Topic
+    | Tag
+    | StructuredTag; // Experimental
 
 /**
  * Semantic Refs are referenced by their sequential ordinal numbers
@@ -136,6 +142,8 @@ export interface Tag {
      */
     text: string;
 }
+
+export type StructuredTag = kpLib.ConcreteEntity;
 
 /**
  * A conversation is a sequence of messages
@@ -630,8 +638,11 @@ export type WhenFilter = {
      * If a thread index is available, match in a thread closest to ths description
      */
     threadDescription?: string | undefined;
-
+    /**
+     * Scope matches to only those text ranges matching tags
+     */
     tags?: string[] | undefined;
+    sTags?: SearchTermGroup | undefined; // Experimental
     /**
      * Use this SearchTermGroup as a sub-query to find matching text ranges
      * Match SemanticRefs the scope for this query

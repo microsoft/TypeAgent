@@ -565,11 +565,7 @@ export async function createKnowproCommands(
                 let concreteEntities = entityRefs.map(
                     (e) => e.knowledge as knowLib.ConcreteEntity,
                 );
-                concreteEntities = kp.mergeConcreteEntities(concreteEntities);
-                concreteEntities.sort((x, y) => x.name.localeCompare(y.name));
-                context.printer.writeNumbered(concreteEntities, (printer, ce) =>
-                    printer.writeEntity(ce).writeLine(),
-                );
+                context.printer.writeEntities(concreteEntities);
             }
         }
     }
@@ -622,10 +618,15 @@ export async function createKnowproCommands(
                     conversation.semanticRefs,
                     (sr) => sr.knowledgeType === "tag",
                 );
-                let tags = tagRefs.map((t) => (t.knowledge as kp.Topic).text);
-                let tagStrings = kp.mergeTopics(tags);
-                tagStrings.sort();
-                context.printer.writeList(tagStrings, { type: "ol" });
+                let tags = tagRefs.map((t) => t.knowledge as kp.Tag);
+                context.printer.writeTags(tags);
+                const sTags = kp
+                    .filterCollection(
+                        conversation.semanticRefs,
+                        (sr) => sr.knowledgeType === "sTag",
+                    )
+                    .map((sr) => sr.knowledge as kp.StructuredTag);
+                context.printer.writeEntities(sTags);
             }
         }
     }

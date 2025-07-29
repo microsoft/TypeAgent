@@ -29,6 +29,7 @@ import {
     IPropertyToSemanticRefIndex,
     SemanticRefSearchResult,
     ISemanticRefCollection,
+    StructuredTag,
 } from "./interfaces.js";
 import {
     Match,
@@ -337,6 +338,18 @@ export function matchPropertySearchTermToSemanticRef(
         matchPropertySearchTermToAction(searchTerm, semanticRef) ||
         matchPropertySearchTermToTag(searchTerm, semanticRef)
     );
+}
+
+export function matchPropertySearchTermToSTag(
+    searchTerm: PropertySearchTerm,
+    semanticRef: SemanticRef,
+): boolean {
+    if (semanticRef.knowledgeType !== "sTag") {
+        return false;
+    }
+    const sTag = semanticRef.knowledge as StructuredTag;
+    // Structured tags are just entities
+    return matchConcreteEntity(searchTerm, sTag);
 }
 
 export function lookupTermFiltered(
@@ -881,7 +894,7 @@ export class MatchPropertySearchTermExpr extends MatchTermExpr {
         }
     }
 
-    private lookupProperty(
+    protected lookupProperty(
         context: QueryEvalContext,
         propertyName: string,
         propertyValue: string,
@@ -902,7 +915,7 @@ export class MatchPropertySearchTermExpr extends MatchTermExpr {
         );
     }
 
-    private lookupPropertyWithoutIndex(
+    protected lookupPropertyWithoutIndex(
         context: QueryEvalContext,
         propertyName: string,
         propertyValue: string,
@@ -1297,6 +1310,27 @@ export class ThreadSelector implements IQueryTextRangeSelector {
     }
 }
 
+export class TextRangesFromSTagSelector implements IQueryTextRangeSelector {
+    constructor(
+        public sourceExpr: IQueryTextRangeSelector,
+        public sTagIndex?: IPropertyToSemanticRefIndex,
+    ) {}
+
+    public eval(context: QueryEvalContext): TextRangeCollection | undefined {
+        const sTagIndex =
+            this.sTagIndex ??
+            new STagPropertyIndex(
+                context.semanticRefs,
+                context.semanticRefIndex,
+            );
+        let curPropIndex = context.propertyIndex;
+        context.propertyIndex = sTagIndex;
+        const textRanges = this.sourceExpr.eval(context);
+        context.propertyIndex = curPropIndex;
+        return textRanges;
+    }
+}
+
 function toGroupedSearchResults(
     evalResults: Map<KnowledgeType, SemanticRefAccumulator>,
 ): Map<KnowledgeType, SemanticRefSearchResult> {
@@ -1642,4 +1676,55 @@ function messageMatchesFromKnowledgeMatches(
 
     messageMatches.smoothScores();
     return messageMatches;
+}
+
+// Experimental
+// Dummy index that lets us treat new knowledge types like sTags as entities
+// Once sTags are stable, we can make sTag indexes part of the conversation's optional
+// secondary indexes
+class STagPropertyIndex implements IPropertyToSemanticRefIndex {
+    constructor(
+        public semanticRefs: ISemanticRefCollection,
+        public semanticRefIndex: ITermToSemanticRefIndex,
+    ) {}
+
+    getValues(): string[] {
+        // No op
+        return [];
+    }
+    addProperty(
+        propertyName: string,
+        value: string,
+        semanticRefOrdinal: SemanticRefOrdinal | ScoredSemanticRefOrdinal,
+    ): void {
+        // Noop, since this is not actually an index
+    }
+
+    /**
+     * We do a
+     * @param propertyName
+     * @param value
+     * @returns
+     */
+    public lookupProperty(
+        propertyName: string,
+        value: string,
+    ): ScoredSemanticRefOrdinal[] | undefined {
+        // Since we are only matching propertyValue.term
+        const propertySearchTerm: PropertySearchTerm = {
+            propertyName: propertyName as KnowledgePropertyName,
+            propertyValue: { term: { text: value } },
+        };
+        return lookupTermFiltered(
+            this.semanticRefIndex,
+            propertySearchTerm.propertyValue.term,
+            this.semanticRefs,
+            (semanticRef) => {
+                return matchPropertySearchTermToSTag(
+                    propertySearchTerm,
+                    semanticRef,
+                );
+            },
+        );
+    }
 }
