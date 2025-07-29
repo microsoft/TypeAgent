@@ -81,18 +81,24 @@ const api: ClientAPI = {
     },
 };
 
-// set up dispatch RPC client
-const dispatcherChannel = createGenericChannel((message: any) =>
-    ipcRenderer.send("dispatcher-rpc-call", message),
-);
+const dispatcherPromiseResolvers = Promise.withResolvers<Dispatcher>();
+ipcRenderer.on("dispatcher-initialized", () => {
+    // Resolve the dispatcher promise when the dispatcher is initialized)
+    // set up dispatch RPC client
+    const dispatcherChannel = createGenericChannel((message: any) =>
+        ipcRenderer.send("dispatcher-rpc-call", message),
+    );
 
-ipcRenderer.on("dispatcher-rpc-reply", (_event, message) => {
-    dispatcherChannel.message(message);
+    ipcRenderer.on("dispatcher-rpc-reply", (_event, message) => {
+        dispatcherChannel.message(message);
+    });
+
+    const dispatcher: Dispatcher = createDispatcherRpcClient(
+        dispatcherChannel.channel,
+    );
+
+    dispatcherPromiseResolvers.resolve(dispatcher);
 });
-
-const dispatcher: Dispatcher = createDispatcherRpcClient(
-    dispatcherChannel.channel,
-);
 
 // Use `contextBridge` APIs to expose Electron APIs to
 // renderer only if context isolation is enabled, otherwise
@@ -100,7 +106,10 @@ const dispatcher: Dispatcher = createDispatcherRpcClient(
 if (process.contextIsolated) {
     try {
         contextBridge.exposeInMainWorld("api", api);
-        contextBridge.exposeInMainWorld("dispatcher", dispatcher);
+        contextBridge.exposeInMainWorld(
+            "dispatcher",
+            dispatcherPromiseResolvers.promise,
+        );
     } catch (error) {
         console.error(error);
     }
@@ -108,5 +117,5 @@ if (process.contextIsolated) {
     // @ts-ignore (define in dts)
     window.api = api;
     // @ts-ignore (define in dts)
-    window.dispatcher = dispatcher;
+    window.dispatcher = dispatcherPromiseResolvers.promise;
 }
