@@ -987,12 +987,14 @@ class SearchQueryCompiler {
             filter.entitySearchTerms.length > 0
         ) {
             let sTagGroup = createAndTermGroup();
-            this.compileEntityTerms(
-                filter.entitySearchTerms,
-                sTagGroup,
-                true,
-                false,
-            );
+            const dedupe = this.dedupe;
+            this.dedupe = false;
+            for (const term of filter.entitySearchTerms) {
+                const andGroup = createAndTermGroup();
+                this.addEntityTermToGroup(term, andGroup);
+                sTagGroup.terms.push(optimizeTermGroup(andGroup));
+            }
+            this.dedupe = dedupe;
             when.sTags =
                 sTagGroup.terms.length === 1
                     ? (sTagGroup.terms[0] as SearchTermGroup)
