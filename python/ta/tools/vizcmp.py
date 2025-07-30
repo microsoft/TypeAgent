@@ -88,7 +88,7 @@ def main():
         print(f" {questions.get(counter)}")
 
     # Print header again
-    print_header(all_files)
+    print_footer(all_files)
 
 
 def print_header(all_files):
@@ -102,6 +102,11 @@ def print_header(all_files):
             label = "--"
         print(f"{label:>6}", end="")
     print()
+
+
+def print_footer(all_files):
+    for i, file in reversed(list(enumerate(all_files))):
+        print("   " + "   |  " * i + "   + " + file)
 
 
 if __name__ == "__main__":
