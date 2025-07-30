@@ -106,7 +106,7 @@ def print_header(all_files):
 
 def print_footer(all_files):
     for i, file in reversed(list(enumerate(all_files))):
-        print("   " + "   |  " * i + "   + " + file)
+        print("   " + "   |  " * i + "   + " + os.path.basename(file))
 
 
 if __name__ == "__main__":
