@@ -331,6 +331,13 @@ export class KnowProPrinter extends MemoryConsoleWriter {
             results,
             maxToDisplay,
         );
+        this.writeKnowledgeSearchResult(
+            conversation,
+            "sTag",
+            results,
+            maxToDisplay,
+        );
+
         if (distinct) {
             this.writeResultDistinct(
                 conversation,

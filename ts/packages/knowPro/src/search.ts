@@ -519,6 +519,7 @@ class QueryCompiler {
 
     public compileSearchGroupMessages(
         searchGroup: SearchTermGroup,
+        matchFilter?: q.IQuerySemanticRefPredicate, // A filter applied after the term group matches
     ): [CompiledTermGroup[], q.IQueryOpExpr<MessageAccumulator>] {
         return this.compileSearchGroup(
             searchGroup,
@@ -528,6 +529,8 @@ class QueryCompiler {
                     booleanOp,
                 );
             },
+            undefined,
+            matchFilter,
         );
     }
 
@@ -539,6 +542,7 @@ class QueryCompiler {
             scopeExpr?: q.GetScopeExpr,
         ) => IQueryOpExpr,
         scopeExpr?: q.GetScopeExpr,
+        matchFilter?: q.IQuerySemanticRefPredicate, // A filter applied after the term group matches
     ): [CompiledTermGroup[], q.IQueryOpExpr] {
         const compiledTerms: CompiledTermGroup[] = [
             { booleanOp: searchGroup.booleanOp, terms: [] },
@@ -565,6 +569,15 @@ class QueryCompiler {
             } else {
                 termExpressions.push(this.compileSearchTerm(term));
                 compiledTerms[0].terms.push(term);
+            }
+        }
+        if (matchFilter !== undefined) {
+            // Apply predicates for each expression
+            for (let i = 0; i < termExpressions.length; ++i) {
+                termExpressions[i] = new q.FilterMatchTermExpr(
+                    termExpressions[i],
+                    matchFilter,
+                );
             }
         }
         let boolExpr = createOp(
@@ -679,10 +692,11 @@ class QueryCompiler {
     private addTermsScopeSelector(
         termGroup: SearchTermGroup,
         scopeSelectors: q.IQueryTextRangeSelector[],
+        matchFilter?: q.IQuerySemanticRefPredicate, // A filter applied after the term group matches
     ) {
         if (termGroup.terms.length > 0) {
             const [searchTermsUsed, selectExpr] =
-                this.compileSearchGroupMessages(termGroup);
+                this.compileSearchGroupMessages(termGroup, matchFilter);
             scopeSelectors.push(
                 new q.TextRangesFromMessagesSelector(selectExpr),
             );
@@ -694,16 +708,8 @@ class QueryCompiler {
         termGroup: SearchTermGroup,
         scopeSelectors: q.IQueryTextRangeSelector[],
     ) {
-        if (termGroup.terms.length > 0) {
-            const [searchTermsUsed, selectExpr] =
-                this.compileSearchGroupMessages(termGroup);
-            scopeSelectors.push(
-                new q.TextRangesFromSTagSelector(
-                    new q.TextRangesFromMessagesSelector(selectExpr),
-                ),
-            );
-            this.allScopeSearchTerms.push(...searchTermsUsed);
-        }
+        const filter = new q.KnowledgeTypePredicate("sTag");
+        return this.addTermsScopeSelector(termGroup, scopeSelectors, filter);
     }
 
     private compileWhere(filter: WhenFilter): q.IQuerySemanticRefPredicate[] {
