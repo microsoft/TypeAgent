@@ -4,7 +4,16 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs/promises";
-import { findMatchingFoldersByName, ActionResult } from "./helpers";
+import {
+    findMatchingFoldersByName,
+    ActionResult,
+    isCopilotEnabled,
+    getIndentationString,
+    resolveOrFallbackToFile,
+    resolvePosition,
+    showDocumentInEditor,
+    triggerCopilotInlineCompletion,
+} from "./helpers";
 
 export async function handleCreateFileAction(
     action: any,
@@ -122,6 +131,174 @@ export async function handleCreateFileAction(
     }
 }
 
+export async function handleSaveCurrentFileAction(
+    action: any,
+): Promise<ActionResult> {
+    const {
+        showErrorIfNoActiveEditor = true,
+        onlyDirty = false,
+        excludeUntitled = false,
+    } = action.parameters ?? {};
+
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+        if (showErrorIfNoActiveEditor) {
+            vscode.window.showErrorMessage("❌ No active editor to save.");
+        }
+        return {
+            handled: false,
+            message: "❌ No active editor to save.",
+        };
+    }
+
+    const { document } = editor;
+    if (excludeUntitled && document.isUntitled) {
+        return {
+            handled: false,
+            message: "🚫 Current file is untitled and excluded from saving.",
+        };
+    }
+
+    if (onlyDirty && !document.isDirty) {
+        return {
+            handled: false,
+            message: "✅ Current file has no unsaved changes.",
+        };
+    }
+
+    try {
+        await document.save();
+        return {
+            handled: true,
+            message: `💾 Saved current file: ${document.fileName}`,
+        };
+    } catch (err: any) {
+        return {
+            handled: false,
+            message: `❌ Failed to save current file: ${err.message}`,
+        };
+    }
+}
+
+export async function handleSaveAllFilesAction(
+    action: any,
+): Promise<ActionResult> {
+    const {
+        onlyDirty = false,
+        excludeUntitled = false,
+        logResult = true,
+    } = action.parameters ?? {};
+
+    const textDocs = vscode.workspace.textDocuments;
+    const docsToSave = textDocs.filter((doc) => {
+        if (excludeUntitled && doc.isUntitled) return false;
+        if (onlyDirty && !doc.isDirty) return false;
+        return true;
+    });
+
+    const results: boolean[] = [];
+    for (const doc of docsToSave) {
+        try {
+            const saved = await doc.save();
+            results.push(saved);
+        } catch {
+            results.push(false);
+        }
+    }
+
+    const allSuccess = results.every(Boolean);
+    const message = allSuccess
+        ? `💾 Saved ${docsToSave.length} file(s).`
+        : `⚠️ Some files failed to save (${results.filter((r) => !r).length} of ${docsToSave.length}).`;
+
+    if (logResult) {
+        vscode.window.showInformationMessage(message);
+    }
+
+    return {
+        handled: true,
+        message,
+    };
+}
+
+export async function handleCreateFunctionAction(
+    action: any,
+): Promise<ActionResult> {
+    const {
+        functionDeclaration,
+        body,
+        docstring,
+        language,
+        file,
+        position = { type: "atCursor" },
+    } = action.parameters;
+
+    try {
+        const doc = await resolveOrFallbackToFile(file);
+        if (!doc) {
+            return {
+                handled: false,
+                message: "❌ Could not resolve target file.",
+            };
+        }
+
+        const editor = await showDocumentInEditor(doc);
+        if (!editor) {
+            return {
+                handled: false,
+                message: "❌ Could not open document in editor.",
+            };
+        }
+
+        const insertPos = resolvePosition(editor, position);
+        if (!insertPos) {
+            return {
+                handled: false,
+                message: "❌ Could not resolve insertion position.",
+            };
+        }
+
+        const indent = getIndentationString(doc);
+        let snippet = `${functionDeclaration}\n`;
+
+        if (docstring) {
+            if (language === "python") {
+                snippet += `${indent}"""${docstring}"""\n`;
+            } else {
+                snippet += `${indent}/** ${docstring} */\n`;
+            }
+        }
+
+        if (body != null) {
+            snippet += `${body}\n`;
+        } else {
+            snippet += indent;
+        }
+
+        await editor.edit((editBuilder) => {
+            editBuilder.insert(insertPos, snippet + "\n");
+        });
+
+        const bodyLine = insertPos.line + snippet.split("\n").length - 2;
+        const bodyPos = new vscode.Position(bodyLine, indent.length);
+        editor.selection = new vscode.Selection(bodyPos, bodyPos);
+
+        if (
+            (body === undefined || body.trim() === "") &&
+            (await isCopilotEnabled())
+        ) {
+            await triggerCopilotInlineCompletion(editor);
+        }
+
+        return {
+            handled: true,
+            message: `✅ Inserted function and ${body ? "filled body." : "triggered Copilot."}`,
+        };
+    } catch (err: any) {
+        return { handled: false, message: `❌ Error: ${err.message}` };
+    }
+}
+
 export async function handleEditorCodeActions(
     action: any,
 ): Promise<ActionResult> {
@@ -138,7 +315,18 @@ export async function handleEditorCodeActions(
             actionResult = await handleCreateFileAction(action);
             break;
 
-        // Add more cases for other actions as needed
+        case "saveCurrentFile":
+            actionResult = await handleSaveCurrentFileAction(action);
+            break;
+
+        case "saveAllFiles":
+            actionResult = await handleSaveAllFilesAction(action);
+            break;
+
+        case "createFunction":
+            actionResult = await handleCreateFunctionAction(action);
+            break;
+
         default:
             actionResult.handled = false;
             actionResult.message = `❌ Unknown action: ${actionName}`;

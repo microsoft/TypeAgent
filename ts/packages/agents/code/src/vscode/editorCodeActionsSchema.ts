@@ -6,7 +6,9 @@ export type EditorCodeActions =
     | EditorActionInsertComment
     | EditorActionGenerateWithCopilot
     | EditorActionRepairWithCopilot
-    | EditorActionCreateFile;
+    | EditorActionCreateFile
+    | EditorActionSaveCurrentFile
+    | EditorActionSaveAllFiles;
 
 // Action to create a new file in the editor
 export type EditorActionCreateFile = {
@@ -54,23 +56,44 @@ export type CodeTarget =
     | { type: "line"; lineNumber: number }
     | { type: "range"; start: number; end: number };
 
+export type FileTarget = {
+    // Name of the file to create or open or edit (e.g., "utils.ts")
+    fileName?: string;
+    // Name of the folder to the file is contained in (e.g., "src")
+    folderName?: string;
+    // Optional: restrict to folders under this path or name
+    folderRelativeTo?: string;
+    // Optional: if file doesn't exist, should it be created?, default: false
+    createIfNotExists?: boolean;
+    // Optional: fallback to currently active file if not open, default: true
+    fallbackToActiveFile?: boolean;
+};
+
 export type EditorActionCreateFunction = {
     actionName: "createFunction";
     parameters: {
-        // The name of the function to create
-        name: string;
-        // Programming language for the function
+        // Language of the function (determines syntax rules)
         language: "typescript" | "python" | "javascript" | string;
-        // Function arguments/parameters
+        // The full function declaration or signature line (no body)
+        functionDeclaration: string;
+        // The function body (optional): may be empty, partial, or full
+        body?: string;
+        // Required: a one-line docstring that explains what the function does.
+        // This is based on the function declaration and user request.
+        docstring: string;
+        name?: string;
+        // Optional: description of what the function params do
         args?: ArgumentDefinition[];
-        // Return type annotation (optional, especially for TS)
+        // Optional: return type annotation (e.g., "number", "void", etc.)
         returnType?: string;
-        // Where to insert the function
-        position?: CursorTarget;
-        // Optional Python-style docstring
-        docstring?: string;
-        // Optional: support for async functions
+        // Optional: whether the function is async
+        // If true, the function will be created as an async function
+        // and the agent may use await inside it
         isAsync?: boolean;
+        // Optional: file to insert into
+        file?: FileTarget;
+        // Where in the file to insert the function
+        position?: CursorTarget;
     };
 };
 
@@ -230,5 +253,23 @@ export type EditorActionUndoLastEdit = {
         scope?: "file" | "workspace";
         // how many edits to undo (default 1)
         count?: number;
+    };
+};
+
+export type EditorActionSaveCurrentFile = {
+    actionName: "saveCurrentFile";
+    parameters: {
+        showErrorIfNoActiveEditor?: boolean;
+        onlyDirty?: boolean;
+        excludeUntitled?: boolean;
+    };
+};
+
+export type EditorActionSaveAllFiles = {
+    actionName: "saveAllFiles";
+    parameters: {
+        onlyDirty?: boolean;
+        excludeUntitled?: boolean;
+        logResult?: boolean;
     };
 };
