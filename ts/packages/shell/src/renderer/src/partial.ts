@@ -300,6 +300,9 @@ export class PartialCompletion {
             prefix.length,
         );
 
+        // Make sure the text entry remains focused after replacement.
+        this.input.getTextEntry().focus();
+
         debug(
             `Partial completion input suffix replaced at: ${replaceText} at offset ${prefix.length}`,
         );

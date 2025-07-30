@@ -248,7 +248,7 @@ export class ChatView {
         }
     }
 
-    enablePartialInput(enabled: boolean) {
+    public enablePartialInput(enabled: boolean) {
         this.partialCompletionEnabled = enabled;
         if (enabled) {
             this.ensurePartialCompletion();
