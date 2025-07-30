@@ -160,10 +160,7 @@ const keywordToSiteWithURLResolver: Record<string, string | null | undefined> =
     {};
 const keyCount = Object.keys(keywordToSites).length;
 let processed = 0;
-const keywords = Object.keys(keywordToSites);
-for (let i = 0; i < 50; i++) {
-    const keyword = keywords[i];
-    //for(const keyword of Object.keys(keywordToSites)) {
+for (const keyword of Object.keys(keywordToSites)) {
     console.log(`Resolving URL for keyword: ${keyword}`);
     keywordToSiteWithURLResolver[keyword] =
         await urlResolver.resolveURLWithSearch(keyword, groundingConfig);

@@ -1,8 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CommandCompletionResult } from "agent-dispatcher";
-import { getDispatcher } from "./main";
+import { CommandCompletionResult, Dispatcher } from "agent-dispatcher";
 import { SearchMenu, SearchMenuItem } from "./search";
 
 import registerDebug from "debug";
@@ -23,13 +22,20 @@ export class PartialCompletion {
     constructor(
         private readonly container: HTMLDivElement,
         private readonly input: ExpandableTextarea,
+        private readonly dispatcher: Dispatcher,
     ) {
         this.searchMenu = new SearchMenu((item) => {
             this.handleSelect(item);
         }, false);
         document.addEventListener("selectionchange", () => {
+            debug("Partial completion update on selection changed");
             this.update(true);
         });
+
+        if (document.activeElement === this.input.getTextEntry()) {
+            // If the input is already focused, we need to update immediately.
+            this.update();
+        }
     }
 
     public update(selectionChanged: boolean = false) {
@@ -73,11 +79,7 @@ export class PartialCompletion {
             return false;
         }
 
-        const textEntry = this.input.getTextEntry();
-        const endNode =
-            textEntry.childNodes.length !== 0
-                ? textEntry.childNodes[0]
-                : textEntry;
+        const endNode = this.input.getSelectionEndNode();
         if (r.endContainer !== endNode) {
             if (!selectionChanged) {
                 debug(`Partial completion skipped: selection not in text area`);
@@ -159,7 +161,7 @@ export class PartialCompletion {
 
         if (showMenu) {
             debug(
-                `Partial completion updated: '${prefix}' with ${items.length} items`,
+                `Partial completion selection updated: '${prefix}' with ${items.length} items`,
             );
             this.showCompletionMenu(prefix);
         } else {
@@ -180,7 +182,7 @@ export class PartialCompletion {
         this.noCompletion = false;
         // Clear the choices
         this.searchMenu.setChoices([]);
-        const completionP = getDispatcher().getCommandCompletion(input);
+        const completionP = this.dispatcher.getCommandCompletion(input);
         this.completionP = completionP;
         completionP
             .then((result) => {
@@ -223,6 +225,10 @@ export class PartialCompletion {
                 }
 
                 this.searchMenu.setChoices(completions);
+
+                debug(
+                    `Partial completion selection reloaded: '${partial}' with ${completions.length} items`,
+                );
                 this.update();
             })
             .catch((e) => {
@@ -292,6 +298,13 @@ export class PartialCompletion {
             replaceText,
             -prefix.length,
             prefix.length,
+        );
+
+        // Make sure the text entry remains focused after replacement.
+        this.input.getTextEntry().focus();
+
+        debug(
+            `Partial completion input suffix replaced at: ${replaceText} at offset ${prefix.length}`,
         );
     }
 

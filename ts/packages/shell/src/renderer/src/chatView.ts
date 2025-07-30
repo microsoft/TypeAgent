@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { IdGenerator, getDispatcher } from "./main";
+import { IdGenerator } from "./main";
 import { ChatInput, ExpandableTextarea } from "./chatInput";
 import { iconCheckMarkCircle, iconX } from "./icon";
 import {
@@ -12,6 +12,7 @@ import {
 } from "@typeagent/agent-sdk";
 import { TTS } from "./tts/tts";
 import {
+    Dispatcher,
     IAgentMessage,
     NotifyExplainedData,
     RequestId,
@@ -63,13 +64,14 @@ export function getSelectionXCoord() {
 
 const DynamicDisplayMinRefreshIntervalMs = 15;
 export class ChatView {
-    private topDiv: HTMLDivElement;
-    private messageDiv: HTMLDivElement;
-    private inputContainer: HTMLDivElement;
+    private readonly topDiv: HTMLDivElement;
+    private readonly messageDiv: HTMLDivElement;
+    private readonly inputContainer: HTMLDivElement;
     private _settingsView: SettingsView | undefined;
-
-    private idToMessageGroup: Map<string, MessageGroup> = new Map();
+    private _dispatcher: Dispatcher | undefined;
+    private readonly idToMessageGroup: Map<string, MessageGroup> = new Map();
     chatInput: ChatInput;
+    private partialCompletionEnabled: boolean = false;
     private partialCompletion: PartialCompletion | undefined;
 
     private commandBackStack: string[] = [];
@@ -106,6 +108,7 @@ export class ChatView {
         };
         const onChange = (_eta: ExpandableTextarea, isInput: boolean) => {
             if (this.partialCompletion) {
+                console.log(`Partial completion on change: ${isInput}`);
                 if (isInput) {
                     this.partialCompletion.update();
                 } else {
@@ -210,14 +213,45 @@ export class ChatView {
         };
     }
 
-    enablePartialInput(enabled: boolean) {
+    private getDispatcher(): Dispatcher {
+        if (this._dispatcher === undefined) {
+            throw new Error("Dispatcher is not initialized");
+        }
+        return this._dispatcher;
+    }
+
+    public initializeDispatcher(dispatcher: Dispatcher) {
+        if (this._dispatcher !== undefined) {
+            throw new Error("Dispatcher already initialized");
+        }
+        this._dispatcher = dispatcher;
+
+        this.chatInput.textarea.enable(true);
+        this.chatInput.focus();
+
+        // delay initialization.
+        if (this.partialCompletionEnabled) {
+            this.ensurePartialCompletion();
+        }
+    }
+
+    private ensurePartialCompletion() {
+        if (
+            this.partialCompletion === undefined &&
+            this._dispatcher !== undefined
+        ) {
+            this.partialCompletion = new PartialCompletion(
+                this.inputContainer,
+                this.chatInput.textarea,
+                this.getDispatcher(),
+            );
+        }
+    }
+
+    public enablePartialInput(enabled: boolean) {
+        this.partialCompletionEnabled = enabled;
         if (enabled) {
-            if (this.partialCompletion === undefined) {
-                this.partialCompletion = new PartialCompletion(
-                    this.inputContainer,
-                    this.chatInput.textarea,
-                );
-            }
+            this.ensurePartialCompletion();
         } else {
             this.partialCompletion?.close();
             this.partialCompletion = undefined;
@@ -300,7 +334,7 @@ export class ChatView {
                 // Only call getDynamicDisplay once if there are multiple
                 let result = currentDisplay.get(`${source}:${displayId}`);
                 if (result === undefined) {
-                    result = await getDispatcher().getDynamicDisplay(
+                    result = await this.getDispatcher().getDynamicDisplay(
                         source,
                         "html",
                         displayId,
@@ -414,7 +448,7 @@ export class ChatView {
             this.settingsView!,
             request,
             this.messageDiv,
-            getDispatcher().processCommand(requestText, id, images),
+            this.getDispatcher().processCommand(requestText, id, images),
             this.agents,
             this.hideMetrics,
         );
@@ -590,7 +624,10 @@ export class ChatView {
         if (agentMessage === undefined) {
             throw new Error(`Invalid requestId ${requestId}`);
         }
-        return agentMessage?.proposeAction(actionTemplates);
+        return agentMessage?.proposeAction(
+            this.getDispatcher(),
+            actionTemplates,
+        );
     }
     getMessageElm() {
         return this.topDiv;

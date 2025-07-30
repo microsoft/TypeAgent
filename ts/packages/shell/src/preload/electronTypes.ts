@@ -57,7 +57,7 @@ export interface Client {
 
 export interface ElectronWindowFields {
     api: ClientAPI;
-    dispatcher: Dispatcher;
+    dispatcher: Promise<Dispatcher>;
 }
 
 export type ElectronWindow = typeof globalThis & ElectronWindowFields;
