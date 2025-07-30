@@ -550,7 +550,12 @@ class QueryCompiler {
         const termExpressions: q.IQueryOpExpr[] = [];
         for (const term of searchGroup.terms) {
             if (isPropertyTerm(term)) {
-                termExpressions.push(this.compilePropertyTerm(term));
+                let termExpr = this.compilePropertyTerm(term);
+                termExpr =
+                    matchFilter !== undefined
+                        ? new q.FilterMatchTermExpr(termExpr, matchFilter)
+                        : termExpr;
+                termExpressions.push(termExpr);
                 if (typeof term.propertyName !== "string") {
                     compiledTerms[0].terms.push(
                         toRequiredSearchTerm(term.propertyName),
@@ -563,21 +568,19 @@ class QueryCompiler {
                 const [nestedTerms, groupExpr] = this.compileSearchGroup(
                     term,
                     createOp,
+                    undefined,
+                    matchFilter,
                 );
                 compiledTerms.push(...nestedTerms);
                 termExpressions.push(groupExpr);
             } else {
-                termExpressions.push(this.compileSearchTerm(term));
+                let termExpr = this.compileSearchTerm(term);
+                termExpr =
+                    matchFilter !== undefined
+                        ? new q.FilterMatchTermExpr(termExpr, matchFilter)
+                        : termExpr;
+                termExpressions.push(termExpr);
                 compiledTerms[0].terms.push(term);
-            }
-        }
-        if (matchFilter !== undefined) {
-            // Apply predicates for each expression
-            for (let i = 0; i < termExpressions.length; ++i) {
-                termExpressions[i] = new q.FilterMatchTermExpr(
-                    termExpressions[i],
-                    matchFilter,
-                );
             }
         }
         let boolExpr = createOp(

@@ -995,12 +995,14 @@ class SearchQueryCompiler {
                 termGroup.terms.push(optimizeTermGroup(andGroup));
             }
             this.dedupe = dedupe;
+            /*
             if (when.scopeDefiningTerms) {
                 when.scopeDefiningTerms.terms.push(termGroup);
             } else {
                 when.scopeDefiningTerms = termGroup;
             }
-            //when.sTags = sTagGroup;
+                */
+            when.sTags = termGroup;
         }
 
         /*
