@@ -990,6 +990,37 @@ export class MatchTopicExpr extends MatchSearchTermExpr {
     }
 }
 
+export class FilterMatchTermExpr extends QueryOpExpr<
+    SemanticRefAccumulator | undefined
+> {
+    constructor(
+        public sourceExpr: IQueryOpExpr<SemanticRefAccumulator | undefined>,
+        public filter: IQuerySemanticRefPredicate,
+    ) {
+        super();
+    }
+
+    public override eval(
+        context: QueryEvalContext,
+    ): SemanticRefAccumulator | undefined {
+        const accumulator = this.sourceExpr.eval(context);
+
+        if (accumulator === undefined || accumulator.size === 0) {
+            return accumulator;
+        }
+        const filtered = new SemanticRefAccumulator(
+            accumulator.searchTermMatches,
+        );
+        filtered.setMatches(
+            accumulator.getMatches((match) => {
+                const sr = context.getSemanticRef(match.value);
+                return this.filter.eval(context, sr);
+            }),
+        );
+        return filtered;
+    }
+}
+
 export class GroupByKnowledgeTypeExpr extends QueryOpExpr<
     Map<KnowledgeType, SemanticRefAccumulator>
 > {
@@ -1057,6 +1088,7 @@ export class WhereSemanticRefExpr extends QueryOpExpr<SemanticRefAccumulator> {
 
     public override eval(context: QueryEvalContext): SemanticRefAccumulator {
         const accumulator = this.sourceExpr.eval(context);
+
         if (accumulator.size === 0) {
             return accumulator;
         }
@@ -1076,8 +1108,8 @@ export class WhereSemanticRefExpr extends QueryOpExpr<SemanticRefAccumulator> {
         predicates: IQuerySemanticRefPredicate[],
         match: Match<SemanticRefOrdinal>,
     ) {
+        const semanticRef = context.getSemanticRef(match.value);
         for (let i = 0; i < predicates.length; ++i) {
-            const semanticRef = context.getSemanticRef(match.value);
             if (!predicates[i].eval(context, semanticRef)) {
                 return false;
             }
@@ -1306,27 +1338,6 @@ export class ThreadSelector implements IQueryTextRangeSelector {
         for (const thread of this.threads) {
             textRanges.addRanges(thread.ranges);
         }
-        return textRanges;
-    }
-}
-
-export class TextRangesFromSTagSelector implements IQueryTextRangeSelector {
-    constructor(
-        public sourceExpr: IQueryTextRangeSelector,
-        public sTagIndex?: IPropertyToSemanticRefIndex,
-    ) {}
-
-    public eval(context: QueryEvalContext): TextRangeCollection | undefined {
-        const sTagIndex =
-            this.sTagIndex ??
-            new STagPropertyIndex(
-                context.semanticRefs,
-                context.semanticRefIndex,
-            );
-        let curPropIndex = context.propertyIndex;
-        context.propertyIndex = sTagIndex;
-        const textRanges = this.sourceExpr.eval(context);
-        context.propertyIndex = curPropIndex;
         return textRanges;
     }
 }
@@ -1676,55 +1687,4 @@ function messageMatchesFromKnowledgeMatches(
 
     messageMatches.smoothScores();
     return messageMatches;
-}
-
-// Experimental
-// Dummy index that lets us treat new knowledge types like sTags as entities
-// Once sTags are stable, we can make sTag indexes part of the conversation's optional
-// secondary indexes
-class STagPropertyIndex implements IPropertyToSemanticRefIndex {
-    constructor(
-        public semanticRefs: ISemanticRefCollection,
-        public semanticRefIndex: ITermToSemanticRefIndex,
-    ) {}
-
-    getValues(): string[] {
-        // No op
-        return [];
-    }
-    addProperty(
-        propertyName: string,
-        value: string,
-        semanticRefOrdinal: SemanticRefOrdinal | ScoredSemanticRefOrdinal,
-    ): void {
-        // Noop, since this is not actually an index
-    }
-
-    /**
-     * We do a
-     * @param propertyName
-     * @param value
-     * @returns
-     */
-    public lookupProperty(
-        propertyName: string,
-        value: string,
-    ): ScoredSemanticRefOrdinal[] | undefined {
-        // Since we are only matching propertyValue.term
-        const propertySearchTerm: PropertySearchTerm = {
-            propertyName: propertyName as KnowledgePropertyName,
-            propertyValue: { term: { text: value } },
-        };
-        return lookupTermFiltered(
-            this.semanticRefIndex,
-            propertySearchTerm.propertyValue.term,
-            this.semanticRefs,
-            (semanticRef) => {
-                return matchPropertySearchTermToSTag(
-                    propertySearchTerm,
-                    semanticRef,
-                );
-            },
-        );
-    }
 }

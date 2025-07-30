@@ -609,9 +609,10 @@ export async function createKnowproCommands(
             return;
         }
         if (args.length > 0) {
-            args.push("--ktype");
-            args.push("tag");
-            await searchTerms(args);
+            context.printer.writeHeading("Tags");
+            await searchTerms([...args, "--kType", "tag"]);
+            context.printer.writeHeading("Structured Tags");
+            await searchTerms([...args, "--kType", "sTag"]);
         } else {
             if (conversation.semanticRefs !== undefined) {
                 const tagRefs = kp.filterCollection(
@@ -619,14 +620,23 @@ export async function createKnowproCommands(
                     (sr) => sr.knowledgeType === "tag",
                 );
                 let tags = tagRefs.map((t) => t.knowledge as kp.Tag);
-                context.printer.writeTags(tags);
+                if (tags.length > 0) {
+                    context.printer.writeHeading("Tags");
+                    context.printer.writeTags(tags);
+                    context.printer.writeLine();
+                }
+
                 const sTags = kp
                     .filterCollection(
                         conversation.semanticRefs,
                         (sr) => sr.knowledgeType === "sTag",
                     )
                     .map((sr) => sr.knowledge as kp.StructuredTag);
-                context.printer.writeEntities(sTags);
+                if (sTags.length > 0) {
+                    context.printer.writeHeading("Structured Tags");
+                    context.printer.writeSTags(sTags);
+                    context.printer.writeLine();
+                }
             }
         }
     }

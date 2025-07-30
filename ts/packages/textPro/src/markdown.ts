@@ -178,7 +178,9 @@ export function textBlocksFromMarkdown(
     }
 
     function endBlock(reduceDepth: boolean = true): void {
-        if (curTextBlock.length > 0) {
+        const trimmedBlock = curTextBlock.trim();
+        if (trimmedBlock.length > 0) {
+            // Use original block to retain original white space
             textBlocks.push(curTextBlock);
             handler?.onBlockEnd(curTextBlock);
         }
@@ -305,7 +307,6 @@ class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
             }
         }
         this.headingsInScope.set(level, headingText);
-        this.addHeadingAsTag(headingText, level);
     }
 
     onLink(text: string, url: string): void {
@@ -337,10 +338,12 @@ class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
 
             const headingEntity = headingToEntity(headingText, headerLevel);
             this.knowledgeBlock.knowledge.entities.push(headingEntity);
+
+            this.addHeadingAsTags(headingText, headerLevel);
         }
     }
 
-    private addHeadingAsTag(headingText: string, level: number) {
+    private addHeadingAsTags(headingText: string, level: number) {
         this.knowledgeBlock.tags.add("heading");
         this.knowledgeBlock.tags.add("section");
         this.knowledgeBlock.tags.add(headingText);

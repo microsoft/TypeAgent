@@ -20,7 +20,7 @@ export class KnowProPrinter extends MemoryConsoleWriter {
         writer: (printer: KnowProPrinter, item: any) => void,
     ) {
         for (let i = 0; i < array.length; ++i) {
-            this.write(`${i}. `);
+            this.write(`${i + 1}. `);
             writer(this, array[i]);
         }
         return this;
@@ -192,6 +192,12 @@ export class KnowProPrinter extends MemoryConsoleWriter {
         return this;
     }
 
+    public writeSTags(tags: kp.StructuredTag[] | undefined) {
+        return this.writeEntities(
+            tags as knowLib.conversation.ConcreteEntity[],
+        );
+    }
+
     public writeSemanticRef(semanticRef: kp.SemanticRef) {
         switch (semanticRef.knowledgeType) {
             default:
@@ -325,6 +331,13 @@ export class KnowProPrinter extends MemoryConsoleWriter {
             results,
             maxToDisplay,
         );
+        this.writeKnowledgeSearchResult(
+            conversation,
+            "sTag",
+            results,
+            maxToDisplay,
+        );
+
         if (distinct) {
             this.writeResultDistinct(
                 conversation,
