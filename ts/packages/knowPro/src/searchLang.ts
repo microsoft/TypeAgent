@@ -986,16 +986,21 @@ class SearchQueryCompiler {
             filter.entitySearchTerms !== undefined &&
             filter.entitySearchTerms.length > 0
         ) {
-            let sTagGroup = createAndTermGroup();
+            let termGroup = createAndTermGroup();
             const dedupe = this.dedupe;
             this.dedupe = false;
             for (const term of filter.entitySearchTerms) {
                 const andGroup = createOrMaxTermGroup();
                 this.addEntityTermToGroup(term, andGroup);
-                sTagGroup.terms.push(optimizeTermGroup(andGroup));
+                termGroup.terms.push(optimizeTermGroup(andGroup));
             }
             this.dedupe = dedupe;
-            when.sTags = sTagGroup;
+            if (when.scopeDefiningTerms) {
+                when.scopeDefiningTerms.terms.push(termGroup);
+            } else {
+                when.scopeDefiningTerms = termGroup;
+            }
+            //when.sTags = sTagGroup;
         }
 
         /*
