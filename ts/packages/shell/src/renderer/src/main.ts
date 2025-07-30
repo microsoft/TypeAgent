@@ -36,7 +36,7 @@ export function getAndroidAPI() {
     return globalThis.Android;
 }
 
-export function getDispatcher(): Dispatcher {
+async function getDispatcher(): Promise<Dispatcher> {
     if (globalThis.dispatcher !== undefined) {
         return globalThis.dispatcher;
     }
@@ -134,7 +134,7 @@ async function initializeChatHistory(chatView: ChatView) {
     }
 }
 
-function addEvents(
+function registerClient(
     chatView: ChatView,
     agents: Map<string, string>,
     settingsView: SettingsView,
@@ -413,7 +413,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     wrapper.appendChild(tabs.getContainer());
 
     document.onkeyup = (ev: KeyboardEvent) => {
-        if (ev.key == "Escape") {
+        if (ev.key === "Escape") {
             tabs.closeTabs();
             ev.preventDefault();
         }
@@ -456,9 +456,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     );
     tabs.getTabContainerByName("Help").append(new HelpView().getContainer());
 
-    addEvents(chatView, agents, settingsView, tabs, cameraView);
-
-    chatView.chatInputFocus();
+    registerClient(chatView, agents, settingsView, tabs, cameraView);
 
     try {
         if (Android !== undefined) {
@@ -484,6 +482,10 @@ document.addEventListener("DOMContentLoaded", async function () {
     }
 
     watchForDOMChanges(chatView.getScrollContainer());
+
+    getDispatcher().then((dispatcher) => {
+        chatView.initializeDispatcher(dispatcher);
+    });
 });
 
 function watchForDOMChanges(element: HTMLDivElement) {
