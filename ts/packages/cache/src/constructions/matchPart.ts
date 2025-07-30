@@ -102,7 +102,7 @@ export class MatchSet {
     public get regexPart() {
         return Array.from(this.matches)
             .sort((a, b) => b.length - a.length) // Match longest first
-            .map((m) => escapeMatch(m))
+            .map((m) => escapeMatch(m).replaceAll(/\s+/g, "\\s+")) // allow multiple spaces
             .join("|");
     }
 
