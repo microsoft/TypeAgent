@@ -112,10 +112,16 @@ export class EntitySidebar {
 
         if (relationshipsEl) {
             // Handle both mock structure and real entity structure
-            const relationshipCount =
-                this.currentEntity.strongRelationships?.length ||
-                this.currentEntity.relationships?.length ||
-                0;
+            let relationshipCount = 0;
+            if (this.currentEntity.strongRelationships?.length) {
+                relationshipCount =
+                    this.currentEntity.strongRelationships.length;
+            } else if (this.currentEntity.relationships?.length) {
+                relationshipCount = this.currentEntity.relationships.length;
+            } else if (Array.isArray(this.currentEntity.relationships)) {
+                relationshipCount = this.currentEntity.relationships.length;
+            }
+
             const relationshipValue =
                 relationshipCount != null ? Number(relationshipCount) : 0;
             relationshipsEl.textContent = isNaN(relationshipValue)
@@ -179,10 +185,23 @@ export class EntitySidebar {
         if (!domainsList) return;
 
         // Handle case where dominantDomains might not exist in real entity data
-        const domains =
+        let domains =
             this.currentEntity.dominantDomains ||
             this.currentEntity.domains ||
             [];
+
+        // If no domains, try to extract from URL if available
+        if (domains.length === 0 && this.currentEntity.url) {
+            try {
+                const domain = new URL(this.currentEntity.url).hostname.replace(
+                    "www.",
+                    "",
+                );
+                domains = [domain];
+            } catch (e) {
+                // Skip invalid URLs
+            }
+        }
 
         if (domains.length === 0) {
             domainsList.innerHTML =
@@ -236,7 +255,12 @@ export class EntitySidebar {
                 this.currentEntity.firstVisit ||
                 this.currentEntity.dateAdded ||
                 this.currentEntity.createdAt;
-            firstSeenEl.textContent = this.formatDate(firstSeen);
+
+            if (firstSeen) {
+                firstSeenEl.textContent = this.formatDate(firstSeen);
+            } else {
+                firstSeenEl.textContent = "-";
+            }
         }
 
         if (lastSeenEl) {
@@ -246,7 +270,12 @@ export class EntitySidebar {
                 this.currentEntity.lastVisit ||
                 this.currentEntity.lastVisited ||
                 this.currentEntity.updatedAt;
-            lastSeenEl.textContent = this.formatDate(lastSeen);
+
+            if (lastSeen) {
+                lastSeenEl.textContent = this.formatDate(lastSeen);
+            } else {
+                lastSeenEl.textContent = "-";
+            }
         }
     }
 
