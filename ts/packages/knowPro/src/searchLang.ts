@@ -986,23 +986,23 @@ class SearchQueryCompiler {
             filter.entitySearchTerms !== undefined &&
             filter.entitySearchTerms.length > 0
         ) {
-            let termGroup = createAndTermGroup();
-            const dedupe = this.dedupe;
-            this.dedupe = false;
-            for (const term of filter.entitySearchTerms) {
-                const andGroup = createOrMaxTermGroup();
-                this.addEntityTermToGroup(term, andGroup);
-                termGroup.terms.push(optimizeTermGroup(andGroup));
-            }
-            this.dedupe = dedupe;
+            // Compile entity terms to search structured tags
+            let termGroup = this.compileEntityTermsForScope(
+                filter.entitySearchTerms,
+            );
+            when.sTags = termGroup;
             /*
             if (when.scopeDefiningTerms) {
                 when.scopeDefiningTerms.terms.push(termGroup);
             } else {
                 when.scopeDefiningTerms = termGroup;
             }
-                */
-            when.sTags = termGroup;
+            */
+            // Also use the names of the entities to look for vanilla tags
+            let tags = this.entityTermsToTags(filter.entitySearchTerms);
+            if (tags.length > 0) {
+                when.tags = tags;
+            }
         }
 
         /*
@@ -1012,6 +1012,32 @@ class SearchQueryCompiler {
         }
             */
         return when;
+    }
+
+    private compileEntityTermsForScope(
+        entityTerms: querySchema.EntityTerm[],
+    ): SearchTermGroup {
+        let termGroup = createAndTermGroup();
+        const dedupe = this.dedupe;
+        this.dedupe = false;
+        for (const term of entityTerms) {
+            const orMax = createOrMaxTermGroup();
+            this.addEntityTermToGroup(term, orMax);
+            termGroup.terms.push(optimizeTermGroup(orMax));
+        }
+        this.dedupe = dedupe;
+        return termGroup;
+    }
+
+    private entityTermsToTags(entityTerms: querySchema.EntityTerm[]): string[] {
+        const tags: string[] = [];
+        for (const term of entityTerms) {
+            const name = term.name;
+            if (!isWildcard(name)) {
+                tags.push(name);
+            }
+        }
+        return tags;
     }
 }
 
