@@ -584,6 +584,7 @@ class SearchQueryCompiler {
         entityTerms: querySchema.EntityTerm[],
         termGroup: SearchTermGroup,
         useOrMax: boolean = true,
+        searchTopics: boolean = true, // Entity names and facet values can also be seen as topics
     ): void {
         if (useOrMax) {
             const dedupe = this.dedupe;
@@ -591,7 +592,7 @@ class SearchQueryCompiler {
             for (const term of entityTerms) {
                 const orMax = createOrMaxTermGroup();
                 this.addEntityTermToGroup(term, orMax);
-                termGroup.terms.push(optimizeOrMax(orMax));
+                termGroup.terms.push(optimizeTermGroup(orMax));
             }
             this.dedupe = dedupe;
         } else {
@@ -599,17 +600,19 @@ class SearchQueryCompiler {
                 this.addEntityTermToGroup(term, termGroup);
             }
         }
-        // Also search for topics
-        for (const term of entityTerms) {
-            this.addEntityNameToGroup(term, PropertyNames.Topic, termGroup);
-            if (term.facets) {
-                for (const facet of term.facets) {
-                    if (!isWildcard(facet.facetValue)) {
-                        this.addPropertyTermToGroup(
-                            facet.facetValue,
-                            PropertyNames.Topic,
-                            termGroup,
-                        );
+        if (searchTopics) {
+            // Also search for topics,
+            for (const term of entityTerms) {
+                this.addEntityNameToGroup(term, PropertyNames.Topic, termGroup);
+                if (term.facets) {
+                    for (const facet of term.facets) {
+                        if (!isWildcard(facet.facetValue)) {
+                            this.addPropertyTermToGroup(
+                                facet.facetValue,
+                                PropertyNames.Topic,
+                                termGroup,
+                            );
+                        }
                     }
                 }
             }
@@ -626,7 +629,7 @@ class SearchQueryCompiler {
             for (const term of entityTerms) {
                 this.addEntityTermAsSearchTermsToGroup(term, orMax);
             }
-            termGroup.terms.push(optimizeOrMax(orMax));
+            termGroup.terms.push(optimizeTermGroup(orMax));
         } else {
             for (const term of entityTerms) {
                 this.addEntityTermAsSearchTermsToGroup(term, termGroup);
@@ -964,10 +967,6 @@ class SearchQueryCompiler {
         let when = this.compileWhen(filter);
         if (filter.scopeSubQuery !== undefined) {
             when = this.compileScopeFilter(filter.scopeSubQuery, when);
-            this.compileScopeFilterAsTerms(
-                filter.scopeSubQuery,
-                searchTermGroup,
-            );
         }
         return {
             searchTermGroup,
@@ -983,24 +982,29 @@ class SearchQueryCompiler {
         if (filter.timeRange) {
             when.dateRange = dateRangeFromDateTimeRange(filter.timeRange);
         }
+        if (
+            filter.entitySearchTerms !== undefined &&
+            filter.entitySearchTerms.length > 0
+        ) {
+            let sTagGroup = createAndTermGroup();
+            const dedupe = this.dedupe;
+            this.dedupe = false;
+            for (const term of filter.entitySearchTerms) {
+                const andGroup = createOrMaxTermGroup();
+                this.addEntityTermToGroup(term, andGroup);
+                sTagGroup.terms.push(optimizeTermGroup(andGroup));
+            }
+            this.dedupe = dedupe;
+            when.sTags = sTagGroup;
+        }
+
+        /*
         if (filter.searchTerms !== undefined && filter.searchTerms.length > 0) {
             when.tags ??= [];
             when.tags.push(...filter.searchTerms);
         }
+            */
         return when;
-    }
-
-    private compileScopeFilterAsTerms(
-        filter: querySchema2.ScopeFilter,
-        searchTermGroup: SearchTermGroup,
-    ): void {
-        if (filter.searchTerms !== undefined && filter.searchTerms.length > 0) {
-            const topicTerms = createOrMaxTermGroup();
-            for (const topic of filter.searchTerms) {
-                topicTerms.terms.push(createPropertySearchTerm("topic", topic));
-            }
-            searchTermGroup.terms.push(topicTerms);
-        }
     }
 }
 
@@ -1211,7 +1215,7 @@ function isEmptyString(value: string): boolean {
     return value === undefined || value.length === 0;
 }
 
-function optimizeOrMax(termGroup: SearchTermGroup) {
+function optimizeTermGroup(termGroup: SearchTermGroup) {
     if (termGroup.terms.length === 1) {
         return termGroup.terms[0];
     }

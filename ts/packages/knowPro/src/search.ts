@@ -665,6 +665,12 @@ class QueryCompiler {
                 );
             }
         }
+        // Structured Tags
+        if (filter && filter.sTags && filter.sTags.terms.length > 0) {
+            scopeSelectors ??= [];
+            this.addSTagScopeSelector(filter.sTags, scopeSelectors);
+        }
+
         return scopeSelectors && scopeSelectors.length > 0
             ? new q.GetScopeExpr(scopeSelectors)
             : undefined;
@@ -679,6 +685,22 @@ class QueryCompiler {
                 this.compileSearchGroupMessages(termGroup);
             scopeSelectors.push(
                 new q.TextRangesFromMessagesSelector(selectExpr),
+            );
+            this.allScopeSearchTerms.push(...searchTermsUsed);
+        }
+    }
+
+    private addSTagScopeSelector(
+        termGroup: SearchTermGroup,
+        scopeSelectors: q.IQueryTextRangeSelector[],
+    ) {
+        if (termGroup.terms.length > 0) {
+            const [searchTermsUsed, selectExpr] =
+                this.compileSearchGroupMessages(termGroup);
+            scopeSelectors.push(
+                new q.TextRangesFromSTagSelector(
+                    new q.TextRangesFromMessagesSelector(selectExpr),
+                ),
             );
             this.allScopeSearchTerms.push(...searchTermsUsed);
         }

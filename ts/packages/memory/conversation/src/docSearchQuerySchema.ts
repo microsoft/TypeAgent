@@ -11,8 +11,8 @@ export type FacetTerm = {
 };
 
 // Use to find information about specific, tangible people, places, institutions, things and document parts only.
-// Document parts like headings, sections , links, lists etc. are entities with facets.
 // This includes entities with particular facets
+// Document parts like headings, sections , links, lists etc. are ENTITIES with facets.
 // Abstract concepts or topics are not entities.
 // Any terms will match fuzzily.
 export type EntityTerm = {
@@ -25,7 +25,7 @@ export type EntityTerm = {
     // An entity can have multiple types; entity types should be single words
     type?: string[];
     // Facet terms search for properties or attributes of the entity.
-    // Eg: color(blue), profession(writer), author(*), aunt(Agatha), weight(4kg), phoneNumber(...), title(*) etc.
+    // Eg: color(blue), profession(writer), author(*), aunt(Agatha), weight(4kg), phoneNumber(...), title(*), level(3) etc.
     facets?: FacetTerm[];
 };
 
@@ -55,7 +55,8 @@ export type ActionTerm = {
 
 export type ScopeFilter = {
     // Search terms to use to limit search
-    searchTerms?: string[] | undefined;
+    // Document parts like headings are NAMED ENTITIES with facets.
+    entitySearchTerms?: EntityTerm[] | undefined;
     // Use only if request explicitly asks for time range, particular year, month etc.
     timeRange?: DateTimeRange | undefined; // in this time range
 };
@@ -70,7 +71,7 @@ export type SearchFilter = {
     // Use for all concepts, topics, or other search terms that don't fit ActionTerms or EntityTerms
     // - Do not use noisy searchTerms like "topic", "topics", "subject", "discussion" etc. even if they are mentioned in the user request
     // - Phrases like 'email address' or 'first name' are a single term
-    // - use empty searchTerms array when use asks for summaries
+    // - use empty searchTerms array when user asks for summaries
     searchTerms?: string[];
     // Use to limit matches to particular subset of the document
     // If the user request specifies a particular section or heading to search within, use their names as scopeSubQuery.searchTerms to limit the search.

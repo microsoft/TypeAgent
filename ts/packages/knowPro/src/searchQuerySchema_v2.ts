@@ -52,7 +52,8 @@ export type ActionTerm = {
 };
 
 export type ScopeFilter = {
-    searchTerms?: string[] | undefined;
+    // Search terms to use to limit search
+    entitySearchTerms?: EntityTerm[] | undefined;
     // Use only if request explicitly asks for time range, particular year, month etc.
     timeRange?: DateTimeRange | undefined; // in this time range
 };

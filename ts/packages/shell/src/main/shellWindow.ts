@@ -375,28 +375,31 @@ export class ShellWindow {
             this.setUserSettingValue("canvas", targetUrlString);
 
             if (
-                this.dispatcherReadyPromise !== undefined &&
+                this.dispatcherReadyPromiseResolvers !== undefined &&
                 targetUrlString.startsWith("http://localhost")
             ) {
-                await this.dispatcherReadyPromise;
+                await this.dispatcherReadyPromiseResolvers.promise;
             }
 
             return inlineWebContentView.webContents.loadURL(targetUrlString);
         }
     }
 
-    private dispatcherReady: (() => void) | undefined;
-    private dispatcherReadyPromise: Promise<void> | undefined = new Promise(
-        (resolve) => {
-            this.dispatcherReady = () => {
-                resolve();
-                this.dispatcherReady = undefined;
-                this.dispatcherReadyPromise = undefined;
-            };
-        },
-    );
+    private dispatcherReadyPromiseResolvers:
+        | PromiseWithResolvers<void>
+        | undefined = Promise.withResolvers<void>();
     public dispatcherInitialized() {
-        this.dispatcherReady?.();
+        if (this.dispatcherReadyPromiseResolvers === undefined) {
+            throw new Error("Dispatcher already initialized");
+        }
+        this.dispatcherReadyPromiseResolvers.resolve();
+        this.dispatcherReadyPromiseResolvers = undefined;
+
+        // Notify the renderer process that the dispatcher is initialized
+        this.chatView.webContents.send("dispatcher-initialized");
+
+        // Give focus to the chat view once initialization is done.
+        this.chatView.webContents.focus();
     }
 
     public closeInlineBrowser(save: boolean = true) {

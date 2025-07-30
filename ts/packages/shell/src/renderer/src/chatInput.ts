@@ -35,7 +35,6 @@ export class ExpandableTextarea {
         this.entryHandlers = handlers;
         const textEntry = document.createElement("span");
         textEntry.className = className;
-        textEntry.contentEditable = "true";
         textEntry.role = "textbox";
         textEntry.id = id;
         textEntry.addEventListener("keydown", (event) => {
@@ -81,6 +80,9 @@ export class ExpandableTextarea {
         this.textEntry = textEntry;
     }
 
+    public enable(enabled: boolean) {
+        this.textEntry.contentEditable = enabled.toString();
+    }
     getTextEntry() {
         return this.textEntry;
     }
@@ -117,20 +119,26 @@ export class ExpandableTextarea {
     public moveCursorToEnd() {
         // Set the cursor to the end of the text
         const r = document.createRange();
-        if (this.textEntry.childNodes.length > 0) {
-            r.selectNode(this.textEntry);
-            r.setStartBefore(this.textEntry.childNodes[0]);
-            r.setEndAfter(
-                this.textEntry.childNodes[this.textEntry.childNodes.length - 1],
-            );
+        const textEntry = this.textEntry;
+        const childNodes = textEntry.childNodes;
+        if (childNodes.length > 0) {
+            r.selectNode(textEntry);
+            r.setStartBefore(childNodes[0]);
+            r.setEndAfter(childNodes[childNodes.length - 1]);
             r.collapse(false);
             const s = document.getSelection();
             if (s) {
                 s.removeAllRanges();
                 s.addRange(r);
             }
-            this.textEntry.scrollTop = this.textEntry.scrollHeight;
+            textEntry.scrollTop = textEntry.scrollHeight;
         }
+    }
+
+    public getSelectionEndNode() {
+        const childNodes = this.textEntry.childNodes;
+        const len = childNodes.length;
+        return len > 0 ? childNodes[len - 1] : this.textEntry;
     }
 
     public replaceTextAtCursor(
@@ -147,16 +155,14 @@ export class ExpandableTextarea {
             if (!currentRange.collapsed) {
                 return;
             }
-            if (currentRange.startContainer === this.textEntry.childNodes[0]) {
+            if (currentRange.startContainer === this.getSelectionEndNode()) {
                 const currentText = this.textEntry.innerText;
                 let offset = currentRange.startOffset + cursorOffset;
                 if (offset < 0 || offset > currentText.length) {
                     return;
                 }
-                const prefix = this.textEntry.innerText.substring(0, offset);
-                const suffix = this.textEntry.innerText.substring(
-                    offset + length,
-                );
+                const prefix = currentText.substring(0, offset);
+                const suffix = currentText.substring(offset + length);
                 this.textEntry.innerText = prefix + text + suffix;
 
                 const newRange = document.createRange();

@@ -196,6 +196,9 @@ export function docPartsFromMarkdown(
             undefined,
             kBlock.knowledge,
         );
+        if (kBlock.sTags && kBlock.sTags.length > 0) {
+            part.sTags = kBlock.sTags;
+        }
         parts.push(part);
     }
     return parts;
