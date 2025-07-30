@@ -10,6 +10,38 @@ import { ExpandableTextarea } from "./chatInput";
 const debug = registerDebug("typeagent:shell:partial");
 const debugError = registerDebug("typeagent:shell:partial:error");
 
+function getLeafNode(node: Node, offset: number) {
+    let curr = 0;
+    let currNode: Node | undefined = node;
+    while (currNode !== undefined) {
+        const childNodes = currNode.childNodes;
+        if (childNodes.length === 0) {
+            if (
+                currNode.textContent === null ||
+                currNode.textContent.length < offset - curr
+            ) {
+                return undefined;
+            }
+
+            return { node: currNode, offset: offset - curr };
+        }
+
+        currNode = undefined;
+        for (const child of childNodes) {
+            if (child.textContent === null) {
+                continue;
+            }
+            const len = child.textContent.length;
+            if (curr + len >= offset) {
+                currNode = child;
+                break;
+            }
+            curr += len;
+        }
+    }
+    return undefined;
+}
+
 export class PartialCompletion {
     private readonly searchMenu: SearchMenu;
     private current: string | undefined = undefined;
@@ -29,22 +61,26 @@ export class PartialCompletion {
         }, false);
         document.addEventListener("selectionchange", () => {
             debug("Partial completion update on selection changed");
-            this.update(true);
+            this.update(false);
         });
 
         if (document.activeElement === this.input.getTextEntry()) {
             // If the input is already focused, we need to update immediately.
-            this.update();
+            this.update(false);
         }
     }
 
-    public update(selectionChanged: boolean = false) {
-        if (!this.isSelectionAtEnd(selectionChanged)) {
+    public update(contentChanged: boolean) {
+        if (contentChanged) {
+            // Normalize the input text to ensure selection at end is correct.
+            this.input.getTextEntry().normalize();
+        }
+        if (!this.isSelectionAtEnd(contentChanged)) {
             this.cancelCompletionMenu();
             return;
         }
         const input = this.getCurrentInputForCompletion();
-        debug(`Partial completion input: ${input}`);
+        debug(`Partial completion input: '${input}'`);
         if (!this.reuseSearchMenu(input)) {
             this.updatePartialCompletion(input);
         }
@@ -55,16 +91,16 @@ export class PartialCompletion {
         this.cancelCompletionMenu();
     }
     private getCurrentInput() {
-        return this.input.getTextEntry().innerText;
+        return this.input.getTextEntry().textContent ?? "";
     }
     private getCurrentInputForCompletion() {
         return this.getCurrentInput().trimStart();
     }
 
-    private isSelectionAtEnd(selectionChanged: boolean = false) {
+    private isSelectionAtEnd(trace: boolean = false) {
         const s = document.getSelection();
         if (!s || s.rangeCount !== 1) {
-            if (!selectionChanged) {
+            if (trace) {
                 debug(
                     `Partial completion skipped: invalid selection count ${s?.rangeCount}`,
                 );
@@ -73,7 +109,7 @@ export class PartialCompletion {
         }
         const r = s.getRangeAt(0);
         if (!r.collapsed) {
-            if (!selectionChanged) {
+            if (trace) {
                 debug(`Partial completion skipped: non-collapsed range`);
             }
             return false;
@@ -81,13 +117,13 @@ export class PartialCompletion {
 
         const endNode = this.input.getSelectionEndNode();
         if (r.endContainer !== endNode) {
-            if (!selectionChanged) {
+            if (trace) {
                 debug(`Partial completion skipped: selection not in text area`);
             }
             return false;
         }
-        if (r.endOffset !== this.getCurrentInput().length) {
-            if (!selectionChanged) {
+        if (r.endOffset !== endNode.textContent?.length) {
+            if (trace) {
                 debug(`Partial completion skipped: selection not at end`);
             }
             return false;
@@ -161,7 +197,7 @@ export class PartialCompletion {
 
         if (showMenu) {
             debug(
-                `Partial completion selection updated: '${prefix}' with ${items.length} items`,
+                `Partial completion prefix updated: '${prefix}' with ${items.length} items`,
             );
             this.showCompletionMenu(prefix);
         } else {
@@ -176,7 +212,7 @@ export class PartialCompletion {
 
     // Updating completions information with input
     private updatePartialCompletion(input: string) {
-        debug(`Partial completion start: ${input}`);
+        debug(`Partial completion start: '${input}'`);
         this.cancelCompletionMenu();
         this.current = input;
         this.noCompletion = false;
@@ -187,7 +223,7 @@ export class PartialCompletion {
         completionP
             .then((result) => {
                 if (this.completionP !== completionP) {
-                    debug(`Partial completion canceled: ${input}`);
+                    debug(`Partial completion canceled: '${input}'`);
                     return;
                 }
 
@@ -227,24 +263,24 @@ export class PartialCompletion {
                 this.searchMenu.setChoices(completions);
 
                 debug(
-                    `Partial completion selection reloaded: '${partial}' with ${completions.length} items`,
+                    `Partial completion selection updated: '${partial}' with ${completions.length} items`,
                 );
-                this.update();
+                this.update(false);
             })
             .catch((e) => {
-                debugError(`Partial completion error: ${input} ${e}`);
+                debugError(`Partial completion error: '${input}' ${e}`);
                 this.completionP = undefined;
             });
     }
 
-    private showCompletionMenu(prefix: string) {
-        if (prefix === undefined) {
+    private showCompletionMenu(completionPrefix: string) {
+        if (completionPrefix === undefined) {
             // This should not happen.
             debugError(`Partial completion prefix not found`);
             return;
         }
 
-        if (this.searchMenu.isActive() && prefix !== "") {
+        if (this.searchMenu.isActive() && completionPrefix !== "") {
             return;
         }
         // The menu is not active or completion prefix is empty (i.e. need to move the menu).
@@ -253,13 +289,18 @@ export class PartialCompletion {
         if (textEntry.childNodes.length === 0) {
             x = textEntry.getBoundingClientRect().left;
         } else {
+            const offset =
+                this.getCurrentInput().length - completionPrefix.length;
+            const leaf = getLeafNode(textEntry, offset);
+            if (leaf === undefined) {
+                debugError(
+                    "Partial completion skipped: unable to determine leaf node",
+                );
+                return;
+            }
             const r = document.createRange();
-
-            r.setEnd(
-                textEntry.childNodes[0],
-                this.getCurrentInput().length - prefix.length,
-            );
-            r.collapse(false);
+            r.setStart(leaf.node, leaf.offset);
+            r.collapse(true);
             const rects = r.getClientRects();
             if (rects.length !== 1) {
                 debugError("Partial completion skipped: invalid rects");
@@ -279,6 +320,7 @@ export class PartialCompletion {
             this.container.removeChild(this.searchMenu.getContainer());
         }
     }
+
     private handleSelect(item: SearchMenuItem) {
         debug(`Partial completion selected: ${item.selectedText}`);
         this.cancelCompletionMenu();
@@ -287,18 +329,46 @@ export class PartialCompletion {
         );
         if (prefix === undefined) {
             // This should not happen.
-            debugError(`Partial completion prefix not found`);
+            debugError(`Partial completion abort select: prefix not found`);
             return;
         }
         const replaceText =
             item.needQuotes !== false && /\s/.test(item.selectedText)
                 ? `"${item.selectedText.replaceAll('"', '\\"')}"`
                 : item.selectedText;
-        this.input.replaceTextAtCursor(
-            replaceText,
-            -prefix.length,
-            prefix.length,
+
+        const offset = this.getCurrentInput().length - prefix.length;
+        const leafNode = getLeafNode(this.input.getTextEntry(), offset);
+        if (leafNode === undefined) {
+            debugError(
+                "Partial completion abort select: unable to determine leaf node",
+            );
+            return;
+        }
+        const endLeafNode = getLeafNode(
+            this.input.getTextEntry(),
+            offset + prefix.length,
         );
+        if (endLeafNode === undefined) {
+            debugError(
+                "Partial completion abort select: unable to determine end leaf node",
+            );
+            return;
+        }
+
+        const newNode = document.createTextNode(replaceText);
+        const r = document.createRange();
+        r.setStart(leafNode.node, leafNode.offset);
+        r.setEnd(endLeafNode.node, endLeafNode.offset);
+        r.deleteContents();
+        r.insertNode(newNode);
+
+        r.collapse(false);
+        const s = document.getSelection();
+        if (s) {
+            s.removeAllRanges();
+            s.addRange(r);
+        }
 
         // Make sure the text entry remains focused after replacement.
         this.input.getTextEntry().focus();

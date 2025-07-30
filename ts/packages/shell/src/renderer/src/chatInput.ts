@@ -44,12 +44,15 @@ export class ExpandableTextarea {
                     return false;
                 }
             }
-            if (event.key === "Enter") {
-                event.preventDefault();
-                this.send(sendButton);
-            } else if (event.key === "Escape") {
-                textEntry.textContent = "";
-                event.preventDefault();
+            switch (event.key) {
+                case "Enter":
+                    event.preventDefault();
+                    this.send(sendButton);
+                    break;
+                case "Escape":
+                    textEntry.textContent = "";
+                    event.preventDefault();
+                    break;
             }
 
             if (sendButton !== undefined) {
@@ -67,6 +70,9 @@ export class ExpandableTextarea {
             ) {
                 textEntry.removeChild(textEntry.childNodes[0]);
             }
+            this.entryHandlers.onChange?.(this, true);
+        });
+        textEntry.addEventListener("paste", () => {
             this.entryHandlers.onChange?.(this, true);
         });
         textEntry.onchange = () => {
@@ -122,9 +128,7 @@ export class ExpandableTextarea {
         const textEntry = this.textEntry;
         const childNodes = textEntry.childNodes;
         if (childNodes.length > 0) {
-            r.selectNode(textEntry);
-            r.setStartBefore(childNodes[0]);
-            r.setEndAfter(childNodes[childNodes.length - 1]);
+            r.selectNodeContents(textEntry);
             r.collapse(false);
             const s = document.getSelection();
             if (s) {
@@ -136,49 +140,13 @@ export class ExpandableTextarea {
     }
 
     public getSelectionEndNode() {
-        const childNodes = this.textEntry.childNodes;
-        const len = childNodes.length;
-        return len > 0 ? childNodes[len - 1] : this.textEntry;
-    }
-
-    public replaceTextAtCursor(
-        text: string,
-        cursorOffset: number = 0,
-        length: number = 0,
-    ) {
-        const s = document.getSelection();
-        if (s) {
-            if (s.rangeCount > 1) {
-                return;
-            }
-            const currentRange = s.getRangeAt(0);
-            if (!currentRange.collapsed) {
-                return;
-            }
-            if (currentRange.startContainer === this.getSelectionEndNode()) {
-                const currentText = this.textEntry.innerText;
-                let offset = currentRange.startOffset + cursorOffset;
-                if (offset < 0 || offset > currentText.length) {
-                    return;
-                }
-                const prefix = currentText.substring(0, offset);
-                const suffix = currentText.substring(offset + length);
-                this.textEntry.innerText = prefix + text + suffix;
-
-                const newRange = document.createRange();
-                newRange.setEnd(
-                    this.textEntry.childNodes[0],
-                    prefix.length + text.length,
-                );
-                newRange.collapse(false);
-                const s = document.getSelection();
-                if (s) {
-                    s.removeAllRanges();
-                    s.addRange(newRange);
-                }
-            }
+        let lastChild: Node = this.textEntry;
+        while (lastChild.childNodes.length > 0) {
+            lastChild = lastChild.childNodes[lastChild.childNodes.length - 1];
         }
+        return lastChild;
     }
+
     send(sendButton?: HTMLButtonElement) {
         const html = this.getTextEntry().innerHTML;
         if (html.length > 0) {
