@@ -482,7 +482,9 @@ export async function createKnowproTestCommands(
                     context.printer.writeError(error);
                 }
             }
-
+            if (!ensureConversationLoaded()) {
+                return;
+            }
             const request = parseTypedArguments<kpTest.SearchRequest>(
                 args,
                 searchDef(),
@@ -499,6 +501,7 @@ export async function createKnowproTestCommands(
                 resultScope.data,
                 options.compileOptions,
             );
+
             const results = (
                 await kp.runSearchQueries(context.conversation!, query, options)
             ).flat();

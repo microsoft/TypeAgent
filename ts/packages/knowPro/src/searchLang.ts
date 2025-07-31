@@ -986,23 +986,18 @@ class SearchQueryCompiler {
             filter.entitySearchTerms !== undefined &&
             filter.entitySearchTerms.length > 0
         ) {
-            let termGroup = createAndTermGroup();
-            const dedupe = this.dedupe;
-            this.dedupe = false;
-            for (const term of filter.entitySearchTerms) {
-                const andGroup = createOrMaxTermGroup();
-                this.addEntityTermToGroup(term, andGroup);
-                termGroup.terms.push(optimizeTermGroup(andGroup));
-            }
-            this.dedupe = dedupe;
+            // Compile entity terms to search structured tags
+            let termGroup = this.compileEntityTermsForScope(
+                filter.entitySearchTerms,
+            );
+            when.tagMatchingTerms = termGroup;
             /*
             if (when.scopeDefiningTerms) {
                 when.scopeDefiningTerms.terms.push(termGroup);
             } else {
                 when.scopeDefiningTerms = termGroup;
             }
-                */
-            when.sTags = termGroup;
+            */
         }
 
         /*
@@ -1012,6 +1007,31 @@ class SearchQueryCompiler {
         }
             */
         return when;
+    }
+
+    private compileEntityTermsForScope(
+        entityTerms: querySchema.EntityTerm[],
+    ): SearchTermGroup {
+        let termGroup = createAndTermGroup();
+        const dedupe = this.dedupe;
+        this.dedupe = false;
+        for (const term of entityTerms) {
+            const orMax = createOrMaxTermGroup();
+            this.addEntityTermToGroup(term, orMax);
+            // Also search for vanilla tags
+            this.addTagToGroup(term.name, orMax);
+            termGroup.terms.push(optimizeTermGroup(orMax));
+        }
+        this.dedupe = dedupe;
+        return termGroup;
+    }
+
+    private addTagToGroup(tag: string, termGroup: SearchTermGroup): void {
+        if (tag && !isWildcard(tag)) {
+            termGroup.terms.push(
+                createPropertySearchTerm(PropertyNames.Tag, tag),
+            );
+        }
     }
 }
 
