@@ -218,7 +218,7 @@ export function textAndKnowledgeBlocksFromMarkdown(
     return [textBlocks, knowledgeBlocks];
 }
 
-class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
+export class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
     public knowledgeBlocks: MarkdownKnowledgeBlock[];
 
     private headingsInScope: Map<number, string>;
@@ -250,23 +250,25 @@ class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
                 this.knowledgeBlock.tags.add("code");
                 break;
             case "list":
-                this.knowledgeBlock.tags.add("list");
                 const listName = this.getPrecedingHeading();
                 if (listName) {
-                    this.knowledgeBlock.knowledge.entities.push({
+                    this.addEntityAndTag({
                         name: listName,
                         type: ["list"],
                     });
+                } else {
+                    this.knowledgeBlock.tags.add("list");
                 }
                 break;
             case "table":
-                this.knowledgeBlock.tags.add("table");
                 const tableName = this.getPrecedingHeading();
                 if (tableName) {
-                    this.knowledgeBlock.knowledge.entities.push({
+                    this.addEntityAndTag({
                         name: tableName,
                         type: ["table"],
                     });
+                } else {
+                    this.knowledgeBlock.tags.add("table");
                 }
                 break;
             case "link":
@@ -337,22 +339,17 @@ class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
             this.knowledgeBlock.knowledge.topics.push(headingText);
 
             const headingEntity = headingToEntity(headingText, headerLevel);
-            this.knowledgeBlock.knowledge.entities.push(headingEntity);
-
-            this.addHeadingAsTags(headingText, headerLevel);
+            this.addEntityAndTag(headingEntity);
         }
     }
 
-    private addHeadingAsTags(headingText: string, level: number) {
-        this.knowledgeBlock.tags.add("heading");
-        this.knowledgeBlock.tags.add("section");
-        this.knowledgeBlock.tags.add(headingText);
+    private addEntityAndTag(entity: kpLib.ConcreteEntity): void {
+        this.knowledgeBlock.knowledge.entities.push(entity);
         // Experimental: structured Tags
-        const headingEntity = headingToEntity(headingText, level);
-        this.knowledgeBlock.sTags.push(headingEntity);
+        this.knowledgeBlock.sTags.push({ ...entity });
     }
 
-    private addLinksToKnowledgeBlock() {
+    private addLinksToKnowledgeBlock(): void {
         //
         // Also include all links
         //
