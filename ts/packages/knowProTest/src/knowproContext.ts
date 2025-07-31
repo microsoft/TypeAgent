@@ -8,6 +8,7 @@ import * as cm from "conversation-memory";
 import { KnowproLog } from "./logging.js";
 import path from "path";
 import { createEmbeddingCache } from "knowledge-processor";
+import { PromptSection } from "typechat";
 
 export class KnowproContext {
     public knowledgeModel: ChatModel;
@@ -21,13 +22,16 @@ export class KnowproContext {
     public log: KnowproLog;
 
     public tokenStats: openai.CompletionUsageStats;
+    public promptHandler?:
+        | ((request: PromptSection[], response: string) => void)
+        | undefined;
 
     constructor(basePath?: string) {
         this.basePath = basePath ?? "/data/testChat/knowpro";
         this.log = new KnowproLog(path.join(this.basePath, "logs"));
         this.knowledgeModel = createKnowledgeModel();
-        this.knowledgeModel.completionCallback = (_, response) =>
-            this.updateTokenCounts(response.usage);
+        this.knowledgeModel.completionCallback = (request, response) =>
+            this.completionHandler(request, response);
         this.similarityModel = createEmbeddingCache(
             openai.createEmbeddingModel(),
             1024,
@@ -52,6 +56,15 @@ export class KnowproContext {
             throw new Error("No conversation loaded");
         }
         return this.conversation!;
+    }
+
+    private completionHandler(request: any, response: any): void {
+        this.updateTokenCounts(response.usage);
+        if (this.promptHandler) {
+            const messages: PromptSection[] = request.messages;
+            const responseText = response.choices[0]?.message?.content ?? "";
+            this.promptHandler(messages, responseText);
+        }
     }
 
     public startTokenCounter(): void {

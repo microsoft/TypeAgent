@@ -9,7 +9,7 @@ import {
     StopWatch,
 } from "interactive-app";
 import chalk, { ChalkInstance } from "chalk";
-import { Result } from "typechat";
+import { PromptSection, Result } from "typechat";
 import { openai } from "aiclient";
 
 export type ChalkColor = {
@@ -20,6 +20,7 @@ export type ChalkColor = {
 export class ChalkWriter extends ConsoleWriter {
     private _io: InteractiveIo;
     private _color: ChalkColor;
+    private _colorStack: ChalkInstance[];
 
     constructor(io?: InteractiveIo) {
         if (!io) {
@@ -28,6 +29,7 @@ export class ChalkWriter extends ConsoleWriter {
         super(io.stdout);
         this._io = io;
         this._color = {};
+        this._colorStack = [];
     }
 
     public get io(): InteractiveIo {
@@ -152,10 +154,12 @@ export class ChalkWriter extends ConsoleWriter {
             ? `${label}: ${clock.elapsedString()}`
             : clock.elapsedString();
         this.writeInColor(color, timing);
+        return this;
     }
 
     public writeError(message: string) {
         this.writeLine(chalk.redBright(message));
+        return this;
     }
 
     public writeListInColor(
@@ -169,6 +173,19 @@ export class ChalkWriter extends ConsoleWriter {
         } finally {
             this.setForeColor(prevColor);
         }
+        return this;
+    }
+
+    public writePromptSection(prompt: PromptSection) {
+        if (prompt.content) {
+            this.writeLine(prompt.role);
+            if (typeof prompt.content === "string") {
+                this.writeLine(prompt.content);
+            } else {
+                this.writeJson(prompt.content);
+            }
+        }
+        return this;
     }
 
     public writeTranslation<T>(result: Result<T>) {
@@ -212,6 +229,21 @@ export class ChalkWriter extends ConsoleWriter {
             this.writeLine(`Completion tokens: ${stats.completion_tokens}`);
             this.writeLine(`Total tokens: ${stats.total_tokens}`);
         });
+        return this;
+    }
+
+    public pushColor(color: ChalkInstance) {
+        const prevColor = this.setForeColor(color);
+        if (prevColor) {
+            this._colorStack.push(prevColor);
+        }
+        return this;
+    }
+
+    public popColor() {
+        const color =
+            this._colorStack.length > 0 ? this._colorStack.pop() : undefined;
+        this.setForeColor(color);
         return this;
     }
 }
