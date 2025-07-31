@@ -371,7 +371,6 @@ export class ShellWindow {
     private async constructPDFViewerUrl(pdfUrl: string): Promise<string> {
         try {
             const browserIpc = BrowserAgentIpc.getinstance();
-            console.trace();
 
             const response = await new Promise<any>((resolve, reject) => {
                 const timeoutId = setTimeout(() => {
