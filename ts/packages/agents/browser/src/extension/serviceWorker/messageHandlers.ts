@@ -497,7 +497,6 @@ export async function handleMessage(
             return { success: true };
         }
 
-
         // Website Library Panel message handlers
         case "importWebsiteDataWithProgress": {
             return await handleImportWebsiteDataWithProgress(message);
@@ -621,7 +620,6 @@ export async function handleMessage(
                 return { domains: [] };
             }
         }
-
 
         case "checkAIModelAvailability": {
             try {
