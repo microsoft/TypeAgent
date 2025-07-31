@@ -10,6 +10,7 @@ import {
     DefaultEntityGraphServices,
     DefaultEntityCacheServices,
     ChromeExtensionService,
+    createExtensionService,
 } from "./knowledgeUtilities";
 
 /**
@@ -26,10 +27,10 @@ class EntityGraphView {
         try {
             console.log("EntityGraphView constructor starting...");
 
-            // Initialize services with Chrome extension connection
-            const chromeService = new ChromeExtensionService();
+            // Initialize services with appropriate extension service based on environment
+            const extensionService = createExtensionService();
             this.entityGraphService = new DefaultEntityGraphServices(
-                chromeService,
+                extensionService,
             );
             this.entityCacheService = new DefaultEntityCacheServices();
             console.log(

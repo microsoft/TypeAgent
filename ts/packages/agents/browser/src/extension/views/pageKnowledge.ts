@@ -3,7 +3,7 @@
 
 import {
     notificationManager,
-    chromeExtensionService,
+    extensionService,
     TemplateHelpers,
     FormatUtils,
     EventManager,
@@ -216,7 +216,7 @@ class KnowledgePanel {
 
     private async loadCurrentPageInfo() {
         try {
-            const tab = await chromeExtensionService.getCurrentTab();
+            const tab = await extensionService.getCurrentTab();
             if (tab) {
                 this.currentUrl = tab.url || "";
 
@@ -237,7 +237,7 @@ class KnowledgePanel {
 
     private async getPageIndexStatus(retryCount: number = 0): Promise<string> {
         try {
-            const response = await chromeExtensionService.getPageIndexStatus(
+            const response = await extensionService.getPageIndexStatus(
                 this.currentUrl,
             );
 
@@ -290,7 +290,7 @@ class KnowledgePanel {
 
     private async refreshPageStatusAfterIndexing() {
         try {
-            const tab = await chromeExtensionService.getCurrentTab();
+            const tab = await extensionService.getCurrentTab();
             if (tab) {
                 this.currentUrl = tab.url || "";
 
@@ -316,7 +316,7 @@ class KnowledgePanel {
 
     private async loadAutoIndexSetting() {
         try {
-            const enabled = await chromeExtensionService.getAutoIndexSetting();
+            const enabled = await extensionService.getAutoIndexSetting();
             const toggle = document.getElementById(
                 "autoIndexToggle",
             ) as HTMLInputElement;
@@ -328,7 +328,7 @@ class KnowledgePanel {
 
     private async toggleAutoIndex(enabled: boolean) {
         try {
-            await chromeExtensionService.setAutoIndexSetting(enabled);
+            await extensionService.setAutoIndexSetting(enabled);
 
             // Update status indicator
             const statusText = enabled
@@ -340,7 +340,7 @@ class KnowledgePanel {
             );
 
             // Notify background script
-            await chromeExtensionService.notifyAutoIndexSettingChanged(enabled);
+            await extensionService.notifyAutoIndexSettingChanged(enabled);
         } catch (error) {
             console.error("Error toggling auto-index:", error);
         }
@@ -380,7 +380,7 @@ class KnowledgePanel {
 
             const startTime = Date.now();
 
-            const response = await chromeExtensionService.extractPageKnowledge(
+            const response = await extensionService.extractPageKnowledge(
                 this.currentUrl,
                 this.extractionSettings.mode,
                 this.extractionSettings,
@@ -508,7 +508,7 @@ class KnowledgePanel {
 
             const startTime = Date.now();
 
-            const response = await chromeExtensionService.indexPageContent(
+            const response = await extensionService.indexPageContent(
                 this.currentUrl,
                 this.extractionSettings.mode,
             );
@@ -530,7 +530,7 @@ class KnowledgePanel {
                 await new Promise((resolve) => setTimeout(resolve, 500));
                 try {
                     const status =
-                        await chromeExtensionService.getPageIndexStatus(
+                        await extensionService.getPageIndexStatus(
                             this.currentUrl,
                         );
                     if (status.isIndexed && status.entityCount !== undefined) {
@@ -604,7 +604,7 @@ class KnowledgePanel {
         queryResults.innerHTML = TemplateHelpers.createSearchLoadingState();
 
         try {
-            const response = await chromeExtensionService.queryKnowledge({
+            const response = await extensionService.queryKnowledge({
                 query: query,
                 url: this.currentUrl,
                 searchScope: "current_page",
@@ -838,7 +838,7 @@ class KnowledgePanel {
                     }, 300);
 
                     // Open the page in a new tab
-                    chromeExtensionService.createTab(url, false);
+                    extensionService.createTab(url, false);
                 }
             }
 
@@ -860,7 +860,7 @@ class KnowledgePanel {
                     }, 300);
 
                     // Open the source in a new tab
-                    chromeExtensionService.createTab(url, false);
+                    extensionService.createTab(url, false);
                 }
             }
 
@@ -926,7 +926,7 @@ class KnowledgePanel {
     private async loadExtractionSettings() {
         try {
             const settings =
-                await chromeExtensionService.getExtractionSettings();
+                await extensionService.getExtractionSettings();
             if (settings) {
                 this.extractionSettings = {
                     ...this.extractionSettings,
@@ -1028,7 +1028,7 @@ class KnowledgePanel {
 
     private async checkConnectionStatus() {
         try {
-            const response = await chromeExtensionService.checkConnection();
+            const response = await extensionService.checkConnection();
 
             this.isConnected = response.connected;
             this.updateConnectionStatus();
@@ -1063,7 +1063,7 @@ class KnowledgePanel {
 
     private async loadFreshKnowledge() {
         try {
-            const indexStatus = await chromeExtensionService.getPageIndexStatus(
+            const indexStatus = await extensionService.getPageIndexStatus(
                 this.currentUrl,
             );
 
@@ -1115,7 +1115,7 @@ class KnowledgePanel {
     private async loadIndexedKnowledge() {
         try {
             const response =
-                await chromeExtensionService.getPageIndexedKnowledge(
+                await extensionService.getPageIndexedKnowledge(
                     this.currentUrl,
                 );
 
@@ -1608,7 +1608,7 @@ class KnowledgePanel {
     private async checkAIModelAvailability() {
         try {
             const response =
-                await chromeExtensionService.checkAIModelAvailability();
+                await extensionService.checkAIModelAvailability();
 
             this.aiModelAvailable = response.available || false;
         } catch (error) {
@@ -1634,7 +1634,7 @@ class KnowledgePanel {
                         <button class="btn btn-primary btn-sm" onclick="switchToBasicMode()">
                             <i class="bi bi-lightning me-2"></i>Switch to Basic Mode
                         </button>
-                        <button class="btn btn-outline-secondary btn-sm" onclick="chromeExtensionService.openOptionsPage()">
+                        <button class="btn btn-outline-secondary btn-sm" onclick="extensionService.openOptionsPage()">
                             <i class="bi bi-gear me-2"></i>Configure AI Model
                         </button>
                     </div>
@@ -1657,7 +1657,7 @@ class KnowledgePanel {
 
     private async saveExtractionSettings() {
         try {
-            await chromeExtensionService.saveExtractionSettings(
+            await extensionService.saveExtractionSettings(
                 this.extractionSettings,
             );
         } catch (error) {

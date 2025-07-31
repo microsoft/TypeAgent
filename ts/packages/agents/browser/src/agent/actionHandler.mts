@@ -622,6 +622,19 @@ async function resolveWebPage(
 ): Promise<string> {
     debug(`Resolving site '${site}'`);
 
+    // Handle library pages with custom protocol
+    const libraryPages: Record<string, string> = {
+        'annotationslibrary': 'typeagent-browser://views/annotationsLibrary.html',
+        'knowledgelibrary': 'typeagent-browser://views/knowledgeLibrary.html', 
+        'macroslibrary': 'typeagent-browser://views/macrosLibrary.html'
+    };
+    
+    const libraryUrl = libraryPages[site.toLowerCase()];
+    if (libraryUrl) {
+        debug(`Resolved library page: ${site} -> ${libraryUrl}`);
+        return libraryUrl;
+    }
+
     switch (site.toLowerCase()) {
         case "paleobiodb":
             return "https://paleobiodb.org/navigator/";
@@ -855,6 +868,7 @@ async function openSearchResult(
         `Opened search result: ${selectedResult.title}`,
     );
 }
+
 
 async function searchWebMemoriesAction(
     context: ActionContext<BrowserActionContext>,

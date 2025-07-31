@@ -416,7 +416,25 @@ export class ShellWindow {
     // ================================================================
     // Inline browser
     // ================================================================
+
     public async openInlineBrowser(targetUrl: URL) {
+        // Check for custom typeagent-browser protocol
+        if (targetUrl.protocol === 'typeagent-browser:') {
+            const browserExtensionUrls = (global as any).browserExtensionUrls;
+            if (browserExtensionUrls) {
+                // Map custom protocol to actual extension URL
+                const libraryName = targetUrl.pathname;
+                
+                if (libraryName && browserExtensionUrls[libraryName]) {
+                    targetUrl = new URL(browserExtensionUrls[libraryName]);
+                    debugShellWindow(`Resolved custom protocol URL: ${targetUrl.toString()}`);
+                } else {
+                    throw new Error(`Unknown library page: ${libraryName}`);
+                }
+            } else {
+                throw new Error('Browser extension not loaded - library pages unavailable');
+            }
+        }
         const mainWindow = this.mainWindow;
         const mainWindowSize = mainWindow.getBounds();
         let newWindow: boolean = false;

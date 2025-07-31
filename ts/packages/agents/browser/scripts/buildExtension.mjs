@@ -103,6 +103,47 @@ const vendorAssets = [
     ],
 ];
 
+const libraryAssets = [
+    "views/annotationsLibrary.html",
+    "views/entityGraphView.css",
+    "views/entityGraphView.html",
+    "views/knowledgeLibrary.css", 
+    "views/knowledgeLibrary.html",
+    "views/macrosLibrary.html", 
+    "views/options.html",
+    "views/pageKnowledge.html",
+    "views/pageMacros.html",
+    "views/pdfView.html",
+];
+
+function copyLibraryAssets(outDir) {
+    mkdirSync(`${outDir}/views`, { recursive: true });
+    for (const asset of libraryAssets) {
+        copyFileSync(`${srcDir}/${asset}`, `${outDir}/${asset}`);
+    }
+}
+
+function copyCommonStaticAssets(outDir) {
+    // Copy library assets
+    copyLibraryAssets(outDir);
+    
+    // Copy other common assets
+    mkdirSync(`${outDir}/offscreen`, { recursive: true });
+    copyFileSync(`${srcDir}/offscreen/offscreen.html`, `${outDir}/offscreen/offscreen.html`);
+    
+    mkdirSync(`${outDir}/sites`, { recursive: true });
+    copyFileSync(`${srcDir}/sites/paleobiodbSchema.mts`, `${outDir}/sites/paleobiodbSchema.mts`);
+    
+    cpSync(`${srcDir}/images`, `${outDir}/images`, { recursive: true });
+    
+    // Copy vendor assets
+    for (const [src, destRel] of vendorAssets) {
+        const dest = resolve(outDir, destRel);
+        mkdirSync(dirname(dest), { recursive: true });
+        copyFileSync(resolve(__dirname, "../", src), dest);
+    }
+}
+
 if (verbose)
     console.log(
         chalk.blueBright(
@@ -154,66 +195,7 @@ for (const [name, relPath] of Object.entries(sharedScripts)) {
 // Static file copy
 if (verbose) console.log(chalk.cyan("\n📁 Copying Chrome static files..."));
 copyFileSync(`${srcDir}/manifest.json`, `${chromeOutDir}/manifest.json`);
-mkdirSync(`${chromeOutDir}/views`, { recursive: true });
-copyFileSync(
-    `${srcDir}/views/pageMacros.html`,
-    `${chromeOutDir}/views/pageMacros.html`,
-);
-copyFileSync(
-    `${srcDir}/views/macrosLibrary.html`,
-    `${chromeOutDir}/views/macrosLibrary.html`,
-);
-
-copyFileSync(
-    `${srcDir}/views/entityGraphView.css`,
-    `${chromeOutDir}/views/entityGraphView.css`,
-);
-
-copyFileSync(
-    `${srcDir}/views/entityGraphView.html`,
-    `${chromeOutDir}/views/entityGraphView.html`,
-);
-
-copyFileSync(
-    `${srcDir}/views/pageKnowledge.html`,
-    `${chromeOutDir}/views/pageKnowledge.html`,
-);
-copyFileSync(
-    `${srcDir}/views/options.html`,
-    `${chromeOutDir}/views/options.html`,
-);
-copyFileSync(
-    `${srcDir}/views/knowledgeLibrary.html`,
-    `${chromeOutDir}/views/knowledgeLibrary.html`,
-);
-copyFileSync(
-    `${srcDir}/views/pdfView.html`,
-    `${chromeOutDir}/views/pdfView.html`,
-);
-copyFileSync(
-    `${srcDir}/views/knowledgeLibrary.css`,
-    `${chromeOutDir}/views/knowledgeLibrary.css`,
-);
-copyFileSync(
-    `${srcDir}/views/annotationsLibrary.html`,
-    `${chromeOutDir}/views/annotationsLibrary.html`,
-);
-mkdirSync(`${chromeOutDir}/offscreen`, { recursive: true });
-copyFileSync(
-    `${srcDir}/offscreen/offscreen.html`,
-    `${chromeOutDir}/offscreen/offscreen.html`,
-);
-mkdirSync(`${chromeOutDir}/sites`, { recursive: true });
-copyFileSync(
-    `${srcDir}/sites/paleobiodbSchema.mts`,
-    `${chromeOutDir}/sites/paleobiodbSchema.mts`,
-);
-cpSync(`${srcDir}/images`, `${chromeOutDir}/images`, { recursive: true });
-for (const [src, destRel] of vendorAssets) {
-    const dest = resolve(chromeOutDir, destRel);
-    mkdirSync(dirname(dest), { recursive: true });
-    copyFileSync(resolve(__dirname, "../", src), dest);
-}
+copyCommonStaticAssets(chromeOutDir);
 if (verbose) console.log(chalk.green("✅ Chrome static assets copied"));
 
 //
@@ -259,12 +241,13 @@ for (const [name, relPath] of Object.entries(electronOnlyScripts)) {
     if (verbose) console.log(chalk.green(`✅ Electron ${name}.js built`));
 }
 
-// Copy electron manifest
+// Copy electron manifest and assets
 if (verbose) console.log(chalk.cyan("\n📁 Copying Electron static files..."));
 copyFileSync(
     `${electronSrcDir}/manifest.json`,
     `${electronOutDir}/manifest.json`,
 );
+copyCommonStaticAssets(electronOutDir);
 if (verbose) console.log(chalk.green("✅ Electron static assets copied\n"));
 
 // Update build hash to mark successful completion

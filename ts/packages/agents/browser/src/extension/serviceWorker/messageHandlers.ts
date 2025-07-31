@@ -305,7 +305,7 @@ export async function handleMessage(
 
         case "queryKnowledge": {
             try {
-                const result = await sendActionToAgent({
+                return await sendActionToAgent({
                     actionName: "queryWebKnowledge",
                     parameters: {
                         query: message.parameters.query,
@@ -314,12 +314,6 @@ export async function handleMessage(
                             message.parameters.searchScope || "current_page",
                     },
                 });
-
-                return {
-                    answer: result.answer || "No answer found",
-                    sources: result.sources || [],
-                    relatedEntities: result.relatedEntities || [],
-                };
             } catch (error) {
                 console.error("Error querying knowledge:", error);
                 return { error: "Failed to query knowledge" };
@@ -426,18 +420,12 @@ export async function handleMessage(
 
         case "getPageIndexStatus": {
             try {
-                const result = await sendActionToAgent({
+                return await sendActionToAgent({
                     actionName: "checkPageIndexStatus",
                     parameters: {
                         url: message.url,
                     },
                 });
-
-                return {
-                    isIndexed: result.isIndexed || false,
-                    lastIndexed: result.lastIndexed || null,
-                    entityCount: result.entityCount || 0,
-                };
             } catch (error) {
                 console.error("Error checking page index status:", error);
                 return { isIndexed: false, error: "Failed to check status" };
@@ -607,15 +595,13 @@ export async function handleMessage(
         }
         case "getAllMacros": {
             try {
-                const result = await sendActionToAgent({
+                return await sendActionToAgent({
                     actionName: "getMacrosForUrl",
                     parameters: {
                         url: null,
                         includeGlobal: true,
                     },
                 });
-
-                return { actions: result.actions || [] };
             } catch (error) {
                 console.error("Error getting all actions:", error);
                 return { actions: [] };
@@ -623,15 +609,44 @@ export async function handleMessage(
         }
         case "getActionDomains": {
             try {
-                const result = await sendActionToAgent({
+                return await sendActionToAgent({
                     actionName: "getActionDomains",
                     parameters: {},
                 });
-
-                return { domains: result.domains || [] };
             } catch (error) {
                 console.error("Error getting action domains:", error);
                 return { domains: [] };
+            }
+        }
+
+        case "getMacroDomains": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getActionDomains", // Maps to existing action
+                    parameters: {},
+                });
+                return result; // Should return { domains: string[] }
+            } catch (error) {
+                console.error("Error getting macro domains:", error);
+                return { domains: [] };
+            }
+        }
+
+        case "deleteMacro": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "deleteMacro", // WebSocket action for deleting macros
+                    parameters: {
+                        macroId: message.macroId,
+                    },
+                });
+                return result; // Should return { success: boolean, error?: string }
+            } catch (error) {
+                console.error("Error deleting macro:", error);
+                return { 
+                    success: false, 
+                    error: error instanceof Error ? error.message : "Unknown error" 
+                };
             }
         }
 

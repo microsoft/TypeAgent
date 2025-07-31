@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { createExtensionService } from './knowledgeUtilities';
+
 export interface StoredMacro {
     id: string;
     name: string;
@@ -88,70 +90,25 @@ export type MacroCategory =
     | "Other";
 export type NotificationType = "success" | "error" | "warning" | "info";
 
+// Create global extension service instance
+const extensionService = createExtensionService();
+
 export async function getMacrosForUrl(
     url: string,
     options: MacroQueryOptions = {},
 ): Promise<StoredMacro[]> {
-    try {
-        const response = await chrome.runtime.sendMessage({
-            type: "getMacrosForUrl",
-            url: url,
-            includeGlobal: options.includeGlobal ?? true,
-            author: options.author,
-        });
-
-        return response?.actions || [];
-    } catch (error) {
-        console.error("Failed to get macros for URL:", error);
-        return [];
-    }
+    return await extensionService.getMacrosForUrl(url, options);
 }
 
 export async function getAllMacros(): Promise<StoredMacro[]> {
-    try {
-        const response = await chrome.runtime.sendMessage({
-            type: "getAllMacros",
-        });
-
-        return response?.actions || [];
-    } catch (error) {
-        console.error("Failed to get all macros:", error);
-        return [];
-    }
+    return await extensionService.getAllMacros();
 }
 
 export async function getMacroDomains(): Promise<string[]> {
-    try {
-        const response = await chrome.runtime.sendMessage({
-            type: "getMacroDomains",
-        });
-
-        return response?.domains || [];
-    } catch (error) {
-        console.error("Failed to get macro domains:", error);
-        return [];
-    }
+    return await extensionService.getMacroDomains();
 }
 export async function deleteMacro(macroId: string): Promise<DeleteMacroResult> {
-    try {
-        const response = await chrome.runtime.sendMessage({
-            type: "deleteMacro",
-            macroId: macroId,
-        });
-
-        return {
-            success: response?.success || false,
-            error: response?.error,
-            macroId: macroId,
-        };
-    } catch (error) {
-        console.error("Failed to delete macro:", error);
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : "Unknown error",
-            macroId: macroId,
-        };
-    }
+    return await extensionService.deleteMacro(macroId);
 }
 
 export async function deleteMultipleMacros(

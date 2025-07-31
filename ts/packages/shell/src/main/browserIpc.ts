@@ -108,4 +108,8 @@ export class BrowserAgentIpc {
         debugBrowserIPC("Browser -> Dispatcher", message);
         this.webSocket.send(JSON.stringify(message));
     }
+
+    public isConnected(): boolean {
+        return this.webSocket && this.webSocket.readyState === WebSocket.OPEN;
+    }
 }

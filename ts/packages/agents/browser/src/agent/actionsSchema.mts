@@ -40,6 +40,9 @@ export type OpenWebPage = {
             | "markdown"
             | "planViewer"
             | "turtleGraphics"
+            | "annotationsLibrary"
+            | "knowledgeLibrary"
+            | "macrosLibrary"
             | WebPage;
     };
 };
@@ -180,3 +183,4 @@ export type OpenSearchResult = {
         openInNewTab?: boolean;
     };
 };
+

@@ -11,7 +11,7 @@ import {
 } from "../interfaces/websiteImport.types";
 import {
     notificationManager,
-    chromeExtensionService,
+    extensionService,
     TemplateHelpers,
     FormatUtils,
     EventManager,
@@ -97,11 +97,11 @@ class WebsiteLibraryPanelFullPage {
 
         // Initialize services with default implementations
         const defaultAnalyticsService = new DefaultAnalyticsServices(
-            chromeExtensionService,
+            extensionService,
         );
         this.services = {
-            search: new DefaultSearchServices(chromeExtensionService),
-            discovery: new DefaultDiscoveryServices(chromeExtensionService),
+            search: new DefaultSearchServices(extensionService),
+            discovery: new DefaultDiscoveryServices(extensionService),
             analytics: new CachedAnalyticsService(defaultAnalyticsService),
         };
     }
@@ -210,7 +210,7 @@ class WebsiteLibraryPanelFullPage {
     private async checkConnectionStatus(): Promise<boolean> {
         try {
             const response =
-                await chromeExtensionService.checkWebSocketConnection();
+                await extensionService.checkWebSocketConnection();
             this.isConnected = response?.connected === true;
             return this.isConnected;
         } catch (error) {
@@ -260,7 +260,7 @@ class WebsiteLibraryPanelFullPage {
         }
 
         try {
-            this.libraryStats = await chromeExtensionService.getLibraryStats();
+            this.libraryStats = await extensionService.getLibraryStats();
             this.updateStatsDisplay();
         } catch (error) {
             console.error("Failed to load library stats:", error);
