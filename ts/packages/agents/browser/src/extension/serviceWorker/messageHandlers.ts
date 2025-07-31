@@ -648,9 +648,12 @@ export async function handleMessage(
                 return result; // Should return { success: boolean, error?: string }
             } catch (error) {
                 console.error("Error deleting macro:", error);
-                return { 
-                    success: false, 
-                    error: error instanceof Error ? error.message : "Unknown error" 
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error",
                 };
             }
         }
@@ -939,7 +942,6 @@ function sendProgressToUI(importId: string, progress: any) {
         console.error("Failed to send progress to UI:", error);
     }
 }
-
 
 async function handleClearWebsiteLibrary() {
     try {

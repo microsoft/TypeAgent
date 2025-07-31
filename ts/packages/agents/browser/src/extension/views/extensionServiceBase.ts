@@ -2,11 +2,11 @@
 // Licensed under the MIT License.
 
 import type { AnswerEnhancement } from "../../agent/search/schema/answerEnhancement.mjs";
-import type { 
-    StoredMacro, 
-    MacroQueryOptions, 
-    DeleteMacroResult 
-} from './macroUtilities';
+import type {
+    StoredMacro,
+    MacroQueryOptions,
+    DeleteMacroResult,
+} from "./macroUtilities";
 
 // ===================================================================
 // INTERFACE DEFINITIONS
@@ -87,11 +87,10 @@ export interface EntityMatch {
  * Abstract base class for extension services
  */
 export abstract class ExtensionServiceBase {
-    
     // ===================================================================
     // SHARED METHOD IMPLEMENTATIONS
     // ===================================================================
-    
+
     async getLibraryStats(): Promise<LibraryStats> {
         return this.sendMessage({
             type: "getLibraryStats",
@@ -116,7 +115,10 @@ export abstract class ExtensionServiceBase {
         });
     }
 
-    async searchWebMemories(query: string, filters: SearchFilters): Promise<SearchResult> {
+    async searchWebMemories(
+        query: string,
+        filters: SearchFilters,
+    ): Promise<SearchResult> {
         const response = (await this.sendMessage({
             type: "searchWebMemories",
             parameters: {
@@ -148,7 +150,11 @@ export abstract class ExtensionServiceBase {
         });
     }
 
-    async extractPageKnowledge(url: string, mode: string, extractionSettings: any): Promise<any> {
+    async extractPageKnowledge(
+        url: string,
+        mode: string,
+        extractionSettings: any,
+    ): Promise<any> {
         return this.sendMessage({
             type: "extractPageKnowledge",
             url,
@@ -190,7 +196,11 @@ export abstract class ExtensionServiceBase {
         });
     }
 
-    async discoverRelationships(url: string, knowledge: any, maxResults: number): Promise<any> {
+    async discoverRelationships(
+        url: string,
+        knowledge: any,
+        maxResults: number,
+    ): Promise<any> {
         return this.sendMessage({
             type: "discoverRelationships",
             url,
@@ -206,7 +216,11 @@ export abstract class ExtensionServiceBase {
         });
     }
 
-    async searchByEntities(entities: string[], url: string, maxResults: number): Promise<any> {
+    async searchByEntities(
+        entities: string[],
+        url: string,
+        maxResults: number,
+    ): Promise<any> {
         return this.sendMessage({
             type: "searchByEntities",
             entities,
@@ -215,7 +229,11 @@ export abstract class ExtensionServiceBase {
         });
     }
 
-    async searchByTopics(topics: string[], url: string, maxResults: number): Promise<any> {
+    async searchByTopics(
+        topics: string[],
+        url: string,
+        maxResults: number,
+    ): Promise<any> {
         return this.sendMessage({
             type: "searchByTopics",
             topics,
@@ -224,7 +242,11 @@ export abstract class ExtensionServiceBase {
         });
     }
 
-    async hybridSearch(query: string, url: string, maxResults: number): Promise<any> {
+    async hybridSearch(
+        query: string,
+        url: string,
+        maxResults: number,
+    ): Promise<any> {
         return this.sendMessage({
             type: "hybridSearch",
             query,
@@ -282,13 +304,16 @@ export abstract class ExtensionServiceBase {
     }
 
     async getRecentSearches(): Promise<string[]> {
-        const response = await this.sendMessage<{searches?: string[]}>({
+        const response = await this.sendMessage<{ searches?: string[] }>({
             type: "getRecentSearches",
         });
         return response?.searches || [];
     }
 
-    async getDiscoverInsights(limit?: number, timeframe?: string): Promise<any> {
+    async getDiscoverInsights(
+        limit?: number,
+        timeframe?: string,
+    ): Promise<any> {
         return this.sendMessage({
             type: "getDiscoverInsights",
             limit,
@@ -319,15 +344,18 @@ export abstract class ExtensionServiceBase {
     }
 
     async getViewHostUrl(): Promise<string | null> {
-        const response = await this.sendMessage<{url?: string}>({
+        const response = await this.sendMessage<{ url?: string }>({
             type: "getViewHostUrl",
         });
         return response?.url || null;
     }
 
     // Macro methods
-    async getMacrosForUrl(url: string, options: MacroQueryOptions = {}): Promise<StoredMacro[]> {
-        const response = await this.sendMessage<{actions?: StoredMacro[]}>({
+    async getMacrosForUrl(
+        url: string,
+        options: MacroQueryOptions = {},
+    ): Promise<StoredMacro[]> {
+        const response = await this.sendMessage<{ actions?: StoredMacro[] }>({
             type: "getMacrosForUrl",
             url: url,
             includeGlobal: options.includeGlobal ?? true,
@@ -337,21 +365,24 @@ export abstract class ExtensionServiceBase {
     }
 
     async getAllMacros(): Promise<StoredMacro[]> {
-        const response = await this.sendMessage<{actions?: StoredMacro[]}>({
+        const response = await this.sendMessage<{ actions?: StoredMacro[] }>({
             type: "getAllMacros",
         });
         return response?.actions || [];
     }
 
     async getMacroDomains(): Promise<string[]> {
-        const response = await this.sendMessage<{domains?: string[]}>({
+        const response = await this.sendMessage<{ domains?: string[] }>({
             type: "getMacroDomains",
         });
         return response?.domains || [];
     }
 
     async deleteMacro(macroId: string): Promise<DeleteMacroResult> {
-        const response = await this.sendMessage<{success?: boolean, error?: string}>({
+        const response = await this.sendMessage<{
+            success?: boolean;
+            error?: string;
+        }>({
             type: "deleteMacro",
             macroId: macroId,
         });
@@ -365,7 +396,7 @@ export abstract class ExtensionServiceBase {
     // ===================================================================
     // ABSTRACT METHODS - Must be implemented by concrete classes
     // ===================================================================
-    
+
     /**
      * Send message using environment-specific transport
      * Concrete classes must implement this method
@@ -375,7 +406,7 @@ export abstract class ExtensionServiceBase {
     // ===================================================================
     // VIRTUAL METHODS - Can be overridden by concrete classes
     // ===================================================================
-    
+
     /**
      * Get current tab - environment-specific implementation
      * Default implementation throws error
@@ -388,7 +419,7 @@ export abstract class ExtensionServiceBase {
      * Get search suggestions - can use default (sendMessage) or custom implementation
      */
     protected async getSearchSuggestionsImpl(query: string): Promise<string[]> {
-        const response = await this.sendMessage<{suggestions?: string[]}>({
+        const response = await this.sendMessage<{ suggestions?: string[] }>({
             type: "getSearchSuggestions",
             query,
         });
@@ -408,7 +439,7 @@ export abstract class ExtensionServiceBase {
      * Get auto index setting - can use default (sendMessage) or custom implementation
      */
     protected async getAutoIndexSettingImpl(): Promise<boolean> {
-        const response = await this.sendMessage<{enabled?: boolean}>({
+        const response = await this.sendMessage<{ enabled?: boolean }>({
             type: "getAutoIndexSetting",
         });
         return response?.enabled || false;
@@ -446,15 +477,15 @@ export abstract class ExtensionServiceBase {
     // ===================================================================
     // PUBLIC INTERFACE METHODS - Delegate to implementations
     // ===================================================================
-    
+
     async getCurrentTab(): Promise<any> {
         return this.getCurrentTabImpl();
     }
-    
+
     async getSearchSuggestions(query: string): Promise<string[]> {
         return this.getSearchSuggestionsImpl(query);
     }
-    
+
     async checkWebSocketConnection(): Promise<any> {
         return this.checkWebSocketConnectionImpl();
     }
@@ -478,7 +509,7 @@ export abstract class ExtensionServiceBase {
     // ===================================================================
     // UTILITY METHODS
     // ===================================================================
-    
+
     /**
      * Transform search web memories response - can be overridden if needed
      */

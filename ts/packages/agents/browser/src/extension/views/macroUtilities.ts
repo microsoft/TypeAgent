@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createExtensionService } from './knowledgeUtilities';
+import { createExtensionService } from "./knowledgeUtilities";
 
 export interface StoredMacro {
     id: string;

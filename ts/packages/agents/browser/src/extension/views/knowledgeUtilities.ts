@@ -7,12 +7,12 @@
  */
 
 import type { AnswerEnhancement } from "../../agent/search/schema/answerEnhancement.mjs";
-import type { 
-    StoredMacro, 
-    MacroQueryOptions, 
-    DeleteMacroResult 
-} from './macroUtilities';
-import { 
+import type {
+    StoredMacro,
+    MacroQueryOptions,
+    DeleteMacroResult,
+} from "./macroUtilities";
+import {
     ExtensionServiceBase,
     LibraryStats,
     SearchFilters,
@@ -20,8 +20,8 @@ import {
     SearchResult,
     Website,
     SourceReference,
-    EntityMatch
-} from './extensionServiceBase';
+    EntityMatch,
+} from "./extensionServiceBase";
 
 // ===================================================================
 // INTERFACES AND TYPES
@@ -34,15 +34,15 @@ export interface NotificationAction {
 }
 
 // Re-export types from base class for backward compatibility
-export { 
-    LibraryStats, 
-    SearchFilters, 
-    KnowledgeStatus, 
-    SearchResult, 
-    Website, 
-    SourceReference, 
-    EntityMatch 
-} from './extensionServiceBase';
+export {
+    LibraryStats,
+    SearchFilters,
+    KnowledgeStatus,
+    SearchResult,
+    Website,
+    SourceReference,
+    EntityMatch,
+} from "./extensionServiceBase";
 
 // ===================================================================
 // NOTIFICATION MANAGER
@@ -185,7 +185,6 @@ export class NotificationManager {
     }
 }
 
-
 // ===================================================================
 // CHROME EXTENSION SERVICE
 // ===================================================================
@@ -205,7 +204,6 @@ export class ChromeExtensionService extends ExtensionServiceBase {
         }
     }
 
-
     async getCurrentTab(): Promise<chrome.tabs.Tab | null> {
         try {
             const tabs = await chrome.tabs.query({
@@ -218,7 +216,6 @@ export class ChromeExtensionService extends ExtensionServiceBase {
             return null;
         }
     }
-
 
     async getAutoIndexSetting(): Promise<boolean> {
         try {
@@ -470,7 +467,6 @@ export class ChromeExtensionService extends ExtensionServiceBase {
     }
 }
 
-
 // ===================================================================
 // ELECTRON EXTENSION SERVICE
 // ===================================================================
@@ -518,15 +514,16 @@ export class ElectronExtensionService extends ExtensionServiceBase {
             id: -1,
             url: window.location.href,
             title: document.title,
-            active: true
+            active: true,
         };
     }
-
 
     // Override getAutoIndexSetting with Electron storage implementation
     protected async getAutoIndexSettingImpl(): Promise<boolean> {
         try {
-            const settings = await (window as any).electronAPI.getStorage(["autoIndexing"]);
+            const settings = await (window as any).electronAPI.getStorage([
+                "autoIndexing",
+            ]);
             return settings.autoIndexing || false;
         } catch (error) {
             console.error("Failed to get auto-index setting:", error);
@@ -537,7 +534,9 @@ export class ElectronExtensionService extends ExtensionServiceBase {
     // Override setAutoIndexSetting with Electron storage implementation
     protected async setAutoIndexSettingImpl(enabled: boolean): Promise<void> {
         try {
-            await (window as any).electronAPI.setStorage({ autoIndexing: enabled });
+            await (window as any).electronAPI.setStorage({
+                autoIndexing: enabled,
+            });
         } catch (error) {
             console.error("Failed to set auto-index setting:", error);
             throw error;
@@ -575,16 +574,13 @@ export class ElectronExtensionService extends ExtensionServiceBase {
         console.warn("Options page not available in Electron context");
     }
 
-    async createTab(
-        url: string,
-        active: boolean = true,
-    ): Promise<any> {
+    async createTab(url: string, active: boolean = true): Promise<any> {
         // Mock tab creation for Electron context
-        window.open(url, active ? '_self' : '_blank');
+        window.open(url, active ? "_self" : "_blank");
         return {
             id: -1,
             url: url,
-            active: active
+            active: active,
         };
     }
 
@@ -601,24 +597,63 @@ export class ElectronExtensionService extends ExtensionServiceBase {
         return this.sendMessage({ type: "getPageIndexedKnowledge", url });
     }
 
-    async discoverRelationships(url: string, knowledge: any, maxResults: number): Promise<any> {
-        return this.sendMessage({ type: "discoverRelationships", url, knowledge, maxResults });
+    async discoverRelationships(
+        url: string,
+        knowledge: any,
+        maxResults: number,
+    ): Promise<any> {
+        return this.sendMessage({
+            type: "discoverRelationships",
+            url,
+            knowledge,
+            maxResults,
+        });
     }
 
     async generateTemporalSuggestions(maxSuggestions: number): Promise<any> {
-        return this.sendMessage({ type: "generateTemporalSuggestions", maxSuggestions });
+        return this.sendMessage({
+            type: "generateTemporalSuggestions",
+            maxSuggestions,
+        });
     }
 
-    async searchByEntities(entities: string[], url: string, maxResults: number): Promise<any> {
-        return this.sendMessage({ type: "searchByEntities", entities, url, maxResults });
+    async searchByEntities(
+        entities: string[],
+        url: string,
+        maxResults: number,
+    ): Promise<any> {
+        return this.sendMessage({
+            type: "searchByEntities",
+            entities,
+            url,
+            maxResults,
+        });
     }
 
-    async searchByTopics(topics: string[], url: string, maxResults: number): Promise<any> {
-        return this.sendMessage({ type: "searchByTopics", topics, url, maxResults });
+    async searchByTopics(
+        topics: string[],
+        url: string,
+        maxResults: number,
+    ): Promise<any> {
+        return this.sendMessage({
+            type: "searchByTopics",
+            topics,
+            url,
+            maxResults,
+        });
     }
 
-    async hybridSearch(query: string, url: string, maxResults: number): Promise<any> {
-        return this.sendMessage({ type: "hybridSearch", query, url, maxResults });
+    async hybridSearch(
+        query: string,
+        url: string,
+        maxResults: number,
+    ): Promise<any> {
+        return this.sendMessage({
+            type: "hybridSearch",
+            query,
+            url,
+            maxResults,
+        });
     }
 
     async searchWebMemoriesAdvanced(parameters: any): Promise<any> {
@@ -652,14 +687,18 @@ export class ElectronExtensionService extends ExtensionServiceBase {
     async getSearchSuggestions(query: string): Promise<string[]> {
         try {
             // For Electron, simulate Chrome storage behavior
-            const settings = await (window as any).electronAPI.getStorage(["searchHistory"]);
+            const settings = await (window as any).electronAPI.getStorage([
+                "searchHistory",
+            ]);
             const searchHistory = settings.searchHistory || [];
-            
+
             const suggestions = searchHistory
-                .filter((search: string) => search.toLowerCase().includes(query.toLowerCase()))
+                .filter((search: string) =>
+                    search.toLowerCase().includes(query.toLowerCase()),
+                )
                 .slice(0, 5);
 
-            // Match ChromeExtensionService extraction pattern  
+            // Match ChromeExtensionService extraction pattern
             return suggestions; // ChromeExtensionService extracts suggestions from response
         } catch (error) {
             console.error("Error getting search suggestions:", error);
@@ -671,8 +710,15 @@ export class ElectronExtensionService extends ExtensionServiceBase {
         return this.sendMessage({ action: "getRecentSearches" });
     }
 
-    async getDiscoverInsights(limit: number = 10, timeframe: string = "30d"): Promise<any> {
-        return this.sendMessage({ type: "getDiscoverInsights", limit, timeframe });
+    async getDiscoverInsights(
+        limit: number = 10,
+        timeframe: string = "30d",
+    ): Promise<any> {
+        return this.sendMessage({
+            type: "getDiscoverInsights",
+            limit,
+            timeframe,
+        });
     }
 
     async saveSearch(query: string, results: any): Promise<void> {
@@ -683,9 +729,14 @@ export class ElectronExtensionService extends ExtensionServiceBase {
         // Use direct IPC call to browserIPC instead of sending via WebSocket
         if (typeof window !== "undefined" && (window as any).electronAPI) {
             try {
-                return await (window as any).electronAPI.checkWebSocketConnection();
+                return await (
+                    window as any
+                ).electronAPI.checkWebSocketConnection();
             } catch (error) {
-                console.error("Direct WebSocket connection check failed:", error);
+                console.error(
+                    "Direct WebSocket connection check failed:",
+                    error,
+                );
                 return { connected: false };
             }
         }
@@ -694,7 +745,7 @@ export class ElectronExtensionService extends ExtensionServiceBase {
 
     async getViewHostUrl(): Promise<string | null> {
         try {
-            const response = await this.sendMessage<{url?: string}>({
+            const response = await this.sendMessage<{ url?: string }>({
                 type: "getViewHostUrl",
             });
             return response?.url || null;
@@ -709,8 +760,11 @@ export class ElectronExtensionService extends ExtensionServiceBase {
         if (typeof window !== "undefined" && (window as any).electronAPI) {
             try {
                 // Transform Chrome message format to Electron format
-                const electronMessage = this.transformChromeMessageToElectron(message);
-                const response = await (window as any).electronAPI.sendBrowserMessage(electronMessage);
+                const electronMessage =
+                    this.transformChromeMessageToElectron(message);
+                const response = await (
+                    window as any
+                ).electronAPI.sendBrowserMessage(electronMessage);
                 if (response && response.error) {
                     throw new Error(response.error);
                 }
@@ -728,19 +782,19 @@ export class ElectronExtensionService extends ExtensionServiceBase {
      */
     private transformChromeMessageToElectron(chromeMessage: any): any {
         const { type, ...params } = chromeMessage;
-        
+
         // Handle special cases where message structure differs
         if (type === "searchWebMemories" && chromeMessage.parameters) {
             return {
                 method: type,
-                params: chromeMessage.parameters
+                params: chromeMessage.parameters,
             };
         }
-        
+
         // Standard transformation: move all properties except 'type' into 'params'
         return {
             method: type,
-            params: Object.keys(params).length > 0 ? params : {}
+            params: Object.keys(params).length > 0 ? params : {},
         };
     }
 }
@@ -867,7 +921,9 @@ export class KnowledgeConnectionManager {
             // Check for Electron context first (has electronAPI in window)
             if (typeof window !== "undefined" && (window as any).electronAPI) {
                 // Electron context - use direct WebSocket connection check
-                const response = await (window as any).electronAPI.checkWebSocketConnection();
+                const response = await (
+                    window as any
+                ).electronAPI.checkWebSocketConnection();
                 return response?.connected === true;
             } else if (typeof chrome !== "undefined" && chrome.runtime) {
                 // Chrome extension context
@@ -945,7 +1001,7 @@ export function createExtensionService(): ExtensionServiceBase {
         console.log("Using ElectronExtensionService for Electron context");
         return new ElectronExtensionService();
     }
-    
+
     // Default to Chrome extension context
     console.log("Using ChromeExtensionService for Chrome extension context");
     return new ChromeExtensionService();
@@ -958,8 +1014,10 @@ export function createExtensionService(): ExtensionServiceBase {
 export class ElectronConnectionManager {
     static async checkConnectionStatus(): Promise<boolean> {
         try {
-            const response = await (window as any).electronAPI.sendBrowserMessage({
-                type: "checkWebSocketConnection"
+            const response = await (
+                window as any
+            ).electronAPI.sendBrowserMessage({
+                type: "checkWebSocketConnection",
             });
             return response?.connected === true;
         } catch (error) {
@@ -975,7 +1033,9 @@ export class UnifiedConnectionManager {
             // Check for Electron context first (has electronAPI in window)
             if (typeof window !== "undefined" && (window as any).electronAPI) {
                 // Electron context - use direct WebSocket connection check
-                const response = await (window as any).electronAPI.checkWebSocketConnection();
+                const response = await (
+                    window as any
+                ).electronAPI.checkWebSocketConnection();
                 return response?.connected === true;
             } else if (typeof chrome !== "undefined" && chrome.runtime) {
                 // Chrome extension context

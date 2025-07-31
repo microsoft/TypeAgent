@@ -249,20 +249,20 @@ contextBridge.exposeInMainWorld("electronAPI", {
     sendBrowserMessage: async (message: any) => {
         return ipcRenderer.invoke("browser-extension-message", message);
     },
-    
+
     // Storage API for extension compatibility
     getStorage: async (keys: string[]) => {
         return ipcRenderer.invoke("extension-storage-get", keys);
     },
-    
+
     setStorage: async (items: Record<string, any>) => {
         return ipcRenderer.invoke("extension-storage-set", items);
     },
-    
+
     // Direct WebSocket connection check
     checkWebSocketConnection: async () => {
         return ipcRenderer.invoke("check-websocket-connection");
-    }
+    },
 });
 
 window.addEventListener("message", async (event) => {

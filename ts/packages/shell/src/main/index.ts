@@ -484,16 +484,19 @@ async function initialize() {
             : appPath,
         "node_modules/browser-typeagent/dist/electron",
     );
-    const extension = await session.defaultSession.loadExtension(browserExtensionPath, {
-        allowFileAccess: true,
-    });
-    
+    const extension = await session.defaultSession.loadExtension(
+        browserExtensionPath,
+        {
+            allowFileAccess: true,
+        },
+    );
+
     // Store extension info for later URL construction
     (global as any).browserExtensionId = extension.id;
     (global as any).browserExtensionUrls = {
         "/annotationsLibrary.html": `chrome-extension://${extension.id}/views/annotationsLibrary.html`,
         "/knowledgeLibrary.html": `chrome-extension://${extension.id}/views/knowledgeLibrary.html`,
-        "/macrosLibrary.html": `chrome-extension://${extension.id}/views/macrosLibrary.html`
+        "/macrosLibrary.html": `chrome-extension://${extension.id}/views/macrosLibrary.html`,
     };
 
     const shellSettings = loadShellSettings(instanceDir);
@@ -543,49 +546,53 @@ async function initialize() {
         try {
             // Route message through browser IPC to TypeAgent backend
             const browserIpc = BrowserAgentIpc.getinstance();
-            
+
             // Create a promise to wait for the WebSocket response
             return new Promise((resolve, reject) => {
                 const messageId = Date.now().toString();
-                
+
                 // Set up one-time response listener
                 const originalHandler = browserIpc.onMessageReceived;
                 browserIpc.onMessageReceived = (response) => {
                     if (response.id === messageId) {
                         // Restore original handler
                         browserIpc.onMessageReceived = originalHandler;
-                        
+
                         // Extract the actual data from the ActionResult if it's an extension message
                         let result = response.result || response;
                         if (result && result.data !== undefined) {
                             // This is likely an ActionResult with data field containing the actual extension response
                             result = result.data;
                         }
-                        
+
                         resolve(result);
                     } else if (originalHandler) {
                         // Forward other messages to original handler
                         originalHandler(response);
                     }
                 };
-                
+
                 // Send the message directly using the method/params from the message
-                browserIpc.send({
-                    method: message.method || message.type, 
-                    params: message.params || message.parameters || message,
-                    id: messageId
-                }).catch(reject);
-                
+                browserIpc
+                    .send({
+                        method: message.method || message.type,
+                        params: message.params || message.parameters || message,
+                        id: messageId,
+                    })
+                    .catch(reject);
+
                 // Set timeout to prevent hanging
                 setTimeout(() => {
                     browserIpc.onMessageReceived = originalHandler;
-                    const method = message.method || message.type || 'unknown';
+                    const method = message.method || message.type || "unknown";
                     const messageInfo = JSON.stringify({
                         method,
                         messageId,
-                        hasParams: !!(message.params || message.parameters)
+                        hasParams: !!(message.params || message.parameters),
                     });
-                    reject(new Error(`Extension message timeout - ${messageInfo}`));
+                    reject(
+                        new Error(`Extension message timeout - ${messageInfo}`),
+                    );
                 }, 30000);
             });
         } catch (error) {
@@ -606,12 +613,15 @@ async function initialize() {
         return result;
     });
 
-    ipcMain.handle("extension-storage-set", async (_, items: Record<string, any>) => {
-        for (const [key, value] of Object.entries(items)) {
-            extensionStorage.set(key, value);
-        }
-        return { success: true };
-    });
+    ipcMain.handle(
+        "extension-storage-set",
+        async (_, items: Record<string, any>) => {
+            for (const [key, value] of Object.entries(items)) {
+                extensionStorage.set(key, value);
+            }
+            return { success: true };
+        },
+    );
 
     // Direct WebSocket connection check via browserIPC
     ipcMain.handle("check-websocket-connection", async () => {

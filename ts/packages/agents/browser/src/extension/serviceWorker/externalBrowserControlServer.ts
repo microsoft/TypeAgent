@@ -79,17 +79,17 @@ export function createExternalBrowserServer(channel: RpcChannel) {
 
     function resolveCustomProtocolUrl(url: string): string {
         // Handle typeagent-browser custom protocol
-        if (url.startsWith('typeagent-browser://')) {
+        if (url.startsWith("typeagent-browser://")) {
             const customUrl = new URL(url);
             const customPath = customUrl.pathname;
-            
+
             // Map custom protocol to actual extension URL
             const libraryMapping: Record<string, string> = {
-                '/annotationsLibrary.html': 'views/annotationsLibrary.html',
-                '/knowledgeLibrary.html': 'views/knowledgeLibrary.html',
-                '/macrosLibrary.html': 'views/macrosLibrary.html'
+                "/annotationsLibrary.html": "views/annotationsLibrary.html",
+                "/knowledgeLibrary.html": "views/knowledgeLibrary.html",
+                "/macrosLibrary.html": "views/macrosLibrary.html",
             };
-            
+
             const extensionPath = libraryMapping[customPath];
             if (extensionPath) {
                 return chrome.runtime.getURL(extensionPath);
@@ -97,7 +97,7 @@ export function createExternalBrowserServer(channel: RpcChannel) {
                 throw new Error(`Unknown library page: ${customPath}`);
             }
         }
-        
+
         return url;
     }
 
@@ -116,7 +116,7 @@ export function createExternalBrowserServer(channel: RpcChannel) {
         openWebPage: async (url: string) => {
             // Resolve custom protocol URLs to actual extension URLs
             const resolvedUrl = resolveCustomProtocolUrl(url);
-            
+
             const targetTab = await getActiveTab();
             if (targetTab) {
                 await chrome.tabs.update(targetTab.id!, { url: resolvedUrl });
@@ -197,7 +197,9 @@ export function createExternalBrowserServer(channel: RpcChannel) {
                 if (openInNewTab) {
                     await chrome.tabs.create({ url: resolvedUrl });
                 } else {
-                    await chrome.tabs.update(targetTab.id!, { url: resolvedUrl });
+                    await chrome.tabs.update(targetTab.id!, {
+                        url: resolvedUrl,
+                    });
                 }
             }
 
@@ -215,7 +217,9 @@ export function createExternalBrowserServer(channel: RpcChannel) {
                         url: resolvedUrl,
                     });
                 } else {
-                    await chrome.tabs.update(targetTab.id!, { url: resolvedUrl });
+                    await chrome.tabs.update(targetTab.id!, {
+                        url: resolvedUrl,
+                    });
                 }
             }
 

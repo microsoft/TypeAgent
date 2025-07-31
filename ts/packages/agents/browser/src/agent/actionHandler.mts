@@ -519,10 +519,11 @@ async function updateBrowserContext(
                         }
 
                         case "getLibraryStats": {
-                            const libraryStatsResult = await handleWebsiteLibraryStats(
-                                data.params,
-                                context,
-                            );
+                            const libraryStatsResult =
+                                await handleWebsiteLibraryStats(
+                                    data.params,
+                                    context,
+                                );
 
                             webSocket.send(
                                 JSON.stringify({
@@ -640,11 +641,11 @@ async function resolveWebPage(
 
     // Handle library pages with custom protocol
     const libraryPages: Record<string, string> = {
-        'annotationslibrary': 'typeagent-browser://views/annotationsLibrary.html',
-        'knowledgelibrary': 'typeagent-browser://views/knowledgeLibrary.html', 
-        'macroslibrary': 'typeagent-browser://views/macrosLibrary.html'
+        annotationslibrary: "typeagent-browser://views/annotationsLibrary.html",
+        knowledgelibrary: "typeagent-browser://views/knowledgeLibrary.html",
+        macroslibrary: "typeagent-browser://views/macrosLibrary.html",
     };
-    
+
     const libraryUrl = libraryPages[site.toLowerCase()];
     if (libraryUrl) {
         debug(`Resolved library page: ${site} -> ${libraryUrl}`);
@@ -884,7 +885,6 @@ async function openSearchResult(
         `Opened search result: ${selectedResult.title}`,
     );
 }
-
 
 async function searchWebMemoriesAction(
     context: ActionContext<BrowserActionContext>,
@@ -2217,10 +2217,10 @@ async function handleWebsiteLibraryStats(
             parameters: {
                 groupBy: "source",
                 limit: 50,
-                ...parameters // Allow override of defaults
+                ...parameters, // Allow override of defaults
             },
         };
-        
+
         const mockActionContext: ActionContext<BrowserActionContext> = {
             sessionContext: context,
             actionIO: {
@@ -2233,9 +2233,12 @@ async function handleWebsiteLibraryStats(
             activityContext: undefined,
             queueToggleTransientAgent: async () => {},
         };
-        
-        const statsResult = await getWebsiteStats(mockActionContext, statsAction);
-        
+
+        const statsResult = await getWebsiteStats(
+            mockActionContext,
+            statsAction,
+        );
+
         if (statsResult.error) {
             return {
                 success: false,
@@ -2253,20 +2256,24 @@ async function handleWebsiteLibraryStats(
             responseText = statsResult.literalText;
         } else if (statsResult.displayContent) {
             // Handle different types of display content
-            if (typeof statsResult.displayContent === 'string') {
+            if (typeof statsResult.displayContent === "string") {
                 responseText = statsResult.displayContent;
             } else if (Array.isArray(statsResult.displayContent)) {
-                responseText = statsResult.displayContent.join('\n');
-            } else if (typeof statsResult.displayContent === 'object' && statsResult.displayContent.content) {
+                responseText = statsResult.displayContent.join("\n");
+            } else if (
+                typeof statsResult.displayContent === "object" &&
+                statsResult.displayContent.content
+            ) {
                 // Handle DisplayMessage type
-                responseText = typeof statsResult.displayContent.content === 'string' 
-                    ? statsResult.displayContent.content 
-                    : String(statsResult.displayContent.content);
+                responseText =
+                    typeof statsResult.displayContent.content === "string"
+                        ? statsResult.displayContent.content
+                        : String(statsResult.displayContent.content);
             }
         }
-        
+
         const formattedStats = formatLibraryStatsResponse(responseText);
-        
+
         return {
             success: true,
             ...formattedStats,

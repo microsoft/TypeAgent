@@ -107,9 +107,9 @@ const libraryAssets = [
     "views/annotationsLibrary.html",
     "views/entityGraphView.css",
     "views/entityGraphView.html",
-    "views/knowledgeLibrary.css", 
+    "views/knowledgeLibrary.css",
     "views/knowledgeLibrary.html",
-    "views/macrosLibrary.html", 
+    "views/macrosLibrary.html",
     "views/options.html",
     "views/pageKnowledge.html",
     "views/pageMacros.html",
@@ -126,16 +126,22 @@ function copyLibraryAssets(outDir) {
 function copyCommonStaticAssets(outDir) {
     // Copy library assets
     copyLibraryAssets(outDir);
-    
+
     // Copy other common assets
     mkdirSync(`${outDir}/offscreen`, { recursive: true });
-    copyFileSync(`${srcDir}/offscreen/offscreen.html`, `${outDir}/offscreen/offscreen.html`);
-    
+    copyFileSync(
+        `${srcDir}/offscreen/offscreen.html`,
+        `${outDir}/offscreen/offscreen.html`,
+    );
+
     mkdirSync(`${outDir}/sites`, { recursive: true });
-    copyFileSync(`${srcDir}/sites/paleobiodbSchema.mts`, `${outDir}/sites/paleobiodbSchema.mts`);
-    
+    copyFileSync(
+        `${srcDir}/sites/paleobiodbSchema.mts`,
+        `${outDir}/sites/paleobiodbSchema.mts`,
+    );
+
     cpSync(`${srcDir}/images`, `${outDir}/images`, { recursive: true });
-    
+
     // Copy vendor assets
     for (const [src, destRel] of vendorAssets) {
         const dest = resolve(outDir, destRel);

@@ -209,8 +209,7 @@ class WebsiteLibraryPanelFullPage {
 
     private async checkConnectionStatus(): Promise<boolean> {
         try {
-            const response =
-                await extensionService.checkWebSocketConnection();
+            const response = await extensionService.checkWebSocketConnection();
             this.isConnected = response?.connected === true;
             return this.isConnected;
         } catch (error) {

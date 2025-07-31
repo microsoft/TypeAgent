@@ -529,10 +529,9 @@ class KnowledgePanel {
             while (attempts < maxAttempts) {
                 await new Promise((resolve) => setTimeout(resolve, 500));
                 try {
-                    const status =
-                        await extensionService.getPageIndexStatus(
-                            this.currentUrl,
-                        );
+                    const status = await extensionService.getPageIndexStatus(
+                        this.currentUrl,
+                    );
                     if (status.isIndexed && status.entityCount !== undefined) {
                         actualEntityCount = status.entityCount;
                         break;
@@ -925,8 +924,7 @@ class KnowledgePanel {
 
     private async loadExtractionSettings() {
         try {
-            const settings =
-                await extensionService.getExtractionSettings();
+            const settings = await extensionService.getExtractionSettings();
             if (settings) {
                 this.extractionSettings = {
                     ...this.extractionSettings,
@@ -1114,10 +1112,9 @@ class KnowledgePanel {
 
     private async loadIndexedKnowledge() {
         try {
-            const response =
-                await extensionService.getPageIndexedKnowledge(
-                    this.currentUrl,
-                );
+            const response = await extensionService.getPageIndexedKnowledge(
+                this.currentUrl,
+            );
 
             if (response.isIndexed && response.knowledge) {
                 this.knowledgeData = response.knowledge;
@@ -1607,8 +1604,7 @@ class KnowledgePanel {
 
     private async checkAIModelAvailability() {
         try {
-            const response =
-                await extensionService.checkAIModelAvailability();
+            const response = await extensionService.checkAIModelAvailability();
 
             this.aiModelAvailable = response.available || false;
         } catch (error) {

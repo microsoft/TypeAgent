@@ -762,18 +762,20 @@ async function handleGetIntentFromReccording(
     };
 }
 
-
 async function handleGetAllMacros(
     action: GetAllMacros,
     ctx: DiscoveryActionHandlerContext,
 ): Promise<DiscoveryActionResult> {
-    return handleGetMacrosForUrl({
-        actionName: "getMacrosForUrl",
-        parameters: {
-            url: "",
-            includeGlobal: true,
-        }
-    } as GetMacrosForUrl, ctx);
+    return handleGetMacrosForUrl(
+        {
+            actionName: "getMacrosForUrl",
+            parameters: {
+                url: "",
+                includeGlobal: true,
+            },
+        } as GetMacrosForUrl,
+        ctx,
+    );
 }
 
 async function handleGetMacrosForUrl(
