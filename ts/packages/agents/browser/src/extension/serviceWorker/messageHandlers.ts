@@ -497,18 +497,6 @@ export async function handleMessage(
             return { success: true };
         }
 
-        case "checkConnection": {
-            try {
-                const websocket = getWebSocket();
-                return {
-                    connected:
-                        websocket && websocket.readyState === WebSocket.OPEN,
-                };
-            } catch (error) {
-                return { connected: false };
-            }
-        }
-
         // Website Library Panel message handlers
         case "importWebsiteDataWithProgress": {
             return await handleImportWebsiteDataWithProgress(message);
@@ -556,10 +544,6 @@ export async function handleMessage(
         }
 
         // Enhanced search message handlers (searchWebsitesEnhanced removed - was broken)
-
-        case "getSearchSuggestions": {
-            return await handleGetSearchSuggestions(message);
-        }
 
         case "saveSearchHistory": {
             return await handleSaveSearchHistory(message);
@@ -634,27 +618,6 @@ export async function handleMessage(
             } catch (error) {
                 console.error("Error getting macro domains:", error);
                 return { domains: [] };
-            }
-        }
-
-        case "deleteMacro": {
-            try {
-                const result = await sendActionToAgent({
-                    actionName: "deleteMacro", // WebSocket action for deleting macros
-                    parameters: {
-                        macroId: message.macroId,
-                    },
-                });
-                return result; // Should return { success: boolean, error?: string }
-            } catch (error) {
-                console.error("Error deleting macro:", error);
-                return {
-                    success: false,
-                    error:
-                        error instanceof Error
-                            ? error.message
-                            : "Unknown error",
-                };
             }
         }
 

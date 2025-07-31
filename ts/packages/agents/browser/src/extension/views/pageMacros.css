@@ -1,0 +1,212 @@
+/* Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. */
+
+body {
+  font-size: 0.875rem;
+  background-color: #f8f9fa;
+  margin: 0;
+  padding: 0;
+}
+
+.container-fluid {
+  padding: 0.75rem;
+}
+
+/* Header styling */
+.macro-header {
+  background: white;
+  color: #333;
+  padding: 1rem;
+  margin: -0.75rem -0.75rem 1rem -0.75rem;
+  border-radius: 0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid #e9ecef;
+}
+
+.status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 0.5rem;
+}
+
+.status-connected {
+  background-color: #28a745;
+}
+
+.status-recording {
+  background-color: #dc3545;
+  animation: pulse 1.5s infinite;
+}
+
+.status-idle {
+  background-color: #6c757d;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* Card styling aligned with knowledge panel */
+.macro-card {
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-bottom: 1rem;
+  border-radius: 0.5rem;
+}
+
+.macro-card .card-header {
+  /* background-color: #fff;
+  border-bottom: 1px solid #e9ecef; */
+  font-weight: 600;
+}
+
+/* macro item styling */
+.macro-item {
+  /* border-left: 3px solid #667eea; */
+  background-color: #f8f9fa;
+  margin-bottom: 0.5rem;
+  padding: 0.75rem;
+  border-radius: 0.25rem;
+  transition: all 0.2s ease;
+}
+
+.macro-item:hover {
+  background-color: #e9ecef;
+  transform: translateX(2px);
+}
+
+.macro-badge {
+  font-size: 0.75rem;
+  margin-right: 0.25rem;
+}
+
+/* Recording state styling */
+.recording-active {
+  border-left-color: #dc3545 !important;
+  background-color: #fff5f5 !important;
+}
+
+/* Button group improvements */
+.macro-controls {
+  gap: 0.5rem;
+}
+
+/* Form improvements */
+.macro-form {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+
+/* Auto-discovery toggle */
+.macro-discovery-toggle {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+}
+
+/* Timeline improvements */
+.timeline-item {
+  position: relative;
+  padding-left: 2rem;
+  padding-bottom: 1rem;
+  border-left: 2px solid #667eea;
+}
+
+.timeline-item::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  top: 0.5rem;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: #667eea;
+  border: 2px solid white;
+  box-shadow: 0 0 0 2px #667eea;
+}
+
+.timeline-item:last-child {
+  border-left-color: transparent;
+}
+
+/* Loading states */
+.loading-shimmer {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* Stats styling */
+.stats-container {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  text-align: center;
+}
+
+.stat-item {
+  padding: 0.75rem;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 0.375rem;
+}
+
+.stat-number {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #667eea;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: #6c757d;
+  margin-top: 0.25rem;
+}
+
+/* Code blocks */
+pre {
+  background: #f8f8f8;
+  padding: 10px;
+  border-radius: 5px;
+  overflow: auto;
+  font-size: 0.8rem;
+}
+
+:not(pre) > code[class*="language-"],
+pre[class*="language-"] {
+  background: #f8f7f7;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .container-fluid {
+    padding: 0.5rem;
+  }
+
+  .macro-header {
+    margin: -0.5rem -0.5rem 1rem -0.5rem;
+  }
+
+  .stats-container {
+    grid-template-columns: 1fr;
+  }
+}
