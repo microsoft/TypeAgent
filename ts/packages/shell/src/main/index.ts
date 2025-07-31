@@ -530,6 +530,36 @@ async function initialize() {
         await BrowserAgentIpc.getinstance().send(data);
     });
 
+    // PDF viewer IPC handlers
+    ipcMain.handle("check-typeagent-connection", async () => {
+        const shellWindow = ShellWindow.getInstance();
+        if (shellWindow) {
+            const connected = await shellWindow.checkTypeAgentConnection();
+            return { connected };
+        }
+        return { connected: false };
+    });
+
+    ipcMain.handle("open-pdf-viewer", async (_, pdfUrl: string) => {
+        const shellWindow = ShellWindow.getInstance();
+        if (shellWindow) {
+            try {
+                await shellWindow.openPDFViewer(pdfUrl);
+                return { success: true };
+            } catch (error) {
+                debugShellError("Error opening PDF viewer:", error);
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error",
+                };
+            }
+        }
+        return { success: false, error: "Shell window not available" };
+    });
+
     app.on("activate", async function () {
         // On macOS it's common to re-create a window in the app when the
         // dock icon is clicked and there are no other windows open.

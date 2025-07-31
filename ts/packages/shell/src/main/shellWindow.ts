@@ -20,6 +20,7 @@ import {
     ShellSettingManager,
 } from "./shellSettings.js";
 import { isProd } from "./index.js";
+import { BrowserAgentIpc } from "./browserIpc.js";
 
 import registerDebug from "debug";
 const debugShellWindow = registerDebug("typeagent:shell:window");
@@ -337,6 +338,81 @@ export class ShellWindow {
     public get inlineBrowserUrl(): string | undefined {
         return this.targetUrl;
     }
+
+    // ================================================================
+    // PDF Viewer Support
+    // ================================================================
+    public async checkTypeAgentConnection(): Promise<boolean> {
+        try {
+            const browserIpc = BrowserAgentIpc.getinstance();
+            const webSocket = await browserIpc.ensureWebsocketConnected();
+            return webSocket !== undefined && webSocket.readyState === 1; // WebSocket.OPEN
+        } catch (error) {
+            debugShellWindowError(
+                "Error checking TypeAgent connection:",
+                error,
+            );
+            return false;
+        }
+    }
+
+    public async openPDFViewer(pdfUrl: string): Promise<void> {
+        try {
+            debugShellWindow(`Opening PDF viewer for: ${pdfUrl}`);
+
+            const viewerUrl = await this.constructPDFViewerUrl(pdfUrl);
+            return this.openInlineBrowser(new URL(viewerUrl));
+        } catch (error) {
+            debugShellWindowError("Error opening PDF viewer:", error);
+            throw error;
+        }
+    }
+
+    private async constructPDFViewerUrl(pdfUrl: string): Promise<string> {
+        try {
+            const browserIpc = BrowserAgentIpc.getinstance();
+
+            const response = await new Promise<any>((resolve, reject) => {
+                const timeoutId = setTimeout(() => {
+                    reject(new Error("Timeout getting view host URL"));
+                }, 10000);
+
+                const messageId = Math.random().toString(36).substring(7);
+                const message = {
+                    id: messageId,
+                    method: "getViewHostUrl",
+                    params: {},
+                };
+
+                const originalHandler = browserIpc.onMessageReceived;
+                browserIpc.onMessageReceived = (response: any) => {
+                    if (response.id === messageId) {
+                        clearTimeout(timeoutId);
+                        browserIpc.onMessageReceived = originalHandler;
+                        resolve(response.result);
+                    } else if (originalHandler) {
+                        originalHandler(response);
+                    }
+                };
+
+                browserIpc.send(message).catch(reject);
+            });
+
+            if (!response || !response.url) {
+                throw new Error(
+                    "Unable to get view host URL from TypeAgent service",
+                );
+            }
+
+            const viewerUrl = `${response.url}/pdf/?url=${encodeURIComponent(pdfUrl)}`;
+            debugShellWindow(`Constructed PDF viewer URL: ${viewerUrl}`);
+            return viewerUrl;
+        } catch (error) {
+            debugShellWindowError("Error constructing PDF viewer URL:", error);
+            throw new Error("Failed to get TypeAgent PDF service URL");
+        }
+    }
+
     // ================================================================
     // Inline browser
     // ================================================================
