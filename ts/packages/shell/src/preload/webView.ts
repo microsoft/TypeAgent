@@ -9,6 +9,7 @@ import {
     setupInlineBrowserRendererProxy,
     sendScriptAction,
 } from "./inlineBrowserRendererRpcServer";
+import { ElectronPDFInterceptor } from "./pdfInterceptor";
 
 const debugWebAgentProxy = registerDebug("typeagent:webAgent:proxy");
 
@@ -54,6 +55,12 @@ ipcRenderer.on("received-from-browser-ipc", async (_, data) => {
 
 // Set up inline browser renderer RPC proxy
 setupInlineBrowserRendererProxy();
+
+// Initialize PDF interceptor when DOM is ready
+document.addEventListener("DOMContentLoaded", () => {
+    const pdfInterceptor = new ElectronPDFInterceptor();
+    pdfInterceptor.initialize();
+});
 
 function sendToBrowserAgent(message: any) {
     ipcRenderer.send("send-to-browser-ipc", message);
