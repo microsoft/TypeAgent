@@ -25,7 +25,7 @@ export function normalizeParamString(str: string) {
     return str
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, "") // Remove combining diacritical marks
-        .replace(/\s/g, " ")
+        .replace(/\s+/g, " ") // Normalize any spaces to a single space
         .toLowerCase();
 }
 
