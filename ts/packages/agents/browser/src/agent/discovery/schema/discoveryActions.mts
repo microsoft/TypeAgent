@@ -52,6 +52,14 @@ export type GetMacrosForUrl = {
     };
 };
 
+export type GetAllMacros = {
+    actionName: "getAllMacros";
+    parameters: {
+        includeGlobal?: boolean;
+        author?: "discovered" | "user";
+    };
+};
+
 export type DeleteMacro = {
     actionName: "deleteMacro";
     parameters: {
@@ -66,4 +74,5 @@ export type SchemaDiscoveryActions =
     | StartAuthoringSession
     | GetIntentFromRecording
     | GetMacrosForUrl
+    | GetAllMacros
     | DeleteMacro;

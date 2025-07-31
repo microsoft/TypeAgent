@@ -35,7 +35,10 @@ export async function handleMessage(
         }
 
         case "getLibraryStats": {
-            return await handleGetWebsiteLibraryStats();
+            return await sendActionToAgent({
+                actionName: "getLibraryStats",
+                parameters: message.parameters || {},
+            });
         }
 
         case "getSearchSuggestions": {
@@ -512,7 +515,10 @@ export async function handleMessage(
         }
 
         case "getWebsiteLibraryStats": {
-            return await handleGetWebsiteLibraryStats();
+            return await sendActionToAgent({
+                actionName: "getLibraryStats",
+                parameters: {},
+            });
         }
 
         case "clearWebsiteLibrary": {
@@ -596,9 +602,8 @@ export async function handleMessage(
         case "getAllMacros": {
             try {
                 return await sendActionToAgent({
-                    actionName: "getMacrosForUrl",
+                    actionName: "getAllMacros",
                     parameters: {
-                        url: null,
                         includeGlobal: true,
                     },
                 });
@@ -935,46 +940,6 @@ function sendProgressToUI(importId: string, progress: any) {
     }
 }
 
-async function handleGetWebsiteLibraryStats() {
-    try {
-        const result = await sendActionToAgent({
-            actionName: "getWebsiteStats",
-            parameters: {
-                groupBy: "source",
-                limit: 50,
-            },
-        });
-
-        if (result.error) {
-            return {
-                success: false,
-                error: result.error,
-            };
-        }
-
-        // Parse the stats from the result text
-        const stats = parseWebsiteStatsFromText(
-            result.literalText || result.text || result.result || "",
-        );
-
-        return {
-            totalWebsites: stats.totalWebsites,
-            totalBookmarks: stats.totalBookmarks,
-            totalHistory: stats.totalHistory,
-            topDomains: stats.topDomains,
-        };
-    } catch (error) {
-        console.error("Error getting website library stats:", error);
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : "Unknown error",
-            totalWebsites: 0,
-            totalBookmarks: 0,
-            totalHistory: 0,
-            topDomains: 0,
-        };
-    }
-}
 
 async function handleClearWebsiteLibrary() {
     try {
@@ -1251,62 +1216,6 @@ async function handleGetSuggestedSearches() {
 }
 
 // Helper function to parse website stats from text response
-function parseWebsiteStatsFromText(text: string) {
-    const defaultStats = {
-        totalWebsites: 0,
-        totalBookmarks: 0,
-        totalHistory: 0,
-        topDomains: 0,
-    };
-
-    if (!text) return defaultStats;
-
-    try {
-        // Parse the text response to extract statistics
-        const lines = text.split("\n");
-        let totalWebsites = 0;
-        let totalBookmarks = 0;
-        let totalHistory = 0;
-        let topDomains = 0;
-
-        // Look for total count line
-        const totalMatch = text.match(/Total:\s*(\d+)\s*sites/i);
-        if (totalMatch) {
-            totalWebsites = parseInt(totalMatch[1]);
-        }
-
-        // Look for source breakdown
-        const bookmarkMatch = text.match(/bookmark:\s*(\d+)/i);
-        if (bookmarkMatch) {
-            totalBookmarks = parseInt(bookmarkMatch[1]);
-        }
-
-        const historyMatch = text.match(/history:\s*(\d+)/i);
-        if (historyMatch) {
-            totalHistory = parseInt(historyMatch[1]);
-        }
-
-        // Count domain entries (rough approximation)
-        const domainLines = lines.filter(
-            (line) =>
-                line.includes(":") &&
-                line.includes("sites") &&
-                !line.includes("Total") &&
-                !line.includes("Source"),
-        );
-        topDomains = domainLines.length;
-
-        return {
-            totalWebsites,
-            totalBookmarks,
-            totalHistory,
-            topDomains,
-        };
-    } catch (error) {
-        console.error("Error parsing website stats:", error);
-        return defaultStats;
-    }
-}
 
 // Helper functions for knowledge indexing
 async function indexPageContent(

@@ -579,7 +579,13 @@ async function initialize() {
                 // Set timeout to prevent hanging
                 setTimeout(() => {
                     browserIpc.onMessageReceived = originalHandler;
-                    reject(new Error("Extension message timeout"));
+                    const method = message.method || message.type || 'unknown';
+                    const messageInfo = JSON.stringify({
+                        method,
+                        messageId,
+                        hasParams: !!(message.params || message.parameters)
+                    });
+                    reject(new Error(`Extension message timeout - ${messageInfo}`));
                 }, 30000);
             });
         } catch (error) {

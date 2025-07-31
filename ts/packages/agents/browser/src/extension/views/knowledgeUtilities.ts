@@ -12,6 +12,16 @@ import type {
     MacroQueryOptions, 
     DeleteMacroResult 
 } from './macroUtilities';
+import { 
+    ExtensionServiceBase,
+    LibraryStats,
+    SearchFilters,
+    KnowledgeStatus,
+    SearchResult,
+    Website,
+    SourceReference,
+    EntityMatch
+} from './extensionServiceBase';
 
 // ===================================================================
 // INTERFACES AND TYPES
@@ -23,76 +33,16 @@ export interface NotificationAction {
     style?: "primary" | "secondary" | "success" | "danger";
 }
 
-export interface LibraryStats {
-    totalWebsites: number;
-    totalBookmarks: number;
-    totalHistory: number;
-    topDomains: number;
-    lastImport?: number;
-}
-
-export interface SearchFilters {
-    dateFrom?: string;
-    dateTo?: string;
-    sourceType?: "bookmarks" | "history";
-    domain?: string;
-    minRelevance?: number;
-}
-
-export interface KnowledgeStatus {
-    hasKnowledge: boolean;
-    extractionDate?: string;
-    entityCount?: number;
-    topicCount?: number;
-    suggestionCount?: number;
-    status: "extracted" | "pending" | "error" | "none" | "extracting";
-    confidence?: number;
-}
-
-export interface SearchResult {
-    websites: Website[];
-    summary: {
-        text: string;
-        totalFound: number;
-        searchTime: number;
-        sources: SourceReference[];
-        entities: EntityMatch[];
-    };
-    query: string;
-    filters: SearchFilters;
-    topTopics?: string[];
-    suggestedFollowups?: string[];
-    relatedEntities?: Array<{
-        name: string;
-        type: string;
-        confidence: number;
-    }>;
-    answerEnhancement?: AnswerEnhancement; // NEW: Dynamic enhancement from LLM
-}
-
-export interface Website {
-    url: string;
-    title: string;
-    domain: string;
-    visitCount?: number;
-    lastVisited?: string;
-    source: "bookmarks" | "history";
-    score?: number;
-    snippet?: string;
-    knowledge?: KnowledgeStatus;
-}
-
-export interface SourceReference {
-    url: string;
-    title: string;
-    relevance: number;
-}
-
-export interface EntityMatch {
-    name: string;
-    type: string;
-    confidence: number;
-}
+// Re-export types from base class for backward compatibility
+export { 
+    LibraryStats, 
+    SearchFilters, 
+    KnowledgeStatus, 
+    SearchResult, 
+    Website, 
+    SourceReference, 
+    EntityMatch 
+} from './extensionServiceBase';
 
 // ===================================================================
 // NOTIFICATION MANAGER
@@ -235,118 +185,26 @@ export class NotificationManager {
     }
 }
 
-// ===================================================================
-// EXTENSION SERVICE INTERFACE
-// ===================================================================
-
-export interface ExtensionService {
-    // Knowledge & Library methods
-    getLibraryStats(): Promise<LibraryStats>;
-    getAnalyticsData(options?: {
-        timeRange?: string;
-        includeQuality?: boolean;
-        includeProgress?: boolean;
-        topDomainsLimit?: number;
-        activityGranularity?: "day" | "week" | "month";
-    }): Promise<any>;
-    searchWebMemories(query: string, filters: SearchFilters): Promise<SearchResult>;
-    
-    // Page methods  
-    getCurrentTab(): Promise<any>;
-    getPageIndexStatus(url: string): Promise<any>;
-    indexPageContent(url: string, mode: string): Promise<any>;
-    extractPageKnowledge(url: string, mode: string, extractionSettings: any): Promise<any>;
-    queryKnowledge(parameters: any): Promise<any>;
-    checkConnection(): Promise<any>;
-    
-    // Settings methods
-    getAutoIndexSetting(): Promise<boolean>;
-    setAutoIndexSetting(enabled: boolean): Promise<void>;
-    getExtractionSettings(): Promise<any>;
-    saveExtractionSettings(settings: any): Promise<void>;
-    
-    // Utility methods
-    openOptionsPage(): Promise<void>;
-    createTab(url: string, active?: boolean): Promise<any>;
-    getViewHostUrl(): Promise<string | null>;
-    checkWebSocketConnection(): Promise<any>;
-    
-    // Additional methods (from broader interface scan)
-    getIndexStats(): Promise<any>;
-    getPageSourceInfo(url: string): Promise<any>;
-    getPageIndexedKnowledge(url: string): Promise<any>;
-    discoverRelationships(url: string, knowledge: any, maxResults: number): Promise<any>;
-    generateTemporalSuggestions(maxSuggestions: number): Promise<any>;
-    searchByEntities(entities: string[], url: string, maxResults: number): Promise<any>;
-    searchByTopics(topics: string[], url: string, maxResults: number): Promise<any>;
-    hybridSearch(query: string, url: string, maxResults: number): Promise<any>;
-    searchWebMemoriesAdvanced(parameters: any): Promise<any>;
-    checkAIModelAvailability(): Promise<any>;
-    getPageQualityMetrics(url: string): Promise<any>;
-    notifyAutoIndexSettingChanged(enabled: boolean): Promise<void>;
-    getRecentKnowledgeItems(limit?: number): Promise<any>;
-    extractKnowledge(url: string): Promise<any>;
-    checkKnowledgeStatus(url: string): Promise<any>;
-    getSearchSuggestions(query: string): Promise<string[]>;
-    getRecentSearches(): Promise<string[]>;
-    getDiscoverInsights(limit?: number, timeframe?: string): Promise<any>;
-    saveSearch(query: string, results: any): Promise<void>;
-    
-    // Macro methods (NEW)
-    getMacrosForUrl(url: string, options?: MacroQueryOptions): Promise<StoredMacro[]>;
-    getAllMacros(): Promise<StoredMacro[]>;
-    getMacroDomains(): Promise<string[]>;
-    deleteMacro(macroId: string): Promise<DeleteMacroResult>;
-}
 
 // ===================================================================
 // CHROME EXTENSION SERVICE
 // ===================================================================
 
-export class ChromeExtensionService implements ExtensionService {
-    async getLibraryStats(): Promise<LibraryStats> {
-        return this.sendMessage({
-            type: "getLibraryStats",
-            includeKnowledge: true,
-        });
+export class ChromeExtensionService extends ExtensionServiceBase {
+    // Override getCurrentTab with Chrome-specific implementation
+    protected async getCurrentTabImpl(): Promise<chrome.tabs.Tab | null> {
+        try {
+            const tabs = await chrome.tabs.query({
+                active: true,
+                currentWindow: true,
+            });
+            return tabs.length > 0 ? tabs[0] : null;
+        } catch (error) {
+            console.error("Failed to get current tab:", error);
+            return null;
+        }
     }
 
-    async getAnalyticsData(options?: {
-        timeRange?: string;
-        includeQuality?: boolean;
-        includeProgress?: boolean;
-        topDomainsLimit?: number;
-        activityGranularity?: "day" | "week" | "month";
-    }): Promise<any> {
-        return this.sendMessage({
-            type: "getAnalyticsData",
-            timeRange: options?.timeRange || "30d",
-            includeQuality: options?.includeQuality !== false,
-            includeProgress: options?.includeProgress !== false,
-            topDomainsLimit: options?.topDomainsLimit || 10,
-            activityGranularity: options?.activityGranularity || "day",
-        });
-    }
-
-    async searchWebMemories(
-        query: string,
-        filters: SearchFilters,
-    ): Promise<SearchResult> {
-        const response = (await this.sendMessage({
-            type: "searchWebMemories",
-            parameters: {
-                query,
-                generateAnswer: true,
-                includeRelatedEntities: true,
-                enableAdvancedSearch: true,
-                limit: 50,
-                minScore: filters.minRelevance || 0.3,
-                domain: filters.domain,
-            },
-        })) as any;
-
-        return response.results;
-    }
 
     async getCurrentTab(): Promise<chrome.tabs.Tab | null> {
         try {
@@ -361,46 +219,6 @@ export class ChromeExtensionService implements ExtensionService {
         }
     }
 
-    async getPageIndexStatus(url: string): Promise<any> {
-        return this.sendMessage({
-            type: "getPageIndexStatus",
-            url,
-        });
-    }
-
-    async indexPageContent(url: string, mode: string): Promise<any> {
-        return this.sendMessage({
-            type: "indexPageContentDirect",
-            url,
-            mode,
-        });
-    }
-
-    async extractPageKnowledge(
-        url: string,
-        mode: string,
-        extractionSettings: any,
-    ): Promise<any> {
-        return this.sendMessage({
-            type: "extractPageKnowledge",
-            url,
-            mode,
-            extractionSettings,
-        });
-    }
-
-    async queryKnowledge(parameters: any): Promise<any> {
-        return this.sendMessage({
-            type: "queryKnowledge",
-            parameters,
-        });
-    }
-
-    async checkConnection(): Promise<any> {
-        return this.sendMessage({
-            type: "checkConnection",
-        });
-    }
 
     async getAutoIndexSetting(): Promise<boolean> {
         try {
@@ -445,6 +263,7 @@ export class ChromeExtensionService implements ExtensionService {
         }
     }
 
+    // Override openOptionsPage with Chrome-specific implementation
     async openOptionsPage(): Promise<void> {
         try {
             chrome.runtime.openOptionsPage();
@@ -454,6 +273,7 @@ export class ChromeExtensionService implements ExtensionService {
         }
     }
 
+    // Override createTab with Chrome-specific implementation
     async createTab(
         url: string,
         active: boolean = true,
@@ -632,19 +452,8 @@ export class ChromeExtensionService implements ExtensionService {
         });
     }
 
-    async getViewHostUrl(): Promise<string | null> {
-        try {
-            const response = await this.sendMessage<{url?: string}>({
-                type: "getViewHostUrl",
-            });
-            return response?.url || null;
-        } catch (error) {
-            console.error("Failed to get view host URL:", error);
-            return null;
-        }
-    }
-
-    private async sendMessage<T>(message: any): Promise<T> {
+    // Implement abstract sendMessage method
+    protected async sendMessage<T>(message: any): Promise<T> {
         if (typeof chrome !== "undefined" && chrome.runtime) {
             try {
                 const response = await chrome.runtime.sendMessage(message);
@@ -659,83 +468,15 @@ export class ChromeExtensionService implements ExtensionService {
         }
         throw new Error("Chrome extension not available");
     }
-
-    // Macro methods
-    async getMacrosForUrl(url: string, options: MacroQueryOptions = {}): Promise<StoredMacro[]> {
-        try {
-            const response = await this.sendMessage<{actions?: StoredMacro[]}>({
-                type: "getMacrosForUrl",
-                url: url,
-                includeGlobal: options.includeGlobal ?? true,
-                author: options.author,
-            });
-            return response?.actions || [];
-        } catch (error) {
-            console.error("Failed to get macros for URL:", error);
-            return [];
-        }
-    }
-
-    async getAllMacros(): Promise<StoredMacro[]> {
-        try {
-            const response = await this.sendMessage<{actions?: StoredMacro[]}>({
-                type: "getAllMacros",
-            });
-            return response?.actions || [];
-        } catch (error) {
-            console.error("Failed to get all macros:", error);
-            return [];
-        }
-    }
-
-    async getMacroDomains(): Promise<string[]> {
-        try {
-            const response = await this.sendMessage<{domains?: string[]}>({
-                type: "getMacroDomains",
-            });
-            return response?.domains || [];
-        } catch (error) {
-            console.error("Failed to get macro domains:", error);
-            return [];
-        }
-    }
-
-    async deleteMacro(macroId: string): Promise<DeleteMacroResult> {
-        try {
-            const response = await this.sendMessage<{success?: boolean, error?: string}>({
-                type: "deleteMacro",
-                macroId: macroId,
-            });
-            return {
-                success: response?.success || false,
-                error: response?.error,
-                macroId: macroId,
-            };
-        } catch (error) {
-            console.error("Failed to delete macro:", error);
-            return {
-                success: false,
-                error: error instanceof Error ? error.message : "Unknown error",
-                macroId: macroId,
-            };
-        }
-    }
 }
+
 
 // ===================================================================
 // ELECTRON EXTENSION SERVICE
 // ===================================================================
 
-export class ElectronExtensionService implements ExtensionService {
-    async getLibraryStats(): Promise<LibraryStats> {
-        return this.sendMessage({
-            method: "getLibraryStats",
-            params: {
-                includeKnowledge: true,
-            },
-        });
-    }
-
+export class ElectronExtensionService extends ExtensionServiceBase {
+    // Override getAnalyticsData to add success wrapper
     async getAnalyticsData(options?: {
         timeRange?: string;
         includeQuality?: boolean;
@@ -743,41 +484,16 @@ export class ElectronExtensionService implements ExtensionService {
         topDomainsLimit?: number;
         activityGranularity?: "day" | "week" | "month";
     }): Promise<any> {
-        const result  = await this.sendMessage({
-            type: "getAnalyticsData",
-            timeRange: options?.timeRange || "30d",
-            includeQuality: options?.includeQuality !== false,
-            includeProgress: options?.includeProgress !== false,
-            topDomainsLimit: options?.topDomainsLimit || 10,
-            activityGranularity: options?.activityGranularity || "day",
-        }) as any;
-
+        const result = await super.getAnalyticsData(options);
         return {
-                    success: !result.error,
-                    analytics: result,
-                    error: result.error,
-                };
+            success: !result.error,
+            analytics: result,
+            error: result.error,
+        };
     }
 
-    async searchWebMemories(
-        query: string,
-        filters: SearchFilters,
-    ): Promise<SearchResult> {
-        const result = (await this.sendMessage({
-            method: "searchWebMemories",
-            params: {
-                query,
-                generateAnswer: true,
-                includeRelatedEntities: true,
-                enableAdvancedSearch: true,
-                limit: 50,
-                minScore: filters.minRelevance || 0.3,
-                domain: filters.domain,
-            },
-        })) as any;
-
-        // Transform WebSocket response to match ChromeExtensionService return structure
-        // ChromeExtensionService extracts response.results, so we return just the results object
+    // Override transformSearchWebMemoriesResponse for Electron-specific response structure
+    protected transformSearchWebMemoriesResponse(result: any): SearchResult {
         return {
             websites: result.websites || [],
             summary: {
@@ -787,15 +503,16 @@ export class ElectronExtensionService implements ExtensionService {
                 sources: result.answerSources || [],
                 entities: result.relatedEntities || [],
             },
-            query: query,
-            filters: filters || {},
+            query: result.query || "",
+            filters: result.filters || {},
             topTopics: result.topTopics || [],
             suggestedFollowups: result.suggestedFollowups || [],
             relatedEntities: result.relatedEntities || [],
         };
     }
 
-    async getCurrentTab(): Promise<any> {
+    // Override getCurrentTab with Electron-specific implementation
+    protected async getCurrentTabImpl(): Promise<any> {
         // Return mock tab object for Electron context
         return {
             id: -1,
@@ -805,48 +522,9 @@ export class ElectronExtensionService implements ExtensionService {
         };
     }
 
-    async getPageIndexStatus(url: string): Promise<any> {
-        return this.sendMessage({
-            type: "getPageIndexStatus",
-            url,
-        });
-    }
 
-    async indexPageContent(url: string, mode: string): Promise<any> {
-        return this.sendMessage({
-            type: "indexPageContentDirect",
-            url,
-            mode,
-        });
-    }
-
-    async extractPageKnowledge(
-        url: string,
-        mode: string,
-        extractionSettings: any,
-    ): Promise<any> {
-        return this.sendMessage({
-            type: "extractPageKnowledge",
-            url,
-            mode,
-            extractionSettings,
-        });
-    }
-
-    async queryKnowledge(parameters: any): Promise<any> {
-        return this.sendMessage({
-            type: "queryKnowledge",
-            parameters,
-        });
-    }
-
-    async checkConnection(): Promise<any> {
-        return this.sendMessage({
-            type: "checkConnection",
-        });
-    }
-
-    async getAutoIndexSetting(): Promise<boolean> {
+    // Override getAutoIndexSetting with Electron storage implementation
+    protected async getAutoIndexSettingImpl(): Promise<boolean> {
         try {
             const settings = await (window as any).electronAPI.getStorage(["autoIndexing"]);
             return settings.autoIndexing || false;
@@ -856,7 +534,8 @@ export class ElectronExtensionService implements ExtensionService {
         }
     }
 
-    async setAutoIndexSetting(enabled: boolean): Promise<void> {
+    // Override setAutoIndexSetting with Electron storage implementation
+    protected async setAutoIndexSettingImpl(enabled: boolean): Promise<void> {
         try {
             await (window as any).electronAPI.setStorage({ autoIndexing: enabled });
         } catch (error) {
@@ -865,7 +544,8 @@ export class ElectronExtensionService implements ExtensionService {
         }
     }
 
-    async getExtractionSettings(): Promise<any> {
+    // Override getExtractionSettings with Electron storage implementation
+    protected async getExtractionSettingsImpl(): Promise<any> {
         try {
             const settings = await (window as any).electronAPI.getStorage([
                 "extractionSettings",
@@ -877,7 +557,8 @@ export class ElectronExtensionService implements ExtensionService {
         }
     }
 
-    async saveExtractionSettings(settings: any): Promise<void> {
+    // Override saveExtractionSettings with Electron storage implementation
+    protected async saveExtractionSettingsImpl(settings: any): Promise<void> {
         try {
             await (window as any).electronAPI.setStorage({
                 extractionMode: settings.mode,
@@ -1023,11 +704,13 @@ export class ElectronExtensionService implements ExtensionService {
         }
     }
 
-    private async sendMessage<T>(message: any): Promise<T> {
+    // Implement abstract sendMessage method with message transformation
+    protected async sendMessage<T>(message: any): Promise<T> {
         if (typeof window !== "undefined" && (window as any).electronAPI) {
             try {
-                // Send messages directly with method/params structure to match WebSocket handling
-                const response = await (window as any).electronAPI.sendBrowserMessage(message);
+                // Transform Chrome message format to Electron format
+                const electronMessage = this.transformChromeMessageToElectron(message);
+                const response = await (window as any).electronAPI.sendBrowserMessage(electronMessage);
                 if (response && response.error) {
                     throw new Error(response.error);
                 }
@@ -1040,74 +723,25 @@ export class ElectronExtensionService implements ExtensionService {
         throw new Error("Electron API not available");
     }
 
-    // Macro methods
-    async getMacrosForUrl(url: string, options: MacroQueryOptions = {}): Promise<StoredMacro[]> {
-        try {
-            const response = await this.sendMessage<{actions?: StoredMacro[]}>({
-                method: "getMacrosForUrl", // Note: method not type for Electron
-                params: {
-                    url: url,
-                    includeGlobal: options.includeGlobal ?? true,
-                    author: options.author,
-                },
-            });
-            return response?.actions || [];
-        } catch (error) {
-            console.error("Failed to get macros for URL:", error);
-            return [];
-        }
-    }
-
-    async getAllMacros(): Promise<StoredMacro[]> {
-        try {
-            const response = await this.sendMessage<{actions?: StoredMacro[]}>({
-                method: "getMacrosForUrl", // Uses same WebSocket action
-                params: {
-                    url: null,
-                    includeGlobal: true,
-                },
-            });
-            return response?.actions || [];
-        } catch (error) {
-            console.error("Failed to get all macros:", error);
-            return [];
-        }
-    }
-
-    async getMacroDomains(): Promise<string[]> {
-        try {
-            const response = await this.sendMessage<{domains?: string[]}>({
-                method: "getActionDomains", // Maps to existing WebSocket action
-                params: {},
-            });
-            return response?.domains || [];
-        } catch (error) {
-            console.error("Failed to get macro domains:", error);
-            return [];
-        }
-    }
-
-    async deleteMacro(macroId: string): Promise<DeleteMacroResult> {
-        try {
-            const response = await this.sendMessage<{success?: boolean, error?: string}>({
-                method: "deleteMacro",
-                params: {
-                    macroId: macroId,
-                },
-            });
+    /**
+     * Transform Chrome message format to Electron format
+     */
+    private transformChromeMessageToElectron(chromeMessage: any): any {
+        const { type, ...params } = chromeMessage;
+        
+        // Handle special cases where message structure differs
+        if (type === "searchWebMemories" && chromeMessage.parameters) {
             return {
-                success: response?.success || false,
-                error: response?.error,
-                macroId: macroId,
-            };
-        } catch (error) {
-            console.error("Failed to delete macro:", error);
-            return {
-                success: false,
-                error: error instanceof Error ? error.message : "Unknown error",
-                macroId: macroId,
+                method: type,
+                params: chromeMessage.parameters
             };
         }
+        
+        // Standard transformation: move all properties except 'type' into 'params'
+        return {
+            method: type,
+            params: Object.keys(params).length > 0 ? params : {}
+        };
     }
 }
 
@@ -1304,7 +938,7 @@ export class ChromeEventManager {
 // SERVICE FACTORY AND ENVIRONMENT DETECTION
 // ===================================================================
 
-export function createExtensionService(): ChromeExtensionService | ElectronExtensionService {
+export function createExtensionService(): ExtensionServiceBase {
     // Check for Electron context first (has electronAPI in window)
     // Note: Electron provides Chrome extension APIs but they're not fully implemented
     if (typeof window !== "undefined" && (window as any).electronAPI) {
@@ -1421,7 +1055,7 @@ export interface EntityCacheServices {
 
 // Default implementations using the existing ChromeExtensionService
 export class DefaultAnalyticsServices implements AnalyticsServices {
-    constructor(private chromeService: ChromeExtensionService | ElectronExtensionService) {}
+    constructor(private chromeService: ExtensionServiceBase) {}
 
     async loadAnalyticsData(): Promise<any> {
         return this.chromeService.getAnalyticsData({
@@ -1438,7 +1072,7 @@ export class DefaultAnalyticsServices implements AnalyticsServices {
 export class CachedDefaultAnalyticsServices extends DefaultAnalyticsServices {
     private cacheManager: any; // Import will be added dynamically
 
-    constructor(chromeService: ChromeExtensionService | ElectronExtensionService) {
+    constructor(chromeService: ExtensionServiceBase) {
         super(chromeService);
         // Initialize cache manager when available
         this.initializeCacheManager();
@@ -1468,7 +1102,7 @@ export class CachedDefaultAnalyticsServices extends DefaultAnalyticsServices {
 }
 
 export class DefaultSearchServices implements SearchServices {
-    constructor(private chromeService: ChromeExtensionService | ElectronExtensionService) {}
+    constructor(private chromeService: ExtensionServiceBase) {}
 
     async performSearch(query: string, filters?: any): Promise<SearchResult> {
         console.log(
@@ -1542,7 +1176,7 @@ export class DefaultSearchServices implements SearchServices {
 }
 
 export class DefaultDiscoveryServices implements DiscoveryServices {
-    constructor(private chromeService: ChromeExtensionService | ElectronExtensionService) {}
+    constructor(private chromeService: ExtensionServiceBase) {}
 
     async loadDiscoverData(): Promise<any> {
         const response = await this.chromeService.getDiscoverInsights(
@@ -1574,9 +1208,9 @@ export class DefaultDiscoveryServices implements DiscoveryServices {
 
 // Default implementations for entity services (connected to real EntityProcessingService)
 export class DefaultEntityGraphServices implements EntityGraphServices {
-    private extensionService: ChromeExtensionService | ElectronExtensionService | null = null;
+    private extensionService: ExtensionServiceBase | null = null;
 
-    constructor(extensionService?: ChromeExtensionService | ElectronExtensionService) {
+    constructor(extensionService?: ExtensionServiceBase) {
         this.extensionService = extensionService || null;
     }
 
