@@ -162,7 +162,7 @@ function createTranslator2(
             `\`\`\`\n${schema}\`\`\`\n` +
             `The following are messages in a conversation:\n` +
             `"""\n${request}\n"""\n` +
-            `The following is the user request translated into a JSON object with no spaces of indentation and no properties with the value undefined:\n`
+            `The following is the user request translated into a JSON object with zero spaces of indentation and no properties with the value undefined:\n`
         );
     }
 }
