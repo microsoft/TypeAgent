@@ -449,4 +449,3 @@ android/samples/mobile/.idea/deploymentTargetSelector.xml
 
 # Everybody gets to maintain their own .github/instructions/ folder
 /.github/instructions/
-/ts/.tools
