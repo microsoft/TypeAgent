@@ -19,6 +19,7 @@ import {
     extractCategories,
     filterMacros,
 } from "./macroUtilities";
+import { extensionService } from "./knowledgeUtilities";
 
 declare global {
     interface Window {
@@ -76,15 +77,7 @@ class MacroIndexApp {
     }
 
     private async getViewHostUrl(): Promise<string | null> {
-        try {
-            const response = await chrome.runtime.sendMessage({
-                type: "getViewHostUrl",
-            });
-            return response?.url || null;
-        } catch (error) {
-            console.error("Failed to get view host URL:", error);
-            return null;
-        }
+        return await extensionService.getViewHostUrl();
     }
 
     private setupEventListeners() {

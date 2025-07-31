@@ -77,6 +77,30 @@ export function createExternalBrowserServer(channel: RpcChannel) {
         return getContentScriptRpc(targetTab.id!);
     }
 
+    function resolveCustomProtocolUrl(url: string): string {
+        // Handle typeagent-browser custom protocol
+        if (url.startsWith("typeagent-browser://")) {
+            const customUrl = new URL(url);
+            const customPath = customUrl.pathname;
+
+            // Map custom protocol to actual extension URL
+            const libraryMapping: Record<string, string> = {
+                "/annotationsLibrary.html": "views/annotationsLibrary.html",
+                "/knowledgeLibrary.html": "views/knowledgeLibrary.html",
+                "/macrosLibrary.html": "views/macrosLibrary.html",
+            };
+
+            const extensionPath = libraryMapping[customPath];
+            if (extensionPath) {
+                return chrome.runtime.getURL(extensionPath);
+            } else {
+                throw new Error(`Unknown library page: ${customPath}`);
+            }
+        }
+
+        return url;
+    }
+
     chrome.runtime.onMessage.addListener(
         (message: any, sender: chrome.runtime.MessageSender) => {
             if (message.type === "rpc") {
@@ -90,11 +114,14 @@ export function createExternalBrowserServer(channel: RpcChannel) {
 
     const invokeFunctions: BrowserControlInvokeFunctions = {
         openWebPage: async (url: string) => {
+            // Resolve custom protocol URLs to actual extension URLs
+            const resolvedUrl = resolveCustomProtocolUrl(url);
+
             const targetTab = await getActiveTab();
             if (targetTab) {
-                await chrome.tabs.update(targetTab.id!, { url });
+                await chrome.tabs.update(targetTab.id!, { url: resolvedUrl });
             } else {
-                await chrome.tabs.create({ url });
+                await chrome.tabs.create({ url: resolvedUrl });
             }
         },
         closeWebPage: async () => {
@@ -166,10 +193,13 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             const url = await contentScriptRpc.getPageLinksByQuery(keywords);
 
             if (url) {
+                const resolvedUrl = resolveCustomProtocolUrl(url);
                 if (openInNewTab) {
-                    await chrome.tabs.create({ url });
+                    await chrome.tabs.create({ url: resolvedUrl });
                 } else {
-                    await chrome.tabs.update(targetTab.id!, { url });
+                    await chrome.tabs.update(targetTab.id!, {
+                        url: resolvedUrl,
+                    });
                 }
             }
 
@@ -181,12 +211,15 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             const url = await contentScriptRpc.getPageLinksByPosition(position);
 
             if (url) {
+                const resolvedUrl = resolveCustomProtocolUrl(url);
                 if (openInNewTab) {
                     await chrome.tabs.create({
-                        url,
+                        url: resolvedUrl,
                     });
                 } else {
-                    await chrome.tabs.update(targetTab.id!, { url });
+                    await chrome.tabs.update(targetTab.id!, {
+                        url: resolvedUrl,
+                    });
                 }
             }
 

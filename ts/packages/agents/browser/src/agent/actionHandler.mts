@@ -451,6 +451,7 @@ async function updateBrowserContext(
                         case "registerPageDynamicAgent":
                         case "getIntentFromRecording":
                         case "getMacrosForUrl":
+                        case "getAllMacros":
                         case "deleteMacro": {
                             const discoveryResult =
                                 await handleSchemaDiscoveryAction(
@@ -512,6 +513,22 @@ async function updateBrowserContext(
                                 JSON.stringify({
                                     id: data.id,
                                     result: websiteResult,
+                                }),
+                            );
+                            break;
+                        }
+
+                        case "getLibraryStats": {
+                            const libraryStatsResult =
+                                await handleWebsiteLibraryStats(
+                                    data.params,
+                                    context,
+                                );
+
+                            webSocket.send(
+                                JSON.stringify({
+                                    id: data.id,
+                                    result: libraryStatsResult,
                                 }),
                             );
                             break;
@@ -621,6 +638,19 @@ async function resolveWebPage(
     site: string,
 ): Promise<string> {
     debug(`Resolving site '${site}'`);
+
+    // Handle library pages with custom protocol
+    const libraryPages: Record<string, string> = {
+        annotationslibrary: "typeagent-browser://views/annotationsLibrary.html",
+        knowledgelibrary: "typeagent-browser://views/knowledgeLibrary.html",
+        macroslibrary: "typeagent-browser://views/macrosLibrary.html",
+    };
+
+    const libraryUrl = libraryPages[site.toLowerCase()];
+    if (libraryUrl) {
+        debug(`Resolved library page: ${site} -> ${libraryUrl}`);
+        return libraryUrl;
+    }
 
     switch (site.toLowerCase()) {
         case "paleobiodb":
@@ -2115,6 +2145,148 @@ async function handleMacroStoreAction(
         return {
             success: false,
             error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+function formatLibraryStatsResponse(text: string) {
+    const defaultStats = {
+        totalWebsites: 0,
+        totalBookmarks: 0,
+        totalHistory: 0,
+        topDomains: 0,
+    };
+
+    if (!text) return defaultStats;
+
+    try {
+        const lines = text.split("\n");
+        let totalWebsites = 0;
+        let totalBookmarks = 0;
+        let totalHistory = 0;
+        let topDomains = 0;
+
+        // Look for total count line
+        const totalMatch = text.match(/Total:\s*(\d+)\s*sites/i);
+        if (totalMatch) {
+            totalWebsites = parseInt(totalMatch[1]);
+        }
+
+        // Look for source breakdown
+        const bookmarkMatch = text.match(/bookmark:\s*(\d+)/i);
+        if (bookmarkMatch) {
+            totalBookmarks = parseInt(bookmarkMatch[1]);
+        }
+
+        const historyMatch = text.match(/history:\s*(\d+)/i);
+        if (historyMatch) {
+            totalHistory = parseInt(historyMatch[1]);
+        }
+
+        // Count domain entries
+        const domainLines = lines.filter(
+            (line) =>
+                line.includes(":") &&
+                line.includes("sites") &&
+                !line.includes("Total") &&
+                !line.includes("Source"),
+        );
+        topDomains = domainLines.length;
+
+        return {
+            totalWebsites,
+            totalBookmarks,
+            totalHistory,
+            topDomains,
+        };
+    } catch (error) {
+        console.error("Error parsing library stats:", error);
+        return defaultStats;
+    }
+}
+
+async function handleWebsiteLibraryStats(
+    parameters: any,
+    context: SessionContext<BrowserActionContext>,
+): Promise<any> {
+    try {
+        // Call existing getWebsiteStats action with proper ActionContext
+        const statsAction = {
+            schemaName: "browser" as const,
+            actionName: "getWebsiteStats" as const,
+            parameters: {
+                groupBy: "source",
+                limit: 50,
+                ...parameters, // Allow override of defaults
+            },
+        };
+
+        const mockActionContext: ActionContext<BrowserActionContext> = {
+            sessionContext: context,
+            actionIO: {
+                setDisplay: () => {},
+                appendDisplay: () => {},
+                clearDisplay: () => {},
+                setError: () => {},
+            } as any,
+            streamingContext: undefined,
+            activityContext: undefined,
+            queueToggleTransientAgent: async () => {},
+        };
+
+        const statsResult = await getWebsiteStats(
+            mockActionContext,
+            statsAction,
+        );
+
+        if (statsResult.error) {
+            return {
+                success: false,
+                error: statsResult.error,
+                totalWebsites: 0,
+                totalBookmarks: 0,
+                totalHistory: 0,
+                topDomains: 0,
+            };
+        }
+
+        // Parse and format the response - extract text from ActionResult
+        let responseText = "";
+        if (statsResult.literalText) {
+            responseText = statsResult.literalText;
+        } else if (statsResult.displayContent) {
+            // Handle different types of display content
+            if (typeof statsResult.displayContent === "string") {
+                responseText = statsResult.displayContent;
+            } else if (Array.isArray(statsResult.displayContent)) {
+                responseText = statsResult.displayContent.join("\n");
+            } else if (
+                typeof statsResult.displayContent === "object" &&
+                statsResult.displayContent.content
+            ) {
+                // Handle DisplayMessage type
+                responseText =
+                    typeof statsResult.displayContent.content === "string"
+                        ? statsResult.displayContent.content
+                        : String(statsResult.displayContent.content);
+            }
+        }
+
+        const formattedStats = formatLibraryStatsResponse(responseText);
+
+        return {
+            success: true,
+            ...formattedStats,
+        };
+    } catch (error) {
+        console.error("Error getting library stats:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+            totalWebsites: 0,
+            totalBookmarks: 0,
+            totalHistory: 0,
+            topDomains: 0,
         };
     }
 }

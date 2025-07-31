@@ -8,6 +8,7 @@
 
 // Import types from the PDF types file
 import type { PDFAnnotation } from "../../views/server/features/pdf/pdfTypes";
+import { extensionService } from "./knowledgeUtilities";
 
 interface UrlDocumentMapping {
     documentId: string;
@@ -43,15 +44,7 @@ class AnnotationsLibraryService {
     }
 
     private async getViewHostUrl(): Promise<string | null> {
-        try {
-            const response = await chrome.runtime.sendMessage({
-                type: "getViewHostUrl",
-            });
-            return response?.url || null;
-        } catch (error) {
-            console.error("Failed to get view host URL:", error);
-            return null;
-        }
+        return await extensionService.getViewHostUrl();
     }
 
     async getAllAnnotations(): Promise<AnnotationWithDocument[]> {
