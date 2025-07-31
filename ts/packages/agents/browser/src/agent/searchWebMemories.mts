@@ -1299,3 +1299,282 @@ export async function hybridSearch(
         );
     }
 }
+export function generateWebSearchHtml(
+    searchResponse: SearchWebMemoriesResponse,
+    summary: string,
+): string {
+    let html = `<div class='web-search-results'>`;
+
+    // Add summary header
+    html += `<div class='search-summary'>${summary}</div>`;
+
+    // Add answer if available
+    if (searchResponse.answer && searchResponse.answerType !== "noAnswer") {
+        html += `<div class='search-answer'>
+            <div class='answer-header'>Answer:</div>
+            <div class='answer-content'>${searchResponse.answer}</div>
+        </div>`;
+    }
+
+    // Add main results as ordered list
+    if (searchResponse.websites.length > 0) {
+        html += `<div class='search-results-header'>Search Results:</div>`;
+        html += `<ol class='search-results-list'>`;
+
+        const topResults = searchResponse.websites.slice(0, 10);
+        topResults.forEach((site: any, index: number) => {
+            html += `<li class='search-result-item'>
+                <div class='result-container'>
+                    <div class='result-info'>
+                        <div class='result-title'>${escapeHtml(site.title)}</div>
+                        <div class='result-url'><a href='${escapeHtml(site.url)}' target='_blank'>${escapeHtml(site.url)}</a></div>
+                        <div class='result-meta'>
+                            ${site.lastVisited ? ` • Visited: ${new Date(site.lastVisited).toLocaleDateString()}` : ""}
+                        </div>
+                    </div>
+                </div>
+            </li>`;
+        });
+
+        html += `</ol>`;
+    }
+
+    // Add related entities if available
+    if (
+        searchResponse.relatedEntities &&
+        searchResponse.relatedEntities.length > 0
+    ) {
+        html += `<div class='related-section'>
+            <div class='section-header'>Related Entities:</div>
+            <div class='entity-tags'>`;
+        const topEntities = searchResponse.relatedEntities.slice(0, 5);
+        topEntities.forEach((entity: any) => {
+            html += `<span class='entity-tag'>${escapeHtml(entity.name)}</span>`;
+        });
+        html += `</div></div>`;
+    }
+
+    // Add topics if available
+    if (searchResponse.topTopics && searchResponse.topTopics.length > 0) {
+        html += `<div class='topics-section'>
+            <div class='section-header'>Top Topics:</div>
+            <div class='topic-tags'>`;
+        const topTopics = searchResponse.topTopics.slice(0, 5);
+        topTopics.forEach((topic: string) => {
+            html += `<span class='topic-tag'>${escapeHtml(topic)}</span>`;
+        });
+        html += `</div></div>`;
+    }
+
+    // Add follow-up suggestions if available
+    if (
+        searchResponse.suggestedFollowups &&
+        searchResponse.suggestedFollowups.length > 0
+    ) {
+        html += `<div class='followups-section'>
+            <div class='section-header'>Suggested follow-ups:</div>
+            <ul class='followup-list'>`;
+        searchResponse.suggestedFollowups.forEach((followup: string) => {
+            html += `<li class='followup-item'>${escapeHtml(followup)}</li>`;
+        });
+        html += `</ul></div>`;
+    }
+
+    html += `</div>`;
+
+    // Add CSS styles for better presentation
+    html += `
+    <style>
+    .web-search-results {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+        max-width: 800px;
+        margin: 0;
+        padding: 0;
+    }
+    .search-summary {
+        background: #f5f5f5;
+        padding: 12px 16px;
+        border-radius: 8px;
+        margin-bottom: 16px;
+        font-weight: 500;
+        color: #333;
+    }
+    .search-answer {
+        background: #e3f2fd;
+        border-left: 4px solid #2196f3;
+        padding: 16px;
+        margin-bottom: 20px;
+        border-radius: 4px;
+    }
+    .answer-header {
+        font-weight: 600;
+        color: #1976d2;
+        margin-bottom: 8px;
+    }
+    .answer-content {
+        line-height: 1.5;
+        color: #333;
+    }
+    .search-results-header {
+        font-size: 18px;
+        font-weight: 600;
+        margin: 20px 0 12px 0;
+        color: #333;
+    }
+    .search-results-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+    .search-result-item {
+        margin-bottom: 20px;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        overflow: hidden;
+        transition: box-shadow 0.2s;
+    }
+    .search-result-item:hover {
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .result-container {
+        padding: 16px;
+    }
+    .result-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: #1976d2;
+        margin-bottom: 6px;
+        line-height: 1.3;
+    }
+    .result-url {
+        margin-bottom: 8px;
+    }
+    .result-url a {
+        color: #2e7d32;
+        text-decoration: none;
+        font-size: 14px;
+    }
+    .result-url a:hover {
+        text-decoration: underline;
+    }
+    .result-meta {
+        font-size: 12px;
+        color: #666;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .result-domain {
+        font-weight: 500;
+    }
+    .related-section, .topics-section, .followups-section {
+        margin-top: 24px;
+        padding-top: 16px;
+        border-top: 1px solid #e0e0e0;
+    }
+    .section-header {
+        font-weight: 600;
+        margin-bottom: 12px;
+        color: #333;
+    }
+    .entity-tags, .topic-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .entity-tag, .topic-tag {
+        background: #f5f5f5;
+        padding: 4px 8px;
+        border-radius: 16px;
+        font-size: 12px;
+        color: #555;
+        border: 1px solid #ddd;
+    }
+    .followup-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+    .followup-item {
+        padding: 8px 0;
+        color: #555;
+        border-bottom: 1px solid #f0f0f0;
+    }
+    .followup-item:last-child {
+        border-bottom: none;
+    }
+    </style>`;
+
+    return html;
+}
+export function generateWebSearchMarkdown(
+    searchResponse: SearchWebMemoriesResponse,
+    query: string,
+): string {
+    let content = `Found ${searchResponse.websites.length} result(s) in ${searchResponse.summary.searchTime}ms\n\n`;
+
+    // Add answer if available
+    if (searchResponse.answer && searchResponse.answerType !== "noAnswer") {
+        content += `** Answer:**${searchResponse.answer}\n\n`;
+    }
+
+    // Add main results (limit to top 10)
+    if (searchResponse.websites.length > 0) {
+        content += `**Top Results:**\n\n`;
+        const topResults = searchResponse.websites.slice(0, 10);
+
+        topResults.forEach((site: any, index: number) => {
+            content += `${index + 1}. ${site.title}\n`;
+            content += `([link](${site.url}))\n`;
+
+            if (site.lastVisited) {
+                content += ` • Last visited: ${new Date(site.lastVisited).toLocaleDateString()}`;
+            }
+            content += `\n\n`;
+        });
+    }
+
+    // Add related entities if available
+    if (
+        searchResponse.relatedEntities &&
+        searchResponse.relatedEntities.length > 0
+    ) {
+        content += `**Related Entities:**\n\n`;
+        const topEntities = searchResponse.relatedEntities.slice(0, 5);
+        topEntities.forEach((entity: any) => {
+            content += `- ${entity.name}\n`;
+        });
+        content += `\n`;
+    }
+
+    // Add topics if available
+    if (searchResponse.topTopics && searchResponse.topTopics.length > 0) {
+        content += `**Top Topics**\n\n`;
+        const topTopics = searchResponse.topTopics.slice(0, 5);
+        topTopics.forEach((topic: string) => {
+            content += `- ${topic}\n`;
+        });
+        content += `\n`;
+    }
+
+    // Add follow-up suggestions if available
+    if (
+        searchResponse.suggestedFollowups &&
+        searchResponse.suggestedFollowups.length > 0
+    ) {
+        content += `**Suggested Follow-ups:**\n\n`;
+        searchResponse.suggestedFollowups.forEach((followup: string) => {
+            content += `- ${followup}\n`;
+        });
+    }
+
+    return content;
+}
+export function escapeHtml(unsafe: string): string {
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}

@@ -104,15 +104,21 @@ const vendorAssets = [
 ];
 
 const libraryAssets = [
+    "views/annotationsLibrary.css",
     "views/annotationsLibrary.html",
     "views/entityGraphView.css",
     "views/entityGraphView.html",
     "views/knowledgeLibrary.css",
     "views/knowledgeLibrary.html",
+    "views/macrosLibrary.css",
     "views/macrosLibrary.html",
+    "views/options.css",
     "views/options.html",
+    "views/pageKnowledge.css",
     "views/pageKnowledge.html",
+    "views/pageMacros.css",
     "views/pageMacros.html",
+    "views/pdfView.css",
     "views/pdfView.html",
 ];
 
