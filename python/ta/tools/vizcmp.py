@@ -11,7 +11,7 @@ from colorama import Back, Fore, Style
 
 
 def main():
-    files = sys.argv[1:] or glob.glob("evals/eval-*.txt")
+    files = sys.argv[1:] or sorted(glob.glob("evals/eval-*.txt"))
     table = {}  # {file: {counter: score, ...}, ...}
     questions = {}  # {counter: question, ...}
 
@@ -55,7 +55,7 @@ def main():
         table[file] = data
 
     # Print header
-    all_files = sorted(table.keys())
+    all_files = list(table.keys())
     print_header(all_files)
 
     # Print data
