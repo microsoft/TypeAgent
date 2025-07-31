@@ -990,7 +990,7 @@ class SearchQueryCompiler {
             let termGroup = this.compileEntityTermsForScope(
                 filter.entitySearchTerms,
             );
-            when.sTags = termGroup;
+            when.tagMatchingTerms = termGroup;
             /*
             if (when.scopeDefiningTerms) {
                 when.scopeDefiningTerms.terms.push(termGroup);
@@ -998,11 +998,6 @@ class SearchQueryCompiler {
                 when.scopeDefiningTerms = termGroup;
             }
             */
-            // Also use the names of the entities to look for vanilla tags
-            let tags = this.entityTermsToTags(filter.entitySearchTerms);
-            if (tags.length > 0) {
-                when.tags = tags;
-            }
         }
 
         /*
@@ -1023,21 +1018,20 @@ class SearchQueryCompiler {
         for (const term of entityTerms) {
             const orMax = createOrMaxTermGroup();
             this.addEntityTermToGroup(term, orMax);
+            // Also search for vanilla tags
+            this.addTagToGroup(term.name, orMax);
             termGroup.terms.push(optimizeTermGroup(orMax));
         }
         this.dedupe = dedupe;
         return termGroup;
     }
 
-    private entityTermsToTags(entityTerms: querySchema.EntityTerm[]): string[] {
-        const tags: string[] = [];
-        for (const term of entityTerms) {
-            const name = term.name;
-            if (!isWildcard(name)) {
-                tags.push(name);
-            }
+    private addTagToGroup(tag: string, termGroup: SearchTermGroup): void {
+        if (tag && !isWildcard(tag)) {
+            termGroup.terms.push(
+                createPropertySearchTerm(PropertyNames.Tag, tag),
+            );
         }
-        return tags;
     }
 }
 

@@ -682,9 +682,13 @@ class QueryCompiler {
             }
         }
         // Structured Tags
-        if (filter && filter.sTags && filter.sTags.terms.length > 0) {
+        if (
+            filter &&
+            filter.tagMatchingTerms &&
+            filter.tagMatchingTerms.terms.length > 0
+        ) {
             scopeSelectors ??= [];
-            this.addSTagScopeSelector(filter.sTags, scopeSelectors);
+            this.addSTagScopeSelector(filter.tagMatchingTerms, scopeSelectors);
         }
 
         return scopeSelectors && scopeSelectors.length > 0

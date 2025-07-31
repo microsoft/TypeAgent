@@ -642,7 +642,8 @@ export type WhenFilter = {
      * Scope matches to only those text ranges matching tags
      */
     tags?: string[] | undefined;
-    sTags?: SearchTermGroup | undefined; // Experimental
+    // Experimental: scope matches to sTags and tags matching this term group
+    tagMatchingTerms?: SearchTermGroup | undefined;
     /**
      * Use this SearchTermGroup as a sub-query to find matching text ranges
      * Match SemanticRefs the scope for this query
