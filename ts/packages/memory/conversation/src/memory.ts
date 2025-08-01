@@ -25,8 +25,9 @@ export interface MemorySettings {
 export function createMemorySettings(
     embeddingCacheSize = 64,
     getPersistentCache?: () => TextEmbeddingCache | undefined,
+    languageModel?: ChatModel,
 ): MemorySettings {
-    const languageModel = openai.createChatModelDefault("conversation-memory");
+    languageModel ??= openai.createChatModelDefault("conversation-memory");
     /**
      * Our index already has embeddings for every term in the podcast
      * Create a caching embedding model that can just leverage those embeddings

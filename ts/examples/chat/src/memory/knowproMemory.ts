@@ -267,7 +267,7 @@ export async function createKnowproCommands(
             } else {
                 context.printer.writeLine("No matches");
             }
-            context.printer.writeTiming(chalk.gray, timer);
+            context.printer.writeTiming(timer);
         } else {
             context.printer.writeError("Conversation is not indexed");
         }

@@ -251,9 +251,9 @@ export async function createKnowproKnowledgeCommands(
         }
         //context.printer.writeCompletionStats(kpContext.tokenStats);
         context.printer.writeTiming(
-            chalk.cyan,
             kpContext.stopWatch,
             llmExtractor.model.modelName,
+            chalk.cyan,
         );
         context.printer.writeLineInColor(
             chalk.gray,

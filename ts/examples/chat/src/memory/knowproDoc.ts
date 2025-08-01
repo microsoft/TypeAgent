@@ -12,6 +12,7 @@ import {
     argNum,
     CommandHandler,
     CommandMetadata,
+    NamedArgs,
     parseNamedArguments,
     ProgressBar,
     StopWatch,
@@ -19,10 +20,10 @@ import {
 import { ensureDir, getFileName } from "typeagent";
 import {
     createIndexingEventHandler,
+    setKnowledgeExtractorV2,
     sourcePathToMemoryIndexPath,
 } from "./knowproCommon.js";
 import { argSourceFile } from "../common.js";
-import chalk from "chalk";
 
 export type KnowproDocContext = {
     printer: KnowProPrinter;
@@ -62,6 +63,7 @@ export async function createKnowproDocMemoryCommands(
                     DefaultMaxCharsPerChunk,
                 ),
                 buildIndex: argBool("Index the imported podcast", true),
+                v2: argBool("Use v2 knowledge extraction", false),
             },
         };
     }
@@ -72,11 +74,11 @@ export async function createKnowproDocMemoryCommands(
             context.printer.writeError(`${namedArgs.filePath} not found`);
             return;
         }
-        const savePath = sourcePathToMemoryIndexPath(namedArgs.filePath);
-
         context.docMemory = await cm.importTextFile(
             namedArgs.filePath,
             namedArgs.maxCharsPerChunk,
+            undefined,
+            kpContext.createMemorySettings(),
         );
         kpContext.conversation = context.docMemory;
         writeDocInfo(context.docMemory);
@@ -85,24 +87,7 @@ export async function createKnowproDocMemoryCommands(
             return;
         }
         // Build index
-        context.printer.writeLine("Building index");
-        const maxMessages = context.docMemory.messages.length;
-        let progress = new ProgressBar(context.printer, maxMessages);
-        const eventHandler = createIndexingEventHandler(
-            context.printer,
-            progress,
-            maxMessages,
-        );
-        const indexingResults =
-            await context.docMemory.buildIndex(eventHandler);
-        context.printer.writeIndexingResults(indexingResults);
-        progress.complete();
-
-        // Save the index
-        await context.docMemory.writeToFile(
-            path.dirname(savePath),
-            getFileName(savePath),
-        );
+        await buildDocIndex(namedArgs);
     }
 
     function docLoadDef(): CommandMetadata {
@@ -121,14 +106,17 @@ export async function createKnowproDocMemoryCommands(
             context.printer.writeError("No filepath or name provided");
             return;
         }
+
         const clock = new StopWatch();
         clock.start();
         const docMemory = await cm.DocMemory.readFromFile(
             path.dirname(memoryFilePath),
             getFileName(memoryFilePath),
+            kpContext.createMemorySettings(),
         );
         clock.stop();
-        context.printer.writeTiming(chalk.gray, clock, "Read file");
+
+        context.printer.writeTiming(clock, "Read file");
         if (!docMemory) {
             context.printer.writeLine("DocMemory not found");
             return;
@@ -136,6 +124,44 @@ export async function createKnowproDocMemoryCommands(
         context.docMemory = docMemory;
         kpContext.conversation = context.docMemory;
         writeDocInfo(context.docMemory);
+    }
+
+    async function buildDocIndex(namedArgs: NamedArgs): Promise<void> {
+        if (!context.docMemory) {
+            return;
+        }
+        const savePath = sourcePathToMemoryIndexPath(namedArgs.filePath);
+        // Build index
+        context.printer.writeLine("Building index");
+        if (namedArgs.v2) {
+            context.printer.writeLine("Using v2 knowledge extractor");
+            setKnowledgeExtractorV2(
+                context.docMemory.settings.conversationSettings,
+            );
+        }
+        const maxMessages = context.docMemory.messages.length;
+        let progress = new ProgressBar(context.printer, maxMessages);
+        const eventHandler = createIndexingEventHandler(
+            context.printer,
+            progress,
+            maxMessages,
+        );
+
+        kpContext.startTokenCounter();
+        kpContext.stopWatch.start();
+        const indexingResults =
+            await context.docMemory.buildIndex(eventHandler);
+        kpContext.stopWatch.stop();
+        progress.complete();
+
+        context.printer.writeIndexingResults(indexingResults);
+        context.printer.writeTiming(kpContext.stopWatch);
+        context.printer.writeCompletionStats(kpContext.tokenStats);
+        // Save the index
+        await context.docMemory.writeToFile(
+            path.dirname(savePath),
+            getFileName(savePath),
+        );
     }
 
     function writeDocInfo(docMemory: cm.DocMemory) {

@@ -22,7 +22,7 @@ import * as knowledgeSchema2 from "./knowledgeSchema_v2.js";
 /**
  * Create a knowledge extractor using the given Chat Model
  * @param chatModel
- * @returns
+ * @returns Knowledge extractor
  */
 export function createKnowledgeExtractor(
     chatModel?: ChatModel,

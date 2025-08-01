@@ -169,7 +169,7 @@ export async function createKnowproWebsiteCommands(
             const result = await buildCollectionIndex(websiteCollection);
             clock.stop();
             progress.complete();
-            context.printer.writeTiming(chalk.gray, clock, "Build index");
+            context.printer.writeTiming(clock, "Build index");
             if (!result.success) {
                 context.printer.writeError(result.message);
                 return;
@@ -216,7 +216,7 @@ export async function createKnowproWebsiteCommands(
                 // Set up enhanced search context for website queries
                 kpContext.conversation = context.website;
 
-                context.printer.writeTiming(chalk.gray, clock);
+                context.printer.writeTiming(clock);
                 context.printer.writeLine(
                     `Loaded website memory with enhanced temporal/frequency search: ${namedArgs.name}`,
                 );

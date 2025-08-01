@@ -73,11 +73,12 @@ export class DocMemory
         settings?: DocMemorySettings,
         tags?: string[],
     ) {
-        settings ??= createTextMemorySettings(
-            64,
-            () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
-        );
-        super(settings ?? createTextMemorySettings(), nameTag, tags);
+        settings ??= createTextMemorySettings();
+        if (!settings.embeddingModel.getPersistentCache) {
+            settings.embeddingModel.getPersistentCache = () =>
+                this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex;
+        }
+        super(settings, nameTag, tags);
         this.messages = new kp.MessageCollection<DocPart>(docParts);
         this.semanticRefs = new kp.SemanticRefCollection();
 
@@ -314,8 +315,9 @@ export class DocMemory
     public static async readFromFile(
         dirPath: string,
         baseFileName: string,
+        settings?: DocMemorySettings,
     ): Promise<DocMemory | undefined> {
-        const docMemory = new DocMemory();
+        const docMemory = new DocMemory(undefined, undefined, settings);
         const data = await kp.readConversationDataFromFile(
             dirPath,
             baseFileName,
