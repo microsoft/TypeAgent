@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { getDevices, getPlaybackState } from "./endpoints.js";
+import { getUserDevices, getPlaybackState } from "./endpoints.js";
 import { IClientContext } from "./client.js";
 import chalk from "chalk";
 import { DisplayContent, ActionResultSuccess } from "@typeagent/agent-sdk";
@@ -133,7 +133,7 @@ export async function printStatus(context: IClientContext) {
     if (!status) {
         console.log("Nothing playing according to Spotify.");
     }
-    const devices = await getDevices(context.service);
+    const devices = await getUserDevices(context.service);
     if (devices && devices.devices.length > 0) {
         const activeDevice =
             devices.devices.find((device) => device.is_active) ??
@@ -156,4 +156,3 @@ export async function printStatus(context: IClientContext) {
         }
     }
 }
-

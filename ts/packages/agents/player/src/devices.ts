@@ -3,7 +3,11 @@
 
 import { hostname } from "os";
 import { IClientContext } from "./client.js";
-import { getDevices, getPlaybackState, transferPlayback } from "./endpoints.js";
+import {
+    getUserDevices,
+    getPlaybackState,
+    transferPlayback,
+} from "./endpoints.js";
 import { SpotifyService } from "./service.js";
 import { Entity, ResolveEntityResult, Storage } from "@typeagent/agent-sdk";
 import {
@@ -13,108 +17,98 @@ import {
 import chalk from "chalk";
 import { saveLocalSettings } from "./settings.js";
 
-export type DeviceInfo = {
-    name: string;
-    id: string;
-};
-
 export type DeviceSettings = {
     maxVolume: number;
 };
 
-async function getDevice(service: SpotifyService, name: string) {
-    const devices = await getDevices(service);
-    if (devices === undefined || devices.devices.length === 0) {
+type DeviceInfo = SpotifyApi.UserDevice & { id: string };
+
+async function getDeviceInfo(
+    service: SpotifyService,
+    name: string,
+): Promise<DeviceInfo | undefined> {
+    const devicesResponse = await getUserDevices(service);
+    if (devicesResponse === undefined || devicesResponse.devices.length === 0) {
         return undefined;
     }
-    return devices.devices.find((d) => d.name === name && d.id !== null);
+    return devicesResponse.devices.find(
+        (d) => d.name === name && d.id !== null,
+    ) as DeviceInfo | undefined;
 }
 
-function getCurrentDeviceName(clientContext: IClientContext): string {
+async function ensureGetDeviceInfos(
+    context: IClientContext,
+): Promise<DeviceInfo[]> {
+    const devicesResponse = await getUserDevices(context.service);
+    const devices = devicesResponse?.devices?.filter((d) => d.id !== null);
+    if (devices === undefined || devices.length === 0) {
+        throw new Error("No devices found.");
+    }
+    return devices as DeviceInfo[];
+}
+
+function getDefaultDeviceName(clientContext: IClientContext): string {
+    return clientContext.localSettings.defaultDeviceName ?? hostname();
+}
+function getSelectedDeviceName(clientContext: IClientContext): string {
     return (
-        clientContext.currentDeviceInfo?.name ??
-        clientContext.localSettings.defaultDeviceName ??
-        hostname()
+        clientContext.selectedDeviceName ?? getDefaultDeviceName(clientContext)
     );
 }
-export async function getCurrentDevice(clientContext: IClientContext) {
-    const name = getCurrentDeviceName(clientContext);
-    const device = await getDevice(clientContext.service, name);
+
+export async function ensureSelectedDeviceInfo(clientContext: IClientContext) {
+    const device = await getDeviceInfo(
+        clientContext.service,
+        getSelectedDeviceName(clientContext),
+    );
     if (device === undefined) {
-        throw new Error(
-            `Unable to find default device '${clientContext.localSettings.defaultDeviceName ?? hostname()}'`,
-        );
+        const description = clientContext.selectedDeviceName
+            ? `selected device '${clientContext.selectedDeviceName}'`
+            : `default selected device '${getDefaultDeviceName(clientContext)}'`;
+        throw new Error(`Unable to find ${description}.`);
     }
     return device;
 }
 
-async function getCurrentDeviceInfo(clientContext: IClientContext) {
-    if (clientContext.currentDeviceInfo) {
-        return clientContext.currentDeviceInfo;
-    }
-    const device = await getDevice(
-        clientContext.service,
-        clientContext.localSettings.defaultDeviceName ?? hostname(),
-    );
-    const current = device
-        ? {
-              name: device.name,
-              id: device.id!,
-          }
-        : undefined;
-    clientContext.currentDeviceInfo = current;
-    return current;
-}
-
-export async function ensureCurrentDeviceInfo(clientContext: IClientContext) {
-    const currentDevice = await getCurrentDeviceInfo(clientContext);
-    if (currentDevice === undefined) {
-        throw new Error(
-            `Unable to find default device '${clientContext.localSettings.defaultDeviceName ?? hostname()}'`,
-        );
-    }
-    return currentDevice;
-}
-
-export async function getCurrentDevicePlaybackState(
+export async function getSelectedDevicePlaybackState(
     clientContext: IClientContext,
 ) {
-    const [currentDevice, state] = await Promise.all([
-        ensureCurrentDeviceInfo(clientContext),
+    const [selected, state] = await Promise.all([
+        ensureSelectedDeviceInfo(clientContext),
         getPlaybackState(clientContext.service),
     ]);
 
-    if (state === undefined || state.device.id === currentDevice.id) {
+    if (state === undefined || state.device.id === selected.id) {
         return state;
     }
 
     if (state.is_playing === true) {
         throw new Error(
-            `Music is currently playing on device '${state.device.name}', not the current device '${currentDevice.name}'`,
+            `Music is currently playing on device '${state.device.name}', not the selected device '${selected.name}'`,
         );
     }
 
     return undefined;
 }
 
-export async function ensureCurrentDeviceId(
+export async function ensureSelectedDeviceId(
     clientContext: IClientContext,
 ): Promise<string> {
-    const [currentDevice, state] = await Promise.all([
-        ensureCurrentDeviceInfo(clientContext),
+    const [selected, state] = await Promise.all([
+        ensureSelectedDeviceInfo(clientContext),
         getPlaybackState(clientContext.service),
     ]);
 
     if (
         state !== undefined &&
-        state.device.id !== currentDevice.id &&
+        state.device.id !== selected.id &&
         state.is_playing === true
     ) {
         throw new Error(
-            `Music is currently playing on device '${state.device.name}', not the current device '${currentDevice.name}'`,
+            `Music is currently playing on device '${state.device.name}', not the selected device '${selected.name}'`,
         );
     }
-    return currentDevice.id;
+    return selected.id;
 }
 
 function toDeviceEntity(name: string): Entity {
@@ -127,35 +121,24 @@ function toDeviceEntity(name: string): Entity {
 
 async function getDevicesMarkdown(
     context: IClientContext,
-    device: SpotifyApi.UserDevice[],
+    device: DeviceInfo[],
 ): Promise<string[]> {
     const markdown: string[] = [];
     markdown.push("Available devices:");
-    const currentDeviceInfo = await getCurrentDeviceInfo(context);
+    const selectedDevice = await ensureSelectedDeviceInfo(context);
 
     const state = await getPlaybackState(context.service);
     const playingId = state?.is_playing ? state.device.id : undefined;
     for (const d of device) {
-        const selected = d.id === currentDeviceInfo?.id;
+        const selected = selectedDevice ? d.id === selectedDevice.id : false;
         const str = `${d.name} (${d.type})${selected ? " [selected]" : ""}${playingId === d.id ? " ▶️" : ""}`;
         markdown.push(`- ${selected ? chalk.green(str) : str}`);
     }
     return markdown;
 }
 
-async function ensureGetDevices(
-    context: IClientContext,
-): Promise<SpotifyApi.UserDevice[]> {
-    const devicesResponse = await getDevices(context.service);
-    const devices = devicesResponse?.devices?.filter((d) => d.id !== null);
-    if (devices === undefined || devices.length === 0) {
-        throw new Error("No devices found.");
-    }
-    return devices;
-}
-
 export async function listDevicesAction(context: IClientContext) {
-    const devices = await ensureGetDevices(context);
+    const devices = await ensureGetDeviceInfos(context);
     return createActionResultFromMarkdownDisplay(
         await getDevicesMarkdown(context, devices),
         undefined,
@@ -167,7 +150,7 @@ async function findDevice(
     clientContext: IClientContext,
     deviceName: string,
 ): Promise<SpotifyApi.UserDevice | undefined> {
-    const devices = await ensureGetDevices(clientContext);
+    const devices = await ensureGetDeviceInfos(clientContext);
     return devices.find(
         (d) =>
             d.name.toLowerCase().includes(deviceName.toLowerCase()) ||
@@ -189,17 +172,14 @@ export async function selectDeviceAction(
                 status.is_playing,
             );
         }
-        if (device.name === context.currentDeviceInfo?.name) {
+        if (device.name === context.selectedDeviceName) {
             return createActionResult(
                 `Device ${device.name} is already selected`,
                 "warning",
                 toDeviceEntity(device.name),
             );
         }
-        context.currentDeviceInfo = {
-            name: device.name,
-            id: device.id!,
-        };
+        context.selectedDeviceName = device.name;
         return createActionResult(
             `Selected device ${device.name} of type ${device.type}`,
             "success",
@@ -245,7 +225,7 @@ export async function resolveMusicDeviceEntity(
 }
 
 export async function showSelectedDeviceAction(clientContext: IClientContext) {
-    const { name } = await ensureCurrentDeviceInfo(clientContext);
+    const { name } = await ensureSelectedDeviceInfo(clientContext);
     return createActionResult(
         `Current device: ${name}`,
         undefined,
@@ -259,15 +239,18 @@ export async function setDefaultDeviceAction(
     instanceStorage?: Storage,
 ) {
     const name =
-        deviceName ?? (await ensureCurrentDeviceInfo(clientContext)).name;
+        deviceName ?? (await ensureSelectedDeviceInfo(clientContext)).name;
     const device = await findDevice(clientContext, name);
     if (device === undefined) {
         throw new Error(`Unable to find device '${deviceName}'`);
     }
     clientContext.localSettings.defaultDeviceName = device.name;
     await saveLocalSettings(instanceStorage, clientContext.localSettings);
+    const selectedDeviceMessage = clientContext.selectedDeviceName
+        ? `Explicit selected device not changed: '${clientContext.selectedDeviceName}'`
+        : `Selected device is not explicitly set and will use the default device '${device.name}'.`;
     return createActionResult(
-        `Default device set to '${device.name}' and will be used on next startup.  Current device not changed: '${getCurrentDeviceName(clientContext)}'`,
+        `Default device set to '${device.name}' and will be used on next startup.\n${selectedDeviceMessage}`,
         "success",
         toDeviceEntity(device.name),
     );
