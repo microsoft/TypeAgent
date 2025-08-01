@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ensureSelectedDeviceInfo, getSelectedUserDevice } from "./devices.js";
+import { ensureSelectedDeviceInfo } from "./devices.js";
 import { IClientContext } from "./client.js";
 import { ActionIO, Storage } from "@typeagent/agent-sdk";
 import { setVolume } from "./endpoints.js";
@@ -44,7 +44,8 @@ export async function setMaxVolumeAction(
     if (newMaxVolume < 0 || newMaxVolume > 100) {
         throw new Error(`Invalid max volume: ${newMaxVolume}`);
     }
-    const { name, id } = await ensureSelectedDeviceInfo(clientContext);
+    const { name, id, volume_percent } =
+        await ensureSelectedDeviceInfo(clientContext);
 
     const deviceSettings = clientContext.roamingSettings.deviceSettings;
     if (deviceSettings.has(name)) {
@@ -54,7 +55,6 @@ export async function setMaxVolumeAction(
         deviceSettings.set(name, { maxVolume: newMaxVolume });
     }
     await saveRoamingSettings(instanceStorage, clientContext.roamingSettings);
-    const { volume_percent } = await getSelectedUserDevice(clientContext);
     if (volume_percent === null || volume_percent > newMaxVolume) {
         await setVolume(clientContext.service, id, newMaxVolume);
         actionIO.appendDisplay({
@@ -74,7 +74,7 @@ export async function changeVolumeAction(
     actionIO: ActionIO,
 ) {
     const { name, id, volume_percent } =
-        await getSelectedUserDevice(clientContext);
+        await ensureSelectedDeviceInfo(clientContext);
     const deviceSettings = clientContext.roamingSettings.deviceSettings;
     const maxVolume = deviceSettings.get(name)?.maxVolume ?? 100;
     const volpct = volume_percent ?? maxVolume;

@@ -83,7 +83,6 @@ import {
     loadRoamingSettings,
 } from "./settings.js";
 import {
-    DeviceInfo,
     ensureSelectedDeviceId,
     getSelectedDevicePlaybackState,
     listDevicesAction,
@@ -134,7 +133,7 @@ export interface IClientContext {
     userData?: UserData | undefined;
     localSettings: LocalSettings;
     roamingSettings: RoamingSettings;
-    selectedDeviceInfo?: DeviceInfo | undefined;
+    selectedDeviceName?: string | undefined;
 }
 
 async function printTrackNames(
