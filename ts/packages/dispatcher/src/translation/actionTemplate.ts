@@ -2,25 +2,22 @@
 // Licensed under the MIT License.
 
 import { ExecutableAction, FullAction } from "agent-cache";
-import { getActionSchema } from "./actionSchemaFileCache.js";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import {
     TemplateFieldStringUnion,
     TemplateSchema,
     SessionContext,
-    AppAction,
     TemplateType,
     TemplateFieldObject,
     TemplateFieldArray,
     TemplateFieldPrimitive,
 } from "@typeagent/agent-sdk";
-import { getAppAgentName } from "./agentTranslators.js";
-import { DeepPartialUndefined } from "common-utils";
 import {
     ActionParamArray,
     ActionParamObject,
     ActionParamType,
 } from "action-schema";
+import { getActionParamCompletion } from "./requestCompletion.js";
 
 export type TemplateData = {
     schema: TemplateSchema;
@@ -212,57 +209,39 @@ export async function getSystemTemplateCompletion(
     data: any,
     propertyName: string,
     context: SessionContext<CommandHandlerContext>,
-): Promise<string[]> {
+): Promise<string[] | undefined> {
     if (templateName !== "action") {
         throw new Error(`Unknown template name: ${templateName}`);
     }
 
     if (!Array.isArray(data)) {
-        return [];
+        return undefined;
     }
 
     const split = propertyName.split(".");
     const actionIndexStr = split.shift();
     if (actionIndexStr === undefined || split.length === 0) {
         // Not a valid property.
-        return [];
+        return undefined;
     }
     const actionIndex = parseInt(actionIndexStr);
     if (actionIndex.toString() !== actionIndexStr) {
         // Not a valid number for action Index
-        return [];
+        return undefined;
     }
 
     // TemplateData has the actual action in in the 'data' property
     const dataProperty = split.shift();
     if (dataProperty !== "data" || split.length === 0) {
-        return [];
+        return undefined;
     }
 
+    const parameterProperty = split.shift();
+    if (parameterProperty !== "parameters" || split.length === 0) {
+        return undefined;
+    }
     const action = data[actionIndex];
     const systemContext = context.agentContext;
-    return getActionCompletion(systemContext, action, split.join("."));
-}
 
-export async function getActionCompletion(
-    systemContext: CommandHandlerContext,
-    action: DeepPartialUndefined<AppAction>,
-    propertyName: string,
-): Promise<string[]> {
-    const actionSchema = getActionSchema(action, systemContext.agents);
-    if (actionSchema === undefined) {
-        return [];
-    }
-    const appAgentName = getAppAgentName(action.schemaName!);
-    const appAgent = systemContext.agents.getAppAgent(appAgentName);
-    if (appAgent.getActionCompletion === undefined) {
-        return [];
-    }
-
-    const sessionContext = systemContext.agents.getSessionContext(appAgentName);
-    return appAgent.getActionCompletion(
-        action as AppAction,
-        propertyName,
-        sessionContext,
-    );
+    return getActionParamCompletion(systemContext, action, split.join("."));
 }

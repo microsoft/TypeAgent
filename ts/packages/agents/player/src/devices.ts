@@ -5,12 +5,13 @@ import { hostname } from "os";
 import { IClientContext } from "./client.js";
 import { getDevices, getPlaybackState, transferPlayback } from "./endpoints.js";
 import { SpotifyService } from "./service.js";
-import { Entity } from "@typeagent/agent-sdk";
+import { Entity, ResolveEntityResult, Storage } from "@typeagent/agent-sdk";
 import {
     createActionResult,
     createActionResultFromMarkdownDisplay,
 } from "@typeagent/agent-sdk/helpers/action";
 import chalk from "chalk";
+import { saveLocalSettings } from "./settings.js";
 
 export type DeviceInfo = {
     name: string;
@@ -226,6 +227,23 @@ export async function selectDeviceAction(
     throw new Error(`No matching device found for '${deviceName}'`);
 }
 
+export async function resolveMusicDeviceEntity(
+    clientContext: IClientContext,
+    name: string,
+): Promise<ResolveEntityResult | undefined> {
+    const device = await findDevice(clientContext, name);
+    if (device === undefined) {
+        return undefined;
+    }
+    return {
+        match:
+            device.name.toLowerCase() === name.toLowerCase()
+                ? "exact"
+                : "fuzzy",
+        entities: [toDeviceEntity(device.name)],
+    };
+}
+
 export async function showSelectedDeviceAction(clientContext: IClientContext) {
     const { name } = await ensureCurrentDeviceInfo(clientContext);
     return createActionResult(
@@ -238,6 +256,7 @@ export async function showSelectedDeviceAction(clientContext: IClientContext) {
 export async function setDefaultDeviceAction(
     clientContext: IClientContext,
     deviceName?: string,
+    instanceStorage?: Storage,
 ) {
     const name =
         deviceName ?? (await ensureCurrentDeviceInfo(clientContext)).name;
@@ -246,6 +265,7 @@ export async function setDefaultDeviceAction(
         throw new Error(`Unable to find device '${deviceName}'`);
     }
     clientContext.localSettings.defaultDeviceName = device.name;
+    await saveLocalSettings(instanceStorage, clientContext.localSettings);
     return createActionResult(
         `Default device set to '${device.name}' and will be used on next startup.  Current device not changed: '${getCurrentDeviceName(clientContext)}'`,
         "success",

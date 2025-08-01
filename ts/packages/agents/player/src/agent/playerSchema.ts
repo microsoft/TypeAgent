@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type PlayerAction =
+export type PlayerActions =
     | PlayRandomAction
     | PlayTrackAction
     | PlayFromCurrentTrackListAction
@@ -30,6 +30,9 @@ export type PlayerAction =
     | CreatePlaylistAction
     | DeletePlaylistAction
     | GetQueueAction;
+
+export type PlayerEntities = MusicDevice;
+export type MusicDevice = string;
 
 // Use playRandom when the user asks for some music to play
 export interface PlayRandomAction {
@@ -122,8 +125,8 @@ export interface ListDevicesAction {
 export interface SetDefaultDeviceAction {
     actionName: "setDefaultDevice";
     parameters: {
-        // keyword to match against device name.  If not specified, the current selected device is used.
-        deviceName?: string;
+        // device name.  If not specified, the current selected device is set as the default.
+        deviceName?: MusicDevice;
     };
 }
 
@@ -131,8 +134,7 @@ export interface SetDefaultDeviceAction {
 export interface SelectDeviceAction {
     actionName: "selectDevice";
     parameters: {
-        // keyword to match against device name
-        deviceName: string;
+        deviceName: MusicDevice;
     };
 }
 
