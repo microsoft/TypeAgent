@@ -18,6 +18,7 @@ import {
     getActionParametersType,
     resolveEntityTypeName,
 } from "../execute/pendingActions.js";
+import { WildcardMode } from "agent-cache";;
 
 const debugCompletion = registerDebug("typeagent:request:completion");
 const debugCompletionError = registerDebug(
@@ -73,9 +74,12 @@ export async function requestCompletion(
         }
 
         const nextPart = construction.parts[partialPartCount];
-        const partCompletions = nextPart.getCompletion();
-        if (partCompletions) {
-            requestText.push(...partCompletions);
+        // Only include part completion if it is not a checked or entity wildcard.
+        if (nextPart.wildcardMode <= WildcardMode.Enabled) {
+            const partCompletions = nextPart.getCompletion();
+            if (partCompletions) {
+                requestText.push(...partCompletions);
+            }
         }
 
         // TODO: assuming the partial action doesn't change the possible values.

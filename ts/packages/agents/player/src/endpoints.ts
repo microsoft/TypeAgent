@@ -430,7 +430,7 @@ export async function play(
     await fetchPutEmptyResult(service, playUrl, smallTrack);
 }
 
-export async function getDevices(service: SpotifyService) {
+export async function getUserDevices(service: SpotifyService) {
     return fetchGet<SpotifyApi.UserDevicesResponse>(
         service,
         "https://api.spotify.com/v1/me/player/devices",
