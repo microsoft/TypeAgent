@@ -25,6 +25,7 @@ import {
     SchemaDiscoveryActions,
     GetMacrosForUrl,
     DeleteMacro,
+    GetAllMacros,
 } from "./schema/discoveryActions.mjs";
 import { UserIntent } from "./schema/recordedActions.mjs";
 import { createSchemaAuthoringAgent } from "./authoringActionHandler.mjs";
@@ -761,6 +762,22 @@ async function handleGetIntentFromReccording(
     };
 }
 
+async function handleGetAllMacros(
+    action: GetAllMacros,
+    ctx: DiscoveryActionHandlerContext,
+): Promise<DiscoveryActionResult> {
+    return handleGetMacrosForUrl(
+        {
+            actionName: "getMacrosForUrl",
+            parameters: {
+                url: "",
+                includeGlobal: true,
+            },
+        } as GetMacrosForUrl,
+        ctx,
+    );
+}
+
 async function handleGetMacrosForUrl(
     action: GetMacrosForUrl,
     ctx: DiscoveryActionHandlerContext,
@@ -919,6 +936,9 @@ export async function handleSchemaDiscoveryAction(
             break;
         case "getMacrosForUrl":
             result = await handleGetMacrosForUrl(action, discoveryContext);
+            break;
+        case "getAllMacros":
+            result = await handleGetAllMacros(action, discoveryContext);
             break;
         case "deleteMacro":
             result = await handleDeleteMacro(action, discoveryContext);

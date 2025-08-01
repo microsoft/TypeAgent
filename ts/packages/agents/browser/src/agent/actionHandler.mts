@@ -57,6 +57,7 @@ import {
     searchByEntities,
     searchByTopics,
     hybridSearch,
+    generateWebSearchMarkdown,
 } from "./searchWebMemories.mjs";
 
 import {
@@ -185,151 +186,7 @@ async function updateBrowserContext(
 
         // Load the website index from disk
         if (!context.agentContext.websiteCollection) {
-            try {
-                const websiteIndexes = await context.indexes("website");
-
-                if (websiteIndexes.length > 0) {
-                    context.agentContext.index = websiteIndexes[0];
-                    context.agentContext.websiteCollection =
-                        await website.WebsiteCollection.readFromFile(
-                            websiteIndexes[0].path,
-                            "index",
-                        );
-                    debug(
-                        `Loaded website index with ${context.agentContext.websiteCollection?.messages.length || 0} websites`,
-                    );
-                } else {
-                    debug(
-                        "No existing website index found, checking for index file at target path",
-                    );
-
-                    let indexPath: string | undefined;
-                    let websiteCollection:
-                        | website.WebsiteCollection
-                        | undefined;
-
-                    // Try to determine the target index path
-                    try {
-                        const sessionDir = await getSessionFolderPath(context);
-                        if (sessionDir) {
-                            // Create index path following IndexManager pattern: sessionDir/indexes/website
-                            indexPath = path.resolve(
-                                sessionDir,
-                                "..",
-                                "indexes",
-                                "website",
-                                "index",
-                            );
-
-                            // Check if the index file exists and try to read it
-                            if (fs.existsSync(indexPath)) {
-                                try {
-                                    websiteCollection =
-                                        await website.WebsiteCollection.readFromFile(
-                                            indexPath,
-                                            "index",
-                                        );
-
-                                    if (
-                                        websiteCollection &&
-                                        websiteCollection.messages.length > 0
-                                    ) {
-                                        context.agentContext.websiteCollection =
-                                            websiteCollection;
-
-                                        // Create proper IndexData object for the loaded collection
-                                        context.agentContext.index = {
-                                            source: "website",
-                                            name: "website-index",
-                                            location: "browser-agent",
-                                            size: websiteCollection.messages
-                                                .length,
-                                            path: indexPath,
-                                            state: "finished",
-                                            progress: 100,
-                                            sizeOnDisk: 0,
-                                        };
-
-                                        debug(
-                                            `Loaded existing website collection with ${websiteCollection.messages.length} websites from ${indexPath}`,
-                                        );
-                                    } else {
-                                        debug(
-                                            `File exists but collection is empty at ${indexPath}, will create new collection`,
-                                        );
-                                        websiteCollection = undefined;
-                                    }
-                                } catch (readError) {
-                                    debug(
-                                        `Failed to read existing collection: ${readError}`,
-                                    );
-                                    websiteCollection = undefined;
-                                }
-                            } else {
-                                debug(
-                                    `No existing collection file found at ${indexPath}`,
-                                );
-                            }
-                        }
-                    } catch (pathError) {
-                        debug(`Error determining index path: ${pathError}`);
-                        indexPath = undefined;
-                    }
-
-                    // If we couldn't load an existing collection, create a new one
-                    if (!websiteCollection) {
-                        context.agentContext.websiteCollection =
-                            new website.WebsiteCollection();
-
-                        // Set up index if we have a valid path
-                        if (indexPath) {
-                            try {
-                                // Ensure directory exists
-                                fs.mkdirSync(indexPath, { recursive: true });
-
-                                // Create proper IndexData object
-                                context.agentContext.index = {
-                                    source: "website",
-                                    name: "website-index",
-                                    location: "browser-agent",
-                                    size: 0,
-                                    path: indexPath,
-                                    state: "new",
-                                    progress: 0,
-                                    sizeOnDisk: 0,
-                                };
-
-                                debug(
-                                    `Created index structure at ${indexPath}`,
-                                );
-                            } catch (createError) {
-                                debug(
-                                    `Error creating index directory: ${createError}`,
-                                );
-                                context.agentContext.index = undefined;
-                            }
-                        } else {
-                            context.agentContext.index = undefined;
-                            debug(
-                                "No index path available, collection will be in-memory only",
-                            );
-                        }
-                    }
-
-                    // Log final state
-                    if (!context.agentContext.index) {
-                        debug(
-                            "Website collection created without persistent index - data will be in-memory only",
-                        );
-                    }
-                }
-            } catch (error) {
-                debug("Error initializing website collection:", error);
-                // Fallback to empty collection without index
-                context.agentContext.websiteCollection =
-                    new website.WebsiteCollection();
-                context.agentContext.index = undefined;
-            }
+            await initializeWebsiteIndex(context);
         }
 
         // Initialize fuzzy matching model for website search
@@ -378,175 +235,12 @@ async function updateBrowserContext(
                 }
 
                 if (data.method) {
-                    switch (data.method) {
-                        case "enableSiteTranslator": {
-                            const targetTranslator = data.params.translator;
-                            if (targetTranslator == "browser.crossword") {
-                                // initialize crossword state
-                                browserControls.setAgentStatus(
-                                    true,
-                                    `Initializing ${targetTranslator}`,
-                                );
-                                try {
-                                    context.agentContext.crossWordState =
-                                        await getBoardSchema(context);
-
-                                    browserControls.setAgentStatus(
-                                        false,
-                                        `Finished initializing ${targetTranslator}`,
-                                    );
-                                } catch (e) {
-                                    browserControls.setAgentStatus(
-                                        false,
-                                        `Failed to initialize ${targetTranslator}`,
-                                    );
-                                }
-
-                                if (context.agentContext.crossWordState) {
-                                    context.notify(
-                                        AppAgentEvent.Info,
-                                        "Crossword board initialized.",
-                                    );
-                                } else {
-                                    context.notify(
-                                        AppAgentEvent.Error,
-                                        "Crossword board initialization failed.",
-                                    );
-                                }
-                            }
-                            await context.toggleTransientAgent(
-                                targetTranslator,
-                                true,
-                            );
-                            break;
-                        }
-                        case "disableSiteTranslator": {
-                            const targetTranslator = data.params.translator;
-                            await context.toggleTransientAgent(
-                                targetTranslator,
-                                false,
-                            );
-                            break;
-                        }
-                        case "removeCrosswordPageCache": {
-                            await deleteCachedSchema(context, data.params.url);
-                            break;
-                        }
-                        case "addTabIdToIndex":
-                        case "deleteTabIdFromIndex":
-                        case "getTabIdFromIndex":
-                        case "resetTabIdToIndex": {
-                            await handleTabIndexActions(
-                                {
-                                    actionName: data.method,
-                                    parameters: data.params,
-                                },
-                                context,
-                                data.id,
-                            );
-                            break;
-                        }
-
-                        case "detectPageActions":
-                        case "registerPageDynamicAgent":
-                        case "getIntentFromRecording":
-                        case "getMacrosForUrl":
-                        case "deleteMacro": {
-                            const discoveryResult =
-                                await handleSchemaDiscoveryAction(
-                                    {
-                                        actionName: data.method,
-                                        parameters: data.params,
-                                    },
-                                    context,
-                                );
-
-                            webSocket.send(
-                                JSON.stringify({
-                                    id: data.id,
-                                    result: discoveryResult.data,
-                                }),
-                            );
-                            break;
-                        }
-
-                        case "extractKnowledgeFromPage":
-                        case "indexWebPageContent":
-                        case "checkPageIndexStatus":
-                        case "getPageIndexedKnowledge":
-                        case "getRecentKnowledgeItems":
-                        case "getAnalyticsData":
-                        case "getDiscoverInsights":
-                        case "getKnowledgeIndexStats":
-                        case "clearKnowledgeIndex": {
-                            const knowledgeResult = await handleKnowledgeAction(
-                                data.method,
-                                data.params,
-                                context,
-                            );
-
-                            webSocket.send(
-                                JSON.stringify({
-                                    id: data.id,
-                                    result: knowledgeResult,
-                                }),
-                            );
-                            break;
-                        }
-
-                        case "importWebsiteData":
-                        case "importWebsiteDataWithProgress":
-                        case "importHtmlFolder":
-                        case "getWebsiteStats":
-                        case "searchWebMemories":
-                        case "searchByEntities":
-                        case "searchByTopics":
-                        case "hybridSearch": {
-                            const websiteResult = await handleWebsiteAction(
-                                data.method,
-                                data.params,
-                                context,
-                            );
-
-                            webSocket.send(
-                                JSON.stringify({
-                                    id: data.id,
-                                    result: websiteResult,
-                                }),
-                            );
-                            break;
-                        }
-
-                        case "recordActionUsage":
-                        case "getActionStatistics": {
-                            const macrosResult = await handleMacroStoreAction(
-                                data.method,
-                                data.params,
-                                context,
-                            );
-
-                            webSocket.send(
-                                JSON.stringify({
-                                    id: data.id,
-                                    result: macrosResult,
-                                }),
-                            );
-                            break;
-                        }
-
-                        case "getViewHostUrl": {
-                            const actionsResult = {
-                                url: `http://localhost:${context.agentContext.localHostPort}`,
-                            };
-                            webSocket.send(
-                                JSON.stringify({
-                                    id: data.id,
-                                    result: actionsResult,
-                                }),
-                            );
-                            break;
-                        }
-                    }
+                    await processBrowserAgentMessage(
+                        data,
+                        browserControls,
+                        context,
+                        webSocket,
+                    );
                 }
             });
         }
@@ -567,6 +261,335 @@ async function updateBrowserContext(
         if (context.agentContext.viewProcess) {
             context.agentContext.viewProcess.kill();
         }
+    }
+}
+
+async function processBrowserAgentMessage(
+    data: any,
+    browserControls: BrowserControl,
+    context: SessionContext<BrowserActionContext>,
+    webSocket: WebSocket,
+) {
+    switch (data.method) {
+        case "enableSiteTranslator": {
+            const targetTranslator = data.params.translator;
+            if (targetTranslator == "browser.crossword") {
+                // initialize crossword state
+                browserControls.setAgentStatus(
+                    true,
+                    `Initializing ${targetTranslator}`,
+                );
+                try {
+                    context.agentContext.crossWordState =
+                        await getBoardSchema(context);
+
+                    browserControls.setAgentStatus(
+                        false,
+                        `Finished initializing ${targetTranslator}`,
+                    );
+                } catch (e) {
+                    browserControls.setAgentStatus(
+                        false,
+                        `Failed to initialize ${targetTranslator}`,
+                    );
+                }
+
+                if (context.agentContext.crossWordState) {
+                    context.notify(
+                        AppAgentEvent.Info,
+                        "Crossword board initialized.",
+                    );
+                } else {
+                    context.notify(
+                        AppAgentEvent.Error,
+                        "Crossword board initialization failed.",
+                    );
+                }
+            }
+            await context.toggleTransientAgent(targetTranslator, true);
+            break;
+        }
+        case "disableSiteTranslator": {
+            const targetTranslator = data.params.translator;
+            await context.toggleTransientAgent(targetTranslator, false);
+            break;
+        }
+        case "removeCrosswordPageCache": {
+            await deleteCachedSchema(context, data.params.url);
+            break;
+        }
+        case "addTabIdToIndex":
+        case "deleteTabIdFromIndex":
+        case "getTabIdFromIndex":
+        case "resetTabIdToIndex": {
+            await handleTabIndexActions(
+                {
+                    actionName: data.method,
+                    parameters: data.params,
+                },
+                context,
+                data.id,
+            );
+            break;
+        }
+
+        case "detectPageActions":
+        case "registerPageDynamicAgent":
+        case "getIntentFromRecording":
+        case "getMacrosForUrl":
+        case "getAllMacros":
+        case "deleteMacro": {
+            const discoveryResult = await handleSchemaDiscoveryAction(
+                {
+                    actionName: data.method,
+                    parameters: data.params,
+                },
+                context,
+            );
+
+            webSocket.send(
+                JSON.stringify({
+                    id: data.id,
+                    result: discoveryResult.data,
+                }),
+            );
+            break;
+        }
+
+        case "extractKnowledgeFromPage":
+        case "indexWebPageContent":
+        case "checkPageIndexStatus":
+        case "getPageIndexedKnowledge":
+        case "getRecentKnowledgeItems":
+        case "getAnalyticsData":
+        case "getDiscoverInsights":
+        case "getKnowledgeIndexStats":
+        case "clearKnowledgeIndex": {
+            const knowledgeResult = await handleKnowledgeAction(
+                data.method,
+                data.params,
+                context,
+            );
+
+            webSocket.send(
+                JSON.stringify({
+                    id: data.id,
+                    result: knowledgeResult,
+                }),
+            );
+            break;
+        }
+
+        case "importWebsiteData":
+        case "importWebsiteDataWithProgress":
+        case "importHtmlFolder":
+        case "getWebsiteStats":
+        case "searchWebMemories":
+        case "searchByEntities":
+        case "searchByTopics":
+        case "hybridSearch": {
+            const websiteResult = await handleWebsiteAction(
+                data.method,
+                data.params,
+                context,
+            );
+
+            webSocket.send(
+                JSON.stringify({
+                    id: data.id,
+                    result: websiteResult,
+                }),
+            );
+            break;
+        }
+
+        case "getLibraryStats": {
+            const libraryStatsResult = await handleWebsiteLibraryStats(
+                data.params,
+                context,
+            );
+
+            webSocket.send(
+                JSON.stringify({
+                    id: data.id,
+                    result: libraryStatsResult,
+                }),
+            );
+            break;
+        }
+
+        case "recordActionUsage":
+        case "getActionStatistics": {
+            const macrosResult = await handleMacroStoreAction(
+                data.method,
+                data.params,
+                context,
+            );
+
+            webSocket.send(
+                JSON.stringify({
+                    id: data.id,
+                    result: macrosResult,
+                }),
+            );
+            break;
+        }
+
+        case "getViewHostUrl": {
+            const actionsResult = {
+                url: `http://localhost:${context.agentContext.localHostPort}`,
+            };
+            webSocket.send(
+                JSON.stringify({
+                    id: data.id,
+                    result: actionsResult,
+                }),
+            );
+            break;
+        }
+    }
+}
+
+async function initializeWebsiteIndex(
+    context: SessionContext<BrowserActionContext>,
+) {
+    try {
+        const websiteIndexes = await context.indexes("website");
+
+        if (websiteIndexes.length > 0) {
+            context.agentContext.index = websiteIndexes[0];
+            context.agentContext.websiteCollection =
+                await website.WebsiteCollection.readFromFile(
+                    websiteIndexes[0].path,
+                    "index",
+                );
+            debug(
+                `Loaded website index with ${context.agentContext.websiteCollection?.messages.length || 0} websites`,
+            );
+        } else {
+            debug(
+                "No existing website index found, checking for index file at target path",
+            );
+
+            let indexPath: string | undefined;
+            let websiteCollection: website.WebsiteCollection | undefined;
+
+            // Try to determine the target index path
+            try {
+                const sessionDir = await getSessionFolderPath(context);
+                if (sessionDir) {
+                    // Create index path following IndexManager pattern: sessionDir/indexes/website
+                    indexPath = path.resolve(
+                        sessionDir,
+                        "..",
+                        "indexes",
+                        "website",
+                        "index",
+                    );
+
+                    // Check if the index file exists and try to read it
+                    if (fs.existsSync(indexPath)) {
+                        try {
+                            websiteCollection =
+                                await website.WebsiteCollection.readFromFile(
+                                    indexPath,
+                                    "index",
+                                );
+
+                            if (
+                                websiteCollection &&
+                                websiteCollection.messages.length > 0
+                            ) {
+                                context.agentContext.websiteCollection =
+                                    websiteCollection;
+
+                                // Create proper IndexData object for the loaded collection
+                                context.agentContext.index = {
+                                    source: "website",
+                                    name: "website-index",
+                                    location: "browser-agent",
+                                    size: websiteCollection.messages.length,
+                                    path: indexPath,
+                                    state: "finished",
+                                    progress: 100,
+                                    sizeOnDisk: 0,
+                                };
+
+                                debug(
+                                    `Loaded existing website collection with ${websiteCollection.messages.length} websites from ${indexPath}`,
+                                );
+                            } else {
+                                debug(
+                                    `File exists but collection is empty at ${indexPath}, will create new collection`,
+                                );
+                                websiteCollection = undefined;
+                            }
+                        } catch (readError) {
+                            debug(
+                                `Failed to read existing collection: ${readError}`,
+                            );
+                            websiteCollection = undefined;
+                        }
+                    } else {
+                        debug(
+                            `No existing collection file found at ${indexPath}`,
+                        );
+                    }
+                }
+            } catch (pathError) {
+                debug(`Error determining index path: ${pathError}`);
+                indexPath = undefined;
+            }
+
+            // If we couldn't load an existing collection, create a new one
+            if (!websiteCollection) {
+                context.agentContext.websiteCollection =
+                    new website.WebsiteCollection();
+
+                // Set up index if we have a valid path
+                if (indexPath) {
+                    try {
+                        // Ensure directory exists
+                        fs.mkdirSync(indexPath, { recursive: true });
+
+                        // Create proper IndexData object
+                        context.agentContext.index = {
+                            source: "website",
+                            name: "website-index",
+                            location: "browser-agent",
+                            size: 0,
+                            path: indexPath,
+                            state: "new",
+                            progress: 0,
+                            sizeOnDisk: 0,
+                        };
+
+                        debug(`Created index structure at ${indexPath}`);
+                    } catch (createError) {
+                        debug(`Error creating index directory: ${createError}`);
+                        context.agentContext.index = undefined;
+                    }
+                } else {
+                    context.agentContext.index = undefined;
+                    debug(
+                        "No index path available, collection will be in-memory only",
+                    );
+                }
+            }
+
+            // Log final state
+            if (!context.agentContext.index) {
+                debug(
+                    "Website collection created without persistent index - data will be in-memory only",
+                );
+            }
+        }
+    } catch (error) {
+        debug("Error initializing website collection:", error);
+        // Fallback to empty collection without index
+        context.agentContext.websiteCollection =
+            new website.WebsiteCollection();
+        context.agentContext.index = undefined;
     }
 }
 
@@ -621,6 +644,19 @@ async function resolveWebPage(
     site: string,
 ): Promise<string> {
     debug(`Resolving site '${site}'`);
+
+    // Handle library pages with custom protocol
+    const libraryPages: Record<string, string> = {
+        annotationslibrary: "typeagent-browser://views/annotationsLibrary.html",
+        knowledgelibrary: "typeagent-browser://views/knowledgeLibrary.html",
+        macroslibrary: "typeagent-browser://views/macrosLibrary.html",
+    };
+
+    const libraryUrl = libraryPages[site.toLowerCase()];
+    if (libraryUrl) {
+        debug(`Resolved library page: ${site} -> ${libraryUrl}`);
+        return libraryUrl;
+    }
 
     switch (site.toLowerCase()) {
         case "paleobiodb":
@@ -928,288 +964,6 @@ async function searchWebMemoriesAction(
         context.actionIO.appendDisplay(`Search failed: ${errorMessage}`);
         return createActionResult(`Search failed: ${errorMessage}`);
     }
-}
-
-export function generateWebSearchHtml(
-    searchResponse: SearchWebMemoriesResponse,
-    summary: string,
-): string {
-    let html = `<div class='web-search-results'>`;
-
-    // Add summary header
-    html += `<div class='search-summary'>${summary}</div>`;
-
-    // Add answer if available
-    if (searchResponse.answer && searchResponse.answerType !== "noAnswer") {
-        html += `<div class='search-answer'>
-            <div class='answer-header'>Answer:</div>
-            <div class='answer-content'>${searchResponse.answer}</div>
-        </div>`;
-    }
-
-    // Add main results as ordered list
-    if (searchResponse.websites.length > 0) {
-        html += `<div class='search-results-header'>Search Results:</div>`;
-        html += `<ol class='search-results-list'>`;
-
-        const topResults = searchResponse.websites.slice(0, 10);
-        topResults.forEach((site: any, index: number) => {
-            html += `<li class='search-result-item'>
-                <div class='result-container'>
-                    <div class='result-info'>
-                        <div class='result-title'>${escapeHtml(site.title)}</div>
-                        <div class='result-url'><a href='${escapeHtml(site.url)}' target='_blank'>${escapeHtml(site.url)}</a></div>
-                        <div class='result-meta'>
-                            ${site.lastVisited ? ` • Visited: ${new Date(site.lastVisited).toLocaleDateString()}` : ""}
-                        </div>
-                    </div>
-                </div>
-            </li>`;
-        });
-
-        html += `</ol>`;
-    }
-
-    // Add related entities if available
-    if (
-        searchResponse.relatedEntities &&
-        searchResponse.relatedEntities.length > 0
-    ) {
-        html += `<div class='related-section'>
-            <div class='section-header'>Related Entities:</div>
-            <div class='entity-tags'>`;
-        const topEntities = searchResponse.relatedEntities.slice(0, 5);
-        topEntities.forEach((entity: any) => {
-            html += `<span class='entity-tag'>${escapeHtml(entity.name)}</span>`;
-        });
-        html += `</div></div>`;
-    }
-
-    // Add topics if available
-    if (searchResponse.topTopics && searchResponse.topTopics.length > 0) {
-        html += `<div class='topics-section'>
-            <div class='section-header'>Top Topics:</div>
-            <div class='topic-tags'>`;
-        const topTopics = searchResponse.topTopics.slice(0, 5);
-        topTopics.forEach((topic: string) => {
-            html += `<span class='topic-tag'>${escapeHtml(topic)}</span>`;
-        });
-        html += `</div></div>`;
-    }
-
-    // Add follow-up suggestions if available
-    if (
-        searchResponse.suggestedFollowups &&
-        searchResponse.suggestedFollowups.length > 0
-    ) {
-        html += `<div class='followups-section'>
-            <div class='section-header'>Suggested follow-ups:</div>
-            <ul class='followup-list'>`;
-        searchResponse.suggestedFollowups.forEach((followup: string) => {
-            html += `<li class='followup-item'>${escapeHtml(followup)}</li>`;
-        });
-        html += `</ul></div>`;
-    }
-
-    html += `</div>`;
-
-    // Add CSS styles for better presentation
-    html += `
-    <style>
-    .web-search-results {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-        max-width: 800px;
-        margin: 0;
-        padding: 0;
-    }
-    .search-summary {
-        background: #f5f5f5;
-        padding: 12px 16px;
-        border-radius: 8px;
-        margin-bottom: 16px;
-        font-weight: 500;
-        color: #333;
-    }
-    .search-answer {
-        background: #e3f2fd;
-        border-left: 4px solid #2196f3;
-        padding: 16px;
-        margin-bottom: 20px;
-        border-radius: 4px;
-    }
-    .answer-header {
-        font-weight: 600;
-        color: #1976d2;
-        margin-bottom: 8px;
-    }
-    .answer-content {
-        line-height: 1.5;
-        color: #333;
-    }
-    .search-results-header {
-        font-size: 18px;
-        font-weight: 600;
-        margin: 20px 0 12px 0;
-        color: #333;
-    }
-    .search-results-list {
-        list-style: none;
-        padding: 0;
-        margin: 0;
-    }
-    .search-result-item {
-        margin-bottom: 20px;
-        border: 1px solid #e0e0e0;
-        border-radius: 8px;
-        overflow: hidden;
-        transition: box-shadow 0.2s;
-    }
-    .search-result-item:hover {
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    }
-    .result-container {
-        padding: 16px;
-    }
-    .result-title {
-        font-size: 16px;
-        font-weight: 600;
-        color: #1976d2;
-        margin-bottom: 6px;
-        line-height: 1.3;
-    }
-    .result-url {
-        margin-bottom: 8px;
-    }
-    .result-url a {
-        color: #2e7d32;
-        text-decoration: none;
-        font-size: 14px;
-    }
-    .result-url a:hover {
-        text-decoration: underline;
-    }
-    .result-meta {
-        font-size: 12px;
-        color: #666;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-    .result-domain {
-        font-weight: 500;
-    }
-    .related-section, .topics-section, .followups-section {
-        margin-top: 24px;
-        padding-top: 16px;
-        border-top: 1px solid #e0e0e0;
-    }
-    .section-header {
-        font-weight: 600;
-        margin-bottom: 12px;
-        color: #333;
-    }
-    .entity-tags, .topic-tags {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-    }
-    .entity-tag, .topic-tag {
-        background: #f5f5f5;
-        padding: 4px 8px;
-        border-radius: 16px;
-        font-size: 12px;
-        color: #555;
-        border: 1px solid #ddd;
-    }
-    .followup-list {
-        list-style: none;
-        padding: 0;
-        margin: 0;
-    }
-    .followup-item {
-        padding: 8px 0;
-        color: #555;
-        border-bottom: 1px solid #f0f0f0;
-    }
-    .followup-item:last-child {
-        border-bottom: none;
-    }
-    </style>`;
-
-    return html;
-}
-
-function generateWebSearchMarkdown(
-    searchResponse: SearchWebMemoriesResponse,
-    query: string,
-): string {
-    let content = `Found ${searchResponse.websites.length} result(s) in ${searchResponse.summary.searchTime}ms\n\n`;
-
-    // Add answer if available
-    if (searchResponse.answer && searchResponse.answerType !== "noAnswer") {
-        content += `** Answer:**${searchResponse.answer}\n\n`;
-    }
-
-    // Add main results (limit to top 10)
-    if (searchResponse.websites.length > 0) {
-        content += `**Top Results:**\n\n`;
-        const topResults = searchResponse.websites.slice(0, 10);
-
-        topResults.forEach((site: any, index: number) => {
-            content += `${index + 1}. ${site.title}\n`;
-            content += `([link](${site.url}))\n`;
-
-            if (site.lastVisited) {
-                content += ` • Last visited: ${new Date(site.lastVisited).toLocaleDateString()}`;
-            }
-            content += `\n\n`;
-        });
-    }
-
-    // Add related entities if available
-    if (
-        searchResponse.relatedEntities &&
-        searchResponse.relatedEntities.length > 0
-    ) {
-        content += `**Related Entities:**\n\n`;
-        const topEntities = searchResponse.relatedEntities.slice(0, 5);
-        topEntities.forEach((entity: any) => {
-            content += `- ${entity.name}\n`;
-        });
-        content += `\n`;
-    }
-
-    // Add topics if available
-    if (searchResponse.topTopics && searchResponse.topTopics.length > 0) {
-        content += `**Top Topics**\n\n`;
-        const topTopics = searchResponse.topTopics.slice(0, 5);
-        topTopics.forEach((topic: string) => {
-            content += `- ${topic}\n`;
-        });
-        content += `\n`;
-    }
-
-    // Add follow-up suggestions if available
-    if (
-        searchResponse.suggestedFollowups &&
-        searchResponse.suggestedFollowups.length > 0
-    ) {
-        content += `**Suggested Follow-ups:**\n\n`;
-        searchResponse.suggestedFollowups.forEach((followup: string) => {
-            content += `- ${followup}\n`;
-        });
-    }
-
-    return content;
-}
-
-function escapeHtml(unsafe: string): string {
-    return unsafe
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
 }
 
 async function executeBrowserAction(
@@ -2115,6 +1869,148 @@ async function handleMacroStoreAction(
         return {
             success: false,
             error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+function formatLibraryStatsResponse(text: string) {
+    const defaultStats = {
+        totalWebsites: 0,
+        totalBookmarks: 0,
+        totalHistory: 0,
+        topDomains: 0,
+    };
+
+    if (!text) return defaultStats;
+
+    try {
+        const lines = text.split("\n");
+        let totalWebsites = 0;
+        let totalBookmarks = 0;
+        let totalHistory = 0;
+        let topDomains = 0;
+
+        // Look for total count line
+        const totalMatch = text.match(/Total:\s*(\d+)\s*sites/i);
+        if (totalMatch) {
+            totalWebsites = parseInt(totalMatch[1]);
+        }
+
+        // Look for source breakdown
+        const bookmarkMatch = text.match(/bookmark:\s*(\d+)/i);
+        if (bookmarkMatch) {
+            totalBookmarks = parseInt(bookmarkMatch[1]);
+        }
+
+        const historyMatch = text.match(/history:\s*(\d+)/i);
+        if (historyMatch) {
+            totalHistory = parseInt(historyMatch[1]);
+        }
+
+        // Count domain entries
+        const domainLines = lines.filter(
+            (line) =>
+                line.includes(":") &&
+                line.includes("sites") &&
+                !line.includes("Total") &&
+                !line.includes("Source"),
+        );
+        topDomains = domainLines.length;
+
+        return {
+            totalWebsites,
+            totalBookmarks,
+            totalHistory,
+            topDomains,
+        };
+    } catch (error) {
+        console.error("Error parsing library stats:", error);
+        return defaultStats;
+    }
+}
+
+async function handleWebsiteLibraryStats(
+    parameters: any,
+    context: SessionContext<BrowserActionContext>,
+): Promise<any> {
+    try {
+        // Call existing getWebsiteStats action with proper ActionContext
+        const statsAction = {
+            schemaName: "browser" as const,
+            actionName: "getWebsiteStats" as const,
+            parameters: {
+                groupBy: "source",
+                limit: 50,
+                ...parameters, // Allow override of defaults
+            },
+        };
+
+        const mockActionContext: ActionContext<BrowserActionContext> = {
+            sessionContext: context,
+            actionIO: {
+                setDisplay: () => {},
+                appendDisplay: () => {},
+                clearDisplay: () => {},
+                setError: () => {},
+            } as any,
+            streamingContext: undefined,
+            activityContext: undefined,
+            queueToggleTransientAgent: async () => {},
+        };
+
+        const statsResult = await getWebsiteStats(
+            mockActionContext,
+            statsAction,
+        );
+
+        if (statsResult.error) {
+            return {
+                success: false,
+                error: statsResult.error,
+                totalWebsites: 0,
+                totalBookmarks: 0,
+                totalHistory: 0,
+                topDomains: 0,
+            };
+        }
+
+        // Parse and format the response - extract text from ActionResult
+        let responseText = "";
+        if (statsResult.literalText) {
+            responseText = statsResult.literalText;
+        } else if (statsResult.displayContent) {
+            // Handle different types of display content
+            if (typeof statsResult.displayContent === "string") {
+                responseText = statsResult.displayContent;
+            } else if (Array.isArray(statsResult.displayContent)) {
+                responseText = statsResult.displayContent.join("\n");
+            } else if (
+                typeof statsResult.displayContent === "object" &&
+                statsResult.displayContent.content
+            ) {
+                // Handle DisplayMessage type
+                responseText =
+                    typeof statsResult.displayContent.content === "string"
+                        ? statsResult.displayContent.content
+                        : String(statsResult.displayContent.content);
+            }
+        }
+
+        const formattedStats = formatLibraryStatsResponse(responseText);
+
+        return {
+            success: true,
+            ...formattedStats,
+        };
+    } catch (error) {
+        console.error("Error getting library stats:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+            totalWebsites: 0,
+            totalBookmarks: 0,
+            totalHistory: 0,
+            topDomains: 0,
         };
     }
 }

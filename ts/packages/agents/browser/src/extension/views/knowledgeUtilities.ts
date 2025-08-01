@@ -7,6 +7,21 @@
  */
 
 import type { AnswerEnhancement } from "../../agent/search/schema/answerEnhancement.mjs";
+import type {
+    StoredMacro,
+    MacroQueryOptions,
+    DeleteMacroResult,
+} from "./macroUtilities";
+import {
+    ExtensionServiceBase,
+    LibraryStats,
+    SearchFilters,
+    KnowledgeStatus,
+    SearchResult,
+    Website,
+    SourceReference,
+    EntityMatch,
+} from "./extensionServiceBase";
 
 // ===================================================================
 // INTERFACES AND TYPES
@@ -18,76 +33,16 @@ export interface NotificationAction {
     style?: "primary" | "secondary" | "success" | "danger";
 }
 
-export interface LibraryStats {
-    totalWebsites: number;
-    totalBookmarks: number;
-    totalHistory: number;
-    topDomains: number;
-    lastImport?: number;
-}
-
-export interface SearchFilters {
-    dateFrom?: string;
-    dateTo?: string;
-    sourceType?: "bookmarks" | "history";
-    domain?: string;
-    minRelevance?: number;
-}
-
-export interface KnowledgeStatus {
-    hasKnowledge: boolean;
-    extractionDate?: string;
-    entityCount?: number;
-    topicCount?: number;
-    suggestionCount?: number;
-    status: "extracted" | "pending" | "error" | "none" | "extracting";
-    confidence?: number;
-}
-
-export interface SearchResult {
-    websites: Website[];
-    summary: {
-        text: string;
-        totalFound: number;
-        searchTime: number;
-        sources: SourceReference[];
-        entities: EntityMatch[];
-    };
-    query: string;
-    filters: SearchFilters;
-    topTopics?: string[];
-    suggestedFollowups?: string[];
-    relatedEntities?: Array<{
-        name: string;
-        type: string;
-        confidence: number;
-    }>;
-    answerEnhancement?: AnswerEnhancement; // NEW: Dynamic enhancement from LLM
-}
-
-export interface Website {
-    url: string;
-    title: string;
-    domain: string;
-    visitCount?: number;
-    lastVisited?: string;
-    source: "bookmarks" | "history";
-    score?: number;
-    snippet?: string;
-    knowledge?: KnowledgeStatus;
-}
-
-export interface SourceReference {
-    url: string;
-    title: string;
-    relevance: number;
-}
-
-export interface EntityMatch {
-    name: string;
-    type: string;
-    confidence: number;
-}
+// Re-export types from base class for backward compatibility
+export {
+    LibraryStats,
+    SearchFilters,
+    KnowledgeStatus,
+    SearchResult,
+    Website,
+    SourceReference,
+    EntityMatch,
+} from "./extensionServiceBase";
 
 // ===================================================================
 // NOTIFICATION MANAGER
@@ -234,49 +189,19 @@ export class NotificationManager {
 // CHROME EXTENSION SERVICE
 // ===================================================================
 
-export class ChromeExtensionService {
-    async getLibraryStats(): Promise<LibraryStats> {
-        return this.sendMessage({
-            type: "getLibraryStats",
-            includeKnowledge: true,
-        });
-    }
-
-    async getAnalyticsData(options?: {
-        timeRange?: string;
-        includeQuality?: boolean;
-        includeProgress?: boolean;
-        topDomainsLimit?: number;
-        activityGranularity?: "day" | "week" | "month";
-    }): Promise<any> {
-        return this.sendMessage({
-            type: "getAnalyticsData",
-            timeRange: options?.timeRange || "30d",
-            includeQuality: options?.includeQuality !== false,
-            includeProgress: options?.includeProgress !== false,
-            topDomainsLimit: options?.topDomainsLimit || 10,
-            activityGranularity: options?.activityGranularity || "day",
-        });
-    }
-
-    async searchWebMemories(
-        query: string,
-        filters: SearchFilters,
-    ): Promise<SearchResult> {
-        const response = (await this.sendMessage({
-            type: "searchWebMemories",
-            parameters: {
-                query,
-                generateAnswer: true,
-                includeRelatedEntities: true,
-                enableAdvancedSearch: true,
-                limit: 50,
-                minScore: filters.minRelevance || 0.3,
-                domain: filters.domain,
-            },
-        })) as any;
-
-        return response.results;
+export class ChromeExtensionService extends ExtensionServiceBase {
+    // Override getCurrentTab with Chrome-specific implementation
+    protected async getCurrentTabImpl(): Promise<chrome.tabs.Tab | null> {
+        try {
+            const tabs = await chrome.tabs.query({
+                active: true,
+                currentWindow: true,
+            });
+            return tabs.length > 0 ? tabs[0] : null;
+        } catch (error) {
+            console.error("Failed to get current tab:", error);
+            return null;
+        }
     }
 
     async getCurrentTab(): Promise<chrome.tabs.Tab | null> {
@@ -290,47 +215,6 @@ export class ChromeExtensionService {
             console.error("Failed to get current tab:", error);
             return null;
         }
-    }
-
-    async getPageIndexStatus(url: string): Promise<any> {
-        return this.sendMessage({
-            type: "getPageIndexStatus",
-            url,
-        });
-    }
-
-    async indexPageContent(url: string, mode: string): Promise<any> {
-        return this.sendMessage({
-            type: "indexPageContentDirect",
-            url,
-            mode,
-        });
-    }
-
-    async extractPageKnowledge(
-        url: string,
-        mode: string,
-        extractionSettings: any,
-    ): Promise<any> {
-        return this.sendMessage({
-            type: "extractPageKnowledge",
-            url,
-            mode,
-            extractionSettings,
-        });
-    }
-
-    async queryKnowledge(parameters: any): Promise<any> {
-        return this.sendMessage({
-            type: "queryKnowledge",
-            parameters,
-        });
-    }
-
-    async checkConnection(): Promise<any> {
-        return this.sendMessage({
-            type: "checkConnection",
-        });
     }
 
     async getAutoIndexSetting(): Promise<boolean> {
@@ -376,6 +260,7 @@ export class ChromeExtensionService {
         }
     }
 
+    // Override openOptionsPage with Chrome-specific implementation
     async openOptionsPage(): Promise<void> {
         try {
             chrome.runtime.openOptionsPage();
@@ -385,6 +270,7 @@ export class ChromeExtensionService {
         }
     }
 
+    // Override createTab with Chrome-specific implementation
     async createTab(
         url: string,
         active: boolean = true,
@@ -563,7 +449,8 @@ export class ChromeExtensionService {
         });
     }
 
-    private async sendMessage<T>(message: any): Promise<T> {
+    // Implement abstract sendMessage method
+    protected async sendMessage<T>(message: any): Promise<T> {
         if (typeof chrome !== "undefined" && chrome.runtime) {
             try {
                 const response = await chrome.runtime.sendMessage(message);
@@ -577,6 +464,338 @@ export class ChromeExtensionService {
             }
         }
         throw new Error("Chrome extension not available");
+    }
+}
+
+// ===================================================================
+// ELECTRON EXTENSION SERVICE
+// ===================================================================
+
+export class ElectronExtensionService extends ExtensionServiceBase {
+    // Override getAnalyticsData to add success wrapper
+    async getAnalyticsData(options?: {
+        timeRange?: string;
+        includeQuality?: boolean;
+        includeProgress?: boolean;
+        topDomainsLimit?: number;
+        activityGranularity?: "day" | "week" | "month";
+    }): Promise<any> {
+        const result = await super.getAnalyticsData(options);
+        return {
+            success: !result.error,
+            analytics: result,
+            error: result.error,
+        };
+    }
+
+    // Override transformSearchWebMemoriesResponse for Electron-specific response structure
+    protected transformSearchWebMemoriesResponse(result: any): SearchResult {
+        return {
+            websites: result.websites || [],
+            summary: {
+                text: result.answer || "",
+                totalFound: result.websites?.length || 0,
+                searchTime: result.summary?.searchTime || 0,
+                sources: result.answerSources || [],
+                entities: result.relatedEntities || [],
+            },
+            query: result.query || "",
+            filters: result.filters || {},
+            topTopics: result.topTopics || [],
+            suggestedFollowups: result.suggestedFollowups || [],
+            relatedEntities: result.relatedEntities || [],
+        };
+    }
+
+    // Override getCurrentTab with Electron-specific implementation
+    protected async getCurrentTabImpl(): Promise<any> {
+        // Return mock tab object for Electron context
+        return {
+            id: -1,
+            url: window.location.href,
+            title: document.title,
+            active: true,
+        };
+    }
+
+    // Override getAutoIndexSetting with Electron storage implementation
+    protected async getAutoIndexSettingImpl(): Promise<boolean> {
+        try {
+            const settings = await (window as any).electronAPI.getStorage([
+                "autoIndexing",
+            ]);
+            return settings.autoIndexing || false;
+        } catch (error) {
+            console.error("Failed to get auto-index setting:", error);
+            return false;
+        }
+    }
+
+    // Override setAutoIndexSetting with Electron storage implementation
+    protected async setAutoIndexSettingImpl(enabled: boolean): Promise<void> {
+        try {
+            await (window as any).electronAPI.setStorage({
+                autoIndexing: enabled,
+            });
+        } catch (error) {
+            console.error("Failed to set auto-index setting:", error);
+            throw error;
+        }
+    }
+
+    // Override getExtractionSettings with Electron storage implementation
+    protected async getExtractionSettingsImpl(): Promise<any> {
+        try {
+            const settings = await (window as any).electronAPI.getStorage([
+                "extractionSettings",
+            ]);
+            return settings.extractionSettings || null;
+        } catch (error) {
+            console.error("Failed to get extraction settings:", error);
+            return null;
+        }
+    }
+
+    // Override saveExtractionSettings with Electron storage implementation
+    protected async saveExtractionSettingsImpl(settings: any): Promise<void> {
+        try {
+            await (window as any).electronAPI.setStorage({
+                extractionMode: settings.mode,
+                suggestQuestions: settings.suggestQuestions,
+            });
+        } catch (error) {
+            console.error("Failed to save extraction settings:", error);
+            throw error;
+        }
+    }
+
+    async openOptionsPage(): Promise<void> {
+        // In Electron, we could potentially open a new window or navigate
+        console.warn("Options page not available in Electron context");
+    }
+
+    async createTab(url: string, active: boolean = true): Promise<any> {
+        // Mock tab creation for Electron context
+        window.open(url, active ? "_self" : "_blank");
+        return {
+            id: -1,
+            url: url,
+            active: active,
+        };
+    }
+
+    // Include all other methods from ChromeExtensionService with the same signatures
+    async getIndexStats(): Promise<any> {
+        return this.sendMessage({ type: "getIndexStats" });
+    }
+
+    async getPageSourceInfo(url: string): Promise<any> {
+        return this.sendMessage({ type: "getPageSourceInfo", url });
+    }
+
+    async getPageIndexedKnowledge(url: string): Promise<any> {
+        return this.sendMessage({ type: "getPageIndexedKnowledge", url });
+    }
+
+    async discoverRelationships(
+        url: string,
+        knowledge: any,
+        maxResults: number,
+    ): Promise<any> {
+        return this.sendMessage({
+            type: "discoverRelationships",
+            url,
+            knowledge,
+            maxResults,
+        });
+    }
+
+    async generateTemporalSuggestions(maxSuggestions: number): Promise<any> {
+        return this.sendMessage({
+            type: "generateTemporalSuggestions",
+            maxSuggestions,
+        });
+    }
+
+    async searchByEntities(
+        entities: string[],
+        url: string,
+        maxResults: number,
+    ): Promise<any> {
+        return this.sendMessage({
+            type: "searchByEntities",
+            entities,
+            url,
+            maxResults,
+        });
+    }
+
+    async searchByTopics(
+        topics: string[],
+        url: string,
+        maxResults: number,
+    ): Promise<any> {
+        return this.sendMessage({
+            type: "searchByTopics",
+            topics,
+            url,
+            maxResults,
+        });
+    }
+
+    async hybridSearch(
+        query: string,
+        url: string,
+        maxResults: number,
+    ): Promise<any> {
+        return this.sendMessage({
+            type: "hybridSearch",
+            query,
+            url,
+            maxResults,
+        });
+    }
+
+    async searchWebMemoriesAdvanced(parameters: any): Promise<any> {
+        return this.sendMessage({ type: "searchWebMemories", parameters });
+    }
+
+    async checkAIModelAvailability(): Promise<any> {
+        return this.sendMessage({ type: "checkAIModelAvailability" });
+    }
+
+    async getPageQualityMetrics(url: string): Promise<any> {
+        return this.sendMessage({ type: "getPageQualityMetrics", url });
+    }
+
+    async notifyAutoIndexSettingChanged(enabled: boolean): Promise<void> {
+        return this.sendMessage({ type: "autoIndexSettingChanged", enabled });
+    }
+
+    async getRecentKnowledgeItems(limit: number = 10): Promise<any> {
+        return this.sendMessage({ type: "getRecentKnowledgeItems", limit });
+    }
+
+    async extractKnowledge(url: string): Promise<any> {
+        return this.sendMessage({ type: "extractKnowledge", url });
+    }
+
+    async checkKnowledgeStatus(url: string): Promise<any> {
+        return this.sendMessage({ action: "checkKnowledgeStatus", url });
+    }
+
+    async getSearchSuggestions(query: string): Promise<string[]> {
+        try {
+            // For Electron, simulate Chrome storage behavior
+            const settings = await (window as any).electronAPI.getStorage([
+                "searchHistory",
+            ]);
+            const searchHistory = settings.searchHistory || [];
+
+            const suggestions = searchHistory
+                .filter((search: string) =>
+                    search.toLowerCase().includes(query.toLowerCase()),
+                )
+                .slice(0, 5);
+
+            // Match ChromeExtensionService extraction pattern
+            return suggestions; // ChromeExtensionService extracts suggestions from response
+        } catch (error) {
+            console.error("Error getting search suggestions:", error);
+            return [];
+        }
+    }
+
+    async getRecentSearches(): Promise<string[]> {
+        return this.sendMessage({ action: "getRecentSearches" });
+    }
+
+    async getDiscoverInsights(
+        limit: number = 10,
+        timeframe: string = "30d",
+    ): Promise<any> {
+        return this.sendMessage({
+            type: "getDiscoverInsights",
+            limit,
+            timeframe,
+        });
+    }
+
+    async saveSearch(query: string, results: any): Promise<void> {
+        return this.sendMessage({ type: "saveSearch", query, results });
+    }
+
+    async checkWebSocketConnection(): Promise<any> {
+        // Use direct IPC call to browserIPC instead of sending via WebSocket
+        if (typeof window !== "undefined" && (window as any).electronAPI) {
+            try {
+                return await (
+                    window as any
+                ).electronAPI.checkWebSocketConnection();
+            } catch (error) {
+                console.error(
+                    "Direct WebSocket connection check failed:",
+                    error,
+                );
+                return { connected: false };
+            }
+        }
+        return { connected: false };
+    }
+
+    async getViewHostUrl(): Promise<string | null> {
+        try {
+            const response = await this.sendMessage<{ url?: string }>({
+                type: "getViewHostUrl",
+            });
+            return response?.url || null;
+        } catch (error) {
+            console.error("Failed to get view host URL:", error);
+            return null;
+        }
+    }
+
+    // Implement abstract sendMessage method with message transformation
+    protected async sendMessage<T>(message: any): Promise<T> {
+        if (typeof window !== "undefined" && (window as any).electronAPI) {
+            try {
+                // Transform Chrome message format to Electron format
+                const electronMessage =
+                    this.transformChromeMessageToElectron(message);
+                const response = await (
+                    window as any
+                ).electronAPI.sendBrowserMessage(electronMessage);
+                if (response && response.error) {
+                    throw new Error(response.error);
+                }
+                return response;
+            } catch (error) {
+                console.error("Electron IPC message failed:", error);
+                throw error;
+            }
+        }
+        throw new Error("Electron API not available");
+    }
+
+    /**
+     * Transform Chrome message format to Electron format
+     */
+    private transformChromeMessageToElectron(chromeMessage: any): any {
+        const { type, ...params } = chromeMessage;
+
+        // Handle special cases where message structure differs
+        if (type === "searchWebMemories" && chromeMessage.parameters) {
+            return {
+                method: type,
+                params: chromeMessage.parameters,
+            };
+        }
+
+        // Standard transformation: move all properties except 'type' into 'params'
+        return {
+            method: type,
+            params: Object.keys(params).length > 0 ? params : {},
+        };
     }
 }
 
@@ -699,13 +918,21 @@ export class KnowledgeTemplateHelpers {
 export class KnowledgeConnectionManager {
     static async checkConnectionStatus(): Promise<boolean> {
         try {
-            if (typeof chrome === "undefined" || !chrome.runtime) {
-                return false;
+            // Check for Electron context first (has electronAPI in window)
+            if (typeof window !== "undefined" && (window as any).electronAPI) {
+                // Electron context - use direct WebSocket connection check
+                const response = await (
+                    window as any
+                ).electronAPI.checkWebSocketConnection();
+                return response?.connected === true;
+            } else if (typeof chrome !== "undefined" && chrome.runtime) {
+                // Chrome extension context
+                const response = await chrome.runtime.sendMessage({
+                    type: "checkWebSocketConnection",
+                });
+                return response?.connected === true;
             }
-            const response = await chrome.runtime.sendMessage({
-                type: "checkWebSocketConnection",
-            });
-            return response?.connected === true;
+            return false;
         } catch (error) {
             console.error("Connection check failed:", error);
             return false;
@@ -764,16 +991,97 @@ export class ChromeEventManager {
 }
 
 // ===================================================================
+// SERVICE FACTORY AND ENVIRONMENT DETECTION
+// ===================================================================
+
+export function createExtensionService(): ExtensionServiceBase {
+    // Check for Electron context first (has electronAPI in window)
+    // Note: Electron provides Chrome extension APIs but they're not fully implemented
+    if (typeof window !== "undefined" && (window as any).electronAPI) {
+        console.log("Using ElectronExtensionService for Electron context");
+        return new ElectronExtensionService();
+    }
+
+    // Default to Chrome extension context
+    console.log("Using ChromeExtensionService for Chrome extension context");
+    return new ChromeExtensionService();
+}
+
+// ===================================================================
+// CONNECTION MANAGER UPDATES FOR ELECTRON
+// ===================================================================
+
+export class ElectronConnectionManager {
+    static async checkConnectionStatus(): Promise<boolean> {
+        try {
+            const response = await (
+                window as any
+            ).electronAPI.sendBrowserMessage({
+                type: "checkWebSocketConnection",
+            });
+            return response?.connected === true;
+        } catch (error) {
+            return false;
+        }
+    }
+}
+
+// Update the existing connection manager to work with both environments
+export class UnifiedConnectionManager {
+    static async checkConnectionStatus(): Promise<boolean> {
+        try {
+            // Check for Electron context first (has electronAPI in window)
+            if (typeof window !== "undefined" && (window as any).electronAPI) {
+                // Electron context - use direct WebSocket connection check
+                const response = await (
+                    window as any
+                ).electronAPI.checkWebSocketConnection();
+                return response?.connected === true;
+            } else if (typeof chrome !== "undefined" && chrome.runtime) {
+                // Chrome extension context
+                const response = await chrome.runtime.sendMessage({
+                    type: "checkWebSocketConnection",
+                });
+                return response?.connected === true;
+            }
+            return false;
+        } catch (error) {
+            console.error("Connection check failed:", error);
+            return false;
+        }
+    }
+
+    static updateConnectionStatus(isConnected: boolean): void {
+        const statusElement = document.getElementById("connectionStatus");
+        if (statusElement) {
+            const indicator = statusElement.querySelector(".status-indicator");
+            const text = statusElement.querySelector("span:last-child");
+            if (indicator && text) {
+                if (isConnected) {
+                    indicator.className = "status-indicator status-connected";
+                    text.textContent = "Connected";
+                } else {
+                    indicator.className =
+                        "status-indicator status-disconnected";
+                    text.textContent = "Disconnected";
+                }
+            }
+        }
+    }
+}
+
+// ===================================================================
 // EXPORTS
 // ===================================================================
 
 export const notificationManager = new NotificationManager();
 export const chromeExtensionService = new ChromeExtensionService();
+export const extensionService = createExtensionService();
 
 export {
     KnowledgeTemplateHelpers as TemplateHelpers,
     KnowledgeFormatUtils as FormatUtils,
-    KnowledgeConnectionManager as ConnectionManager,
+    UnifiedConnectionManager as ConnectionManager,
     ChromeEventManager as EventManager,
 };
 
@@ -807,7 +1115,7 @@ export interface EntityCacheServices {
 
 // Default implementations using the existing ChromeExtensionService
 export class DefaultAnalyticsServices implements AnalyticsServices {
-    constructor(private chromeService: ChromeExtensionService) {}
+    constructor(private chromeService: ExtensionServiceBase) {}
 
     async loadAnalyticsData(): Promise<any> {
         return this.chromeService.getAnalyticsData({
@@ -824,7 +1132,7 @@ export class DefaultAnalyticsServices implements AnalyticsServices {
 export class CachedDefaultAnalyticsServices extends DefaultAnalyticsServices {
     private cacheManager: any; // Import will be added dynamically
 
-    constructor(chromeService: ChromeExtensionService) {
+    constructor(chromeService: ExtensionServiceBase) {
         super(chromeService);
         // Initialize cache manager when available
         this.initializeCacheManager();
@@ -854,7 +1162,7 @@ export class CachedDefaultAnalyticsServices extends DefaultAnalyticsServices {
 }
 
 export class DefaultSearchServices implements SearchServices {
-    constructor(private chromeService: ChromeExtensionService) {}
+    constructor(private chromeService: ExtensionServiceBase) {}
 
     async performSearch(query: string, filters?: any): Promise<SearchResult> {
         console.log(
@@ -928,7 +1236,7 @@ export class DefaultSearchServices implements SearchServices {
 }
 
 export class DefaultDiscoveryServices implements DiscoveryServices {
-    constructor(private chromeService: ChromeExtensionService) {}
+    constructor(private chromeService: ExtensionServiceBase) {}
 
     async loadDiscoverData(): Promise<any> {
         const response = await this.chromeService.getDiscoverInsights(
@@ -960,15 +1268,15 @@ export class DefaultDiscoveryServices implements DiscoveryServices {
 
 // Default implementations for entity services (connected to real EntityProcessingService)
 export class DefaultEntityGraphServices implements EntityGraphServices {
-    private chromeService: ChromeExtensionService | null = null;
+    private extensionService: ExtensionServiceBase | null = null;
 
-    constructor(chromeService?: ChromeExtensionService) {
-        this.chromeService = chromeService || null;
+    constructor(extensionService?: ExtensionServiceBase) {
+        this.extensionService = extensionService || null;
     }
 
     async searchByEntity(entityName: string, options: any = {}): Promise<any> {
         try {
-            if (!this.chromeService) {
+            if (!this.extensionService) {
                 console.warn(
                     "ChromeExtensionService not available, using empty result",
                 );
@@ -1074,7 +1382,7 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
 
     async getEntityGraph(centerEntity: string, depth: number): Promise<any> {
         try {
-            if (!this.chromeService) {
+            if (!this.extensionService) {
                 console.warn(
                     "ChromeExtensionService not available, using empty result",
                 );
@@ -1237,7 +1545,7 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
         entityName: string,
         options: any = {},
     ): Promise<any> {
-        if (!this.chromeService) {
+        if (!this.extensionService) {
             throw new Error("ChromeExtensionService not available");
         }
 
@@ -1248,7 +1556,7 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
 
         try {
             // Strategy 1: Direct entity search (fastest)
-            const entityResults = await this.chromeService.searchByEntities(
+            const entityResults = await this.extensionService.searchByEntities(
                 [entityName],
                 "",
                 maxResults,
@@ -1284,7 +1592,7 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
         if (!searchResult || searchResult.websites.length < 3) {
             try {
                 console.log(`Trying topic search for: ${entityName}`);
-                const topicResults = await this.chromeService.searchByTopics(
+                const topicResults = await this.extensionService.searchByTopics(
                     [entityName],
                     "",
                     maxResults,
@@ -1350,7 +1658,7 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
         if (!searchResult || searchResult.websites.length < 2) {
             try {
                 console.log(`Trying hybrid search for: ${entityName}`);
-                const hybridResults = await this.chromeService.hybridSearch(
+                const hybridResults = await this.extensionService.hybridSearch(
                     entityName,
                     "",
                     maxResults,
@@ -1415,7 +1723,7 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
         if (!searchResult || searchResult.websites.length === 0) {
             try {
                 console.log(`Falling back to text search for: ${entityName}`);
-                searchResult = await this.chromeService.searchWebMemories(
+                searchResult = await this.extensionService.searchWebMemories(
                     entityName,
                     {},
                 );

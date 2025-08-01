@@ -62,19 +62,18 @@ export class BrowserAgentIpc {
                         : await (event.data as Blob).text();
                 try {
                     const data = JSON.parse(text) as WebSocketMessageV2;
-                    if (data.method) {
-                        let schema = data.method?.split("/")[0];
-                        schema = schema || "browser";
 
-                        if (
-                            (schema == "browser" ||
-                                schema == "webAgent" ||
-                                schema.startsWith("browser.")) &&
-                            this.onMessageReceived
-                        ) {
-                            debugBrowserIPC("Browser -> Dispatcher", data);
-                            this.onMessageReceived(data);
-                        }
+                    let schema = data.method?.split("/")[0];
+                    schema = schema || "browser";
+
+                    if (
+                        (schema == "browser" ||
+                            schema == "webAgent" ||
+                            schema.startsWith("browser.")) &&
+                        this.onMessageReceived
+                    ) {
+                        debugBrowserIPC("Browser -> Dispatcher", data);
+                        this.onMessageReceived(data);
                     }
                 } catch {}
             };
@@ -108,5 +107,9 @@ export class BrowserAgentIpc {
         await this.ensureWebsocketConnected();
         debugBrowserIPC("Browser -> Dispatcher", message);
         this.webSocket.send(JSON.stringify(message));
+    }
+
+    public isConnected(): boolean {
+        return this.webSocket && this.webSocket.readyState === WebSocket.OPEN;
     }
 }

@@ -484,9 +484,20 @@ async function initialize() {
             : appPath,
         "node_modules/browser-typeagent/dist/electron",
     );
-    await session.defaultSession.loadExtension(browserExtensionPath, {
-        allowFileAccess: true,
-    });
+    const extension = await session.defaultSession.loadExtension(
+        browserExtensionPath,
+        {
+            allowFileAccess: true,
+        },
+    );
+
+    // Store extension info for later URL construction
+    (global as any).browserExtensionId = extension.id;
+    (global as any).browserExtensionUrls = {
+        "/annotationsLibrary.html": `chrome-extension://${extension.id}/views/annotationsLibrary.html`,
+        "/knowledgeLibrary.html": `chrome-extension://${extension.id}/views/knowledgeLibrary.html`,
+        "/macrosLibrary.html": `chrome-extension://${extension.id}/views/macrosLibrary.html`,
+    };
 
     const shellSettings = loadShellSettings(instanceDir);
     const settings = shellSettings.user;
@@ -528,6 +539,129 @@ async function initialize() {
 
     ipcMain.on("send-to-browser-ipc", async (_, data: WebSocketMessageV2) => {
         await BrowserAgentIpc.getinstance().send(data);
+    });
+
+    // Extension service adapter IPC handlers - CRITICAL: Must handle async response waiting
+    ipcMain.handle("browser-extension-message", async (_, message) => {
+        try {
+            // Route message through browser IPC to TypeAgent backend
+            const browserIpc = BrowserAgentIpc.getinstance();
+
+            // Create a promise to wait for the WebSocket response
+            return new Promise((resolve, reject) => {
+                const messageId = Date.now().toString();
+
+                // Set up one-time response listener
+                const originalHandler = browserIpc.onMessageReceived;
+                browserIpc.onMessageReceived = (response) => {
+                    if (response.id === messageId) {
+                        // Restore original handler
+                        browserIpc.onMessageReceived = originalHandler;
+
+                        // Extract the actual data from the ActionResult if it's an extension message
+                        let result = response.result || response;
+                        if (result && result.data !== undefined) {
+                            // This is likely an ActionResult with data field containing the actual extension response
+                            result = result.data;
+                        }
+
+                        resolve(result);
+                    } else if (originalHandler) {
+                        // Forward other messages to original handler
+                        originalHandler(response);
+                    }
+                };
+
+                // Send the message directly using the method/params from the message
+                browserIpc
+                    .send({
+                        method: message.method || message.type,
+                        params: message.params || message.parameters || message,
+                        id: messageId,
+                    })
+                    .catch(reject);
+
+                // Set timeout to prevent hanging
+                setTimeout(() => {
+                    browserIpc.onMessageReceived = originalHandler;
+                    const method = message.method || message.type || "unknown";
+                    const messageInfo = JSON.stringify({
+                        method,
+                        messageId,
+                        hasParams: !!(message.params || message.parameters),
+                    });
+                    reject(
+                        new Error(`Extension message timeout - ${messageInfo}`),
+                    );
+                }, 30000);
+            });
+        } catch (error) {
+            return { error: (error as Error).message };
+        }
+    });
+
+    // Storage handlers (simple local storage simulation)
+    const extensionStorage = new Map<string, any>();
+
+    ipcMain.handle("extension-storage-get", async (_, keys: string[]) => {
+        const result: Record<string, any> = {};
+        for (const key of keys) {
+            if (extensionStorage.has(key)) {
+                result[key] = extensionStorage.get(key);
+            }
+        }
+        return result;
+    });
+
+    ipcMain.handle(
+        "extension-storage-set",
+        async (_, items: Record<string, any>) => {
+            for (const [key, value] of Object.entries(items)) {
+                extensionStorage.set(key, value);
+            }
+            return { success: true };
+        },
+    );
+
+    // Direct WebSocket connection check via browserIPC
+    ipcMain.handle("check-websocket-connection", async () => {
+        try {
+            const browserIpc = BrowserAgentIpc.getinstance();
+            const connected = browserIpc.isConnected();
+            return { connected };
+        } catch (error) {
+            return { connected: false };
+        }
+    });
+
+    // PDF viewer IPC handlers
+    ipcMain.handle("check-typeagent-connection", async () => {
+        const shellWindow = ShellWindow.getInstance();
+        if (shellWindow) {
+            const connected = await shellWindow.checkTypeAgentConnection();
+            return { connected };
+        }
+        return { connected: false };
+    });
+
+    ipcMain.handle("open-pdf-viewer", async (_, pdfUrl: string) => {
+        const shellWindow = ShellWindow.getInstance();
+        if (shellWindow) {
+            try {
+                await shellWindow.openPDFViewer(pdfUrl);
+                return { success: true };
+            } catch (error) {
+                debugShellError("Error opening PDF viewer:", error);
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error",
+                };
+            }
+        }
+        return { success: false, error: "Shell window not available" };
     });
 
     app.on("activate", async function () {
