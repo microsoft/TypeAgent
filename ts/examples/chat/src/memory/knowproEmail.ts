@@ -21,7 +21,6 @@ import {
     loadEmailMemory,
     memoryNameToIndexPath,
 } from "./knowproCommon.js";
-import chalk from "chalk";
 
 export type KnowProEmailContext = {
     printer: KnowProPrinter;
@@ -138,7 +137,7 @@ export async function createKnowproEmailCommands(
             const result = await emailMemory.buildIndex(eventHandler);
             clock.stop();
             progress.complete();
-            context.printer.writeTiming(chalk.gray, clock, "Build index");
+            context.printer.writeTiming(clock, "Build index");
             if (!result.success) {
                 context.printer.writeError(result.message);
                 return;
@@ -179,7 +178,7 @@ export async function createKnowproEmailCommands(
         );
         clock.stop();
         if (context.email) {
-            context.printer.writeTiming(chalk.gray, clock);
+            context.printer.writeTiming(clock);
         } else {
             // Memory not found. Create a new one
             context.email = await loadEmailMemory(emailIndexPath, true);

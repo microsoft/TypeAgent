@@ -149,11 +149,15 @@ export class ChalkWriter extends ConsoleWriter {
         return this;
     }
 
-    public writeTiming(color: ChalkInstance, clock: StopWatch, label?: string) {
+    public writeTiming(
+        clock: StopWatch,
+        label?: string,
+        color?: ChalkInstance,
+    ) {
         const timing = label
             ? `${label}: ${clock.elapsedString()}`
             : clock.elapsedString();
-        this.writeInColor(color, timing);
+        this.writeInColor(color ?? chalk.gray, timing);
         return this;
     }
 

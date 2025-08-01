@@ -193,6 +193,39 @@ export type MarkdownKnowledgeBlock = {
     knowledge: kpLib.KnowledgeResponse;
 };
 
+export type KnowledgeMarkdownTypes =
+    | "blockquote"
+    | "code"
+    | "codespan"
+    | "em"
+    | "heading"
+    | "image"
+    | "link"
+    | "list"
+    | "strong"
+    | "table";
+
+export type KnowledgeCollectionOptions = {
+    tagTokens: Set<KnowledgeMarkdownTypes>; // Extract tags for these token types
+};
+
+export function createKnowledgeCollectionOptions(): KnowledgeCollectionOptions {
+    return {
+        tagTokens: new Set([
+            "blockquote",
+            "code",
+            "codespan",
+            "em",
+            "heading",
+            "image",
+            "link",
+            "list",
+            "strong",
+            "table",
+        ]),
+    };
+}
+
 /**
  * Parses the given markdown text and chunks it at logical boundaries.
  * @param markdown markdown string
@@ -202,8 +235,11 @@ export type MarkdownKnowledgeBlock = {
 export function textAndKnowledgeBlocksFromMarkdown(
     markdown: string | md.TokensList,
     maxChunkLength?: number,
+    knowledgeOptions?: KnowledgeCollectionOptions,
 ): [string[], MarkdownKnowledgeBlock[]] {
-    const knowledgeCollector = new MarkdownKnowledgeCollector();
+    const knowledgeCollector = new MarkdownKnowledgeCollector(
+        knowledgeOptions ?? createKnowledgeCollectionOptions(),
+    );
     const textBlocks = textBlocksFromMarkdown(
         markdown,
         knowledgeCollector,
@@ -227,7 +263,7 @@ export class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
 
     private lastToken: md.Token | undefined;
 
-    constructor() {
+    constructor(public options: KnowledgeCollectionOptions) {
         this.knowledgeBlocks = [];
         this.headingsInScope = new Map<number, string>();
         this.linksInScope = new Map<string, string>();
@@ -241,50 +277,35 @@ export class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
         switch (token.type) {
             default:
                 break;
-            case "heading":
-                const heading = token as md.Tokens.Heading;
-                this.onHeading(heading.text, heading.depth);
-                break;
             case "codespan":
+                this.onCodeSpan(token as md.Tokens.Codespan);
+                break;
             case "code":
-                this.knowledgeBlock.tags.add("code");
+                this.onCode(token as md.Tokens.Code);
                 break;
-            case "list":
-                const listName = this.getPrecedingHeading();
-                if (listName) {
-                    this.addEntityAndTag({
-                        name: listName,
-                        type: ["list"],
-                    });
-                } else {
-                    this.knowledgeBlock.tags.add("list");
-                }
+            case "em":
+                this.onEmphasis(token.text);
                 break;
-            case "table":
-                const tableName = this.getPrecedingHeading();
-                if (tableName) {
-                    this.addEntityAndTag({
-                        name: tableName,
-                        type: ["table"],
-                    });
-                } else {
-                    this.knowledgeBlock.tags.add("table");
-                }
+            case "image":
+                this.onImage(token as md.Tokens.Image);
+                break;
+            case "heading":
+                this.onHeading(token as md.Tokens.Heading);
+                break;
+            case "image":
+                this.onImage(token as md.Tokens.Image);
                 break;
             case "link":
-                const link = token as md.Tokens.Link;
-                this.onLink(link.text, link.href);
+                this.onLink(token as md.Tokens.Link);
+                break;
+            case "list":
+                this.onList(token as md.Tokens.List);
+                break;
+            case "table":
+                this.onTable(token as md.Tokens.Table);
                 break;
             case "strong":
-            case "em":
-                let text: string = token.text;
-                if (!(text.startsWith("__") || text.startsWith("**"))) {
-                    // Auto promote to topics
-                    this.knowledgeBlock.knowledge.topics.push(text);
-                    this.knowledgeBlock.knowledge.entities.push(
-                        emphasisToEntity(text),
-                    );
-                }
+                this.onEmphasis(token.text);
                 break;
         }
         this.lastToken = token;
@@ -300,7 +321,9 @@ export class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
         this.linksInScope.clear();
     }
 
-    onHeading(headingText: string, level: number): void {
+    onHeading(heading: md.Tokens.Heading): void {
+        const headingText = heading.text;
+        const level = heading.depth;
         // Any heading level > level is no longer in scope
         const curLevels = [...this.headingsInScope.keys()];
         for (const hLevel of curLevels) {
@@ -311,8 +334,71 @@ export class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
         this.headingsInScope.set(level, headingText);
     }
 
-    onLink(text: string, url: string): void {
-        this.linksInScope.set(text, url);
+    onBlockQuote(block: md.Tokens.Blockquote): void {
+        const blockName = this.getPrecedingHeading();
+        if (blockName) {
+            this.addEntityAndTag(blockQuoteToEntity(blockName), block.type);
+        } else {
+            this.addTag("block", block.type);
+        }
+    }
+
+    onCode(code: md.Tokens.Code): void {
+        const blockName = this.getPrecedingHeading();
+        if (blockName) {
+            this.addEntityAndTag(
+                codeBlockToEntity(blockName, code.lang),
+                code.type,
+            );
+        } else {
+            this.addTag("code", code.type);
+        }
+    }
+
+    onCodeSpan(code: md.Tokens.Codespan): void {
+        const blockName = this.getPrecedingHeading();
+        if (blockName) {
+            this.addEntityAndTag(codeBlockToEntity(blockName), code.type);
+        } else {
+            this.addTag("code", code.type);
+        }
+    }
+
+    onLink(link: md.Tokens.Link): void {
+        this.linksInScope.set(link.text, link.href);
+    }
+
+    onImage(image: md.Tokens.Image): void {
+        this.addEntityAndTag(
+            imageToEntity(image.title, image.href),
+            image.type,
+        );
+    }
+
+    onList(list: md.Tokens.List): void {
+        const listName = this.getPrecedingHeading();
+        if (listName) {
+            this.addEntityAndTag(listToEntity(listName), list.type);
+        } else {
+            this.addTag("list", list.type);
+        }
+    }
+
+    onTable(table: md.Tokens.Table): void {
+        const tableName = this.getPrecedingHeading();
+        if (tableName) {
+            this.addEntityAndTag(tableToEntity(tableName), table.type);
+        } else {
+            this.addTag("table", table.type);
+        }
+    }
+
+    onEmphasis(text: string): void {
+        if (!(text.startsWith("__") || text.startsWith("**"))) {
+            // Automatically make any emphasized text into to topics
+            this.knowledgeBlock.knowledge.topics.push(text);
+            this.addEntity(emphasisToEntity(text));
+        }
     }
 
     onBlockEnd(): void {
@@ -325,7 +411,7 @@ export class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
         this.knowledgeBlocks.push(this.knowledgeBlock);
     }
 
-    private addHeadingsToKnowledgeBlock() {
+    protected addHeadingsToKnowledgeBlock() {
         // Include top K headings in scope.. as topics, entities
         const topK = 2;
         let headingLevelsInScope = [...this.headingsInScope.keys()].sort(
@@ -337,26 +423,46 @@ export class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
             const headerLevel = headingLevelsInScope[i];
             const headingText = this.headingsInScope.get(headerLevel)!;
             this.knowledgeBlock.knowledge.topics.push(headingText);
-
-            const headingEntity = headingToEntity(headingText, headerLevel);
-            this.addEntityAndTag(headingEntity);
+            this.addEntityAndTag(
+                headingToEntity(headingText, headerLevel),
+                "heading",
+            );
         }
     }
 
-    private addEntityAndTag(entity: kpLib.ConcreteEntity): void {
-        this.knowledgeBlock.knowledge.entities.push(entity);
-        // Experimental: structured Tags
-        this.knowledgeBlock.sTags.push({ ...entity });
+    protected addLinksToKnowledgeBlock(): void {
+        for (const linkText of this.linksInScope.keys()) {
+            this.addEntityAndTag(
+                linkToEntity(linkText, this.linksInScope.get(linkText)!),
+                "link",
+            );
+        }
     }
 
-    private addLinksToKnowledgeBlock(): void {
-        //
-        // Also include all links
-        //
-        for (const linkText of this.linksInScope.keys()) {
-            this.knowledgeBlock.knowledge.entities.push(
-                linkToEntity(linkText, this.linksInScope.get(linkText)!),
-            );
+    protected addEntityAndTag(
+        entity: kpLib.ConcreteEntity,
+        tokenType: string,
+    ): void {
+        this.addEntity(entity);
+        if (this.options.tagTokens.has(tokenType as KnowledgeMarkdownTypes)) {
+            this.addTag({ ...entity });
+        }
+    }
+
+    protected addEntity(entity: kpLib.ConcreteEntity): void {
+        this.knowledgeBlock.knowledge.entities.push(entity);
+    }
+
+    protected addTag(
+        tag: kpLib.ConcreteEntity | string,
+        tokenType?: KnowledgeMarkdownTypes,
+    ): void {
+        if (tokenType === undefined || this.options.tagTokens.has(tokenType)) {
+            if (typeof tag === "string") {
+                this.knowledgeBlock.tags.add(tag);
+            } else {
+                this.knowledgeBlock.sTags.push(tag);
+            }
         }
     }
 
@@ -365,6 +471,27 @@ export class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
             ? this.lastToken.text
             : undefined;
     }
+}
+
+export function blockQuoteToEntity(name: string): kpLib.ConcreteEntity {
+    return {
+        name,
+        type: ["block"],
+    };
+}
+
+export function codeBlockToEntity(
+    name: string,
+    lang?: string,
+): kpLib.ConcreteEntity {
+    const entity: kpLib.ConcreteEntity = {
+        name,
+        type: ["code"],
+    };
+    if (lang) {
+        entity.facets = [{ name: "lang", value: lang }];
+    }
+    return entity;
 }
 
 export function headingToEntity(
@@ -386,6 +513,32 @@ export function linkToEntity(
         name: linkText,
         type: ["link", "url"],
         facets: [{ name: "url", value: url }],
+    };
+}
+
+export function imageToEntity(
+    name: string | undefined | null,
+    url: string,
+): kpLib.ConcreteEntity {
+    name ??= url;
+    return {
+        name,
+        type: ["image"],
+        facets: [{ name: "url", value: url }],
+    };
+}
+
+export function listToEntity(listName: string): kpLib.ConcreteEntity {
+    return {
+        name: listName,
+        type: ["list"],
+    };
+}
+
+export function tableToEntity(tableName: string): kpLib.ConcreteEntity {
+    return {
+        name: tableName,
+        type: ["table"],
     };
 }
 

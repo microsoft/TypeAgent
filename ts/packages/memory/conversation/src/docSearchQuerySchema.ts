@@ -12,7 +12,7 @@ export type FacetTerm = {
 
 // Use to find information about specific, tangible people, places, institutions, things and document parts only.
 // This includes entities with particular facets
-// Document parts like headings, sections , links, lists etc. are ENTITIES with facets.
+// Document parts like headings, sections , links, lists etc. are named ENTITIES with facets.
 // Abstract concepts or topics are not entities.
 // Any terms will match fuzzily.
 export type EntityTerm = {

@@ -58,6 +58,10 @@ export class KnowproContext {
         return this.conversation!;
     }
 
+    public createMemorySettings(): cm.MemorySettings {
+        return cm.createMemorySettings(64, undefined, this.knowledgeModel);
+    }
+
     private completionHandler(request: any, response: any): void {
         this.updateTokenCounts(response.usage);
         if (this.promptHandler) {

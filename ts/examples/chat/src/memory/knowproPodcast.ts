@@ -26,7 +26,6 @@ import {
 } from "./knowproCommon.js";
 import { argDestFile, argToDate, copyFileToDir } from "../common.js";
 import { ensureDir, getAbsolutePath, getFileName } from "typeagent";
-import chalk from "chalk";
 
 export type KnowproPodcastContext = {
     printer: KnowProPrinter;
@@ -134,7 +133,7 @@ export async function createKnowproPodcastCommands(
             getFileName(namedArgs.filePath),
         );
         clock.stop();
-        context.printer.writeTiming(chalk.gray, clock, "Write to file");
+        context.printer.writeTiming(clock, "Write to file");
     }
 
     commands.kpPodcastLoad.metadata = kpTest.podcastLoadDef();
@@ -143,7 +142,7 @@ export async function createKnowproPodcastCommands(
         clock.start();
         const loadResult = await kpTest.execLoadPodcast(kpContext, args);
         clock.stop();
-        context.printer.writeTiming(chalk.gray, clock, "Load podcast");
+        context.printer.writeTiming(clock, "Load podcast");
         if (!loadResult.success) {
             context.printer.writeError(loadResult.message);
             return;
@@ -203,7 +202,7 @@ export async function createKnowproPodcastCommands(
 
             clock.stop();
             progress.complete();
-            context.printer.writeTiming(chalk.gray, clock);
+            context.printer.writeTiming(clock);
             context.printer.writeIndexingResults(indexResult);
         } finally {
             context.podcast.messages = originalMessages;
