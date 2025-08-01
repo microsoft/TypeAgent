@@ -17,7 +17,7 @@
     "./agent/handlers": "./dist/agent/playerHandlers.js"
   },
   "scripts": {
-    "asc": "asc -i ./src/agent/playerSchema.ts -o ./dist/agent/playerSchema.pas.json -t PlayerAction",
+    "asc": "asc -i ./src/agent/playerSchema.ts -o ./dist/agent/playerSchema.pas.json -t PlayerActions -e PlayerEntities",
     "build": "concurrently npm:tsc npm:asc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "tsc": "tsc -p src"

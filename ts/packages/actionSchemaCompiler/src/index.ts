@@ -36,10 +36,15 @@ export default class Compile extends Command {
             required: true,
             char: "o",
         }),
-        schemaType: Flags.string({
-            description: "Entry type name for the schema",
+        actionType: Flags.string({
+            description: "Entry type name for the action schemas",
             required: true,
             char: "t",
+        }),
+        entityType: Flags.string({
+            description: "Entity type name for the entity types",
+            required: false,
+            char: "e",
         }),
     };
 
@@ -48,10 +53,16 @@ export default class Compile extends Command {
 
         const name = path.basename(flags.input);
 
+        const type = flags.entityType
+            ? {
+                  action: flags.actionType,
+                  entity: flags.entityType,
+              }
+            : flags.actionType;
         const actionSchemaFile = parseActionSchemaSource(
             fs.readFileSync(flags.input, "utf-8"),
             name,
-            flags.schemaType,
+            type,
             flags.input,
             getSchemaConfig(flags.input),
             true,

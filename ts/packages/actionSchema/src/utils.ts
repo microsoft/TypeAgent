@@ -88,17 +88,6 @@ export function getPropertyType(
     return getPropertyPartType(type, propertyName.split("."));
 }
 
-// Return the type of the property.  If the property type is a type-reference, it will be resolved.
-// Unresolved type references are ignored.
-// Type Union is not supported.
-export function getPropertyResolvedType(
-    type: SchemaType,
-    propertyName: string,
-): SchemaType | undefined {
-    const propertyType = getPropertyPartType(type, propertyName.split("."));
-    return propertyType ? resolveTypeReference(propertyType) : undefined;
-}
-
 // Unresolved type references are ignored.
 // Type Union is not supported.
 export function getParameterNames(
@@ -110,17 +99,19 @@ export function getParameterNames(
         return [];
     }
     const pending: Array<[string, SchemaType]> = [["parameters", parameters]];
-    const result: string[] = [];
+    const result = new Set<string>();
     while (true) {
         const next = pending.pop();
         if (next === undefined) {
-            return result;
+            return Array.from(result);
         }
 
         const [name, field] = next;
         switch (field.type) {
             case "type-union":
-                // TODO: Implement this case
+                for (const type of field.types) {
+                    pending.push([name, type]);
+                }
                 break;
             case "type-reference":
                 if (field.definition) {
@@ -140,7 +131,8 @@ export function getParameterNames(
                 }
                 break;
             default:
-                result.push(name);
+                result.add(name);
+                break;
         }
     }
 }

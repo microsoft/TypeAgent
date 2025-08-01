@@ -260,18 +260,6 @@ export function getEntityPropertyTypeName(
         actionName,
         actionSchemaFile,
     );
-    return resolveEntityPropertyTypeName(
-        actionParametersType,
-        paramName,
-        entitySchemas,
-    );
-}
-
-export function resolveEntityPropertyTypeName(
-    actionParametersType: ActionParamType,
-    paramName: string,
-    entitySchemas: Map<string, ActionSchemaEntityTypeDefinition>,
-) {
     const parameterType = getPropertyType(actionParametersType, paramName);
     if (parameterType === undefined) {
         throw new Error(`Unable to get type for parameter ${paramName}`);
@@ -282,14 +270,22 @@ export function resolveEntityPropertyTypeName(
             `Unable to resolve type reference for parameter ${paramName}`,
         );
     }
-    // resolve union type pretending to be a string value for wildcard.
-    // REVIEW: what if the union type include empty string?
-    const resolvedType = resolveUnionType(
+
+    return resolveEntityTypeName(
         parameterType,
         resolvedParameterType,
-        "",
+        entitySchemas,
     );
+}
 
+export function resolveEntityTypeName(
+    type: ActionParamType,
+    resolved: ActionResolvedParamType,
+    entitySchemas: Map<string, ActionSchemaEntityTypeDefinition>,
+) {
+    // resolve union type pretending to be a string value for wildcard.
+    // REVIEW: what if the union type include empty string?
+    const resolvedType = resolveUnionType(type, resolved, "");
     if (resolvedType === undefined) {
         return undefined;
     }
@@ -764,7 +760,7 @@ async function getParameterEntities(
     }
 }
 
-function getActionParametersType(
+export function getActionParametersType(
     actionName: string,
     actionSchemaFile: ActionSchemaFile,
 ): ActionParamObject {
