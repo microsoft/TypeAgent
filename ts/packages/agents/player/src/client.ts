@@ -9,7 +9,7 @@ import {
     PlayAlbumAction,
     PlayFromCurrentTrackListAction,
     PlayArtistAction,
-    PlayerAction,
+    PlayerActions,
     PlayGenreAction,
     PlayRandomAction,
     PlayTrackAction,
@@ -725,7 +725,7 @@ export function getUserDataStrings(clientContext: IClientContext) {
 }
 
 export async function handleCall(
-    action: TypeAgentAction<PlayerAction>,
+    action: TypeAgentAction<PlayerActions>,
     clientContext: IClientContext,
     actionIO: ActionIO,
     instanceStorage?: Storage,
@@ -799,6 +799,7 @@ export async function handleCall(
             return setDefaultDeviceAction(
                 clientContext,
                 action.parameters.deviceName,
+                instanceStorage,
             );
         case "showSelectedDevice": {
             return showSelectedDeviceAction(clientContext);

@@ -12,6 +12,7 @@ import {
     AppAgentEvent,
     DynamicDisplay,
     TypeAgentAction,
+    ResolveEntityResult,
 } from "@typeagent/agent-sdk";
 import { createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
 import { searchTracks } from "../client.js";
@@ -24,8 +25,10 @@ import {
     toQueryString,
     searchAlbums,
 } from "../search.js";
-import { PlayerAction } from "./playerSchema.js";
+import { PlayerActions } from "./playerSchema.js";
 import registerDebug from "debug";
+import { resolveMusicDeviceEntity } from "../devices.js";
+import { getDevices } from "../endpoints.js";
 
 const debugSpotify = registerDebug("typeagent:spotify");
 
@@ -35,6 +38,7 @@ export function instantiate(): AppAgent {
         updateAgentContext: updatePlayerContext,
         executeAction: executePlayerAction,
         validateWildcardMatch: validatePlayerWildcardMatch,
+        resolveEntity: resolvePlayerEntity,
         getDynamicDisplay: getPlayerDynamicDisplay,
         ...getPlayerCommandInterface(),
         getActionCompletion: getPlayerActionCompletion,
@@ -52,7 +56,7 @@ async function initializePlayerContext() {
 }
 
 async function executePlayerAction(
-    action: TypeAgentAction<PlayerAction>,
+    action: TypeAgentAction<PlayerActions>,
     context: ActionContext<PlayerActionContext>,
 ) {
     const clientContext = context.sessionContext.agentContext.spotify;
@@ -123,7 +127,7 @@ export async function disableSpotify(
 }
 
 async function validatePlayerWildcardMatch(
-    action: PlayerAction,
+    action: PlayerActions,
     context: SessionContext<PlayerActionContext>,
 ) {
     const clientContext = context.agentContext.spotify;
@@ -155,6 +159,22 @@ async function validatePlayerWildcardMatch(
             return false;
     }
     return true;
+}
+
+async function resolvePlayerEntity(
+    type: string,
+    name: string,
+    context: SessionContext<PlayerActionContext>,
+): Promise<ResolveEntityResult | undefined> {
+    const clientContext = context.agentContext.spotify;
+    if (clientContext === undefined) {
+        return undefined;
+    }
+    switch (type) {
+        case "MusicDevice":
+            return resolveMusicDeviceEntity(clientContext, name);
+    }
+    return undefined;
 }
 
 async function validateTrack(
@@ -269,17 +289,31 @@ async function getPlayerDynamicDisplay(
 }
 
 async function getPlayerActionCompletion(
+    context: SessionContext<PlayerActionContext>,
     action: AppAction,
     propertyName: string,
-    context: SessionContext<PlayerActionContext>,
+    entityType?: string,
 ): Promise<string[]> {
+    const result: string[] = [];
     const clientContext = context.agentContext.spotify;
     if (clientContext === undefined) {
-        return [];
+        return result;
     }
+
+    if (entityType === "MusicDevice") {
+        const devices = await getDevices(clientContext.service);
+        if (devices !== undefined) {
+            result.push(
+                ...devices.devices
+                    .filter((device) => device.id !== null)
+                    .map((device) => device.name),
+            );
+        }
+    }
+
     const userData = clientContext.userData;
     if (userData === undefined) {
-        return [];
+        return result;
     }
 
     let track = false;
@@ -311,7 +345,6 @@ async function getPlayerActionCompletion(
             break;
     }
 
-    const result: string[] = [];
     if (track) {
         for (const track of userData.data.tracks.values()) {
             result.push(track.name);

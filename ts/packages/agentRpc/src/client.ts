@@ -563,14 +563,16 @@ export async function createAgentRpcClient(
             });
         },
         getActionCompletion(
+            context: SessionContext<ShimContext>,
             partialAction,
             propertyName,
-            context: SessionContext<ShimContext>,
+            entityTypeName,
         ) {
             return rpc.invoke("getActionCompletion", {
                 ...getContextParam(context),
                 partialAction,
                 propertyName,
+                entityTypeName,
             });
         },
     };

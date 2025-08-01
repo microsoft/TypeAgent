@@ -227,9 +227,10 @@ export function createAgentRpcServer(
                 throw new Error("Invalid invocation of getActionCompletion");
             }
             return agent.getActionCompletion(
+                getSessionContextShim(param),
                 param.partialAction,
                 param.propertyName,
-                getSessionContextShim(param),
+                param.entityTypeName,
             );
         },
     };

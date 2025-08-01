@@ -202,13 +202,14 @@ export type AgentInvokeFunctions = {
             data: unknown;
             propertyName: string;
         },
-    ): Promise<string[]>;
+    ): Promise<string[] | undefined>;
     getActionCompletion(
         param: Partial<ContextParams> & {
             partialAction: AppAction;
             propertyName: string;
+            entityTypeName: string | undefined;
         },
-    ): Promise<string[]>;
+    ): Promise<string[] | undefined>;
 };
 
 export type ContextParams = {

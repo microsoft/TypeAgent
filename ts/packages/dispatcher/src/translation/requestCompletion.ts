@@ -5,8 +5,20 @@ import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import registerDebug from "debug";
 import { getHistoryContextForTranslation } from "./translateRequest.js";
 import { ExecutableAction, getPropertyInfo } from "agent-cache";
+import { CompletionGroup, TypeAgentAction } from "@typeagent/agent-sdk";
+import { DeepPartialUndefined } from "common-utils";
+import {
+    ActionParamType,
+    ActionResolvedParamType,
+    getPropertyType,
+    resolveTypeReference,
+} from "action-schema";
 import { getAppAgentName } from "./agentTranslators.js";
-import { CompletionGroup } from "@typeagent/agent-sdk";
+import {
+    getActionParametersType,
+    resolveEntityTypeName,
+} from "../execute/pendingActions.js";
+
 const debugCompletion = registerDebug("typeagent:request:completion");
 const debugCompletionError = registerDebug(
     "typeagent:request:completion:error",
@@ -90,7 +102,7 @@ export async function requestCompletion(
             if (queryPropertyNames.length === 0) {
                 continue; // No single-part properties to complete
             }
-            await getActionCompletion(
+            await collectActionCompletions(
                 queryPropertyNames,
                 result.match.actions,
                 context,
@@ -111,7 +123,7 @@ export async function requestCompletion(
     return completions;
 }
 
-async function getActionCompletion(
+async function collectActionCompletions(
     properties: string[],
     partialActions: ExecutableAction[],
     context: CommandHandlerContext,
@@ -122,36 +134,95 @@ async function getActionCompletion(
             propertyName,
             partialActions,
         );
-        if (
-            parameterName === undefined ||
-            action?.schemaName === undefined ||
-            action?.actionName === undefined
-        ) {
-            // The part is for the fullActionName, or the action doesn't have a schema or action name yet.
-            // Can't do completion for this part.
+
+        if (parameterName === undefined) {
+            // The part is for the fullActionName, can't do completion for this part.
             continue;
         }
 
-        const appAgentName = getAppAgentName(action.schemaName);
-        const agent = context.agents.getAppAgent(appAgentName);
-        const sessionContext = context.agents.getSessionContext(appAgentName);
+        const paramCompletion = await getActionParamCompletion(
+            context,
+            action,
+            parameterName,
+        );
+
+        if (paramCompletion !== undefined) {
+            propertyCompletions.set(propertyName, {
+                name: `property ${propertyName}`,
+                completions: paramCompletion,
+                needQuotes: false, // Request completions are partial, no quotes needed
+            });
+        }
+    }
+}
+
+export async function getActionParamCompletion(
+    systemContext: CommandHandlerContext,
+    partialAction: DeepPartialUndefined<TypeAgentAction>,
+    parameterName: string,
+): Promise<string[] | undefined> {
+    const { schemaName, actionName } = partialAction;
+    if (schemaName === undefined || actionName === undefined) {
+        return undefined;
+    }
+
+    debugCompletion(
+        `Getting action completion for ${schemaName}.${actionName} parameter ${parameterName}`,
+    );
+
+    // Having action schema means it is a FullAction
+    const action = partialAction as TypeAgentAction;
+    let actionCompletion: string[] | undefined;
+    let fieldType: ActionParamType | undefined;
+    let resolvedFieldType: ActionResolvedParamType | undefined;
+    let literalCompletion: string[] | undefined;
+
+    const agents = systemContext.agents;
+    const actionSchemaFile = agents.tryGetActionSchemaFile(schemaName);
+    if (actionSchemaFile !== undefined) {
+        const actionParametersType = getActionParametersType(
+            actionName,
+            actionSchemaFile,
+        );
+        fieldType = getPropertyType(actionParametersType, parameterName);
+        resolvedFieldType = resolveTypeReference(fieldType);
+        switch (resolvedFieldType?.type) {
+            case "string-union":
+                literalCompletion = [...resolvedFieldType.typeEnum];
+                break;
+            case "type-union":
+                const literals = [];
+                for (const type of resolvedFieldType.types) {
+                    if (type.type === "string-union") {
+                        literals.push(...type.typeEnum);
+                    }
+                }
+                literalCompletion = literals.length > 0 ? literals : undefined;
+                break;
+        }
+    }
+
+    const appAgentName = getAppAgentName(schemaName);
+    const appAgent = agents.getAppAgent(appAgentName);
+    if (appAgent.getActionCompletion !== undefined) {
+        const entitySchemas =
+            actionSchemaFile?.parsedActionSchema.entitySchemas;
+        const entityTypeName =
+            fieldType && resolvedFieldType && entitySchemas
+                ? resolveEntityTypeName(
+                      fieldType,
+                      resolvedFieldType,
+                      entitySchemas,
+                  )
+                : undefined;
+        const sessionContext = agents.getSessionContext(appAgentName);
         try {
-            debugCompletion(
-                `Getting action completion for ${action.schemaName}.${action.actionName} parameter ${parameterName}`,
-            );
-            const paramCompletion = await agent.getActionCompletion?.(
+            actionCompletion = await appAgent.getActionCompletion(
+                sessionContext,
                 action,
                 `parameters.${parameterName}`,
-                sessionContext,
+                entityTypeName,
             );
-
-            if (paramCompletion !== undefined) {
-                propertyCompletions.set(propertyName, {
-                    name: `property ${propertyName}`,
-                    completions: paramCompletion,
-                    needQuotes: false, // Request completions are partial, no quotes needed
-                });
-            }
         } catch (e: any) {
             // If the agent completion fails, just ignore it.
             debugCompletionError(
@@ -159,4 +230,10 @@ async function getActionCompletion(
             );
         }
     }
+
+    return literalCompletion
+        ? actionCompletion
+            ? literalCompletion.concat(actionCompletion)
+            : literalCompletion
+        : actionCompletion;
 }

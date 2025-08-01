@@ -32,7 +32,6 @@ export { validateAction } from "./validate.js";
 // Utils for any schemas
 export {
     getPropertyType,
-    getPropertyResolvedType,
     getParameterNames,
     resolveTypeReference,
     resolveUnionType,
