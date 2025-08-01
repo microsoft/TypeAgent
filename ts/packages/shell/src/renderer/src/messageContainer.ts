@@ -308,6 +308,7 @@ export class MessageContainer {
         const actionContainer = document.createElement("div");
         actionContainer.className = "action-container";
         this.messageDiv.appendChild(actionContainer);
+        this.updateDivState();
 
         const actionCascade = new TemplateEditor(
             actionContainer,
@@ -320,6 +321,7 @@ export class MessageContainer {
             span.innerText = text;
             return span;
         };
+
         return new Promise((resolve) => {
             const confirm = () => {
                 const choices: InputChoice[] = [
@@ -596,7 +598,7 @@ export class MessageContainer {
         this.ensureMetricsDiv().ttsMetricsDiv.innerHTML = messages.join("<br>");
     }
 
-    public show() {
+    private show() {
         this.div.classList.remove("chat-message-hidden");
     }
     public hide() {
