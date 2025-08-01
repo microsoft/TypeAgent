@@ -61,7 +61,7 @@ def main():
     # Print data
     all_counters = sorted(
         {counter for data in table.values() for counter in data.keys()},
-        key=lambda x: table[all_files[0]].get(x, 0.0),
+        key=lambda x: statistics.mean(table[file].get(x, 0.0) for file in all_files),
         reverse=True,
     )
     for counter in all_counters:
