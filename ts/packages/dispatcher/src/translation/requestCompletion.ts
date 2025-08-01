@@ -18,7 +18,7 @@ import {
     getActionParametersType,
     resolveEntityTypeName,
 } from "../execute/pendingActions.js";
-import { WildcardMode } from "agent-cache";;
+import { WildcardMode } from "agent-cache";
 
 const debugCompletion = registerDebug("typeagent:request:completion");
 const debugCompletionError = registerDebug(
