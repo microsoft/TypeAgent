@@ -97,11 +97,14 @@ async function setVolumeAmount(
     id: string,
     actionIO: ActionIO,
 ) {
-    actionIO.appendDisplay({
-        type: "text",
-        kind: "status",
-        content: `Setting device '${name}' volume to ${volume} ...`,
-    });
+    actionIO.appendDisplay(
+        {
+            type: "text",
+            kind: "status",
+            content: `Setting device '${name}' volume to ${volume} ...`,
+        },
+        "temporary",
+    );
     await setVolume(service, id, volume);
     return createActionResult(`Device '${name}' volume set to ${volume}`);
 }
