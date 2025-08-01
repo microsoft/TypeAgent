@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { getDevices, getPlaybackState, transferPlayback } from "./endpoints.js";
+import { getDevices, getPlaybackState } from "./endpoints.js";
 import { IClientContext } from "./client.js";
 import chalk from "chalk";
 import { DisplayContent, ActionResultSuccess } from "@typeagent/agent-sdk";
@@ -157,52 +157,3 @@ export async function printStatus(context: IClientContext) {
     }
 }
 
-export async function selectDevice(keyword: string, context: IClientContext) {
-    const devices = await getDevices(context.service);
-
-    if (devices && devices.devices.length > 0) {
-        for (const device of devices.devices) {
-            if (
-                device.name.toLowerCase().includes(keyword.toLowerCase()) ||
-                device.type.toLowerCase().includes(keyword.toLowerCase())
-            ) {
-                let html = "";
-                const status = await getPlaybackState(context.service);
-                if (status) {
-                    if (status.device.id === device.id) {
-                        const text = `Device ${device.name} is already selected`;
-                        html += `<div>${text}</div>\n`;
-                        console.log(chalk.yellow(text));
-                        return { html, text };
-                    }
-                    await transferPlayback(
-                        context.service,
-                        device.id!,
-                        status.is_playing,
-                    );
-                }
-                context.deviceId = device.id!;
-                const text = `Selected device ${device.name} of type ${device.type}`;
-                html += `<div>${text}</div>\n`;
-                console.log(chalk.green(text));
-                return { html, text };
-            }
-        }
-    }
-}
-
-export async function listAvailableDevices(context: IClientContext) {
-    const devices = await getDevices(context.service);
-    if (devices && devices.devices.length > 0) {
-        let devHTML = "<div><div>Available Devices...</div><ul>\n";
-        let literalText = "Available devices:\n";
-        for (const device of devices.devices) {
-            const description = `${device.name} (${device.type})${device.is_active ? " [active]" : ""}`;
-            console.log(chalk.magenta(`Device ${description}`));
-            devHTML += `<li>${description}</li>\n`;
-            literalText += `    ${description}\n`;
-        }
-        devHTML += "</ul></div>";
-        return { html: devHTML, lit: literalText };
-    }
-}

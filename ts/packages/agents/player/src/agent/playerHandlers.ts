@@ -55,11 +55,13 @@ async function executePlayerAction(
     action: TypeAgentAction<PlayerAction>,
     context: ActionContext<PlayerActionContext>,
 ) {
-    if (context.sessionContext.agentContext.spotify) {
+    const clientContext = context.sessionContext.agentContext.spotify;
+    if (clientContext) {
         return handleCall(
             action,
-            context.sessionContext.agentContext.spotify,
+            clientContext,
             context.actionIO,
+            context.sessionContext.instanceStorage,
         );
     }
 

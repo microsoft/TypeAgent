@@ -3,7 +3,6 @@
 
 import path from "node:path";
 import {
-    ChangeVolumeAction,
     DeletePlaylistAction,
     GetFavoritesAction,
     GetPlaylistAction,
@@ -15,9 +14,6 @@ import {
     PlayRandomAction,
     PlayTrackAction,
     SearchTracksAction,
-    SelectDeviceAction,
-    SetVolumeAction,
-    ShuffleAction,
 } from "./agent/playerSchema.js";
 import { createTokenProvider } from "./defaultTokenProvider.js";
 import chalk from "chalk";
@@ -34,15 +30,11 @@ import { applyFilterExpr } from "./trackFilter.js";
 import {
     play,
     getUserProfile,
-    getDevices,
     search,
-    setVolume,
-    limitMax,
     getFavoriteTracks,
     createPlaylist,
     deletePlaylist,
     getPlaylists,
-    getPlaybackState,
     getPlaylistTracks,
     pause,
     next,
@@ -51,15 +43,9 @@ import {
     getQueue,
     getAlbum,
 } from "./endpoints.js";
-import {
-    htmlStatus,
-    listAvailableDevices,
-    printStatus,
-    selectDevice,
-} from "./playback.js";
+import { htmlStatus, printStatus } from "./playback.js";
 import { SpotifyService } from "./service.js";
 import { fileURLToPath } from "node:url";
-import { hostname } from "node:os";
 import {
     initializeUserData,
     mergeUserDataKind,
@@ -67,7 +53,7 @@ import {
     addUserDataStrings,
     UserData,
 } from "./userData.js";
-import registerDebug from "debug";
+
 import {
     ActionIO,
     DisplayContent,
@@ -89,9 +75,27 @@ import {
     getTrackFromEntity,
 } from "./search.js";
 import { toTrackObjectFull } from "./spotifyUtils.js";
-
-const debugSpotify = registerDebug("typeagent:spotify");
-const debugSpotifyError = registerDebug("typeagent:spotify:error");
+import { debugSpotify, debugSpotifyError } from "./debug.js";
+import {
+    LocalSettings,
+    RoamingSettings,
+    loadLocalSettings,
+    loadRoamingSettings,
+} from "./settings.js";
+import {
+    DeviceInfo,
+    ensureCurrentDeviceId,
+    getCurrentDevicePlaybackState,
+    listDevicesAction,
+    selectDeviceAction,
+    setDefaultDeviceAction,
+    showSelectedDeviceAction,
+} from "./devices.js";
+import {
+    changeVolumeAction,
+    setMaxVolumeAction,
+    setVolumeAction,
+} from "./volume.js";
 
 function createWarningActionResult(message: string) {
     debugSpotifyError(message);
@@ -122,13 +126,15 @@ function getTypeChatLanguageModel() {
 
 export interface IClientContext {
     service: SpotifyService;
-    deviceId?: string | undefined;
     currentTrackList?: ITrackCollection;
     lastTrackStartIndex?: number;
     lastTrackEndIndex?: number;
     trackListMap: Map<string, ITrackCollection>;
     trackListCount: number;
     userData?: UserData | undefined;
+    localSettings: LocalSettings;
+    roamingSettings: RoamingSettings;
+    currentDeviceInfo?: DeviceInfo | undefined;
 }
 
 async function printTrackNames(
@@ -360,17 +366,12 @@ export async function getClientContext(
         id: userdata?.id,
         username: userdata?.display_name,
     });
-    const devices = await getDevices(service);
-    let deviceId: string | undefined;
-    if (devices && devices.devices.length > 0) {
-        const activeDevice =
-            devices.devices.find((device) => device.is_active) ??
-            devices.devices.find((device) => device.name === hostname()) ??
-            devices.devices[0];
-        deviceId = activeDevice.id ?? undefined;
-    }
+
+    const roamingSettings = await loadRoamingSettings(instanceStorage);
+    const localSettings = await loadLocalSettings(instanceStorage);
     return {
-        deviceId,
+        localSettings,
+        roamingSettings,
         service,
         trackListMap: new Map<string, ITrackCollection>(),
         trackListCount: 0,
@@ -410,23 +411,19 @@ async function playTrackCollection(
     trackCollection: ITrackCollection,
     clientContext: IClientContext,
 ) {
-    if (clientContext.deviceId) {
-        const tracks = trackCollection.getTracks();
-        const uris = tracks.map((track) => track.uri);
-        console.log(chalk.cyanBright("Playing..."));
-        await printTrackNames(trackCollection, clientContext);
-        const actionResult = await htmlTrackNames(trackCollection, "Playing");
-        await play(
-            clientContext.service,
-            clientContext.deviceId,
-            uris,
-            trackCollection.getContext(),
-        );
-        return actionResult;
-    } else {
-        const message = "No active device found";
-        return createActionResultFromTextDisplay(chalk.red(message), message);
-    }
+    const deviceId = await ensureCurrentDeviceId(clientContext);
+    const tracks = trackCollection.getTracks();
+    const uris = tracks.map((track) => track.uri);
+    console.log(chalk.cyanBright("Playing..."));
+    await printTrackNames(trackCollection, clientContext);
+    const actionResult = await htmlTrackNames(trackCollection, "Playing");
+    await play(
+        clientContext.service,
+        deviceId,
+        uris,
+        trackCollection.getContext(),
+    );
+    return actionResult;
 }
 
 async function playRandomAction(
@@ -650,32 +647,16 @@ async function playGenreAction(
     return playTrackCollection(collection, clientContext);
 }
 
-function ensureClientId(state: SpotifyApi.CurrentPlaybackResponse) {
-    if (state.device.id !== null) {
-        return state.device.id;
-    }
-    console.log(
-        chalk.red(
-            `Current device '${state.device.name}' is a restricted device and cannot be controlled.`,
-        ),
-    );
-    return undefined;
-}
-
 async function resumeActionCall(clientContext: IClientContext) {
-    const state = await getPlaybackState(clientContext.service);
+    const state = await getCurrentDevicePlaybackState(clientContext);
     if (!state) {
         return createWarningActionResult("No active playback to resume");
-    }
-    const deviceId = ensureClientId(state);
-    if (deviceId === undefined) {
-        return createWarningActionResult("No device active");
     }
 
     if (state.is_playing) {
         console.log(chalk.yellow("Music already playing"));
     } else {
-        await play(clientContext.service, deviceId);
+        await play(clientContext.service, state.device.id!);
     }
     await printStatus(clientContext);
     const status = await htmlStatus(clientContext);
@@ -685,18 +666,14 @@ async function resumeActionCall(clientContext: IClientContext) {
 async function pauseActionCall(
     clientContext: IClientContext,
 ): Promise<ActionResult> {
-    const state = await getPlaybackState(clientContext.service);
+    const state = await getCurrentDevicePlaybackState(clientContext);
     if (!state) {
         return createWarningActionResult("No active playback to pause");
-    }
-    const deviceId = ensureClientId(state);
-    if (deviceId === undefined) {
-        return createWarningActionResult("No device active");
     }
     if (!state.is_playing) {
         console.log(chalk.yellow("Music already stopped."));
     } else {
-        await pause(clientContext.service, deviceId);
+        await pause(clientContext.service, state.device.id!);
     }
     await printStatus(clientContext);
     const statusHtml = await htmlStatus(clientContext);
@@ -704,50 +681,38 @@ async function pauseActionCall(
 }
 
 async function nextActionCall(clientContext: IClientContext) {
-    const state = await getPlaybackState(clientContext.service);
+    const state = await getCurrentDevicePlaybackState(clientContext);
     if (!state) {
         return createWarningActionResult("No active playback to move next to");
     }
-    const deviceId = ensureClientId(state);
-    if (deviceId === undefined) {
-        return createWarningActionResult("No device active");
-    }
 
-    await next(clientContext.service, deviceId);
+    await next(clientContext.service, state.device.id!);
     await printStatus(clientContext);
     const statusHtml = await htmlStatus(clientContext);
     return statusHtml;
 }
 
 async function previousActionCall(clientContext: IClientContext) {
-    const state = await getPlaybackState(clientContext.service);
+    const state = await getCurrentDevicePlaybackState(clientContext);
     if (!state) {
         return createWarningActionResult(
             "No active playback to move previous to",
         );
     }
-    const deviceId = ensureClientId(state);
-    if (deviceId === undefined) {
-        return createWarningActionResult("No device active");
-    }
 
-    await previous(clientContext.service, deviceId);
+    await previous(clientContext.service, state.device.id!);
     await printStatus(clientContext);
     const statusHtml = await htmlStatus(clientContext);
     return statusHtml;
 }
 
 async function shuffleActionCall(clientContext: IClientContext, on: boolean) {
-    const state = await getPlaybackState(clientContext.service);
+    const state = await getCurrentDevicePlaybackState(clientContext);
     if (!state) {
         return createWarningActionResult("No active playback to shuffle");
     }
-    const deviceId = ensureClientId(state);
-    if (deviceId === undefined) {
-        return createWarningActionResult("No device active");
-    }
 
-    await shuffle(clientContext.service, deviceId, on);
+    await shuffle(clientContext.service, state.device.id!, on);
     await printStatus(clientContext);
     const statusHtml = await htmlStatus(clientContext);
     return statusHtml;
@@ -763,6 +728,7 @@ export async function handleCall(
     action: TypeAgentAction<PlayerAction>,
     clientContext: IClientContext,
     actionIO: ActionIO,
+    instanceStorage?: Storage,
 ): Promise<ActionResult> {
     switch (action.actionName) {
         case "playRandom":
@@ -814,62 +780,47 @@ export async function handleCall(
             return previousActionCall(clientContext);
         }
         case "shuffle": {
-            const shuffleAction = action as ShuffleAction;
-            return shuffleActionCall(
-                clientContext,
-                shuffleAction.parameters.on,
-            );
+            return shuffleActionCall(clientContext, action.parameters.on);
         }
         case "resume": {
             return resumeActionCall(clientContext);
         }
         case "listDevices": {
-            const result = await listAvailableDevices(clientContext);
-            return result
-                ? createActionResultFromHtmlDisplay(result.html, result.lit)
-                : createErrorActionResult("No devices found");
+            return listDevicesAction(clientContext);
         }
         case "selectDevice": {
-            const selectDeviceAction = action as SelectDeviceAction;
-            const keyword = selectDeviceAction.parameters.keyword;
-            const result = await selectDevice(keyword, clientContext);
-            if (result) {
-                const { html, text } = result;
-                return createActionResultFromHtmlDisplay(html, text);
-            } else return createErrorActionResult("No devices found");
+            return selectDeviceAction(
+                clientContext,
+                action.parameters.deviceName,
+            );
+        }
+
+        case "setDefaultDevice":
+            return setDefaultDeviceAction(
+                clientContext,
+                action.parameters.deviceName,
+            );
+        case "showSelectedDevice": {
+            return showSelectedDeviceAction(clientContext);
         }
         case "setVolume": {
-            const setVolumeAction = action as SetVolumeAction;
-            let newVolumeLevel = setVolumeAction.parameters.newVolumeLevel;
-            if (newVolumeLevel > 50) {
-                newVolumeLevel = 50;
-            }
-            actionIO.setDisplay(
-                chalk.yellowBright(`setting volume to ${newVolumeLevel} ...`),
+            const newVolumeLevel = action.parameters.newVolumeLevel;
+            return setVolumeAction(clientContext, newVolumeLevel, actionIO);
+        }
+        case "setMaxVolume": {
+            return setMaxVolumeAction(
+                clientContext,
+                action.parameters.newMaxVolumeLevel,
+                actionIO,
+                instanceStorage,
             );
-            await setVolume(clientContext.service, newVolumeLevel);
-            return htmlStatus(clientContext);
         }
         case "changeVolume": {
-            const changeVolumeAction = action as ChangeVolumeAction;
-            const volumeChangeAmount =
-                changeVolumeAction.parameters.volumeChangePercentage;
-            const playback = await getPlaybackState(clientContext.service);
-            if (playback && playback.device) {
-                const volpct = playback.device.volume_percent || 50;
-                let nv = Math.floor(
-                    (1.0 + volumeChangeAmount / 100.0) * volpct,
-                );
-                if (nv > 50) {
-                    nv = 50;
-                }
-                actionIO.setDisplay(
-                    chalk.yellowBright(`setting volume to ${nv} ...`),
-                );
-                await setVolume(clientContext.service, nv);
-                return htmlStatus(clientContext);
-            }
-            return createErrorActionResult("No active device found");
+            return changeVolumeAction(
+                clientContext,
+                action.parameters.volumeChangePercentage,
+                actionIO,
+            );
         }
         case "searchTracks": {
             const searchTracksAction = action as SearchTracksAction;
@@ -928,7 +879,7 @@ export async function handleCall(
             let status: SpotifyApi.CurrentPlaybackResponse | undefined =
                 undefined;
             // get album of current playing track and load it as track collection
-            status = await getPlaybackState(clientContext.service);
+            status = await getCurrentDevicePlaybackState(clientContext);
             if (status && status.item && status.item.type === "track") {
                 const track = status.item as SpotifyApi.TrackObjectFull;
                 album = track.album;
@@ -946,7 +897,7 @@ export async function handleCall(
                 ) {
                     await play(
                         clientContext.service,
-                        clientContext.deviceId!,
+                        await ensureCurrentDeviceId(clientContext),
                         [],
                         album.uri,
                         status.item.track_number - 1,
@@ -969,11 +920,7 @@ export async function handleCall(
         }
         case "getFavorites": {
             const getFavoritesAction = action as GetFavoritesAction;
-            const countOption = getFavoritesAction.parameters?.count;
-            let count = limitMax;
-            if (countOption !== undefined) {
-                count = countOption;
-            }
+            const count = getFavoritesAction.parameters?.count;
             const tops = await getFavoriteTracks(clientContext.service, count);
             if (tops) {
                 const tracks = tops.map((pto) => pto.track!);
