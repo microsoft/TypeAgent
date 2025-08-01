@@ -15,8 +15,11 @@ export type PlayerAction =
     | PreviousAction
     | ShuffleAction
     | ListDevicesAction
+    | SetDefaultDeviceAction
     | SelectDeviceAction
+    | ShowSelectedDeviceAction
     | SetVolumeAction
+    | SetMaxVolumeAction
     | ChangeVolumeAction
     | SearchTracksAction
     | ListPlaylistsAction
@@ -116,13 +119,26 @@ export interface ListDevicesAction {
     actionName: "listDevices";
 }
 
+export interface SetDefaultDeviceAction {
+    actionName: "setDefaultDevice";
+    parameters: {
+        // keyword to match against device name.  If not specified, the current selected device is used.
+        deviceName?: string;
+    };
+}
+
 // select playback device by keyword
 export interface SelectDeviceAction {
     actionName: "selectDevice";
     parameters: {
         // keyword to match against device name
-        keyword: string;
+        deviceName: string;
     };
+}
+
+// show the selected playback device
+export interface ShowSelectedDeviceAction {
+    actionName: "showSelectedDevice";
 }
 
 // set volume
@@ -131,6 +147,15 @@ export interface SetVolumeAction {
     parameters: {
         // new volume level
         newVolumeLevel: number;
+    };
+}
+
+// set max volume for the current device
+export interface SetMaxVolumeAction {
+    actionName: "setMaxVolume";
+    parameters: {
+        // new volume level
+        newMaxVolumeLevel: number;
     };
 }
 

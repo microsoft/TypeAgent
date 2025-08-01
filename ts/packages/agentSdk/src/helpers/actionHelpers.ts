@@ -7,6 +7,7 @@ import {
     ActionResultSuccess,
     ActionResultSuccessNoDisplay,
 } from "../action.js";
+import { DisplayMessageKind } from "../display.js";
 import { Entity } from "../memory.js";
 
 export function createActionResultNoDisplay(
@@ -21,18 +22,34 @@ export function createActionResultNoDisplay(
 
 export function createActionResult(
     literalText: string,
-    speak?: boolean | undefined,
-    entities?: Entity[] | undefined,
+    options?:
+        | {
+              kind?: DisplayMessageKind;
+              speak?: boolean;
+          }
+        | DisplayMessageKind
+        | boolean,
+    entities?: Entity | Entity[],
 ): ActionResultSuccess {
-    entities ??= [];
+    const displayOptions =
+        typeof options === "boolean"
+            ? { speak: options }
+            : typeof options === "string"
+              ? { kind: options }
+              : options;
+
     return {
         literalText,
-        entities,
-        displayContent: speak
+        entities: entities
+            ? Array.isArray(entities)
+                ? entities
+                : [entities]
+            : [],
+        displayContent: displayOptions
             ? {
                   type: "text",
                   content: literalText,
-                  speak: true,
+                  ...displayOptions,
               }
             : literalText,
     };

@@ -23,7 +23,7 @@ export type DisplayContent =
     | {
           type: DisplayType; // Type of the content
           content: MessageContent; // each string in the MessageContext is treated as what `type` specifies
-          kind?: DisplayMessageKind; // Optional message kind for client specific styling
+          kind?: DisplayMessageKind | undefined; // Optional message kind for client specific styling
           speak?: boolean; // Optional flag to indicate if the content should be spoken
       };
 
