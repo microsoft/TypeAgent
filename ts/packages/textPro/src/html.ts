@@ -403,7 +403,6 @@ export class HtmlToMdConvertor {
                             this.appendPrefix();
                             this.traverseChildren(childElement);
                             this.appendLineBreak();
-                            //this.append("\n");
                             break;
                         case "span":
                             this.traverseChildren(childElement);
@@ -468,34 +467,17 @@ export class HtmlToMdConvertor {
                         case "strong":
                         case "b":
                         case "mark":
-                            this.appendMarkup("**");
-                            this.traverseChildren(childElement);
-                            this.appendMarkup("**");
+                            this.appendStrong(childElement);
                             break;
                         case "em":
                         case "i":
-                            this.appendMarkup("__");
-                            this.traverseChildren(childElement);
-                            this.appendMarkup("__");
+                            this.appendEm(childElement);
                             break;
                         case "a":
-                            if (childElement.children.length > 0) {
-                                let text = this.getInnerText(childElement);
-                                if (text) {
-                                    text = escapeMarkdownText(text);
-                                    const href = childElement.attribs["href"];
-                                    this.appendMarkup(`[${text}](${href})`);
-                                    this.eventHandler?.onLink(text, href);
-                                }
-                            }
+                            this.appendLUrl(childElement);
                             break;
                         case "img":
-                            const src = childElement.attribs["src"];
-                            if (src.length > 0) {
-                                const alt = childElement.attribs["alt"] ?? "";
-                                this.appendMarkup(`![${alt}](${src})`);
-                                this.eventHandler?.onImg(alt, src);
-                            }
+                            this.appendImage(childElement);
                             break;
                         case "br":
                             this.appendLineBreak();
@@ -505,9 +487,6 @@ export class HtmlToMdConvertor {
                 case "text":
                     let text = this.getInnerText(child);
                     if (text && text.length > 0) {
-                        if (text.includes("edit")) {
-                            console.log(text);
-                        }
                         this.append(text);
                     }
                     break;
@@ -539,6 +518,70 @@ export class HtmlToMdConvertor {
             }
         }
         return undefined;
+    }
+
+    private appendInnerMarkup(element: cheerio.Element): void {
+        for (let i = 0; i < element.children.length; ++i) {
+            const child = element.children[i];
+            switch (child.type) {
+                default:
+                    break;
+                case "tag":
+                    const childElement = child as cheerio.Element;
+                    const tagName = childElement.tagName;
+                    switch (tagName) {
+                        default:
+                            const shouldSkipTag = this.tagsToIgnore.some(
+                                (tagPrefix) =>
+                                    tagName === tagPrefix ||
+                                    tagName.startsWith(tagPrefix),
+                            );
+
+                            if (!shouldSkipTag) {
+                                this.appendInnerHtml(childElement);
+                            }
+                            break;
+                        case "p":
+                        case "div":
+                        case "span":
+                        case "article":
+                        case "section":
+                        case "blockquote":
+                        case "code":
+                        case "code":
+                        case "h1":
+                        case "h2":
+                        case "h3":
+                        case "h4":
+                        case "h5":
+                        case "h6":
+                            this.appendInnerText(childElement);
+                            break;
+                        case "strong":
+                        case "b":
+                        case "mark":
+                            this.appendStrong(childElement);
+                            break;
+                        case "em":
+                        case "i":
+                            this.appendEm(childElement);
+                            break;
+                        case "a":
+                            this.appendLUrl(childElement);
+                            break;
+                        case "img":
+                            this.appendImage(childElement);
+                            break;
+                    }
+                    break;
+                case "text":
+                    let text = this.getInnerText(child);
+                    if (text && text.length > 0) {
+                        this.append(text);
+                    }
+                    break;
+            }
+        }
     }
 
     private beginBlock(name: string): void {
@@ -578,6 +621,39 @@ export class HtmlToMdConvertor {
         this.appendMarkup("\n");
     }
 
+    private appendStrong(element: cheerio.Element) {
+        this.appendMarkup("**");
+        this.traverseChildren(element);
+        this.appendMarkup("**");
+    }
+
+    private appendEm(element: cheerio.Element) {
+        this.appendMarkup("__");
+        this.traverseChildren(element);
+        this.appendMarkup("__");
+    }
+
+    private appendLUrl(element: cheerio.Element) {
+        if (element.children.length > 0) {
+            let text = this.getInnerText(element);
+            if (text) {
+                text = escapeMarkdownText(text);
+                const href = element.attribs["href"];
+                this.appendMarkup(`[${text}](${href})`);
+                this.eventHandler?.onLink(text, href);
+            }
+        }
+    }
+
+    private appendImage(element: cheerio.Element) {
+        const src = element.attribs["src"];
+        if (src.length > 0) {
+            const alt = element.attribs["alt"] ?? "";
+            this.appendMarkup(`![${alt}](${src})`);
+            this.eventHandler?.onImg(alt, src);
+        }
+    }
+
     private appendPrefix(): void {
         for (let i = 0; i < this.prefix.length; ++i) {
             this.curBlock += this.prefix[i];
@@ -600,6 +676,25 @@ export class HtmlToMdConvertor {
 
     private appendLineBreak(): void {
         this.appendMarkup("  ");
+    }
+
+    private appendInnerText(element: cheerio.Element): void {
+        let text = this.$(element).text();
+        if (text && text.length > 0) {
+            text = text.replace("\n", " ");
+            if (!text.startsWith(" ")) {
+                this.appendMarkup(" ");
+            }
+            this.appendMarkup(text);
+        }
+    }
+
+    private appendInnerHtml(element: cheerio.Element): void {
+        let html = this.$(element).html();
+        if (html && html.length > 0) {
+            html = html.replace("\n", " ");
+            this.appendMarkup(html);
+        }
     }
 
     private appendHeading(text: string, level: number): void {
@@ -668,7 +763,7 @@ export class HtmlToMdConvertor {
         this.appendPrefix();
         row.each((i, col) => {
             this.appendMarkup("|");
-            this.traverseChildren(col);
+            this.appendInnerMarkup(col);
         });
         // Markup require equal #s of cols in a table, so must pad
         for (let i = row.length; i < colCount; ++i) {
