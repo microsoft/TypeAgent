@@ -73,6 +73,7 @@ export async function createKnowproTestCommands(
             },
             options: {
                 rootTag: arg("Root tag", "body"),
+                knowledge: argBool("Extract knowledge", true),
             },
         };
     }
@@ -90,9 +91,12 @@ export async function createKnowproTestCommands(
         const destPath = changeFileExt(filePath, ".md");
         fs.writeFileSync(destPath, markdown);
 
-        let mdDom = tp.tokenizeMarkdown(markdown);
-        context.printer.writeJsonInColor(chalk.gray, mdDom);
+        if (!namedArgs.knowledge) {
+            return;
+        }
 
+        let mdDom = tp.tokenizeMarkdown(markdown);
+        //context.printer.writeJsonInColor(chalk.gray, mdDom);
         const [textBlocks, knowledgeBlocks] =
             tp.textAndKnowledgeBlocksFromMarkdown(mdDom);
         assert(textBlocks.length === knowledgeBlocks.length);
