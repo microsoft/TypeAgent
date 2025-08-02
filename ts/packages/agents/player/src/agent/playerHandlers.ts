@@ -28,7 +28,7 @@ import {
 import { PlayerActions } from "./playerSchema.js";
 import registerDebug from "debug";
 import { resolveMusicDeviceEntity } from "../devices.js";
-import { getDevices } from "../endpoints.js";
+import { getUserDevices } from "../endpoints.js";
 
 const debugSpotify = registerDebug("typeagent:spotify");
 
@@ -301,7 +301,7 @@ async function getPlayerActionCompletion(
     }
 
     if (entityType === "MusicDevice") {
-        const devices = await getDevices(clientContext.service);
+        const devices = await getUserDevices(clientContext.service);
         if (devices !== undefined) {
             result.push(
                 ...devices.devices

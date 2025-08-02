@@ -49,7 +49,7 @@ export {
     getPropertyInfo,
 } from "./explanation/requestAction.js";
 export { AgentCacheFactory, getDefaultExplainerName } from "./cache/factory.js";
-export { MatchResult } from "./constructions/constructions.js";
+export { MatchResult, WildcardMode } from "./constructions/constructions.js";
 
 // Testing
 export { getNamespaceForCache } from "./explanation/schemaInfoProvider.js";

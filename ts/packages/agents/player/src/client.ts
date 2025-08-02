@@ -83,9 +83,8 @@ import {
     loadRoamingSettings,
 } from "./settings.js";
 import {
-    DeviceInfo,
-    ensureCurrentDeviceId,
-    getCurrentDevicePlaybackState,
+    ensureSelectedDeviceId,
+    getSelectedDevicePlaybackState,
     listDevicesAction,
     selectDeviceAction,
     setDefaultDeviceAction,
@@ -134,7 +133,7 @@ export interface IClientContext {
     userData?: UserData | undefined;
     localSettings: LocalSettings;
     roamingSettings: RoamingSettings;
-    currentDeviceInfo?: DeviceInfo | undefined;
+    selectedDeviceName?: string | undefined;
 }
 
 async function printTrackNames(
@@ -411,7 +410,7 @@ async function playTrackCollection(
     trackCollection: ITrackCollection,
     clientContext: IClientContext,
 ) {
-    const deviceId = await ensureCurrentDeviceId(clientContext);
+    const deviceId = await ensureSelectedDeviceId(clientContext);
     const tracks = trackCollection.getTracks();
     const uris = tracks.map((track) => track.uri);
     console.log(chalk.cyanBright("Playing..."));
@@ -648,7 +647,7 @@ async function playGenreAction(
 }
 
 async function resumeActionCall(clientContext: IClientContext) {
-    const state = await getCurrentDevicePlaybackState(clientContext);
+    const state = await getSelectedDevicePlaybackState(clientContext);
     if (!state) {
         return createWarningActionResult("No active playback to resume");
     }
@@ -666,7 +665,7 @@ async function resumeActionCall(clientContext: IClientContext) {
 async function pauseActionCall(
     clientContext: IClientContext,
 ): Promise<ActionResult> {
-    const state = await getCurrentDevicePlaybackState(clientContext);
+    const state = await getSelectedDevicePlaybackState(clientContext);
     if (!state) {
         return createWarningActionResult("No active playback to pause");
     }
@@ -681,7 +680,7 @@ async function pauseActionCall(
 }
 
 async function nextActionCall(clientContext: IClientContext) {
-    const state = await getCurrentDevicePlaybackState(clientContext);
+    const state = await getSelectedDevicePlaybackState(clientContext);
     if (!state) {
         return createWarningActionResult("No active playback to move next to");
     }
@@ -693,7 +692,7 @@ async function nextActionCall(clientContext: IClientContext) {
 }
 
 async function previousActionCall(clientContext: IClientContext) {
-    const state = await getCurrentDevicePlaybackState(clientContext);
+    const state = await getSelectedDevicePlaybackState(clientContext);
     if (!state) {
         return createWarningActionResult(
             "No active playback to move previous to",
@@ -707,7 +706,7 @@ async function previousActionCall(clientContext: IClientContext) {
 }
 
 async function shuffleActionCall(clientContext: IClientContext, on: boolean) {
-    const state = await getCurrentDevicePlaybackState(clientContext);
+    const state = await getSelectedDevicePlaybackState(clientContext);
     if (!state) {
         return createWarningActionResult("No active playback to shuffle");
     }
@@ -880,7 +879,7 @@ export async function handleCall(
             let status: SpotifyApi.CurrentPlaybackResponse | undefined =
                 undefined;
             // get album of current playing track and load it as track collection
-            status = await getCurrentDevicePlaybackState(clientContext);
+            status = await getSelectedDevicePlaybackState(clientContext);
             if (status && status.item && status.item.type === "track") {
                 const track = status.item as SpotifyApi.TrackObjectFull;
                 album = track.album;
@@ -898,7 +897,7 @@ export async function handleCall(
                 ) {
                     await play(
                         clientContext.service,
-                        await ensureCurrentDeviceId(clientContext),
+                        await ensureSelectedDeviceId(clientContext),
                         [],
                         album.uri,
                         status.item.track_number - 1,
