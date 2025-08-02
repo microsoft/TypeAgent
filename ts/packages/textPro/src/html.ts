@@ -256,6 +256,7 @@ function getTypicalTagNames(): string[] {
         "blockquote",
         "code",
         "figure",
+        "abbr",
     ];
 }
 
