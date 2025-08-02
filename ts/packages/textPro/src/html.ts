@@ -237,6 +237,7 @@ function getTypicalTagNames(): string[] {
         "ul",
         "li",
         "table",
+        "tbody",
         "tr",
         "th",
         "td",
@@ -272,6 +273,7 @@ function getRemovableAttrPrefixes(): string[] {
         "title",
         "lang",
         "accesskey",
+        "rel",
     ];
 }
 
@@ -325,6 +327,7 @@ export class HtmlToMdConvertor {
             //"react",
             "clipboard",
             "notification",
+            "abbr",
         ];
         this.textBlocks = [];
         this.curBlock = "";
@@ -474,7 +477,7 @@ export class HtmlToMdConvertor {
                             this.appendEm(childElement);
                             break;
                         case "a":
-                            this.appendLUrl(childElement);
+                            this.appendUrl(childElement);
                             break;
                         case "img":
                             this.appendImage(childElement);
@@ -521,58 +524,66 @@ export class HtmlToMdConvertor {
     }
 
     private appendInnerMarkup(element: cheerio.Element): void {
+        const tagName = element.tagName;
+        switch (tagName) {
+            default:
+                const shouldSkipTag = this.tagsToIgnore.some(
+                    (tagPrefix) =>
+                        tagName === tagPrefix || tagName.startsWith(tagPrefix),
+                );
+
+                if (!shouldSkipTag) {
+                    this.appendInnerHtml(element);
+                }
+                break;
+            case "p":
+            case "div":
+            case "article":
+            case "section":
+                this.traverseInnerMarkup(element);
+                break;
+            case "h1":
+            case "h2":
+            case "h3":
+            case "h4":
+            case "h5":
+            case "h6":
+            case "span":
+            case "code":
+            case "code":
+            case "blockquote":
+                this.appendInnerText(element);
+                break;
+            case "ul":
+            case "ol":
+                this.appendInnerList(element);
+                break;
+            case "strong":
+            case "b":
+            case "mark":
+                this.appendStrong(element);
+                break;
+            case "em":
+            case "i":
+                this.appendEm(element);
+                break;
+            case "a":
+                this.appendUrl(element);
+                break;
+            case "img":
+                this.appendImage(element);
+                break;
+        }
+    }
+
+    private traverseInnerMarkup(element: cheerio.Element): void {
         for (let i = 0; i < element.children.length; ++i) {
             const child = element.children[i];
             switch (child.type) {
                 default:
                     break;
                 case "tag":
-                    const childElement = child as cheerio.Element;
-                    const tagName = childElement.tagName;
-                    switch (tagName) {
-                        default:
-                            const shouldSkipTag = this.tagsToIgnore.some(
-                                (tagPrefix) =>
-                                    tagName === tagPrefix ||
-                                    tagName.startsWith(tagPrefix),
-                            );
-
-                            if (!shouldSkipTag) {
-                                this.appendInnerHtml(childElement);
-                            }
-                            break;
-                        case "p":
-                        case "div":
-                        case "span":
-                        case "article":
-                        case "section":
-                        case "blockquote":
-                        case "code":
-                        case "code":
-                        case "h1":
-                        case "h2":
-                        case "h3":
-                        case "h4":
-                        case "h5":
-                        case "h6":
-                            this.appendInnerText(childElement);
-                            break;
-                        case "strong":
-                        case "b":
-                        case "mark":
-                            this.appendStrong(childElement);
-                            break;
-                        case "em":
-                        case "i":
-                            this.appendEm(childElement);
-                            break;
-                        case "a":
-                            this.appendLUrl(childElement);
-                            break;
-                        case "img":
-                            this.appendImage(childElement);
-                            break;
-                    }
+                    this.appendInnerMarkup(child);
                     break;
                 case "text":
                     let text = this.getInnerText(child);
@@ -633,7 +644,7 @@ export class HtmlToMdConvertor {
         this.appendMarkup("__");
     }
 
-    private appendLUrl(element: cheerio.Element) {
+    private appendUrl(element: cheerio.Element) {
         if (element.children.length > 0) {
             let text = this.getInnerText(element);
             if (text) {
@@ -695,6 +706,16 @@ export class HtmlToMdConvertor {
             html = html.replace("\n", " ");
             this.appendMarkup(html);
         }
+    }
+
+    private appendInnerList(element: cheerio.Element): void {
+        let list = this.$(element).find("li");
+        list.each((i, li) => {
+            if (i > 0) {
+                this.appendMarkup(", ");
+            }
+            this.appendMarkup(this.$(li).text());
+        });
     }
 
     private appendHeading(text: string, level: number): void {
@@ -763,7 +784,7 @@ export class HtmlToMdConvertor {
         this.appendPrefix();
         row.each((i, col) => {
             this.appendMarkup("|");
-            this.appendInnerMarkup(col);
+            this.traverseInnerMarkup(col);
         });
         // Markup require equal #s of cols in a table, so must pad
         for (let i = row.length; i < colCount; ++i) {
