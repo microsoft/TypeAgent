@@ -499,6 +499,7 @@ export class HtmlToMdConvertor {
                             if (childElement.children.length > 0) {
                                 let text = this.getInnerText(childElement);
                                 if (text) {
+                                    text = escapeMarkdownText(text);
                                     const href = childElement.attribs["href"];
                                     this.appendMarkup(`[${text}](${href})`);
                                     this.eventHandler?.onLink(text, href);
@@ -521,6 +522,9 @@ export class HtmlToMdConvertor {
                 case "text":
                     let text = this.getInnerText(child);
                     if (text && text.length > 0) {
+                        if (text.includes("edit")) {
+                            console.log(text);
+                        }
                         this.append(text);
                     }
                     break;
@@ -548,7 +552,7 @@ export class HtmlToMdConvertor {
                 spacesAdded++;
             }
             if (spacesAdded === 0 || text.length > spacesAdded) {
-                return escapeMarkdownText(text);
+                return text;
             }
         }
         return undefined;
@@ -598,8 +602,8 @@ export class HtmlToMdConvertor {
     }
 
     private append(text: string): void {
-        text = escapeMarkdownText(text);
-        this.curBlock += text;
+        let markdownText = escapeMarkdownText(text);
+        this.curBlock += markdownText;
     }
 
     private appendMarkup(text: string): void {
