@@ -693,7 +693,7 @@ export class HtmlToMdConvertor {
     private appendInnerText(element: cheerio.Element): void {
         let text = this.$(element).text();
         if (text && text.length > 0) {
-            text = text.replace("\n", " ");
+            text = text.replaceAll("\n", " ");
             if (!text.startsWith(" ")) {
                 this.appendMarkup(" ");
             }
@@ -704,7 +704,7 @@ export class HtmlToMdConvertor {
     private appendInnerHtml(element: cheerio.Element): void {
         let html = this.$(element).html();
         if (html && html.length > 0) {
-            html = html.replace("\n", " ");
+            html = html.replaceAll("\n", " ");
             this.appendMarkup(html);
         }
     }
