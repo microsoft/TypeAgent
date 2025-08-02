@@ -771,6 +771,9 @@ export class HtmlToMdConvertor {
                 // Markup require table headers
                 this.appendMarkup("|---".repeat(colCount));
                 this.appendMarkup("|\n");
+                if (!hasHeaders) {
+                    this.convertRow(columns, colCount);
+                }
             } else {
                 this.convertRow(columns, colCount);
             }
