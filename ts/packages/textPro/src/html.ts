@@ -461,26 +461,9 @@ export class HtmlToMdConvertor {
                             break;
                         case "table":
                             this.beginBlock(tagName);
-                            this.traverseChildren(childElement);
+                            this.convertTable(childElement);
                             this.appendMarkup("\n");
                             this.endBlock();
-                            break;
-                        case "tr":
-                            if (childElement.children.length > 0) {
-                                this.traverseChildren(childElement);
-                                this.appendMarkup("|\n");
-                                if (this.isTableHeader(childElement)) {
-                                    this.appendMarkup(
-                                        "|---".repeat(element.children.length),
-                                    );
-                                    this.appendMarkup("|\n");
-                                }
-                            }
-                            break;
-                        case "th":
-                        case "td":
-                            this.appendMarkup("|");
-                            this.traverseChildren(childElement);
                             break;
                         case "strong":
                         case "b":
@@ -629,13 +612,68 @@ export class HtmlToMdConvertor {
         this.eventHandler?.onHeading(text, level);
     }
 
-    private isTableHeader(element: cheerio.Element): boolean {
-        for (let i = 0; i < element.children.length; ++i) {
-            const child = element.children[i];
-            if (child.type === "tag" && child.tagName !== "th") {
-                return false;
-            }
+    private convertTable(element: cheerio.Element): void {
+        let tbody = this.$(element).find("tbody");
+        if (tbody !== undefined) {
+            element = tbody[0];
         }
-        return true;
+        const rows = this.$(element).find("tr");
+        if (rows.length === 0) {
+            return;
+        }
+        const rowColumns = rows.map((i, row) => {
+            return this.$(row).find("> th, > td");
+        });
+        if (rowColumns.length === 0) {
+            return;
+        }
+
+        let colCount = 0;
+        rowColumns.each((index, columns) => {
+            if (columns.length > colCount) {
+                colCount = columns.length;
+            }
+        });
+        let hasHeaders = true;
+        rowColumns[0].each((_, col) => {
+            if (col.tagName !== "th") {
+                hasHeaders = false;
+            }
+        });
+
+        this.appendMarkup("\n");
+        rowColumns.each((rowNum, columns) => {
+            this.appendPrefix();
+            if (rowNum === 0) {
+                if (hasHeaders) {
+                    this.convertRow(columns, colCount);
+                } else {
+                    // Insert dummy headers, markup requires them
+                    this.appendMarkup("| ".repeat(colCount));
+                    this.appendMarkup("|\n");
+                }
+                // Markup require table headers
+                this.appendMarkup("|---".repeat(colCount));
+                this.appendMarkup("|\n");
+            } else {
+                this.convertRow(columns, colCount);
+            }
+        });
+    }
+
+    private convertRow(
+        row: cheerio.Cheerio<cheerio.Element>,
+        colCount: number,
+    ): void {
+        this.appendPrefix();
+        row.each((i, col) => {
+            this.appendMarkup("|");
+            this.traverseChildren(col);
+        });
+        // Markup require equal #s of cols in a table, so must pad
+        for (let i = row.length; i < colCount; ++i) {
+            this.appendMarkup("|");
+        }
+        this.appendMarkup("|\n");
     }
 }
