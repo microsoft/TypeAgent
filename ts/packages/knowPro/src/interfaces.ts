@@ -50,8 +50,7 @@ export interface IMessage extends IKnowledgeSource {
     /**
      * (Optional) tags associated with the message
      */
-    tags: string[];
-    sTags?: StructuredTag[] | undefined;
+    tags: string[] | MessageTag[];
     /**
      * (Future) Information about the deletion of the message.
      */
@@ -144,6 +143,8 @@ export interface Tag {
 }
 
 export type StructuredTag = kpLib.ConcreteEntity;
+
+export type MessageTag = string | StructuredTag;
 
 /**
  * A conversation is a sequence of messages

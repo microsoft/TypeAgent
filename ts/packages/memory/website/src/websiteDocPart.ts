@@ -17,7 +17,7 @@ export class WebsiteDocPart extends DocPart {
     constructor(
         websiteMeta: WebsiteMeta,
         textChunks: string | string[] = [],
-        tags?: string[] | undefined,
+        tags?: string[] | kp.MessageTag[] | undefined,
         timestamp?: string | undefined,
         knowledge?: kpLib.KnowledgeResponse | undefined,
         deletionInfo?: kp.DeletionInfo | undefined,

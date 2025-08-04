@@ -638,7 +638,7 @@ export async function createKnowproCommands(
                     .map((sr) => sr.knowledge as kp.StructuredTag);
                 if (sTags.length > 0) {
                     context.printer.writeHeading("Structured Tags");
-                    context.printer.writeSTags(sTags);
+                    context.printer.writeStructuredTags(sTags);
                     context.printer.writeLine();
                 }
             }

@@ -993,10 +993,7 @@ export async function createKnowproWebsiteCommands(
         try {
             context.printer.writeNameValue("Timestamp", message.timestamp);
             if (message.tags && message.tags.length > 0) {
-                context.printer.writeList(message.tags, {
-                    type: "csv",
-                    title: "Tags",
-                });
+                context.printer.writeMessageTags(message.tags);
             }
 
             // Filter out content-heavy fields from metadata

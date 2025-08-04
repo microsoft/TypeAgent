@@ -129,7 +129,7 @@ export class Message<TMeta extends MessageMetadata = MessageMetadata>
     constructor(
         public metadata: TMeta,
         messageBody: string | string[],
-        public tags: string[] = [],
+        public tags: string[] | kp.MessageTag[] = [],
         public timestamp: string | undefined = undefined,
         public knowledge: kpLib.KnowledgeResponse | undefined = undefined,
         public deletionInfo: kp.DeletionInfo | undefined = undefined,

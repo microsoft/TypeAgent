@@ -24,12 +24,10 @@ export class DocPartMeta extends MessageMetadata {
  * Use tags to annotate headings, etc.
  */
 export class DocPart extends Message<DocPartMeta> {
-    public sTags?: kp.StructuredTag[] | undefined;
-
     constructor(
         textChunks: string | string[] = [],
         metadata?: DocPartMeta | undefined,
-        tags?: string[] | undefined,
+        tags?: string[] | kp.MessageTag[] | undefined,
         timestamp?: string | undefined,
         knowledge?: kpLib.conversation.KnowledgeResponse | undefined,
         deletionInfo: kp.DeletionInfo | undefined = undefined,
@@ -385,6 +383,5 @@ function docPartClassFromJsonObj(jMsg: DocPart): DocPart {
         jMsg.knowledge,
         jMsg.deletionInfo,
     );
-    part.sTags = jMsg.sTags;
     return part;
 }
