@@ -158,14 +158,21 @@ async function canTranslateWithoutContext(
     }
 }
 
-function canBeCachedWithHistory(history?: HistoryContext) {
-    // TODO: Translation with additional instructions or activities context are not cacheable for now
-    return (
-        history === undefined ||
-        ((history.additionalInstructions === undefined ||
-            history.additionalInstructions.length === 0) &&
-            history.activityContext === undefined)
-    );
+function getCannotUseCacheReason(
+    attachments?: string[],
+    history?: HistoryContext,
+) {
+    if (attachments && attachments.length > 0) {
+        return "has attachments";
+    }
+    if (history !== undefined) {
+        if (history.additionalInstructions) {
+            return "has additional instructions";
+        } else if (history.activityContext) {
+            return "has activity context";
+        }
+    }
+    return undefined;
 }
 
 function getExplainerOptions(
@@ -177,10 +184,12 @@ function getExplainerOptions(
         return undefined;
     }
 
-    if (!canBeCachedWithHistory(requestAction.history)) {
+    if (
+        getCannotUseCacheReason(undefined, requestAction.history) !== undefined
+    ) {
+        // Cannot use cache for this request
         return undefined;
     }
-
     if (
         !context.session.getConfig().explainer.filter.multiple &&
         requestAction.actions.length > 1
@@ -230,14 +239,12 @@ async function requestExplain(
     context: CommandHandlerContext,
     fromCache: boolean,
     fromUser: boolean,
+    cannotUseCacheReason?: string,
 ) {
     // Make sure the current requestId is captured
     const requestId = context.requestId;
-    const notifyExplained = (result?: ProcessRequestActionResult) => {
-        const explanationResult = result?.explanationResult.explanation;
-        const error = explanationResult?.success
-            ? undefined
-            : explanationResult?.message;
+
+    const notifyExplained = (error?: string) => {
         context.clientIO.notify(
             "explained",
             requestId,
@@ -251,6 +258,17 @@ async function requestExplain(
         );
     };
 
+    const notifyExplainedResult = (result: ProcessRequestActionResult) => {
+        const explanationResult = result.explanationResult.explanation;
+        const error = explanationResult.success
+            ? undefined
+            : explanationResult?.message;
+        notifyExplained(error);
+    };
+
+    if (cannotUseCacheReason !== undefined) {
+        notifyExplained(`cannot not use cache (${cannotUseCacheReason})`);
+    }
     if (fromCache && !fromUser) {
         // If it is from cache, and not from the user, explanation is not necessary.
         notifyExplained();
@@ -269,25 +287,15 @@ async function requestExplain(
     );
 
     if (context.explanationAsynchronousMode) {
-        processRequestActionP.then(notifyExplained).catch((e) =>
-            context.clientIO.notify(
-                "explained",
-                requestId,
-                {
-                    error: e.message,
-                    fromCache,
-                    fromUser,
-                    time: new Date().toLocaleTimeString(),
-                },
-                DispatcherName,
-            ),
-        );
+        processRequestActionP
+            .then(notifyExplainedResult)
+            .catch((e) => notifyExplained(e.message));
     } else {
         console.log(
             chalk.grey(`Generating explanation for '${requestAction}'`),
         );
         const processRequestActionResult = await processRequestActionP;
-        notifyExplained(processRequestActionResult);
+        notifyExplainedResult(processRequestActionResult);
 
         printProcessRequestActionResult(processRequestActionResult);
     }
@@ -353,9 +361,11 @@ export class RequestCommandHandler implements CommandHandler {
 
             const history = getHistoryContextForTranslation(systemContext);
 
-            const canUseCacheMatch =
-                (attachments === undefined || attachments.length === 0) &&
-                canBeCachedWithHistory(history);
+            const cannotUseCacheReason = getCannotUseCacheReason(
+                attachments,
+                history,
+            );
+            const canUseCacheMatch = cannotUseCacheReason === undefined;
 
             addRequestToMemory(systemContext, request, cachedAttachments);
             let translationResult: TranslationResult;
@@ -398,14 +408,14 @@ export class RequestCommandHandler implements CommandHandler {
                 requestAction.history?.entities,
                 context,
             );
-            if (canUseCacheMatch) {
-                await requestExplain(
-                    requestAction,
-                    systemContext,
-                    fromCache,
-                    fromUser,
-                );
-            }
+
+            await requestExplain(
+                requestAction,
+                systemContext,
+                fromCache,
+                fromUser,
+                cannotUseCacheReason,
+            );
         } finally {
             profiler?.stop();
         }
