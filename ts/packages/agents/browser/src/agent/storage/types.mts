@@ -345,117 +345,6 @@ export interface SearchSuggestion {
     context?: string;
 }
 
-// Analytics Types
-export interface UsageContext {
-    success: boolean;
-    executionTime?: number;
-    userAgent?: string;
-    url?: string;
-    domain?: string;
-    sessionId?: string;
-}
-
-export interface MacroUsageStats {
-    macroId: string;
-    totalUsage: number;
-    lastUsed: string;
-    usageHistory: Array<{
-        timestamp: string;
-        success: boolean;
-        executionTime?: number;
-        userAgent?: string;
-        url?: string;
-    }>;
-    averageSuccessRate: number;
-    averageExecutionTime: number;
-    popularTimes: Record<number, number>;
-    errorCount: number;
-}
-
-export interface UsageStatistics {
-    totalUsage: number;
-    totalMacros: number;
-    averageUsage: number;
-    mostUsedMacros: Array<{
-        macroId: string;
-        usageCount: number;
-        lastUsed: string;
-        successRate: number;
-    }>;
-    usageTrends: Array<{
-        date: string;
-        usage: number;
-    }>;
-    performanceMetrics: PerformanceMetrics;
-    domainBreakdown: Array<{
-        domain: string;
-        usage: number;
-        percentage: number;
-    }>;
-    timeRange: {
-        start: string;
-        end: string;
-    };
-}
-
-export interface DomainAnalytics {
-    domain: string;
-    totalUsage: number;
-    uniqueMacros: number;
-    averageSuccessRate: number;
-    popularMacros: Array<{
-        macroId: string;
-        name: string;
-        usage: number;
-    }>;
-    usageTrends: Array<{
-        date: string;
-        usage: number;
-        successRate: number;
-        averageExecutionTime: number;
-    }>;
-    lastActivity: string;
-}
-
-export interface PerformanceMetrics {
-    timestamp: string;
-    averageSearchTime: number;
-    averageMacroExecutionTime: number;
-    cacheHitRate: number;
-    errorRate: number;
-    memoryUsage: number;
-    indexSize: number;
-}
-
-// Enhanced Statistics Types
-export interface EnhancedStoreStatistics extends StoreStatistics {
-    searchStats: {
-        totalSearches: number;
-        averageSearchTime: number;
-        popularQueries: PopularSearch[];
-        searchSuccessRate: number;
-    };
-    tagStats: {
-        totalTags: number;
-        averageTagsPerMacro: number;
-        popularTags: TagStatistics[];
-    };
-    performanceStats: PerformanceMetrics;
-    trendsAndInsights: {
-        growthRate: number;
-        usageGrowth: number;
-        topGrowingDomains: string[];
-        recommendedOptimizations: string[];
-    };
-}
-
-// Time Range Types
-export interface TimeRange {
-    start?: string;
-    end?: string;
-    preset?: "today" | "week" | "month" | "quarter" | "year";
-}
-
 // Additional types for filtering
 export interface MacroFilter {
     categories?: MacroCategory[];
@@ -500,6 +389,5 @@ export type ActionIndexEntry = MacroIndexEntry;
 export type ActionSearchQuery = MacroSearchQuery;
 export type ActionSearchResult = MacroSearchResult;
 export type ActionFilter = MacroFilter;
-export type ActionUsageStats = MacroUsageStats;
 // Note: ResolvedAction is an alias for ResolvedMacro (defined in patternResolver.mts)
 export type ResolvedAction = import("./patternResolver.mjs").ResolvedMacro;
