@@ -189,8 +189,18 @@ export function docPartsFromMarkdown(
     const parts: DocPart[] = [];
     for (let i = 0; i < textBlocks.length; ++i) {
         const kBlock = knowledgeBlocks[i];
+        let textBlock = textBlocks[i];
+        let textBlockTrimmed = textBlock.trimEnd();
+        if (textBlockTrimmed.length === 0) {
+            // Empty text block
+            continue;
+        }
+        // If the text block has a bunch of ending whitespace, reduce it to one
+        if (textBlock.length > textBlockTrimmed.length) {
+            textBlock = textBlockTrimmed + textBlock[textBlock.length - 1];
+        }
         const part = new DocPart(
-            textBlocks[i],
+            textBlock,
             new DocPartMeta(sourceUrl),
             kBlock.tags.size > 0 ? [...kBlock.tags.values()] : undefined,
             undefined,

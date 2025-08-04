@@ -688,15 +688,26 @@ export function addMessageKnowledgeToSemanticRefIndex(
         }
         if (msg.tags && semanticRefs) {
             for (const tag of msg.tags) {
-                const tagObj: Tag = { text: tag };
-                addTag(
-                    tagObj,
-                    semanticRefs,
-                    semanticRefIndex,
-                    messageOrdinal,
-                    chunkOrdinal,
-                    termsAdded,
-                );
+                if (typeof tag === "string") {
+                    const tagObj: Tag = { text: tag };
+                    addTag(
+                        tagObj,
+                        semanticRefs,
+                        semanticRefIndex,
+                        messageOrdinal,
+                        chunkOrdinal,
+                        termsAdded,
+                    );
+                } else {
+                    addStructuredTag(
+                        tag,
+                        semanticRefs,
+                        semanticRefIndex,
+                        messageOrdinal,
+                        chunkOrdinal,
+                        termsAdded,
+                    );
+                }
             }
         }
         if (msg.sTags && semanticRefs) {

@@ -51,7 +51,7 @@ export class KPPrinter extends AppPrinter {
         const prevColor = this.setForeColor(chalk.cyan);
         try {
             this.writeNameValue("Timestamp", message.timestamp);
-            this.writeList(message.tags, { type: "csv", title: "Tags" });
+            //this.writeList(message.tags, { type: "csv", title: "Tags" });
             this.writeMetadata(message);
         } finally {
             this.setForeColor(prevColor);

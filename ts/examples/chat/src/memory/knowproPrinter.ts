@@ -64,7 +64,7 @@ export class KnowProPrinter extends MemoryConsoleWriter {
         try {
             this.writeNameValue("Timestamp", message.timestamp);
             if (message.tags && message.tags.length > 0) {
-                this.writeList(message.tags, { type: "csv", title: "Tags" });
+                this.writeMessageTags(message.tags);
             }
             this.writeMetadata(message);
         } finally {
@@ -132,6 +132,24 @@ export class KnowProPrinter extends MemoryConsoleWriter {
         this.writeLine();
     }
 
+    public writeMessageTags(tags: string[] | kp.MessageTag[] | undefined) {
+        if (tags && tags.length > 0) {
+            const stringTags: string[] = tags.filter(
+                (t) => typeof t === "string",
+            ) as string[];
+            if (stringTags && stringTags.length > 0) {
+                this.writeList(stringTags, { type: "csv", title: "Tags" });
+            }
+            const sTags: kp.StructuredTag[] = tags.filter(
+                (t) => typeof t !== "string",
+            ) as kp.StructuredTag[];
+            if (sTags && sTags.length > 0) {
+                this.writeLine("sTags");
+                this.writeStructuredTags(sTags);
+            }
+        }
+    }
+
     public writeEntity(
         entity: knowLib.conversation.ConcreteEntity | undefined,
     ): KnowProPrinter {
@@ -192,7 +210,7 @@ export class KnowProPrinter extends MemoryConsoleWriter {
         return this;
     }
 
-    public writeSTags(tags: kp.StructuredTag[] | undefined) {
+    public writeStructuredTags(tags: kp.StructuredTag[] | undefined) {
         return this.writeEntities(
             tags as knowLib.conversation.ConcreteEntity[],
         );
