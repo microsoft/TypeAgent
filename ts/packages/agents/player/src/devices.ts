@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { hostname } from "os";
+import * as os from "node:os";
 import { IClientContext } from "./client.js";
 import {
     getUserDevices,
@@ -47,8 +47,21 @@ async function ensureGetDeviceInfos(
     return devices as DeviceInfo[];
 }
 
+function getHostName(): string {
+    const host = os.hostname();
+    if (os.platform() === "darwin") {
+        // On macOS, strip the .local
+        const split = host.split(".");
+        if (split.length > 1 && split[split.length - 1] === "local") {
+            split.pop(); // remove the last element
+            return split.join(".");
+        }
+    }
+    return host;
+}
+
 function getDefaultDeviceName(clientContext: IClientContext): string {
-    return clientContext.localSettings.defaultDeviceName ?? hostname();
+    return clientContext.localSettings.defaultDeviceName ?? getHostName();
 }
 function getSelectedDeviceName(clientContext: IClientContext): string {
     return (
@@ -56,11 +69,17 @@ function getSelectedDeviceName(clientContext: IClientContext): string {
     );
 }
 
-export async function ensureSelectedDeviceInfo(clientContext: IClientContext) {
-    const device = await getDeviceInfo(
+async function getSelectedDeviceInfo(
+    clientContext: IClientContext,
+): Promise<DeviceInfo | undefined> {
+    return getDeviceInfo(
         clientContext.service,
         getSelectedDeviceName(clientContext),
     );
+}
+
+export async function ensureSelectedDeviceInfo(clientContext: IClientContext) {
+    const device = await getSelectedDeviceInfo(clientContext);
     if (device === undefined) {
         const description = clientContext.selectedDeviceName
             ? `selected device '${clientContext.selectedDeviceName}'`
@@ -125,7 +144,7 @@ async function getDevicesMarkdown(
 ): Promise<string[]> {
     const markdown: string[] = [];
     markdown.push("Available devices:");
-    const selectedDevice = await ensureSelectedDeviceInfo(context);
+    const selectedDevice = await getSelectedDeviceInfo(context);
 
     const state = await getPlaybackState(context.service);
     const playingId = state?.is_playing ? state.device.id : undefined;
