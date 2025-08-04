@@ -15,6 +15,7 @@ import { filePathToUrlString } from "memory-storage";
 import path from "path";
 import { getHtml } from "aiclient";
 import { Result, success } from "typechat";
+import * as kp from "knowpro";
 
 /**
  * Import a text document as DocMemory
@@ -199,16 +200,20 @@ export function docPartsFromMarkdown(
         if (textBlock.length > textBlockTrimmed.length) {
             textBlock = textBlockTrimmed + textBlock[textBlock.length - 1];
         }
+        const tags: kp.MessageTag[] = [];
+        if (kBlock.tags.size > 0) {
+            tags.push(...kBlock.tags.values());
+        }
+        if (kBlock.sTags && kBlock.sTags.length > 0) {
+            tags.push(...kBlock.sTags);
+        }
         const part = new DocPart(
             textBlock,
             new DocPartMeta(sourceUrl),
-            kBlock.tags.size > 0 ? [...kBlock.tags.values()] : undefined,
+            tags.length > 0 ? tags : undefined,
             undefined,
             kBlock.knowledge,
         );
-        if (kBlock.sTags && kBlock.sTags.length > 0) {
-            part.sTags = kBlock.sTags;
-        }
         parts.push(part);
     }
     return parts;

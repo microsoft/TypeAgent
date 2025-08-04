@@ -710,6 +710,7 @@ export function addMessageKnowledgeToSemanticRefIndex(
                 }
             }
         }
+        /*
         if (msg.sTags && semanticRefs) {
             for (const sTag of msg.sTags) {
                 addStructuredTag(
@@ -722,6 +723,7 @@ export function addMessageKnowledgeToSemanticRefIndex(
                 );
             }
         }
+            */
     }
 }
 

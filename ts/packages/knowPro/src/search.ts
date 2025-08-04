@@ -660,7 +660,7 @@ class QueryCompiler {
         if (filter && filter.tags && filter.tags.length > 0) {
             scopeSelectors ??= [];
             this.addTermsScopeSelector(
-                createTagSearchTermGroup(filter.tags, false),
+                createTagSearchTermGroup(filter.tags, true),
                 scopeSelectors,
             );
         }

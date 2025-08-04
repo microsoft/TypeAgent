@@ -691,7 +691,7 @@ export class KnowProPrinter extends MemoryConsoleWriter {
         }
         if (docPart.tags && docPart.tags.length > 0) {
             this.writeLineInColor(chalk.cyan, "Tags");
-            this.writeList(docPart.tags, { type: "csv" });
+            this.writeMessageTags(docPart.tags);
         }
         this.writeKnowledge(docPart.knowledge);
         return this;

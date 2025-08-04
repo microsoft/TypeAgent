@@ -85,7 +85,7 @@ export class ConversationMessage extends Message<ConversationMessageMeta> {
     constructor(
         messageText: string | string[],
         metadata?: ConversationMessageMeta | undefined,
-        tags?: string[] | undefined,
+        tags?: string[] | kp.MessageTag[] | undefined,
         /**
          * Any pre-extracted knowledge for this message.
          */
