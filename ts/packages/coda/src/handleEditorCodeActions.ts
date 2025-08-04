@@ -14,6 +14,11 @@ import {
     showDocumentInEditor,
     triggerCopilotInlineCompletion,
 } from "./helpers";
+import {
+    ensureFunctionDeclarationClosure,
+    generateDocComment,
+    getClosingBraceIfNeeded,
+} from "./codeUtils";
 
 export async function handleCreateFileAction(
     action: any,
@@ -259,18 +264,18 @@ export async function handleCreateFunctionAction(
         }
 
         const indent = getIndentationString(doc);
-        let snippet = `${functionDeclaration}\n`;
+        const decl = ensureFunctionDeclarationClosure(
+            functionDeclaration,
+            language,
+        );
 
-        if (docstring) {
-            if (language === "python") {
-                snippet += `${indent}"""${docstring}"""\n`;
-            } else {
-                snippet += `${indent}/** ${docstring} */\n`;
-            }
-        }
+        let snippet = `${decl}\n`;
+        snippet += generateDocComment(docstring, language, indent);
 
-        if (body != null) {
+        const isBodyEmpty = body === undefined || body.trim() === "";
+        if (!isBodyEmpty) {
             snippet += `${body}\n`;
+            snippet += getClosingBraceIfNeeded(language);
         } else {
             snippet += indent;
         }
@@ -279,23 +284,26 @@ export async function handleCreateFunctionAction(
             editBuilder.insert(insertPos, snippet + "\n");
         });
 
-        const bodyLine = insertPos.line + snippet.split("\n").length - 2;
+        const lineOffset = snippet.split("\n").length - (isBodyEmpty ? 1 : 2);
+        const bodyLine = insertPos.line + lineOffset;
         const bodyPos = new vscode.Position(bodyLine, indent.length);
         editor.selection = new vscode.Selection(bodyPos, bodyPos);
 
-        if (
-            (body === undefined || body.trim() === "") &&
-            (await isCopilotEnabled())
-        ) {
+        if (isBodyEmpty && (await isCopilotEnabled())) {
             await triggerCopilotInlineCompletion(editor);
         }
 
         return {
             handled: true,
-            message: `✅ Inserted function and ${body ? "filled body." : "triggered Copilot."}`,
+            message: `✅ Inserted function and ${
+                isBodyEmpty ? "triggered Copilot." : "filled body."
+            }`,
         };
     } catch (err: any) {
-        return { handled: false, message: `❌ Error: ${err.message}` };
+        return {
+            handled: false,
+            message: `❌ Error: ${err.message}`,
+        };
     }
 }
 

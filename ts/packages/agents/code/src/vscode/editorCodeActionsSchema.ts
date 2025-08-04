@@ -69,30 +69,33 @@ export type FileTarget = {
     fallbackToActiveFile?: boolean;
 };
 
+// schema to generate a function
+// Schema to generate a function
 export type EditorActionCreateFunction = {
     actionName: "createFunction";
     parameters: {
         // Language of the function (determines syntax rules)
         language: "typescript" | "python" | "javascript" | string;
-        // The full function declaration or signature line (no body)
+        // The full function declaration or signature line (e.g., "function foo(x: number): number {")
+        // Must include the opening brace or colon (depending on language)
         functionDeclaration: string;
-        // The function body (optional): may be empty, partial, or full
+        // Function body contents (excluding closing brace if applicable)
+        // Leave as empty string "" to trigger Copilot suggestion
         body?: string;
-        // Required: a one-line docstring that explains what the function does.
+        // One-line docstring explaining what the function does.
         // This is based on the function declaration and user request.
-        docstring: string;
+        docstring?: string;
+        // Optional: function name (extracted if not explicit in declaration)
         name?: string;
-        // Optional: description of what the function params do
+        // Optional: list of argument name/type descriptions
         args?: ArgumentDefinition[];
-        // Optional: return type annotation (e.g., "number", "void", etc.)
+        // Optional: return type (e.g., "string", "void", etc.)
         returnType?: string;
         // Optional: whether the function is async
-        // If true, the function will be created as an async function
-        // and the agent may use await inside it
         isAsync?: boolean;
-        // Optional: file to insert into
+        // Optional: file where function should be inserted
         file?: FileTarget;
-        // Where in the file to insert the function
+        // Optional: where to insert function (default: atCursor)
         position?: CursorTarget;
     };
 };
