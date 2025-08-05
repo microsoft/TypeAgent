@@ -7,7 +7,7 @@ import {
     WebsiteMeta,
     importWebsiteVisit,
 } from "./websiteMeta.js";
-import { ExtractionMode } from "./contentExtractor.js";
+import { ExtractionMode } from "./extraction/types.js";
 import {
     ContentExtractor,
     ExtractionInput,

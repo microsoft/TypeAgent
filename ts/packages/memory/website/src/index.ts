@@ -14,16 +14,9 @@ export {
     ActionInfo,
     StructuredDataCollection,
     WebsiteContentWithKnowledge,
-} from "./contentExtractor.js";
+    KnowledgeQualityMetrics,
+} from "./extraction/types.js";
 
-export {
-    WebsiteImportOptions,
-    defaultWebsiteImportOptions,
-    importWebsite,
-    importWebsitesWithProcessing,
-    ImportQualityMetrics,
-    analyzeImportQuality,
-} from "./enhancedImport.js";
 export * from "./importWebsites.js";
 export * from "./indexingService.js";
 export * from "./websiteCollection.js";

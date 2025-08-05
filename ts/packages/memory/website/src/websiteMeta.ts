@@ -8,7 +8,7 @@ import {
     MetaTagCollection,
     StructuredDataCollection,
     ActionInfo,
-} from "./contentExtractor.js";
+} from "./extraction/types.js";
 import { websiteToTextChunks } from "./chunkingUtils.js";
 import { DetectedAction, ActionSummary } from "./extraction/types.js";
 
