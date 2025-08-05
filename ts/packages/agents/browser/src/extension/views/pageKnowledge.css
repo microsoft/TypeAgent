@@ -530,3 +530,59 @@ body {
 .extraction-mode-slider[data-mode="full"]::-moz-range-thumb {
   background: #dc3545;
 }
+
+/* Facets styling */
+.facets-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.facet-item {
+  display: flex;
+  align-items: flex-start;
+  padding: 0.5rem;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  border-left: 3px solid #667eea;
+  transition: background-color 0.2s ease;
+}
+
+.facet-item:hover {
+  background-color: #e9ecef;
+}
+
+.facet-name {
+  font-weight: 600;
+  color: #495057;
+  margin-right: 0.5rem;
+  min-width: 80px;
+  flex-shrink: 0;
+}
+
+.facet-value {
+  color: #6c757d;
+  word-break: break-word;
+  flex: 1;
+}
+
+.facet-link {
+  color: #0d6efd;
+  text-decoration: none;
+}
+
+.facet-link:hover {
+  text-decoration: underline;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .facet-item {
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  
+  .facet-name {
+    min-width: auto;
+  }
+}

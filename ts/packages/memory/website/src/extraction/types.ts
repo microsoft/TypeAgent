@@ -118,7 +118,7 @@ export const EXTRACTION_MODE_CONFIGS: Record<
         knowledgeStrategy: "hybrid",
         defaultChunkSize: 8000,
         defaultQualityThreshold: 0.4,
-        defaultConcurrentExtractions: 2,
+        defaultConcurrentExtractions: 4,
     },
 };
 
