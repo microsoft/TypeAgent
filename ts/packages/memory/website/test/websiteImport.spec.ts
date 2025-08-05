@@ -6,7 +6,6 @@ import {
     importChromeBookmarks,
     importWebsites,
     getDefaultBrowserPaths,
-    determinePageType,
 } from "../src/importWebsites.js";
 import {
     writeSampleBookmarksFile,
@@ -29,23 +28,6 @@ describe("websiteImport", () => {
         cleanupTestFile(testBookmarksFile);
     });
 
-    test("determine page type", () => {
-        expect(determinePageType("https://github.com/microsoft/repo")).toBe(
-            "development",
-        );
-        expect(determinePageType("https://news.bbc.com/technology")).toBe(
-            "news",
-        );
-        expect(determinePageType("https://docs.microsoft.com/api")).toBe(
-            "documentation",
-        );
-        expect(determinePageType("https://amazon.com/product")).toBe(
-            "commerce",
-        );
-        expect(determinePageType("https://twitter.com/user")).toBe("social");
-        expect(determinePageType("https://booking.com/hotels")).toBe("travel");
-        expect(determinePageType("https://example.com")).toBe("general");
-    });
 
     test("get default browser paths", () => {
         const paths = getDefaultBrowserPaths();

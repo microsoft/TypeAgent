@@ -233,70 +233,106 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
             // Temporal facets for ordering queries
             if (this.bookmarkDate) {
                 const bookmarkDate = new Date(this.bookmarkDate);
-                domainEntity.facets.push({
-                    name: "bookmarkDate",
-                    value: this.bookmarkDate,
-                });
-                domainEntity.facets.push({
-                    name: "bookmarkYear",
-                    value: bookmarkDate.getFullYear().toString(),
-                });
+                const existingFacetNames = new Set(domainEntity.facets.map((f: any) => f.name));
+                
+                if (!existingFacetNames.has("bookmarkDate")) {
+                    domainEntity.facets.push({
+                        name: "bookmarkDate",
+                        value: this.bookmarkDate,
+                    });
+                }
+                if (!existingFacetNames.has("bookmarkYear")) {
+                    domainEntity.facets.push({
+                        name: "bookmarkYear",
+                        value: bookmarkDate.getFullYear().toString(),
+                    });
+                }
             }
 
             if (this.visitDate) {
                 const visitDate = new Date(this.visitDate);
-                domainEntity.facets.push({
-                    name: "visitDate",
-                    value: this.visitDate,
-                });
-                domainEntity.facets.push({
-                    name: "visitYear",
-                    value: visitDate.getFullYear().toString(),
-                });
+                const existingFacetNames = new Set(domainEntity.facets.map((f: any) => f.name));
+                
+                if (!existingFacetNames.has("visitDate")) {
+                    domainEntity.facets.push({
+                        name: "visitDate",
+                        value: this.visitDate,
+                    });
+                }
+                if (!existingFacetNames.has("visitYear")) {
+                    domainEntity.facets.push({
+                        name: "visitYear",
+                        value: visitDate.getFullYear().toString(),
+                    });
+                }
             }
 
             // Frequency facets for popularity queries
             if (this.visitCount !== undefined) {
-                domainEntity.facets.push({
-                    name: "visitCount",
-                    value: this.visitCount.toString(),
-                });
-                const frequency = this.calculateVisitFrequency();
-                domainEntity.facets.push({
-                    name: "visitFrequency",
-                    value: frequency,
-                });
+                const existingFacetNames = new Set(domainEntity.facets.map((f: any) => f.name));
+                
+                if (!existingFacetNames.has("visitCount")) {
+                    domainEntity.facets.push({
+                        name: "visitCount",
+                        value: this.visitCount.toString(),
+                    });
+                }
+                if (!existingFacetNames.has("visitFrequency")) {
+                    const frequency = this.calculateVisitFrequency();
+                    domainEntity.facets.push({
+                        name: "visitFrequency",
+                        value: frequency,
+                    });
+                }
             }
 
             // Category and source facets for filtering
             if (this.pageType) {
-                domainEntity.facets.push({
-                    name: "category",
-                    value: this.pageType,
-                });
-                const confidence = this.calculatePageTypeConfidence();
-                domainEntity.facets.push({
-                    name: "categoryConfidence",
-                    value: confidence.toString(),
-                });
+                const existingFacetNames = new Set(domainEntity.facets.map((f: any) => f.name));
+                
+                if (!existingFacetNames.has("category")) {
+                    domainEntity.facets.push({
+                        name: "category",
+                        value: this.pageType,
+                    });
+                }
+                if (!existingFacetNames.has("categoryConfidence")) {
+                    const confidence = this.calculatePageTypeConfidence();
+                    domainEntity.facets.push({
+                        name: "categoryConfidence",
+                        value: confidence.toString(),
+                    });
+                }
             }
 
             if (this.websiteSource) {
-                domainEntity.facets.push({
-                    name: "source",
-                    value: this.websiteSource,
-                });
+                const existingFacetNames = new Set(domainEntity.facets.map((f: any) => f.name));
+                
+                if (!existingFacetNames.has("source")) {
+                    domainEntity.facets.push({
+                        name: "source",
+                        value: this.websiteSource,
+                    });
+                }
             }
 
             // Folder context for bookmarks
             if (this.folder && this.websiteSource === "bookmark") {
-                domainEntity.facets.push({
-                    name: "folder",
-                    value: this.folder,
-                });
+                const existingFacetNames = new Set(domainEntity.facets.map((f: any) => f.name));
+                
+                if (!existingFacetNames.has("folder")) {
+                    domainEntity.facets.push({
+                        name: "folder",
+                        value: this.folder,
+                    });
+                }
             }
 
-            entities.push(domainEntity);
+            // Check if entity with same name already exists
+            const existingEntityNames = new Set(entities.map(e => e.name));
+            if (!existingEntityNames.has(domainEntity.name)) {
+                entities.push(domainEntity);
+            }
         }
 
         // Enhanced temporal topics for LLM reasoning
@@ -305,66 +341,129 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
             const year = bookmarkDate.getFullYear();
             const currentYear = new Date().getFullYear();
 
-            topics.push(`bookmarked in ${year}`);
-            topics.push(`${this.domain} bookmark from ${year}`);
+            const potentialTopics = [
+                `bookmarked in ${year}`,
+                `${this.domain} bookmark from ${year}`
+            ];
 
             // Relative temporal topics
             const yearsAgo = currentYear - year;
             if (yearsAgo === 0) {
-                topics.push("recent bookmark");
-                topics.push("new bookmark");
+                potentialTopics.push("recent bookmark", "new bookmark");
             } else if (yearsAgo >= 3) {
-                topics.push("old bookmark");
-                topics.push("early bookmark");
+                potentialTopics.push("old bookmark", "early bookmark");
+            }
+
+            // Add only unique topics
+            const existingTopics = new Set(topics);
+            for (const topic of potentialTopics) {
+                if (!existingTopics.has(topic)) {
+                    topics.push(topic);
+                    existingTopics.add(topic);
+                }
             }
         }
 
         if (this.visitDate) {
             const visitDate = new Date(this.visitDate);
             const year = visitDate.getFullYear();
-            topics.push(`visited in ${year}`);
-            topics.push(`${this.domain} visit from ${year}`);
+            
+            const potentialTopics = [
+                `visited in ${year}`,
+                `${this.domain} visit from ${year}`
+            ];
+
+            // Add only unique topics
+            const existingTopics = new Set(topics);
+            for (const topic of potentialTopics) {
+                if (!existingTopics.has(topic)) {
+                    topics.push(topic);
+                    existingTopics.add(topic);
+                }
+            }
         }
 
         // Frequency-derived topics
-        if (this.visitCount !== undefined && this.visitCount > 10) {
-            topics.push("frequently visited site");
-            topics.push("popular domain");
-            topics.push("often visited");
-        } else if (this.visitCount !== undefined && this.visitCount <= 2) {
-            topics.push("rarely visited site");
-            topics.push("infrequent visit");
+        if (this.visitCount !== undefined) {
+            let potentialTopics: string[] = [];
+            
+            if (this.visitCount > 10) {
+                potentialTopics = ["frequently visited site", "popular domain", "often visited"];
+            } else if (this.visitCount <= 2) {
+                potentialTopics = ["rarely visited site", "infrequent visit"];
+            }
+
+            // Add only unique topics
+            const existingTopics = new Set(topics);
+            for (const topic of potentialTopics) {
+                if (!existingTopics.has(topic)) {
+                    topics.push(topic);
+                    existingTopics.add(topic);
+                }
+            }
         }
 
         // Enhanced category topics
         if (this.pageType) {
-            topics.push(this.pageType);
-            topics.push(`${this.pageType} site`);
-            topics.push(`${this.pageType} website`);
+            const potentialTopics = [
+                this.pageType,
+                `${this.pageType} site`,
+                `${this.pageType} website`
+            ];
 
             // Category-specific temporal topics
             if (this.bookmarkDate) {
                 const year = new Date(this.bookmarkDate).getFullYear();
-                topics.push(`${this.pageType} bookmark from ${year}`);
+                potentialTopics.push(`${this.pageType} bookmark from ${year}`);
+            }
+
+            // Add only unique topics
+            const existingTopics = new Set(topics);
+            for (const topic of potentialTopics) {
+                if (!existingTopics.has(topic)) {
+                    topics.push(topic);
+                    existingTopics.add(topic);
+                }
             }
         }
 
         // Add title as topic if available
         if (this.title) {
-            topics.push(this.title);
+            const existingTopics = new Set(topics);
+            if (!existingTopics.has(this.title)) {
+                topics.push(this.title);
+            }
         }
 
         // Add folder as topic if it's a bookmark
         if (this.folder && this.websiteSource === "bookmark") {
-            topics.push(this.folder);
-            topics.push(`bookmark folder: ${this.folder}`);
+            const potentialTopics = [
+                this.folder,
+                `bookmark folder: ${this.folder}`
+            ];
+
+            // Add only unique topics
+            const existingTopics = new Set(topics);
+            for (const topic of potentialTopics) {
+                if (!existingTopics.has(topic)) {
+                    topics.push(topic);
+                    existingTopics.add(topic);
+                }
+            }
         }
 
         // Add keywords as topics
         if (this.keywords) {
+            const existingTopics = new Set(topics);
             for (const keyword of this.keywords) {
-                topics.push(keyword);
-                topics.push(`keyword: ${keyword}`);
+                const potentialTopics = [keyword, `keyword: ${keyword}`];
+                
+                for (const topic of potentialTopics) {
+                    if (!existingTopics.has(topic)) {
+                        topics.push(topic);
+                        existingTopics.add(topic);
+                    }
+                }
             }
         }
 
@@ -399,7 +498,16 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
             });
         }
 
-        actions.push(action);
+        // Check if action already exists (compare by verb, subject, and object)
+        const actionExists = actions.some(existingAction => 
+            existingAction.verbs?.[0] === action.verbs[0] &&
+            existingAction.subjectEntityName === action.subjectEntityName &&
+            existingAction.objectEntityName === action.objectEntityName
+        );
+        
+        if (!actionExists) {
+            actions.push(action);
+        }
 
         // Basic content-derived knowledge
         this.addBasicContentTopics(topics);
@@ -438,39 +546,34 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
     }
 
     private addBasicContentTopics(topics: string[]): void {
+        const existingTopics = new Set(topics);
+        
         // Basic content analysis from page content
         if (this.pageContent) {
             // Add headings as topics
             this.pageContent.headings.forEach((heading) => {
-                topics.push(heading);
-                topics.push(`topic: ${heading}`);
+                const potentialTopics = [heading, `topic: ${heading}`];
+                
+                for (const topic of potentialTopics) {
+                    if (!existingTopics.has(topic)) {
+                        topics.push(topic);
+                        existingTopics.add(topic);
+                    }
+                }
             });
-
-            // Content characteristics
-            if (
-                this.pageContent.codeBlocks &&
-                this.pageContent.codeBlocks.length > 0
-            ) {
-                topics.push("contains code examples");
-                topics.push("programming tutorial");
-                topics.push("technical documentation");
-            }
-
-            // Reading time context
-            if (this.pageContent.readingTime > 10) {
-                topics.push("long form content");
-                topics.push("detailed article");
-            } else if (this.pageContent.readingTime < 3) {
-                topics.push("quick read");
-                topics.push("short content");
-            }
         }
 
         // Meta tag derived knowledge
         if (this.metaTags?.keywords) {
             this.metaTags.keywords.forEach((keyword) => {
-                topics.push(keyword);
-                topics.push(`keyword: ${keyword}`);
+                const potentialTopics = [keyword, `keyword: ${keyword}`];
+                
+                for (const topic of potentialTopics) {
+                    if (!existingTopics.has(topic)) {
+                        topics.push(topic);
+                        existingTopics.add(topic);
+                    }
+                }
             });
         }
     }

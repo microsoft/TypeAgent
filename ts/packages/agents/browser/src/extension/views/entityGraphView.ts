@@ -885,7 +885,13 @@ class EntityGraphView {
         if (!entities || entities.length === 0) return 0;
 
         return entities.reduce((total, entity) => {
-            return total + (entity.visitCount || entity.occurrenceCount || entity.mentionCount || 1);
+            return (
+                total +
+                (entity.visitCount ||
+                    entity.occurrenceCount ||
+                    entity.mentionCount ||
+                    1)
+            );
         }, 0);
     }
 

@@ -1459,9 +1459,11 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                                     ? relatedEntity.facets
                                     : [],
                             // Add occurrence count from search results or default
-                            mentionCount: typeof relatedEntity === "object" && relatedEntity.occurrenceCount 
-                                ? relatedEntity.occurrenceCount 
-                                : 1,
+                            mentionCount:
+                                typeof relatedEntity === "object" &&
+                                relatedEntity.occurrenceCount
+                                    ? relatedEntity.occurrenceCount
+                                    : 1,
                             visitCount: 0,
                             dominantDomains: [],
                             topicAffinity:
@@ -1618,36 +1620,44 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
 
             // Combine and deduplicate entities by name (case-insensitive)
             const entityMap = new Map<string, any>();
-            
+
             // Add center entity first
             if (centerEntityNode) {
-                entityMap.set(centerEntityNode.name.toLowerCase(), centerEntityNode);
+                entityMap.set(
+                    centerEntityNode.name.toLowerCase(),
+                    centerEntityNode,
+                );
             }
-            
+
             // Add primary and related entities, deduplicating and aggregating occurrence counts
             const entitiesToProcess = [...primaryEntities, ...relatedEntities];
-            
+
             for (const entity of entitiesToProcess) {
                 if (!entity?.name) continue;
-                
+
                 const entityNameLower = entity.name.toLowerCase();
-                
+
                 if (entityMap.has(entityNameLower)) {
                     // Entity already exists - aggregate occurrence counts and update properties
                     const existing = entityMap.get(entityNameLower)!;
-                    const existingOccurrence = existing.occurrenceCount || existing.mentionCount || 1;
-                    const newOccurrence = entity.occurrenceCount || entity.mentionCount || 1;
-                    
+                    const existingOccurrence =
+                        existing.occurrenceCount || existing.mentionCount || 1;
+                    const newOccurrence =
+                        entity.occurrenceCount || entity.mentionCount || 1;
+
                     // Update the existing entity with aggregated data
-                    existing.occurrenceCount = existingOccurrence + newOccurrence;
+                    existing.occurrenceCount =
+                        existingOccurrence + newOccurrence;
                     existing.mentionCount = existing.occurrenceCount; // Keep backward compatibility
-                    
+
                     // Update confidence to weighted average
                     const existingConfidence = existing.confidence || 0.5;
                     const newConfidence = entity.confidence || 0.5;
-                    existing.confidence = (existingConfidence * existingOccurrence + newConfidence * newOccurrence) / 
-                                        (existingOccurrence + newOccurrence);
-                    
+                    existing.confidence =
+                        (existingConfidence * existingOccurrence +
+                            newConfidence * newOccurrence) /
+                        (existingOccurrence + newOccurrence);
+
                     // Merge other properties if they don't exist in the existing entity
                     if (!existing.facets && entity.facets) {
                         existing.facets = entity.facets;
@@ -1658,32 +1668,37 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                     if (!existing.url && entity.url) {
                         existing.url = entity.url;
                     }
-                    
+
                     // Merge arrays
                     if (entity.dominantDomains) {
-                        existing.dominantDomains = [...new Set([
-                            ...(existing.dominantDomains || []), 
-                            ...entity.dominantDomains
-                        ])];
+                        existing.dominantDomains = [
+                            ...new Set([
+                                ...(existing.dominantDomains || []),
+                                ...entity.dominantDomains,
+                            ]),
+                        ];
                     }
                     if (entity.topicAffinity) {
-                        existing.topicAffinity = [...new Set([
-                            ...(existing.topicAffinity || []), 
-                            ...entity.topicAffinity
-                        ])];
+                        existing.topicAffinity = [
+                            ...new Set([
+                                ...(existing.topicAffinity || []),
+                                ...entity.topicAffinity,
+                            ]),
+                        ];
                     }
-                    
                 } else {
                     // New entity - ensure it has occurrence count
                     const processedEntity = {
                         ...entity,
-                        occurrenceCount: entity.occurrenceCount || entity.mentionCount || 1,
-                        mentionCount: entity.occurrenceCount || entity.mentionCount || 1, // Backward compatibility
+                        occurrenceCount:
+                            entity.occurrenceCount || entity.mentionCount || 1,
+                        mentionCount:
+                            entity.occurrenceCount || entity.mentionCount || 1, // Backward compatibility
                     };
                     entityMap.set(entityNameLower, processedEntity);
                 }
             }
-            
+
             const allEntities = Array.from(entityMap.values());
 
             // Generate relationships
@@ -2383,7 +2398,6 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
 
         return relationships;
     }
-
 }
 
 export class DefaultEntityCacheServices implements EntityCacheServices {
