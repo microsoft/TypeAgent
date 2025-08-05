@@ -8,7 +8,6 @@ import {
     ActionInfo,
     StructuredDataCollection,
 } from "../contentExtractor.js";
-import { DetectedAction, ActionSummary } from "../actionExtractor.js";
 
 /**
  * Extraction modes determine the level of content processing and AI usage
@@ -275,4 +274,21 @@ export function getEffectiveConfig(
             config.qualityThreshold ?? modeConfig.defaultQualityThreshold,
         enableCrossChunkMerging: config.enableCrossChunkMerging ?? true,
     };
+}
+
+/**
+ * Action detection interfaces for browser agent integration
+ */
+export interface DetectedAction {
+    type: string;
+    element: string;
+    text?: string;
+    confidence: number;
+}
+
+export interface ActionSummary {
+    totalActions: number;
+    actionTypes: string[];
+    highConfidenceActions: number;
+    actionDistribution: { [key: string]: number };
 }

@@ -58,10 +58,6 @@ export async function createKnowproWebsiteCommands(
     commands.kpWebsiteAnalyzeContent = websiteAnalyzeContent;
     commands.kpWebsiteTestEnhanced = websiteTestEnhanced;
 
-    // NEW: Action detection commands
-    commands.kpWebsiteAnalyzeActions = websiteAnalyzeActions;
-    commands.kpWebsiteListActions = websiteListActions;
-
     // Enhanced knowledge search commands
     commands.kpWebsiteSearchEntities = websiteSearchEntities;
     commands.kpWebsiteSearchTopics = websiteSearchTopics;
@@ -667,7 +663,7 @@ export async function createKnowproWebsiteCommands(
                 totalActions += metadata.detectedActions.length;
 
                 metadata.detectedActions.forEach((action: DetectedAction) => {
-                    const actionType = action.actionType.replace("Action", "");
+                    const actionType = action.type;
                     actionTypeCounts.set(
                         actionType,
                         (actionTypeCounts.get(actionType) || 0) + 1,
@@ -1136,7 +1132,7 @@ export async function createKnowproWebsiteCommands(
                                     const actionSummary = highConfActions
                                         .map(
                                             (a: DetectedAction) =>
-                                                `${a.actionType.replace("Action", "")} (${(a.confidence * 100).toFixed(0)}%)`,
+                                                `${a.type} (${(a.confidence * 100).toFixed(0)}%)`,
                                         )
                                         .join(", ");
                                     context.printer.writeLine(
@@ -1654,189 +1650,6 @@ export async function createKnowproWebsiteCommands(
         closeWebsite();
     }
 
-    // NEW: Action Analysis Commands
-
-    function websiteAnalyzeActionsDef(): CommandMetadata {
-        return {
-            description: "Analyze actions available on specific URLs",
-            args: {
-                url: arg("URL to analyze for actions"),
-            },
-            options: {
-                confidence: arg("Minimum confidence threshold", "0.5"),
-                showDetails: argBool("Show detailed action information", false),
-            },
-        };
-    }
-    commands.kpWebsiteAnalyzeActions.metadata = websiteAnalyzeActionsDef();
-
-    async function websiteAnalyzeActions(args: string[]) {
-        const namedArgs = parseNamedArguments(args, websiteAnalyzeActionsDef());
-
-        try {
-            context.printer.writeLine(`🎯 Analyzing actions: ${namedArgs.url}`);
-
-            const actionExtractor = new website.ActionExtractor({
-                minConfidence: parseFloat(namedArgs.confidence) || 0.5,
-            });
-
-            const actions = await actionExtractor.extractActionsFromUrl(
-                namedArgs.url,
-            );
-
-            if (actions.length === 0) {
-                context.printer.writeLine(
-                    `❌ No actions found with confidence >= ${namedArgs.confidence}`,
-                );
-                return;
-            }
-
-            context.printer.writeLine(`\n🎯 Found ${actions.length} actions:`);
-
-            // Group by action type
-            const groupedActions = new Map<string, any[]>();
-            actions.forEach((action) => {
-                if (!groupedActions.has(action.actionType)) {
-                    groupedActions.set(action.actionType, []);
-                }
-                groupedActions.get(action.actionType)!.push(action);
-            });
-
-            for (const [actionType, actionGroup] of groupedActions) {
-                context.printer.writeLine(
-                    `\n📋 ${actionType} (${actionGroup.length}):`,
-                );
-
-                actionGroup.forEach((action: DetectedAction) => {
-                    const confidenceIcon =
-                        action.confidence > 0.8
-                            ? "🟢"
-                            : action.confidence > 0.6
-                              ? "🟡"
-                              : "🔴";
-                    context.printer.writeLine(
-                        `   ${confidenceIcon} ${action.name} (${(action.confidence * 100).toFixed(0)}%)`,
-                    );
-
-                    if (namedArgs.showDetails) {
-                        if (action.target) {
-                            context.printer.writeLine(
-                                `      Target: ${action.target.type} - ${action.target.name || "N/A"}`,
-                            );
-                        }
-                        if (action.selectors && action.selectors.length > 0) {
-                            context.printer.writeLine(
-                                `      Selectors: ${action.selectors.slice(0, 2).join(", ")}`,
-                            );
-                        }
-                        if (action.url && action.url !== namedArgs.url) {
-                            context.printer.writeLine(
-                                `      Action URL: ${action.url}`,
-                            );
-                        }
-                    }
-                });
-            }
-        } catch (error) {
-            context.printer.writeError(`Action analysis failed: ${error}`);
-        }
-    }
-
-    function websiteListActionsDef(): CommandMetadata {
-        return {
-            description: "List all sites with specific action types",
-            options: {
-                actionType: arg(
-                    "Filter by action type (BuyAction, DownloadAction, etc.)",
-                ),
-                confidence: arg("Minimum confidence threshold", "0.7"),
-                limit: arg("Maximum results to show", "10"),
-            },
-        };
-    }
-    commands.kpWebsiteListActions.metadata = websiteListActionsDef();
-
-    async function websiteListActions(args: string[]) {
-        const websiteCollection = ensureMemoryLoaded();
-        if (!websiteCollection) return;
-
-        const namedArgs = parseNamedArguments(args, websiteListActionsDef());
-        const minConfidence = parseFloat(namedArgs.confidence) || 0.7;
-        const limit = parseInt(namedArgs.limit) || 10;
-
-        context.printer.writeLine(
-            `🎯 Finding sites with actions (confidence >= ${minConfidence}):`,
-        );
-
-        const sitesWithActions: any[] = [];
-
-        for (let i = 0; i < websiteCollection.messages.length; i++) {
-            const website = websiteCollection.messages.get(i);
-            const metadata = website?.metadata as website.WebsiteDocPartMeta;
-            if (!metadata.detectedActions) continue;
-
-            const relevantActions = metadata.detectedActions.filter(
-                (action) => {
-                    const meetsConfidence = action.confidence >= minConfidence;
-                    const meetsType =
-                        !namedArgs.actionType ||
-                        action.actionType === namedArgs.actionType;
-                    return meetsConfidence && meetsType;
-                },
-            );
-
-            if (relevantActions.length > 0) {
-                sitesWithActions.push({
-                    url: metadata.url,
-                    title: metadata.title,
-                    domain: metadata.domain,
-                    actions: relevantActions,
-                });
-            }
-        }
-
-        if (sitesWithActions.length === 0) {
-            context.printer.writeLine(
-                `❌ No sites found with matching actions`,
-            );
-            return;
-        }
-
-        context.printer.writeLine(
-            `\n📊 Found ${sitesWithActions.length} sites with actions:\n`,
-        );
-
-        sitesWithActions
-            .sort((a, b) => b.actions.length - a.actions.length)
-            .slice(0, limit)
-            .forEach((site, index) => {
-                context.printer.writeLine(
-                    `${index + 1}. **${site.title || site.domain}**`,
-                );
-                context.printer.writeLine(`   URL: ${site.url}`);
-
-                const actionSummary = site.actions
-                    .map(
-                        (a: DetectedAction) =>
-                            `${a.actionType.replace("Action", "")} (${(a.confidence * 100).toFixed(0)}%)`,
-                    )
-                    .join(", ");
-                context.printer.writeLine(`   Actions: ${actionSummary}`);
-
-                // Show high-confidence actions
-                const highConfActions = site.actions.filter(
-                    (a: DetectedAction) => a.confidence > 0.8,
-                );
-                if (highConfActions.length > 0) {
-                    context.printer.writeLine(
-                        `   High-confidence: ${highConfActions.map((a: DetectedAction) => a.name).join(", ")}`,
-                    );
-                }
-
-                context.printer.writeLine("");
-            });
-    }
-
     function calculateActionStats(websites: website.Website[]) {
         let sitesWithActions = 0;
         let totalActions = 0;
@@ -1852,7 +1665,7 @@ export async function createKnowproWebsiteCommands(
                 totalActions += w.metadata.detectedActions.length;
 
                 w.metadata.detectedActions.forEach((action) => {
-                    actionTypesSet.add(action.actionType.replace("Action", ""));
+                    actionTypesSet.add(action.type);
                     if (action.confidence > 0.8) {
                         highConfidenceActions++;
                     }

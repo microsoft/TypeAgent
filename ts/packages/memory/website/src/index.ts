@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export * from "./actionExtractor.js";
 export * from "./chunkingUtils.js";
 
 // Core types and interfaces (keep for external compatibility)
@@ -40,4 +39,6 @@ export {
     AIModelRequiredError,
     AIExtractionFailedError,
     getEffectiveConfig,
+    ActionSummary,
+    DetectedAction,
 } from "./extraction/index.js";

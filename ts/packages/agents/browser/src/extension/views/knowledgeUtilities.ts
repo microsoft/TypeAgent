@@ -1539,7 +1539,7 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
 
     /**
      * Smart entity search with fallback strategy
-     * Uses entity search first, then topic search, then hybrid search, then text search
+     * Uses entity search first, then topic search as fallback
      */
     private async performEntitySearchWithFallback(
         entityName: string,
@@ -1654,92 +1654,19 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
             }
         }
 
-        // Strategy 3: Hybrid search if still no good results
-        if (!searchResult || searchResult.websites.length < 2) {
-            try {
-                console.log(`Trying hybrid search for: ${entityName}`);
-                const hybridResults = await this.extensionService.hybridSearch(
-                    entityName,
-                    "",
-                    maxResults,
-                );
-
-                if (
-                    hybridResults &&
-                    hybridResults.websites &&
-                    hybridResults.websites.length > 0
-                ) {
-                    const existingWebsites = searchResult?.websites || [];
-                    const existingRelatedEntities =
-                        searchResult?.relatedEntities || [];
-                    const existingTopTopics = searchResult?.topTopics || [];
-
-                    searchResult = {
-                        websites: [
-                            ...existingWebsites,
-                            ...hybridResults.websites,
-                        ].slice(0, maxResults),
-                        relatedEntities: [
-                            ...existingRelatedEntities,
-                            ...(hybridResults.relatedEntities || []),
-                        ],
-                        topTopics: [
-                            ...existingTopTopics,
-                            ...(hybridResults.topTopics || []),
-                        ],
-                        summary:
-                            hybridResults.summary ||
-                            searchResult?.summary ||
-                            null,
-                        metadata: {
-                            ...searchResult?.metadata,
-                            ...hybridResults.metadata,
-                        },
-                        answerSources: [
-                            ...(searchResult?.answerSources || []),
-                            ...(hybridResults.answerSources || []),
-                        ],
-                    };
-                    searchMethod =
-                        searchResult.websites.length > existingWebsites.length
-                            ? "hybrid"
-                            : searchMethod;
-                    console.log(
-                        "✅ Hybrid search found %d additional results for: %s",
-                        hybridResults.websites.length,
-                        entityName,
-                        "Added related entities: %d",
-                        hybridResults.relatedEntities?.length || 0,
-                        "Added topics: %d",
-                        hybridResults.topTopics?.length || 0,
-                    );
-                }
-            } catch (error) {
-                console.warn("Hybrid search failed for: %s", entityName, error);
-            }
-        }
-
-        // Strategy 4: Text search fallback (original slow method)
+        // If no results from entity or topic search, return empty result
         if (!searchResult || searchResult.websites.length === 0) {
-            try {
-                console.log(`Falling back to text search for: ${entityName}`);
-                searchResult = await this.extensionService.searchWebMemories(
-                    entityName,
-                    {},
-                );
-                searchMethod = "text_fallback";
-                console.log(
-                    `⚠️ Text fallback found ${searchResult?.websites?.length || 0} results for: ${entityName}`,
-                );
-            } catch (error) {
-                console.error(
-                    "All search methods failed for: %s",
-                    entityName,
-                    error,
-                );
-                searchResult = { websites: [] };
-                searchMethod = "failed";
-            }
+            console.log(
+                `No results found for entity: ${entityName} using entity or topic search`,
+            );
+            searchResult = {
+                websites: [],
+                relatedEntities: [],
+                topTopics: [],
+                metadata: {},
+                answerSources: [],
+            };
+            searchMethod = "no_results";
         }
 
         // Add metadata about which search method was used
@@ -2282,6 +2209,75 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                 }
             }
         });
+
+        // Document co-occurrence relationships - entities that appear together in the same document
+        const documentCoOccurrences =
+            this.generateDocumentCoOccurrenceRelationships(entities);
+        relationships.push(...documentCoOccurrences);
+
+        return relationships;
+    }
+
+    /**
+     * Generate relationships between entities that co-occur in the same document
+     */
+    private generateDocumentCoOccurrenceRelationships(entities: any[]): any[] {
+        const relationships: any[] = [];
+        const documentEntityMap = new Map<string, any[]>();
+
+        // Group entities by their source document URL
+        entities.forEach((entity) => {
+            if (entity.url && entity.category === "primary") {
+                const url = entity.url;
+                if (!documentEntityMap.has(url)) {
+                    documentEntityMap.set(url, []);
+                }
+                documentEntityMap.get(url)!.push(entity);
+            }
+        });
+
+        // For each document with multiple entities, create co-occurrence relationships
+        documentEntityMap.forEach((documentEntities, documentUrl) => {
+            if (documentEntities.length > 1) {
+                // Create relationships between all pairs of entities in the same document
+                for (let i = 0; i < documentEntities.length; i++) {
+                    for (let j = i + 1; j < documentEntities.length; j++) {
+                        const entity1 = documentEntities[i];
+                        const entity2 = documentEntities[j];
+
+                        if (
+                            entity1.name &&
+                            entity2.name &&
+                            entity1.name.trim() !== entity2.name.trim()
+                        ) {
+                            // Calculate co-occurrence strength based on confidence of both entities
+                            const strength = Math.min(
+                                (entity1.confidence || 0.5) *
+                                    (entity2.confidence || 0.5) *
+                                    1.2,
+                                0.9,
+                            );
+
+                            relationships.push({
+                                id: `co_occurrence_${entity1.id}_${entity2.id}`,
+                                from: entity1.name.trim(),
+                                to: entity2.name.trim(),
+                                type: "co_occurrence",
+                                strength: strength,
+                                source: documentUrl,
+                                direction: "bidirectional",
+                                category: "co_occurrence",
+                                evidence: `Both entities appear in: ${this.extractDomain(documentUrl)}`,
+                            });
+                        }
+                    }
+                }
+            }
+        });
+
+        console.log(
+            `Generated ${relationships.length} document co-occurrence relationships from ${documentEntityMap.size} documents`,
+        );
 
         return relationships;
     }

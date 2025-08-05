@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { conversation as kpLib } from "knowledge-processor";
-import { DetectedAction, ActionSummary } from "./actionExtractor.js";
+import { DetectedAction, ActionSummary } from "./extraction/types.js";
 
 export type ExtractionMode = "basic" | "content" | "macros" | "full";
 

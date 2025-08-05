@@ -342,6 +342,9 @@ export class EntitySidebar {
             technology: '<i class="bi bi-cpu"></i>',
             event: '<i class="bi bi-calendar-event"></i>',
             document: '<i class="bi bi-file-text"></i>',
+            website: '<i class="bi bi-globe"></i>',
+            topic: '<i class="bi bi-tag"></i>',
+            related_entity: '<i class="bi bi-link-45deg"></i>',
         };
 
         return iconMap[type] || '<i class="bi bi-diagram-2"></i>';

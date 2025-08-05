@@ -9,8 +9,8 @@ import {
     StructuredDataCollection,
     ActionInfo,
 } from "./contentExtractor.js";
-import { DetectedAction, ActionSummary } from "./actionExtractor.js";
 import { websiteToTextChunksEnhanced } from "./chunkingUtils.js";
+import { DetectedAction, ActionSummary } from "./extraction/types.js";
 
 export interface WebsiteVisitInfo {
     url: string;
@@ -35,7 +35,7 @@ export interface WebsiteVisitInfo {
     extractedActions?: ActionInfo[];
     contentSummary?: string;
 
-    // NEW: Action detection fields
+    // Action detection fields
     detectedActions?: DetectedAction[];
     actionSummary?: ActionSummary;
 }
@@ -104,7 +104,7 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
         if (visitInfo.contentSummary !== undefined)
             this.contentSummary = visitInfo.contentSummary;
 
-        // NEW: Action detection properties
+        // Action detection properties
         if (visitInfo.detectedActions !== undefined)
             this.detectedActions = visitInfo.detectedActions;
         if (visitInfo.actionSummary !== undefined)
@@ -404,13 +404,6 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
         // Basic content-derived knowledge
         this.addBasicContentTopics(topics);
 
-        // NEW: Action-derived knowledge
-        if (this.detectedActions && this.detectedActions.length > 0) {
-            this.addActionTopics(topics, this.detectedActions);
-            this.addActionEntities(entities, this.detectedActions);
-            this.addActionCapabilities(actions, this.detectedActions);
-        }
-
         return {
             entities,
             topics,
@@ -478,255 +471,6 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
             this.metaTags.keywords.forEach((keyword) => {
                 topics.push(keyword);
                 topics.push(`keyword: ${keyword}`);
-            });
-        }
-    }
-
-    private addActionTopics(
-        topics: string[],
-        detectedActions: DetectedAction[],
-    ): void {
-        // Add action type topics - filter out undefined actionTypes
-        const actionTypes = new Set(
-            detectedActions
-                .map((a) => a.actionType)
-                .filter(
-                    (actionType): actionType is string =>
-                        actionType != null && actionType !== "",
-                ),
-        );
-
-        actionTypes.forEach((actionType) => {
-            topics.push(`supports ${actionType}`);
-            topics.push(
-                `${actionType.replace("Action", "").toLowerCase()} available`,
-            );
-
-            // Action type specific topics
-            switch (actionType) {
-                case "BuyAction":
-                    topics.push("commerce site");
-                    topics.push("shopping available");
-                    topics.push("purchase options");
-                    break;
-                case "DownloadAction":
-                    topics.push("downloads available");
-                    topics.push("resource site");
-                    topics.push("file downloads");
-                    break;
-                case "ShareAction":
-                    topics.push("social sharing");
-                    topics.push("shareable content");
-                    topics.push("social features");
-                    break;
-                case "SearchAction":
-                    topics.push("searchable site");
-                    topics.push("search functionality");
-                    topics.push("search interface");
-                    break;
-                case "SubscribeAction":
-                    topics.push("subscription available");
-                    topics.push("newsletter signup");
-                    topics.push("email notifications");
-                    break;
-                case "WatchAction":
-                    topics.push("video content");
-                    topics.push("playable media");
-                    topics.push("multimedia site");
-                    break;
-                case "CommunicateAction":
-                    topics.push("contact available");
-                    topics.push("communication forms");
-                    topics.push("customer support");
-                    break;
-                case "LoginAction":
-                    topics.push("user accounts");
-                    topics.push("authentication required");
-                    topics.push("member login");
-                    break;
-            }
-        });
-
-        // High-confidence action topics
-        const highConfidenceActions = detectedActions.filter(
-            (a) => a.confidence > 0.8,
-        );
-        if (highConfidenceActions.length > 0) {
-            topics.push("high-confidence actions");
-            topics.push("reliable action detection");
-        }
-
-        // Action quantity topics
-        if (detectedActions.length > 5) {
-            topics.push("action-rich site");
-            topics.push("interactive website");
-            topics.push("many features available");
-        } else if (detectedActions.length === 1) {
-            topics.push("focused functionality");
-            topics.push("single primary action");
-        }
-
-        // Target type topics
-        detectedActions.forEach((action) => {
-            if (action.target?.type) {
-                topics.push(`operates on ${action.target.type}`);
-                if (action.target.type === "Product") {
-                    topics.push("product-focused");
-                    topics.push("e-commerce");
-                } else if (action.target.type === "DigitalDocument") {
-                    topics.push("document-focused");
-                    topics.push("resource library");
-                }
-            }
-        });
-    }
-
-    private addActionEntities(
-        entities: any[],
-        detectedActions: DetectedAction[],
-    ): void {
-        // Create action entities for high-confidence actions
-        detectedActions.forEach((action, index) => {
-            if (action.confidence > 0.7 && action.actionType) {
-                const actionEntity: any = {
-                    name: `${this.domain}_action_${index}`,
-                    type: [
-                        "action",
-                        action.actionType.toLowerCase().replace("action", ""),
-                    ],
-                    facets: [
-                        { name: "actionType", value: action.actionType },
-                        { name: "actionName", value: action.name },
-                        {
-                            name: "confidence",
-                            value: action.confidence.toString(),
-                        },
-                        { name: "domain", value: this.domain || "unknown" },
-                        { name: "url", value: this.url },
-                    ],
-                };
-
-                // Add target information
-                if (action.target) {
-                    actionEntity.facets.push({
-                        name: "targetType",
-                        value: action.target.type,
-                    });
-                    if (action.target.name) {
-                        actionEntity.facets.push({
-                            name: "targetName",
-                            value: action.target.name,
-                        });
-                    }
-                    if (action.target.price) {
-                        actionEntity.facets.push(
-                            { name: "hasPrice", value: "true" },
-                            {
-                                name: "priceText",
-                                value: action.target.price.text || "",
-                            },
-                        );
-                    }
-                    if (action.target.fileFormat) {
-                        actionEntity.facets.push({
-                            name: "fileFormat",
-                            value: action.target.fileFormat,
-                        });
-                    }
-                }
-
-                // Add method information for forms
-                if (action.method) {
-                    actionEntity.facets.push({
-                        name: "httpMethod",
-                        value: action.method,
-                    });
-                }
-
-                // Add source information
-                if (action.metadata?.source) {
-                    actionEntity.facets.push({
-                        name: "detectionSource",
-                        value: action.metadata.source,
-                    });
-                }
-
-                entities.push(actionEntity);
-            }
-        });
-    }
-
-    private addActionCapabilities(
-        actions: any[],
-        detectedActions: DetectedAction[],
-    ): void {
-        // Add primary action capability
-        if (detectedActions.length > 0) {
-            const primaryAction = detectedActions.sort(
-                (a, b) => b.confidence - a.confidence,
-            )[0];
-
-            if (primaryAction.actionType) {
-                const actionVerb = primaryAction.actionType
-                    .replace("Action", "")
-                    .toLowerCase();
-
-                actions.push({
-                    verbs: ["can", actionVerb],
-                    verbTense: "present",
-                    subjectEntityName: "user",
-                    objectEntityName: this.domain || this.url,
-                    indirectObjectEntityName: "none",
-                    params: [
-                        { name: "actionType", value: primaryAction.actionType },
-                        {
-                            name: "actionConfidence",
-                            value: primaryAction.confidence.toString(),
-                        },
-                        { name: "actionName", value: primaryAction.name },
-                    ],
-                });
-            }
-        }
-
-        // Add specific high-value actions
-        const buyActions = detectedActions.filter(
-            (a) => a.actionType === "BuyAction" && a.confidence > 0.8,
-        );
-        if (buyActions.length > 0) {
-            actions.push({
-                verbs: ["can", "purchase"],
-                verbTense: "present",
-                subjectEntityName: "user",
-                objectEntityName: this.domain || this.url,
-                indirectObjectEntityName: "none",
-                params: [
-                    { name: "actionType", value: "BuyAction" },
-                    {
-                        name: "actionCount",
-                        value: buyActions.length.toString(),
-                    },
-                ],
-            });
-        }
-
-        const downloadActions = detectedActions.filter(
-            (a) => a.actionType === "DownloadAction" && a.confidence > 0.8,
-        );
-        if (downloadActions.length > 0) {
-            actions.push({
-                verbs: ["can", "download"],
-                verbTense: "present",
-                subjectEntityName: "user",
-                objectEntityName: this.domain || this.url,
-                indirectObjectEntityName: "none",
-                params: [
-                    { name: "actionType", value: "DownloadAction" },
-                    {
-                        name: "actionCount",
-                        value: downloadActions.length.toString(),
-                    },
-                ],
             });
         }
     }

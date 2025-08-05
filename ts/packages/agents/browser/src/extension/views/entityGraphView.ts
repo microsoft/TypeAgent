@@ -573,11 +573,14 @@ class EntityGraphView {
                                 graphData.entities,
                             ) || 0.8,
                     },
-                    // Website-based entities
+                    // Website-based entities - mark as documents
                     ...graphData.entities.map((e: any) => ({
                         name: e.name || e.entityName || "Unknown",
-                        type: e.type || e.entityType || "website",
+                        type: e.url
+                            ? "document"
+                            : e.type || e.entityType || "website",
                         confidence: e.confidence || 0.5,
+                        url: e.url,
                     })),
                     // Related entities from search results
                     ...(graphData.relatedEntities || []).map(
@@ -726,8 +729,14 @@ class EntityGraphView {
                     ),
                     relationships: validRelationships || [],
                     dominantDomains: this.extractDomains(graphData.entities),
-                    firstSeen: this.getEarliestDate(graphData.entities),
-                    lastSeen: this.getLatestDate(graphData.entities),
+                    firstSeen: this.getEarliestDate(
+                        graphData.entities,
+                        validatedRelationships,
+                    ),
+                    lastSeen: this.getLatestDate(
+                        graphData.entities,
+                        validatedRelationships,
+                    ),
                     visitCount: this.calculateTotalVisits(graphData.entities),
                 };
                 await this.sidebar.loadEntity(centerEntityData);
@@ -948,30 +957,48 @@ class EntityGraphView {
         return Array.from(domains).slice(0, 5);
     }
 
-    private getEarliestDate(entities: any[]): string {
+    private getEarliestDate(entities: any[], relationships: any[]): string {
         if (!entities || entities.length === 0) return new Date().toISOString();
+
+        const containsRelationships = relationships.filter(
+            (r) => r.type === "contains",
+        );
+        const entityNamesInContainsRelationships = new Set(
+            containsRelationships.map((r) => r.to),
+        );
 
         let earliest: string | null = null;
         entities.forEach((entity) => {
-            const date =
-                entity.lastVisited || entity.dateAdded || entity.createdAt;
-            if (date && (!earliest || date < earliest)) {
-                earliest = date;
+            if (entityNamesInContainsRelationships.has(entity.name)) {
+                const date =
+                    entity.lastVisited || entity.dateAdded || entity.createdAt;
+                if (date && (!earliest || date < earliest)) {
+                    earliest = date;
+                }
             }
         });
 
         return earliest || new Date().toISOString();
     }
 
-    private getLatestDate(entities: any[]): string {
+    private getLatestDate(entities: any[], relationships: any[]): string {
         if (!entities || entities.length === 0) return new Date().toISOString();
+
+        const containsRelationships = relationships.filter(
+            (r) => r.type === "contains",
+        );
+        const entityNamesInContainsRelationships = new Set(
+            containsRelationships.map((r) => r.to),
+        );
 
         let latest: string | null = null;
         entities.forEach((entity) => {
-            const date =
-                entity.lastVisited || entity.updatedAt || entity.lastSeen;
-            if (date && (!latest || date > latest)) {
-                latest = date;
+            if (entityNamesInContainsRelationships.has(entity.name)) {
+                const date =
+                    entity.lastVisited || entity.updatedAt || entity.lastSeen;
+                if (date && (!latest || date > latest)) {
+                    latest = date;
+                }
             }
         });
 
