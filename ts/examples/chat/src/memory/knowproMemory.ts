@@ -39,7 +39,6 @@ import { createKnowproImageCommands } from "./knowproImage.js";
 import { createKnowproPodcastCommands } from "./knowproPodcast.js";
 import { createKnowproTestCommands } from "./knowproTest.js";
 import { createKnowproDocMemoryCommands } from "./knowproDoc.js";
-import { createKnowproWebsiteCommands } from "./knowproWebsite.js";
 import { Result } from "typechat";
 import { conversation as knowLib } from "knowledge-processor";
 import { createKnowproKnowledgeCommands } from "./knowproKnowledge.js";
@@ -111,7 +110,6 @@ export async function createKnowproCommands(
     await createKnowproDataFrameCommands(context, commands);
     await createKnowproTestCommands(context, commands);
     await createKnowproDocMemoryCommands(context, commands);
-    await createKnowproWebsiteCommands(context, commands);
     await createKnowproKnowledgeCommands(context, commands);
 
     // Diagnostic commands
