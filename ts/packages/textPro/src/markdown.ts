@@ -6,6 +6,7 @@ import {
     conversation as kpLib,
     splitIntoParagraphs,
 } from "knowledge-processor";
+import { htmlToText } from "./html.js";
 
 /**
  * Parses markdown into a token DOM using the "marked" library
@@ -96,6 +97,16 @@ export function markdownToTextBlocks(
                     curTextBlock += token.raw;
                 }
                 break;
+            case "html":
+                const htmlNode = token as md.Tokens.HTML;
+                const htmlText = htmlToText(htmlNode.raw);
+                if (curTextBlock.length + token.raw.length > maxCharsPerChunk) {
+                    const subParagraphs = textToParagraphs(htmlText);
+                    traverseTokens(subParagraphs, depth + 1, token);
+                } else {
+                    curTextBlock += token.raw;
+                }
+                break;
             case "paragraph":
                 beginBlock(
                     token,
@@ -113,7 +124,7 @@ export function markdownToTextBlocks(
                     // Huge list. Need to break it up
                     // Note: a smaller list will automatically result in a fresh block if it exceeds
                     // the chunk limit (see beginBlock)
-                    const subLists = listToLists(
+                    const subLists = splitList(
                         token as md.Tokens.List,
                         maxCharsPerChunk,
                     );
@@ -131,16 +142,23 @@ export function markdownToTextBlocks(
                 }
                 break;
             case "table":
-                // TODO: split very large tables into smaller tables
-                beginBlock(
-                    token,
-                    prevBlockName === "heading" ||
-                        prevBlockName === "paragraph",
-                    token.raw.length,
-                    parentToken,
-                );
-                curTextBlock += token.raw;
-                visitInnerNodes(token);
+                if (depth === 1 && token.raw.length > maxCharsPerChunk) {
+                    const subTables = splitTable(
+                        token as md.Tokens.Table,
+                        maxCharsPerChunk,
+                    );
+                    traverseTokens(subTables, depth + 1, token);
+                } else {
+                    beginBlock(
+                        token,
+                        prevBlockName === "heading" ||
+                            prevBlockName === "paragraph",
+                        token.raw.length,
+                        parentToken,
+                    );
+                    curTextBlock += token.raw;
+                    visitInnerNodes(token);
+                }
                 break;
             case "blockquote":
             case "codespan":
@@ -607,7 +625,7 @@ function textToParagraphs(text: string): md.Tokens.Paragraph[] {
     });
 }
 
-function listToLists(
+function splitList(
     list: md.Tokens.List,
     maxCharsPerChunk: number,
 ): md.Tokens.List[] {
@@ -619,11 +637,7 @@ function listToLists(
         let itemLength = listItems[i].raw.length;
         if (curListLength + itemLength > maxCharsPerChunk) {
             lists.push(
-                listItemsToList(
-                    listItems.slice(curListStartAt, i),
-                    list.ordered,
-                    list.loose,
-                ),
+                listItemsToList(list, listItems.slice(curListStartAt, i)),
             );
             curListLength = 0;
             curListStartAt = i;
@@ -631,21 +645,14 @@ function listToLists(
         curListLength += itemLength;
     }
     if (curListLength > 0) {
-        lists.push(
-            listItemsToList(
-                listItems.slice(curListStartAt),
-                list.ordered,
-                list.loose,
-            ),
-        );
+        lists.push(listItemsToList(list, listItems.slice(curListStartAt)));
     }
     return lists;
 }
 
 function listItemsToList(
+    srcList: md.Tokens.List,
     items: md.Tokens.ListItem[],
-    ordered: boolean,
-    loose: boolean,
 ): md.Tokens.List {
     const rawItems = items.map((item) => item.raw);
     const raw = rawItems.join("\n");
@@ -653,8 +660,54 @@ function listItemsToList(
         type: "list",
         items,
         raw,
-        ordered,
-        loose,
+        ordered: srcList.ordered,
+        loose: srcList.loose,
         start: "",
     };
+}
+
+function splitTable(
+    table: md.Tokens.Table,
+    maxCharsPerChunk: number,
+): md.Tokens.Table[] {
+    const tables: md.Tokens.Table[] = [];
+    const rows = table.rows;
+    let curTableStartAt = 0;
+    let curTableLength = 0;
+    for (let i = 0; i < rows.length; ++i) {
+        const row = rows[i];
+        const rowLength = getRowLength(row);
+        if (curTableLength + rowLength > maxCharsPerChunk) {
+            tables.push(rowsToTable(table, rows.slice(curTableStartAt, i)));
+            curTableLength = 0;
+            curTableStartAt = i;
+        }
+        curTableLength += rowLength;
+    }
+    if (curTableLength > 0) {
+        tables.push(rowsToTable(table, rows.slice(curTableStartAt)));
+    }
+    return tables;
+}
+
+function rowsToTable(
+    srcTable: md.Tokens.Table,
+    rows: md.Tokens.TableCell[][],
+): md.Tokens.Table {
+    const raw = rows.map((r) => getRowRaw(r)).join("");
+    return {
+        type: "table",
+        header: srcTable.header,
+        align: srcTable.align,
+        rows,
+        raw,
+    };
+}
+
+function getRowRaw(row: md.Tokens.TableCell[]): string {
+    return row.map((r) => r.text).join("");
+}
+
+function getRowLength(row: md.Tokens.TableCell[]): number {
+    return row.reduce<number>((total, cell) => total + cell.text.length, 0);
 }
