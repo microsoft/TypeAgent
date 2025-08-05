@@ -72,6 +72,7 @@ export async function createKnowproTestCommands(
             },
             options: {
                 chunkSize: argChunkSize(4096),
+                knowledge: argBool("Show knowledge", true),
             },
         };
     }
@@ -85,13 +86,24 @@ export async function createKnowproTestCommands(
         let markdown = await readAllText(filePath);
         let mdDom = tp.markdownTokenize(markdown);
         //context.printer.writeJsonInColor(chalk.gray, mdDom);
+        const chunkSize = namedArgs.chunkSize;
         const [textBlocks, knowledgeBlocks] =
-            tp.markdownToTextAndKnowledgeBlocks(mdDom, namedArgs.chunkSize);
+            tp.markdownToTextAndKnowledgeBlocks(mdDom, chunkSize);
         assert(textBlocks.length === knowledgeBlocks.length);
         for (let i = 0; i < textBlocks.length; ++i) {
-            context.printer.writeLine("=====");
-            context.printer.writeLine(textBlocks[i]);
-            context.printer.writeJsonInColor(chalk.gray, knowledgeBlocks[i]);
+            const textBlock = textBlocks[i];
+            context.printer.writeLineInColor(
+                textBlock.length > chunkSize ? chalk.red : chalk.green,
+                `[${textBlock.length}]`,
+            );
+            context.printer.writeLine(textBlock);
+
+            if (namedArgs.knowledge) {
+                context.printer.writeJsonInColor(
+                    chalk.gray,
+                    knowledgeBlocks[i],
+                );
+            }
         }
     }
 
