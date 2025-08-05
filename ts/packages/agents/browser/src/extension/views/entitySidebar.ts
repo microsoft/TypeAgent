@@ -239,7 +239,9 @@ export class EntitySidebar {
 
     private isDate(value: string): boolean {
         const date = new Date(value);
-        return !isNaN(date.getTime()) && value.match(/^\d{4}-\d{2}-\d{2}/) !== null;
+        return (
+            !isNaN(date.getTime()) && value.match(/^\d{4}-\d{2}-\d{2}/) !== null
+        );
     }
 
     private isNumber(value: string): boolean {

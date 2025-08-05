@@ -1,10 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    importWebsite,
-    analyzeImportQuality,
-} from "../src/enhancedImport.js";
+import { importWebsite, analyzeImportQuality } from "../src/enhancedImport.js";
 import { WebsiteVisitInfo } from "../src/websiteMeta.js";
 import {
     intelligentWebsiteChunking,
@@ -150,10 +147,7 @@ describe("Stage 2 Enhanced Import", () => {
                 "<html><body><div>Unclosed div<p>Unclosed paragraph";
 
             // Should not throw an error
-            const docParts = await importWebsite(
-                visitInfo,
-                malformedHtml,
-            );
+            const docParts = await importWebsite(visitInfo, malformedHtml);
 
             expect(docParts.length).toBeGreaterThan(0);
             expect(docParts[0].url).toBe(visitInfo.url);

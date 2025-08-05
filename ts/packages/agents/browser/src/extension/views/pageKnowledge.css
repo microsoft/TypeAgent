@@ -581,7 +581,7 @@ body {
     flex-direction: column;
     gap: 0.25rem;
   }
-  
+
   .facet-name {
     min-width: auto;
   }
