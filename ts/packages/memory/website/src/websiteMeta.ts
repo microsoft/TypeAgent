@@ -8,8 +8,8 @@ import {
     MetaTagCollection,
     StructuredDataCollection,
     ActionInfo,
-} from "./contentExtractor.js";
-import { websiteToTextChunksEnhanced } from "./chunkingUtils.js";
+} from "./extraction/types.js";
+import { websiteToTextChunks } from "./chunkingUtils.js";
 import { DetectedAction, ActionSummary } from "./extraction/types.js";
 
 export interface WebsiteVisitInfo {
@@ -127,7 +127,7 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
         return this.websiteToKnowledge();
     }
 
-    public getEnhancedKnowledge(
+    public getMergedKnowledge(
         extractedKnowledge?: kpLib.KnowledgeResponse,
     ): kpLib.KnowledgeResponse {
         const baseKnowledge = this.websiteToKnowledge();
@@ -497,7 +497,7 @@ export class Website implements kp.IMessage {
         this.timestamp = metadata.visitDate || metadata.bookmarkDate;
 
         if (isNew) {
-            const chunks = websiteToTextChunksEnhanced(
+            const chunks = websiteToTextChunks(
                 pageContent,
                 metadata.title,
                 metadata.url,

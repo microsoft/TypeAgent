@@ -594,7 +594,7 @@ export class WebsiteImportUI {
         ) as HTMLInputElement;
 
         // Convert slider value to mode string
-        const modeMap = ["basic", "summary", "content", "macros", "full"];
+        const modeMap = ["basic", "summary", "content", "full"];
         const extractionMode = extractionModeInput?.value
             ? (modeMap[parseInt(extractionModeInput.value)] as any)
             : "content";
@@ -662,7 +662,7 @@ export class WebsiteImportUI {
         ) as HTMLInputElement;
 
         // Convert slider value to mode string
-        const modeMap = ["basic", "summary", "content", "macros", "full"];
+        const modeMap = ["basic", "summary", "content", "full"];
         const extractionMode = extractionModeInput?.value
             ? (modeMap[parseInt(extractionModeInput.value)] as any)
             : "content";
@@ -1139,7 +1139,7 @@ export class WebsiteImportUI {
 
         // Handle slider input
         slider.addEventListener("input", () => {
-            const modeMap = ["basic", "summary", "content", "macros", "full"];
+            const modeMap = ["basic", "summary", "content", "full"];
             const mode = modeMap[parseInt(slider.value)];
             slider.setAttribute("data-mode", mode);
             this.updateSliderLabels(slider);
@@ -1150,13 +1150,7 @@ export class WebsiteImportUI {
         const labels = modal.querySelectorAll(".slider-label");
         labels.forEach((label, index) => {
             label.addEventListener("click", () => {
-                const modeMap = [
-                    "basic",
-                    "summary",
-                    "content",
-                    "macros",
-                    "full",
-                ];
+                const modeMap = ["basic", "summary", "content", "full"];
                 slider.value = index.toString();
                 slider.setAttribute("data-mode", modeMap[index]);
                 this.updateSliderLabels(slider);
@@ -1210,7 +1204,6 @@ export class WebsiteImportUI {
                 "AI-enhanced content summarization with key insights extraction",
             content:
                 "AI-powered content analysis with entity and topic extraction",
-            macros: "AI analysis plus interaction detection for dynamic pages",
             full: "Complete AI analysis with relationships and cross-references",
         };
 

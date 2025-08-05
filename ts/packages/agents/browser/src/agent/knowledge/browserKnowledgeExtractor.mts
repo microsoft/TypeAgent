@@ -119,7 +119,7 @@ export class BrowserKnowledgeExtractor {
             );
 
             // Add enhanced action detection for appropriate modes
-            if (mode === "macros" || mode === "full") {
+            if (mode === "full") {
                 await this.enhanceWithActionDetection(
                     extractionResults,
                     contents,
