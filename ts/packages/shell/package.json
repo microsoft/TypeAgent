@@ -92,6 +92,9 @@
   "fluidBuild": {
     "tasks": {
       "build:electron:esm": {
+        "after": [
+          "^*"
+        ],
         "files": {
           "inputGlobs": [
             "src/preload/**/*",
@@ -108,6 +111,9 @@
         }
       },
       "build:electron:cjs": {
+        "after": [
+          "^*"
+        ],
         "files": {
           "inputGlobs": [
             "src/preload/**/*",
