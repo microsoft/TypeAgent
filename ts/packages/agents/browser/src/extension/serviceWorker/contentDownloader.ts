@@ -264,7 +264,7 @@ export class BrowserContentDownloader implements ContentDownloadAdapter {
         return new Promise((resolve, reject) => {
             const timeoutId = setTimeout(() => {
                 reject(new Error("Offscreen communication timeout"));
-            }, timeout);
+            }, this.sanitizeTimeout(timeout));
 
             chrome.runtime
                 .sendMessage({
