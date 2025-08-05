@@ -42,15 +42,17 @@
     "typescript": "~5.4.5"
   },
   "fluidBuild": {
-    "declarativeTasks": {
+    "tasks": {
       "asc": {
-        "inputGlobs": [
-          "src/agent/playerSchema.ts",
-          "src/agent/playerSchema.json"
-        ],
-        "outputGlobs": [
-          "dist/agent/playerSchema.json"
-        ]
+        "files": {
+          "inputGlobs": [
+            "src/agent/playerSchema.ts",
+            "src/agent/playerSchema.json"
+          ],
+          "outputGlobs": [
+            "dist/agent/playerSchema.json"
+          ]
+        }
       }
     }
   }

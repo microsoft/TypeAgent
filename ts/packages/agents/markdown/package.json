@@ -36,7 +36,6 @@
     "@milkdown/utils": "^7.3.6",
     "@typeagent/agent-sdk": "workspace:*",
     "aiclient": "workspace:*",
-    "common-utils": "workspace:*",
     "debug": "^4.3.4",
     "dompurify": "^3.2.6",
     "express": "^4.21.2",
@@ -50,7 +49,6 @@
     "prosemirror-model": "^1.19.0",
     "prosemirror-state": "^1.4.2",
     "prosemirror-view": "^1.31.0",
-    "typeagent": "workspace:*",
     "typechat": "^0.1.1",
     "unist-util-visit": "^4.1.2",
     "ws": "^8.14.2",
@@ -76,14 +74,16 @@
     "vite": "^6.3.4"
   },
   "fluidBuild": {
-    "declarativeTasks": {
-      "vite": {
-        "inputGlobs": [
-          "src/view/site/**/*"
-        ],
-        "outputGlobs": [
-          "dist/view/site/**/*"
-        ]
+    "tasks": {
+      "build:frontend": {
+        "files": {
+          "inputGlobs": [
+            "src/view/site/**/*"
+          ],
+          "outputGlobs": [
+            "dist/view/site/**/*"
+          ]
+        }
       }
     }
   }

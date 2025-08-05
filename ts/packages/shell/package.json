@@ -88,5 +88,36 @@
     "typescript": "~5.4.5",
     "vite": "^6.3.4"
   },
-  "productName": "TypeAgent Shell"
+  "productName": "TypeAgent Shell",
+  "fluidBuild": {
+    "tasks": {
+      "build:electron:esm": {
+        "files": {
+          "inputGlobs": [
+            "src/preload/**/*",
+            "src/main/**/*",
+            "src/renderer/**/*",
+            "lib/**/*",
+            "electron.vite.config.mts"
+          ],
+          "outputGlobs": [
+            "out/preload/**/*",
+            "out/main/**/*",
+            "out/renderer/**/*"
+          ]
+        }
+      },
+      "build:electron:cjs": {
+        "files": {
+          "inputGlobs": [
+            "src/preload/**/*",
+            "electron.vite.preload-cjs.config.mts"
+          ],
+          "outputGlobs": [
+            "out/preload-cjs/**/*"
+          ]
+        }
+      }
+    }
+  }
 }
