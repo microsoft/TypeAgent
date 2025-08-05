@@ -48,6 +48,33 @@ from typeagent.knowpro import serialization
 from typeagent.podcasts import podcast
 
 
+### Logfire setup ###
+
+
+def setup_logfire():
+    import logfire
+
+    def scrubbing_callback(m: logfire.ScrubMatch):
+        # if m.path == ('attributes', 'http.request.header.authorization'):
+        #     return m.value
+
+        # if m.path == ('attributes', 'http.request.header.api-key'):
+        #     return m.value
+
+        if (
+            m.path == ("attributes", "http.request.body.text", "messages", 0, "content")
+            and m.pattern_match.group(0) == "secret"
+        ):
+            return m.value
+
+        # if m.path == ('attributes', 'http.response.header.azureml-model-session'):
+        #     return m.value
+
+    logfire.configure(scrubbing=logfire.ScrubbingOptions(callback=scrubbing_callback))
+    logfire.instrument_pydantic_ai()
+    logfire.instrument_httpx(capture_all=True)
+
+
 ### Classes ###
 
 
@@ -116,6 +143,8 @@ def main():
     parser = make_arg_parser("TypeAgent Query Tool")
     args = parser.parse_args()
     fill_in_debug_defaults(parser, args)
+    if args.logfire:
+        setup_logfire()
     settings = importing.ConversationSettings()
     query_context = load_podcast_index(args.podcast, settings)
     ar_list, ar_index = load_index_file(args.qafile, "question", QuestionAnswerData)
@@ -487,6 +516,11 @@ def make_arg_parser(description: str) -> argparse.ArgumentParser:
         "--show-schema",
         action="store_true",
         help="Show the TypeScript schema computed by typechat.",
+    )
+    debug.add_argument(
+        "--logfire",
+        action="store_true",
+        help="Upload log events to Pydantic's Logfire server",
     )
 
     return parser
