@@ -25,7 +25,6 @@ import {
 } from "typeagent";
 import chalk from "chalk";
 import { openai } from "aiclient";
-import * as fs from "fs";
 import {
     createIndexingEventHandler,
     sourcePathToMemoryIndexPath,
@@ -48,7 +47,7 @@ export async function createKnowproTestCommands(
     commands.kpTestVerifyAnswerBatch = verifyAnswerBatch;
     commands.kpTestHtml = testHtml;
     commands.kpTestHtmlText = testHtmlText;
-    commands.kpTestHtmlMd = testHtmlMd;
+    commands.kpTestHtmlMd = testMdParse;
     commands.kpTestHtmlParts = testHtmlParts;
     commands.kpTestChoices = testMultipleChoice;
     commands.kpTestSearch = testSearchScope;
@@ -65,36 +64,22 @@ export async function createKnowproTestCommands(
         context.printer.writeLine(text);
     }
 
-    function testHtmlMdDef(): CommandMetadata {
+    function testMdParseDef(): CommandMetadata {
         return {
             description: "Html to MD",
             args: {
                 filePath: arg("File path"),
             },
-            options: {
-                rootTag: arg("Root tag", "body"),
-                knowledge: argBool("Extract knowledge", true),
-            },
         };
     }
-    commands.kpTestHtmlMd.metadata = testHtmlMdDef();
-    async function testHtmlMd(args: string[]) {
-        const namedArgs = parseNamedArguments(args, testHtmlMdDef());
-        const filePath = namedArgs.filePath;
+    commands.kpTestHtmlMd.metadata = testMdParseDef();
+    async function testMdParse(args: string[]) {
+        const namedArgs = parseNamedArguments(args, testMdParseDef());
+        let filePath = namedArgs.filePath;
         if (!filePath) {
             return;
         }
-        let html = await readAllText(filePath);
-        let markdown = tp.htmlToMarkdown(html, namedArgs.rootTag);
-        context.printer.writeLine(markdown);
-
-        const destPath = changeFileExt(filePath, ".md");
-        fs.writeFileSync(destPath, markdown);
-
-        if (!namedArgs.knowledge) {
-            return;
-        }
-
+        let markdown = await readAllText(filePath);
         let mdDom = tp.tokenizeMarkdown(markdown);
         //context.printer.writeJsonInColor(chalk.gray, mdDom);
         const [textBlocks, knowledgeBlocks] =
