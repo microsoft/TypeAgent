@@ -16,7 +16,7 @@ export type ImportWebsiteData = {
         // Specific bookmark folder to import (for bookmarks)
         folder?: string;
         // extraction mode
-        mode?: "basic" | "content" | "macros" | "full";
+        mode?: "basic" | "content" | "full";
         maxConcurrent?: number;
         contentTimeout?: number;
     };
@@ -31,7 +31,7 @@ export type ImportHtmlFolder = {
         // Import options
         options?: {
             // extraction mode
-            mode?: "basic" | "content" | "macros" | "full";
+            mode?: "basic" | "content" | "full";
             preserveStructure?: boolean;
             // Folder-specific options
             recursive?: boolean;

@@ -377,7 +377,7 @@ export async function extractKnowledgeFromPage(
         extractEntities: boolean;
         extractRelationships: boolean;
         suggestQuestions: boolean;
-        mode?: "basic" | "summary" | "content" | "actions" | "full";
+        mode?: "basic" | "summary" | "content" | "full";
     },
     context: SessionContext<BrowserActionContext>,
 ): Promise<EnhancedKnowledgeExtractionResult> {
@@ -433,7 +433,7 @@ export async function indexWebPageContent(
         extractKnowledge: boolean;
         timestamp: string;
         textOnly?: boolean;
-        mode?: "basic" | "content" | "macros" | "full";
+        mode?: "basic" | "content" | "full";
     },
     context: SessionContext<BrowserActionContext>,
 ): Promise<{
