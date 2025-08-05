@@ -178,7 +178,7 @@ export function docPartsFromMarkdown(
     maxCharsPerChunk?: number,
     sourceUrl?: string,
 ): DocPart[] {
-    const [textBlocks, knowledgeBlocks] = tp.textAndKnowledgeBlocksFromMarkdown(
+    const [textBlocks, knowledgeBlocks] = tp.markdownToTextAndKnowledgeBlocks(
         markdown,
         maxCharsPerChunk,
     );

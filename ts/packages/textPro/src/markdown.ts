@@ -9,30 +9,8 @@ import { conversation as kpLib } from "knowledge-processor";
  * @param markdown
  * @returns
  */
-export function tokenizeMarkdown(markdown: string): md.TokensList {
+export function markdownTokenize(markdown: string): md.TokensList {
     return md.lexer(markdown);
-}
-
-/**
- * Recursively traverse the given markdown
- * @param markdown
- * @param tokenHandler
- */
-export function traverseMarkdownTokens(
-    tokens: md.Token[],
-    tokenHandler: (token: md.Token, parentToken: md.Token | undefined) => void,
-    parentToken?: md.Token,
-): void {
-    if (tokens !== undefined && tokens.length > 0) {
-        for (let i = 0; i < tokens.length; ++i) {
-            const token = tokens[i];
-            tokenHandler(token, parentToken);
-            const children = getChildTokens(token);
-            if (children !== undefined && children.length > 0) {
-                traverseMarkdownTokens(children, tokenHandler, token);
-            }
-        }
-    }
 }
 
 function getChildTokens(token: md.Token): md.Token[] | undefined {
@@ -52,18 +30,23 @@ export interface MarkdownBlockHandler {
 
 /**
  * Splits markdown text into text blocks
+ * - Collects raw inner markup (text with formatting hits) from the first level of the markdown DOM
+ * - For each block or text block, traverses child nodes to visit any embedded markdown (em, links etc) in the text and
+ *   calls the handler. This markup then be used to associate knowledge like entities etc. with the text block.
+ *   @see {markdownToTextAndKnowledgeBlocks}, @see {MarkdownKnowledgeCollector}
+ * - To further split individual markdown blocks, you can either call this method OR splitter for paragraph, tables, lists
  * @param markdown
- * @param handler
- * @param maxChunkLength
+ * @param {MarkdownBlockHandler} handler
+ * @param maxChunkLength Approx max size of chunk. Uses as a best effort limit. Text blocks will be split only when it makes sense.
  * @returns
  */
-export function textBlocksFromMarkdown(
+export function markdownToTextBlocks(
     markdown: string | md.Token[],
     handler?: MarkdownBlockHandler,
     maxChunkLength?: number,
 ): string[] {
     const markdownTokens =
-        typeof markdown === "string" ? tokenizeMarkdown(markdown) : markdown;
+        typeof markdown === "string" ? markdownTokenize(markdown) : markdown;
     let textBlocks: string[] = [];
     let curTextBlock = "";
     let prevBlockName: string = "";
@@ -109,6 +92,7 @@ export function textBlocksFromMarkdown(
                     prevBlockName === "paragraph" ||
                         prevBlockName === "heading" ||
                         prevTokenName === "space",
+                    token.raw.length,
                     parentToken,
                 );
                 curTextBlock += token.raw;
@@ -116,10 +100,12 @@ export function textBlocksFromMarkdown(
                 break;
             case "list":
             case "table":
+                // TODO: split very large lists and tables into smaller lists and tables with custom splitters
                 beginBlock(
                     token,
                     prevBlockName === "heading" ||
                         prevBlockName === "paragraph",
+                    token.raw.length,
                     parentToken,
                 );
                 curTextBlock += token.raw;
@@ -128,31 +114,42 @@ export function textBlocksFromMarkdown(
             case "blockquote":
             case "codespan":
             case "heading":
-                beginBlock(token, false, parentToken);
+                beginBlock(token, false, token.raw.length, parentToken);
                 curTextBlock += token.raw;
                 visitInnerNodes(token);
                 break;
         }
     }
 
-    function visitInnerNodes(token: md.Token): void {
-        const children = getChildTokens(token);
-        if (children !== undefined && children.length > 0) {
-            visitNodes(children);
-        }
-    }
-
-    function visitNodes(tokens: md.Token[]): void {
-        for (let i = 0; i < tokens.length; ++i) {
-            const token = tokens[i];
-            switch (token.type) {
-                default:
-                    handler?.onToken(curTextBlock, token);
-                    visitInnerNodes(token);
-                    break;
-                case "text":
-                case "space":
-                    break;
+    function visitInnerNodes(parentToken: md.Token): void {
+        const tokens = getChildTokens(parentToken);
+        if (tokens !== undefined) {
+            // Each markdown block node provides pertinent inner raw text + markup
+            // nodes in the "raw" property. But it also adds the text elements as children
+            // We only want to visit any nodes that contain useful markup information (like em, image, link etc)
+            // but do not append to the block's text
+            for (let i = 0; i < tokens.length; ++i) {
+                const token = tokens[i];
+                switch (token.type) {
+                    default:
+                        handler?.onToken(curTextBlock, token);
+                        visitInnerNodes(token);
+                        break;
+                    case "space":
+                    case "br":
+                        break;
+                    case "text":
+                        break;
+                    case "paragraph":
+                        break;
+                    case "list":
+                    case "table":
+                        break;
+                    case "blockquote":
+                    case "codespan":
+                    case "heading":
+                        break;
+                }
             }
         }
     }
@@ -160,30 +157,36 @@ export function textBlocksFromMarkdown(
     function beginBlock(
         token: md.Token,
         shouldMerge: boolean,
+        newTextLength: number,
         parentToken?: md.Token | undefined,
     ): void {
-        // If we just saw a heading, just keep collecting the text block associated with it
+        // Keep adding to the current block unless asked. E.g. merge small paragraph unless
+        // we hit some chunk size limits
         if (
             !prevBlockName ||
             !shouldMerge ||
             (maxChunkLength !== undefined &&
-                curTextBlock.length > maxChunkLength)
+                curTextBlock.length + newTextLength > maxChunkLength)
         ) {
-            endBlock(false);
-            curTextBlock = "";
-            handler?.onBlockStart();
+            terminateBlock();
         }
         handler?.onToken(curTextBlock, token, parentToken);
         prevBlockName = token.type;
     }
 
-    function endBlock(reduceDepth: boolean = true): void {
+    function endBlock(): void {
         const trimmedBlock = curTextBlock.trim();
         if (trimmedBlock.length > 0) {
             // Use original block to retain original white space
             textBlocks.push(curTextBlock);
             handler?.onBlockEnd(curTextBlock);
         }
+    }
+
+    function terminateBlock(): void {
+        endBlock();
+        curTextBlock = "";
+        handler?.onBlockStart();
     }
 }
 
@@ -232,7 +235,7 @@ export function createKnowledgeCollectionOptions(): KnowledgeCollectionOptions {
  * @param maxChunkLength
  * @returns
  */
-export function textAndKnowledgeBlocksFromMarkdown(
+export function markdownToTextAndKnowledgeBlocks(
     markdown: string | md.TokensList,
     maxChunkLength?: number,
     knowledgeOptions?: KnowledgeCollectionOptions,
@@ -240,7 +243,7 @@ export function textAndKnowledgeBlocksFromMarkdown(
     const knowledgeCollector = new MarkdownKnowledgeCollector(
         knowledgeOptions ?? createKnowledgeCollectionOptions(),
     );
-    const textBlocks = textBlocksFromMarkdown(
+    const textBlocks = markdownToTextBlocks(
         markdown,
         knowledgeCollector,
         maxChunkLength,

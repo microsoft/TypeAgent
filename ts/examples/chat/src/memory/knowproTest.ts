@@ -47,14 +47,14 @@ export async function createKnowproTestCommands(
     commands.kpTestVerifyAnswerBatch = verifyAnswerBatch;
     commands.kpTestHtml = testHtml;
     commands.kpTestHtmlText = testHtmlText;
-    commands.kpTestHtmlMd = testMdParse;
+    commands.kpTestMdParse = testMdParse;
     commands.kpTestHtmlParts = testHtmlParts;
     commands.kpTestChoices = testMultipleChoice;
     commands.kpTestSearch = testSearchScope;
 
     async function testHtml(args: string[]) {
         const html = await readAllText(args[0]);
-        const simpleHtml = tp.simplifyHtml(html);
+        const simpleHtml = tp.htmlSimplify(html);
         context.printer.writeLine(simpleHtml);
     }
 
@@ -72,7 +72,7 @@ export async function createKnowproTestCommands(
             },
         };
     }
-    commands.kpTestHtmlMd.metadata = testMdParseDef();
+    commands.kpTestMdParse.metadata = testMdParseDef();
     async function testMdParse(args: string[]) {
         const namedArgs = parseNamedArguments(args, testMdParseDef());
         let filePath = namedArgs.filePath;
@@ -80,10 +80,10 @@ export async function createKnowproTestCommands(
             return;
         }
         let markdown = await readAllText(filePath);
-        let mdDom = tp.tokenizeMarkdown(markdown);
+        let mdDom = tp.markdownTokenize(markdown);
         //context.printer.writeJsonInColor(chalk.gray, mdDom);
         const [textBlocks, knowledgeBlocks] =
-            tp.textAndKnowledgeBlocksFromMarkdown(mdDom);
+            tp.markdownToTextAndKnowledgeBlocks(mdDom);
         assert(textBlocks.length === knowledgeBlocks.length);
         for (let i = 0; i < textBlocks.length; ++i) {
             context.printer.writeLine("=====");
