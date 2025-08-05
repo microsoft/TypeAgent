@@ -1446,8 +1446,7 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                             name: centerEntity,
                             type: Array.isArray(relatedEntity.type)
                                 ? relatedEntity.type.join(", ")
-                                : relatedEntity.type ||
-                                  this.inferEntityType(relatedEntity),
+                                : relatedEntity.type || "concept",
                             confidence:
                                 typeof relatedEntity === "object"
                                     ? relatedEntity.confidence || 0.9
@@ -1498,8 +1497,7 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                                 name: matchingEntity.name,
                                 type: Array.isArray(matchingEntity.type)
                                     ? matchingEntity.type.join(", ")
-                                    : matchingEntity.type ||
-                                      this.inferEntityType(centerEntity),
+                                    : matchingEntity.type || "concept",
                                 confidence: matchingEntity.confidence || 0.9,
                                 category: "center",
                                 description:
@@ -1543,7 +1541,7 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                 centerEntityNode = {
                     id: "center",
                     name: centerEntity,
-                    type: this.inferEntityType(centerEntity),
+                    type: "concept",
                     confidence: 0.8,
                     category: "center",
                     description: `Center entity: ${centerEntity}`,
@@ -1897,7 +1895,7 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
         const baseEntity = {
             id: `entity_${index}`,
             name: title.slice(0, 50).trim() || `Entity ${index + 1}`,
-            type: this.inferEntityType(title, url),
+            type: "website",
             confidence: this.calculateConfidence(website),
             url: url,
             description: website.description || "",
@@ -2386,102 +2384,6 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
         return relationships;
     }
 
-    private inferEntityType(text: string, url?: string): string {
-        const lowerText = text.toLowerCase();
-
-        // URL-based detection first
-        if (url) {
-            const domain = this.extractDomain(url);
-
-            // Technology/development sites
-            if (
-                [
-                    "github.com",
-                    "stackoverflow.com",
-                    "npm.org",
-                    "docs.microsoft.com",
-                ].includes(domain)
-            ) {
-                return "technology";
-            }
-
-            // Social media / person indicators
-            if (
-                ["linkedin.com", "twitter.com", "github.com"].includes(
-                    domain,
-                ) &&
-                lowerText.includes("profile")
-            ) {
-                return "person";
-            }
-
-            // News/blog sites usually contain concepts
-            if (
-                ["medium.com", "dev.to", "blog", "news"].some((term) =>
-                    domain.includes(term),
-                )
-            ) {
-                return "concept";
-            }
-        }
-
-        // Content-based detection
-        // Website/domain detection
-        if (
-            lowerText.includes(".com") ||
-            lowerText.includes(".org") ||
-            lowerText.includes("http")
-        ) {
-            return "website";
-        }
-
-        // Organization detection
-        if (
-            lowerText.includes("corp") ||
-            lowerText.includes("inc") ||
-            lowerText.includes("company") ||
-            lowerText.includes("ltd")
-        ) {
-            return "organization";
-        }
-
-        // Technology detection
-        if (
-            lowerText.includes("api") ||
-            lowerText.includes("framework") ||
-            lowerText.includes("library") ||
-            lowerText.includes("javascript") ||
-            lowerText.includes("typescript") ||
-            lowerText.includes("react") ||
-            lowerText.includes("node") ||
-            lowerText.includes("python") ||
-            lowerText.includes("github")
-        ) {
-            return "technology";
-        }
-
-        // Product detection
-        if (
-            lowerText.includes("app") ||
-            lowerText.includes("tool") ||
-            lowerText.includes("platform") ||
-            lowerText.includes("service") ||
-            lowerText.includes("software")
-        ) {
-            return "product";
-        }
-
-        // Person detection (basic heuristics)
-        if (
-            lowerText.split(" ").length === 2 &&
-            /^[A-Z][a-z]+ [A-Z][a-z]+/.test(text)
-        ) {
-            return "person";
-        }
-
-        // Default to concept for general content
-        return "concept";
-    }
 }
 
 export class DefaultEntityCacheServices implements EntityCacheServices {

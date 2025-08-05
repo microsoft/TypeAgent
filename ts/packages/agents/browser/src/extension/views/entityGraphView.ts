@@ -867,54 +867,6 @@ class EntityGraphView {
     /**
      * Helper methods for entity data processing
      */
-    private inferEntityType(entityName: string): string {
-        const lowerName = entityName.toLowerCase();
-
-        // Technology/framework detection
-        if (
-            lowerName.includes("api") ||
-            lowerName.includes("framework") ||
-            lowerName.includes("library") ||
-            lowerName.includes("javascript") ||
-            lowerName.includes("typescript") ||
-            lowerName.includes("react") ||
-            lowerName.includes("node") ||
-            lowerName.includes("python")
-        ) {
-            return "technology";
-        }
-
-        // Organization detection
-        if (
-            lowerName.includes("corp") ||
-            lowerName.includes("inc") ||
-            lowerName.includes("company") ||
-            lowerName.includes("ltd") ||
-            lowerName.includes("microsoft") ||
-            lowerName.includes("google")
-        ) {
-            return "organization";
-        }
-
-        // Product detection
-        if (
-            lowerName.includes("app") ||
-            lowerName.includes("tool") ||
-            lowerName.includes("platform") ||
-            lowerName.includes("service") ||
-            lowerName.includes("software")
-        ) {
-            return "product";
-        }
-
-        // Person detection (basic heuristics)
-        const words = lowerName.split(" ");
-        if (words.length === 2 && /^[A-Z][a-z]+ [A-Z][a-z]+/.test(entityName)) {
-            return "person";
-        }
-
-        return "concept"; // Default type
-    }
 
     private calculateCenterEntityConfidence(entities: any[]): number {
         if (!entities || entities.length === 0) return 0.8;
