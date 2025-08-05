@@ -703,9 +703,11 @@ class KnowledgePanel {
 
     // Helper functions to check if modules have meaningful data
     private hasContentMetrics(knowledge: KnowledgeData): boolean {
-        return !!(knowledge.contentMetrics && 
-                 (knowledge.contentMetrics.readingTime > 0 || 
-                  knowledge.contentMetrics.wordCount > 0));
+        return !!(
+            knowledge.contentMetrics &&
+            (knowledge.contentMetrics.readingTime > 0 ||
+                knowledge.contentMetrics.wordCount > 0)
+        );
     }
 
     private hasRelatedContent(knowledge: KnowledgeData): boolean {

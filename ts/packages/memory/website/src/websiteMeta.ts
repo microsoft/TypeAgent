@@ -34,7 +34,7 @@ export interface WebsiteVisitInfo {
     structuredData?: StructuredDataCollection;
     extractedActions?: ActionInfo[];
     contentSummary?: string;
-    
+
     // Action detection fields
     detectedActions?: DetectedAction[];
     actionSummary?: ActionSummary;

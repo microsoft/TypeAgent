@@ -39,4 +39,6 @@ export {
     AIModelRequiredError,
     AIExtractionFailedError,
     getEffectiveConfig,
+    ActionSummary,
+    DetectedAction,
 } from "./extraction/index.js";

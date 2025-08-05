@@ -576,7 +576,9 @@ class EntityGraphView {
                     // Website-based entities - mark as documents
                     ...graphData.entities.map((e: any) => ({
                         name: e.name || e.entityName || "Unknown",
-                        type: e.url ? "document" : (e.type || e.entityType || "website"),
+                        type: e.url
+                            ? "document"
+                            : e.type || e.entityType || "website",
                         confidence: e.confidence || 0.5,
                         url: e.url,
                     })),
@@ -727,8 +729,14 @@ class EntityGraphView {
                     ),
                     relationships: validRelationships || [],
                     dominantDomains: this.extractDomains(graphData.entities),
-                    firstSeen: this.getEarliestDate(graphData.entities, validatedRelationships),
-                    lastSeen: this.getLatestDate(graphData.entities, validatedRelationships),
+                    firstSeen: this.getEarliestDate(
+                        graphData.entities,
+                        validatedRelationships,
+                    ),
+                    lastSeen: this.getLatestDate(
+                        graphData.entities,
+                        validatedRelationships,
+                    ),
                     visitCount: this.calculateTotalVisits(graphData.entities),
                 };
                 await this.sidebar.loadEntity(centerEntityData);
@@ -952,9 +960,11 @@ class EntityGraphView {
     private getEarliestDate(entities: any[], relationships: any[]): string {
         if (!entities || entities.length === 0) return new Date().toISOString();
 
-        const containsRelationships = relationships.filter(r => r.type === 'contains');
+        const containsRelationships = relationships.filter(
+            (r) => r.type === "contains",
+        );
         const entityNamesInContainsRelationships = new Set(
-            containsRelationships.map(r => r.to)
+            containsRelationships.map((r) => r.to),
         );
 
         let earliest: string | null = null;
@@ -974,9 +984,11 @@ class EntityGraphView {
     private getLatestDate(entities: any[], relationships: any[]): string {
         if (!entities || entities.length === 0) return new Date().toISOString();
 
-        const containsRelationships = relationships.filter(r => r.type === 'contains');
+        const containsRelationships = relationships.filter(
+            (r) => r.type === "contains",
+        );
         const entityNamesInContainsRelationships = new Set(
-            containsRelationships.map(r => r.to)
+            containsRelationships.map((r) => r.to),
         );
 
         let latest: string | null = null;

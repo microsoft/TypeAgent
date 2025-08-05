@@ -1659,12 +1659,12 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
             console.log(
                 `No results found for entity: ${entityName} using entity or topic search`,
             );
-            searchResult = { 
+            searchResult = {
                 websites: [],
                 relatedEntities: [],
                 topTopics: [],
                 metadata: {},
-                answerSources: []
+                answerSources: [],
             };
             searchMethod = "no_results";
         }
@@ -2211,7 +2211,8 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
         });
 
         // Document co-occurrence relationships - entities that appear together in the same document
-        const documentCoOccurrences = this.generateDocumentCoOccurrenceRelationships(entities);
+        const documentCoOccurrences =
+            this.generateDocumentCoOccurrenceRelationships(entities);
         relationships.push(...documentCoOccurrences);
 
         return relationships;
@@ -2223,9 +2224,9 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
     private generateDocumentCoOccurrenceRelationships(entities: any[]): any[] {
         const relationships: any[] = [];
         const documentEntityMap = new Map<string, any[]>();
-        
+
         // Group entities by their source document URL
-        entities.forEach(entity => {
+        entities.forEach((entity) => {
             if (entity.url && entity.category === "primary") {
                 const url = entity.url;
                 if (!documentEntityMap.has(url)) {
@@ -2243,16 +2244,20 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                     for (let j = i + 1; j < documentEntities.length; j++) {
                         const entity1 = documentEntities[i];
                         const entity2 = documentEntities[j];
-                        
-                        if (entity1.name && entity2.name && 
-                            entity1.name.trim() !== entity2.name.trim()) {
-                            
+
+                        if (
+                            entity1.name &&
+                            entity2.name &&
+                            entity1.name.trim() !== entity2.name.trim()
+                        ) {
                             // Calculate co-occurrence strength based on confidence of both entities
                             const strength = Math.min(
-                                (entity1.confidence || 0.5) * (entity2.confidence || 0.5) * 1.2,
-                                0.9
+                                (entity1.confidence || 0.5) *
+                                    (entity2.confidence || 0.5) *
+                                    1.2,
+                                0.9,
                             );
-                            
+
                             relationships.push({
                                 id: `co_occurrence_${entity1.id}_${entity2.id}`,
                                 from: entity1.name.trim(),
@@ -2262,7 +2267,7 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                                 source: documentUrl,
                                 direction: "bidirectional",
                                 category: "co_occurrence",
-                                evidence: `Both entities appear in: ${this.extractDomain(documentUrl)}`
+                                evidence: `Both entities appear in: ${this.extractDomain(documentUrl)}`,
                             });
                         }
                     }
@@ -2271,9 +2276,9 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
         });
 
         console.log(
-            `Generated ${relationships.length} document co-occurrence relationships from ${documentEntityMap.size} documents`
+            `Generated ${relationships.length} document co-occurrence relationships from ${documentEntityMap.size} documents`,
         );
-        
+
         return relationships;
     }
 
