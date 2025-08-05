@@ -562,17 +562,6 @@ class EntityGraphView {
 
                 // Create entity list with center entity, website entities, related entities, and topics
                 const allEntities = [
-                    // Center entity - get actual type and confidence from graph data
-                    {
-                        name: graphData.centerEntity,
-                        type:
-                            this.inferEntityType(graphData.centerEntity) ||
-                            "entity",
-                        confidence:
-                            this.calculateCenterEntityConfidence(
-                                graphData.entities,
-                            ) || 0.8,
-                    },
                     // Website-based entities - mark as documents
                     ...graphData.entities.map((e: any) => ({
                         name: e.name || e.entityName || "Unknown",
@@ -708,17 +697,28 @@ class EntityGraphView {
                     relationships: validatedRelationships,
                 });
 
+                // Find the center entity from allEntities (should be first)
+                const centerEntityFromGraph =
+                    graphData.entities.find(
+                        (e: any) =>
+                            e.id === "center" || e.category === "center",
+                    ) || graphData.entities[0]; // Fallback to first entity which should be center
+
                 // Load entity data into sidebar using rich graph data
                 const centerEntityData = {
                     name: entityName,
                     entityName: entityName,
-                    type: this.inferEntityType(entityName) || "entity",
-                    entityType: this.inferEntityType(entityName) || "entity",
+                    type: centerEntityFromGraph.type,
+                    entityType: centerEntityFromGraph.type,
                     confidence:
+                        centerEntityFromGraph.confidence ||
                         this.calculateCenterEntityConfidence(
                             graphData.entities,
-                        ) || 0.8,
+                        ) ||
+                        0.8,
                     source: "graph",
+                    // Include facets from the enhanced entity if available
+                    facets: centerEntityFromGraph?.facets || [],
                     topicAffinity: graphData.topTopics || [],
                     summary: graphData.summary,
                     metadata: graphData.metadata,
@@ -730,6 +730,7 @@ class EntityGraphView {
                     relationships: validRelationships || [],
                     dominantDomains: this.extractDomains(graphData.entities),
                     firstSeen: this.getEarliestDate(
+                        // TODO: limit this to "contains" relationships
                         graphData.entities,
                         validatedRelationships,
                     ),
@@ -866,54 +867,6 @@ class EntityGraphView {
     /**
      * Helper methods for entity data processing
      */
-    private inferEntityType(entityName: string): string {
-        const lowerName = entityName.toLowerCase();
-
-        // Technology/framework detection
-        if (
-            lowerName.includes("api") ||
-            lowerName.includes("framework") ||
-            lowerName.includes("library") ||
-            lowerName.includes("javascript") ||
-            lowerName.includes("typescript") ||
-            lowerName.includes("react") ||
-            lowerName.includes("node") ||
-            lowerName.includes("python")
-        ) {
-            return "technology";
-        }
-
-        // Organization detection
-        if (
-            lowerName.includes("corp") ||
-            lowerName.includes("inc") ||
-            lowerName.includes("company") ||
-            lowerName.includes("ltd") ||
-            lowerName.includes("microsoft") ||
-            lowerName.includes("google")
-        ) {
-            return "organization";
-        }
-
-        // Product detection
-        if (
-            lowerName.includes("app") ||
-            lowerName.includes("tool") ||
-            lowerName.includes("platform") ||
-            lowerName.includes("service") ||
-            lowerName.includes("software")
-        ) {
-            return "product";
-        }
-
-        // Person detection (basic heuristics)
-        const words = lowerName.split(" ");
-        if (words.length === 2 && /^[A-Z][a-z]+ [A-Z][a-z]+/.test(entityName)) {
-            return "person";
-        }
-
-        return "concept"; // Default type
-    }
 
     private calculateCenterEntityConfidence(entities: any[]): number {
         if (!entities || entities.length === 0) return 0.8;
@@ -932,7 +885,13 @@ class EntityGraphView {
         if (!entities || entities.length === 0) return 0;
 
         return entities.reduce((total, entity) => {
-            return total + (entity.visitCount || entity.mentionCount || 1);
+            return (
+                total +
+                (entity.visitCount ||
+                    entity.occurrenceCount ||
+                    entity.mentionCount ||
+                    1)
+            );
         }, 0);
     }
 

@@ -203,15 +203,9 @@ export async function searchWebMemories(
             `Found ${searchResults.length} results from comprehensive search`,
         );
 
-        // PHASE 3: Apply discovery filters
+        // PHASE 3: Processing phase
         const processingStart = Date.now();
-        let filteredResults = await applyDiscoveryFilters(
-            searchResults,
-            enhancedRequest,
-        );
-
-        // Apply sorting
-        filteredResults = applySorting(filteredResults, enhancedRequest);
+        let filteredResults = searchResults;
 
         // Apply comprehensive LLM-informed ranking
         if (detectedIntent && filteredResults.length > 0) {
@@ -781,24 +775,6 @@ function buildTemporalFilter(
     return {};
 }
 
-async function applyDiscoveryFilters(
-    results: website.Website[],
-    request: SearchWebMemoriesRequest,
-): Promise<website.Website[]> {
-    // All discovery filtering is now handled by AI analysis
-    // No manual filters to apply since domain, pageType, and source were removed
-    return results;
-}
-
-function applySorting(
-    results: website.Website[],
-    request: SearchWebMemoriesRequest,
-): website.Website[] {
-    // All sorting is now handled by AI analysis and LLM-informed ranking
-    // No manual sorting to apply since temporalSort and frequencySort were removed
-    return results;
-}
-
 function convertToWebsiteResults(websites: website.Website[]): WebsiteResult[] {
     return websites.map((site) => {
         const metadata = site.metadata as any;
@@ -826,31 +802,142 @@ function extractSnippet(website: website.Website): string {
 async function extractKnowledgeFromResults(
     results: website.Website[],
 ): Promise<{ entities: Entity[]; topics: string[] }> {
-    const entities: Entity[] = [];
-    const topicsSet = new Set<string>();
+    // Entity aggregation with count tracking
+    const entityMap = new Map<
+        string,
+        {
+            entity: any;
+            count: number;
+            totalConfidence: number;
+            sites: string[];
+        }
+    >();
 
-    for (const site of results.slice(0, 3)) {
+    // Topic aggregation with count tracking
+    const topicMap = new Map<
+        string,
+        {
+            topic: string;
+            count: number;
+            sites: string[];
+        }
+    >();
+
+    // Process all sites (not just first 3)
+    for (const site of results) {
         const knowledge = site.getKnowledge();
+        const siteUrl = (site as any).url || "unknown";
+
+        // Process ALL entities from this site (not just first n)
         if (knowledge?.entities) {
-            for (const entity of knowledge.entities.slice(0, 3)) {
-                entities.push({
-                    name: entity.name,
-                    type: Array.isArray(entity.type)
-                        ? entity.type.join(", ")
-                        : entity.type,
-                    confidence: 0.7,
-                });
+            for (const entity of knowledge.entities) {
+                if (!entity.name) continue;
+
+                const entityNameLower = entity.name.toLowerCase();
+
+                if (entityMap.has(entityNameLower)) {
+                    // Entity already exists - increment count and update confidence
+                    const existing = entityMap.get(entityNameLower)!;
+                    existing.count += 1;
+                    existing.totalConfidence +=
+                        (entity as any).confidence || 0.7;
+                    existing.sites.push(siteUrl);
+
+                    // Update entity data if current entity has facets and existing doesn't
+                    if ((entity as any).facets && !existing.entity.facets) {
+                        existing.entity.facets = (entity as any).facets;
+                    }
+                } else {
+                    // New entity - create entry
+                    const extractedEntity: any = {
+                        name: entity.name,
+                        type: Array.isArray(entity.type)
+                            ? entity.type.join(", ")
+                            : entity.type,
+                        confidence: (entity as any).confidence || 0.7,
+                    };
+
+                    // Add description if available from facets
+                    if ((entity as any).facets) {
+                        const facets = (entity as any).facets;
+                        const descriptionFacet = facets.find(
+                            (f: any) => f.name === "description",
+                        );
+                        if (descriptionFacet) {
+                            extractedEntity.description =
+                                descriptionFacet.value;
+                        }
+
+                        // Add facets array to the entity
+                        extractedEntity.facets = facets.map((facet: any) => ({
+                            name: facet.name || facet.category || "Unknown",
+                            value: Array.isArray(facet.value)
+                                ? facet.value.join(", ")
+                                : facet.value ||
+                                  (facet.values ? facet.values.join(", ") : ""),
+                        }));
+                    }
+
+                    entityMap.set(entityNameLower, {
+                        entity: extractedEntity,
+                        count: 1,
+                        totalConfidence: extractedEntity.confidence,
+                        sites: [siteUrl],
+                    });
+                }
             }
         }
 
+        // Process ALL topics from this site
         if (knowledge?.topics) {
-            knowledge.topics.forEach((topic) => topicsSet.add(topic));
+            for (const topic of knowledge.topics) {
+                const topicName =
+                    typeof topic === "string"
+                        ? topic
+                        : (topic as any).name || (topic as any).topic || topic;
+                if (!topicName) continue;
+
+                const topicNameLower = topicName.toLowerCase();
+
+                if (topicMap.has(topicNameLower)) {
+                    // Topic already exists - increment count
+                    const existing = topicMap.get(topicNameLower)!;
+                    existing.count += 1;
+                    existing.sites.push(siteUrl);
+                } else {
+                    // New topic - create entry
+                    topicMap.set(topicNameLower, {
+                        topic: topicName,
+                        count: 1,
+                        sites: [siteUrl],
+                    });
+                }
+            }
         }
     }
 
+    // Sort entities by count (descending) and take top 10
+    const sortedEntities = Array.from(entityMap.values())
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10)
+        .map((entry) => {
+            // Update confidence to average across all occurrences
+            entry.entity.confidence = entry.totalConfidence / entry.count;
+            // Add occurrence count metadata
+            entry.entity.occurrenceCount = entry.count;
+            entry.entity.sourceSites = entry.sites.length;
+            return entry.entity;
+        });
+
+    // Sort topics by count (descending) and take top 10
+    const sortedTopics = Array.from(topicMap.values())
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10)
+        .map((entry) => entry.topic);
+
     return {
-        entities,
-        topics: Array.from(topicsSet).slice(0, 10),
+        entities: sortedEntities,
+        topics: sortedTopics,
     };
 }
 
