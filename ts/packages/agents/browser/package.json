@@ -85,7 +85,7 @@
   },
   "devDependencies": {
     "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
-    "@fluidframework/build-tools": "^0.56.0",
+    "@fluidframework/build-tools": "^0.57.0",
     "@types/chrome": "^0.0.256",
     "@types/cytoscape": "^3.21.9",
     "@types/cytoscape-dagre": "^2.3.3",
@@ -178,19 +178,21 @@
       "tsc:views:client:typecheck": [
         "tsc:views:shared"
       ],
-      "vite:views:client": [
-        "tsc:views:shared"
-      ]
+      "vite:views:client": {
+        "dependsOn": [
+          "tsc:views:shared"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/views/client/**/*"
+          ],
+          "outputGlobs": [
+            "dist/views/public/**/*"
+          ]
+        }
+      }
     },
     "declarativeTasks": {
-      "vite": {
-        "inputGlobs": [
-          "src/views/client/**/*"
-        ],
-        "outputGlobs": [
-          "dist/views/public/**/*"
-        ]
-      },
       "build-extension": {
         "inputGlobs": [
           "src/extension/**",
