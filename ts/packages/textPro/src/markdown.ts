@@ -54,18 +54,19 @@ export function markdownToTextBlocks(
     let curTextBlock = "";
     let prevBlockName: string = "";
     let prevTokenName: string = "";
-    traverseTokens(markdownTokens);
+    traverseTokens(markdownTokens, 1, undefined);
 
     return textBlocks;
 
     function traverseTokens(
         tokens: md.Token[] | undefined,
-        parentToken?: md.Token | undefined,
+        depth: number,
+        parentToken: md.Token | undefined,
     ) {
         if (tokens !== undefined && tokens.length > 0) {
             for (let i = 0; i < tokens.length; ++i) {
                 const token = tokens[i];
-                collectText(token, parentToken);
+                collectText(token, depth, parentToken);
                 prevTokenName = token.type;
             }
             endBlock();
@@ -74,6 +75,7 @@ export function markdownToTextBlocks(
 
     function collectText(
         token: md.Token,
+        depth: number,
         parentToken: md.Token | undefined,
     ): void {
         switch (token.type) {
@@ -88,8 +90,8 @@ export function markdownToTextBlocks(
                 break;
             case "text":
                 if (curTextBlock.length + token.raw.length > maxCharsPerChunk) {
-                    const paraToken = textToParagraphs(token.raw);
-                    traverseTokens(paraToken, token);
+                    const subParagraphs = textToParagraphs(token.raw);
+                    traverseTokens(subParagraphs, depth + 1, token);
                 } else {
                     curTextBlock += token.raw;
                 }
@@ -107,8 +109,29 @@ export function markdownToTextBlocks(
                 visitInnerNodes(token);
                 break;
             case "list":
+                if (depth === 1 && token.raw.length > maxCharsPerChunk) {
+                    // Huge list. Need to break it up
+                    // Note: a smaller list will automatically result in a fresh block if it exceeds
+                    // the chunk limit (see beginBlock)
+                    const subLists = listToLists(
+                        token as md.Tokens.List,
+                        maxCharsPerChunk,
+                    );
+                    traverseTokens(subLists, depth + 1, token);
+                } else {
+                    beginBlock(
+                        token,
+                        prevBlockName === "heading" ||
+                            prevBlockName === "paragraph",
+                        token.raw.length,
+                        parentToken,
+                    );
+                    curTextBlock += token.raw;
+                    visitInnerNodes(token);
+                }
+                break;
             case "table":
-                // TODO: split very large lists and tables into smaller lists and tables with custom splitters
+                // TODO: split very large tables into smaller tables
                 beginBlock(
                     token,
                     prevBlockName === "heading" ||
@@ -582,4 +605,56 @@ function textToParagraphs(text: string): md.Tokens.Paragraph[] {
             tokens: [],
         };
     });
+}
+
+function listToLists(
+    list: md.Tokens.List,
+    maxCharsPerChunk: number,
+): md.Tokens.List[] {
+    const lists: md.Tokens.List[] = [];
+    const listItems = list.items;
+    let curListStartAt = 0;
+    let curListLength = 0;
+    for (let i = 0; i < listItems.length; ++i) {
+        let itemLength = listItems[i].raw.length;
+        if (curListLength + itemLength > maxCharsPerChunk) {
+            lists.push(
+                listItemsToList(
+                    listItems.slice(curListStartAt, i),
+                    list.ordered,
+                    list.loose,
+                ),
+            );
+            curListLength = 0;
+            curListStartAt = i;
+        }
+        curListLength += itemLength;
+    }
+    if (curListLength > 0) {
+        lists.push(
+            listItemsToList(
+                listItems.slice(curListStartAt),
+                list.ordered,
+                list.loose,
+            ),
+        );
+    }
+    return lists;
+}
+
+function listItemsToList(
+    items: md.Tokens.ListItem[],
+    ordered: boolean,
+    loose: boolean,
+): md.Tokens.List {
+    const rawItems = items.map((item) => item.raw);
+    const raw = rawItems.join("\n");
+    return {
+        type: "list",
+        items,
+        raw,
+        ordered,
+        loose,
+        start: "",
+    };
 }
