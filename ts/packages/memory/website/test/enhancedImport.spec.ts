@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import {
-    enhancedWebsiteImport,
+    importWebsite,
     analyzeImportQuality,
 } from "../src/enhancedImport.js";
 import { WebsiteVisitInfo } from "../src/websiteMeta.js";
@@ -63,7 +63,7 @@ describe("Stage 2 Enhanced Import", () => {
                     50,
                 );
 
-            const docParts = await enhancedWebsiteImport(visitInfo, content, {
+            const docParts = await importWebsite(visitInfo, content, {
                 maxCharsPerChunk: 500,
                 preserveStructure: true,
                 extractionMode: "content",
@@ -83,7 +83,7 @@ describe("Stage 2 Enhanced Import", () => {
                 source: "bookmark",
             };
 
-            const docParts = await enhancedWebsiteImport(visitInfo);
+            const docParts = await importWebsite(visitInfo);
 
             expect(docParts.length).toBe(1);
             expect(docParts[0].textChunks).toEqual([]);
@@ -103,7 +103,7 @@ describe("Stage 2 Enhanced Import", () => {
 
             const content = "Test content for metadata preservation.";
 
-            const docParts = await enhancedWebsiteImport(visitInfo, content);
+            const docParts = await importWebsite(visitInfo, content);
 
             expect(docParts.length).toBe(1);
             const docPart = docParts[0];
@@ -128,7 +128,7 @@ describe("Stage 2 Enhanced Import", () => {
             const content = "Test content for quality analysis. ".repeat(20);
             const startTime = Date.now();
 
-            const docParts = await enhancedWebsiteImport(visitInfo, content);
+            const docParts = await importWebsite(visitInfo, content);
             const metrics = analyzeImportQuality(docParts, startTime);
 
             expect(metrics.totalParts).toBeGreaterThan(0);
@@ -150,7 +150,7 @@ describe("Stage 2 Enhanced Import", () => {
                 "<html><body><div>Unclosed div<p>Unclosed paragraph";
 
             // Should not throw an error
-            const docParts = await enhancedWebsiteImport(
+            const docParts = await importWebsite(
                 visitInfo,
                 malformedHtml,
             );

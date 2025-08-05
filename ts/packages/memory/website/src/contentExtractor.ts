@@ -55,7 +55,7 @@ export interface ActionInfo {
     text?: string;
 }
 
-export interface EnhancedContentWithKnowledge extends EnhancedContent {
+export interface WebsiteContentWithKnowledge extends WebsiteContent {
     knowledge?: kpLib.KnowledgeResponse;
     knowledgeQuality?: KnowledgeQualityMetrics;
 }
@@ -68,7 +68,7 @@ export interface KnowledgeQualityMetrics {
     extractionMode: "basic" | "enhanced" | "hybrid";
 }
 
-export interface EnhancedContent {
+export interface WebsiteContent {
     pageContent?: PageContent;
     metaTags?: MetaTagCollection;
     structuredData?: StructuredDataCollection;

@@ -543,7 +543,7 @@ async function enhanceWithContent(
                 const result = await extractor.extract(input, extractionMode);
 
                 // Create enhanced website with content and knowledge
-                return createEnhancedWebsiteWithKnowledge(website, result);
+                return createWebsiteWithKnowledge(website, result);
             } catch (error) {
                 console.warn(
                     `Content extraction failed for ${website.metadata.url}:`,
@@ -579,7 +579,7 @@ async function enhanceWithContent(
     return enhanced;
 }
 
-function createEnhancedWebsiteWithKnowledge(
+function createWebsiteWithKnowledge(
     originalWebsite: Website,
     extractionResult: ExtractionResult,
 ): Website {
@@ -644,7 +644,7 @@ function createEnhancedWebsiteWithKnowledge(
     // Get enhanced knowledge if available
     let finalKnowledge;
     if (extractionResult.knowledge) {
-        finalKnowledge = meta.getEnhancedKnowledge(extractionResult.knowledge);
+        finalKnowledge = meta.getMergedKnowledge(extractionResult.knowledge);
     } else {
         finalKnowledge = meta.getKnowledge();
     }

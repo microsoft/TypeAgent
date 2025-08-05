@@ -36,7 +36,7 @@ export function intelligentWebsiteChunking(
  * Enhanced version of websiteToTextChunks that uses intelligent chunking
  * while maintaining backward compatibility.
  */
-export function websiteToTextChunksEnhanced(
+export function websiteToTextChunks(
     pageContent: string | string[],
     title?: string,
     url?: string,

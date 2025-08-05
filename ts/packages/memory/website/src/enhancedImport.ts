@@ -12,7 +12,7 @@ import { conversation as kpLib } from "knowledge-processor";
 /**
  * Enhanced HTML import options that combine website and conversation capabilities
  */
-export interface EnhancedImportOptions {
+export interface WebsiteImportOptions {
     maxCharsPerChunk: number;
     preserveStructure: boolean;
     extractionMode: ExtractionMode;
@@ -25,7 +25,7 @@ export interface EnhancedImportOptions {
 /**
  * Default options for enhanced import
  */
-export const defaultEnhancedImportOptions: EnhancedImportOptions = {
+export const defaultWebsiteImportOptions: WebsiteImportOptions = {
     maxCharsPerChunk: 2000,
     preserveStructure: true,
     extractionMode: "content",
@@ -35,16 +35,16 @@ export const defaultEnhancedImportOptions: EnhancedImportOptions = {
 /**
  * Enhanced website import that leverages knowPro strengths
  */
-export async function enhancedWebsiteImport(
+export async function importWebsite(
     visitInfo: WebsiteVisitInfo,
     content?: string,
     options: Partial<
-        EnhancedImportOptions & {
+        WebsiteImportOptions & {
             knowledgeExtractor?: kpLib.KnowledgeExtractor;
         }
     > = {},
 ): Promise<WebsiteDocPart[]> {
-    const opts = { ...defaultEnhancedImportOptions, ...options };
+    const opts = { ...defaultWebsiteImportOptions, ...options };
     const websiteMeta = new WebsiteMeta(visitInfo);
 
     if (!content) {
@@ -70,14 +70,14 @@ export async function enhancedWebsiteImport(
 }
 
 /**
- * Enhanced browser import that uses intelligent chunking and improved content processing
+ * Browser import that uses intelligent chunking and improved content processing
  */
-export async function importWebsitesEnhanced(
+export async function importWebsitesWithProcessing(
     source: "chrome" | "edge",
     type: "bookmarks" | "history",
     filePath: string,
     options?: Partial<
-        EnhancedImportOptions & {
+        WebsiteImportOptions & {
             knowledgeExtractor?: kpLib.KnowledgeExtractor;
         }
     >,
@@ -95,7 +95,7 @@ export async function importWebsitesEnhanced(
 
     // Convert Website objects to WebsiteDocPart using enhanced processing
     const websiteDocParts: WebsiteDocPart[] = [];
-    const enhancedOptions = { ...defaultEnhancedImportOptions, ...options };
+    const websiteOptions = { ...defaultWebsiteImportOptions, ...options };
 
     for (let i = 0; i < websites.length; i++) {
         const website = websites[i];
@@ -148,10 +148,10 @@ export async function importWebsitesEnhanced(
             const mainContent = website.textChunks.join("\n\n");
 
             // Use enhanced import processing
-            const docParts = await enhancedWebsiteImport(
+            const docParts = await importWebsite(
                 visitInfo,
                 mainContent,
-                enhancedOptions,
+                websiteOptions,
             );
             websiteDocParts.push(...docParts);
 
@@ -184,7 +184,7 @@ export async function importWebsitesEnhanced(
 async function processHtmlWithEnhancedCapabilities(
     html: string,
     url: string,
-    options: EnhancedImportOptions,
+    options: WebsiteImportOptions,
     existingMeta?: WebsiteMeta,
 ): Promise<WebsiteDocPart[]> {
     try {
@@ -352,7 +352,7 @@ async function processHtmlWithEnhancedCapabilities(
 function processPlainTextContent(
     content: string,
     websiteMeta: WebsiteMeta,
-    options: EnhancedImportOptions,
+    options: WebsiteImportOptions,
 ): WebsiteDocPart[] {
     // Apply intelligent chunking to plain text
     const chunks = intelligentWebsiteChunking(content, {

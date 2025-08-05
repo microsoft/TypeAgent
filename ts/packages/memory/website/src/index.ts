@@ -6,17 +6,24 @@ export * from "./chunkingUtils.js";
 // Core types and interfaces (keep for external compatibility)
 export {
     ExtractionMode,
-    EnhancedContent,
+    WebsiteContent,
     PageContent,
     MetaTagCollection,
     ImageInfo,
     LinkInfo,
     ActionInfo,
     StructuredDataCollection,
-    EnhancedContentWithKnowledge,
+    WebsiteContentWithKnowledge,
 } from "./contentExtractor.js";
 
-export * from "./enhancedImport.js";
+export {
+    WebsiteImportOptions,
+    defaultWebsiteImportOptions,
+    importWebsite,
+    importWebsitesWithProcessing,
+    ImportQualityMetrics,
+    analyzeImportQuality,
+} from "./enhancedImport.js";
 export * from "./importWebsites.js";
 export * from "./indexingService.js";
 export * from "./websiteCollection.js";
