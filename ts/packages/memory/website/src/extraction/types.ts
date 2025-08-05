@@ -27,12 +27,7 @@ import {
  * await extractor.extract(content, "full");
  * ```
  */
-export type ExtractionMode =
-    | "basic"
-    | "summary"
-    | "content"
-    | "macros"
-    | "full";
+export type ExtractionMode = "basic" | "summary" | "content" | "full";
 
 /**
  * Configuration for content extraction operations
@@ -113,16 +108,6 @@ export const EXTRACTION_MODE_CONFIGS: Record<
         defaultChunkSize: 8000,
         defaultQualityThreshold: 0.3,
         defaultConcurrentExtractions: 5,
-    },
-    macros: {
-        description: "Content + macros detection with AI knowledge processing",
-        usesAI: true,
-        extractsActions: true,
-        extractsRelationships: false,
-        knowledgeStrategy: "hybrid",
-        defaultChunkSize: 8000,
-        defaultQualityThreshold: 0.35,
-        defaultConcurrentExtractions: 3,
     },
     full: {
         description:

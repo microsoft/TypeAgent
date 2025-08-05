@@ -306,10 +306,7 @@ export async function createKnowproWebsiteCommands(
                     `⚙️  Max concurrent: ${namedArgs.maxConcurrent}, Timeout: ${namedArgs.contentTimeout}ms`,
                 );
 
-                if (
-                    namedArgs.extractionMode === "macros" ||
-                    namedArgs.extractionMode === "full"
-                ) {
+                if (namedArgs.extractionMode === "full") {
                     context.printer.writeLine(
                         `🎯 Action detection enabled via ${namedArgs.extractionMode} mode`,
                     );
@@ -349,10 +346,7 @@ export async function createKnowproWebsiteCommands(
                 }
 
                 // Report action detection results
-                if (
-                    namedArgs.extractionMode === "macros" ||
-                    namedArgs.extractionMode === "full"
-                ) {
+                if (namedArgs.extractionMode === "full") {
                     const actionStats = calculateActionStats(websites);
                     if (actionStats.sitesWithActions > 0) {
                         context.printer.writeLine(
