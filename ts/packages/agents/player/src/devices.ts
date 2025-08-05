@@ -25,23 +25,31 @@ type DeviceInfo = SpotifyApi.UserDevice & { id: string };
 
 async function getDeviceInfo(
     service: SpotifyService,
-    name: string,
+    name?: string,
 ): Promise<DeviceInfo | undefined> {
-    const devicesResponse = await getUserDevices(service);
-    if (devicesResponse === undefined || devicesResponse.devices.length === 0) {
+    const devices = (await getUserDevices(service)).devices;
+    if (devices.length === 0) {
         return undefined;
     }
-    return devicesResponse.devices.find(
-        (d) => d.name === name && d.id !== null,
-    ) as DeviceInfo | undefined;
+
+    if (name === undefined) {
+        const hostName = getHostName().toLowerCase();
+        // If no name is provided, return the first device that has an id.
+        return devices.find(
+            (d) => d.name.toLowerCase() === hostName && d.id !== null,
+        ) as DeviceInfo | undefined;
+    }
+    return devices.find((d) => d.name === name && d.id !== null) as
+        | DeviceInfo
+        | undefined;
 }
 
 async function ensureGetDeviceInfos(
     context: IClientContext,
 ): Promise<DeviceInfo[]> {
     const devicesResponse = await getUserDevices(context.service);
-    const devices = devicesResponse?.devices?.filter((d) => d.id !== null);
-    if (devices === undefined || devices.length === 0) {
+    const devices = devicesResponse.devices.filter((d) => d.id !== null);
+    if (devices.length === 0) {
         throw new Error("No devices found.");
     }
     return devices as DeviceInfo[];
@@ -60,10 +68,14 @@ function getHostName(): string {
     return host;
 }
 
-function getDefaultDeviceName(clientContext: IClientContext): string {
-    return clientContext.localSettings.defaultDeviceName ?? getHostName();
+function getDefaultDeviceName(
+    clientContext: IClientContext,
+): string | undefined {
+    return clientContext.localSettings.defaultDeviceName;
 }
-function getSelectedDeviceName(clientContext: IClientContext): string {
+function getSelectedDeviceName(
+    clientContext: IClientContext,
+): string | undefined {
     return (
         clientContext.selectedDeviceName ?? getDefaultDeviceName(clientContext)
     );
@@ -83,7 +95,7 @@ export async function ensureSelectedDeviceInfo(clientContext: IClientContext) {
     if (device === undefined) {
         const description = clientContext.selectedDeviceName
             ? `selected device '${clientContext.selectedDeviceName}'`
-            : `default selected device '${getDefaultDeviceName(clientContext)}'`;
+            : `default selected device '${getDefaultDeviceName(clientContext) ?? getHostName()}'`;
         throw new Error(`Unable to find ${description}.`);
     }
     return device;
