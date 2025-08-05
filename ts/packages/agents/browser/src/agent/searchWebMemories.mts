@@ -833,13 +833,36 @@ async function extractKnowledgeFromResults(
         const knowledge = site.getKnowledge();
         if (knowledge?.entities) {
             for (const entity of knowledge.entities.slice(0, 3)) {
-                entities.push({
+                // Create base entity with required fields
+                const extractedEntity: any = {
                     name: entity.name,
                     type: Array.isArray(entity.type)
                         ? entity.type.join(", ")
                         : entity.type,
-                    confidence: 0.7,
-                });
+                    confidence: (entity as any).confidence || 0.7,
+                };
+
+                // Add description if available from facets
+                if ((entity as any).facets) {
+                    const facets = (entity as any).facets;
+                    const descriptionFacet = facets.find(
+                        (f: any) => f.name === "description",
+                    );
+                    if (descriptionFacet) {
+                        extractedEntity.description = descriptionFacet.value;
+                    }
+
+                    // Add facets array to the entity
+                    extractedEntity.facets = facets.map((facet: any) => ({
+                        name: facet.name || facet.category || "Unknown",
+                        value: Array.isArray(facet.value)
+                            ? facet.value.join(", ")
+                            : facet.value ||
+                              (facet.values ? facet.values.join(", ") : ""),
+                    }));
+                }
+
+                entities.push(extractedEntity);
             }
         }
 

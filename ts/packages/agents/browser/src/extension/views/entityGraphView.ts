@@ -562,17 +562,6 @@ class EntityGraphView {
 
                 // Create entity list with center entity, website entities, related entities, and topics
                 const allEntities = [
-                    // Center entity - get actual type and confidence from graph data
-                    {
-                        name: graphData.centerEntity,
-                        type:
-                            this.inferEntityType(graphData.centerEntity) ||
-                            "entity",
-                        confidence:
-                            this.calculateCenterEntityConfidence(
-                                graphData.entities,
-                            ) || 0.8,
-                    },
                     // Website-based entities - mark as documents
                     ...graphData.entities.map((e: any) => ({
                         name: e.name || e.entityName || "Unknown",
@@ -708,17 +697,28 @@ class EntityGraphView {
                     relationships: validatedRelationships,
                 });
 
+                // Find the center entity from allEntities (should be first)
+                const centerEntityFromGraph =
+                    graphData.entities.find(
+                        (e: any) =>
+                            e.id === "center" || e.category === "center",
+                    ) || graphData.entities[0]; // Fallback to first entity which should be center
+
                 // Load entity data into sidebar using rich graph data
                 const centerEntityData = {
                     name: entityName,
                     entityName: entityName,
-                    type: this.inferEntityType(entityName) || "entity",
-                    entityType: this.inferEntityType(entityName) || "entity",
+                    type: centerEntityFromGraph.type,
+                    entityType: centerEntityFromGraph.type,
                     confidence:
+                        centerEntityFromGraph.confidence ||
                         this.calculateCenterEntityConfidence(
                             graphData.entities,
-                        ) || 0.8,
+                        ) ||
+                        0.8,
                     source: "graph",
+                    // Include facets from the enhanced entity if available
+                    facets: centerEntityFromGraph?.facets || [],
                     topicAffinity: graphData.topTopics || [],
                     summary: graphData.summary,
                     metadata: graphData.metadata,
@@ -730,6 +730,7 @@ class EntityGraphView {
                     relationships: validRelationships || [],
                     dominantDomains: this.extractDomains(graphData.entities),
                     firstSeen: this.getEarliestDate(
+                        // TODO: limit this to "contains" relationships
                         graphData.entities,
                         validatedRelationships,
                     ),
