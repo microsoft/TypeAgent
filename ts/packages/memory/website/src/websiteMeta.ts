@@ -233,8 +233,10 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
             // Temporal facets for ordering queries
             if (this.bookmarkDate) {
                 const bookmarkDate = new Date(this.bookmarkDate);
-                const existingFacetNames = new Set(domainEntity.facets.map((f: any) => f.name));
-                
+                const existingFacetNames = new Set(
+                    domainEntity.facets.map((f: any) => f.name),
+                );
+
                 if (!existingFacetNames.has("bookmarkDate")) {
                     domainEntity.facets.push({
                         name: "bookmarkDate",
@@ -251,8 +253,10 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
 
             if (this.visitDate) {
                 const visitDate = new Date(this.visitDate);
-                const existingFacetNames = new Set(domainEntity.facets.map((f: any) => f.name));
-                
+                const existingFacetNames = new Set(
+                    domainEntity.facets.map((f: any) => f.name),
+                );
+
                 if (!existingFacetNames.has("visitDate")) {
                     domainEntity.facets.push({
                         name: "visitDate",
@@ -269,8 +273,10 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
 
             // Frequency facets for popularity queries
             if (this.visitCount !== undefined) {
-                const existingFacetNames = new Set(domainEntity.facets.map((f: any) => f.name));
-                
+                const existingFacetNames = new Set(
+                    domainEntity.facets.map((f: any) => f.name),
+                );
+
                 if (!existingFacetNames.has("visitCount")) {
                     domainEntity.facets.push({
                         name: "visitCount",
@@ -288,8 +294,10 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
 
             // Category and source facets for filtering
             if (this.pageType) {
-                const existingFacetNames = new Set(domainEntity.facets.map((f: any) => f.name));
-                
+                const existingFacetNames = new Set(
+                    domainEntity.facets.map((f: any) => f.name),
+                );
+
                 if (!existingFacetNames.has("category")) {
                     domainEntity.facets.push({
                         name: "category",
@@ -306,8 +314,10 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
             }
 
             if (this.websiteSource) {
-                const existingFacetNames = new Set(domainEntity.facets.map((f: any) => f.name));
-                
+                const existingFacetNames = new Set(
+                    domainEntity.facets.map((f: any) => f.name),
+                );
+
                 if (!existingFacetNames.has("source")) {
                     domainEntity.facets.push({
                         name: "source",
@@ -318,8 +328,10 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
 
             // Folder context for bookmarks
             if (this.folder && this.websiteSource === "bookmark") {
-                const existingFacetNames = new Set(domainEntity.facets.map((f: any) => f.name));
-                
+                const existingFacetNames = new Set(
+                    domainEntity.facets.map((f: any) => f.name),
+                );
+
                 if (!existingFacetNames.has("folder")) {
                     domainEntity.facets.push({
                         name: "folder",
@@ -329,7 +341,7 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
             }
 
             // Check if entity with same name already exists
-            const existingEntityNames = new Set(entities.map(e => e.name));
+            const existingEntityNames = new Set(entities.map((e) => e.name));
             if (!existingEntityNames.has(domainEntity.name)) {
                 entities.push(domainEntity);
             }
@@ -343,7 +355,7 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
 
             const potentialTopics = [
                 `bookmarked in ${year}`,
-                `${this.domain} bookmark from ${year}`
+                `${this.domain} bookmark from ${year}`,
             ];
 
             // Relative temporal topics
@@ -367,10 +379,10 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
         if (this.visitDate) {
             const visitDate = new Date(this.visitDate);
             const year = visitDate.getFullYear();
-            
+
             const potentialTopics = [
                 `visited in ${year}`,
-                `${this.domain} visit from ${year}`
+                `${this.domain} visit from ${year}`,
             ];
 
             // Add only unique topics
@@ -386,9 +398,13 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
         // Frequency-derived topics
         if (this.visitCount !== undefined) {
             let potentialTopics: string[] = [];
-            
+
             if (this.visitCount > 10) {
-                potentialTopics = ["frequently visited site", "popular domain", "often visited"];
+                potentialTopics = [
+                    "frequently visited site",
+                    "popular domain",
+                    "often visited",
+                ];
             } else if (this.visitCount <= 2) {
                 potentialTopics = ["rarely visited site", "infrequent visit"];
             }
@@ -408,7 +424,7 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
             const potentialTopics = [
                 this.pageType,
                 `${this.pageType} site`,
-                `${this.pageType} website`
+                `${this.pageType} website`,
             ];
 
             // Category-specific temporal topics
@@ -439,7 +455,7 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
         if (this.folder && this.websiteSource === "bookmark") {
             const potentialTopics = [
                 this.folder,
-                `bookmark folder: ${this.folder}`
+                `bookmark folder: ${this.folder}`,
             ];
 
             // Add only unique topics
@@ -457,7 +473,7 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
             const existingTopics = new Set(topics);
             for (const keyword of this.keywords) {
                 const potentialTopics = [keyword, `keyword: ${keyword}`];
-                
+
                 for (const topic of potentialTopics) {
                     if (!existingTopics.has(topic)) {
                         topics.push(topic);
@@ -499,12 +515,13 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
         }
 
         // Check if action already exists (compare by verb, subject, and object)
-        const actionExists = actions.some(existingAction => 
-            existingAction.verbs?.[0] === action.verbs[0] &&
-            existingAction.subjectEntityName === action.subjectEntityName &&
-            existingAction.objectEntityName === action.objectEntityName
+        const actionExists = actions.some(
+            (existingAction) =>
+                existingAction.verbs?.[0] === action.verbs[0] &&
+                existingAction.subjectEntityName === action.subjectEntityName &&
+                existingAction.objectEntityName === action.objectEntityName,
         );
-        
+
         if (!actionExists) {
             actions.push(action);
         }
@@ -547,13 +564,13 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
 
     private addBasicContentTopics(topics: string[]): void {
         const existingTopics = new Set(topics);
-        
+
         // Basic content analysis from page content
         if (this.pageContent) {
             // Add headings as topics
             this.pageContent.headings.forEach((heading) => {
                 const potentialTopics = [heading, `topic: ${heading}`];
-                
+
                 for (const topic of potentialTopics) {
                     if (!existingTopics.has(topic)) {
                         topics.push(topic);
@@ -567,7 +584,7 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
         if (this.metaTags?.keywords) {
             this.metaTags.keywords.forEach((keyword) => {
                 const potentialTopics = [keyword, `keyword: ${keyword}`];
-                
+
                 for (const topic of potentialTopics) {
                     if (!existingTopics.has(topic)) {
                         topics.push(topic);

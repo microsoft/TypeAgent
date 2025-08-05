@@ -28,7 +28,6 @@ describe("websiteImport", () => {
         cleanupTestFile(testBookmarksFile);
     });
 
-
     test("get default browser paths", () => {
         const paths = getDefaultBrowserPaths();
 

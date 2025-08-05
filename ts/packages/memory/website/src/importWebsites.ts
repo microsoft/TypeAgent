@@ -739,4 +739,3 @@ export function getDefaultBrowserPaths(): { chrome: any; edge: any } {
         };
     }
 }
-
