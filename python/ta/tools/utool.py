@@ -779,7 +779,7 @@ async def compare_answers(
 
     if expected_success != actual_success:
         print(f"Expected success: {expected_success}; actual: {actual_success}")
-        return 0.000
+        return 0.000 if expected_success else 0.001  # 0.001 == Answer not expected
 
     if not actual_success:
         print(Fore.GREEN + f"Both failed" + Fore.RESET)
