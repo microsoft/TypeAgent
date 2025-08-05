@@ -44,6 +44,9 @@
   "fluidBuild": {
     "tasks": {
       "asc": {
+        "dependsOn": [
+          "action-schema-compiler#tsc"
+        ],
         "files": {
           "inputGlobs": [
             "src/agent/playerSchema.ts",
