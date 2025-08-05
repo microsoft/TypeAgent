@@ -4,7 +4,7 @@
 import { DocPartMeta } from "conversation-memory";
 import { conversation as kpLib } from "knowledge-processor";
 import { WebsiteMeta } from "./websiteMeta.js";
-import { DetectedAction, ActionSummary } from "./actionExtractor.js";
+import { DetectedAction, ActionSummary } from "./extraction/types.js";
 
 /**
  * Extended metadata for website documents that includes all website-specific information

@@ -33,7 +33,7 @@ export const defaultEnhancedImportOptions: EnhancedImportOptions = {
 };
 
 /**
- * Enhanced website import that leverages both packages' strengths
+ * Enhanced website import that leverages knowPro strengths
  */
 export async function enhancedWebsiteImport(
     visitInfo: WebsiteVisitInfo,

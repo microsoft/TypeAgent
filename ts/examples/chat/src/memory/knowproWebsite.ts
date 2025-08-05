@@ -667,7 +667,7 @@ export async function createKnowproWebsiteCommands(
                 totalActions += metadata.detectedActions.length;
 
                 metadata.detectedActions.forEach((action: DetectedAction) => {
-                    const actionType = action.actionType.replace("Action", "");
+                    const actionType = action.type;
                     actionTypeCounts.set(
                         actionType,
                         (actionTypeCounts.get(actionType) || 0) + 1,
@@ -1139,7 +1139,7 @@ export async function createKnowproWebsiteCommands(
                                     const actionSummary = highConfActions
                                         .map(
                                             (a: DetectedAction) =>
-                                                `${a.actionType.replace("Action", "")} (${(a.confidence * 100).toFixed(0)}%)`,
+                                                `${a.type} (${(a.confidence * 100).toFixed(0)}%)`,
                                         )
                                         .join(", ");
                                     context.printer.writeLine(
@@ -1679,67 +1679,11 @@ export async function createKnowproWebsiteCommands(
         try {
             context.printer.writeLine(`🎯 Analyzing actions: ${namedArgs.url}`);
 
-            const actionExtractor = new website.ActionExtractor({
-                minConfidence: parseFloat(namedArgs.confidence) || 0.5,
-            });
-
-            const actions = await actionExtractor.extractActionsFromUrl(
-                namedArgs.url,
-            );
-
-            if (actions.length === 0) {
-                context.printer.writeLine(
-                    `❌ No actions found with confidence >= ${namedArgs.confidence}`,
-                );
-                return;
-            }
-
-            context.printer.writeLine(`\n🎯 Found ${actions.length} actions:`);
-
-            // Group by action type
-            const groupedActions = new Map<string, any[]>();
-            actions.forEach((action) => {
-                if (!groupedActions.has(action.actionType)) {
-                    groupedActions.set(action.actionType, []);
-                }
-                groupedActions.get(action.actionType)!.push(action);
-            });
-
-            for (const [actionType, actionGroup] of groupedActions) {
-                context.printer.writeLine(
-                    `\n📋 ${actionType} (${actionGroup.length}):`,
-                );
-
-                actionGroup.forEach((action: DetectedAction) => {
-                    const confidenceIcon =
-                        action.confidence > 0.8
-                            ? "🟢"
-                            : action.confidence > 0.6
-                              ? "🟡"
-                              : "🔴";
-                    context.printer.writeLine(
-                        `   ${confidenceIcon} ${action.name} (${(action.confidence * 100).toFixed(0)}%)`,
-                    );
-
-                    if (namedArgs.showDetails) {
-                        if (action.target) {
-                            context.printer.writeLine(
-                                `      Target: ${action.target.type} - ${action.target.name || "N/A"}`,
-                            );
-                        }
-                        if (action.selectors && action.selectors.length > 0) {
-                            context.printer.writeLine(
-                                `      Selectors: ${action.selectors.slice(0, 2).join(", ")}`,
-                            );
-                        }
-                        if (action.url && action.url !== namedArgs.url) {
-                            context.printer.writeLine(
-                                `      Action URL: ${action.url}`,
-                            );
-                        }
-                    }
-                });
-            }
+            // ActionExtractor has been removed - functionality moved to browser agent
+            context.printer.writeLine(`❌ Action extraction is no longer available.`);
+            context.printer.writeLine(`   This functionality has been moved to the browser agent.`);
+            context.printer.writeLine(`   Use the browser extension for action detection.`);
+            return;
         } catch (error) {
             context.printer.writeError(`Action analysis failed: ${error}`);
         }
@@ -1783,7 +1727,7 @@ export async function createKnowproWebsiteCommands(
                     const meetsConfidence = action.confidence >= minConfidence;
                     const meetsType =
                         !namedArgs.actionType ||
-                        action.actionType === namedArgs.actionType;
+                        action.type === namedArgs.actionType;
                     return meetsConfidence && meetsType;
                 },
             );
@@ -1821,7 +1765,7 @@ export async function createKnowproWebsiteCommands(
                 const actionSummary = site.actions
                     .map(
                         (a: DetectedAction) =>
-                            `${a.actionType.replace("Action", "")} (${(a.confidence * 100).toFixed(0)}%)`,
+                            `${a.type} (${(a.confidence * 100).toFixed(0)}%)`,
                     )
                     .join(", ");
                 context.printer.writeLine(`   Actions: ${actionSummary}`);
@@ -1832,7 +1776,7 @@ export async function createKnowproWebsiteCommands(
                 );
                 if (highConfActions.length > 0) {
                     context.printer.writeLine(
-                        `   High-confidence: ${highConfActions.map((a: DetectedAction) => a.name).join(", ")}`,
+                        `   High-confidence: ${highConfActions.map((a: DetectedAction) => a.text || a.element).join(", ")}`,
                     );
                 }
 
@@ -1855,7 +1799,7 @@ export async function createKnowproWebsiteCommands(
                 totalActions += w.metadata.detectedActions.length;
 
                 w.metadata.detectedActions.forEach((action) => {
-                    actionTypesSet.add(action.actionType.replace("Action", ""));
+                    actionTypesSet.add(action.type);
                     if (action.confidence > 0.8) {
                         highConfidenceActions++;
                     }

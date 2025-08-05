@@ -418,8 +418,6 @@ export async function extractKnowledgeFromPage(
 
         return {
             ...aggregatedResults,
-            // Enhanced action data is now properly included in aggregatedResults
-            // detectedActions and actionSummary are included if actions were detected
         };
     } catch (error) {
         console.error("Error extracting knowledge from fragments:", error);

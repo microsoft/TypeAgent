@@ -701,20 +701,50 @@ class KnowledgePanel {
         `;
     }
 
+    // Helper functions to check if modules have meaningful data
+    private hasContentMetrics(knowledge: KnowledgeData): boolean {
+        return !!(knowledge.contentMetrics && 
+                 (knowledge.contentMetrics.readingTime > 0 || 
+                  knowledge.contentMetrics.wordCount > 0));
+    }
+
+    private hasRelatedContent(knowledge: KnowledgeData): boolean {
+        // Check if there's any meaningful related content to show
+        // This could be expanded based on what constitutes "related content"
+        // For now, return false to hide by default until we have actual related content logic
+        return false;
+    }
+
+    private renderRelatedContent(knowledge: KnowledgeData) {
+        const container = document.getElementById("relatedContentContainer")!;
+        // Since hasRelatedContent returns false, this method won't be called
+        // But we include it for completeness and future expansion
+        container.innerHTML = `
+            <div class="text-muted text-center">
+                <i class="bi bi-info-circle"></i>
+                No related content available
+            </div>
+        `;
+    }
+
     private async renderKnowledgeResults(knowledge: KnowledgeData) {
         const knowledgeSection = document.getElementById("knowledgeSection")!;
         knowledgeSection.className = "";
         knowledgeSection.innerHTML = `
-            ${knowledge.contentMetrics ? this.renderContentMetricsCard() : ""}
-            ${this.renderRelatedContentCard()}
+            ${this.hasContentMetrics(knowledge) ? this.renderContentMetricsCard() : ""}
+            ${this.hasRelatedContent(knowledge) ? this.renderRelatedContentCard() : ""}
             ${this.renderEntitiesCard()}
             ${this.renderRelationshipsCard()}
             ${this.renderTopicsCard()}
             ${knowledge.detectedActions && knowledge.detectedActions.length > 0 ? this.renderUserActionsCard() : ""}
         `;
 
-        if (knowledge.contentMetrics) {
+        if (this.hasContentMetrics(knowledge)) {
             this.renderContentMetrics(knowledge.contentMetrics);
+        }
+
+        if (this.hasRelatedContent(knowledge)) {
+            this.renderRelatedContent(knowledge);
         }
 
         this.renderEntities(knowledge.entities);

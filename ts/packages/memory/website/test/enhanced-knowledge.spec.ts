@@ -329,10 +329,10 @@ describe("Enhanced Website Query Integration", () => {
             pageType: "news",
             detectedActions: [
                 {
-                    actionType: "ShareAction",
-                    name: "Social media sharing",
+                    type: "share",
+                    element: ".share-button",
+                    text: "Social media sharing",
                     confidence: 0.9,
-                    selectors: [".share-button"],
                 },
             ],
         };
