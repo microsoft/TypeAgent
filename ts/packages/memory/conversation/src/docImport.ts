@@ -175,7 +175,7 @@ export function docPartsFromHtml(
  */
 export function docPartsFromMarkdown(
     markdown: string,
-    maxCharsPerChunk?: number,
+    maxCharsPerChunk: number,
     sourceUrl?: string,
 ): DocPart[] {
     const [textBlocks, knowledgeBlocks] = tp.markdownToTextAndKnowledgeBlocks(
@@ -195,6 +195,10 @@ export function docPartsFromMarkdown(
             // Empty text block
             continue;
         }
+        let textChunks =
+            textBlock.length > maxCharsPerChunk
+                ? [...splitLargeTextIntoChunks(textBlock, maxCharsPerChunk)]
+                : textBlock;
         const tags: kp.MessageTag[] = [];
         if (kBlock.tags.size > 0) {
             tags.push(...kBlock.tags.values());
@@ -203,7 +207,7 @@ export function docPartsFromMarkdown(
             tags.push(...kBlock.sTags);
         }
         const part = new DocPart(
-            textBlock,
+            textChunks,
             new DocPartMeta(sourceUrl),
             tags.length > 0 ? tags : undefined,
             undefined,

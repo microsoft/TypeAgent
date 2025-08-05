@@ -12,7 +12,7 @@ import {
     ProgressBar,
 } from "interactive-app";
 import { KnowproContext, searchDef } from "./knowproMemory.js";
-import { argDestFile, argSourceFile } from "../common.js";
+import { argChunkSize, argDestFile, argSourceFile } from "../common.js";
 import * as kp from "knowpro";
 import * as kpTest from "knowpro-test";
 import * as cm from "conversation-memory";
@@ -70,6 +70,9 @@ export async function createKnowproTestCommands(
             args: {
                 filePath: arg("File path"),
             },
+            options: {
+                chunkSize: argChunkSize(4096),
+            },
         };
     }
     commands.kpTestMdParse.metadata = testMdParseDef();
@@ -83,7 +86,7 @@ export async function createKnowproTestCommands(
         let mdDom = tp.markdownTokenize(markdown);
         //context.printer.writeJsonInColor(chalk.gray, mdDom);
         const [textBlocks, knowledgeBlocks] =
-            tp.markdownToTextAndKnowledgeBlocks(mdDom);
+            tp.markdownToTextAndKnowledgeBlocks(mdDom, namedArgs.chunkSize);
         assert(textBlocks.length === knowledgeBlocks.length);
         for (let i = 0; i < textBlocks.length; ++i) {
             context.printer.writeLine("=====");

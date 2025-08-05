@@ -2,7 +2,10 @@
 // Licensed under the MIT License.
 
 import * as md from "marked";
-import { conversation as kpLib } from "knowledge-processor";
+import {
+    conversation as kpLib,
+    splitIntoParagraphs,
+} from "knowledge-processor";
 
 /**
  * Parses markdown into a token DOM using the "marked" library
@@ -37,13 +40,13 @@ export interface MarkdownBlockHandler {
  * - To further split individual markdown blocks, you can either call this method OR splitter for paragraph, tables, lists
  * @param markdown
  * @param {MarkdownBlockHandler} handler
- * @param maxChunkLength Approx max size of chunk. Uses as a best effort limit. Text blocks will be split only when it makes sense.
+ * @param maxCharsPerChunk Approx max size of chunk. Uses as a best effort limit. Text blocks will be split only when it makes sense.
  * @returns
  */
 export function markdownToTextBlocks(
     markdown: string | md.Token[],
     handler?: MarkdownBlockHandler,
-    maxChunkLength?: number,
+    maxCharsPerChunk: number = Number.MAX_SAFE_INTEGER,
 ): string[] {
     const markdownTokens =
         typeof markdown === "string" ? markdownTokenize(markdown) : markdown;
@@ -84,7 +87,12 @@ export function markdownToTextBlocks(
                 curTextBlock += "\n";
                 break;
             case "text":
-                curTextBlock += token.raw;
+                if (curTextBlock.length + token.raw.length > maxCharsPerChunk) {
+                    const paraToken = textToParagraphs(token.raw);
+                    traverseTokens(paraToken, token);
+                } else {
+                    curTextBlock += token.raw;
+                }
                 break;
             case "paragraph":
                 beginBlock(
@@ -165,10 +173,11 @@ export function markdownToTextBlocks(
         if (
             !prevBlockName ||
             !shouldMerge ||
-            (maxChunkLength !== undefined &&
-                curTextBlock.length + newTextLength > maxChunkLength)
+            curTextBlock.length + newTextLength > maxCharsPerChunk
         ) {
-            terminateBlock();
+            endBlock();
+            curTextBlock = "";
+            handler?.onBlockStart();
         }
         handler?.onToken(curTextBlock, token, parentToken);
         prevBlockName = token.type;
@@ -181,12 +190,6 @@ export function markdownToTextBlocks(
             textBlocks.push(curTextBlock);
             handler?.onBlockEnd(curTextBlock);
         }
-    }
-
-    function terminateBlock(): void {
-        endBlock();
-        curTextBlock = "";
-        handler?.onBlockStart();
     }
 }
 
@@ -232,12 +235,12 @@ export function createKnowledgeCollectionOptions(): KnowledgeCollectionOptions {
 /**
  * Parses the given markdown text and chunks it at logical boundaries.
  * @param markdown markdown string
- * @param maxChunkLength
+ * @param maxCharsPerChunk
  * @returns
  */
 export function markdownToTextAndKnowledgeBlocks(
     markdown: string | md.TokensList,
-    maxChunkLength?: number,
+    maxCharsPerChunk: number,
     knowledgeOptions?: KnowledgeCollectionOptions,
 ): [string[], MarkdownKnowledgeBlock[]] {
     const knowledgeCollector = new MarkdownKnowledgeCollector(
@@ -246,7 +249,7 @@ export function markdownToTextAndKnowledgeBlocks(
     const textBlocks = markdownToTextBlocks(
         markdown,
         knowledgeCollector,
-        maxChunkLength,
+        maxCharsPerChunk,
     );
     const knowledgeBlocks = knowledgeCollector.knowledgeBlocks;
     if (textBlocks.length !== knowledgeBlocks.length) {
@@ -567,4 +570,16 @@ function createMarkdownKnowledgeBlock(): MarkdownKnowledgeBlock {
         sTags: [],
         knowledge: createKnowledgeResponse(),
     };
+}
+
+function textToParagraphs(text: string): md.Tokens.Paragraph[] {
+    const paras = splitIntoParagraphs(text);
+    return paras.map((p) => {
+        return {
+            type: "paragraph",
+            raw: text,
+            text,
+            tokens: [],
+        };
+    });
 }
