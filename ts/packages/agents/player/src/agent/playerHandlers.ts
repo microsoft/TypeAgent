@@ -280,7 +280,7 @@ async function getPlayerDynamicDisplay(
         const status = await htmlStatus(context.agentContext.spotify);
         return {
             content:
-                type === "html" ? status.displayContent : status.literalText!,
+                type === "html" ? status.displayContent : status.historyText!,
 
             nextRefreshMs: 1000,
         };

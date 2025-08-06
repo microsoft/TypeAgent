@@ -168,7 +168,10 @@ async function executeAction(
         displayError(result.error, actionContext);
     } else {
         if (result.displayContent !== undefined) {
-            actionContext.actionIO.setDisplay(result.displayContent);
+            actionContext.actionIO.appendDisplay(
+                result.displayContent,
+                "block",
+            );
         }
         if (result.dynamicDisplayId !== undefined) {
             systemContext.clientIO.setDynamicDisplay(

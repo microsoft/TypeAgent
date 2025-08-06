@@ -19,7 +19,6 @@ import { ChatModelWithStreaming, CompletionSettings, openai } from "aiclient";
 import { PromptSection, Result } from "typechat";
 import {
     displayError,
-    displayResult,
     displayStatus,
 } from "@typeagent/agent-sdk/helpers/display";
 import {
@@ -153,7 +152,10 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
                         context,
                     )) as ActionResultSuccess;
 
-                    displayResult(result.literalText!, context);
+                    context.actionIO.appendDisplay(
+                        result.displayContent,
+                        "block",
+                    );
                     break;
 
                 // case "contextualGreetingAction":

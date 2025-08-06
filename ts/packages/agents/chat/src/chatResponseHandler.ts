@@ -10,7 +10,6 @@ import {
 
 import { ActionContext, AppAgent, TypeAgentAction } from "@typeagent/agent-sdk";
 import {
-    createActionResult,
     createActionResultFromHtmlDisplay,
     createActionResultNoDisplay,
 } from "@typeagent/agent-sdk/helpers/action";
@@ -63,8 +62,7 @@ async function handleChatResponse(
     console.log(JSON.stringify(chatAction, undefined, 2));
     switch (chatAction.actionName) {
         case "generateResponse": {
-            return generateReponse(chatAction, context);
-            break;
+            return generateResponse(chatAction, context);
         }
 
         case "showImageFile":
@@ -79,7 +77,7 @@ async function handleChatResponse(
     }
 }
 
-async function generateReponse(
+async function generateResponse(
     generateResponseAction: GenerateResponseAction,
     context: ActionContext,
 ) {
@@ -92,23 +90,29 @@ async function generateReponse(
             "Got generated text: " + generatedText.substring(0, 100) + "...",
         );
 
-        const needDisplay =
-            context.streamingContext !== generatedText ||
-            generateResponseAction.parameters.relatedFiles;
-        let result;
-        if (needDisplay) {
-            if (generateResponseAction.parameters.relatedFiles) {
-                result = createActionResultFromHtmlDisplay(
-                    `<div>${generatedText}</div><div class='chat-smallImage'>${await rehydrateImages(context, generateResponseAction.parameters.relatedFiles!)}</div>`,
-                );
-            } else {
-                result = createActionResult(generatedText, true);
-            }
-        } else {
-            result = createActionResultNoDisplay(generatedText);
+        const streamingContext = context.streamingContext;
+        context.streamingContext = undefined; // clear the streaming context
+        if (streamingContext !== generatedText) {
+            // Either we didn't stream, or we streamed a different text.
+            // REVIEW: what happens to the speaking text that was streamed?
+            context.actionIO.setDisplay({
+                type: "text",
+                content: generatedText,
+                speak: streamingContext === undefined,
+            });
         }
 
-        let entities = parameters.generatedTextEntities || [];
+        // Add the related files.
+        if (generateResponseAction.parameters.relatedFiles) {
+            context.actionIO.appendDisplay(
+                `<div class='chat-smallImage'>${await rehydrateImages(context, generateResponseAction.parameters.relatedFiles!)}</div>`,
+                "block",
+            );
+        }
+
+        const result = createActionResultNoDisplay(generatedText);
+
+        const entities = parameters.generatedTextEntities || [];
         if (parameters.userRequestEntities !== undefined) {
             result.entities = parameters.userRequestEntities.concat(entities);
         }

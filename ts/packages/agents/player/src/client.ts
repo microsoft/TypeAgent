@@ -223,7 +223,7 @@ async function htmlTrackNames(
 
     const actionResult: ActionResult = {
         displayContent,
-        literalText: "",
+        historyText: "",
         entities: [],
     };
     let prevUrl = "";
@@ -279,7 +279,7 @@ async function htmlTrackNames(
             }
         }
         displayContent.content += "</ol></div>";
-        actionResult.literalText =
+        actionResult.historyText =
             "Updated the current track list with the numbered list of tracks on the screen";
     } else if (selectedTracks.length === 1) {
         const track = selectedTracks[0];
@@ -312,7 +312,7 @@ async function htmlTrackNames(
         const litArtists =
             litArtistsPrefix +
             track.artists.map((artist) => artist.name).join(", ");
-        actionResult.literalText = `Now playing: ${track.name} from album ${track.album.name} with ${litArtists}`;
+        actionResult.historyText = `Now playing: ${track.name} from album ${track.album.name} with ${litArtists}`;
         if (track.album.images.length > 0 && track.album.images[0].url) {
             displayContent.content = "<div class='track-list scroll_enabled'>";
             displayContent.content +=

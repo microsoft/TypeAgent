@@ -73,7 +73,7 @@ function htmlPlaybackStatus(
             }
             const pp = status.is_playing ? "" : "(paused)";
             const album = status.item.album.name;
-            actionResult.literalText += `Now playing${pp}: ${status.item.name} from album ${album} with ${artists}`;
+            actionResult.historyText += `Now playing${pp}: ${status.item.name} from album ${album} with ${artists}`;
             actionResult.entities.push({
                 name: status.item.name,
                 type: ["track"],
@@ -107,7 +107,7 @@ export async function htmlStatus(context: IClientContext) {
         content: "<div data-group='status'>Status...",
     };
     const actionResult: ActionResultSuccess = {
-        literalText: "",
+        historyText: "",
         entities: [],
         displayContent,
     };
@@ -117,10 +117,10 @@ export async function htmlStatus(context: IClientContext) {
         const aux = `Volume is ${activeDevice.volume_percent}%. ${status.shuffle_state ? "Shuffle on" : ""}`;
         displayContent.content += `<div>Active device: ${activeDevice.name} of type ${activeDevice.type}</div>`;
         displayContent.content += `<div>${aux}</div>`;
-        actionResult.literalText += `\nActive device: ${activeDevice.name} of type ${activeDevice.type}\n${aux}`;
+        actionResult.historyText += `\nActive device: ${activeDevice.name} of type ${activeDevice.type}\n${aux}`;
     } else {
         displayContent.content += "<div>Nothing playing.</div>";
-        actionResult.literalText = "Nothing playing.";
+        actionResult.historyText = "Nothing playing.";
     }
     displayContent.content += "</div>";
     actionResult.dynamicDisplayId = "status";

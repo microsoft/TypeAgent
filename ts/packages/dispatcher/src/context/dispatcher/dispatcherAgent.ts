@@ -182,7 +182,7 @@ async function clarifyWithLookup(
 
     if (
         lookupResult.error !== undefined ||
-        lookupResult.literalText === undefined
+        lookupResult.historyText === undefined
     ) {
         return undefined;
     }
@@ -196,7 +196,7 @@ async function clarifyWithLookup(
 
     history.promptSections.push({
         role: "assistant",
-        content: lookupResult.literalText,
+        content: lookupResult.historyText,
     });
 
     const translationResult = await translateRequest(
