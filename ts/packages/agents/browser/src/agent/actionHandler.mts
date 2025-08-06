@@ -1779,7 +1779,7 @@ async function handleWebsiteAction(
             );
             return {
                 success: !statsResult.error,
-                result: statsResult.literalText || "Stats retrieved",
+                result: statsResult.historyText || "Stats retrieved",
                 error: statsResult.error,
             };
 
@@ -1976,8 +1976,8 @@ async function handleWebsiteLibraryStats(
 
         // Parse and format the response - extract text from ActionResult
         let responseText = "";
-        if (statsResult.literalText) {
-            responseText = statsResult.literalText;
+        if (statsResult.historyText) {
+            responseText = statsResult.historyText;
         } else if (statsResult.displayContent) {
             // Handle different types of display content
             if (typeof statsResult.displayContent === "string") {
