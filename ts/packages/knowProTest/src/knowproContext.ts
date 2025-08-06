@@ -10,6 +10,11 @@ import path from "path";
 import { createEmbeddingCache } from "knowledge-processor";
 import { PromptSection } from "typechat";
 
+export type KnowproContextOptions = {
+    retryNoAnswer: boolean;
+    scopedSearch: boolean;
+};
+
 export class KnowproContext {
     public knowledgeModel: ChatModel;
     public similarityModel: TextEmbeddingModel;
@@ -18,8 +23,11 @@ export class KnowproContext {
     public queryTranslator: kp.SearchQueryTranslator;
     public answerGenerator: kp.AnswerGenerator;
     public termParser: cm.SearchTermParser;
-    public retryNoAnswer: boolean;
     public log: KnowproLog;
+    //
+    // Global options and overrides
+    //
+    public options: KnowproContextOptions;
 
     public tokenStats: openai.CompletionUsageStats;
     public promptHandler?:
@@ -42,12 +50,18 @@ export class KnowproContext {
         this.answerGenerator = new kp.AnswerGenerator(
             kp.createAnswerGeneratorSettings(this.knowledgeModel),
         );
-        this.retryNoAnswer = false;
         this.termParser = new cm.SearchTermParser();
         this.tokenStats = {
             completion_tokens: 0,
             prompt_tokens: 0,
             total_tokens: 0,
+        };
+        //
+        // Set default global options and overrides
+        //
+        this.options = {
+            retryNoAnswer: false,
+            scopedSearch: false,
         };
     }
 

@@ -1,7 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CommandMetadata, arg, argBool, argNum } from "interactive-app";
+import {
+    CommandMetadata,
+    arg,
+    argBool,
+    argNum,
+    makeArg,
+} from "interactive-app";
 import * as kp from "knowpro";
 import { Result } from "typechat";
 import { argSourceFile } from "./common.js";
@@ -53,9 +59,10 @@ export function searchRequestDef(): CommandMetadata {
                 "Thread description: scope matches to the thread best matching this description",
             ),
             when: arg("Sub-query to scope matches (early experimental)"),
-            scoped: argBool(
+            scoped: makeArg(
                 "Translate NL queries into scoped search expressions",
-                false,
+                "boolean",
+                undefined,
             ),
         },
     };
