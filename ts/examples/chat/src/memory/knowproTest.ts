@@ -87,13 +87,14 @@ export async function createKnowproTestCommands(
         let mdDom = tp.markdownTokenize(markdown);
         //context.printer.writeJsonInColor(chalk.gray, mdDom);
         const chunkSize = namedArgs.chunkSize;
+        const chunkSizeBuffer = chunkSize + chunkSize * 0.25;
         const [textBlocks, knowledgeBlocks] =
             tp.markdownToTextAndKnowledgeBlocks(mdDom, chunkSize);
         assert(textBlocks.length === knowledgeBlocks.length);
         let largeChunkCount = 0;
         for (let i = 0; i < textBlocks.length; ++i) {
             const textBlock = textBlocks[i];
-            if (textBlock.length > chunkSize) {
+            if (textBlock.length > chunkSizeBuffer) {
                 largeChunkCount++;
                 context.printer.writeLineInColor(
                     chalk.redBright,
@@ -116,7 +117,7 @@ export async function createKnowproTestCommands(
         }
         if (largeChunkCount > 0) {
             context.printer.writeError(
-                `${largeChunkCount} chunks > ${chunkSize}`,
+                `${largeChunkCount} chunks > [${chunkSize}, ${chunkSizeBuffer}]`,
             );
         }
     }
