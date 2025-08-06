@@ -20,12 +20,15 @@ def main():
         with open(file, "r") as f:
             lines = f.readlines()
 
+        scores = {}
         counter = None
         for i, line in enumerate(lines):
             if m := re.match(r"^(?:-+|\*+)\s+(\d+)\s+", line):
                 counter = int(m.group(1))
-            elif m := re.match(r"^.*; Question:\s+(.*)$", line):
-                question = m.group(1)
+            elif m := re.match(r"^Score:\s+([\d.]+); Question:\s+(.*)$", line):
+                score = float(m.group(1))
+                scores[counter] = score
+                question = m.group(2)
                 if counter not in questions:
                     questions[counter] = question
                 elif questions[counter] != question:
@@ -33,26 +36,7 @@ def main():
                     print(f"< {questions[counter]}")
                     print(f"> {question}")
 
-        i = lines.index("==================================================\n")
-        if i < 0:
-            print(f"File {file} does not contain a separator line")
-            continue
-        lines = lines[i + 1 :]
-        text = "".join(lines)
-        matches = re.findall(r"\d\.\d\d\d\(\d+\)", text)
-        if not matches:
-            print(f"File {file} does not contain any scores")
-            continue
-        # print(len(matches), matches)
-        data = {}
-        for match in matches:
-            m = re.match(r"(\d\.\d\d\d)\((\d+)\)", match)
-            assert m
-            score = float(m.group(1))
-            counter = int(m.group(2))
-            data[counter] = score
-        assert len(data) == len(matches)
-        table[file] = data
+        table[file] = scores
 
     # Print header
     all_files = list(table.keys())
