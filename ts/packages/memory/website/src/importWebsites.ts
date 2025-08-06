@@ -343,14 +343,12 @@ export async function importChromeHistory(
 
                 const domain = extractDomain(row.url);
                 const visitDate = chromeTimeToISOString(row.last_visit_time);
-                const pageType = determinePageType(row.url, row.title);
 
                 const visitInfo: WebsiteVisitInfo = {
                     url: row.url,
                     domain,
                     visitDate,
                     source: "history" as const,
-                    pageType,
                 };
 
                 if (row.title) visitInfo.title = row.title;
@@ -740,83 +738,4 @@ export function getDefaultBrowserPaths(): { chrome: any; edge: any } {
             },
         };
     }
-}
-
-/**
- * Determine page type based on URL and title
- * Legacy function - kept for backward compatibility
- */
-export function determinePageType(url: string, title?: string): string {
-    const domain = extractDomain(url).toLowerCase();
-    const urlLower = url.toLowerCase();
-    const titleLower = title?.toLowerCase() || "";
-
-    // News sites
-    if (
-        domain.includes("news") ||
-        domain.includes("cnn") ||
-        domain.includes("bbc") ||
-        domain.includes("reuters") ||
-        domain.includes("npr") ||
-        domain.includes("guardian")
-    ) {
-        return "news";
-    }
-
-    // Documentation sites
-    if (
-        domain.includes("docs") ||
-        domain.includes("documentation") ||
-        urlLower.includes("/docs/") ||
-        titleLower.includes("documentation")
-    ) {
-        return "documentation";
-    }
-
-    // Shopping/commerce
-    if (
-        domain.includes("amazon") ||
-        domain.includes("shop") ||
-        domain.includes("store") ||
-        domain.includes("ebay") ||
-        urlLower.includes("/shop/") ||
-        urlLower.includes("/cart/")
-    ) {
-        return "commerce";
-    }
-
-    // Social media
-    if (
-        domain.includes("twitter") ||
-        domain.includes("facebook") ||
-        domain.includes("linkedin") ||
-        domain.includes("instagram") ||
-        domain.includes("reddit")
-    ) {
-        return "social";
-    }
-
-    // Travel
-    if (
-        domain.includes("booking") ||
-        domain.includes("expedia") ||
-        domain.includes("travel") ||
-        domain.includes("airbnb") ||
-        titleLower.includes("travel")
-    ) {
-        return "travel";
-    }
-
-    // Development/tech
-    if (
-        domain.includes("github") ||
-        domain.includes("stackoverflow") ||
-        domain.includes("dev") ||
-        titleLower.includes("api") ||
-        titleLower.includes("tutorial")
-    ) {
-        return "development";
-    }
-
-    return "general";
 }

@@ -40,6 +40,8 @@ export interface Entity {
     type: string;
     description?: string;
     confidence: number;
+    occurrenceCount?: number;
+    sourceSites?: number;
 }
 
 export interface Relationship {

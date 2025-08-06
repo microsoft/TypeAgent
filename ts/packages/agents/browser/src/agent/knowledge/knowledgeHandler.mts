@@ -475,11 +475,6 @@ export async function indexWebPageContent(
             visitDate: parameters.timestamp,
         };
 
-        visitInfo.pageType = website.determinePageType(
-            parameters.url,
-            parameters.title,
-        );
-
         const websiteObj = website.importWebsiteVisit(
             visitInfo,
             combinedTextContent,
