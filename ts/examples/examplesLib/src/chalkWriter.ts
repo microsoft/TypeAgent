@@ -193,7 +193,6 @@ export class ChalkWriter extends ConsoleWriter {
     }
 
     public writeTranslation<T>(result: Result<T>) {
-        this.writeLine();
         if (result.success) {
             this.writeJson(result.data);
         } else {

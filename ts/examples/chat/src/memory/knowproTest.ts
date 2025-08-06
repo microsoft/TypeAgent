@@ -474,7 +474,7 @@ export async function createKnowproTestCommands(
     function testSearchDef(): CommandMetadata {
         const def = searchDef();
         def.options ??= {};
-        def.options!.compare = argBool("Compare to V1 mode", false);
+        def.options!.compare = argBool("Compare to V1 mode", true);
         return def;
     }
     commands.kpTestSearch.metadata = testSearchDef();
@@ -487,8 +487,13 @@ export async function createKnowproTestCommands(
         const result = namedArgs.compare
             ? await queryTranslator.translate(namedArgs.query)
             : undefined;
-        if (result) {
-            context.printer.writeTranslation(result);
+        try {
+            context.printer.pushColor(chalk.gray);
+            if (result) {
+                context.printer.writeTranslation(result);
+            }
+        } finally {
+            context.printer.popColor();
         }
 
         context.printer.writeHeading("Scope");
@@ -504,7 +509,7 @@ export async function createKnowproTestCommands(
                     context.printer.writeError(error);
                 }
             }
-            if (!ensureConversationLoaded()) {
+            if (!context.conversation) {
                 return;
             }
             const request = parseTypedArguments<kpTest.SearchRequest>(
