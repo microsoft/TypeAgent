@@ -51,7 +51,7 @@ export async function importTextFile(
         case ".htm":
             parts = docPartsFromHtml(
                 docText,
-                true,
+                false,
                 maxCharsPerChunk,
                 sourceUrl,
             );
