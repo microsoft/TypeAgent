@@ -254,6 +254,8 @@ async function runEntityExtraction(
         return [];
     }
     let entityText = "";
+    let linkEntities: Array<Entity> = [];
+    let refCount = 0;
     for (const message of messages) {
         for (const content of message.content) {
             const textContent = content as MessageTextContent;
@@ -266,6 +268,10 @@ async function runEntityExtraction(
                         case "url_citation":
                             const url = a as MessageTextUrlCitationAnnotation;
                             entityText += `Reference: ${url.urlCitation.title} - ${url.urlCitation.url}`;
+                            linkEntities.push({
+                                type: ["link", "url", "website"],
+                                name: `Reference #${++refCount} - ${url.urlCitation.title} - ${url.urlCitation.url}`,
+                            });
                             break;
                         default:
                             console.warn(
@@ -282,8 +288,11 @@ async function runEntityExtraction(
     if (entityText.length > settings.maxEntityTextLength) {
         entityText = entityText.slice(0, settings.maxEntityTextLength);
     }
-    const results = await extractEntities(settings.entityGenModel, entityText);
-    return results;
+
+    return [
+        ...(await extractEntities(settings.entityGenModel, entityText)),
+        ...linkEntities,
+    ];
 }
 
 let groundingConfig: bingWithGrounding.ApiSettings | undefined;
