@@ -17,13 +17,18 @@ import {
     ProgressBar,
     StopWatch,
 } from "interactive-app";
-import { ensureDir, getFileName } from "typeagent";
+import { changeFileExt, ensureDir, getFileName, readAllText } from "typeagent";
 import {
     createIndexingEventHandler,
     setKnowledgeExtractorV2,
     sourcePathToMemoryIndexPath,
 } from "./knowproCommon.js";
 import { argSourceFile } from "../common.js";
+import { getFileNameFromUrl, toUrl } from "examples-lib";
+import { getHtml } from "aiclient";
+import * as tp from "textpro";
+import { pathToFileURL } from "url";
+import chalk from "chalk";
 
 export type KnowproDocContext = {
     printer: KnowProPrinter;
@@ -47,6 +52,7 @@ export async function createKnowproDocMemoryCommands(
 
     commands.kpDocImport = docImport;
     commands.kpDocLoad = docLoad;
+    commands.kpDocHtmlToMd = htmlToMd;
 
     function docImportDef(): CommandMetadata {
         return {
@@ -124,6 +130,58 @@ export async function createKnowproDocMemoryCommands(
         context.docMemory = docMemory;
         kpContext.conversation = context.docMemory;
         writeDocInfo(context.docMemory);
+    }
+
+    function htmlToMdDef(): CommandMetadata {
+        return {
+            description: "Convert Html to MD and save to a file",
+            args: {
+                path: arg("File path or url"),
+            },
+            options: {
+                rootTag: arg("Root tag to start converting from", "body"),
+                destPath: arg("Destination path to save file"),
+            },
+        };
+    }
+    commands.kpDocHtmlToMd.metadata = htmlToMdDef();
+    async function htmlToMd(args: string[]) {
+        const namedArgs = parseNamedArguments(args, htmlToMdDef());
+        let filePath = namedArgs.filePath;
+        if (!filePath) {
+            return;
+        }
+        let html = "";
+        let srcUrl = toUrl(filePath);
+        if (srcUrl !== undefined) {
+            const htmlResult = await getHtml(srcUrl.href);
+            if (!htmlResult.success) {
+                context.printer.writeError(htmlResult.message);
+                return;
+            }
+            html = htmlResult.data;
+            const fileName = getFileNameFromUrl(srcUrl);
+            filePath = fileName
+                ? path.join(context.basePath, fileName)
+                : undefined;
+        } else {
+            html = await readAllText(filePath);
+        }
+        let markdown = tp.htmlToMarkdown(html, namedArgs.rootTag);
+        context.printer.writeLine(markdown);
+
+        const destPath = namedArgs.destPath
+            ? namedArgs.destPath
+            : filePath
+              ? changeFileExt(filePath, ".md")
+              : undefined;
+        if (destPath) {
+            fs.writeFileSync(destPath, markdown);
+            context.printer.writeInColor(
+                chalk.blueBright,
+                `Url: ${pathToFileURL(destPath)}`,
+            );
+        }
     }
 
     async function buildDocIndex(namedArgs: NamedArgs): Promise<void> {

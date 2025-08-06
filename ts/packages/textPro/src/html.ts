@@ -24,7 +24,7 @@ export function htmlToText(html: string): string {
  * @param html html text
  * @returns simplified html
  */
-export function simplifyHtml(html: string): string {
+export function htmlSimplify(html: string): string {
     const editor = new HtmlEditor(html);
     editor.simplify();
     return editor.getHtml();

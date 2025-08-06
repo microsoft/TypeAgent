@@ -12,7 +12,7 @@ import {
     ProgressBar,
 } from "interactive-app";
 import { KnowproContext, searchDef } from "./knowproMemory.js";
-import { argDestFile, argSourceFile } from "../common.js";
+import { argChunkSize, argDestFile, argSourceFile } from "../common.js";
 import * as kp from "knowpro";
 import * as kpTest from "knowpro-test";
 import * as cm from "conversation-memory";
@@ -25,7 +25,6 @@ import {
 } from "typeagent";
 import chalk from "chalk";
 import { openai } from "aiclient";
-import * as fs from "fs";
 import {
     createIndexingEventHandler,
     sourcePathToMemoryIndexPath,
@@ -48,14 +47,14 @@ export async function createKnowproTestCommands(
     commands.kpTestVerifyAnswerBatch = verifyAnswerBatch;
     commands.kpTestHtml = testHtml;
     commands.kpTestHtmlText = testHtmlText;
-    commands.kpTestHtmlMd = testHtmlMd;
+    commands.kpTestMdParse = testMdParse;
     commands.kpTestHtmlParts = testHtmlParts;
     commands.kpTestChoices = testMultipleChoice;
     commands.kpTestSearch = testSearchScope;
 
     async function testHtml(args: string[]) {
         const html = await readAllText(args[0]);
-        const simpleHtml = tp.simplifyHtml(html);
+        const simpleHtml = tp.htmlSimplify(html);
         context.printer.writeLine(simpleHtml);
     }
 
@@ -65,45 +64,61 @@ export async function createKnowproTestCommands(
         context.printer.writeLine(text);
     }
 
-    function testHtmlMdDef(): CommandMetadata {
+    function testMdParseDef(): CommandMetadata {
         return {
             description: "Html to MD",
             args: {
                 filePath: arg("File path"),
             },
             options: {
-                rootTag: arg("Root tag", "body"),
-                knowledge: argBool("Extract knowledge", true),
+                chunkSize: argChunkSize(4096),
+                knowledge: argBool("Show knowledge", false),
             },
         };
     }
-    commands.kpTestHtmlMd.metadata = testHtmlMdDef();
-    async function testHtmlMd(args: string[]) {
-        const namedArgs = parseNamedArguments(args, testHtmlMdDef());
-        const filePath = namedArgs.filePath;
+    commands.kpTestMdParse.metadata = testMdParseDef();
+    async function testMdParse(args: string[]) {
+        const namedArgs = parseNamedArguments(args, testMdParseDef());
+        let filePath = namedArgs.filePath;
         if (!filePath) {
             return;
         }
-        let html = await readAllText(filePath);
-        let markdown = tp.htmlToMarkdown(html, namedArgs.rootTag);
-        context.printer.writeLine(markdown);
-
-        const destPath = changeFileExt(filePath, ".md");
-        fs.writeFileSync(destPath, markdown);
-
-        if (!namedArgs.knowledge) {
-            return;
-        }
-
-        let mdDom = tp.tokenizeMarkdown(markdown);
+        let markdown = await readAllText(filePath);
+        let mdDom = tp.markdownTokenize(markdown);
         //context.printer.writeJsonInColor(chalk.gray, mdDom);
+        const chunkSize = namedArgs.chunkSize;
+        const chunkSizeBuffer = chunkSize + chunkSize * 0.25;
         const [textBlocks, knowledgeBlocks] =
-            tp.textAndKnowledgeBlocksFromMarkdown(mdDom);
+            tp.markdownToTextAndKnowledgeBlocks(mdDom, chunkSize);
         assert(textBlocks.length === knowledgeBlocks.length);
+        let largeChunkCount = 0;
         for (let i = 0; i < textBlocks.length; ++i) {
-            context.printer.writeLine("=====");
-            context.printer.writeLine(textBlocks[i]);
-            context.printer.writeJsonInColor(chalk.gray, knowledgeBlocks[i]);
+            const textBlock = textBlocks[i];
+            if (textBlock.length > chunkSizeBuffer) {
+                largeChunkCount++;
+                context.printer.writeLineInColor(
+                    chalk.redBright,
+                    `[${textBlock.length}]`,
+                );
+            } else {
+                context.printer.writeLineInColor(
+                    chalk.green,
+                    `[${textBlock.length}]`,
+                );
+            }
+            context.printer.writeLine(textBlock);
+
+            if (namedArgs.knowledge) {
+                context.printer.writeJsonInColor(
+                    chalk.gray,
+                    knowledgeBlocks[i],
+                );
+            }
+        }
+        if (largeChunkCount > 0) {
+            context.printer.writeError(
+                `${largeChunkCount} chunks > [${chunkSize}, ${chunkSizeBuffer}]`,
+            );
         }
     }
 

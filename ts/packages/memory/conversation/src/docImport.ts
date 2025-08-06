@@ -51,7 +51,7 @@ export async function importTextFile(
         case ".htm":
             parts = docPartsFromHtml(
                 docText,
-                true,
+                false,
                 maxCharsPerChunk,
                 sourceUrl,
             );
@@ -175,10 +175,10 @@ export function docPartsFromHtml(
  */
 export function docPartsFromMarkdown(
     markdown: string,
-    maxCharsPerChunk?: number,
+    maxCharsPerChunk: number,
     sourceUrl?: string,
 ): DocPart[] {
-    const [textBlocks, knowledgeBlocks] = tp.textAndKnowledgeBlocksFromMarkdown(
+    const [textBlocks, knowledgeBlocks] = tp.markdownToTextAndKnowledgeBlocks(
         markdown,
         maxCharsPerChunk,
     );

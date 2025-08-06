@@ -2,37 +2,19 @@
 // Licensed under the MIT License.
 
 import * as md from "marked";
-import { conversation as kpLib } from "knowledge-processor";
+import {
+    conversation as kpLib,
+    splitIntoParagraphs,
+} from "knowledge-processor";
+import { htmlSimplify, htmlToText } from "./html.js";
 
 /**
  * Parses markdown into a token DOM using the "marked" library
  * @param markdown
  * @returns
  */
-export function tokenizeMarkdown(markdown: string): md.TokensList {
+export function markdownTokenize(markdown: string): md.TokensList {
     return md.lexer(markdown);
-}
-
-/**
- * Recursively traverse the given markdown
- * @param markdown
- * @param tokenHandler
- */
-export function traverseMarkdownTokens(
-    tokens: md.Token[],
-    tokenHandler: (token: md.Token, parentToken: md.Token | undefined) => void,
-    parentToken?: md.Token,
-): void {
-    if (tokens !== undefined && tokens.length > 0) {
-        for (let i = 0; i < tokens.length; ++i) {
-            const token = tokens[i];
-            tokenHandler(token, parentToken);
-            const children = getChildTokens(token);
-            if (children !== undefined && children.length > 0) {
-                traverseMarkdownTokens(children, tokenHandler, token);
-            }
-        }
-    }
 }
 
 function getChildTokens(token: md.Token): md.Token[] | undefined {
@@ -52,34 +34,40 @@ export interface MarkdownBlockHandler {
 
 /**
  * Splits markdown text into text blocks
+ * - Collects raw inner markup (text with formatting hits) from the first level of the markdown DOM
+ * - For each block or text block, traverses child nodes to visit any embedded markdown (em, links etc) in the text and
+ *   calls the handler. This markup then be used to associate knowledge like entities etc. with the text block.
+ *   @see {markdownToTextAndKnowledgeBlocks}, @see {MarkdownKnowledgeCollector}
+ * - To further split individual markdown blocks, you can either call this method OR splitter for paragraph, tables, lists
  * @param markdown
- * @param handler
- * @param maxChunkLength
+ * @param {MarkdownBlockHandler} handler
+ * @param maxCharsPerChunk Approx max size of chunk. Uses as a best effort limit. Text blocks will be split only when it makes sense.
  * @returns
  */
-export function textBlocksFromMarkdown(
+export function markdownToTextBlocks(
     markdown: string | md.Token[],
     handler?: MarkdownBlockHandler,
-    maxChunkLength?: number,
+    maxCharsPerChunk: number = Number.MAX_SAFE_INTEGER,
 ): string[] {
     const markdownTokens =
-        typeof markdown === "string" ? tokenizeMarkdown(markdown) : markdown;
+        typeof markdown === "string" ? markdownTokenize(markdown) : markdown;
     let textBlocks: string[] = [];
     let curTextBlock = "";
     let prevBlockName: string = "";
     let prevTokenName: string = "";
-    traverseTokens(markdownTokens);
+    traverseTokens(markdownTokens, 1, undefined);
 
     return textBlocks;
 
     function traverseTokens(
         tokens: md.Token[] | undefined,
-        parentToken?: md.Token | undefined,
+        depth: number,
+        parentToken: md.Token | undefined,
     ) {
         if (tokens !== undefined && tokens.length > 0) {
             for (let i = 0; i < tokens.length; ++i) {
                 const token = tokens[i];
-                collectText(token, parentToken);
+                collectText(token, depth, parentToken);
                 prevTokenName = token.type;
             }
             endBlock();
@@ -88,6 +76,7 @@ export function textBlocksFromMarkdown(
 
     function collectText(
         token: md.Token,
+        depth: number,
         parentToken: md.Token | undefined,
     ): void {
         switch (token.type) {
@@ -101,7 +90,22 @@ export function textBlocksFromMarkdown(
                 curTextBlock += "\n";
                 break;
             case "text":
-                curTextBlock += token.raw;
+                if (curTextBlock.length + token.raw.length > maxCharsPerChunk) {
+                    const subParagraphs = textToParagraphs(token.raw);
+                    traverseTokens(subParagraphs, depth + 1, token);
+                } else {
+                    curTextBlock += token.raw;
+                }
+                break;
+            case "html":
+                const htmlNode = token as md.Tokens.HTML;
+                const htmlText = htmlToText(htmlNode.raw);
+                if (curTextBlock.length + token.raw.length > maxCharsPerChunk) {
+                    const subParagraphs = textToParagraphs(htmlText);
+                    traverseTokens(subParagraphs, depth + 1, token);
+                } else {
+                    curTextBlock += token.raw;
+                }
                 break;
             case "paragraph":
                 beginBlock(
@@ -109,50 +113,92 @@ export function textBlocksFromMarkdown(
                     prevBlockName === "paragraph" ||
                         prevBlockName === "heading" ||
                         prevTokenName === "space",
+                    token.raw.length,
                     parentToken,
                 );
                 curTextBlock += token.raw;
                 visitInnerNodes(token);
                 break;
             case "list":
+                if (depth === 1 && token.raw.length > maxCharsPerChunk) {
+                    // Huge list. Need to break it up
+                    // Note: a smaller list will automatically result in a fresh block if it exceeds
+                    // the chunk limit (see beginBlock)
+                    const subLists = splitList(
+                        token as md.Tokens.List,
+                        maxCharsPerChunk,
+                    );
+                    traverseTokens(subLists, depth + 1, token);
+                } else {
+                    beginBlock(
+                        token,
+                        prevBlockName === "heading" ||
+                            prevBlockName === "paragraph",
+                        token.raw.length,
+                        parentToken,
+                    );
+                    curTextBlock += token.raw;
+                    visitInnerNodes(token);
+                }
+                break;
             case "table":
-                beginBlock(
-                    token,
-                    prevBlockName === "heading" ||
-                        prevBlockName === "paragraph",
-                    parentToken,
-                );
-                curTextBlock += token.raw;
-                visitInnerNodes(token);
+                if (depth === 1 && token.raw.length > maxCharsPerChunk) {
+                    const subTables = splitTable(
+                        token as md.Tokens.Table,
+                        maxCharsPerChunk,
+                    );
+                    traverseTokens(subTables, depth + 1, token);
+                } else {
+                    beginBlock(
+                        token,
+                        prevBlockName === "heading" ||
+                            prevBlockName === "paragraph",
+                        token.raw.length,
+                        parentToken,
+                    );
+                    curTextBlock += token.raw;
+                    visitInnerNodes(token);
+                }
                 break;
             case "blockquote":
             case "codespan":
             case "heading":
-                beginBlock(token, false, parentToken);
+                beginBlock(token, false, token.raw.length, parentToken);
                 curTextBlock += token.raw;
                 visitInnerNodes(token);
                 break;
         }
     }
 
-    function visitInnerNodes(token: md.Token): void {
-        const children = getChildTokens(token);
-        if (children !== undefined && children.length > 0) {
-            visitNodes(children);
-        }
-    }
-
-    function visitNodes(tokens: md.Token[]): void {
-        for (let i = 0; i < tokens.length; ++i) {
-            const token = tokens[i];
-            switch (token.type) {
-                default:
-                    handler?.onToken(curTextBlock, token);
-                    visitInnerNodes(token);
-                    break;
-                case "text":
-                case "space":
-                    break;
+    function visitInnerNodes(parentToken: md.Token): void {
+        const tokens = getChildTokens(parentToken);
+        if (tokens !== undefined) {
+            // Each markdown block node provides pertinent inner raw text + markup
+            // nodes in the "raw" property. But it also adds the text elements as children
+            // We only want to visit any nodes that contain useful markup information (like em, image, link etc)
+            // but do not append to the block's text
+            for (let i = 0; i < tokens.length; ++i) {
+                const token = tokens[i];
+                switch (token.type) {
+                    default:
+                        handler?.onToken(curTextBlock, token);
+                        visitInnerNodes(token);
+                        break;
+                    case "space":
+                    case "br":
+                        break;
+                    case "text":
+                        break;
+                    case "paragraph":
+                        break;
+                    case "list":
+                    case "table":
+                        break;
+                    case "blockquote":
+                    case "codespan":
+                    case "heading":
+                        break;
+                }
             }
         }
     }
@@ -160,16 +206,17 @@ export function textBlocksFromMarkdown(
     function beginBlock(
         token: md.Token,
         shouldMerge: boolean,
+        newTextLength: number,
         parentToken?: md.Token | undefined,
     ): void {
-        // If we just saw a heading, just keep collecting the text block associated with it
+        // Keep adding to the current block unless asked. E.g. merge small paragraph unless
+        // we hit some chunk size limits
         if (
             !prevBlockName ||
             !shouldMerge ||
-            (maxChunkLength !== undefined &&
-                curTextBlock.length > maxChunkLength)
+            curTextBlock.length + newTextLength > maxCharsPerChunk
         ) {
-            endBlock(false);
+            endBlock();
             curTextBlock = "";
             handler?.onBlockStart();
         }
@@ -177,7 +224,7 @@ export function textBlocksFromMarkdown(
         prevBlockName = token.type;
     }
 
-    function endBlock(reduceDepth: boolean = true): void {
+    function endBlock(): void {
         const trimmedBlock = curTextBlock.trim();
         if (trimmedBlock.length > 0) {
             // Use original block to retain original white space
@@ -229,21 +276,21 @@ export function createKnowledgeCollectionOptions(): KnowledgeCollectionOptions {
 /**
  * Parses the given markdown text and chunks it at logical boundaries.
  * @param markdown markdown string
- * @param maxChunkLength
+ * @param maxCharsPerChunk
  * @returns
  */
-export function textAndKnowledgeBlocksFromMarkdown(
+export function markdownToTextAndKnowledgeBlocks(
     markdown: string | md.TokensList,
-    maxChunkLength?: number,
+    maxCharsPerChunk: number,
     knowledgeOptions?: KnowledgeCollectionOptions,
 ): [string[], MarkdownKnowledgeBlock[]] {
     const knowledgeCollector = new MarkdownKnowledgeCollector(
         knowledgeOptions ?? createKnowledgeCollectionOptions(),
     );
-    const textBlocks = textBlocksFromMarkdown(
+    const textBlocks = markdownToTextBlocks(
         markdown,
         knowledgeCollector,
-        maxChunkLength,
+        maxCharsPerChunk,
     );
     const knowledgeBlocks = knowledgeCollector.knowledgeBlocks;
     if (textBlocks.length !== knowledgeBlocks.length) {
@@ -564,4 +611,143 @@ function createMarkdownKnowledgeBlock(): MarkdownKnowledgeBlock {
         sTags: [],
         knowledge: createKnowledgeResponse(),
     };
+}
+
+function textToParagraphs(text: string): md.Tokens.Paragraph[] {
+    const paras = splitIntoParagraphs(text);
+    return paras.map((p) => {
+        return {
+            type: "paragraph",
+            raw: text,
+            text,
+            tokens: [],
+        };
+    });
+}
+
+function splitList(
+    list: md.Tokens.List,
+    maxCharsPerChunk: number,
+): md.Tokens.List[] {
+    const lists: md.Tokens.List[] = [];
+    const listItems = list.items;
+    let curListStartAt = 0;
+    let curListLength = 0;
+    for (let i = 0; i < listItems.length; ++i) {
+        let itemLength = listItems[i].raw.length;
+        if (curListLength + itemLength > maxCharsPerChunk) {
+            lists.push(
+                listItemsToList(list, listItems.slice(curListStartAt, i)),
+            );
+            curListLength = 0;
+            curListStartAt = i;
+        }
+        curListLength += itemLength;
+    }
+    if (curListLength > 0) {
+        lists.push(listItemsToList(list, listItems.slice(curListStartAt)));
+    }
+    return lists;
+}
+
+function listItemsToList(
+    srcList: md.Tokens.List,
+    items: md.Tokens.ListItem[],
+): md.Tokens.List {
+    const rawItems = items.map((item) => item.raw);
+    const raw = rawItems.join("\n");
+    return {
+        type: "list",
+        items,
+        raw,
+        ordered: srcList.ordered,
+        loose: srcList.loose,
+        start: "",
+    };
+}
+
+function splitTable(
+    table: md.Tokens.Table,
+    maxCharsPerChunk: number,
+): md.Tokens.Table[] {
+    const tables: md.Tokens.Table[] = [];
+    const rows = table.rows;
+    let curTableStartAt = 0;
+    let curTableLength = 0;
+    for (let i = 0; i < rows.length; ++i) {
+        const row = rows[i];
+        const rowLength = getRowLength(row);
+        if (rowLength > maxCharsPerChunk) {
+            simplifyRow(row, maxCharsPerChunk);
+        }
+        if (curTableLength + rowLength > maxCharsPerChunk) {
+            tables.push(rowsToTable(table, rows.slice(curTableStartAt, i)));
+            curTableLength = 0;
+            curTableStartAt = i;
+        }
+        curTableLength += rowLength;
+    }
+    if (curTableLength > 0) {
+        tables.push(rowsToTable(table, rows.slice(curTableStartAt)));
+    }
+    return tables;
+}
+
+function rowsToTable(
+    srcTable: md.Tokens.Table,
+    rows: md.Tokens.TableCell[][],
+): md.Tokens.Table {
+    let raw = getRowRaw(srcTable.header);
+    raw += "|---".repeat(srcTable.header.length) + "|\n";
+    for (const row of rows) {
+        raw += getRowRaw(row);
+    }
+    return {
+        type: "table",
+        header: srcTable.header,
+        align: srcTable.align,
+        rows,
+        raw,
+    };
+}
+
+function getRowRaw(row: md.Tokens.TableCell[]): string {
+    let raw = "|";
+    for (const cell of row) {
+        raw += cell.text;
+        raw += "|";
+    }
+    return raw + "\n";
+}
+
+function getRowLength(row: md.Tokens.TableCell[]): number {
+    return row.reduce<number>((total, cell) => total + cell.text.length, 0);
+}
+
+function simplifyRow(
+    row: md.Tokens.TableCell[],
+    maxCharsPerChunk: number,
+): void {
+    for (const cell of row) {
+        if (cell.text.length > maxCharsPerChunk) {
+            cell.text = simplifyText(cell.text, maxCharsPerChunk);
+        }
+    }
+}
+
+function simplifyText(text: string, maxCharsPerChunk: number): string {
+    try {
+        // Large text is frequently raw html. First, retain the html, which has meaning
+        text = htmlSimplify(text);
+        if (text.length > maxCharsPerChunk) {
+            // Get rid of the html
+            text = htmlToText(text);
+        }
+        if (text.length < maxCharsPerChunk) {
+            return text;
+        }
+    } finally {
+    }
+    // Just truncate
+    return text.slice(0, maxCharsPerChunk);
 }
