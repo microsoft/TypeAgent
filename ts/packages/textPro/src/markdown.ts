@@ -6,7 +6,7 @@ import {
     conversation as kpLib,
     splitIntoParagraphs,
 } from "knowledge-processor";
-import { htmlToText } from "./html.js";
+import { htmlSimplify, htmlToText } from "./html.js";
 
 /**
  * Parses markdown into a token DOM using the "marked" library
@@ -677,6 +677,9 @@ function splitTable(
     for (let i = 0; i < rows.length; ++i) {
         const row = rows[i];
         const rowLength = getRowLength(row);
+        if (rowLength > maxCharsPerChunk) {
+            simplifyRow(row, maxCharsPerChunk);
+        }
         if (curTableLength + rowLength > maxCharsPerChunk) {
             tables.push(rowsToTable(table, rows.slice(curTableStartAt, i)));
             curTableLength = 0;
@@ -719,4 +722,32 @@ function getRowRaw(row: md.Tokens.TableCell[]): string {
 
 function getRowLength(row: md.Tokens.TableCell[]): number {
     return row.reduce<number>((total, cell) => total + cell.text.length, 0);
+}
+
+function simplifyRow(
+    row: md.Tokens.TableCell[],
+    maxCharsPerChunk: number,
+): void {
+    for (const cell of row) {
+        if (cell.text.length > maxCharsPerChunk) {
+            cell.text = simplifyText(cell.text, maxCharsPerChunk);
+        }
+    }
+}
+
+function simplifyText(text: string, maxCharsPerChunk: number): string {
+    try {
+        // Large text is frequently raw html. First, retain the html, which has meaning
+        text = htmlSimplify(text);
+        if (text.length > maxCharsPerChunk) {
+            // Get rid of the html
+            text = htmlToText(text);
+        }
+        if (text.length < maxCharsPerChunk) {
+            return text;
+        }
+    } finally {
+    }
+    // Just truncate
+    return text.slice(0, maxCharsPerChunk);
 }
