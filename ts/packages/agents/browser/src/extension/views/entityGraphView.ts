@@ -229,21 +229,50 @@ class EntityGraphView {
      */
     private setupSearchHandlers(): void {
         const searchInput = document.getElementById(
-            "entitySearch",
+            "entitySearchInput",
         ) as HTMLInputElement;
         const searchButton = document.getElementById(
-            "searchButton",
+            "entitySearchButton",
         ) as HTMLButtonElement;
 
+        console.log("Setting up search handlers:", {
+            searchInput: !!searchInput,
+            searchButton: !!searchButton,
+        });
+
         if (searchInput && searchButton) {
-            searchButton.addEventListener("click", () => {
-                this.searchEntity(searchInput.value);
-            });
+            const performSearch = () => {
+                const query = searchInput.value.trim();
+                if (query) {
+                    console.log("Performing search with value:", query);
+                    this.searchEntity(query);
+                    // Clear the input after successful search initiation
+                    searchInput.value = "";
+                } else {
+                    this.showMessage(
+                        "Please enter an entity name to search",
+                        "warning",
+                    );
+                }
+            };
+
+            searchButton.addEventListener("click", performSearch);
 
             searchInput.addEventListener("keypress", (e) => {
                 if (e.key === "Enter") {
-                    this.searchEntity(searchInput.value);
+                    e.preventDefault(); // Prevent form submission
+                    performSearch();
                 }
+            });
+
+            // Optional: Add focus behavior for better UX
+            searchInput.addEventListener("focus", () => {
+                searchInput.select(); // Select all text when focused
+            });
+        } else {
+            console.warn("Search elements not found:", {
+                searchInputFound: !!searchInput,
+                searchButtonFound: !!searchButton,
             });
         }
     }
@@ -324,10 +353,20 @@ class EntityGraphView {
         if (!query.trim()) return;
 
         try {
-            // Search in real data
-            await this.searchRealEntity(query);
+            // Navigate directly to the entity (same as URL parameter logic)
+            console.log(`Searching for entity: ${query}`);
+            this.showMessage(`Loading entity "${query}"...`, "info");
+
+            await this.navigateToEntity(query.trim());
+
+            // Show success message
+            this.showMessage(`Loaded entity: "${query}"`, "success");
         } catch (error) {
             console.error("Failed to search entity:", error);
+            this.showMessage(
+                `Failed to load entity "${query}". ${error instanceof Error ? error.message : "Please try again."}`,
+                "error",
+            );
         }
     }
 
