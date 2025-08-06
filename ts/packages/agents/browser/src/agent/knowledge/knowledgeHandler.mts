@@ -377,7 +377,7 @@ export async function extractKnowledgeFromPage(
         extractEntities: boolean;
         extractRelationships: boolean;
         suggestQuestions: boolean;
-        mode?: "basic" | "summary" | "content" | "actions" | "full";
+        mode?: "basic" | "summary" | "content" | "full";
     },
     context: SessionContext<BrowserActionContext>,
 ): Promise<EnhancedKnowledgeExtractionResult> {
@@ -418,8 +418,6 @@ export async function extractKnowledgeFromPage(
 
         return {
             ...aggregatedResults,
-            // Enhanced action data is now properly included in aggregatedResults
-            // detectedActions and actionSummary are included if actions were detected
         };
     } catch (error) {
         console.error("Error extracting knowledge from fragments:", error);
@@ -435,7 +433,7 @@ export async function indexWebPageContent(
         extractKnowledge: boolean;
         timestamp: string;
         textOnly?: boolean;
-        mode?: "basic" | "content" | "macros" | "full";
+        mode?: "basic" | "content" | "full";
     },
     context: SessionContext<BrowserActionContext>,
 ): Promise<{
@@ -476,11 +474,6 @@ export async function indexWebPageContent(
             source: "history",
             visitDate: parameters.timestamp,
         };
-
-        visitInfo.pageType = website.determinePageType(
-            parameters.url,
-            parameters.title,
-        );
 
         const websiteObj = website.importWebsiteVisit(
             visitInfo,

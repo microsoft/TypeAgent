@@ -7,7 +7,7 @@ import {
     WebsiteMeta,
     importWebsiteVisit,
 } from "./websiteMeta.js";
-import { ExtractionMode } from "./contentExtractor.js";
+import { ExtractionMode } from "./extraction/types.js";
 import {
     ContentExtractor,
     ExtractionInput,
@@ -343,14 +343,12 @@ export async function importChromeHistory(
 
                 const domain = extractDomain(row.url);
                 const visitDate = chromeTimeToISOString(row.last_visit_time);
-                const pageType = determinePageType(row.url, row.title);
 
                 const visitInfo: WebsiteVisitInfo = {
                     url: row.url,
                     domain,
                     visitDate,
                     source: "history" as const,
-                    pageType,
                 };
 
                 if (row.title) visitInfo.title = row.title;
@@ -543,7 +541,7 @@ async function enhanceWithContent(
                 const result = await extractor.extract(input, extractionMode);
 
                 // Create enhanced website with content and knowledge
-                return createEnhancedWebsiteWithKnowledge(website, result);
+                return createWebsiteWithKnowledge(website, result);
             } catch (error) {
                 console.warn(
                     `Content extraction failed for ${website.metadata.url}:`,
@@ -579,7 +577,7 @@ async function enhanceWithContent(
     return enhanced;
 }
 
-function createEnhancedWebsiteWithKnowledge(
+function createWebsiteWithKnowledge(
     originalWebsite: Website,
     extractionResult: ExtractionResult,
 ): Website {
@@ -644,7 +642,7 @@ function createEnhancedWebsiteWithKnowledge(
     // Get enhanced knowledge if available
     let finalKnowledge;
     if (extractionResult.knowledge) {
-        finalKnowledge = meta.getEnhancedKnowledge(extractionResult.knowledge);
+        finalKnowledge = meta.getMergedKnowledge(extractionResult.knowledge);
     } else {
         finalKnowledge = meta.getKnowledge();
     }
@@ -740,83 +738,4 @@ export function getDefaultBrowserPaths(): { chrome: any; edge: any } {
             },
         };
     }
-}
-
-/**
- * Determine page type based on URL and title
- * Legacy function - kept for backward compatibility
- */
-export function determinePageType(url: string, title?: string): string {
-    const domain = extractDomain(url).toLowerCase();
-    const urlLower = url.toLowerCase();
-    const titleLower = title?.toLowerCase() || "";
-
-    // News sites
-    if (
-        domain.includes("news") ||
-        domain.includes("cnn") ||
-        domain.includes("bbc") ||
-        domain.includes("reuters") ||
-        domain.includes("npr") ||
-        domain.includes("guardian")
-    ) {
-        return "news";
-    }
-
-    // Documentation sites
-    if (
-        domain.includes("docs") ||
-        domain.includes("documentation") ||
-        urlLower.includes("/docs/") ||
-        titleLower.includes("documentation")
-    ) {
-        return "documentation";
-    }
-
-    // Shopping/commerce
-    if (
-        domain.includes("amazon") ||
-        domain.includes("shop") ||
-        domain.includes("store") ||
-        domain.includes("ebay") ||
-        urlLower.includes("/shop/") ||
-        urlLower.includes("/cart/")
-    ) {
-        return "commerce";
-    }
-
-    // Social media
-    if (
-        domain.includes("twitter") ||
-        domain.includes("facebook") ||
-        domain.includes("linkedin") ||
-        domain.includes("instagram") ||
-        domain.includes("reddit")
-    ) {
-        return "social";
-    }
-
-    // Travel
-    if (
-        domain.includes("booking") ||
-        domain.includes("expedia") ||
-        domain.includes("travel") ||
-        domain.includes("airbnb") ||
-        titleLower.includes("travel")
-    ) {
-        return "travel";
-    }
-
-    // Development/tech
-    if (
-        domain.includes("github") ||
-        domain.includes("stackoverflow") ||
-        domain.includes("dev") ||
-        titleLower.includes("api") ||
-        titleLower.includes("tutorial")
-    ) {
-        return "development";
-    }
-
-    return "general";
 }

@@ -44,8 +44,7 @@
     "textpro": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
-    "typescript": "~5.4.5",
-    "website-memory": "workspace:*"
+    "typescript": "~5.4.5"
   },
   "devDependencies": {
     "@types/better-sqlite3": "7.6.11",

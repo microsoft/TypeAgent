@@ -34,7 +34,7 @@ export class ActionDetectionAdapter {
     ): Promise<DetectedAction[]> {
         try {
             // Only perform action detection for modes that support it
-            if (mode !== "macros" && mode !== "full") {
+            if (mode !== "full") {
                 return [];
             }
 
@@ -239,7 +239,7 @@ export class ActionDetectionAdapter {
     getCapabilities() {
         return {
             available: this.isActionDetectionAvailable(),
-            supportedModes: ["actions", "full"],
+            supportedModes: ["full"],
             phases: [
                 "Page Summary Analysis",
                 "Candidate Action Detection",

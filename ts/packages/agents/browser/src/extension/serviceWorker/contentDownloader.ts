@@ -19,6 +19,18 @@ export class BrowserContentDownloader implements ContentDownloadAdapter {
     private offscreenCreated: boolean = false;
     private readonly maxRetries: number = 3;
     private readonly defaultTimeout: number = 30000;
+    private readonly maxTimeout: number = 10000; // Lowered to 10 seconds to prevent resource exhaustion
+
+    /**
+     * Sanitize and clamp the timeout value to a safe range
+     */
+    private sanitizeTimeout(timeout: any): number {
+        let t = Number(timeout);
+        if (!Number.isFinite(t) || t <= 0) {
+            return this.defaultTimeout;
+        }
+        return Math.min(t, this.maxTimeout);
+    }
 
     /**
      * Download content using browser context with authentication support
@@ -138,7 +150,7 @@ export class BrowserContentDownloader implements ContentDownloadAdapter {
             const controller = new AbortController();
             const timeoutId = setTimeout(
                 () => controller.abort(),
-                options.timeout || this.defaultTimeout,
+                this.sanitizeTimeout(options.timeout),
             );
 
             const response = await fetch(url, {
@@ -252,7 +264,7 @@ export class BrowserContentDownloader implements ContentDownloadAdapter {
         return new Promise((resolve, reject) => {
             const timeoutId = setTimeout(() => {
                 reject(new Error("Offscreen communication timeout"));
-            }, timeout);
+            }, this.sanitizeTimeout(timeout));
 
             chrome.runtime
                 .sendMessage({

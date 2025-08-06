@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { hostname } from "os";
+import * as os from "node:os";
 import { IClientContext } from "./client.js";
 import {
     getUserDevices,
@@ -25,46 +25,77 @@ type DeviceInfo = SpotifyApi.UserDevice & { id: string };
 
 async function getDeviceInfo(
     service: SpotifyService,
-    name: string,
+    name?: string,
 ): Promise<DeviceInfo | undefined> {
-    const devicesResponse = await getUserDevices(service);
-    if (devicesResponse === undefined || devicesResponse.devices.length === 0) {
+    const devices = (await getUserDevices(service)).devices;
+    if (devices.length === 0) {
         return undefined;
     }
-    return devicesResponse.devices.find(
-        (d) => d.name === name && d.id !== null,
-    ) as DeviceInfo | undefined;
+
+    if (name === undefined) {
+        const hostName = getHostName().toLowerCase();
+        // If no name is provided, return the first device that has an id.
+        return devices.find(
+            (d) => d.name.toLowerCase() === hostName && d.id !== null,
+        ) as DeviceInfo | undefined;
+    }
+    return devices.find((d) => d.name === name && d.id !== null) as
+        | DeviceInfo
+        | undefined;
 }
 
 async function ensureGetDeviceInfos(
     context: IClientContext,
 ): Promise<DeviceInfo[]> {
     const devicesResponse = await getUserDevices(context.service);
-    const devices = devicesResponse?.devices?.filter((d) => d.id !== null);
-    if (devices === undefined || devices.length === 0) {
+    const devices = devicesResponse.devices.filter((d) => d.id !== null);
+    if (devices.length === 0) {
         throw new Error("No devices found.");
     }
     return devices as DeviceInfo[];
 }
 
-function getDefaultDeviceName(clientContext: IClientContext): string {
-    return clientContext.localSettings.defaultDeviceName ?? hostname();
+function getHostName(): string {
+    const host = os.hostname();
+    if (os.platform() === "darwin") {
+        // On macOS, strip the .local
+        const split = host.split(".");
+        if (split.length > 1 && split[split.length - 1] === "local") {
+            split.pop(); // remove the last element
+            return split.join(".");
+        }
+    }
+    return host;
 }
-function getSelectedDeviceName(clientContext: IClientContext): string {
+
+function getDefaultDeviceName(
+    clientContext: IClientContext,
+): string | undefined {
+    return clientContext.localSettings.defaultDeviceName;
+}
+function getSelectedDeviceName(
+    clientContext: IClientContext,
+): string | undefined {
     return (
         clientContext.selectedDeviceName ?? getDefaultDeviceName(clientContext)
     );
 }
 
-export async function ensureSelectedDeviceInfo(clientContext: IClientContext) {
-    const device = await getDeviceInfo(
+async function getSelectedDeviceInfo(
+    clientContext: IClientContext,
+): Promise<DeviceInfo | undefined> {
+    return getDeviceInfo(
         clientContext.service,
         getSelectedDeviceName(clientContext),
     );
+}
+
+export async function ensureSelectedDeviceInfo(clientContext: IClientContext) {
+    const device = await getSelectedDeviceInfo(clientContext);
     if (device === undefined) {
         const description = clientContext.selectedDeviceName
             ? `selected device '${clientContext.selectedDeviceName}'`
-            : `default selected device '${getDefaultDeviceName(clientContext)}'`;
+            : `default selected device '${getDefaultDeviceName(clientContext) ?? getHostName()}'`;
         throw new Error(`Unable to find ${description}.`);
     }
     return device;
@@ -125,7 +156,7 @@ async function getDevicesMarkdown(
 ): Promise<string[]> {
     const markdown: string[] = [];
     markdown.push("Available devices:");
-    const selectedDevice = await ensureSelectedDeviceInfo(context);
+    const selectedDevice = await getSelectedDeviceInfo(context);
 
     const state = await getPlaybackState(context.service);
     const playingId = state?.is_playing ? state.device.id : undefined;

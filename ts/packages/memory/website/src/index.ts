@@ -1,23 +1,22 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export * from "./actionExtractor.js";
 export * from "./chunkingUtils.js";
 
 // Core types and interfaces (keep for external compatibility)
 export {
     ExtractionMode,
-    EnhancedContent,
+    WebsiteContent,
     PageContent,
     MetaTagCollection,
     ImageInfo,
     LinkInfo,
     ActionInfo,
     StructuredDataCollection,
-    EnhancedContentWithKnowledge,
-} from "./contentExtractor.js";
+    WebsiteContentWithKnowledge,
+    KnowledgeQualityMetrics,
+} from "./extraction/types.js";
 
-export * from "./enhancedImport.js";
 export * from "./importWebsites.js";
 export * from "./indexingService.js";
 export * from "./websiteCollection.js";
@@ -40,4 +39,6 @@ export {
     AIModelRequiredError,
     AIExtractionFailedError,
     getEffectiveConfig,
+    ActionSummary,
+    DetectedAction,
 } from "./extraction/index.js";
