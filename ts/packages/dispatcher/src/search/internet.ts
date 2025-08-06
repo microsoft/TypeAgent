@@ -288,8 +288,11 @@ async function runEntityExtraction(
     if (entityText.length > settings.maxEntityTextLength) {
         entityText = entityText.slice(0, settings.maxEntityTextLength);
     }
-    
-    return [...await extractEntities(settings.entityGenModel, entityText), ...linkEntities];
+
+    return [
+        ...(await extractEntities(settings.entityGenModel, entityText)),
+        ...linkEntities,
+    ];
 }
 
 let groundingConfig: bingWithGrounding.ApiSettings | undefined;
