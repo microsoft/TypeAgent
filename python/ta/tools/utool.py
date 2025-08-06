@@ -778,14 +778,16 @@ async def compare_answers(
     actual_text, actual_success = actual
 
     if expected_success != actual_success:
-        print(f"Expected success: {expected_success}; actual: {actual_success}")
-        return 0.000 if expected_success else 0.001  # 0.001 == Answer not expected
+        print(
+            f"Expected success: {Fore.RED}{expected_success}{Fore.RESET}; "
+            f"actual: {Fore.GREEN}{actual_success}{Fore.RESET}"
+        )
 
-    if not actual_success:
+    elif not actual_success:
         print(Fore.GREEN + f"Both failed" + Fore.RESET)
         return 1.001
 
-    if expected_text == actual_text:
+    elif expected_text == actual_text:
         print(Fore.GREEN + f"Both equal" + Fore.RESET)
         return 1.000
 
@@ -794,7 +796,11 @@ async def compare_answers(
     else:
         n = 2
     print_diff(expected_text, actual_text, n=n)
-    return await equality_score(context, expected_text, actual_text)
+
+    if expected_success != actual_success:
+        return 0.000 if expected_success else 0.001  # 0.001 == Answer not expected
+    else:
+        return await equality_score(context, expected_text, actual_text)
 
 
 def print_diff(a: str, b: str, n: int) -> None:
