@@ -27,3 +27,25 @@ export function getAbsolutePath(relativePath: string): string {
 export function getTextOrFile(text: string): string {
     return isFilePath(text) ? fs.readFileSync(text, "utf-8") : text;
 }
+
+export function toUrl(str: string): URL | undefined {
+    try {
+        return new URL(str);
+    } catch {}
+    return undefined;
+}
+
+export function isUrl(str: string): boolean {
+    return toUrl(str) !== undefined;
+}
+
+export function getFileNameFromUrl(url: string | URL): string | undefined {
+    if (typeof url === "string") {
+        url = new URL(url);
+    }
+    const urlParts = url.pathname.split("/");
+    if (urlParts) {
+        return urlParts.length > 0 ? urlParts[urlParts.length - 1] : "";
+    }
+    return undefined;
+}
