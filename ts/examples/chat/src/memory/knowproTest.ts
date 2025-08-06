@@ -72,7 +72,7 @@ export async function createKnowproTestCommands(
             },
             options: {
                 chunkSize: argChunkSize(4096),
-                knowledge: argBool("Show knowledge", true),
+                knowledge: argBool("Show knowledge", false),
             },
         };
     }

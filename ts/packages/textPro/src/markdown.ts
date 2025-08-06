@@ -694,7 +694,11 @@ function rowsToTable(
     srcTable: md.Tokens.Table,
     rows: md.Tokens.TableCell[][],
 ): md.Tokens.Table {
-    const raw = rows.map((r) => getRowRaw(r)).join("");
+    let raw = getRowRaw(srcTable.header);
+    raw += "|---".repeat(srcTable.header.length) + "|\n";
+    for (const row of rows) {
+        raw += getRowRaw(row);
+    }
     return {
         type: "table",
         header: srcTable.header,
@@ -705,7 +709,12 @@ function rowsToTable(
 }
 
 function getRowRaw(row: md.Tokens.TableCell[]): string {
-    return row.map((r) => r.text).join("");
+    let raw = "|";
+    for (const cell of row) {
+        raw += cell.text;
+        raw += "|";
+    }
+    return raw + "\n";
 }
 
 function getRowLength(row: md.Tokens.TableCell[]): number {
