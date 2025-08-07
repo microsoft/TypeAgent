@@ -2,11 +2,17 @@
 // Licensed under the MIT License.
 
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
-import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
+import {
+    ActionContext,
+    CompletionGroup,
+    ParsedCommandParams,
+    SessionContext,
+} from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { displayResult } from "@typeagent/agent-sdk/helpers/display";
 import { getColorElapsedString } from "common-utils";
 import { translateRequest } from "../../../translation/translateRequest.js";
+import { requestCompletion } from "../../../translation/requestCompletion.js";
 
 export class TranslateCommandHandler implements CommandHandler {
     public readonly description = "Translate a request";
@@ -26,21 +32,37 @@ export class TranslateCommandHandler implements CommandHandler {
             params.args.request,
             context,
         );
-        if (translationResult) {
-            const elapsedStr = getColorElapsedString(
-                translationResult.elapsedMs,
-            );
-            const usageStr = translationResult.tokenUsage
-                ? `(Tokens: ${translationResult.tokenUsage.prompt_tokens} + ${translationResult.tokenUsage.completion_tokens} = ${translationResult.tokenUsage.total_tokens})`
-                : "";
-            displayResult(
-                `${translationResult.requestAction} ${elapsedStr}${usageStr}\n\nJSON:\n${JSON.stringify(
-                    translationResult.requestAction.actions,
-                    undefined,
-                    2,
-                )}`,
-                context,
-            );
+
+        const elapsedStr = getColorElapsedString(translationResult.elapsedMs);
+        const usageStr = translationResult.tokenUsage
+            ? `(Tokens: ${translationResult.tokenUsage.prompt_tokens} + ${translationResult.tokenUsage.completion_tokens} = ${translationResult.tokenUsage.total_tokens})`
+            : "";
+        displayResult(
+            `${translationResult.requestAction} ${elapsedStr}${usageStr}\n\nJSON:\n${JSON.stringify(
+                translationResult.requestAction.actions,
+                undefined,
+                2,
+            )}`,
+            context,
+        );
+    }
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ): Promise<CompletionGroup[]> {
+        const completions: CompletionGroup[] = [];
+        for (const name of names) {
+            if (name === "request") {
+                const requestPrefix = params.args.request;
+                completions.push(
+                    ...(await requestCompletion(
+                        requestPrefix,
+                        context.agentContext,
+                    )),
+                );
+            }
         }
+        return completions;
     }
 }

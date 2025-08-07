@@ -39,11 +39,13 @@ import {
 } from "../../translation/translateRequest.js";
 import { ActivityActions } from "./schema/activityActionSchema.js";
 import { ClarifyEntityAction } from "../../execute/pendingActions.js";
+import { MatchCommandHandler } from "./handlers/matchCommandHandler.js";
 
 const dispatcherHandlers: CommandHandlerTable = {
     description: "Type Agent Dispatcher Commands",
     commands: {
         request: new RequestCommandHandler(),
+        match: new MatchCommandHandler(),
         translate: new TranslateCommandHandler(),
         explain: new ExplainCommandHandler(),
     },
