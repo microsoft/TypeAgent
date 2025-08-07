@@ -84,7 +84,7 @@ import { ShoppingActions } from "./commerce/schema/userActions.mjs";
 import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
 import { BrowserControl } from "../common/browserControl.mjs";
-import { openai, TextEmbeddingModel } from "aiclient";
+import { openai, TextEmbeddingModel, wikipedia } from "aiclient";
 import { urlResolver, bingWithGrounding } from "azure-ai-foundry";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 import { deleteCachedSchema } from "./crossword/cachedSchema.mjs";
@@ -706,6 +706,8 @@ async function resolveWebPage(
                 debug(`Resolved URL from history: ${historyUrl}`);
                 return historyUrl;
             }
+
+            // try to resolve URL string using known keyword matching
             const cachehitUrl = await urlResolver.resolveURLByKeyword(site);
             if (cachehitUrl) {
                 debug(`Resolved URL from cache: ${cachehitUrl}`);
@@ -719,15 +721,16 @@ async function resolveWebPage(
                     return cachehitUrl;
                 }
             }
-            // TODO: reenable
-            // const wikiPediaUrl = await urlResolver.resolveURLWithWikipedia(
-            //     site,
-            //     wikipedia.apiSettingsFromEnv(),
-            // );
-            // if (wikiPediaUrl) {
-            //     debug(`Resolved URL using Wikipedia: ${wikiPediaUrl}`);
-            //     return wikiPediaUrl;
-            // }
+
+            // try to resolve URL by using the Wikipedia API
+            const wikiPediaUrl = await urlResolver.resolveURLWithWikipedia(
+                site,
+                wikipedia.apiSettingsFromEnv(),
+            );
+            if (wikiPediaUrl) {
+                debug(`Resolved URL using Wikipedia: ${wikiPediaUrl}`);
+                return wikiPediaUrl;
+            }
 
             // try to resolve URL using LLM + internet search
             const url = await urlResolver.resolveURLWithSearch(

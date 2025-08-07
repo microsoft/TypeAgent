@@ -404,9 +404,7 @@ export async function resolveURLWithWikipedia(
         .locale.split("-")[0];
     const searchQuery = `${site}`;
     const numberOfResults = 1;
-    const headers = {
-        Authorization: `Bearer ${await wikipediaConfig.getToken()}`,
-    };
+    const headers = await wikipediaConfig.getAPIHeaders();
 
     const baseUrl = `${wikipediaConfig.endpoint}`;
     const search_endpoint = "/search/page";
@@ -419,12 +417,19 @@ export async function resolveURLWithWikipedia(
     let retVal = undefined;
     await fetch(`${url}?${parameters}`, { method: "GET", headers: headers })
         .then((response) => response.json())
-        .then((data) => {
+        .then((data: any) => {
             retVal = data;
             console.log(data);
 
+            // go through the pages (max 3)
+            for(let i = 0; i < data.page.length || i < 3; i++) {
+                // get the page data
+
+                    // TODO: implement
+            }
+
+
             // TODO: get the "official website" URL from the data (if it exists)
-            // TODO: waiting for Wikipedia arbitration committee to approve Application
         })
         .catch((error) => {
             console.error("Error fetching data:", error);

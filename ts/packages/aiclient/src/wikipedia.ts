@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { getEnvSetting } from "./common.js";
+import { wikipedia } from "./index.js";
 
 export type WikipediaApiSettings = {
     endpoint?: string;
@@ -9,6 +10,7 @@ export type WikipediaApiSettings = {
     clientId?: string;
     clientSecret?: string;
     getToken(): Promise<string>;
+    getAPIHeaders(): Promise<any>;
 };
 
 /**
@@ -73,5 +75,21 @@ export function apiSettingsFromEnv(
 
             return wikiToken!;
         },
+        getAPIHeaders: async (): Promise<any> => {
+
+            // get the token first
+            if (!wikiToken) {
+                await apiSettingsFromEnv(env).getToken();
+            }
+
+            return {
+                Authorization: `Bearer ${wikiToken}`,
+                "Api-User-Agent": `TypeAgent/https://github.com/microsoft/TypeAgent`,
+            };
+        },
     };
+}
+
+export function getPageObject(title: string, config: wikipedia.WikipediaApiSettings) {
+    // TODO: implement
 }
