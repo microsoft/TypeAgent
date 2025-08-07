@@ -531,13 +531,7 @@ export async function createKnowproTestCommands(
             context.printer.writeError(result.message);
             return;
         }
-        const comparison = result.data;
-        context.printer.writeJsonInColor(chalk.gray, comparison.expected);
-        context.printer.writeHeading("Scope");
-        context.printer.writeJson(comparison.actual);
-        if (comparison.error) {
-            context.printer.writeError(comparison.error);
-        }
+        writeSearchComparison(result.data);
     }
 
     function compareSearchScopeBatchDef(): CommandMetadata {
@@ -553,9 +547,6 @@ export async function createKnowproTestCommands(
     }
     commands.kpTestSearchCompareBatch.metadata = compareSearchScopeBatchDef();
     async function testSearchCompareBatch(args: string[]) {
-        if (!ensureConversationLoaded()) {
-            return;
-        }
         const namedArgs = parseNamedArguments(args, verifySearchBatchDef());
         const prevOptions = beginTestBatch(namedArgs);
         try {
@@ -567,13 +558,7 @@ export async function createKnowproTestCommands(
                     context.printer.writeProgress(index + 1, total);
                     if (result.success) {
                         const cmp = result.data;
-                        if (cmp.error) {
-                            context.printer.writeError(cmp.error);
-                        }
-                        context.printer.writeLineInColor(
-                            chalk.green,
-                            cmp.query,
-                        );
+                        writeSearchComparison(cmp);
                     } else {
                         context.printer.writeError(result.message);
                     }
@@ -694,6 +679,15 @@ export async function createKnowproTestCommands(
         if (result.score < threshold && verbose) {
             context.printer.writeJsonInColor(chalk.redBright, result.actual);
             context.printer.writeJsonInColor(chalk.green, result.expected);
+        }
+    }
+
+    function writeSearchComparison(cmp: kpTest.ScopeQueryComparison): void {
+        context.printer.writeJsonInColor(chalk.gray, cmp.expected);
+        context.printer.writeHeading("Scope");
+        context.printer.writeJson(cmp.actual);
+        if (cmp.error) {
+            context.printer.writeError(cmp.error);
         }
     }
 
