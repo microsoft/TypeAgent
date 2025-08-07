@@ -15,6 +15,8 @@ export class BrowserAgentIpc {
     private static instance: BrowserAgentIpc;
     public onMessageReceived: ((message: WebSocketMessageV2) => void) | null;
     private webSocket: any;
+    private reconnectionPending: boolean = false;
+    private webSocketPromise: Promise<WebSocket | undefined> | null = null;
 
     private constructor() {
         this.webSocket = null;
@@ -30,7 +32,14 @@ export class BrowserAgentIpc {
     };
 
     public async ensureWebsocketConnected() {
-        return new Promise<WebSocket | undefined>(async (resolve) => {
+
+        // if there's a pending websocket promise, return it
+        if (this.webSocketPromise ) {
+            return this.webSocketPromise;
+        }
+
+        //create a new promise to establish the websocket connection
+        this.webSocketPromise = new Promise<WebSocket | undefined>(async (resolve) => {
             if (this.webSocket) {
                 if (this.webSocket.readyState === WebSocket.OPEN) {
                     resolve(this.webSocket);
@@ -84,11 +93,25 @@ export class BrowserAgentIpc {
                 this.reconnectWebSocket();
             };
 
+            this.webSocketPromise = null;
+
             resolve(this.webSocket);
+
         });
+
+        return this.webSocketPromise
     }
 
     private reconnectWebSocket() {
+        // if there is a reconnection pending just return
+        if (this.reconnectionPending) {
+            return;
+        }
+
+        // indicate a reconnection attempt is pending
+        this.reconnectionPending = true;
+
+        // attempt reconnection every 5 seconds
         const connectionCheckIntervalId = setInterval(async () => {
             if (
                 this.webSocket &&
@@ -100,6 +123,9 @@ export class BrowserAgentIpc {
                 console.log("Retrying connection");
                 await this.ensureWebsocketConnected();
             }
+            
+            // reconnection was either successful or attempted
+            this.reconnectionPending = false;
         }, 5 * 1000);
     }
 
