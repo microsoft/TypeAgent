@@ -7,6 +7,8 @@ import {
     argNum,
     CommandHandler,
     CommandMetadata,
+    makeArg,
+    NamedArgs,
     parseNamedArguments,
     parseTypedArguments,
     ProgressBar,
@@ -51,6 +53,7 @@ export async function createKnowproTestCommands(
     commands.kpTestHtmlParts = testHtmlParts;
     commands.kpTestChoices = testMultipleChoice;
     commands.kpTestSearch = testSearchScope;
+    commands.kpTestScoped = setScoped;
 
     async function testHtml(args: string[]) {
         const html = await readAllText(args[0]);
@@ -197,10 +200,9 @@ export async function createKnowproTestCommands(
         if (!ensureConversationLoaded()) {
             return;
         }
+        const namedArgs = parseNamedArguments(args, searchBatchDef());
+        const prevOptions = beginTestBatch(namedArgs);
         try {
-            beginTestBatch();
-
-            const namedArgs = parseNamedArguments(args, searchBatchDef());
             const destPath =
                 namedArgs.destPath ??
                 changeFileExt(namedArgs.srcPath, ".json", "_results");
@@ -224,7 +226,7 @@ export async function createKnowproTestCommands(
                 return;
             }
         } finally {
-            endTestBatch();
+            endTestBatch(prevOptions);
         }
     }
 
@@ -244,10 +246,9 @@ export async function createKnowproTestCommands(
         if (!ensureConversationLoaded()) {
             return;
         }
+        const namedArgs = parseNamedArguments(args, verifySearchBatchDef());
+        const prevOptions = beginTestBatch(namedArgs);
         try {
-            beginTestBatch();
-
-            const namedArgs = parseNamedArguments(args, verifySearchBatchDef());
             const srcPath = namedArgs.srcPath;
 
             const startTimestamp = new Date();
@@ -273,7 +274,7 @@ export async function createKnowproTestCommands(
                 startTimestamp,
             );
         } finally {
-            endTestBatch();
+            endTestBatch(prevOptions);
         }
     }
 
@@ -293,10 +294,9 @@ export async function createKnowproTestCommands(
         if (!ensureConversationLoaded()) {
             return;
         }
+        const namedArgs = parseNamedArguments(args, answerBatchDef());
+        const prevOptions = beginTestBatch(namedArgs);
         try {
-            beginTestBatch();
-
-            const namedArgs = parseNamedArguments(args, answerBatchDef());
             const srcPath = namedArgs.srcPath;
             const destPath =
                 namedArgs.destPath ??
@@ -321,7 +321,7 @@ export async function createKnowproTestCommands(
                 },
             );
         } finally {
-            endTestBatch();
+            endTestBatch(prevOptions);
         }
     }
 
@@ -337,6 +337,10 @@ export async function createKnowproTestCommands(
                     0.9,
                 ),
                 verbose: argBool("Verbose error output", false),
+                scoped: argBool(
+                    "Translate NL queries into scoped search expressions",
+                    false,
+                ),
             },
         };
     }
@@ -345,10 +349,9 @@ export async function createKnowproTestCommands(
         if (!ensureConversationLoaded()) {
             return;
         }
+        const namedArgs = parseNamedArguments(args, verifyAnswerBatchDef());
+        const prevOptions = beginTestBatch(namedArgs);
         try {
-            beginTestBatch();
-
-            const namedArgs = parseNamedArguments(args, verifyAnswerBatchDef());
             const minSimilarity = namedArgs.similarity;
             const srcPath = namedArgs.srcPath;
 
@@ -374,7 +377,7 @@ export async function createKnowproTestCommands(
                 context.printer.writeError(results.message);
             }
         } finally {
-            endTestBatch();
+            endTestBatch(prevOptions);
         }
     }
 
@@ -471,7 +474,7 @@ export async function createKnowproTestCommands(
     function testSearchDef(): CommandMetadata {
         const def = searchDef();
         def.options ??= {};
-        def.options!.compare = argBool("Compare to V1 mode", false);
+        def.options!.compare = argBool("Compare to V1 mode", true);
         return def;
     }
     commands.kpTestSearch.metadata = testSearchDef();
@@ -484,8 +487,13 @@ export async function createKnowproTestCommands(
         const result = namedArgs.compare
             ? await queryTranslator.translate(namedArgs.query)
             : undefined;
-        if (result) {
-            context.printer.writeTranslation(result);
+        try {
+            context.printer.pushColor(chalk.gray);
+            if (result) {
+                context.printer.writeTranslation(result);
+            }
+        } finally {
+            context.printer.popColor();
         }
 
         context.printer.writeHeading("Scope");
@@ -501,7 +509,7 @@ export async function createKnowproTestCommands(
                     context.printer.writeError(error);
                 }
             }
-            if (!ensureConversationLoaded()) {
+            if (!context.conversation) {
                 return;
             }
             const request = parseTypedArguments<kpTest.SearchRequest>(
@@ -534,6 +542,26 @@ export async function createKnowproTestCommands(
                     namedArgs.distinct,
                 );
             }
+        }
+    }
+
+    function setScopedDef(): CommandMetadata {
+        return {
+            description: "Enable/disable scoped search",
+            options: {
+                enable: makeArg("Enable scoped search", "boolean", undefined),
+            },
+        };
+    }
+    commands.kpTestScoped.metadata = setScopedDef();
+    async function setScoped(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, setScopedDef());
+        if (namedArgs.enable !== undefined) {
+            context.options.scopedSearch = namedArgs.enable;
+        } else {
+            context.printer.writeLine(
+                `Scoped search: ${context.options.scopedSearch}`,
+            );
         }
     }
 
@@ -616,12 +644,17 @@ export async function createKnowproTestCommands(
         }
     }
 
-    function beginTestBatch(): void {
-        context.retryNoAnswer = true;
+    function beginTestBatch(
+        namedArgs: NamedArgs,
+    ): kpTest.KnowproContextOptions {
+        const prevOptions = { ...context.options };
+        context.options.retryNoAnswer = true;
+        return prevOptions;
     }
 
-    function endTestBatch(): void {
-        context.retryNoAnswer = false;
+    function endTestBatch(savedOptions: kpTest.KnowproContextOptions): void {
+        context.options = savedOptions;
     }
+
     return;
 }

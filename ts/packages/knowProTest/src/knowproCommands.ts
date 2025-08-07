@@ -105,7 +105,11 @@ export async function execSearchRequest(
         debugContext.searchQueryExpr = compiledQueries;
         searchResults = success(queryResults.flat());
     } else {
-        if (request.scoped === undefined || request.scoped === false) {
+        let scoped = context.options.scopedSearch;
+        if (request.scoped !== undefined) {
+            scoped = request.scoped;
+        }
+        if (!scoped) {
             //
             // Run raw NLP query
             //
@@ -191,7 +195,7 @@ export async function execGetAnswerRequest(
         request,
         searchResults.data,
         progressCallback,
-        context.retryNoAnswer,
+        context.options.retryNoAnswer,
     );
     response.answerResponses = answerResponses;
     return response;
