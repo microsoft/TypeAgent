@@ -3,7 +3,12 @@
 
 import { TextEmbeddingModel } from "aiclient";
 import fs from "fs";
-import { ArgDef, NamedArgs, parseCommandLine } from "interactive-app";
+import {
+    ArgDef,
+    getBatchFileLines,
+    NamedArgs,
+    parseCommandLine,
+} from "interactive-app";
 import path from "path";
 import {
     collections,
@@ -11,9 +16,10 @@ import {
     dotProduct,
     generateTextEmbeddingsWithRetry,
     getFileName,
+    writeJsonFile,
 } from "typeagent";
-import { error, Result, Error } from "typechat";
-import { ComparisonResult } from "./types.js";
+import { error, Result, Error, success } from "typechat";
+import { BatchCallback, ComparisonResult } from "./types.js";
 
 export function ensureDirSync(folderPath: string): string {
     if (!fs.existsSync(folderPath)) {
@@ -83,6 +89,40 @@ export async function execCommandLine<T>(
     }
 
     return error("No args");
+}
+
+export async function runTestBatch<T>(
+    batchFilePath: string,
+    cmdHandler: (cmd: string, args: string[]) => Promise<Result<T>>,
+    destFilePath?: string,
+    cb?: BatchCallback<Result<T>>,
+    stopOnError: boolean = false,
+): Promise<Result<T[]>> {
+    const batchLines = getBatchFileLines(batchFilePath);
+    const results: T[] = [];
+    for (let i = 0; i < batchLines.length; ++i) {
+        const cmd = batchLines[i];
+        const args = getCommandArgs(cmd);
+        if (args.length === 0) {
+            continue;
+        }
+        let response = await cmdHandler(cmd, args);
+        if (!response.success) {
+            response = queryError(cmd, response);
+        }
+        if (cb) {
+            cb(response, i, batchLines.length);
+        }
+        if (response.success) {
+            results.push(response.data);
+        } else if (stopOnError) {
+            return response;
+        }
+    }
+    if (destFilePath) {
+        await writeJsonFile(destFilePath, results);
+    }
+    return success(results);
 }
 
 export function argSourceFile(defaultValue?: string | undefined): ArgDef {
