@@ -72,6 +72,18 @@ export class KnowproContext {
         return this.conversation!;
     }
 
+    public getConversationQueryTranslator(): kp.SearchQueryTranslator {
+        let queryTranslator = this.queryTranslator;
+
+        if (
+            this.conversation !== undefined &&
+            this.conversation! instanceof cm.Memory
+        ) {
+            queryTranslator = this.conversation!.settings.queryTranslator;
+        }
+        return queryTranslator;
+    }
+
     public createMemorySettings(): cm.MemorySettings {
         return cm.createMemorySettings(64, undefined, this.knowledgeModel);
     }

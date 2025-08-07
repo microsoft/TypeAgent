@@ -145,9 +145,9 @@ export interface AnswerDebugContext extends kp.LanguageSearchDebugContext {
 
 export type ComparisonResult = string | undefined;
 
-export type Comparison<T> = {
+export type Comparison<T, TExpected = T> = {
     actual: T;
-    expected: T;
+    expected: TExpected;
     error?: ComparisonResult;
 };
 

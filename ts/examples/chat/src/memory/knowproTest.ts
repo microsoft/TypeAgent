@@ -54,6 +54,7 @@ export async function createKnowproTestCommands(
     commands.kpTestChoices = testMultipleChoice;
     commands.kpTestSearch = testSearchScope;
     commands.kpTestScoped = setScoped;
+    commands.kpTestSearchCompare = testSearchScopeCompare;
 
     async function testHtml(args: string[]) {
         const html = await readAllText(args[0]);
@@ -473,75 +474,68 @@ export async function createKnowproTestCommands(
 
     function testSearchDef(): CommandMetadata {
         const def = searchDef();
-        def.options ??= {};
-        def.options!.compare = argBool("Compare to V1 mode", true);
+        def.description = "Test v2 (scoped) search";
         return def;
     }
     commands.kpTestSearch.metadata = testSearchDef();
     async function testSearchScope(args: string[]) {
         const namedArgs = parseNamedArguments(args, testSearchDef());
-        const queryTranslator =
-            context.conversation! instanceof cm.Memory
-                ? context.conversation!.settings.queryTranslator
-                : context.queryTranslator;
-        const result = namedArgs.compare
-            ? await queryTranslator.translate(namedArgs.query)
-            : undefined;
-        try {
-            context.printer.pushColor(chalk.gray);
-            if (result) {
-                context.printer.writeTranslation(result);
-            }
-        } finally {
-            context.printer.popColor();
-        }
-
-        context.printer.writeHeading("Scope");
+        const queryTranslator = context.getConversationQueryTranslator();
         const resultScope = await queryTranslator.translate2!(namedArgs.query);
         context.printer.writeTranslation(resultScope);
-        if ((result === undefined || result.success) && resultScope.success) {
-            if (result !== undefined) {
-                const error = kpTest.compareSearchQueryScope(
-                    result.data,
-                    resultScope.data,
-                );
-                if (error !== undefined) {
-                    context.printer.writeError(error);
-                }
-            }
-            if (!context.conversation) {
-                return;
-            }
-            const request = parseTypedArguments<kpTest.SearchRequest>(
-                args,
-                searchDef(),
-            );
-            const options: kp.LanguageSearchOptions = {
-                ...kpTest.createSearchOptions(request),
-                compileOptions: {
-                    exactScope: request.exactScope,
-                    applyScope: request.applyScope,
-                },
-            };
-            const query = kp.compileSearchQuery2(
-                context.conversation!,
-                resultScope.data,
-                options.compileOptions,
-            );
+        if (!resultScope.success || !ensureConversationLoaded()) {
+            return;
+        }
+        const request = parseTypedArguments<kpTest.SearchRequest>(
+            args,
+            searchDef(),
+        );
+        const options: kp.LanguageSearchOptions = {
+            ...kpTest.createSearchOptions(request),
+            compileOptions: {
+                exactScope: request.exactScope,
+                applyScope: request.applyScope,
+            },
+        };
+        const query = kp.compileSearchQuery2(
+            context.conversation!,
+            resultScope.data,
+            options.compileOptions,
+        );
 
-            const results = (
-                await kp.runSearchQueries(context.conversation!, query, options)
-            ).flat();
-            for (let i = 0; i < results.length; ++i) {
-                context.printer.writeConversationSearchResult(
-                    context.conversation!,
-                    results[i],
-                    namedArgs.showKnowledge,
-                    namedArgs.showMessages,
-                    namedArgs.maxToDisplay,
-                    namedArgs.distinct,
-                );
-            }
+        const results = (
+            await kp.runSearchQueries(context.conversation!, query, options)
+        ).flat();
+        for (let i = 0; i < results.length; ++i) {
+            context.printer.writeConversationSearchResult(
+                context.conversation!,
+                results[i],
+                namedArgs.showKnowledge,
+                namedArgs.showMessages,
+                namedArgs.maxToDisplay,
+                namedArgs.distinct,
+            );
+        }
+    }
+
+    commands.kpTestSearchCompare.metadata = testSearchDef();
+    async function testSearchScopeCompare(args: string[]) {
+        const namedArgs = parseNamedArguments(args, testSearchDef());
+        const queryTranslator = context.getConversationQueryTranslator();
+        const result = await kpTest.compareSearchQueryTranslations(
+            queryTranslator,
+            namedArgs.query,
+        );
+        if (!result.success) {
+            context.printer.writeError(result.message);
+            return;
+        }
+        const comparison = result.data;
+        context.printer.writeJsonInColor(chalk.gray, comparison.expected);
+        context.printer.writeHeading("Scope");
+        context.printer.writeJson(comparison.actual);
+        if (comparison.error) {
+            context.printer.writeError(comparison.error);
         }
     }
 
