@@ -88,6 +88,7 @@ def create_translator[T](
 
 # Vibe-coded by o4-mini-high
 def list_diff(label_a, a, label_b, b, max_items):
+    """Print colorized diff between two sorted list of numbers."""
     sm = difflib.SequenceMatcher(None, a, b)
     a_out, b_out = [], []
     for tag, i1, i2, j1, j2 in sm.get_opcodes():
@@ -142,3 +143,30 @@ def list_diff(label_a, a, label_b, b, max_items):
         seg_widths = widths[start:end]
         print(la, fmt(a_cols[start:end], seg_widths))
         print(lb, fmt(b_cols[start:end], seg_widths))
+
+
+def setup_logfire():
+    """Configure logfire for pydantic_ai and httpx."""
+
+    import logfire
+
+    def scrubbing_callback(m: logfire.ScrubMatch):
+        """Instructions: Uncomment any block where you deem it safe to not scrub."""
+        # if m.path == ('attributes', 'http.request.header.authorization'):
+        #     return m.value
+
+        # if m.path == ('attributes', 'http.request.header.api-key'):
+        #     return m.value
+
+        if (
+            m.path == ("attributes", "http.request.body.text", "messages", 0, "content")
+            and m.pattern_match.group(0) == "secret"
+        ):
+            return m.value
+
+        # if m.path == ('attributes', 'http.response.header.azureml-model-session'):
+        #     return m.value
+
+    logfire.configure(scrubbing=logfire.ScrubbingOptions(callback=scrubbing_callback))
+    logfire.instrument_pydantic_ai()
+    logfire.instrument_httpx(capture_all=True)
