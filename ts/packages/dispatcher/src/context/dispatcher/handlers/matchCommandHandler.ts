@@ -9,17 +9,20 @@ import {
     SessionContext,
 } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
-import { displayResult } from "@typeagent/agent-sdk/helpers/display";
+import {
+    displayError,
+    displayResult,
+} from "@typeagent/agent-sdk/helpers/display";
 import { getColorElapsedString } from "common-utils";
-import { translateRequest } from "../../../translation/translateRequest.js";
+import { matchRequest } from "../../../translation/matchRequest.js";
 import { requestCompletion } from "../../../translation/requestCompletion.js";
 
-export class TranslateCommandHandler implements CommandHandler {
-    public readonly description = "Translate a request";
+export class MatchCommandHandler implements CommandHandler {
+    public readonly description = "Match a request";
     public readonly parameters = {
         args: {
             request: {
-                description: "Request to translate",
+                description: "Request to match",
                 implicitQuotes: true,
             },
         },
@@ -28,23 +31,21 @@ export class TranslateCommandHandler implements CommandHandler {
         context: ActionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const translationResult = await translateRequest(
-            params.args.request,
-            context,
-        );
+        const matchResult = await matchRequest(params.args.request, context);
+        if (matchResult) {
+            const elapsedStr = getColorElapsedString(matchResult.elapsedMs);
 
-        const elapsedStr = getColorElapsedString(translationResult.elapsedMs);
-        const usageStr = translationResult.tokenUsage
-            ? `(Tokens: ${translationResult.tokenUsage.prompt_tokens} + ${translationResult.tokenUsage.completion_tokens} = ${translationResult.tokenUsage.total_tokens})`
-            : "";
-        displayResult(
-            `${translationResult.requestAction} ${elapsedStr}${usageStr}\n\nJSON:\n${JSON.stringify(
-                translationResult.requestAction.actions,
-                undefined,
-                2,
-            )}`,
-            context,
-        );
+            displayResult(
+                `${matchResult.requestAction} ${elapsedStr}\n\nJSON:\n${JSON.stringify(
+                    matchResult.requestAction.actions,
+                    undefined,
+                    2,
+                )}`,
+                context,
+            );
+        } else {
+            displayError("No match found for the request.", context);
+        }
     }
     public async getCompletion(
         context: SessionContext<CommandHandlerContext>,
