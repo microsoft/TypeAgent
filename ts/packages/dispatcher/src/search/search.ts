@@ -118,12 +118,12 @@ export async function lookupAndAnswer(
                     lookupAction.parameters.lookup.conversationLookupFilters,
                 );
             }
-            const literalText = await lookupAndAnswerFromMemory(
+            const historyText = await lookupAndAnswerFromMemory(
                 context,
                 lookupAction.parameters.question,
             );
             // TODO: how about entities?
-            return createActionResultNoDisplay(literalText.join("\n"));
+            return createActionResultNoDisplay(historyText.join("\n"));
         }
         default:
             throw new Error(`Unknown lookup source: ${source}`);

@@ -21,8 +21,8 @@ export type ActionResultActivityContext = Omit<
 > | null;
 
 export type ActionResultSuccess = {
-    literalText?: string | undefined;
-    displayContent: DisplayContent;
+    historyText?: string | undefined;
+    displayContent: DisplayContent; // the display content to be appended with "block" mode
     entities: Entity[];
     resultEntity?: Entity | undefined;
     dynamicDisplayId?: string | undefined;

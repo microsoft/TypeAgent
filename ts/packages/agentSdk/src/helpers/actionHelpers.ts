@@ -11,17 +11,17 @@ import { DisplayMessageKind } from "../display.js";
 import { Entity } from "../memory.js";
 
 export function createActionResultNoDisplay(
-    literalText: string,
+    historyText: string,
     entities?: Entity[] | undefined,
 ): ActionResultSuccessNoDisplay {
     return {
-        literalText,
+        historyText,
         entities: entities ? entities : [],
     };
 }
 
 export function createActionResult(
-    literalText: string,
+    displayAndHistoryText: string,
     options?:
         | {
               kind?: DisplayMessageKind;
@@ -39,7 +39,7 @@ export function createActionResult(
               : options;
 
     return {
-        literalText,
+        historyText: displayAndHistoryText,
         entities: entities
             ? Array.isArray(entities)
                 ? entities
@@ -48,19 +48,19 @@ export function createActionResult(
         displayContent: displayOptions
             ? {
                   type: "text",
-                  content: literalText,
+                  content: displayAndHistoryText,
                   ...displayOptions,
               }
-            : literalText,
+            : displayAndHistoryText,
     };
 }
 
 export function createActionResultFromTextDisplay(
     displayText: string,
-    literalText?: string,
+    historyText?: string,
 ): ActionResultSuccess {
     return {
-        literalText,
+        historyText,
         entities: [],
         displayContent: displayText,
     };
@@ -68,11 +68,11 @@ export function createActionResultFromTextDisplay(
 
 export function createActionResultFromHtmlDisplay(
     displayText: string,
-    literalText?: string,
+    historyText?: string,
     entities?: Entity[] | undefined,
 ): ActionResultSuccess {
     return {
-        literalText,
+        historyText,
         entities: entities ? entities : [],
         displayContent: {
             type: "html",
@@ -83,10 +83,10 @@ export function createActionResultFromHtmlDisplay(
 
 export function createActionResultFromHtmlDisplayWithScript(
     displayText: string,
-    literalText?: string,
+    historyText?: string,
 ): ActionResultSuccess {
     return {
-        literalText,
+        historyText,
         entities: [],
         displayContent: {
             type: "iframe",
@@ -104,13 +104,13 @@ export function createActionResultFromHtmlDisplayWithScript(
  */
 export function createActionResultFromMarkdownDisplay(
     markdownText: string | string[],
-    literalText?: string,
+    historyText?: string,
     entities: Entity[] = [],
     resultEntity?: Entity,
 ): ActionResultSuccess {
     return {
-        literalText:
-            literalText ??
+        historyText:
+            historyText ??
             (Array.isArray(markdownText)
                 ? markdownText.join("\n")
                 : markdownText),
