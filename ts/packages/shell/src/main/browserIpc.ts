@@ -32,74 +32,74 @@ export class BrowserAgentIpc {
     };
 
     public async ensureWebsocketConnected() {
-
         // if there's a pending websocket promise, return it
-        if (this.webSocketPromise ) {
+        if (this.webSocketPromise) {
             return this.webSocketPromise;
         }
 
         //create a new promise to establish the websocket connection
-        this.webSocketPromise = new Promise<WebSocket | undefined>(async (resolve) => {
-            if (this.webSocket) {
-                if (this.webSocket.readyState === WebSocket.OPEN) {
-                    resolve(this.webSocket);
+        this.webSocketPromise = new Promise<WebSocket | undefined>(
+            async (resolve) => {
+                if (this.webSocket) {
+                    if (this.webSocket.readyState === WebSocket.OPEN) {
+                        resolve(this.webSocket);
+                        return;
+                    }
+                    try {
+                        this.webSocket.close();
+                        this.webSocket = undefined;
+                    } catch {}
+                }
+
+                this.webSocket = await createWebSocket(
+                    "browser",
+                    "client",
+                    "inlineBrowser",
+                );
+                if (!this.webSocket) {
+                    resolve(undefined);
                     return;
                 }
-                try {
-                    this.webSocket.close();
+
+                this.webSocket.binaryType = "blob";
+                keepWebSocketAlive(this.webSocket, "browser");
+
+                this.webSocket.onmessage = async (event: any) => {
+                    const text =
+                        typeof event.data === "string"
+                            ? event.data
+                            : await (event.data as Blob).text();
+                    try {
+                        const data = JSON.parse(text) as WebSocketMessageV2;
+
+                        let schema = data.method?.split("/")[0];
+                        schema = schema || "browser";
+
+                        if (
+                            (schema == "browser" ||
+                                schema == "webAgent" ||
+                                schema.startsWith("browser.")) &&
+                            this.onMessageReceived
+                        ) {
+                            debugBrowserIPC("Browser -> Dispatcher", data);
+                            this.onMessageReceived(data);
+                        }
+                    } catch {}
+                };
+
+                this.webSocket.onclose = () => {
+                    console.log("websocket connection closed");
                     this.webSocket = undefined;
-                } catch {}
-            }
+                    this.reconnectWebSocket();
+                };
 
-            this.webSocket = await createWebSocket(
-                "browser",
-                "client",
-                "inlineBrowser",
-            );
-            if (!this.webSocket) {
-                resolve(undefined);
-                return;
-            }
+                this.webSocketPromise = null;
 
-            this.webSocket.binaryType = "blob";
-            keepWebSocketAlive(this.webSocket, "browser");
+                resolve(this.webSocket);
+            },
+        );
 
-            this.webSocket.onmessage = async (event: any) => {
-                const text =
-                    typeof event.data === "string"
-                        ? event.data
-                        : await (event.data as Blob).text();
-                try {
-                    const data = JSON.parse(text) as WebSocketMessageV2;
-
-                    let schema = data.method?.split("/")[0];
-                    schema = schema || "browser";
-
-                    if (
-                        (schema == "browser" ||
-                            schema == "webAgent" ||
-                            schema.startsWith("browser.")) &&
-                        this.onMessageReceived
-                    ) {
-                        debugBrowserIPC("Browser -> Dispatcher", data);
-                        this.onMessageReceived(data);
-                    }
-                } catch {}
-            };
-
-            this.webSocket.onclose = () => {
-                console.log("websocket connection closed");
-                this.webSocket = undefined;
-                this.reconnectWebSocket();
-            };
-
-            this.webSocketPromise = null;
-
-            resolve(this.webSocket);
-
-        });
-
-        return this.webSocketPromise
+        return this.webSocketPromise;
     }
 
     private reconnectWebSocket() {
@@ -123,7 +123,7 @@ export class BrowserAgentIpc {
                 console.log("Retrying connection");
                 await this.ensureWebsocketConnected();
             }
-            
+
             // reconnection was either successful or attempted
             this.reconnectionPending = false;
         }, 5 * 1000);
