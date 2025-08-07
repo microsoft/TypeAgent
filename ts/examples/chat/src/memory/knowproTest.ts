@@ -558,7 +558,14 @@ export async function createKnowproTestCommands(
                     context.printer.writeProgress(index + 1, total);
                     if (result.success) {
                         const cmp = result.data;
-                        writeSearchComparison(cmp);
+                        if (cmp.error) {
+                            writeSearchComparison(cmp);
+                        } else {
+                            context.printer.writeLineInColor(
+                                chalk.green,
+                                cmp.query,
+                            );
+                        }
                     } else {
                         context.printer.writeError(result.message);
                     }
