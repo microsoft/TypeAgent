@@ -274,10 +274,13 @@ export async function handleCreateFunctionAction(
 
         const isBodyEmpty = body === undefined || body.trim() === "";
         if (!isBodyEmpty) {
-            snippet += `${body}\n`;
+            const indentedBody = body
+                .split("\n")
+                .map((line: string) => (line.trim() ? indent + line : line))
+                .join("\n");
+
+            snippet += `${indentedBody}\n`;
             snippet += getClosingBraceIfNeeded(language);
-        } else {
-            snippet += indent;
         }
 
         await editor.edit((editBuilder) => {

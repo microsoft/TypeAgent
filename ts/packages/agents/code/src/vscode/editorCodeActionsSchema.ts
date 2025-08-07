@@ -69,33 +69,35 @@ export type FileTarget = {
     fallbackToActiveFile?: boolean;
 };
 
-// schema to generate a function
 // Schema to generate a function
 export type EditorActionCreateFunction = {
     actionName: "createFunction";
     parameters: {
-        // Language of the function (determines syntax rules)
+        // Programming language of the function (determines syntax rules and formatting)
         language: "typescript" | "python" | "javascript" | string;
         // The full function declaration or signature line (e.g., "function foo(x: number): number {")
-        // Must include the opening brace or colon (depending on language)
+        // This must include the opening brace (for JS/TS) or colon (for Python) and match the language's syntax
         functionDeclaration: string;
-        // Function body contents (excluding closing brace if applicable)
-        // Leave as empty string "" to trigger Copilot suggestion
+        // Function implementation body (excluding the closing brace or dedent, if applicable)
+        // This should contain valid code that performs the intended task.
+        // If left as an empty string (""), the extension will attempt to trigger GitHub Copilot to complete the body.
+        // Prefer generating this value if the function behavior is well understood.
         body?: string;
-        // One-line docstring explaining what the function does.
-        // This is based on the function declaration and user request.
+        // A one-line docstring or comment that explains what the function does.
+        // This should describe the function’s intent based on the declaration and user request.
+        // Used to improve readability and may help tools like Copilot complete the function more accurately.
         docstring?: string;
-        // Optional: function name (extracted if not explicit in declaration)
+        // Optional: the name of the function. If omitted, may be inferred from the declaration.
         name?: string;
-        // Optional: list of argument name/type descriptions
+        // Optional: an array of function parameters with their names and types (for display or analysis)
         args?: ArgumentDefinition[];
-        // Optional: return type (e.g., "string", "void", etc.)
+        // Optional: the function's return type (e.g., "string", "void", "Promise<boolean>")
         returnType?: string;
-        // Optional: whether the function is async
+        // Optional: whether the function should be marked as async
         isAsync?: boolean;
-        // Optional: file where function should be inserted
+        // Optional: the target file where the function should be inserted
         file?: FileTarget;
-        // Optional: where to insert function (default: atCursor)
+        // Optional: where in the file to insert the function. Defaults to current cursor location if not provided.
         position?: CursorTarget;
     };
 };
