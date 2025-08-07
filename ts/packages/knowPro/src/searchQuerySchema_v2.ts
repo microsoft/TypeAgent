@@ -12,18 +12,18 @@ export type FacetTerm = {
 
 // Use to find information about specific, tangible people, places, institutions or things only..
 // This includes entities with particular facets
-// Abstract concepts or topics are not entities.
+// Abstract concepts or topics are not entityTerms. Use string for them
 // Any terms will match fuzzily.
 export type EntityTerm = {
     // the name of the entity or thing such as "Bach", "Great Gatsby", "frog" or "piano" or "we", "I"; "*" means match any entity name
     name: string;
     isNamePronoun: boolean;
     // the specific types of the entity such as "book", "movie", "song", "speaker", "person", "artist", "animal", "instrument", "school", "room", "museum", "food" etc.
-    // Do not include generic types such as: "entity", "object", "thing", "concept" etc.
+    // Generic types like "object", "thing" etc. are NOT allowed
     // An entity can have multiple types; entity types should be single words
     type?: string[];
     // Facet terms search for properties or attributes of the entity.
-    // Eg: color(blue), profession(writer), author(*), aunt(Agatha), weight(4kg), phoneNumber(...), title(*) etc.
+    // Eg: color(blue), profession(writer), author(*), aunt(Agatha), weight(4kg), phoneNumber(...), etc.
     facets?: FacetTerm[];
 };
 
@@ -65,7 +65,7 @@ export type SearchFilter = {
     actionSearchTerm?: ActionTerm;
     entitySearchTerms?: EntityTerm[];
     // searchTerms:
-    // Use for all concepts, topics, or other search terms that don't fit ActionTerms or EntityTerms
+    // Concepts, topics or other terms that don't fit ActionTerms or EntityTerms
     // - Do not use noisy searchTerms like "topic", "topics", "subject", "discussion" etc. even if they are mentioned in the user request
     // - Phrases like 'email address' or 'first name' are a single term
     // - use empty searchTerms array when use asks for summaries
