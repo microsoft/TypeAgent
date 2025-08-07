@@ -16,6 +16,7 @@ import { fileURLToPath } from "url";
 import os from "os";
 import registerDebug from "debug";
 import chalk from "chalk";
+import { createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
 
 const debug = registerDebug("typeagent:code");
 
@@ -82,7 +83,9 @@ async function updateCodeContext(
                     if (pendingCall) {
                         agentContext.pendingCall.delete(Number(data.id));
                         const { resolve, context } = pendingCall;
-                        context.actionIO.setDisplay(data.result);
+                        if (context?.actionIO) {
+                            context.actionIO.setDisplay(data.result);
+                        }
                         resolve();
                     }
                 }
@@ -174,6 +177,37 @@ async function ensureVSCodeProcess(): Promise<void> {
     });
 }
 
+async function sendPingToCodaExtension(
+    agentContext: CodeActionContext,
+): Promise<boolean> {
+    const ws = agentContext.webSocket;
+    if (!ws || ws.readyState !== 1) return false;
+
+    const callId = agentContext.nextCallId++;
+    return new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+            agentContext.pendingCall.delete(callId);
+            resolve(false);
+        }, 1000);
+
+        agentContext.pendingCall.set(callId, {
+            resolve: () => {
+                clearTimeout(timeout);
+                resolve(true);
+            },
+            context: undefined as any,
+        });
+
+        ws.send(
+            JSON.stringify({
+                id: callId,
+                method: "code/ping",
+                params: {},
+            }),
+        );
+    });
+}
+
 async function executeCodeAction(
     action: AppAction,
     context: ActionContext<CodeActionContext>,
@@ -185,8 +219,17 @@ async function executeCodeAction(
 
     const agentContext = context.sessionContext.agentContext;
     const webSocketEndpoint = agentContext.webSocket;
+
     if (webSocketEndpoint) {
         try {
+            const isExtensionAlive =
+                await sendPingToCodaExtension(agentContext);
+            if (!isExtensionAlive) {
+                return createActionResultFromError(
+                    "❌ Coda VSCode extension is not connected.",
+                );
+            }
+
             const callId = agentContext.nextCallId++;
             return new Promise<undefined>((resolve) => {
                 agentContext.pendingCall.set(callId, {
