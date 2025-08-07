@@ -253,6 +253,7 @@ export function compareStringArray(
     y: string[] | undefined,
     label: string,
     sort = true,
+    cmpFuzzy?: (x: string, y: string) => boolean,
 ): string | undefined {
     if (isUndefinedOrEmpty(x) && isUndefinedOrEmpty(y)) {
         return undefined;
@@ -269,7 +270,9 @@ export function compareStringArray(
     }
     for (let i = 0; i < x.length; ++i) {
         if (collections.stringCompare(x[i], y[i], false) !== 0) {
-            return `${label}: [${i}] ${x[i]} !== ${y[i]}`;
+            if (!cmpFuzzy || !cmpFuzzy(x[i], y[i])) {
+                return `${label}: [${i}] ${x[i]} !== ${y[i]}`;
+            }
         }
     }
     return undefined;
@@ -344,4 +347,8 @@ export function queryError(query: string, result: Error): Error {
 
 export function stringifyReadable(value: any): string {
     return JSON.stringify(value, undefined, 2);
+}
+
+export function isStem(x: string, y: string, stemLength = 2) {
+    return x.startsWith(y) && x.length - y.length <= stemLength;
 }
