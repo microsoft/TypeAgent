@@ -54,7 +54,8 @@ export async function createKnowproTestCommands(
     commands.kpTestChoices = testMultipleChoice;
     commands.kpTestSearch = testSearchScope;
     commands.kpTestScoped = setScoped;
-    commands.kpTestSearchCompare = testSearchScopeCompare;
+    commands.kpTestSearchCompare = testSearchCompare;
+    commands.kpTestSearchCompareBatch = testSearchCompareBatch;
 
     async function testHtml(args: string[]) {
         const html = await readAllText(args[0]);
@@ -519,7 +520,7 @@ export async function createKnowproTestCommands(
     }
 
     commands.kpTestSearchCompare.metadata = testSearchDef();
-    async function testSearchScopeCompare(args: string[]) {
+    async function testSearchCompare(args: string[]) {
         const namedArgs = parseNamedArguments(args, testSearchDef());
         const queryTranslator = context.getConversationQueryTranslator();
         const result = await kpTest.compareSearchQueryTranslations(
@@ -536,6 +537,64 @@ export async function createKnowproTestCommands(
         context.printer.writeJson(comparison.actual);
         if (comparison.error) {
             context.printer.writeError(comparison.error);
+        }
+    }
+
+    function compareSearchScopeBatchDef(): CommandMetadata {
+        return {
+            description: "Compare query translations in a batch",
+            args: {
+                srcPath: argSourceFile(),
+            },
+            options: {
+                verbose: argBool("Verbose error output", false),
+            },
+        };
+    }
+    commands.kpTestSearchCompareBatch.metadata = compareSearchScopeBatchDef();
+    async function testSearchCompareBatch(args: string[]) {
+        if (!ensureConversationLoaded()) {
+            return;
+        }
+        const namedArgs = parseNamedArguments(args, verifySearchBatchDef());
+        const prevOptions = beginTestBatch(namedArgs);
+        try {
+            const srcPath = namedArgs.srcPath;
+            const results = await kpTest.compareSearchQueryTranslationsBatch(
+                context,
+                srcPath,
+                (result, index, total) => {
+                    context.printer.writeProgress(index + 1, total);
+                    if (result.success) {
+                        const cmp = result.data;
+                        if (cmp.error) {
+                            context.printer.writeError(cmp.error);
+                        }
+                        context.printer.writeLineInColor(
+                            chalk.green,
+                            cmp.query,
+                        );
+                    } else {
+                        context.printer.writeError(result.message);
+                    }
+                },
+            );
+            if (!results.success) {
+                context.printer.writeError(results.message);
+                return;
+            }
+            let errorResults = results.data.filter(
+                (r) => r.error !== undefined && r.error.length > 0,
+            );
+            if (errorResults.length > 0) {
+                context.printer.writeLine(`${errorResults.length} errors`);
+                context.printer.writeList(
+                    errorResults.map((e) => e.query),
+                    { type: "ol" },
+                );
+            }
+        } finally {
+            endTestBatch(prevOptions);
         }
     }
 

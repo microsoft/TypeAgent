@@ -455,10 +455,13 @@ export function compareSearchExprScope(
     return undefined;
 }
 
-export type ScopeQueryComparison = Comparison<
-    kp.querySchema2.SearchQuery,
-    kp.querySchema.SearchQuery
->;
+export interface ScopeQueryComparison
+    extends Comparison<
+        kp.querySchema2.SearchQuery,
+        kp.querySchema.SearchQuery
+    > {
+    query: string;
+}
 
 export async function compareSearchQueryTranslations(
     queryTranslator: kp.SearchQueryTranslator,
@@ -479,6 +482,7 @@ export async function compareSearchQueryTranslations(
     let cmp: ScopeQueryComparison = {
         actual: resultScope.data,
         expected: result.data,
+        query,
     };
     cmp.error = compareSearchQueryScope(result.data, resultScope.data);
     return success(cmp);
