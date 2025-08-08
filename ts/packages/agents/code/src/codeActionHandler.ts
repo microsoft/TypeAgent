@@ -208,6 +208,57 @@ async function sendPingToCodaExtension(
     });
 }
 
+type ActiveFile = {
+    filePath: string;
+    languageId: string;
+    isUntitled: boolean;
+    isDirty: boolean;
+};
+
+export async function getActiveFileFromVSCode(
+    agentContext: CodeActionContext,
+    timeoutMs = 2000,
+): Promise<ActiveFile | undefined> {
+    const ws = agentContext.webSocket;
+
+    if (!ws || ws.readyState !== 1 /* OPEN */) {
+        return undefined;
+    }
+
+    const callId = agentContext.nextCallId++;
+
+    return new Promise<ActiveFile | undefined>((resolve) => {
+        // Hard timeout so we never hang
+        const t = setTimeout(() => {
+            agentContext.pendingCall.delete(callId);
+            resolve(undefined);
+        }, timeoutMs);
+
+        // NOTE: pendingCall entry has no ActionContext because this isn’t a UI action
+        agentContext.pendingCall.set(callId, {
+            resolve: (value?: any) => {
+                clearTimeout(t);
+                resolve(value as ActiveFile | undefined);
+            },
+            context: undefined as any,
+        });
+
+        try {
+            ws.send(
+                JSON.stringify({
+                    id: callId,
+                    method: "code/getActiveFile",
+                    params: {},
+                }),
+            );
+        } catch {
+            clearTimeout(t);
+            agentContext.pendingCall.delete(callId);
+            resolve(undefined);
+        }
+    });
+}
+
 async function executeCodeAction(
     action: AppAction,
     context: ActionContext<CodeActionContext>,

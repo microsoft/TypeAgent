@@ -12,7 +12,7 @@ import {
     resolveOrFallbackToFile,
     resolvePosition,
     showDocumentInEditor,
-    triggerCopilotInlineCompletion,
+    triggerAndMaybeAcceptInlineSuggestion,
 } from "./helpers";
 import {
     ensureFunctionDeclarationClosure,
@@ -278,22 +278,47 @@ export async function handleCreateFunctionAction(
                 .split("\n")
                 .map((line: string) => (line.trim() ? indent + line : line))
                 .join("\n");
-
             snippet += `${indentedBody}\n`;
-            snippet += getClosingBraceIfNeeded(language);
+        } else {
+            snippet += indent;
+        }
+        snippet += getClosingBraceIfNeeded(language);
+
+        // Add spacing before the snippet if needed
+        if (insertPos.line > 0) {
+            const prevLineText = doc.lineAt(insertPos.line - 1).text.trim();
+
+            if (prevLineText !== "") {
+                const prevLineIsBlockDecl =
+                    /^(export\s+)?(async\s+)?(function|class)\b/.test(
+                        prevLineText,
+                    );
+                if (prevLineIsBlockDecl) {
+                    snippet = "\n\n" + snippet;
+                } else {
+                    snippet = "\n" + snippet;
+                }
+            }
         }
 
         await editor.edit((editBuilder) => {
             editBuilder.insert(insertPos, snippet + "\n");
         });
 
-        const lineOffset = snippet.split("\n").length - (isBodyEmpty ? 1 : 2);
+        /*const lineOffset = snippet.split("\n").length - (isBodyEmpty ? 1 : 2);
+        const bodyLine = insertPos.line + lineOffset;
+        const bodyPos = new vscode.Position(bodyLine, indent.length);
+        editor.selection = new vscode.Selection(bodyPos, bodyPos);*/
+
+        const snippetLines = snippet.split("\n");
+        const lineOffset = snippetLines.length - (isBodyEmpty ? 1 : 2);
         const bodyLine = insertPos.line + lineOffset;
         const bodyPos = new vscode.Position(bodyLine, indent.length);
         editor.selection = new vscode.Selection(bodyPos, bodyPos);
 
         if (isBodyEmpty && (await isCopilotEnabled())) {
-            await triggerCopilotInlineCompletion(editor);
+            //await triggerCopilotInlineCompletion(editor);
+            await triggerAndMaybeAcceptInlineSuggestion({ autoAccept: true });
         }
 
         return {

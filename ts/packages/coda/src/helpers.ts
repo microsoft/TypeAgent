@@ -336,6 +336,41 @@ export async function triggerCopilotInlineCompletion(
     await vscode.commands.executeCommand("editor.action.inlineSuggest.trigger");
 }
 
+export async function triggerAndMaybeAcceptInlineSuggestion(
+    opts: {
+        autoAccept?: boolean; // if true, try to accept immediately
+        navigate?: "next" | "prev"; // optional cycling
+    } = {},
+) {
+    // show suggestion
+    await vscode.commands.executeCommand("editor.action.inlineSuggest.trigger");
+
+    if (opts.navigate === "next") {
+        await vscode.commands.executeCommand(
+            "editor.action.inlineSuggest.showNext",
+        );
+    } else if (opts.navigate === "prev") {
+        await vscode.commands.executeCommand(
+            "editor.action.inlineSuggest.showPrevious",
+        );
+    }
+
+    if (opts.autoAccept) {
+        try {
+            // Accept the visible inline suggestion (equivalent to pressing Tab)
+            await vscode.commands.executeCommand(
+                "editor.action.inlineSuggest.commit",
+            );
+        } catch {
+            // Fallback: prompt the user if the command isn't available on their build
+            vscode.window.setStatusBarMessage(
+                "Press Tab to accept Copilot suggestion",
+                3000,
+            );
+        }
+    }
+}
+
 export function getIndentationString(doc: vscode.TextDocument): string {
     const editor = vscode.window.visibleTextEditors.find(
         (e) => e.document === doc,
@@ -395,4 +430,24 @@ export function resolvePosition(
             );
             return undefined;
     }
+}
+
+type ActiveFileMeta = {
+    filePath: string;
+    languageId: string;
+    isUntitled: boolean;
+    isDirty: boolean;
+};
+
+export function getActiveFileMetadata(): ActiveFileMeta | null {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) return null;
+
+    const { document } = editor;
+    return {
+        filePath: document.uri.fsPath || document.uri.toString(true),
+        languageId: document.languageId,
+        isUntitled: document.isUntitled,
+        isDirty: document.isDirty,
+    };
 }
