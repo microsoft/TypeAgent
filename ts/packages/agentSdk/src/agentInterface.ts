@@ -211,6 +211,7 @@ export type ActivityContext<T = Record<string, unknown>> = {
     state: T;
     openLocalView?: boolean | undefined;
     activityEndAction?: AppAction | undefined;
+    restricted?: boolean | undefined; // restrict the actions to this specific agent, default is false
 };
 
 export interface ActionContext<T = void> {

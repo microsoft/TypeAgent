@@ -107,16 +107,18 @@ type AssistantSelectionSchemaEntry = {
     schema: InlineTranslatorSchemaDef;
 };
 export function getAssistantSelectionSchemas(
-    schemaNames: string[],
+    schemaNames: Iterable<string>,
     provider: ActionConfigProvider,
 ) {
-    return schemaNames
-        .map((name) => {
-            return { name, schema: getSelectionSchema(name, provider) };
-        })
-        .filter(
-            (entry) => entry.schema !== undefined,
-        ) as AssistantSelectionSchemaEntry[];
+    const schemaEntries: AssistantSelectionSchemaEntry[] = [];
+    for (const schemaName of schemaNames) {
+        const schema = getSelectionSchema(schemaName, provider);
+        if (schema !== undefined) {
+            schemaEntries.push({ name: schemaName, schema });
+        }
+    }
+
+    return schemaEntries;
 }
 
 export type AssistantSelection = {
@@ -128,7 +130,7 @@ export type AssistantSelection = {
 const assistantSelectionLimit = 8192 * 3;
 
 export function loadAssistantSelectionJsonTranslator(
-    schemaNames: string[],
+    schemaNames: Iterable<string>,
     provider: ActionConfigProvider,
 ) {
     const schemas = getAssistantSelectionSchemas(schemaNames, provider);
