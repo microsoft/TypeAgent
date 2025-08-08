@@ -4,6 +4,7 @@
 import {
     IConversation,
     KnowledgeType,
+    PropertySearchTerm,
     SearchTermGroup,
     SemanticRefSearchResult,
 } from "../src/interfaces.js";
@@ -14,6 +15,8 @@ import {
     createOrTermGroup,
     createPropertySearchTerm,
     createOrMaxTermGroup,
+    createTopicSearchTermGroup,
+    createEntitySearchTermGroup,
 } from "../src/searchLib.js";
 import {
     emptyConversation,
@@ -33,7 +36,8 @@ import {
     verifySemanticRefResult,
 } from "./verify.js";
 import { hasTestKeys, describeIf } from "test-lib";
-import { validateSearchTermGroup } from "../src/compileLib.js";
+import { isPropertyTerm, validateSearchTermGroup } from "../src/compileLib.js";
+import { PropertyNames } from "../src/propertyIndex.js";
 
 /**
  * These tests are designed to run offline.
@@ -226,6 +230,39 @@ describe("search.offline", () => {
         },
         testTimeout,
     );
+    test(
+        "propertySearchGroup",
+        () => {
+            let topicTerms = ["music", "dance"];
+            let termGroup = createTopicSearchTermGroup(topicTerms);
+            validateSearchTermGroup(termGroup);
+
+            expect(termGroup.terms.length).toEqual(topicTerms.length);
+            for (let i = 0; i < termGroup.terms.length; ++i) {
+                const term = termGroup.terms[i];
+                expect(isPropertyTerm(term)).toBeTruthy();
+                if (isPropertyTerm(term)) {
+                    expect(term.propertyName).toEqual(PropertyNames.Topic);
+                    expect(term.propertyValue.term.text).toEqual(topicTerms[i]);
+                }
+            }
+
+            termGroup = createEntitySearchTermGroup(
+                "jane",
+                "person",
+                "job",
+                "scientist",
+            );
+            validateSearchTermGroup(termGroup);
+            expect(termGroup.terms.length).toEqual(4);
+            let propertyTerm = termGroup.terms[2] as PropertySearchTerm;
+            expect(propertyTerm.propertyName).toEqual("facet.name");
+            propertyTerm = termGroup.terms[3] as PropertySearchTerm;
+            expect(propertyTerm.propertyName).toEqual("facet.value");
+        },
+        testTimeout,
+    );
+
     async function runSearchKnowledge(
         termGroup: SearchTermGroup,
         knowledgeType: KnowledgeType,
