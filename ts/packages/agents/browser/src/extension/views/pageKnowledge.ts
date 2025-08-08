@@ -109,6 +109,7 @@ class KnowledgePanel {
     private knowledgeData: KnowledgeData | null = null;
     private extractionSettings: ExtractionSettings;
     private aiModelAvailable: boolean = false;
+    private connectionStatusCallback?: (connected: boolean) => void;
 
     constructor() {
         this.extractionSettings = {
@@ -126,6 +127,7 @@ class KnowledgePanel {
         await this.loadCurrentPageInfo();
         await this.loadAutoIndexSetting();
         await this.checkConnectionStatus();
+        this.setupConnectionStatusListener();
         await this.loadFreshKnowledge();
         await this.loadExtractionSettings();
     }
@@ -1058,6 +1060,22 @@ class KnowledgePanel {
             `;
         }
     }
+
+    private setupConnectionStatusListener(): void {
+        this.connectionStatusCallback = (connected: boolean) => {
+            console.log(`Connection status changed: ${connected ? 'Connected' : 'Disconnected'}`);
+            this.isConnected = connected;
+            this.updateConnectionStatus();
+        };
+        
+        extensionService.onConnectionStatusChange(this.connectionStatusCallback);
+    }
+
+    public cleanup(): void {
+        if (this.connectionStatusCallback) {
+            extensionService.removeConnectionStatusListener(this.connectionStatusCallback);
+        }
+    }
     private async onTabChange() {
         await this.loadCurrentPageInfo();
         await this.loadFreshKnowledge();
@@ -1666,7 +1684,16 @@ class KnowledgePanel {
     }
 }
 
+let knowledgePanelInstance: KnowledgePanel;
+
 document.addEventListener("DOMContentLoaded", () => {
-    const panel = new KnowledgePanel();
-    panel.initialize();
+    knowledgePanelInstance = new KnowledgePanel();
+    knowledgePanelInstance.initialize();
+});
+
+// Add cleanup on window unload
+window.addEventListener('beforeunload', () => {
+    if (knowledgePanelInstance) {
+        knowledgePanelInstance.cleanup();
+    }
 });

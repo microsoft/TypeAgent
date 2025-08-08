@@ -57,6 +57,7 @@ interface UserPreferences {
 class WebsiteLibraryPanelFullPage {
     private isConnected: boolean = false;
     private isInitialized: boolean = false;
+    private connectionStatusCallback?: (connected: boolean) => void;
     private navigation: FullPageNavigation = {
         currentPage: "search",
     };
@@ -119,6 +120,7 @@ class WebsiteLibraryPanelFullPage {
             this.setupImportFunctionality();
 
             await this.checkConnectionStatus();
+            this.setupConnectionStatusListener();
             await this.loadLibraryStats();
             await this.navigateToPage("search");
         } catch (error) {
@@ -238,6 +240,23 @@ class WebsiteLibraryPanelFullPage {
                     text.textContent = "Disconnected";
                 }
             }
+        }
+    }
+
+    private setupConnectionStatusListener(): void {
+        this.connectionStatusCallback = (connected: boolean) => {
+            console.log(`Connection status changed: ${connected ? 'Connected' : 'Disconnected'}`);
+            this.isConnected = connected;
+            this.updateConnectionStatus();
+            this.updatePanelConnectionStatus();
+        };
+        
+        extensionService.onConnectionStatusChange(this.connectionStatusCallback);
+    }
+
+    public cleanup(): void {
+        if (this.connectionStatusCallback) {
+            extensionService.removeConnectionStatusListener(this.connectionStatusCallback);
         }
     }
 
@@ -771,3 +790,10 @@ if (document.readyState === "loading") {
 } else {
     initializeLibraryPanel();
 }
+
+// Add cleanup on window unload
+window.addEventListener('beforeunload', () => {
+    if (libraryPanelInstance) {
+        libraryPanelInstance.cleanup();
+    }
+});

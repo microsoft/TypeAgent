@@ -1,13 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DiscoveryServices } from "./knowledgeUtilities";
+import { DiscoveryServices, extensionService } from "./knowledgeUtilities";
 
 export class KnowledgeDiscoveryPanel {
     private container: HTMLElement;
     private services: DiscoveryServices;
     private discoverData: any = null;
     private isConnected: boolean = true;
+    private connectionStatusCallback?: (connected: boolean) => void;
 
     constructor(container: HTMLElement, services: DiscoveryServices) {
         this.container = container;
@@ -21,6 +22,7 @@ export class KnowledgeDiscoveryPanel {
             emptyState.style.display = "none";
         }
 
+        this.setupConnectionStatusListener();
         await this.loadDiscoverData();
         this.renderContent();
     }
@@ -307,5 +309,13 @@ export class KnowledgeDiscoveryPanel {
         if (!isConnected) {
             this.showConnectionError();
         }
+    }
+
+    private setupConnectionStatusListener(): void {
+        this.connectionStatusCallback = (connected: boolean) => {
+            this.setConnectionStatus(connected);
+        };
+        
+        extensionService.onConnectionStatusChange(this.connectionStatusCallback);
     }
 }
