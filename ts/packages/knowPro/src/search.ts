@@ -82,8 +82,17 @@ export function createSearchOptionsTypical(): SearchOptions {
     };
 }
 
+/**
+ * Search matches returned by searchConversation {@link searchConversation}
+ */
 export type ConversationSearchResult = {
+    /**
+     * The ordinals of matching messages. You can use these ordinals to load messages
+     */
     messageMatches: ScoredMessageOrdinal[];
+    /**
+     * For each matching knowledge type, the ordinals of the matching knowledge.
+     */
     knowledgeMatches: Map<KnowledgeType, SemanticRefSearchResult>;
     rawSearchQuery?: string | undefined;
 };

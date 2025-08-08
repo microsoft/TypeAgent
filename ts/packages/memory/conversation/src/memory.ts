@@ -277,6 +277,86 @@ export abstract class Memory<
         );
     }
 
+    /**
+     * Find matching topics in this conversation
+     * Wrapper around the more powerful searchKnowledge
+     * @param searchTerms
+     * @param topK
+     * @param exactMatch
+     * @returns
+     */
+    public async searchTopics(
+        searchTerms: string | string[],
+        topK?: number,
+        exactMatch: boolean = false,
+    ): Promise<kp.Topic[] | undefined> {
+        const searchTermGroup = kp.createTopicSearchTermGroup(
+            searchTerms,
+            exactMatch,
+        );
+        const matches = await this.searchKnowledge({
+            searchTermGroup,
+            when: { knowledgeType: "topic" },
+        });
+        const topicMatches = matches?.get("topic");
+        if (!topicMatches || topicMatches.semanticRefMatches.length === 0) {
+            return undefined;
+        }
+        /**
+         * Search will find every matching instance of the occurrence of a topic during the conversation
+         * Since we are only interested in the topics themselves,return a distinct list
+         */
+        const distinct = kp.getDistinctTopicMatches(
+            this.conversation.semanticRefs!,
+            topicMatches.semanticRefMatches,
+            topK,
+        );
+        return distinct.map((t) => t.knowledge as kp.Topic);
+    }
+
+    /**
+     * Find matching entities in this conversation
+     * Wrapper around the more powerful searchKnowledge
+     * @param name (Optional) entity name to match
+     * @param type (Optional) entity type to match
+     * @param facetName (Optional) facet name to match
+     * @param facetValue (Optional) facet value  to match
+     * @param topK
+     * @param exactMatch
+     * @returns
+     */
+    public async searchEntities(
+        name: string | undefined,
+        type?: string | undefined,
+        facetName?: string | undefined,
+        facetValue?: string | undefined,
+        topK?: number,
+        exactMatch: boolean = false,
+    ): Promise<kpLib.ConcreteEntity[] | undefined> {
+        const searchTermGroup = kp.createEntitySearchTermGroup(
+            name,
+            type,
+            facetName,
+            facetValue,
+            exactMatch,
+        );
+        const matches = await this.searchKnowledge({
+            searchTermGroup,
+            when: { knowledgeType: "entity" },
+        });
+        const entityMatches = matches?.get("entity");
+        if (!entityMatches || entityMatches.semanticRefMatches.length === 0) {
+            return undefined;
+        }
+
+        const distinct = kp.getDistinctEntityMatches(
+            this.conversation.semanticRefs!,
+            entityMatches.semanticRefMatches,
+            topK,
+        );
+        return distinct.map((t) => t.knowledge as kpLib.ConcreteEntity);
+    }
+
     /***
      * Run a natural language query against this memory.
      * @param {string} searchText - The natural language query text.
@@ -310,6 +390,57 @@ export abstract class Memory<
                 debugContext,
             );
         }
+    }
+
+    /**
+     * Run a query on the memory using topics
+     * Simple wrapper around {@link search}
+     * @param topicTerms
+     * @param {kp.WhenFilter} when
+     * @param {kp.SearchOptions} options
+     * @returns {kp.ConversationSearchResult}
+     */
+    public async searchWithTopics(
+        topicTerms: string | string[],
+        when?: kp.WhenFilter,
+        options?: kp.SearchOptions,
+    ): Promise<kp.ConversationSearchResult | undefined> {
+        const selectExpr: kp.SearchSelectExpr = {
+            searchTermGroup: kp.createTopicSearchTermGroup(topicTerms),
+            when,
+        };
+        return this.search(selectExpr, options);
+    }
+
+    /**
+     * Run a query on the memory using entity matching
+     * Simple wrapper around {@link search}
+     * @param name (Optional) entity name to match
+     * @param type (Optional) entity type to match
+     * @param facetName (Optional) facet name to match
+     * @param facetValue (Optional) facet value  to match
+     * @param {kp.WhenFilter} when
+     * @param {kp.SearchOptions} options
+     * @returns
+     */
+    public async searchWithEntities(
+        name: string | undefined,
+        type?: string | undefined,
+        facetName?: string | undefined,
+        facetValue?: string | undefined,
+        when?: kp.WhenFilter,
+        options?: kp.SearchOptions,
+    ): Promise<kp.ConversationSearchResult | undefined> {
+        const selectExpr: kp.SearchSelectExpr = {
+            searchTermGroup: kp.createEntitySearchTermGroup(
+                name,
+                type,
+                facetName,
+                facetValue,
+            ),
+            when,
+        };
+        return this.search(selectExpr, options);
     }
 
     /**

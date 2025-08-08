@@ -20,6 +20,7 @@ import {
     IMessageCollection,
 } from "./interfaces.js";
 import { conversation as kpLib } from "knowledge-processor";
+import { getSemanticRefsFromScoredOrdinals } from "./searchLib.js";
 
 export function facetValueToString(facet: kpLib.Facet): string {
     const value = facet.value;
@@ -65,14 +66,6 @@ export function* getScoredSemanticRefsFromOrdinals(
             };
         }
     }
-}
-
-export function getSemanticRefsFromScoredOrdinals(
-    semanticRefs: ISemanticRefCollection,
-    scoredOrdinals: ScoredSemanticRefOrdinal[],
-): SemanticRef[] {
-    const ordinals = scoredOrdinals.map((sr) => sr.semanticRefOrdinal);
-    return semanticRefs.getMultiple(ordinals);
 }
 
 export function* messageOrdinalsFromSemanticRefs(semanticRefs: SemanticRef[]) {
