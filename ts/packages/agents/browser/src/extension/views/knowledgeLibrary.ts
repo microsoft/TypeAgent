@@ -452,7 +452,7 @@ class WebsiteLibraryPanelFullPage {
 
             const result =
                 await this.importManager.startWebActivityImport(options);
-            this.importUI.showImportComplete(result);
+            // Don't show completion immediately - let progress updates handle it
         } catch (error) {
             this.importUI.showImportError({
                 type: "processing",
@@ -481,7 +481,7 @@ class WebsiteLibraryPanelFullPage {
             });
 
             const result = await this.importManager.startFolderImport(options);
-            this.importUI.showImportComplete(result);
+            // Don't show completion immediately - let progress updates handle it
         } catch (error) {
             this.importUI.showImportError({
                 type: "processing",

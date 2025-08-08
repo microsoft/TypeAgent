@@ -26,6 +26,7 @@ export class WebsiteImportUI {
         null;
     private completionCallback: ((result: ImportResult) => void) | null = null;
     private errorCallback: ((error: ImportError) => void) | null = null;
+    private isImportComplete: boolean = false;
 
     constructor() {}
 
@@ -54,6 +55,7 @@ export class WebsiteImportUI {
      * Hide any active import modal
      */
     public hideActiveModal(): void {
+        this.isImportComplete = false;
         if (this.activeModal) {
             this.hideModal(this.activeModal);
             this.removeModal(this.activeModal);
@@ -107,6 +109,7 @@ export class WebsiteImportUI {
      * Show import progress in the active modal with smooth transitions
      */
     public showImportProgress(progress: ImportProgress): void {
+        this.isImportComplete = false;
         const modalElement = document.getElementById(this.activeModal || "");
         if (!modalElement) return;
 
@@ -162,11 +165,38 @@ export class WebsiteImportUI {
      * Enhanced updateImportProgress method with better validation and logging
      */
     public updateImportProgress(progress: ImportProgress): void {
+        if (this.isImportComplete) {
+            console.log("🚫 Ignoring progress update - import already completed");
+            return;
+        }
+        
         console.log("🔄 Updating import progress:", progress);
 
         // Validate progress object
         if (!progress) {
             console.warn("❌ Progress object is null or undefined");
+            return;
+        }
+        
+        // Handle completion phase by transitioning to complete UI
+        if (progress.phase === "complete") {
+            console.log("✅ Import phase complete - transitioning to completion UI");
+            const mockResult: ImportResult = {
+                success: true,
+                importId: progress.importId || "",
+                itemCount: progress.processedItems || 0,
+                duration: 0,
+                errors: progress.errors || [],
+                summary: {
+                    totalProcessed: progress.totalItems || 0,
+                    successfullyImported: progress.processedItems || 0,
+                    knowledgeExtracted: 0,
+                    entitiesFound: 0,
+                    topicsIdentified: 0,
+                    actionsDetected: 0
+                }
+            };
+            this.showImportComplete(mockResult);
             return;
         }
 
@@ -233,7 +263,7 @@ export class WebsiteImportUI {
             let newMessage = phaseMessages[progress.phase] || progress.phase;
 
             // Add current item info if available
-            if (progress.currentItem && progress.phase !== "complete") {
+            if (progress.currentItem) {
                 const truncatedItem =
                     progress.currentItem.length > 50
                         ? progress.currentItem.substring(0, 50) + "..."
@@ -329,6 +359,7 @@ export class WebsiteImportUI {
      * Show import completion result
      */
     public showImportComplete(result: ImportResult): void {
+        this.isImportComplete = true;
         const modalElement = document.getElementById(this.activeModal || "");
         if (!modalElement) return;
 
@@ -427,6 +458,7 @@ export class WebsiteImportUI {
      * Show import error
      */
     public showImportError(error: ImportError): void {
+        this.isImportComplete = true;
         const modalElement = document.getElementById(this.activeModal || "");
         if (!modalElement) return;
 
@@ -522,6 +554,7 @@ export class WebsiteImportUI {
 
         if (retryButton) {
             retryButton.addEventListener("click", () => {
+                this.isImportComplete = false;
                 // Reset to form view
                 let formContainer, progressContainer;
 
@@ -1113,7 +1146,23 @@ export class WebsiteImportUI {
     private removeModal(modalId: string): void {
         const modalElement = document.getElementById(modalId);
         if (modalElement) {
-            modalElement.remove();
+            const modalInstance = (window as any).bootstrap.Modal.getInstance(modalElement);
+            if (modalInstance) {
+                modalInstance.dispose();
+            }
+            
+            const formContainer = modalElement.querySelector(modalId === this.webActivityModalId ? 
+                "#webActivityImportForm" : "#folderImportForm");
+            const progressContainer = modalElement.querySelector(modalId === this.webActivityModalId ? 
+                "#webActivityImportProgress" : "#folderImportProgress");
+                
+            if (formContainer && progressContainer) {
+                formContainer.classList.remove("d-none", "fade-out");
+                progressContainer.classList.add("d-none");
+                progressContainer.classList.remove("fade-in");
+            }
+            
+            this.resetModalForm(modalId);
         }
 
         // Clean up any leftover backdrop
@@ -1125,6 +1174,32 @@ export class WebsiteImportUI {
         document.body.classList.remove("modal-open");
         document.body.style.removeProperty("overflow");
         document.body.style.removeProperty("padding-right");
+    }
+
+    private resetModalForm(modalId: string): void {
+        const modalElement = document.getElementById(modalId);
+        if (!modalElement) return;
+        
+        if (modalId === this.webActivityModalId) {
+            modalElement.querySelectorAll(".selected").forEach(el => el.classList.remove("selected"));
+            modalElement.querySelectorAll("input").forEach(input => {
+                if (input.type !== "checkbox" && input.type !== "radio") {
+                    input.value = "";
+                }
+            });
+        } else if (modalId === this.folderImportModalId) {
+            const folderPathInput = modalElement.querySelector("#folderPath") as HTMLInputElement;
+            if (folderPathInput) {
+                folderPathInput.value = "";
+            }
+            modalElement.querySelectorAll("input[type='number']").forEach(input => {
+                const numberInput = input as HTMLInputElement;
+                const defaultValue = numberInput.getAttribute("value");
+                if (defaultValue) {
+                    numberInput.value = defaultValue;
+                }
+            });
+        }
     }
 
     /**
