@@ -86,10 +86,51 @@ export function apiSettingsFromEnv(
                 Authorization: `Bearer ${wikiToken}`,
                 "Api-User-Agent": `TypeAgent/https://github.com/microsoft/TypeAgent`,
             };
-        },
+        }
     };
 }
 
-export function getPageObject(title: string, config: wikipedia.WikipediaApiSettings) {
-    // TODO: implement
+/**
+ * Get the page object of the item with the supplied title.
+ * @param title - The title of the page to retrieve
+ * @param config - The wikipedia API configuration
+ * @returns The page object.
+ */
+export async function getPageObject(title: string, config: wikipedia.WikipediaApiSettings) {
+    // TODO: localization (e.g. en, de, fr, etc.)
+    const response = await fetch(`${config.endpoint}core/v1/wikipedia/en/page/${title}/bare`, { method: "GET", headers: await config.getAPIHeaders() });
+
+    if (response.ok) {
+        return response.json();
+    } else {
+        return undefined;
+    }
 }
+
+/**
+ * 
+ * @param title - The title of the page whose content to get.
+ * @param config - The wikipedia API configuration
+ * @returns - The content of the requetsed page or undefined if there was a problem
+ */
+export async function getPageMarkdown(title: string, config: wikipedia.WikipediaApiSettings): Promise<string | undefined> {
+    // TODO: localization (e.g. en, de, fr, etc.)
+    const url: string = `${config.endpoint}en/page/${encodeWikipediaTitle(title)}`;
+    const response = await fetch(url, { method: "GET", headers: await config.getAPIHeaders() });
+
+    if (response.ok) {
+        return response.text();
+    } else {
+        return undefined;
+    }
+}
+
+/**
+ * Encodes a non-modified (human readable) Wikipedia title for use in a URL.
+ * @param title - The title of the page to encode.
+ * @returns - The encoded title suitable for use in a URL.
+ */
+export function encodeWikipediaTitle(title: string): string {
+  return encodeURIComponent(title.replace(/ /g, '_'));
+}
+

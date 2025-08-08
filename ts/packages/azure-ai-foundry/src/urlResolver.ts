@@ -417,15 +417,17 @@ export async function resolveURLWithWikipedia(
     let retVal = undefined;
     await fetch(`${url}?${parameters}`, { method: "GET", headers: headers })
         .then((response) => response.json())
-        .then((data: any) => {
+        .then(async (data: any) => {
             retVal = data;
             console.log(data);
 
             // go through the pages (max 3)
-            for(let i = 0; i < data.page.length || i < 3; i++) {
-                // get the page data
+            for(let i = 0; i < data.pages.length && i < 3; i++) {
+                const content = await wikipedia.getPageMarkdown(data.pages[i].title, wikipediaConfig);
 
-                    // TODO: implement
+                        // get the "official website" out of the page if it exists
+
+                        console.log(content);
             }
 
 
