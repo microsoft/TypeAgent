@@ -199,9 +199,9 @@ export function createTopicSearchTermGroup(
 
 export function createEntitySearchTermGroup(
     name: string | undefined,
-    type: string | undefined,
-    faceName: string | undefined,
-    facetValue: string | undefined,
+    type?: string | undefined,
+    faceName?: string | undefined,
+    facetValue?: string | undefined,
     exactMatch: boolean = false,
 ): SearchTermGroup {
     const termGroup = createOrMaxTermGroup();

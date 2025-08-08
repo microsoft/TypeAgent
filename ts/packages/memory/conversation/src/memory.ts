@@ -317,23 +317,26 @@ export abstract class Memory<
     /**
      * Find matching entities in this conversation
      * Wrapper around the more powerful searchKnowledge
-     * @param searchTerms
+     * @param name (Optional) entity name to match
+     * @param type (Optional) entity type to match
+     * @param facetName (Optional) facet name to match
+     * @param facetValue (Optional) facet value  to match
      * @param topK
      * @param exactMatch
      * @returns
      */
     public async searchEntities(
         name: string | undefined,
-        type: string | undefined,
-        faceName: string | undefined,
-        facetValue: string | undefined,
+        type?: string | undefined,
+        facetName?: string | undefined,
+        facetValue?: string | undefined,
         topK?: number,
         exactMatch: boolean = false,
     ): Promise<kpLib.ConcreteEntity[] | undefined> {
         const searchTermGroup = kp.createEntitySearchTermGroup(
             name,
             type,
-            faceName,
+            facetName,
             facetValue,
             exactMatch,
         );
@@ -414,7 +417,7 @@ export abstract class Memory<
      * Simple wrapper around {@link search}
      * @param name (Optional) entity name to match
      * @param type (Optional) entity type to match
-     * @param faceName (Optional) facet name to match
+     * @param facetName (Optional) facet name to match
      * @param facetValue (Optional) facet value  to match
      * @param {kp.WhenFilter} when
      * @param {kp.SearchOptions} options
@@ -422,9 +425,9 @@ export abstract class Memory<
      */
     public async searchWithEntities(
         name: string | undefined,
-        type: string | undefined,
-        faceName: string | undefined,
-        facetValue: string | undefined,
+        type?: string | undefined,
+        facetName?: string | undefined,
+        facetValue?: string | undefined,
         when?: kp.WhenFilter,
         options?: kp.SearchOptions,
     ): Promise<kp.ConversationSearchResult | undefined> {
@@ -432,7 +435,7 @@ export abstract class Memory<
             searchTermGroup: kp.createEntitySearchTermGroup(
                 name,
                 type,
-                facetValue,
+                facetName,
                 facetValue,
             ),
             when,
