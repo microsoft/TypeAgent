@@ -391,18 +391,50 @@ export abstract class Memory<
 
     /**
      * Run a query on the memory using topics
-     * @param searchTerms
-     * @param topK
-     * @param exactMatch
-     * @returns
+     * Simple wrapper around {@link search}
+     * @param topicTerms
+     * @param {kp.WhenFilter} when
+     * @param {kp.SearchOptions} options
+     * @returns {kp.ConversationSearchResult}
      */
     public async searchWithTopics(
-        searchTerms: string | string[],
+        topicTerms: string | string[],
         when?: kp.WhenFilter,
         options?: kp.SearchOptions,
     ): Promise<kp.ConversationSearchResult | undefined> {
         const selectExpr: kp.SearchSelectExpr = {
-            searchTermGroup: kp.createTopicSearchTermGroup(searchTerms),
+            searchTermGroup: kp.createTopicSearchTermGroup(topicTerms),
+            when,
+        };
+        return this.search(selectExpr, options);
+    }
+
+    /**
+     * Run a query on the memory using entity matching
+     * Simple wrapper around {@link search}
+     * @param name (Optional) entity name to match
+     * @param type (Optional) entity type to match
+     * @param faceName (Optional) facet name to match
+     * @param facetValue (Optional) facet value  to match
+     * @param {kp.WhenFilter} when
+     * @param {kp.SearchOptions} options
+     * @returns
+     */
+    public async searchWithEntities(
+        name: string | undefined,
+        type: string | undefined,
+        faceName: string | undefined,
+        facetValue: string | undefined,
+        when?: kp.WhenFilter,
+        options?: kp.SearchOptions,
+    ): Promise<kp.ConversationSearchResult | undefined> {
+        const selectExpr: kp.SearchSelectExpr = {
+            searchTermGroup: kp.createEntitySearchTermGroup(
+                name,
+                type,
+                facetValue,
+                facetValue,
+            ),
             when,
         };
         return this.search(selectExpr, options);
