@@ -5,6 +5,7 @@ import * as bingWithGrounding from "./bingWithGrounding.js";
 import * as agents from "./agents.js";
 import { AIProjectClient } from "@azure/ai-projects";
 import { DefaultAzureCredential } from "@azure/identity";
+import { createTypeChat } from "typeagent";
 import {
     Agent,
     MessageContentUnion,
@@ -12,8 +13,16 @@ import {
     ToolUtility,
 } from "@azure/ai-agents";
 import registerDebug from "debug";
-import { wikipedia } from "aiclient";
+import {
+    ChatModelWithStreaming,
+    CompletionSettings,
+    openai,
+    wikipedia,
+    wikipediaSchemas,
+} from "aiclient";
 import { readFileSync } from "fs";
+import { Result } from "typechat";
+import { encodeWikipediaTitle } from "../../aiclient/dist/wikipedia.js";
 
 const debug = registerDebug("typeagent:azure-ai-foundry:urlResolver");
 
@@ -404,9 +413,7 @@ export async function resolveURLWithWikipedia(
         .locale.split("-")[0];
     const searchQuery = `${site}`;
     const numberOfResults = 1;
-    const headers = {
-        Authorization: `Bearer ${await wikipediaConfig.getToken()}`,
-    };
+    const headers = await wikipediaConfig.getAPIHeaders();
 
     const baseUrl = `${wikipediaConfig.endpoint}`;
     const search_endpoint = "/search/page";
@@ -416,15 +423,45 @@ export async function resolveURLWithWikipedia(
         limit: numberOfResults.toString(),
     });
 
-    let retVal = undefined;
+    let retVal: string | undefined = undefined;
     await fetch(`${url}?${parameters}`, { method: "GET", headers: headers })
         .then((response) => response.json())
-        .then((data) => {
-            retVal = data;
-            console.log(data);
+        .then(async (data: any) => {
+            // go through the pages (max 3)
+            for (let i = 0; i < data.pages.length && i < 3; i++) {
+                // default the result to the wikipedia page URL
+                if (retVal === undefined) {
+                    retVal = `https://en.wikipedia.org/wiki/${encodeWikipediaTitle(data.pages[i].title)}`;
+                }
 
-            // TODO: get the "official website" URL from the data (if it exists)
-            // TODO: waiting for Wikipedia arbitration committee to approve Application
+                // get the page markdown
+                const content = await wikipedia.getPageMarkdown(
+                    data.pages[i].title,
+                    wikipediaConfig,
+                );
+
+                if (content) {
+                    const response = await getTypeChatResponse(
+                        content!,
+                        wikipediaConfig,
+                    );
+                    if (response.success) {
+                        const externalLinks =
+                            response.data as wikipediaSchemas.WikipediaPageExternalLinks;
+
+                        // get the "official website" out of the page if it exists
+                        if (externalLinks.officialWebsite) {
+                            retVal = externalLinks.officialWebsite.url;
+                            break; // we found the official website, so break out of the loop
+                        }
+
+                        console.log(externalLinks);
+                    }
+                } else {
+                    // no "official website" found, so just use the wikipedia page URL
+                    retVal = `https://en.wikipedia.org/wiki/${encodeWikipediaTitle(data.pages[i].title)}`;
+                }
+            }
         })
         .catch((error) => {
             console.error("Error fetching data:", error);
@@ -456,4 +493,75 @@ export async function resolveURLByKeyword(
     }
 
     return keyWordsToSites![keyword] ?? null;
+}
+
+async function getTypeChatResponse(
+    pageMarkdown: string,
+    config: wikipedia.WikipediaApiSettings,
+): Promise<Result<wikipediaSchemas.WikipediaPageExternalLinks>> {
+    // Create Model instance
+    let chatModel = createModel(true);
+
+    // Create Chat History
+    let maxContextLength = 8196;
+    let maxWindowLength = 30;
+
+    // create TypeChat object
+    const chat = createTypeChat<wikipediaSchemas.WikipediaPageExternalLinks>(
+        chatModel,
+        `
+export type WikipediaPageExternalLinks = {
+    officialWebsite?: WebPageLink;
+}
+
+export type WebPageLink = {
+    url: string;
+    title?: string;
+}            
+        `,
+        "WikipediaPageExternalLinks",
+        "You extract links from Wikipedia markdown pages.",
+        [],
+        maxContextLength,
+        maxWindowLength,
+    );
+
+    // make the request
+    const chatResponse = await chat.translate(pageMarkdown);
+
+    return chatResponse;
+}
+
+function createModel(fastModel: boolean = true): ChatModelWithStreaming {
+    let apiSettings: openai.ApiSettings | undefined;
+    if (!apiSettings) {
+        if (fastModel) {
+            apiSettings = openai.localOpenAIApiSettingsFromEnv(
+                openai.ModelType.Chat,
+                undefined,
+                "GPT_4O_mini",
+                ["wikipedia"],
+            );
+        } else {
+            // Create default model
+            apiSettings = openai.apiSettingsFromEnv();
+        }
+    }
+
+    let completionSettings: CompletionSettings = {
+        temperature: 1.0,
+        // Max response tokens
+        max_tokens: 1000,
+        // createChatModel will remove it if the model doesn't support it
+        response_format: { type: "json_object" },
+    };
+
+    const chatModel = openai.createChatModel(
+        apiSettings,
+        completionSettings,
+        undefined,
+        ["wikipedia"],
+    );
+
+    return chatModel;
 }

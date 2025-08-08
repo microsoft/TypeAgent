@@ -6,6 +6,7 @@ import {
     SearchResult,
     Website,
     EntityMatch,
+    extensionService,
 } from "./knowledgeUtilities";
 import type {
     DynamicSummary,
@@ -21,6 +22,7 @@ export class KnowledgeSearchPanel {
     private searchDebounceTimer: number | null = null;
     private currentViewMode: "list" | "grid" | "timeline" | "domain" = "list";
     private recentSearches: string[] = [];
+    private connectionStatusCallback?: (connected: boolean) => void;
 
     constructor(container: HTMLElement, services: SearchServices) {
         this.container = container;
@@ -30,6 +32,7 @@ export class KnowledgeSearchPanel {
 
     async initialize(): Promise<void> {
         this.setupEventListeners();
+        this.setupConnectionStatusListener();
         this.updateRecentSearchesDisplay();
     }
 
@@ -607,6 +610,16 @@ export class KnowledgeSearchPanel {
         if (!isConnected && this.currentQuery) {
             this.showConnectionError();
         }
+    }
+
+    private setupConnectionStatusListener(): void {
+        this.connectionStatusCallback = (connected: boolean) => {
+            this.setConnectionStatus(connected);
+        };
+
+        extensionService.onConnectionStatusChange(
+            this.connectionStatusCallback,
+        );
     }
 
     performSearchWithQuery(query: string): void {

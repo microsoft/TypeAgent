@@ -34,7 +34,7 @@ export interface NotificationAction {
 }
 
 // Re-export types from base class for backward compatibility
-export {
+export type {
     LibraryStats,
     SearchFilters,
     KnowledgeStatus,

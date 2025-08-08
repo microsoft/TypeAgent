@@ -88,6 +88,69 @@ export interface EntityMatch {
  */
 export abstract class ExtensionServiceBase {
     // ===================================================================
+    // CONNECTION STATUS EVENT SYSTEM
+    // ===================================================================
+
+    private connectionStatusCallbacks: ((connected: boolean) => void)[] = [];
+    private connectionStatusListenerSetup = false;
+
+    /**
+     * Register a callback for connection status changes
+     */
+    public onConnectionStatusChange(
+        callback: (connected: boolean) => void,
+    ): void {
+        this.connectionStatusCallbacks.push(callback);
+
+        if (!this.connectionStatusListenerSetup) {
+            this.setupConnectionStatusListener();
+            this.connectionStatusListenerSetup = true;
+        }
+    }
+
+    /**
+     * Remove connection status callback
+     */
+    public removeConnectionStatusListener(
+        callback: (connected: boolean) => void,
+    ): void {
+        const index = this.connectionStatusCallbacks.indexOf(callback);
+        if (index > -1) {
+            this.connectionStatusCallbacks.splice(index, 1);
+        }
+    }
+
+    /**
+     * Setup message listener for connection status changes
+     */
+    private setupConnectionStatusListener(): void {
+        const messageListener = (
+            message: any,
+            sender: any,
+            sendResponse: any,
+        ) => {
+            if (message.type === "connectionStatusChanged") {
+                this.connectionStatusCallbacks.forEach((callback) => {
+                    try {
+                        callback(message.connected);
+                    } catch (error) {
+                        console.error(
+                            "Connection status callback error:",
+                            error,
+                        );
+                    }
+                });
+            }
+        };
+
+        try {
+            chrome.runtime.onMessage.addListener(messageListener);
+        } catch (error) {
+            console.error("Failed to setup connection status listener:", error);
+        }
+    }
+
+    // ===================================================================
     // SHARED METHOD IMPLEMENTATIONS
     // ===================================================================
 

@@ -13,3 +13,4 @@ export {
     getChatModelMaxConcurrency,
 } from "./modelResource.js";
 export * as wikipedia from "./wikipedia.js";
+export * as wikipediaSchemas from "./wikipediaSchemas.js";

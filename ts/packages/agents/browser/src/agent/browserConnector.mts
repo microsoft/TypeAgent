@@ -119,7 +119,8 @@ export class BrowserConnector {
                     if (
                         message.includes(
                             "MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND",
-                        )
+                        ) ||
+                        message.includes("Tabs cannot be edited right now")
                     ) {
                         return "";
                     }

@@ -37,7 +37,7 @@ import { TabTitleIndex, createTabTitleIndex } from "./tabTitleIndex.mjs";
 import { ChildProcess, fork } from "child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import fs from "node:fs";
+import fs, { readFileSync } from "node:fs";
 
 import {
     CommandHandler,
@@ -84,7 +84,7 @@ import { ShoppingActions } from "./commerce/schema/userActions.mjs";
 import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
 import { BrowserControl } from "../common/browserControl.mjs";
-import { openai, TextEmbeddingModel } from "aiclient";
+import { openai, TextEmbeddingModel, wikipedia } from "aiclient";
 import { urlResolver, bingWithGrounding } from "azure-ai-foundry";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 import { deleteCachedSchema } from "./crossword/cachedSchema.mjs";
@@ -123,6 +123,12 @@ export type BrowserActionContext = {
     localHostPort: number;
     macrosStore?: MacroStore | undefined; // Add MacroStore instance
     currentWebSearchResults?: Map<string, any[]> | undefined; // Store search results for follow-up actions
+    resolverSettings: {
+        searchResolver?: boolean | undefined;
+        keywordResolver?: boolean | undefined;
+        wikipediaResolver?: boolean | undefined;
+        historyResolver?: boolean | undefined;
+    };
 };
 
 export interface urlResolutionAction {
@@ -151,6 +157,12 @@ async function initializeBrowserContext(
         index: undefined,
         localHostPort,
         macrosStore: undefined, // Will be initialized in updateBrowserContext
+        resolverSettings: {
+            searchResolver: true,
+            keywordResolver: true,
+            wikipediaResolver: true,
+            historyResolver: false,
+        },
     };
 }
 
@@ -243,6 +255,26 @@ async function updateBrowserContext(
                     );
                 }
             });
+        }
+
+        // rehydrate resolver settings
+        const sessionDir: string | undefined =
+            await getSessionFolderPath(context);
+        const contents: string = await readFileSync(
+            path.join(sessionDir!, "settings.json"),
+            "utf-8",
+        );
+
+        if (contents.length > 0) {
+            const config = JSON.parse(contents);
+            context.agentContext.resolverSettings.searchResolver =
+                config.searchResolver;
+            context.agentContext.resolverSettings.keywordResolver =
+                config.keywordResolver;
+            context.agentContext.resolverSettings.wikipediaResolver =
+                config.wikipediaResolver;
+            context.agentContext.resolverSettings.historyResolver =
+                config.historyResolver;
         }
     } else {
         const webSocket = context.agentContext.webSocket;
@@ -614,6 +646,13 @@ async function getSessionFolderPath(
     return sessionDir;
 }
 
+async function saveSettings(context: SessionContext<BrowserActionContext>) {
+    await context.sessionStorage?.write(
+        "settings.json",
+        JSON.stringify(context.agentContext.resolverSettings),
+    );
+}
+
 async function resolveEntity(
     type: string,
     name: string,
@@ -701,43 +740,55 @@ async function resolveWebPage(
             }
 
             // try to resolve URL using website visit history first
-            const historyUrl = await resolveURLWithHistory(context, site);
-            if (historyUrl) {
-                debug(`Resolved URL from history: ${historyUrl}`);
-                return historyUrl;
-            }
-            const cachehitUrl = await urlResolver.resolveURLByKeyword(site);
-            if (cachehitUrl) {
-                debug(`Resolved URL from cache: ${cachehitUrl}`);
-
-                if (
-                    cachehitUrl.indexOf("https://") !== 0 &&
-                    cachehitUrl.indexOf("http://") !== 0
-                ) {
-                    return "https://" + cachehitUrl;
-                } else {
-                    return cachehitUrl;
+            if (context.agentContext.resolverSettings.historyResolver) {
+                const historyUrl = await resolveURLWithHistory(context, site);
+                if (historyUrl) {
+                    debug(`Resolved URL from history: ${historyUrl}`);
+                    return historyUrl;
                 }
             }
-            // TODO: reenable
-            // const wikiPediaUrl = await urlResolver.resolveURLWithWikipedia(
-            //     site,
-            //     wikipedia.apiSettingsFromEnv(),
-            // );
-            // if (wikiPediaUrl) {
-            //     debug(`Resolved URL using Wikipedia: ${wikiPediaUrl}`);
-            //     return wikiPediaUrl;
-            // }
+
+            // try to resolve URL string using known keyword matching
+            if (context.agentContext.resolverSettings.keywordResolver) {
+                const cachehitUrl = await urlResolver.resolveURLByKeyword(site);
+                if (cachehitUrl) {
+                    debug(`Resolved URL from cache: ${cachehitUrl}`);
+
+                    if (
+                        cachehitUrl.indexOf("https://") !== 0 &&
+                        cachehitUrl.indexOf("http://") !== 0
+                    ) {
+                        return "https://" + cachehitUrl;
+                    } else {
+                        return cachehitUrl;
+                    }
+                }
+            }
+
+            // try to resolve URL by using the Wikipedia API
+            if (context.agentContext.resolverSettings.wikipediaResolver) {
+                debug(`Resolving URL using Wikipedia for: ${site}`);
+                const wikiPediaUrl = await urlResolver.resolveURLWithWikipedia(
+                    site,
+                    wikipedia.apiSettingsFromEnv(),
+                );
+                if (wikiPediaUrl) {
+                    debug(`Resolved URL using Wikipedia: ${wikiPediaUrl}`);
+                    return wikiPediaUrl;
+                }
+            }
 
             // try to resolve URL using LLM + internet search
-            const url = await urlResolver.resolveURLWithSearch(
-                site,
-                bingWithGrounding.apiSettingsFromEnv(),
-            );
+            if (context.agentContext.resolverSettings.searchResolver) {
+                const url = await urlResolver.resolveURLWithSearch(
+                    site,
+                    bingWithGrounding.apiSettingsFromEnv(),
+                );
 
-            if (url) {
-                debug(`Resolved URL using Bing with Grounding: ${url}`);
-                return url;
+                if (url) {
+                    debug(`Resolved URL using Bing with Grounding: ${url}`);
+                    return url;
+                }
             }
 
             // can't get a URL
@@ -2082,6 +2133,113 @@ export const handlers: CommandHandlerTable = {
                             false,
                         );
                         displaySuccess("Use client browser control.", context);
+                    },
+                },
+            },
+        },
+        resolver: {
+            description: "Toggle URL resolver methods",
+            defaultSubCommand: "list",
+            commands: {
+                list: {
+                    description: "List all available URL resolvers",
+                    run: async (
+                        context: ActionContext<BrowserActionContext>,
+                    ) => {
+                        const agentContext =
+                            context.sessionContext.agentContext;
+                        const resolvers = Object.entries(
+                            agentContext.resolverSettings,
+                        )
+                            .filter(([, enabled]) => enabled !== undefined)
+                            .map(([name, enabled]) => ({
+                                name,
+                                enabled,
+                            }));
+                        displaySuccess(
+                            `Available resolvers: ${JSON.stringify(resolvers)}`,
+                            context,
+                        );
+                    },
+                },
+                search: {
+                    description: "Toggle search resolver",
+                    run: async (
+                        context: ActionContext<BrowserActionContext>,
+                    ) => {
+                        const agentContext =
+                            context.sessionContext.agentContext;
+                        agentContext.resolverSettings.searchResolver =
+                            !agentContext.resolverSettings.searchResolver;
+                        displaySuccess(
+                            `Search resolver is now ${
+                                agentContext.resolverSettings.searchResolver
+                                    ? "enabled"
+                                    : "disabled"
+                            }`,
+                            context,
+                        );
+                        saveSettings(context.sessionContext);
+                    },
+                },
+                keyword: {
+                    description: "Toggle keyword resolver",
+                    run: async (
+                        context: ActionContext<BrowserActionContext>,
+                    ) => {
+                        const agentContext =
+                            context.sessionContext.agentContext;
+                        agentContext.resolverSettings.keywordResolver =
+                            !agentContext.resolverSettings.keywordResolver;
+                        displaySuccess(
+                            `Keyword resolver is now ${
+                                agentContext.resolverSettings.keywordResolver
+                                    ? "enabled"
+                                    : "disabled"
+                            }`,
+                            context,
+                        );
+                        saveSettings(context.sessionContext);
+                    },
+                },
+                wikipedia: {
+                    description: "Toggle Wikipedia resolver",
+                    run: async (
+                        context: ActionContext<BrowserActionContext>,
+                    ) => {
+                        const agentContext =
+                            context.sessionContext.agentContext;
+                        agentContext.resolverSettings.wikipediaResolver =
+                            !agentContext.resolverSettings.wikipediaResolver;
+                        displaySuccess(
+                            `Wikipedia resolver is now ${
+                                agentContext.resolverSettings.wikipediaResolver
+                                    ? "enabled"
+                                    : "disabled"
+                            }`,
+                            context,
+                        );
+                        saveSettings(context.sessionContext);
+                    },
+                },
+                history: {
+                    description: "Toggle history resolver",
+                    run: async (
+                        context: ActionContext<BrowserActionContext>,
+                    ) => {
+                        const agentContext =
+                            context.sessionContext.agentContext;
+                        agentContext.resolverSettings.historyResolver =
+                            !agentContext.resolverSettings.historyResolver;
+                        displaySuccess(
+                            `History resolver is now ${
+                                agentContext.resolverSettings.historyResolver
+                                    ? "enabled"
+                                    : "disabled"
+                            }`,
+                            context,
+                        );
+                        saveSettings(context.sessionContext);
                     },
                 },
             },
