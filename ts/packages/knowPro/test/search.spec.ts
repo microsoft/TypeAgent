@@ -33,6 +33,7 @@ import {
     resolveAndVerifyKnowledgeMatches,
     resolveAndVerifySemanticRefs,
     verifyDidMatchSearchGroup,
+    verifyPropertySearchTermName,
     verifySemanticRefResult,
 } from "./verify.js";
 import { hasTestKeys, describeIf } from "test-lib";
@@ -242,7 +243,7 @@ describe("search.offline", () => {
                 const term = termGroup.terms[i];
                 expect(isPropertyTerm(term)).toBeTruthy();
                 if (isPropertyTerm(term)) {
-                    expect(term.propertyName).toEqual(PropertyNames.Topic);
+                    verifyPropertySearchTermName(term, PropertyNames.Topic);
                     expect(term.propertyValue.term.text).toEqual(topicTerms[i]);
                 }
             }
@@ -256,9 +257,9 @@ describe("search.offline", () => {
             validateSearchTermGroup(termGroup);
             expect(termGroup.terms.length).toEqual(4);
             let propertyTerm = termGroup.terms[2] as PropertySearchTerm;
-            expect(propertyTerm.propertyName).toEqual("facet.name");
+            verifyPropertySearchTermName(propertyTerm, "facet.name");
             propertyTerm = termGroup.terms[3] as PropertySearchTerm;
-            expect(propertyTerm.propertyName).toEqual("facet.value");
+            verifyPropertySearchTermName(propertyTerm, "facet.value");
         },
         testTimeout,
     );
