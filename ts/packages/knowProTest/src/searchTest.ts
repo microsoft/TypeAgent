@@ -4,7 +4,12 @@
 import { KnowproContext } from "./knowproContext.js";
 import { dateTime, readJsonFile, writeJsonFile } from "typeagent";
 import { error, Result, success } from "typechat";
-import { BatchCallback, Comparison } from "./types.js";
+import {
+    BatchCallback,
+    Comparison,
+    SearchRequest,
+    searchRequestDef,
+} from "./types.js";
 import {
     compareNumberArray,
     compareObject,
@@ -12,9 +17,10 @@ import {
     dateRangeToTimeRange,
     getCommandArgs,
     queryError,
+    runTestBatch,
 } from "./common.js";
 import { getLangSearchResult } from "./knowproCommands.js";
-import { getBatchFileLines } from "interactive-app";
+import { getBatchFileLines, parseTypedArguments } from "interactive-app";
 import { execSearchRequest } from "./knowproCommands.js";
 import * as kp from "knowpro";
 import { TestRunReport } from "./logging.js";
@@ -34,6 +40,7 @@ export type LangSearchResult = {
     actionMatches?: kp.SemanticRefOrdinal[] | undefined;
 };
 
+// TODO: convert this to use runBatch from common.ts
 export async function runSearchBatch(
     context: KnowproContext,
     batchFilePath: string,
@@ -69,6 +76,7 @@ export async function runSearchBatch(
     }
     return success(results);
 }
+
 async function getSearchResults(
     context: KnowproContext,
     args: string[],
@@ -445,4 +453,62 @@ export function compareSearchExprScope(
         }
     }
     return undefined;
+}
+
+export interface ScopeQueryComparison
+    extends Comparison<
+        kp.querySchema2.SearchQuery,
+        kp.querySchema.SearchQuery
+    > {
+    query: string;
+}
+
+export async function compareSearchQueryTranslations(
+    queryTranslator: kp.SearchQueryTranslator,
+    query: string,
+): Promise<Result<ScopeQueryComparison>> {
+    if (!queryTranslator.translate2) {
+        return error("not supported");
+    }
+    const result = await queryTranslator.translate(query);
+    if (!result.success) {
+        return result;
+    }
+    const resultScope = await queryTranslator.translate2!(query);
+    if (!resultScope.success) {
+        return resultScope;
+    }
+
+    let cmp: ScopeQueryComparison = {
+        actual: resultScope.data,
+        expected: result.data,
+        query,
+    };
+    cmp.error = compareSearchQueryScope(result.data, resultScope.data);
+    return success(cmp);
+}
+
+export async function compareSearchQueryTranslationsBatch(
+    context: KnowproContext,
+    batchFilePath: string,
+    cb?: BatchCallback<Result<ScopeQueryComparison>>,
+    stopOnError: boolean = false,
+): Promise<Result<ScopeQueryComparison[]>> {
+    const queryTranslator = context.getConversationQueryTranslator();
+    return runTestBatch(
+        batchFilePath,
+        (_, args: string[]) => {
+            const request = parseTypedArguments<SearchRequest>(
+                args,
+                searchRequestDef(),
+            );
+            return compareSearchQueryTranslations(
+                queryTranslator,
+                request.query,
+            );
+        },
+        undefined,
+        cb,
+        stopOnError,
+    );
 }

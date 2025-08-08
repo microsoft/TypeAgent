@@ -7,10 +7,9 @@ TextPro uses markdown as in intermediate format. Other formats like html are con
 TextPro analyzes markdown documents and extracts:
 
 - Document blocks/chunks such as headings, lists, tables, links, images, etc.
-- Inferred knowledge such as entities, topics structured tags etc. This knowledge can be inferred from markdown information without using an LLM.  
-  TextPro is also used by Document memory
+- Inferred knowledge such as entities, topics structured tags etc. This knowledge can be inferred from markdown information without using an LLM.
 
-TextPro is currently used by [Document Memory](../memory//conversation/src/docImport.ts) to import html and markdown documents.
+TextPro is used by [Document Memory](../memory//conversation/src/docImport.ts) to import html and markdown documents.
 
 ## Module Overview
 
