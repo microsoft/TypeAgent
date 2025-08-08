@@ -200,6 +200,7 @@ function getExplainerOptions(
 
     const usedTranslators = new Map<string, TypeAgentTranslator>();
     const actions = requestAction.actions;
+    const activeSchemas = new Set(context.agents.getActiveSchemas());
     for (const { action } of actions) {
         if (isUnknownAction(action)) {
             // can't explain unknown actions
@@ -212,9 +213,10 @@ function getExplainerOptions(
             return undefined;
         }
 
+        // TODO: This does not support activities.
         usedTranslators.set(
             schemaName,
-            getTranslatorForSchema(context, schemaName),
+            getTranslatorForSchema(context, schemaName, activeSchemas),
         );
     }
     const { list, value, translate } =
