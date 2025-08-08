@@ -166,10 +166,12 @@ export class WebsiteImportUI {
      */
     public updateImportProgress(progress: ImportProgress): void {
         if (this.isImportComplete) {
-            console.log("🚫 Ignoring progress update - import already completed");
+            console.log(
+                "🚫 Ignoring progress update - import already completed",
+            );
             return;
         }
-        
+
         console.log("🔄 Updating import progress:", progress);
 
         // Validate progress object
@@ -177,10 +179,12 @@ export class WebsiteImportUI {
             console.warn("❌ Progress object is null or undefined");
             return;
         }
-        
+
         // Handle completion phase by transitioning to complete UI
         if (progress.phase === "complete") {
-            console.log("✅ Import phase complete - transitioning to completion UI");
+            console.log(
+                "✅ Import phase complete - transitioning to completion UI",
+            );
             const mockResult: ImportResult = {
                 success: true,
                 importId: progress.importId || "",
@@ -193,8 +197,8 @@ export class WebsiteImportUI {
                     knowledgeExtracted: 0,
                     entitiesFound: 0,
                     topicsIdentified: 0,
-                    actionsDetected: 0
-                }
+                    actionsDetected: 0,
+                },
             };
             this.showImportComplete(mockResult);
             return;
@@ -1146,22 +1150,30 @@ export class WebsiteImportUI {
     private removeModal(modalId: string): void {
         const modalElement = document.getElementById(modalId);
         if (modalElement) {
-            const modalInstance = (window as any).bootstrap.Modal.getInstance(modalElement);
+            const modalInstance = (window as any).bootstrap.Modal.getInstance(
+                modalElement,
+            );
             if (modalInstance) {
                 modalInstance.dispose();
             }
-            
-            const formContainer = modalElement.querySelector(modalId === this.webActivityModalId ? 
-                "#webActivityImportForm" : "#folderImportForm");
-            const progressContainer = modalElement.querySelector(modalId === this.webActivityModalId ? 
-                "#webActivityImportProgress" : "#folderImportProgress");
-                
+
+            const formContainer = modalElement.querySelector(
+                modalId === this.webActivityModalId
+                    ? "#webActivityImportForm"
+                    : "#folderImportForm",
+            );
+            const progressContainer = modalElement.querySelector(
+                modalId === this.webActivityModalId
+                    ? "#webActivityImportProgress"
+                    : "#folderImportProgress",
+            );
+
             if (formContainer && progressContainer) {
                 formContainer.classList.remove("d-none", "fade-out");
                 progressContainer.classList.add("d-none");
                 progressContainer.classList.remove("fade-in");
             }
-            
+
             this.resetModalForm(modalId);
         }
 
@@ -1179,26 +1191,32 @@ export class WebsiteImportUI {
     private resetModalForm(modalId: string): void {
         const modalElement = document.getElementById(modalId);
         if (!modalElement) return;
-        
+
         if (modalId === this.webActivityModalId) {
-            modalElement.querySelectorAll(".selected").forEach(el => el.classList.remove("selected"));
-            modalElement.querySelectorAll("input").forEach(input => {
+            modalElement
+                .querySelectorAll(".selected")
+                .forEach((el) => el.classList.remove("selected"));
+            modalElement.querySelectorAll("input").forEach((input) => {
                 if (input.type !== "checkbox" && input.type !== "radio") {
                     input.value = "";
                 }
             });
         } else if (modalId === this.folderImportModalId) {
-            const folderPathInput = modalElement.querySelector("#folderPath") as HTMLInputElement;
+            const folderPathInput = modalElement.querySelector(
+                "#folderPath",
+            ) as HTMLInputElement;
             if (folderPathInput) {
                 folderPathInput.value = "";
             }
-            modalElement.querySelectorAll("input[type='number']").forEach(input => {
-                const numberInput = input as HTMLInputElement;
-                const defaultValue = numberInput.getAttribute("value");
-                if (defaultValue) {
-                    numberInput.value = defaultValue;
-                }
-            });
+            modalElement
+                .querySelectorAll("input[type='number']")
+                .forEach((input) => {
+                    const numberInput = input as HTMLInputElement;
+                    const defaultValue = numberInput.getAttribute("value");
+                    if (defaultValue) {
+                        numberInput.value = defaultValue;
+                    }
+                });
         }
     }
 

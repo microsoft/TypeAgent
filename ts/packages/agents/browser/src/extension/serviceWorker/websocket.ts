@@ -20,22 +20,26 @@ let settings: Record<string, any>;
  */
 function broadcastConnectionStatus(connected: boolean): void {
     chrome.tabs.query({}, (tabs) => {
-        tabs.forEach(tab => {
-            if (tab.url?.startsWith('chrome-extension://')) {
-                chrome.tabs.sendMessage(tab.id!, {
-                    type: 'connectionStatusChanged',
-                    connected: connected,
-                    timestamp: Date.now()
-                }).catch(() => {});
+        tabs.forEach((tab) => {
+            if (tab.url?.startsWith("chrome-extension://")) {
+                chrome.tabs
+                    .sendMessage(tab.id!, {
+                        type: "connectionStatusChanged",
+                        connected: connected,
+                        timestamp: Date.now(),
+                    })
+                    .catch(() => {});
             }
         });
     });
-    
-    chrome.runtime.sendMessage({
-        type: 'connectionStatusChanged',
-        connected: connected,
-        timestamp: Date.now()
-    }).catch(() => {});
+
+    chrome.runtime
+        .sendMessage({
+            type: "connectionStatusChanged",
+            connected: connected,
+            timestamp: Date.now(),
+        })
+        .catch(() => {});
 }
 
 /**

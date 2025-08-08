@@ -315,7 +315,9 @@ export class KnowledgeDiscoveryPanel {
         this.connectionStatusCallback = (connected: boolean) => {
             this.setConnectionStatus(connected);
         };
-        
-        extensionService.onConnectionStatusChange(this.connectionStatusCallback);
+
+        extensionService.onConnectionStatusChange(
+            this.connectionStatusCallback,
+        );
     }
 }

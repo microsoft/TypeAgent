@@ -616,8 +616,10 @@ export class KnowledgeSearchPanel {
         this.connectionStatusCallback = (connected: boolean) => {
             this.setConnectionStatus(connected);
         };
-        
-        extensionService.onConnectionStatusChange(this.connectionStatusCallback);
+
+        extensionService.onConnectionStatusChange(
+            this.connectionStatusCallback,
+        );
     }
 
     performSearchWithQuery(query: string): void {

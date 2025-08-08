@@ -245,18 +245,24 @@ class WebsiteLibraryPanelFullPage {
 
     private setupConnectionStatusListener(): void {
         this.connectionStatusCallback = (connected: boolean) => {
-            console.log(`Connection status changed: ${connected ? 'Connected' : 'Disconnected'}`);
+            console.log(
+                `Connection status changed: ${connected ? "Connected" : "Disconnected"}`,
+            );
             this.isConnected = connected;
             this.updateConnectionStatus();
             this.updatePanelConnectionStatus();
         };
-        
-        extensionService.onConnectionStatusChange(this.connectionStatusCallback);
+
+        extensionService.onConnectionStatusChange(
+            this.connectionStatusCallback,
+        );
     }
 
     public cleanup(): void {
         if (this.connectionStatusCallback) {
-            extensionService.removeConnectionStatusListener(this.connectionStatusCallback);
+            extensionService.removeConnectionStatusListener(
+                this.connectionStatusCallback,
+            );
         }
     }
 
@@ -792,7 +798,7 @@ if (document.readyState === "loading") {
 }
 
 // Add cleanup on window unload
-window.addEventListener('beforeunload', () => {
+window.addEventListener("beforeunload", () => {
     if (libraryPanelInstance) {
         libraryPanelInstance.cleanup();
     }

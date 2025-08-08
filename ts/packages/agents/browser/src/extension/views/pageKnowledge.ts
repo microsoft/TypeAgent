@@ -1063,17 +1063,23 @@ class KnowledgePanel {
 
     private setupConnectionStatusListener(): void {
         this.connectionStatusCallback = (connected: boolean) => {
-            console.log(`Connection status changed: ${connected ? 'Connected' : 'Disconnected'}`);
+            console.log(
+                `Connection status changed: ${connected ? "Connected" : "Disconnected"}`,
+            );
             this.isConnected = connected;
             this.updateConnectionStatus();
         };
-        
-        extensionService.onConnectionStatusChange(this.connectionStatusCallback);
+
+        extensionService.onConnectionStatusChange(
+            this.connectionStatusCallback,
+        );
     }
 
     public cleanup(): void {
         if (this.connectionStatusCallback) {
-            extensionService.removeConnectionStatusListener(this.connectionStatusCallback);
+            extensionService.removeConnectionStatusListener(
+                this.connectionStatusCallback,
+            );
         }
     }
     private async onTabChange() {
@@ -1692,7 +1698,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 // Add cleanup on window unload
-window.addEventListener('beforeunload', () => {
+window.addEventListener("beforeunload", () => {
     if (knowledgePanelInstance) {
         knowledgePanelInstance.cleanup();
     }
