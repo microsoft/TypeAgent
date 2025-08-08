@@ -67,6 +67,8 @@ export interface IMessage extends IKnowledgeSource {
 export type ScoredMessageOrdinal = {
     /**
      * The ordinal number of the message.
+     * Use this ordinal to get the message frm the conversation's message collection {@link IMessageCollection}
+     * @see {@link IConversation.messages}
      */
     messageOrdinal: MessageOrdinal;
     /**
@@ -187,7 +189,9 @@ export interface IConversation<TMessage extends IMessage = IMessage> {
  */
 export type ScoredSemanticRefOrdinal = {
     /**
-     * Ordinal number for the semantic reference.
+     * Ordinal number for the SemanticRef {@link SemanticRef}.
+     * Use this ordinal to resolve the SemanticRef from the conversation's semantic refs collection {@link ISemanticRefCollection}
+     * @see {@link IConversation.semanticRefs}
      */
     semanticRefOrdinal: SemanticRefOrdinal;
     /**
@@ -657,7 +661,13 @@ export type WhenFilter = {
 };
 
 export type SemanticRefSearchResult = {
+    /**
+     * The search terms that caused these semantic refs to match
+     */
     termMatches: Set<string>;
+    /**
+     * Scored semantic ref matches
+     */
     semanticRefMatches: ScoredSemanticRefOrdinal[];
 };
 
