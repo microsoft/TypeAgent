@@ -20,6 +20,12 @@ export interface MemorySettings {
     queryTranslator?: kp.SearchQueryTranslator | undefined;
     answerGenerator?: kp.IAnswerGenerator | undefined;
     fileSaveSettings?: IndexFileSettings | undefined;
+    /**
+     * Experimental: use improved usage of 'scopes' in queries
+     * Improved scoping leverages Structured Tags
+     * @see {kp.searchConversationWithLanguage2}
+     */
+    useScopedSearch?: boolean | undefined;
 }
 
 export function createMemorySettings(
@@ -285,14 +291,25 @@ export abstract class Memory<
         debugContext?: kp.LanguageSearchDebugContext,
     ): Promise<Result<kp.ConversationSearchResult[]>> {
         options = this.adjustLanguageSearchOptions(options);
-        return kp.searchConversationWithLanguage(
-            this.conversation,
-            searchText,
-            this.getQueryTranslator(),
-            options,
-            langSearchFilter,
-            debugContext,
-        );
+        if (!this.useScoped) {
+            return kp.searchConversationWithLanguage(
+                this.conversation,
+                searchText,
+                this.getQueryTranslator(),
+                options,
+                langSearchFilter,
+                debugContext,
+            );
+        } else {
+            return kp.searchConversationWithLanguage2(
+                this.conversation,
+                searchText,
+                this.getQueryTranslator(),
+                options,
+                langSearchFilter,
+                debugContext,
+            );
+        }
     }
 
     /**
@@ -306,12 +323,21 @@ export abstract class Memory<
         options?: kp.LanguageSearchOptions,
     ): Promise<Result<kp.querySchema.SearchQuery>> {
         options = this.adjustLanguageSearchOptions(options);
-        return kp.searchQueryFromLanguage(
-            this.conversation,
-            this.getQueryTranslator(),
-            searchText,
-            this.getModelInstructions(),
-        );
+        if (!this.useScoped) {
+            return kp.searchQueryFromLanguage(
+                this.conversation,
+                this.getQueryTranslator(),
+                searchText,
+                this.getModelInstructions(),
+            );
+        } else {
+            return kp.searchQueryFromLanguage2(
+                this.conversation,
+                this.getQueryTranslator(),
+                searchText,
+                this.getModelInstructions(),
+            );
+        }
     }
 
     /**
@@ -416,6 +442,22 @@ export abstract class Memory<
         return undefined;
     }
 
+    protected addStandardNoiseTerms() {
+        addNoiseWordsFromFile(
+            this.noiseTerms,
+            ms.getAbsolutePathFromUrl(import.meta.url, "noiseTerms.txt"),
+        );
+    }
+
+    protected ensureAnswerGenerator(): kp.IAnswerGenerator {
+        if (this.settings.answerGenerator === undefined) {
+            this.settings.answerGenerator = new kp.AnswerGenerator(
+                kp.createAnswerGeneratorSettings(this.settings.languageModel),
+            );
+        }
+        return this.settings.answerGenerator;
+    }
+
     private getQueryTranslator(): kp.SearchQueryTranslator {
         const queryTranslator = this.settings.queryTranslator;
         if (!queryTranslator) {
@@ -439,19 +481,7 @@ export abstract class Memory<
         return options;
     }
 
-    protected addStandardNoiseTerms() {
-        addNoiseWordsFromFile(
-            this.noiseTerms,
-            ms.getAbsolutePathFromUrl(import.meta.url, "noiseTerms.txt"),
-        );
-    }
-
-    protected ensureAnswerGenerator(): kp.IAnswerGenerator {
-        if (this.settings.answerGenerator === undefined) {
-            this.settings.answerGenerator = new kp.AnswerGenerator(
-                kp.createAnswerGeneratorSettings(this.settings.languageModel),
-            );
-        }
-        return this.settings.answerGenerator;
+    private get useScoped(): boolean {
+        return this.settings.useScopedSearch ?? false;
     }
 }

@@ -11,11 +11,14 @@ import {
     searchRequestDef,
 } from "./types.js";
 import {
+    compareArray,
     compareNumberArray,
     compareObject,
     compareStringArray,
     dateRangeToTimeRange,
     getCommandArgs,
+    isStem,
+    isUndefinedOrEmpty,
     queryError,
     runTestBatch,
 } from "./common.js";
@@ -354,6 +357,7 @@ export function compareSearchExpr(
 function compareActionTerm(
     x?: kp.querySchema.ActionTerm,
     y?: kp.querySchema.ActionTerm,
+    strict: boolean = true,
 ): string | undefined {
     if (x === undefined && y === undefined) {
         return undefined;
@@ -362,26 +366,35 @@ function compareActionTerm(
         x?.actionVerbs?.words,
         y?.actionVerbs?.words,
         "verbs",
+        true,
+        strict ? undefined : (xv, yv) => isStem(xv, yv) || isStem(yv, xv),
     );
     if (error !== undefined) {
         return error;
     }
-    error = compareObject(x?.actorEntities, y?.actorEntities, "actorEntities");
+    error = compareEntityTerms(
+        x?.actorEntities,
+        y?.actorEntities,
+        "actorEntities",
+        strict,
+    );
     if (error !== undefined) {
         return error;
     }
-    error = compareObject(
+    error = compareEntityTerms(
         x?.additionalEntities,
         y?.additionalEntities,
         "additionalEntities",
+        strict,
     );
     if (error !== undefined) {
         return error;
     }
-    error = compareObject(
+    error = compareEntityTerms(
         x?.targetEntities,
         y?.targetEntities,
         "targetEntities",
+        strict,
     );
     if (error !== undefined) {
         return error;
@@ -390,6 +403,81 @@ function compareActionTerm(
         return `isInformational: ${x?.isInformational} !== ${y?.isInformational}`;
     }
     return undefined;
+}
+
+function compareEntityTerms(
+    x: kp.querySchema.EntityTerm[] | "*" | undefined,
+    y: kp.querySchema.EntityTerm[] | "*" | undefined,
+    label: string,
+    strict: boolean = true,
+): string | undefined {
+    if (isUndefinedOrEmpty(x) && isUndefinedOrEmpty(y)) {
+        return undefined;
+    }
+    if (!Array.isArray(x) || !Array.isArray(y)) {
+        return compareObject(x, y, label);
+    }
+    return compareArray(x, y, label, (xt, yt) =>
+        compareEntityTerm(xt, yt, label, strict),
+    );
+}
+
+function compareEntityTerm(
+    x: kp.querySchema.EntityTerm,
+    y: kp.querySchema.EntityTerm,
+    label: string,
+    strict: boolean,
+): string | undefined {
+    if (strict) {
+        return compareObject(x, y, label);
+    }
+
+    if (x.name !== y.name) {
+        return `${label}.name: ${x.name} !== ${y.name}`;
+    }
+
+    let error = compareTypes(x.type, y.type, label);
+    if (error !== undefined) {
+        return error;
+    }
+
+    if (x.isNamePronoun !== y.isNamePronoun) {
+        return `${label}.isNamePronoun: ${x.isNamePronoun} !== ${y.isNamePronoun}`;
+    }
+
+    return compareObject(x.facets, y.facets, label + ".facets");
+
+    function compareTypes(
+        xType: string[] | undefined,
+        yType: string[] | undefined,
+        label: string,
+    ): string | undefined {
+        let error = compareStringArray(xType, yType, label + ".type");
+        if (error === undefined) {
+            return undefined;
+        }
+        if (xType !== undefined && isTypeVariation(xType, yType)) {
+            return undefined;
+        }
+        if (yType !== undefined && isTypeVariation(yType, xType)) {
+            return undefined;
+        }
+        return error;
+    }
+}
+
+function isTypeVariation(xType: string[], yType?: string[]): boolean {
+    if (xType.length === 1 && isUndefinedOrEmpty(yType)) {
+        const xValue = xType[0];
+        switch (xValue.toLowerCase()) {
+            default:
+                break;
+
+            case "person":
+                return true;
+        }
+    }
+    return false;
 }
 
 export function compareSearchQueryScope(
@@ -414,6 +502,7 @@ export function compareSearchQueryScope(
 export function compareSearchExprScope(
     s1: kp.querySchema.SearchExpr,
     s2: kp.querySchema2.SearchExpr,
+    strict: boolean = false,
 ): string | undefined {
     if (s1.filters.length !== s2.filters.length) {
         return `SearchExpr.filters.length: ${s1.filters.length} !== ${s2.filters.length}`;
@@ -423,15 +512,20 @@ export function compareSearchExprScope(
         const f1 = s1.filters[i];
         const f2 = s2.filters[i];
 
-        let error = compareObject(
+        let error = compareEntityTerms(
             f1.entitySearchTerms,
             f2.entitySearchTerms,
             "entitySearchTerms",
+            strict,
         );
         if (error !== undefined) {
             return error;
         }
-        error = compareActionTerm(f1.actionSearchTerm, f2.actionSearchTerm);
+        error = compareActionTerm(
+            f1.actionSearchTerm,
+            f2.actionSearchTerm,
+            strict,
+        );
         if (error !== undefined) {
             return error;
         }

@@ -182,7 +182,7 @@ export class ChalkWriter extends ConsoleWriter {
 
     public writePromptSection(prompt: PromptSection) {
         if (prompt.content) {
-            this.writeLine(prompt.role);
+            this.writeLine(`[Role: ${prompt.role}]`);
             if (typeof prompt.content === "string") {
                 this.writeLine(prompt.content);
             } else {

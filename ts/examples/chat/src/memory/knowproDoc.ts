@@ -70,6 +70,7 @@ export async function createKnowproDocMemoryCommands(
                 ),
                 buildIndex: argBool("Index the imported podcast", true),
                 v2: argBool("Use v2 knowledge extraction", false),
+                scoped: argBool("Use scoped queries", true),
             },
         };
     }
@@ -84,7 +85,7 @@ export async function createKnowproDocMemoryCommands(
             namedArgs.filePath,
             namedArgs.maxCharsPerChunk,
             undefined,
-            kpContext.createMemorySettings(),
+            createDocMemorySettings(namedArgs.scoped),
         );
         kpContext.conversation = context.docMemory;
         writeDocInfo(context.docMemory);
@@ -101,6 +102,7 @@ export async function createKnowproDocMemoryCommands(
             description: "Load existing Doc memory",
             options: {
                 filePath: argSourceFile(),
+                scoped: argBool("Use scoped queries", true),
             },
         };
     }
@@ -118,7 +120,7 @@ export async function createKnowproDocMemoryCommands(
         const docMemory = await cm.DocMemory.readFromFile(
             path.dirname(memoryFilePath),
             getFileName(memoryFilePath),
-            kpContext.createMemorySettings(),
+            createDocMemorySettings(namedArgs.scoped),
         );
         clock.stop();
 
@@ -233,6 +235,14 @@ export async function createKnowproDocMemoryCommands(
                 context.printer.write(chunk);
             }
         }
+    }
+
+    function createDocMemorySettings(useScoped: boolean) {
+        const settings = kpContext.createMemorySettings();
+        if (useScoped !== undefined && useScoped === true) {
+            settings.useScopedSearch = true;
+        }
+        return settings;
     }
     return;
 }

@@ -1089,7 +1089,9 @@ export async function searchQueryExprFromLanguage2(
 
 /**
  * Experimental...
- * Allows NLP to specify scoping.
+ * Uses an improved schema to better capture "scope" clauses from natural language queries
+ * Scopes can now be explicitly specified as 'sub-queries'... scope filters. This leads to a more
+ * robust "where" operator
  *
  * Search a conversation using natural language. Returns {@link ConversationSearchResult} containing
  * relevant knowledge and messages.

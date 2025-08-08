@@ -557,15 +557,7 @@ export async function createKnowproTestCommands(
                 (result, index, total) => {
                     context.printer.writeProgress(index + 1, total);
                     if (result.success) {
-                        const cmp = result.data;
-                        if (cmp.error) {
-                            writeSearchComparison(cmp);
-                        } else {
-                            context.printer.writeLineInColor(
-                                chalk.green,
-                                cmp.query,
-                            );
-                        }
+                        writeSearchComparison(result.data);
                     } else {
                         context.printer.writeError(result.message);
                     }
@@ -690,11 +682,16 @@ export async function createKnowproTestCommands(
     }
 
     function writeSearchComparison(cmp: kpTest.ScopeQueryComparison): void {
-        context.printer.writeJsonInColor(chalk.gray, cmp.expected);
-        context.printer.writeHeading("Scope");
-        context.printer.writeJson(cmp.actual);
         if (cmp.error) {
-            context.printer.writeError(cmp.error);
+            context.printer.writeLineInColor(chalk.redBright, cmp.query);
+            context.printer.writeJsonInColor(chalk.green, cmp.expected);
+            context.printer.writeHeading("Scope");
+            context.printer.writeJsonInColor(chalk.red, cmp.actual);
+            if (cmp.error) {
+                context.printer.writeError(cmp.error);
+            }
+        } else {
+            context.printer.writeLineInColor(chalk.greenBright, cmp.query);
         }
     }
 
