@@ -76,7 +76,6 @@ export function apiSettingsFromEnv(
             return wikiToken!;
         },
         getAPIHeaders: async (): Promise<any> => {
-
             // get the token first
             if (!wikiToken) {
                 await apiSettingsFromEnv(env).getToken();
@@ -86,7 +85,7 @@ export function apiSettingsFromEnv(
                 Authorization: `Bearer ${wikiToken}`,
                 "Api-User-Agent": `TypeAgent/https://github.com/microsoft/TypeAgent`,
             };
-        }
+        },
     };
 }
 
@@ -96,9 +95,15 @@ export function apiSettingsFromEnv(
  * @param config - The wikipedia API configuration
  * @returns The page object.
  */
-export async function getPageObject(title: string, config: wikipedia.WikipediaApiSettings) {
+export async function getPageObject(
+    title: string,
+    config: wikipedia.WikipediaApiSettings,
+) {
     // TODO: localization (e.g. en, de, fr, etc.)
-    const response = await fetch(`${config.endpoint}core/v1/wikipedia/en/page/${title}/bare`, { method: "GET", headers: await config.getAPIHeaders() });
+    const response = await fetch(
+        `${config.endpoint}core/v1/wikipedia/en/page/${title}/bare`,
+        { method: "GET", headers: await config.getAPIHeaders() },
+    );
 
     if (response.ok) {
         return response.json();
@@ -108,15 +113,21 @@ export async function getPageObject(title: string, config: wikipedia.WikipediaAp
 }
 
 /**
- * 
+ *
  * @param title - The title of the page whose content to get.
  * @param config - The wikipedia API configuration
  * @returns - The content of the requetsed page or undefined if there was a problem
  */
-export async function getPageMarkdown(title: string, config: wikipedia.WikipediaApiSettings): Promise<string | undefined> {
+export async function getPageMarkdown(
+    title: string,
+    config: wikipedia.WikipediaApiSettings,
+): Promise<string | undefined> {
     // TODO: localization (e.g. en, de, fr, etc.)
     const url: string = `${config.endpoint}en/page/${encodeWikipediaTitle(title)}`;
-    const response = await fetch(url, { method: "GET", headers: await config.getAPIHeaders() });
+    const response = await fetch(url, {
+        method: "GET",
+        headers: await config.getAPIHeaders(),
+    });
 
     if (response.ok) {
         return response.text();
@@ -131,6 +142,5 @@ export async function getPageMarkdown(title: string, config: wikipedia.Wikipedia
  * @returns - The encoded title suitable for use in a URL.
  */
 export function encodeWikipediaTitle(title: string): string {
-  return encodeURIComponent(title.replace(/ /g, '_'));
+    return encodeURIComponent(title.replace(/ /g, "_"));
 }
-

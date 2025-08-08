@@ -6,9 +6,9 @@ export type WikipediaPageExternalLinks = {
     //officialLinks?: WebPageLink[];
     //additionalLinks?: WebPageLink[];
     //images?: WebPageLink[];
-}
+};
 
 export type WebPageLink = {
     url: string;
     title?: string;
-}
+};

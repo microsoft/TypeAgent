@@ -128,7 +128,7 @@ export type BrowserActionContext = {
         keywordResolver?: boolean | undefined;
         wikipediaResolver?: boolean | undefined;
         historyResolver?: boolean | undefined;
-    }
+    };
 };
 
 export interface urlResolutionAction {
@@ -161,8 +161,8 @@ async function initializeBrowserContext(
             searchResolver: true,
             keywordResolver: true,
             wikipediaResolver: true,
-            historyResolver: false
-        }
+            historyResolver: false,
+        },
     };
 }
 
@@ -258,17 +258,24 @@ async function updateBrowserContext(
         }
 
         // rehydrate resolver settings
-        const sessionDir: string | undefined = await getSessionFolderPath(context);
-        const contents: string = await readFileSync(path.join(sessionDir!, "settings.json"), "utf-8");
-        
+        const sessionDir: string | undefined =
+            await getSessionFolderPath(context);
+        const contents: string = await readFileSync(
+            path.join(sessionDir!, "settings.json"),
+            "utf-8",
+        );
+
         if (contents.length > 0) {
             const config = JSON.parse(contents);
-            context.agentContext.resolverSettings.searchResolver = config.searchResolver;
-            context.agentContext.resolverSettings.keywordResolver = config.keywordResolver;
-            context.agentContext.resolverSettings.wikipediaResolver = config.wikipediaResolver;
-            context.agentContext.resolverSettings.historyResolver = config.historyResolver;
+            context.agentContext.resolverSettings.searchResolver =
+                config.searchResolver;
+            context.agentContext.resolverSettings.keywordResolver =
+                config.keywordResolver;
+            context.agentContext.resolverSettings.wikipediaResolver =
+                config.wikipediaResolver;
+            context.agentContext.resolverSettings.historyResolver =
+                config.historyResolver;
         }
-
     } else {
         const webSocket = context.agentContext.webSocket;
         if (webSocket) {
@@ -640,7 +647,10 @@ async function getSessionFolderPath(
 }
 
 async function saveSettings(context: SessionContext<BrowserActionContext>) {
-    await context.sessionStorage?.write("settings.json", JSON.stringify(context.agentContext.resolverSettings));
+    await context.sessionStorage?.write(
+        "settings.json",
+        JSON.stringify(context.agentContext.resolverSettings),
+    );
 }
 
 async function resolveEntity(
@@ -766,7 +776,7 @@ async function resolveWebPage(
                     debug(`Resolved URL using Wikipedia: ${wikiPediaUrl}`);
                     return wikiPediaUrl;
                 }
-            }            
+            }
 
             // try to resolve URL using LLM + internet search
             if (context.agentContext.resolverSettings.searchResolver) {
@@ -2141,9 +2151,7 @@ export const handlers: CommandHandlerTable = {
                         const resolvers = Object.entries(
                             agentContext.resolverSettings,
                         )
-                            .filter(
-                                ([, enabled]) => enabled !== undefined,
-                            )
+                            .filter(([, enabled]) => enabled !== undefined)
                             .map(([name, enabled]) => ({
                                 name,
                                 enabled,
@@ -2234,7 +2242,7 @@ export const handlers: CommandHandlerTable = {
                         saveSettings(context.sessionContext);
                     },
                 },
-            }
-        }
+            },
+        },
     },
 };

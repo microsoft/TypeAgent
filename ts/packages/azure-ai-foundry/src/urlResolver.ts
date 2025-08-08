@@ -13,7 +13,13 @@ import {
     ToolUtility,
 } from "@azure/ai-agents";
 import registerDebug from "debug";
-import { ChatModelWithStreaming, CompletionSettings, openai, wikipedia, wikipediaSchemas } from "aiclient";
+import {
+    ChatModelWithStreaming,
+    CompletionSettings,
+    openai,
+    wikipedia,
+    wikipediaSchemas,
+} from "aiclient";
 import { readFileSync } from "fs";
 import { Result } from "typechat";
 import { encodeWikipediaTitle } from "../../aiclient/dist/wikipedia.js";
@@ -421,22 +427,27 @@ export async function resolveURLWithWikipedia(
     await fetch(`${url}?${parameters}`, { method: "GET", headers: headers })
         .then((response) => response.json())
         .then(async (data: any) => {
-
             // go through the pages (max 3)
-            for(let i = 0; i < data.pages.length && i < 3; i++) {
-
+            for (let i = 0; i < data.pages.length && i < 3; i++) {
                 // default the result to the wikipedia page URL
                 if (retVal === undefined) {
                     retVal = `https://en.wikipedia.org/wiki/${encodeWikipediaTitle(data.pages[i].title)}`;
                 }
 
                 // get the page markdown
-                const content = await wikipedia.getPageMarkdown(data.pages[i].title, wikipediaConfig);
+                const content = await wikipedia.getPageMarkdown(
+                    data.pages[i].title,
+                    wikipediaConfig,
+                );
 
-                if (content){
-                    const response = await getTypeChatResponse(content!, wikipediaConfig);
+                if (content) {
+                    const response = await getTypeChatResponse(
+                        content!,
+                        wikipediaConfig,
+                    );
                     if (response.success) {
-                        const externalLinks = response.data as wikipediaSchemas.WikipediaPageExternalLinks
+                        const externalLinks =
+                            response.data as wikipediaSchemas.WikipediaPageExternalLinks;
 
                         // get the "official website" out of the page if it exists
                         if (externalLinks.officialWebsite) {
@@ -484,7 +495,10 @@ export async function resolveURLByKeyword(
     return keyWordsToSites![keyword] ?? null;
 }
 
-async function getTypeChatResponse(pageMarkdown: string, config: wikipedia.WikipediaApiSettings): Promise<Result<wikipediaSchemas.WikipediaPageExternalLinks>> {
+async function getTypeChatResponse(
+    pageMarkdown: string,
+    config: wikipedia.WikipediaApiSettings,
+): Promise<Result<wikipediaSchemas.WikipediaPageExternalLinks>> {
     // Create Model instance
     let chatModel = createModel(true);
 
@@ -511,7 +525,7 @@ export type WebPageLink = {
         maxContextLength,
         maxWindowLength,
     );
-    
+
     // make the request
     const chatResponse = await chat.translate(pageMarkdown);
 
