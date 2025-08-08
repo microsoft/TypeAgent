@@ -61,8 +61,13 @@ export function setActivityContext(
             : undefined);
 
     if (context.session.getConfig().execution.activity) {
-        const { activityName, description, state, activityEndAction } =
-            resultActivityContext;
+        const {
+            activityName,
+            description,
+            state,
+            activityEndAction,
+            restricted,
+        } = resultActivityContext;
         let action: AppAction | undefined;
         if (activityEndAction !== undefined) {
             action = structuredClone(activityEndAction);
@@ -83,6 +88,7 @@ export function setActivityContext(
             openLocalView:
                 localViewAction ?? context.activityContext?.openLocalView,
             activityEndAction: action,
+            restricted,
         };
 
         if (context.activityContext === undefined) {
