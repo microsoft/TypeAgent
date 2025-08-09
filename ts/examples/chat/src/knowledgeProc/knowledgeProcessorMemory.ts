@@ -673,7 +673,7 @@ export async function runKnowledgeProcessorCommands(): Promise<void> {
             if (count % 10 === 0) {
                 clock.stop();
                 totalElapsed += clock.elapsedMs;
-                printer.writeTiming(chalk.cyan, clock, "last 10 records");
+                printer.writeTiming(clock, "last 10 records", chalk.cyan);
                 // write out elapsed time in seconds
                 printer.writeLine(
                     `Processed ${count} records with total elapsed time: ${millisecondsToString(
@@ -794,7 +794,7 @@ export async function runKnowledgeProcessorCommands(): Promise<void> {
             if (count % 10 === 0) {
                 clock.stop();
                 totalElapsed += clock.elapsedMs;
-                printer.writeTiming(chalk.cyan, clock, "last 10 records");
+                printer.writeTiming(clock, "last 10 records", chalk.cyan);
                 // write out elapsed time in seconds
                 printer.writeLine(
                     `Processed ${count} records with total elapsed time: ${millisecondsToString(
@@ -1551,7 +1551,7 @@ export async function runKnowledgeProcessorCommands(): Promise<void> {
             }
             clock.stop();
             printer.writeLine();
-            printer.writeTiming(chalk.cyanBright, clock);
+            printer.writeTiming(clock, undefined, chalk.cyanBright);
             if (!result) {
                 printer.writeError("No result");
                 return undefined;

@@ -15,14 +15,14 @@ import {
 import { ChatModel } from "aiclient";
 import { createKnowledgeModel } from "./conversationIndex.js";
 import { BatchTask, runInBatches } from "./taskQueue.js";
-import { Tag } from "./interfaces.js";
+import { MessageTag, StructuredTag, Tag } from "./interfaces.js";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import * as knowledgeSchema2 from "./knowledgeSchema_v2.js";
 
 /**
  * Create a knowledge extractor using the given Chat Model
  * @param chatModel
- * @returns
+ * @returns Knowledge extractor
  */
 export function createKnowledgeExtractor(
     chatModel?: ChatModel,
@@ -162,7 +162,7 @@ function createTranslator2(
             `\`\`\`\n${schema}\`\`\`\n` +
             `The following are messages in a conversation:\n` +
             `"""\n${request}\n"""\n` +
-            `The following is the user request translated into a JSON object with no spaces of indentation and no properties with the value undefined:\n`
+            `The following is the user request translated into a JSON object with zero spaces of indentation and no properties with the value undefined:\n`
         );
     }
 }
@@ -241,4 +241,12 @@ function inverseActionFromAction2(
         action.params = action2.params;
     }
     return action;
+}
+
+export function isTag(tag: MessageTag): tag is StructuredTag {
+    if (typeof tag === "object") {
+        return (tag as StructuredTag).name !== undefined;
+    }
+
+    return false;
 }

@@ -12,14 +12,6 @@ import {
     Relationship,
 } from "./schema/knowledgeExtraction.mjs";
 import {
-    RelationshipDiscovery,
-    RelationshipResult,
-} from "./relationshipDiscovery.js";
-import {
-    TemporalQueryProcessor,
-    TemporalPattern,
-} from "./temporalQueryProcessor.js";
-import {
     ExtractionMode,
     ExtractionInput,
     AIModelRequiredError,
@@ -339,15 +331,6 @@ export async function handleKnowledgeAction(
         case "clearKnowledgeIndex":
             return await clearKnowledgeIndex(parameters, context);
 
-        case "discoverRelationships":
-            return await discoverRelationships(parameters, context);
-
-        case "analyzeTemporalPatterns":
-            return await analyzeTemporalPatterns(parameters, context);
-
-        case "generateTemporalSuggestions":
-            return await generateTemporalSuggestions(parameters, context);
-
         case "getExtractionAnalytics":
             return await getExtractionAnalytics(parameters, context);
 
@@ -394,7 +377,7 @@ export async function extractKnowledgeFromPage(
         extractEntities: boolean;
         extractRelationships: boolean;
         suggestQuestions: boolean;
-        mode?: "basic" | "summary" | "content" | "actions" | "full";
+        mode?: "basic" | "summary" | "content" | "full";
     },
     context: SessionContext<BrowserActionContext>,
 ): Promise<EnhancedKnowledgeExtractionResult> {
@@ -435,8 +418,6 @@ export async function extractKnowledgeFromPage(
 
         return {
             ...aggregatedResults,
-            // Enhanced action data is now properly included in aggregatedResults
-            // detectedActions and actionSummary are included if actions were detected
         };
     } catch (error) {
         console.error("Error extracting knowledge from fragments:", error);
@@ -452,7 +433,7 @@ export async function indexWebPageContent(
         extractKnowledge: boolean;
         timestamp: string;
         textOnly?: boolean;
-        mode?: "basic" | "content" | "macros" | "full";
+        mode?: "basic" | "content" | "full";
     },
     context: SessionContext<BrowserActionContext>,
 ): Promise<{
@@ -493,11 +474,6 @@ export async function indexWebPageContent(
             source: "history",
             visitDate: parameters.timestamp,
         };
-
-        visitInfo.pageType = website.determinePageType(
-            parameters.url,
-            parameters.title,
-        );
 
         const websiteObj = website.importWebsiteVisit(
             visitInfo,
@@ -840,208 +816,6 @@ function extractDomainFromUrl(url: string): string {
         return urlObj.hostname;
     } catch {
         return url;
-    }
-}
-
-// Cross-page intelligence functions
-export async function discoverRelationships(
-    parameters: {
-        url: string;
-        knowledge: any;
-        maxResults?: number;
-    },
-    context: SessionContext<BrowserActionContext>,
-): Promise<{
-    success: boolean;
-    relationships: RelationshipResult[];
-    totalFound: number;
-}> {
-    try {
-        const relationshipDiscovery = new RelationshipDiscovery(context);
-
-        const relationships = await relationshipDiscovery.discoverRelationships(
-            parameters.url,
-            parameters.knowledge,
-            parameters.maxResults || 10,
-        );
-
-        return {
-            success: true,
-            relationships,
-            totalFound: relationships.reduce(
-                (sum, result) => sum + result.relatedPages.length,
-                0,
-            ),
-        };
-    } catch (error) {
-        console.error("Error discovering relationships:", error);
-        return {
-            success: false,
-            relationships: [],
-            totalFound: 0,
-        };
-    }
-}
-
-// === TEMPORAL ANALYSIS FUNCTIONS ===
-
-export async function analyzeTemporalPatterns(
-    parameters: {
-        query?: string;
-        timeframe?: "week" | "month" | "quarter" | "year";
-        maxResults?: number;
-    },
-    context: SessionContext<BrowserActionContext>,
-): Promise<{
-    success: boolean;
-    patterns: TemporalPattern[];
-    totalAnalyzed: number;
-}> {
-    try {
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection || websiteCollection.messages.length === 0) {
-            return {
-                success: false,
-                patterns: [],
-                totalAnalyzed: 0,
-            };
-        }
-
-        const temporalProcessor = new TemporalQueryProcessor(context);
-        const websites = websiteCollection.messages.getAll();
-
-        // Filter by timeframe if specified
-        let filteredWebsites = websites;
-        if (parameters.timeframe) {
-            const now = new Date();
-            const thresholds: { [key: string]: number } = {
-                week: 7,
-                month: 30,
-                quarter: 90,
-                year: 365,
-            };
-            const days = thresholds[parameters.timeframe] || 30;
-            const threshold = new Date(
-                now.getTime() - days * 24 * 60 * 60 * 1000,
-            );
-
-            filteredWebsites = websites.filter((site: any) => {
-                const visitDate =
-                    site.metadata.visitDate || site.metadata.bookmarkDate;
-                return visitDate && new Date(visitDate) >= threshold;
-            });
-        }
-
-        const patterns =
-            await temporalProcessor.analyzeTemporalPatterns(filteredWebsites);
-        const limitedPatterns = patterns.slice(0, parameters.maxResults || 10);
-
-        return {
-            success: true,
-            patterns: limitedPatterns,
-            totalAnalyzed: filteredWebsites.length,
-        };
-    } catch (error) {
-        console.error("Error analyzing temporal patterns:", error);
-        return {
-            success: false,
-            patterns: [],
-            totalAnalyzed: 0,
-        };
-    }
-}
-
-export async function generateTemporalSuggestions(
-    parameters: {
-        maxSuggestions?: number;
-    },
-    context: SessionContext<BrowserActionContext>,
-): Promise<{
-    success: boolean;
-    suggestions: string[];
-    contextInfo: {
-        recentActivityDays: number;
-        uniqueDomains: number;
-        uniqueTopics: number;
-    };
-}> {
-    try {
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection || websiteCollection.messages.length === 0) {
-            return {
-                success: false,
-                suggestions: [
-                    "What have I been learning lately?",
-                    "Show me this week's discoveries",
-                    "Display my recent browsing timeline",
-                ],
-                contextInfo: {
-                    recentActivityDays: 0,
-                    uniqueDomains: 0,
-                    uniqueTopics: 0,
-                },
-            };
-        }
-
-        const temporalProcessor = new TemporalQueryProcessor(context);
-        const suggestions =
-            await temporalProcessor.generateTemporalSuggestions(
-                websiteCollection,
-            );
-
-        // Calculate context info
-        const websites = websiteCollection.messages.getAll();
-        const recentThreshold = new Date();
-        recentThreshold.setDate(recentThreshold.getDate() - 7);
-
-        const recentSites = websites.filter((site: any) => {
-            const visitDate =
-                site.metadata.visitDate || site.metadata.bookmarkDate;
-            return visitDate && new Date(visitDate) >= recentThreshold;
-        });
-
-        const uniqueDomains = new Set(
-            recentSites.map((site: any) => {
-                try {
-                    return new URL(site.metadata.url).hostname;
-                } catch {
-                    return site.metadata.url;
-                }
-            }),
-        ).size;
-
-        const uniqueTopics = new Set();
-        recentSites.forEach((site: any) => {
-            const knowledge = site.getKnowledge();
-            if (knowledge?.topics) {
-                knowledge.topics.forEach((topic: string) =>
-                    uniqueTopics.add(topic),
-                );
-            }
-        });
-
-        return {
-            success: true,
-            suggestions: suggestions.slice(0, parameters.maxSuggestions || 8),
-            contextInfo: {
-                recentActivityDays: 7,
-                uniqueDomains,
-                uniqueTopics: uniqueTopics.size,
-            },
-        };
-    } catch (error) {
-        console.error("Error generating temporal suggestions:", error);
-        return {
-            success: false,
-            suggestions: [],
-            contextInfo: {
-                recentActivityDays: 0,
-                uniqueDomains: 0,
-                uniqueTopics: 0,
-            },
-        };
     }
 }
 

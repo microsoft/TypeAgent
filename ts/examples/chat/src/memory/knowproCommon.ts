@@ -166,3 +166,12 @@ export async function getLangSearchResult(
 
     return searchResults;
 }
+
+export function setKnowledgeExtractorV2(settings: kp.ConversationSettings) {
+    const extractor = settings.semanticRefIndexSettings.knowledgeExtractor;
+    if (extractor) {
+        extractor.translator = kp.createKnowledgeTranslator2(
+            extractor.translator!.model,
+        );
+    }
+}

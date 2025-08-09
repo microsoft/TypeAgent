@@ -11,8 +11,8 @@ export type FacetTerm = {
 };
 
 // Use to find information about specific, tangible people, places, institutions, things and document parts only.
-// Document parts like headings, sections , links, lists etc. are entities with facets.
 // This includes entities with particular facets
+// Document parts like headings, sections , links, lists etc. are named ENTITIES with facets.
 // Abstract concepts or topics are not entities.
 // Any terms will match fuzzily.
 export type EntityTerm = {
@@ -25,10 +25,11 @@ export type EntityTerm = {
     // An entity can have multiple types; entity types should be single words
     type?: string[];
     // Facet terms search for properties or attributes of the entity.
-    // Eg: color(blue), profession(writer), author(*), aunt(Agatha), weight(4kg), phoneNumber(...), title(*) etc.
+    // Eg: color(blue), profession(writer), author(*), aunt(Agatha), weight(4kg), phoneNumber(...), title(*), level(3) etc.
     facets?: FacetTerm[];
 };
 
+// Use for action verbs only. Ensure nouns are not misinterpreted as verbs
 export type VerbsTerm = {
     words: string[]; // individual words in single or compound verb
     tense: "Past" | "Present" | "Future";
@@ -48,14 +49,15 @@ export type ActionTerm = {
     additionalEntities?: EntityTerm[];
     // Is the intent of the phrase translated to this ActionTerm to actually get information about a specific entities?
     // Examples:
-    // true: if asking for specific information about an entity, such as "What is Mia's phone number?" or "Where did Jane study?"
+    // true: if asking for specific information about an entity, such as "What did Mia say her phone number was?"
     // false if involves actions and interactions between entities, such as "What phone number did Mia mention in her note to Jane?"
     isInformational: boolean;
 };
 
 export type ScopeFilter = {
     // Search terms to use to limit search
-    searchTerms?: string[] | undefined;
+    // Document parts like headings are NAMED ENTITIES with facets.
+    entitySearchTerms?: EntityTerm[] | undefined;
     // Use only if request explicitly asks for time range, particular year, month etc.
     timeRange?: DateTimeRange | undefined; // in this time range
 };
@@ -64,13 +66,16 @@ export type ScopeFilter = {
 // Search a search engine using filters:
 // entitySearchTerms cannot contain entities already in actionSearchTerms
 export type SearchFilter = {
+    // Use actionSearchTerm for queries involving actions and interactions between entities.
     actionSearchTerm?: ActionTerm;
+    // Use entitySearchTerms for queries asking for specific information about entities and their attributes.
+    // E.g. "What is Mia's phone number?" or "Where did Jane study?"
     entitySearchTerms?: EntityTerm[];
     // searchTerms:
-    // Use for all concepts, topics, or other search terms that don't fit ActionTerms or EntityTerms
+    // Use for all concepts, topics, or other search terms that don't fit (or are not already handled by) ActionTerms or EntityTerms
     // - Do not use noisy searchTerms like "topic", "topics", "subject", "discussion" etc. even if they are mentioned in the user request
     // - Phrases like 'email address' or 'first name' are a single term
-    // - use empty searchTerms array when use asks for summaries
+    // - use empty searchTerms array when user asks for summaries
     searchTerms?: string[];
     // Use to limit matches to particular subset of the document
     // If the user request specifies a particular section or heading to search within, use their names as scopeSubQuery.searchTerms to limit the search.

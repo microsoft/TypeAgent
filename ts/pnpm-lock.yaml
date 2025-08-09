@@ -9,8 +9,8 @@ importers:
   .:
     devDependencies:
       '@fluidframework/build-tools':
-        specifier: ^0.56.0
-        version: 0.56.0(@types/node@20.17.47)
+        specifier: ^0.57.0
+        version: 0.57.0(@types/node@20.17.47)
       '@types/node':
         specifier: ^20.17.28
         version: 20.17.47
@@ -133,9 +133,6 @@ importers:
       typescript:
         specifier: ~5.4.5
         version: 5.4.5
-      website-memory:
-        specifier: workspace:*
-        version: link:../../packages/memory/website
     devDependencies:
       '@types/better-sqlite3':
         specifier: 7.6.11
@@ -688,6 +685,61 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
+  examples/websiteAliases:
+    dependencies:
+      '@azure/ai-agents':
+        specifier: ^1.0.0-beta.3
+        version: 1.0.0-beta.3
+      '@azure/ai-projects':
+        specifier: ^1.0.0-beta.8
+        version: 1.0.0-beta.8(encoding@0.1.13)(ws@8.18.2)(zod@3.24.4)
+      '@azure/identity':
+        specifier: ^4.10.0
+        version: 4.10.0
+      azure-ai-foundry:
+        specifier: workspace:*
+        version: link:../../packages/azure-ai-foundry
+      chalk:
+        specifier: ^5.4.1
+        version: 5.4.1
+      code-processor:
+        specifier: workspace:*
+        version: link:../../packages/codeProcessor
+      common-utils:
+        specifier: workspace:*
+        version: link:../../packages/commonUtils
+      debug:
+        specifier: ^4.4.0
+        version: 4.4.1(supports-color@8.1.1)
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.5.0
+      fs-extra:
+        specifier: ^11.3.0
+        version: 11.3.0
+      puppeteer:
+        specifier: ^23.11.1
+        version: 23.11.1(typescript@5.4.5)
+      typeagent:
+        specifier: workspace:*
+        version: link:../../packages/typeagent
+      typechat:
+        specifier: ^0.1.1
+        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+    devDependencies:
+      '@types/fs-extra':
+        specifier: ^11.0.4
+        version: 11.0.4
+      copyfiles:
+        specifier: ^2.4.1
+        version: 2.4.1
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+
   examples/whisperClient:
     dependencies:
       chalk:
@@ -1032,8 +1084,8 @@ importers:
         specifier: ^0.2.3
         version: 0.2.3(esbuild@0.25.4)
       '@fluidframework/build-tools':
-        specifier: ^0.56.0
-        version: 0.56.0(@types/node@20.17.47)
+        specifier: ^0.57.0
+        version: 0.57.0(@types/node@20.17.47)
       '@types/chrome':
         specifier: ^0.0.256
         version: 0.0.256
@@ -1471,9 +1523,6 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../../aiclient
-      common-utils:
-        specifier: workspace:*
-        version: link:../../commonUtils
       debug:
         specifier: ^4.3.4
         version: 4.4.1(supports-color@8.1.1)
@@ -1513,9 +1562,6 @@ importers:
       prosemirror-view:
         specifier: ^1.31.0
         version: 1.40.0
-      typeagent:
-        specifier: workspace:*
-        version: link:../../typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
@@ -1994,6 +2040,9 @@ importers:
       '@azure/identity':
         specifier: ^4.10.0
         version: 4.10.0
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../agentSdk
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
@@ -2006,6 +2055,9 @@ importers:
       telemetry:
         specifier: workspace:*
         version: link:../telemetry
+      typeagent:
+        specifier: workspace:*
+        version: link:../typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
@@ -4267,13 +4319,13 @@ packages:
   '@floating-ui/utils@0.2.9':
     resolution: {integrity: sha512-MDWhGtE+eHw5JW7lq4qhc5yRLS11ERl1c7Z6Xd0a58DozHES6EnNNwUWbMiG4J9Cgj053Bhk8zvlhFYKVhULwg==}
 
-  '@fluid-tools/version-tools@0.56.0':
-    resolution: {integrity: sha512-un3xHww/pvZEznO8InnlVs2dCyK+Qmjq7MFymsRKURK0C/l53325uWBK+ZcNlOTlxB/9ajrw6rRzaDmnTOd+LQ==}
+  '@fluid-tools/version-tools@0.57.0':
+    resolution: {integrity: sha512-SViGNYQff84ZHlra9WI8VJe70mnPKbFByuBnA7ZFThGUKPg5ZTmdstkOjaYluQXcz2SPCFnJ/FDNTuXNQPHOjQ==}
     engines: {node: '>=20.15.1'}
     hasBin: true
 
-  '@fluidframework/build-tools@0.56.0':
-    resolution: {integrity: sha512-8px5sXBRTW3u2bFVGcOH+bQbA8Kv84iKPGvDfOgwtjT3oC3u9+g8feCeIcEGWsT4U5P/69b31vLXHLXdMpnaYQ==}
+  '@fluidframework/build-tools@0.57.0':
+    resolution: {integrity: sha512-zFCXXM9Gj+gCNAH9AzrgrA0svAm8kcXzrMGkWB98rDjOoYtBDC4MJg4EsM/fzlwG1Qc7ms+yGUYtMOoKJAqwUA==}
     engines: {node: '>=20.15.1'}
     hasBin: true
 
@@ -5612,9 +5664,6 @@ packages:
   '@traceloop/instrumentation-openai@0.13.0':
     resolution: {integrity: sha512-ql9ML/zV4uHc5RnrpuismJluYiVDo9TXxIMqz1PSe2uFuzt6d7RDil9tbjXbwNlCfeyIEBGY/UJZCuUYneXUdw==}
     engines: {node: '>=14'}
-
-  '@ts-morph/common@0.23.0':
-    resolution: {integrity: sha512-m7Lllj9n/S6sOkCkRftpM7L24uvmfXQFedlW/4hENcuJH1HHm9u5EgxZb9uVjQSCGrbBWBkOGgcTxNg36r6ywA==}
 
   '@tsconfig/node10@1.0.9':
     resolution: {integrity: sha512-jNsYVVxU8v5g43Erja32laIDHXeoNvFEpX33OK4d6hljo3jDhCBDhx5dhCCTMWUojscpAagGiRkBKxpdl9fxqA==}
@@ -6958,9 +7007,6 @@ packages:
   cockatiel@3.2.1:
     resolution: {integrity: sha512-gfrHV6ZPkquExvMh9IOkKsBzNDk6sDuZ6DdBGUBkvFnTCqCxzpuq48RySgP0AnaqQkw2zynOFj9yly6T1Q2G5Q==}
     engines: {node: '>=16'}
-
-  code-block-writer@13.0.3:
-    resolution: {integrity: sha512-Oofo0pq3IKnsFtuHqSF7TqBfr71aeyZDVJ0HpmqB7FBM2qEigL0iPONSCZSO9pE9dZTAxANe5XHG9Uy0YMv8cg==}
 
   code-excerpt@4.0.0:
     resolution: {integrity: sha512-xxodCmBen3iy2i0WtAK8FlFNrRzjUqjRsMfho58xT/wvZU1YTM3fCnRjcy1gJPMepaRlgm/0e6w8SpWHpn3/cA==}
@@ -10157,9 +10203,6 @@ packages:
     resolution: {integrity: sha512-0YNdUceMdaQwoKce1gatDScmMo5pu/tfABfnzEqeG0gtTmd7mh/WcwgUjtAeOU7N8nFFlbQBnFK2gXW5fGvmMA==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
 
-  path-browserify@1.0.1:
-    resolution: {integrity: sha512-b7uo2UCUOYZcnF/3ID0lulOJi/bafxa1xPe7ZPsammBSpjSWQkjNxlt635YGS2MiR9GjvuXCtz2emr3jbsz98g==}
-
   path-data-parser@0.1.0:
     resolution: {integrity: sha512-NOnmBpt5Y2RWbuv0LMzsayp3lVylAHLPUTut412ZA3l+C4uw4ZVkQbjShYCQ8TCpUMdPapr4YjUqLYD6v68j+w==}
 
@@ -11511,9 +11554,6 @@ packages:
     peerDependencies:
       typescript: '*'
       webpack: ^5.0.0
-
-  ts-morph@22.0.0:
-    resolution: {integrity: sha512-M9MqFGZREyeb5fTl6gNHKZLqBQA0TjA1lea+CR48R8EBTDuWrNqW6ccC5QvjNR4s6wDumD3LTCjOFSp9iwlzaw==}
 
   ts-node@10.9.2:
     resolution: {integrity: sha512-f0FFpIdcHgn8zcPSbf1dRevwt047YMnaiJM3u2w2RewrB+fob/zePZcrOyQoLMMO7aBIddLcQIEK5dYjkLnGrQ==}
@@ -13765,14 +13805,14 @@ snapshots:
 
   '@floating-ui/utils@0.2.9': {}
 
-  '@fluid-tools/version-tools@0.56.0(@types/node@20.17.47)':
+  '@fluid-tools/version-tools@0.57.0(@types/node@20.17.47)':
     dependencies:
       '@oclif/core': 4.3.0
       '@oclif/plugin-autocomplete': 3.2.24
       '@oclif/plugin-commands': 4.1.21
       '@oclif/plugin-help': 6.2.26
       '@oclif/plugin-not-found': 3.2.44(@types/node@20.17.47)
-      semver: 7.7.1
+      semver: 7.7.2
       table: 6.9.0
     transitivePeerDependencies:
       - '@types/node'
@@ -13781,9 +13821,9 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@fluidframework/build-tools@0.56.0(@types/node@20.17.47)':
+  '@fluidframework/build-tools@0.57.0(@types/node@20.17.47)':
     dependencies:
-      '@fluid-tools/version-tools': 0.56.0(@types/node@20.17.47)
+      '@fluid-tools/version-tools': 0.57.0(@types/node@20.17.47)
       '@manypkg/get-packages': 2.2.2
       async: 3.2.6
       cosmiconfig: 8.3.6(typescript@5.4.5)
@@ -13796,17 +13836,15 @@ snapshots:
       globby: 11.1.0
       ignore: 5.3.2
       json5: 2.2.3
-      lodash: 4.17.21
       lodash.isequal: 4.5.0
       multimatch: 5.0.0
       picocolors: 1.1.1
       picomatch: 2.3.1
       picospinner: 2.0.0
       rimraf: 4.4.1
-      semver: 7.7.1
+      semver: 7.7.2
       sort-package-json: 1.57.0
       ts-deepmerge: 7.0.2
-      ts-morph: 22.0.0
       type-fest: 2.19.0
       typescript: 5.4.5
       yaml: 2.7.0
@@ -14426,7 +14464,7 @@ snapshots:
 
   '@manypkg/tools@1.1.2':
     dependencies:
-      fast-glob: 3.3.2
+      fast-glob: 3.3.3
       jju: 1.4.0
       js-yaml: 4.1.0
 
@@ -15803,13 +15841,6 @@ snapshots:
     transitivePeerDependencies:
       - '@opentelemetry/api'
       - supports-color
-
-  '@ts-morph/common@0.23.0':
-    dependencies:
-      fast-glob: 3.3.2
-      minimatch: 9.0.5
-      mkdirp: 3.0.1
-      path-browserify: 1.0.1
 
   '@tsconfig/node10@1.0.9': {}
 
@@ -17476,8 +17507,6 @@ snapshots:
 
   cockatiel@3.2.1: {}
 
-  code-block-writer@13.0.3: {}
-
   code-excerpt@4.0.0:
     dependencies:
       convert-to-spaces: 2.0.1
@@ -19033,7 +19062,7 @@ snapshots:
       '@types/glob': 7.2.0
       array-union: 2.1.0
       dir-glob: 3.0.1
-      fast-glob: 3.3.2
+      fast-glob: 3.3.3
       glob: 7.2.3
       ignore: 5.3.2
       merge2: 1.4.1
@@ -21506,8 +21535,6 @@ snapshots:
 
   patch-console@2.0.0: {}
 
-  path-browserify@1.0.1: {}
-
   path-data-parser@0.1.0: {}
 
   path-exists@4.0.0: {}
@@ -23126,11 +23153,6 @@ snapshots:
       source-map: 0.7.4
       typescript: 5.4.5
       webpack: 5.99.8(webpack-cli@5.1.4)
-
-  ts-morph@22.0.0:
-    dependencies:
-      '@ts-morph/common': 0.23.0
-      code-block-writer: 13.0.3
 
   ts-node@10.9.2(@types/node@20.17.47)(typescript@5.4.5):
     dependencies:

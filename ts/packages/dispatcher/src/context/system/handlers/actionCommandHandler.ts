@@ -8,19 +8,16 @@ import {
     ParsedCommandParams,
     PartialParsedCommandParams,
     SessionContext,
+    TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
-import {
-    getParameterNames,
-    getPropertyResolvedType,
-    validateAction,
-} from "action-schema";
+import { getParameterNames, validateAction } from "action-schema";
 import { executeActions } from "../../../execute/actionHandlers.js";
 import { FullAction, toExecutableActions } from "agent-cache";
 import { getActionSchema } from "../../../internal.js";
-import { getObjectProperty } from "common-utils";
-import { getActionCompletion } from "../../../translation/actionTemplate.js";
+import { DeepPartialUndefined, getObjectProperty } from "common-utils";
+import { getActionParamCompletion } from "../../../translation/requestCompletion.js";
 
 export class ActionCommandHandler implements CommandHandler {
     public readonly description = "Execute an action";
@@ -147,40 +144,24 @@ export class ActionCommandHandler implements CommandHandler {
             if (name.startsWith("--parameters.")) {
                 // complete the flag values for json properties
 
-                const action = {
+                const action: DeepPartialUndefined<TypeAgentAction> = {
                     schemaName: params.args?.schemaName,
                     actionName: params.args?.actionName,
                     parameters: params.flags?.parameters,
                 };
 
-                const actionSchema = getActionSchema(
+                const parameterCompletion = await getActionParamCompletion(
+                    systemContext,
                     action,
-                    systemContext.agents,
+                    name.substring("--parameters.".length),
                 );
-                if (actionSchema === undefined) {
-                    continue;
-                }
-                const propertyName = name.substring(2);
-                const fieldType = getPropertyResolvedType(
-                    actionSchema.type,
-                    propertyName,
-                );
-                if (fieldType?.type === "string-union") {
+
+                if (parameterCompletion && parameterCompletion.length > 0) {
                     completions.push({
                         name,
-                        completions: fieldType.typeEnum,
+                        completions: parameterCompletion,
                     });
-                    continue;
                 }
-
-                completions.push({
-                    name: propertyName,
-                    completions: await getActionCompletion(
-                        systemContext,
-                        action as Partial<AppAction>,
-                        propertyName,
-                    ),
-                });
 
                 continue;
             }

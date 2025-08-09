@@ -35,7 +35,6 @@ export class ExpandableTextarea {
         this.entryHandlers = handlers;
         const textEntry = document.createElement("span");
         textEntry.className = className;
-        textEntry.contentEditable = "true";
         textEntry.role = "textbox";
         textEntry.id = id;
         textEntry.addEventListener("keydown", (event) => {
@@ -45,12 +44,15 @@ export class ExpandableTextarea {
                     return false;
                 }
             }
-            if (event.key === "Enter") {
-                event.preventDefault();
-                this.send(sendButton);
-            } else if (event.key === "Escape") {
-                textEntry.textContent = "";
-                event.preventDefault();
+            switch (event.key) {
+                case "Enter":
+                    event.preventDefault();
+                    this.send(sendButton);
+                    break;
+                case "Escape":
+                    textEntry.textContent = "";
+                    event.preventDefault();
+                    break;
             }
 
             if (sendButton !== undefined) {
@@ -70,6 +72,9 @@ export class ExpandableTextarea {
             }
             this.entryHandlers.onChange?.(this, true);
         });
+        textEntry.addEventListener("paste", () => {
+            this.entryHandlers.onChange?.(this, true);
+        });
         textEntry.onchange = () => {
             if (sendButton !== undefined) {
                 sendButton.disabled = this.textEntry.innerHTML.length === 0;
@@ -81,6 +86,9 @@ export class ExpandableTextarea {
         this.textEntry = textEntry;
     }
 
+    public enable(enabled: boolean) {
+        this.textEntry.contentEditable = enabled.toString();
+    }
     getTextEntry() {
         return this.textEntry;
     }
@@ -117,62 +125,28 @@ export class ExpandableTextarea {
     public moveCursorToEnd() {
         // Set the cursor to the end of the text
         const r = document.createRange();
-        if (this.textEntry.childNodes.length > 0) {
-            r.selectNode(this.textEntry);
-            r.setStartBefore(this.textEntry.childNodes[0]);
-            r.setEndAfter(
-                this.textEntry.childNodes[this.textEntry.childNodes.length - 1],
-            );
+        const textEntry = this.textEntry;
+        const childNodes = textEntry.childNodes;
+        if (childNodes.length > 0) {
+            r.selectNodeContents(textEntry);
             r.collapse(false);
             const s = document.getSelection();
             if (s) {
                 s.removeAllRanges();
                 s.addRange(r);
             }
-            this.textEntry.scrollTop = this.textEntry.scrollHeight;
+            textEntry.scrollTop = textEntry.scrollHeight;
         }
     }
 
-    public replaceTextAtCursor(
-        text: string,
-        cursorOffset: number = 0,
-        length: number = 0,
-    ) {
-        const s = document.getSelection();
-        if (s) {
-            if (s.rangeCount > 1) {
-                return;
-            }
-            const currentRange = s.getRangeAt(0);
-            if (!currentRange.collapsed) {
-                return;
-            }
-            if (currentRange.startContainer === this.textEntry.childNodes[0]) {
-                const currentText = this.textEntry.innerText;
-                let offset = currentRange.startOffset + cursorOffset;
-                if (offset < 0 || offset > currentText.length) {
-                    return;
-                }
-                const prefix = this.textEntry.innerText.substring(0, offset);
-                const suffix = this.textEntry.innerText.substring(
-                    offset + length,
-                );
-                this.textEntry.innerText = prefix + text + suffix;
-
-                const newRange = document.createRange();
-                newRange.setEnd(
-                    this.textEntry.childNodes[0],
-                    prefix.length + text.length,
-                );
-                newRange.collapse(false);
-                const s = document.getSelection();
-                if (s) {
-                    s.removeAllRanges();
-                    s.addRange(newRange);
-                }
-            }
+    public getSelectionEndNode() {
+        let lastChild: Node = this.textEntry;
+        while (lastChild.childNodes.length > 0) {
+            lastChild = lastChild.childNodes[lastChild.childNodes.length - 1];
         }
+        return lastChild;
     }
+
     send(sendButton?: HTMLButtonElement) {
         const html = this.getTextEntry().innerHTML;
         if (html.length > 0) {

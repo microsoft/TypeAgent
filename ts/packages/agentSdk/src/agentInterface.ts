@@ -115,13 +115,14 @@ export interface AppAgent extends Partial<AppAgentCommandInterface> {
         data: unknown,
         propertyName: string,
         context: SessionContext,
-    ): Promise<string[]>;
-    // For action template
+    ): Promise<string[] | undefined>;
+    // For action completion (template, request/action command  completion)
     getActionCompletion?(
+        context: SessionContext,
         partialAction: AppAction, // action schemaName and actionName are validated by the dispatcher.
         propertyName: string,
-        context: SessionContext,
-    ): Promise<string[]>;
+        entityTypeName?: string, // the type of the entity if the property is an entity
+    ): Promise<string[] | undefined>;
     // Output
     getDynamicDisplay?(
         type: DisplayType,
@@ -210,6 +211,7 @@ export type ActivityContext<T = Record<string, unknown>> = {
     state: T;
     openLocalView?: boolean | undefined;
     activityEndAction?: AppAction | undefined;
+    restricted?: boolean | undefined; // restrict the actions to this specific agent, default is false
 };
 
 export interface ActionContext<T = void> {

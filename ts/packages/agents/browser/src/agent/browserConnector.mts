@@ -111,7 +111,23 @@ export class BrowserConnector {
 
     async getCurrentPageScreenshot(): Promise<string> {
         return await Promise.race<string>([
-            this.browserControl.captureScreenshot(),
+            (async () => {
+                try {
+                    return await this.browserControl.captureScreenshot();
+                } catch (err) {
+                    const message = (err as Error)?.message || "";
+                    if (
+                        message.includes(
+                            "MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND",
+                        ) ||
+                        message.includes("Tabs cannot be edited right now")
+                    ) {
+                        return "";
+                    }
+                    // Rethrow other errors
+                    throw new Error(`Screenshot capture failed: ${message}`);
+                }
+            })(),
             new Promise((_, reject) =>
                 setTimeout(
                     () => reject(new Error("Screenshot capture timed out")),

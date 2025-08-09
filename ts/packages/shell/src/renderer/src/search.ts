@@ -15,7 +15,7 @@ function normalizeMatchText(text: string): string {
     // Remove diacritical marks, and case replace any space characters with the normalized ' '.
     return text
         .normalize("NFD")
-        .replace(/\p{Diacritic}/gu, "")
+        .replace(/[\u0300-\u036f]/g, "") // Remove combining diacritical marks
         .replace(/\s/g, " ")
         .toLowerCase();
 }
@@ -30,7 +30,7 @@ export class SearchMenu {
     private selected: number = -1;
     private onCompletion: (item: SearchMenuItem) => void;
     private items: SearchMenuItem[] = [];
-    private prefix: string | undefined;
+    private prefix: string = "";
     visibleItemsCount: number = 15;
     top: number = 0;
 
@@ -211,10 +211,10 @@ export class SearchMenu {
                 // make a span for the prefix
                 const prefixSpan = document.createElement("span");
                 prefixSpan.className = "search-prefix";
-                prefixSpan.innerText = this.prefix ?? "";
+                prefixSpan.innerText = this.prefix;
                 li.appendChild(prefixSpan);
                 // make a span for the suffix
-                const suffix = item.matchText.substring(this.prefix!!.length);
+                const suffix = item.matchText.substring(this.prefix.length);
                 const resultSpan = document.createElement("span");
                 resultSpan.className = "search-suffix";
                 resultSpan.innerText = suffix;

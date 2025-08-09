@@ -421,7 +421,7 @@ function writeMessage(out: StyledOutput, message: kp.IMessage) {
     out.writeInColor(chalk.cyan, () => {
         out.writeLine(`Timestamp ${message.timestamp}`);
         if (message.tags && message.tags.length > 0) {
-            writeList(out, message.tags, { type: "csv", title: "Tags" });
+            writeMessageTags(out, message.tags);
         }
         if (message.metadata) {
             out.writeLine(
@@ -433,4 +433,26 @@ function writeMessage(out: StyledOutput, message: kp.IMessage) {
         out.write(chunk);
     }
     out.writeLine();
+}
+
+function writeMessageTags(out: StyledOutput, tags: string[] | kp.MessageTag[]) {
+    if (tags && tags.length > 0) {
+        const stringTags: string[] = tags.filter(
+            (t) => typeof t === "string",
+        ) as string[];
+        if (stringTags && stringTags.length > 0) {
+            writeList(out, stringTags, { type: "csv", title: "Tags" });
+        }
+        const sTags: kp.StructuredTag[] = tags.filter(
+            (t) => typeof t !== "string",
+        ) as kp.StructuredTag[];
+        if (sTags && sTags.length > 0) {
+            out.writeLine("sTags");
+            writeStructuredTags(out, sTags);
+        }
+    }
+}
+
+function writeStructuredTags(out: StyledOutput, tags: kp.StructuredTag[]) {
+    tags.forEach((t) => writeEntity(out, t as conversation.ConcreteEntity));
 }

@@ -50,7 +50,7 @@ export interface IMessage extends IKnowledgeSource {
     /**
      * (Optional) tags associated with the message
      */
-    tags: string[];
+    tags: string[] | MessageTag[];
     /**
      * (Future) Information about the deletion of the message.
      */
@@ -67,6 +67,8 @@ export interface IMessage extends IKnowledgeSource {
 export type ScoredMessageOrdinal = {
     /**
      * The ordinal number of the message.
+     * Use this ordinal to get the message frm the conversation's message collection {@link IMessageCollection}
+     * @see {@link IConversation.messages}
      */
     messageOrdinal: MessageOrdinal;
     /**
@@ -86,11 +88,16 @@ export interface DeletionInfo {
 /**
  * Types of knowledge objects {@link Knowledge}
  */
-export type KnowledgeType = "entity" | "action" | "topic" | "tag";
+export type KnowledgeType = "entity" | "action" | "topic" | "tag" | "sTag"; // sTag: Experimental ;
 /**
  * Knowledge objects
  */
-export type Knowledge = kpLib.ConcreteEntity | kpLib.Action | Topic | Tag;
+export type Knowledge =
+    | kpLib.ConcreteEntity
+    | kpLib.Action
+    | Topic
+    | Tag
+    | StructuredTag; // Experimental
 
 /**
  * Semantic Refs are referenced by their sequential ordinal numbers
@@ -137,6 +144,10 @@ export interface Tag {
     text: string;
 }
 
+export type StructuredTag = kpLib.ConcreteEntity;
+
+export type MessageTag = string | StructuredTag;
+
 /**
  * A conversation is a sequence of messages
  * The conversation can also store semantic refs {@link SemanticRef} that was found
@@ -178,7 +189,9 @@ export interface IConversation<TMessage extends IMessage = IMessage> {
  */
 export type ScoredSemanticRefOrdinal = {
     /**
-     * Ordinal number for the semantic reference.
+     * Ordinal number for the SemanticRef {@link SemanticRef}.
+     * Use this ordinal to resolve the SemanticRef from the conversation's semantic refs collection {@link ISemanticRefCollection}
+     * @see {@link IConversation.semanticRefs}
      */
     semanticRefOrdinal: SemanticRefOrdinal;
     /**
@@ -630,8 +643,12 @@ export type WhenFilter = {
      * If a thread index is available, match in a thread closest to ths description
      */
     threadDescription?: string | undefined;
-
+    /**
+     * Scope matches to only those text ranges matching tags
+     */
     tags?: string[] | undefined;
+    // Experimental: scope matches to sTags and tags matching this term group
+    tagMatchingTerms?: SearchTermGroup | undefined;
     /**
      * Use this SearchTermGroup as a sub-query to find matching text ranges
      * Match SemanticRefs the scope for this query
@@ -644,7 +661,13 @@ export type WhenFilter = {
 };
 
 export type SemanticRefSearchResult = {
+    /**
+     * The search terms that caused these semantic refs to match
+     */
     termMatches: Set<string>;
+    /**
+     * Scored semantic ref matches
+     */
     semanticRefMatches: ScoredSemanticRefOrdinal[];
 };
 

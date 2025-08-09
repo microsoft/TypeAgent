@@ -27,7 +27,7 @@ export class DocPart extends Message<DocPartMeta> {
     constructor(
         textChunks: string | string[] = [],
         metadata?: DocPartMeta | undefined,
-        tags?: string[] | undefined,
+        tags?: string[] | kp.MessageTag[] | undefined,
         timestamp?: string | undefined,
         knowledge?: kpLib.conversation.KnowledgeResponse | undefined,
         deletionInfo: kp.DeletionInfo | undefined = undefined,
@@ -71,11 +71,12 @@ export class DocMemory
         settings?: DocMemorySettings,
         tags?: string[],
     ) {
-        settings ??= createTextMemorySettings(
-            64,
-            () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
-        );
-        super(settings ?? createTextMemorySettings(), nameTag, tags);
+        settings ??= createTextMemorySettings();
+        if (!settings.embeddingModel.getPersistentCache) {
+            settings.embeddingModel.getPersistentCache = () =>
+                this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex;
+        }
+        super(settings, nameTag, tags);
         this.messages = new kp.MessageCollection<DocPart>(docParts);
         this.semanticRefs = new kp.SemanticRefCollection();
 
@@ -256,8 +257,7 @@ export class DocMemory
     public async deserialize(docMemoryData: DocMemoryData): Promise<void> {
         this.nameTag = docMemoryData.nameTag;
         const docParts = docMemoryData.messages.map((m) => {
-            const metadata = new DocPartMeta(m.metadata.sourceUrl);
-            return new DocPart(m.textChunks, metadata, m.tags, m.timestamp);
+            return docPartClassFromJsonObj(m);
         });
         this.messages = new kp.MessageCollection<DocPart>(docParts);
         this.semanticRefs = new kp.SemanticRefCollection(
@@ -313,8 +313,9 @@ export class DocMemory
     public static async readFromFile(
         dirPath: string,
         baseFileName: string,
+        settings?: DocMemorySettings,
     ): Promise<DocMemory | undefined> {
-        const docMemory = new DocMemory();
+        const docMemory = new DocMemory(undefined, undefined, settings);
         const data = await kp.readConversationDataFromFile(
             dirPath,
             baseFileName,
@@ -340,18 +341,18 @@ export class DocPartSerializer implements kp.JsonSerializer<DocPart> {
 
     public deserialize(json: string): DocPart {
         const jMsg: DocPart = JSON.parse(json);
-        const jMeta: DocPartMeta = jMsg.metadata;
-        return new DocPart(
-            jMsg.textChunks,
-            jMeta,
-            jMsg.tags,
-            jMsg.timestamp,
-            jMsg.knowledge,
-            jMsg.deletionInfo,
-        );
+        return docPartClassFromJsonObj(jMsg);
     }
 }
 
+/**
+ * Documents contain additional entity types like sections, parts, tables, lists.
+ * To allow the LLM to translate NL queries featuring these, we must add some additional comments
+ * and few shot examples in the query schema. We do this by using a custom schema file that
+ * implements the same interfaces but adds more comments
+ * @param searchQueryTranslator
+ * @param languageModel
+ */
 function customizeScopeQueryProcessing(
     searchQueryTranslator: kp.SearchQueryTranslator,
     languageModel: TypeChatLanguageModel,
@@ -365,4 +366,22 @@ function customizeScopeQueryProcessing(
     searchQueryTranslator!.translate2 = (request, preamble) => {
         return customScopeTranslator.translate(request, preamble);
     };
+}
+
+/**
+ * DocPart is a class, and JSON deserialization does not restore it
+ * @param jMsg
+ * @returns
+ */
+function docPartClassFromJsonObj(jMsg: DocPart): DocPart {
+    const jMeta: DocPartMeta = jMsg.metadata;
+    const part = new DocPart(
+        jMsg.textChunks,
+        jMeta,
+        jMsg.tags,
+        jMsg.timestamp,
+        jMsg.knowledge,
+        jMsg.deletionInfo,
+    );
+    return part;
 }

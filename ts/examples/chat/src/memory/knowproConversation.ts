@@ -145,7 +145,7 @@ export async function createKnowproConversationCommands(
             dirPath,
         );
         clock.stop();
-        context.printer.writeTiming(chalk.gray, clock);
+        context.printer.writeTiming(clock);
         context.printer.writeConversationInfo(context.conversationMemory);
         kpContext.conversation = context.conversationMemory;
     }

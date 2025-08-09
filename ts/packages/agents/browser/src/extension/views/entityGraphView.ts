@@ -10,6 +10,7 @@ import {
     DefaultEntityGraphServices,
     DefaultEntityCacheServices,
     ChromeExtensionService,
+    createExtensionService,
 } from "./knowledgeUtilities";
 
 /**
@@ -26,10 +27,10 @@ class EntityGraphView {
         try {
             console.log("EntityGraphView constructor starting...");
 
-            // Initialize services with Chrome extension connection
-            const chromeService = new ChromeExtensionService();
+            // Initialize services with appropriate extension service based on environment
+            const extensionService = createExtensionService();
             this.entityGraphService = new DefaultEntityGraphServices(
-                chromeService,
+                extensionService,
             );
             this.entityCacheService = new DefaultEntityCacheServices();
             console.log(
@@ -228,21 +229,50 @@ class EntityGraphView {
      */
     private setupSearchHandlers(): void {
         const searchInput = document.getElementById(
-            "entitySearch",
+            "entitySearchInput",
         ) as HTMLInputElement;
         const searchButton = document.getElementById(
-            "searchButton",
+            "entitySearchButton",
         ) as HTMLButtonElement;
 
+        console.log("Setting up search handlers:", {
+            searchInput: !!searchInput,
+            searchButton: !!searchButton,
+        });
+
         if (searchInput && searchButton) {
-            searchButton.addEventListener("click", () => {
-                this.searchEntity(searchInput.value);
-            });
+            const performSearch = () => {
+                const query = searchInput.value.trim();
+                if (query) {
+                    console.log("Performing search with value:", query);
+                    this.searchEntity(query);
+                    // Clear the input after successful search initiation
+                    searchInput.value = "";
+                } else {
+                    this.showMessage(
+                        "Please enter an entity name to search",
+                        "warning",
+                    );
+                }
+            };
+
+            searchButton.addEventListener("click", performSearch);
 
             searchInput.addEventListener("keypress", (e) => {
                 if (e.key === "Enter") {
-                    this.searchEntity(searchInput.value);
+                    e.preventDefault(); // Prevent form submission
+                    performSearch();
                 }
+            });
+
+            // Optional: Add focus behavior for better UX
+            searchInput.addEventListener("focus", () => {
+                searchInput.select(); // Select all text when focused
+            });
+        } else {
+            console.warn("Search elements not found:", {
+                searchInputFound: !!searchInput,
+                searchButtonFound: !!searchButton,
             });
         }
     }
@@ -323,10 +353,20 @@ class EntityGraphView {
         if (!query.trim()) return;
 
         try {
-            // Search in real data
-            await this.searchRealEntity(query);
+            // Navigate directly to the entity (same as URL parameter logic)
+            console.log(`Searching for entity: ${query}`);
+            this.showMessage(`Loading entity "${query}"...`, "info");
+
+            await this.navigateToEntity(query.trim());
+
+            // Show success message
+            this.showMessage(`Loaded entity: "${query}"`, "success");
         } catch (error) {
             console.error("Failed to search entity:", error);
+            this.showMessage(
+                `Failed to load entity "${query}". ${error instanceof Error ? error.message : "Please try again."}`,
+                "error",
+            );
         }
     }
 
@@ -561,17 +601,14 @@ class EntityGraphView {
 
                 // Create entity list with center entity, website entities, related entities, and topics
                 const allEntities = [
-                    // Center entity
-                    {
-                        name: graphData.centerEntity,
-                        type: "center_entity",
-                        confidence: 1.0,
-                    },
-                    // Website-based entities
+                    // Website-based entities - mark as documents
                     ...graphData.entities.map((e: any) => ({
                         name: e.name || e.entityName || "Unknown",
-                        type: e.type || e.entityType || "website",
+                        type: e.url
+                            ? "document"
+                            : e.type || e.entityType || "website",
                         confidence: e.confidence || 0.5,
+                        url: e.url,
                     })),
                     // Related entities from search results
                     ...(graphData.relatedEntities || []).map(
@@ -699,18 +736,48 @@ class EntityGraphView {
                     relationships: validatedRelationships,
                 });
 
+                // Find the center entity from allEntities (should be first)
+                const centerEntityFromGraph =
+                    graphData.entities.find(
+                        (e: any) =>
+                            e.id === "center" || e.category === "center",
+                    ) || graphData.entities[0]; // Fallback to first entity which should be center
+
                 // Load entity data into sidebar using rich graph data
                 const centerEntityData = {
                     name: entityName,
                     entityName: entityName,
-                    type: "center_entity",
-                    entityType: "center_entity",
-                    confidence: 0.9,
+                    type: centerEntityFromGraph.type,
+                    entityType: centerEntityFromGraph.type,
+                    confidence:
+                        centerEntityFromGraph.confidence ||
+                        this.calculateCenterEntityConfidence(
+                            graphData.entities,
+                        ) ||
+                        0.8,
                     source: "graph",
+                    // Include facets from the enhanced entity if available
+                    facets: centerEntityFromGraph?.facets || [],
                     topicAffinity: graphData.topTopics || [],
                     summary: graphData.summary,
                     metadata: graphData.metadata,
                     answerSources: graphData.answerSources || [],
+                    // Add additional data for sidebar metrics
+                    mentionCount: this.calculateTotalMentions(
+                        graphData.entities,
+                    ),
+                    relationships: validRelationships || [],
+                    dominantDomains: this.extractDomains(graphData.entities),
+                    firstSeen: this.getEarliestDate(
+                        // TODO: limit this to "contains" relationships
+                        graphData.entities,
+                        validatedRelationships,
+                    ),
+                    lastSeen: this.getLatestDate(
+                        graphData.entities,
+                        validatedRelationships,
+                    ),
+                    visitCount: this.calculateTotalVisits(graphData.entities),
                 };
                 await this.sidebar.loadEntity(centerEntityData);
 
@@ -834,6 +901,114 @@ class EntityGraphView {
 
         // You could implement a toast notification here
         // For now, just log to console
+    }
+
+    /**
+     * Helper methods for entity data processing
+     */
+
+    private calculateCenterEntityConfidence(entities: any[]): number {
+        if (!entities || entities.length === 0) return 0.8;
+
+        // Calculate average confidence of related entities
+        const avgConfidence =
+            entities.reduce((sum, entity) => {
+                return sum + (entity.confidence || 0.5);
+            }, 0) / entities.length;
+
+        // Boost center entity confidence slightly above average
+        return Math.min(0.95, avgConfidence + 0.1);
+    }
+
+    private calculateTotalMentions(entities: any[]): number {
+        if (!entities || entities.length === 0) return 0;
+
+        return entities.reduce((total, entity) => {
+            return (
+                total +
+                (entity.visitCount ||
+                    entity.occurrenceCount ||
+                    entity.mentionCount ||
+                    1)
+            );
+        }, 0);
+    }
+
+    private extractDomains(entities: any[]): string[] {
+        if (!entities || entities.length === 0) return [];
+
+        const domains = new Set<string>();
+        entities.forEach((entity) => {
+            if (entity.url) {
+                try {
+                    const domain = new URL(entity.url).hostname.replace(
+                        "www.",
+                        "",
+                    );
+                    domains.add(domain);
+                } catch (e) {
+                    // Skip invalid URLs
+                }
+            }
+        });
+
+        return Array.from(domains).slice(0, 5);
+    }
+
+    private getEarliestDate(entities: any[], relationships: any[]): string {
+        if (!entities || entities.length === 0) return new Date().toISOString();
+
+        const containsRelationships = relationships.filter(
+            (r) => r.type === "contains",
+        );
+        const entityNamesInContainsRelationships = new Set(
+            containsRelationships.map((r) => r.to),
+        );
+
+        let earliest: string | null = null;
+        entities.forEach((entity) => {
+            if (entityNamesInContainsRelationships.has(entity.name)) {
+                const date =
+                    entity.lastVisited || entity.dateAdded || entity.createdAt;
+                if (date && (!earliest || date < earliest)) {
+                    earliest = date;
+                }
+            }
+        });
+
+        return earliest || new Date().toISOString();
+    }
+
+    private getLatestDate(entities: any[], relationships: any[]): string {
+        if (!entities || entities.length === 0) return new Date().toISOString();
+
+        const containsRelationships = relationships.filter(
+            (r) => r.type === "contains",
+        );
+        const entityNamesInContainsRelationships = new Set(
+            containsRelationships.map((r) => r.to),
+        );
+
+        let latest: string | null = null;
+        entities.forEach((entity) => {
+            if (entityNamesInContainsRelationships.has(entity.name)) {
+                const date =
+                    entity.lastVisited || entity.updatedAt || entity.lastSeen;
+                if (date && (!latest || date > latest)) {
+                    latest = date;
+                }
+            }
+        });
+
+        return latest || new Date().toISOString();
+    }
+
+    private calculateTotalVisits(entities: any[]): number {
+        if (!entities || entities.length === 0) return 0;
+
+        return entities.reduce((total, entity) => {
+            return total + (entity.visitCount || 0);
+        }, 0);
     }
 }
 

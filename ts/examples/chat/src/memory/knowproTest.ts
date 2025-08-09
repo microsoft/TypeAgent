@@ -7,12 +7,14 @@ import {
     argNum,
     CommandHandler,
     CommandMetadata,
+    makeArg,
+    NamedArgs,
     parseNamedArguments,
     parseTypedArguments,
     ProgressBar,
 } from "interactive-app";
 import { KnowproContext, searchDef } from "./knowproMemory.js";
-import { argDestFile, argSourceFile } from "../common.js";
+import { argChunkSize, argDestFile, argSourceFile } from "../common.js";
 import * as kp from "knowpro";
 import * as kpTest from "knowpro-test";
 import * as cm from "conversation-memory";
@@ -25,7 +27,6 @@ import {
 } from "typeagent";
 import chalk from "chalk";
 import { openai } from "aiclient";
-import * as fs from "fs";
 import {
     createIndexingEventHandler,
     sourcePathToMemoryIndexPath,
@@ -48,14 +49,17 @@ export async function createKnowproTestCommands(
     commands.kpTestVerifyAnswerBatch = verifyAnswerBatch;
     commands.kpTestHtml = testHtml;
     commands.kpTestHtmlText = testHtmlText;
-    commands.kpTestHtmlMd = testHtmlMd;
+    commands.kpTestMdParse = testMdParse;
     commands.kpTestHtmlParts = testHtmlParts;
     commands.kpTestChoices = testMultipleChoice;
     commands.kpTestSearch = testSearchScope;
+    commands.kpTestScoped = setScoped;
+    commands.kpTestSearchCompare = testSearchCompare;
+    commands.kpTestSearchCompareBatch = testSearchCompareBatch;
 
     async function testHtml(args: string[]) {
         const html = await readAllText(args[0]);
-        const simpleHtml = tp.simplifyHtml(html);
+        const simpleHtml = tp.htmlSimplify(html);
         context.printer.writeLine(simpleHtml);
     }
 
@@ -65,41 +69,61 @@ export async function createKnowproTestCommands(
         context.printer.writeLine(text);
     }
 
-    function testHtmlMdDef(): CommandMetadata {
+    function testMdParseDef(): CommandMetadata {
         return {
             description: "Html to MD",
             args: {
                 filePath: arg("File path"),
             },
             options: {
-                rootTag: arg("Root tag", "body"),
+                chunkSize: argChunkSize(4096),
+                knowledge: argBool("Show knowledge", false),
             },
         };
     }
-    commands.kpTestHtmlMd.metadata = testHtmlMdDef();
-    async function testHtmlMd(args: string[]) {
-        const namedArgs = parseNamedArguments(args, testHtmlMdDef());
-        const filePath = namedArgs.filePath;
+    commands.kpTestMdParse.metadata = testMdParseDef();
+    async function testMdParse(args: string[]) {
+        const namedArgs = parseNamedArguments(args, testMdParseDef());
+        let filePath = namedArgs.filePath;
         if (!filePath) {
             return;
         }
-        let html = await readAllText(filePath);
-        let markdown = tp.htmlToMarkdown(html, namedArgs.rootTag);
-        context.printer.writeLine(markdown);
-
-        const destPath = changeFileExt(filePath, ".md");
-        fs.writeFileSync(destPath, markdown);
-
-        let mdDom = tp.tokenizeMarkdown(markdown);
-        context.printer.writeJsonInColor(chalk.gray, mdDom);
-
+        let markdown = await readAllText(filePath);
+        let mdDom = tp.markdownTokenize(markdown);
+        //context.printer.writeJsonInColor(chalk.gray, mdDom);
+        const chunkSize = namedArgs.chunkSize;
+        const chunkSizeBuffer = chunkSize + chunkSize * 0.25;
         const [textBlocks, knowledgeBlocks] =
-            tp.textAndKnowledgeBlocksFromMarkdown(mdDom);
+            tp.markdownToTextAndKnowledgeBlocks(mdDom, chunkSize);
         assert(textBlocks.length === knowledgeBlocks.length);
+        let largeChunkCount = 0;
         for (let i = 0; i < textBlocks.length; ++i) {
-            context.printer.writeLine("=====");
-            context.printer.writeLine(textBlocks[i]);
-            context.printer.writeJsonInColor(chalk.gray, knowledgeBlocks[i]);
+            const textBlock = textBlocks[i];
+            if (textBlock.length > chunkSizeBuffer) {
+                largeChunkCount++;
+                context.printer.writeLineInColor(
+                    chalk.redBright,
+                    `[${textBlock.length}]`,
+                );
+            } else {
+                context.printer.writeLineInColor(
+                    chalk.green,
+                    `[${textBlock.length}]`,
+                );
+            }
+            context.printer.writeLine(textBlock);
+
+            if (namedArgs.knowledge) {
+                context.printer.writeJsonInColor(
+                    chalk.gray,
+                    knowledgeBlocks[i],
+                );
+            }
+        }
+        if (largeChunkCount > 0) {
+            context.printer.writeError(
+                `${largeChunkCount} chunks > [${chunkSize}, ${chunkSizeBuffer}]`,
+            );
         }
     }
 
@@ -178,10 +202,9 @@ export async function createKnowproTestCommands(
         if (!ensureConversationLoaded()) {
             return;
         }
+        const namedArgs = parseNamedArguments(args, searchBatchDef());
+        const prevOptions = beginTestBatch(namedArgs);
         try {
-            beginTestBatch();
-
-            const namedArgs = parseNamedArguments(args, searchBatchDef());
             const destPath =
                 namedArgs.destPath ??
                 changeFileExt(namedArgs.srcPath, ".json", "_results");
@@ -205,7 +228,7 @@ export async function createKnowproTestCommands(
                 return;
             }
         } finally {
-            endTestBatch();
+            endTestBatch(prevOptions);
         }
     }
 
@@ -225,10 +248,9 @@ export async function createKnowproTestCommands(
         if (!ensureConversationLoaded()) {
             return;
         }
+        const namedArgs = parseNamedArguments(args, verifySearchBatchDef());
+        const prevOptions = beginTestBatch(namedArgs);
         try {
-            beginTestBatch();
-
-            const namedArgs = parseNamedArguments(args, verifySearchBatchDef());
             const srcPath = namedArgs.srcPath;
 
             const startTimestamp = new Date();
@@ -254,7 +276,7 @@ export async function createKnowproTestCommands(
                 startTimestamp,
             );
         } finally {
-            endTestBatch();
+            endTestBatch(prevOptions);
         }
     }
 
@@ -274,10 +296,9 @@ export async function createKnowproTestCommands(
         if (!ensureConversationLoaded()) {
             return;
         }
+        const namedArgs = parseNamedArguments(args, answerBatchDef());
+        const prevOptions = beginTestBatch(namedArgs);
         try {
-            beginTestBatch();
-
-            const namedArgs = parseNamedArguments(args, answerBatchDef());
             const srcPath = namedArgs.srcPath;
             const destPath =
                 namedArgs.destPath ??
@@ -302,7 +323,7 @@ export async function createKnowproTestCommands(
                 },
             );
         } finally {
-            endTestBatch();
+            endTestBatch(prevOptions);
         }
     }
 
@@ -318,6 +339,10 @@ export async function createKnowproTestCommands(
                     0.9,
                 ),
                 verbose: argBool("Verbose error output", false),
+                scoped: argBool(
+                    "Translate NL queries into scoped search expressions",
+                    false,
+                ),
             },
         };
     }
@@ -326,10 +351,9 @@ export async function createKnowproTestCommands(
         if (!ensureConversationLoaded()) {
             return;
         }
+        const namedArgs = parseNamedArguments(args, verifyAnswerBatchDef());
+        const prevOptions = beginTestBatch(namedArgs);
         try {
-            beginTestBatch();
-
-            const namedArgs = parseNamedArguments(args, verifyAnswerBatchDef());
             const minSimilarity = namedArgs.similarity;
             const srcPath = namedArgs.srcPath;
 
@@ -355,7 +379,7 @@ export async function createKnowproTestCommands(
                 context.printer.writeError(results.message);
             }
         } finally {
-            endTestBatch();
+            endTestBatch(prevOptions);
         }
     }
 
@@ -451,67 +475,130 @@ export async function createKnowproTestCommands(
 
     function testSearchDef(): CommandMetadata {
         const def = searchDef();
-        def.options ??= {};
-        def.options!.compare = argBool("Compare to V1 mode", false);
+        def.description = "Test v2 (scoped) search";
         return def;
     }
     commands.kpTestSearch.metadata = testSearchDef();
     async function testSearchScope(args: string[]) {
         const namedArgs = parseNamedArguments(args, testSearchDef());
-        const queryTranslator =
-            context.conversation! instanceof cm.Memory
-                ? context.conversation!.settings.queryTranslator
-                : context.queryTranslator;
-        const result = namedArgs.compare
-            ? await queryTranslator.translate(namedArgs.query)
-            : undefined;
-        if (result) {
-            context.printer.writeTranslation(result);
-        }
-
-        context.printer.writeHeading("Scope");
+        const queryTranslator = context.getConversationQueryTranslator();
         const resultScope = await queryTranslator.translate2!(namedArgs.query);
         context.printer.writeTranslation(resultScope);
-        if ((result === undefined || result.success) && resultScope.success) {
-            if (result !== undefined) {
-                const error = kpTest.compareSearchQueryScope(
-                    result.data,
-                    resultScope.data,
-                );
-                if (error !== undefined) {
-                    context.printer.writeError(error);
-                }
-            }
+        if (!resultScope.success || !ensureConversationLoaded()) {
+            return;
+        }
+        const request = parseTypedArguments<kpTest.SearchRequest>(
+            args,
+            searchDef(),
+        );
+        const options: kp.LanguageSearchOptions = {
+            ...kpTest.createSearchOptions(request),
+            compileOptions: {
+                exactScope: request.exactScope,
+                applyScope: request.applyScope,
+            },
+        };
+        const query = kp.compileSearchQuery2(
+            context.conversation!,
+            resultScope.data,
+            options.compileOptions,
+        );
 
-            const request = parseTypedArguments<kpTest.SearchRequest>(
-                args,
-                searchDef(),
-            );
-            const options: kp.LanguageSearchOptions = {
-                ...kpTest.createSearchOptions(request),
-                compileOptions: {
-                    exactScope: request.exactScope,
-                    applyScope: request.applyScope,
-                },
-            };
-            const query = kp.compileSearchQuery2(
+        const results = (
+            await kp.runSearchQueries(context.conversation!, query, options)
+        ).flat();
+        for (let i = 0; i < results.length; ++i) {
+            context.printer.writeConversationSearchResult(
                 context.conversation!,
-                resultScope.data,
-                options.compileOptions,
+                results[i],
+                namedArgs.showKnowledge,
+                namedArgs.showMessages,
+                namedArgs.maxToDisplay,
+                namedArgs.distinct,
             );
-            const results = (
-                await kp.runSearchQueries(context.conversation!, query, options)
-            ).flat();
-            for (let i = 0; i < results.length; ++i) {
-                context.printer.writeConversationSearchResult(
-                    context.conversation!,
-                    results[i],
-                    namedArgs.showKnowledge,
-                    namedArgs.showMessages,
-                    namedArgs.maxToDisplay,
-                    namedArgs.distinct,
+        }
+    }
+
+    commands.kpTestSearchCompare.metadata = testSearchDef();
+    async function testSearchCompare(args: string[]) {
+        const namedArgs = parseNamedArguments(args, testSearchDef());
+        const queryTranslator = context.getConversationQueryTranslator();
+        const result = await kpTest.compareSearchQueryTranslations(
+            queryTranslator,
+            namedArgs.query,
+        );
+        if (!result.success) {
+            context.printer.writeError(result.message);
+            return;
+        }
+        writeSearchComparison(result.data);
+    }
+
+    function compareSearchScopeBatchDef(): CommandMetadata {
+        return {
+            description: "Compare query translations in a batch",
+            args: {
+                srcPath: argSourceFile(),
+            },
+            options: {
+                verbose: argBool("Verbose error output", false),
+            },
+        };
+    }
+    commands.kpTestSearchCompareBatch.metadata = compareSearchScopeBatchDef();
+    async function testSearchCompareBatch(args: string[]) {
+        const namedArgs = parseNamedArguments(args, verifySearchBatchDef());
+        const prevOptions = beginTestBatch(namedArgs);
+        try {
+            const srcPath = namedArgs.srcPath;
+            const results = await kpTest.compareSearchQueryTranslationsBatch(
+                context,
+                srcPath,
+                (result, index, total) => {
+                    context.printer.writeProgress(index + 1, total);
+                    if (result.success) {
+                        writeSearchComparison(result.data);
+                    } else {
+                        context.printer.writeError(result.message);
+                    }
+                },
+            );
+            if (!results.success) {
+                context.printer.writeError(results.message);
+                return;
+            }
+            let errorResults = results.data.filter(
+                (r) => r.error !== undefined && r.error.length > 0,
+            );
+            if (errorResults.length > 0) {
+                context.printer.writeLine(`${errorResults.length} errors`);
+                context.printer.writeList(
+                    errorResults.map((e) => e.query),
+                    { type: "ol" },
                 );
             }
+        } finally {
+            endTestBatch(prevOptions);
+        }
+    }
+
+    function setScopedDef(): CommandMetadata {
+        return {
+            description: "Enable/disable scoped search",
+            options: {
+                enable: makeArg("Enable scoped search", "boolean", undefined),
+            },
+        };
+    }
+    commands.kpTestScoped.metadata = setScopedDef();
+    async function setScoped(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, setScopedDef());
+        if (namedArgs.enable !== undefined) {
+            context.options.scopedSearch = namedArgs.enable;
+        } else {
+            context.printer.writeLine(
+                `Scoped search: ${context.options.scopedSearch}`,
+            );
         }
     }
 
@@ -594,12 +681,31 @@ export async function createKnowproTestCommands(
         }
     }
 
-    function beginTestBatch(): void {
-        context.retryNoAnswer = true;
+    function writeSearchComparison(cmp: kpTest.ScopeQueryComparison): void {
+        if (cmp.error) {
+            context.printer.writeLineInColor(chalk.redBright, cmp.query);
+            context.printer.writeJsonInColor(chalk.green, cmp.expected);
+            context.printer.writeHeading("Scope");
+            context.printer.writeJsonInColor(chalk.red, cmp.actual);
+            if (cmp.error) {
+                context.printer.writeError(cmp.error);
+            }
+        } else {
+            context.printer.writeLineInColor(chalk.greenBright, cmp.query);
+        }
     }
 
-    function endTestBatch(): void {
-        context.retryNoAnswer = false;
+    function beginTestBatch(
+        namedArgs: NamedArgs,
+    ): kpTest.KnowproContextOptions {
+        const prevOptions = { ...context.options };
+        context.options.retryNoAnswer = true;
+        return prevOptions;
     }
+
+    function endTestBatch(savedOptions: kpTest.KnowproContextOptions): void {
+        context.options = savedOptions;
+    }
+
     return;
 }

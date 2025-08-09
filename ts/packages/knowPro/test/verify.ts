@@ -12,6 +12,7 @@ import {
     SemanticRef,
     TextRange,
     SemanticRefSearchResult,
+    PropertySearchTerm,
 } from "../src/interfaces.js";
 import { ConversationSearchResult } from "../src/search.js";
 import {
@@ -196,5 +197,17 @@ export function verifyAnswerResponse(response: AnswerResponse) {
         expect(response.answer).toBeDefined();
     } else {
         expect(response.whyNoAnswer).toBeDefined();
+    }
+}
+
+export function verifyPropertySearchTermName(
+    property: PropertySearchTerm,
+    name: string,
+) {
+    expect(property.propertyName).toBeDefined();
+    if (typeof property.propertyName === "string") {
+        expect(property.propertyName).toEqual(name);
+    } else {
+        expect(property.propertyName.term.text).toEqual(name);
     }
 }

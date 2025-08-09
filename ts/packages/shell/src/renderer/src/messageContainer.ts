@@ -11,6 +11,7 @@ import {
     TemplateEditConfig,
     PhaseTiming,
     NotifyExplainedData,
+    Dispatcher,
 } from "agent-dispatcher";
 
 import { ChoicePanel, InputChoice } from "./choicePanel";
@@ -179,7 +180,7 @@ export class MessageContainer {
     }
 
     constructor(
-        private chatView: ChatView,
+        private readonly chatView: ChatView,
         private settingsView: SettingsView,
         private classNameSuffix: "agent" | "user",
         private source: string,
@@ -299,14 +300,19 @@ export class MessageContainer {
         );
     }
 
-    public async proposeAction(actionTemplates: TemplateEditConfig) {
+    public async proposeAction(
+        dispatcher: Dispatcher,
+        actionTemplates: TemplateEditConfig,
+    ) {
         // use this div to show the proposed action
         const actionContainer = document.createElement("div");
         actionContainer.className = "action-container";
         this.messageDiv.appendChild(actionContainer);
+        this.updateDivState();
 
         const actionCascade = new TemplateEditor(
             actionContainer,
+            dispatcher,
             actionTemplates,
         );
 
@@ -315,6 +321,7 @@ export class MessageContainer {
             span.innerText = text;
             return span;
         };
+
         return new Promise((resolve) => {
             const confirm = () => {
                 const choices: InputChoice[] = [
@@ -591,7 +598,7 @@ export class MessageContainer {
         this.ensureMetricsDiv().ttsMetricsDiv.innerHTML = messages.join("<br>");
     }
 
-    public show() {
+    private show() {
         this.div.classList.remove("chat-message-hidden");
     }
     public hide() {
@@ -621,8 +628,8 @@ export class MessageContainer {
             message = `${cachePart}. Nothing to put in cache: ${data.error}`;
             color = "lightblue";
         }
-        this.messageDiv.setAttribute("data-expl", message);
-        this.messageDiv.classList.add("chat-message-explained");
+        this.div.setAttribute("data-expl", message);
+        this.div.classList.add("chat-message-explained");
         const icon = iconRoadrunner();
         icon.getElementsByTagName("svg")[0].style.fill = color;
         icon.className = "chat-message-explained-icon";

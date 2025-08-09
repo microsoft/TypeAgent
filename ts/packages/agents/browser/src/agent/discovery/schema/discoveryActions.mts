@@ -1,24 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type FindPageComponents = {
-    actionName: "findPageComponents";
-};
-
 export type DetectPageActions = {
     actionName: "detectPageActions";
     parameters: {
         registerAgent?: boolean;
         agentName?: string;
     };
-};
-
-export type GetPageType = {
-    actionName: "getPageType";
-};
-
-export type GetSiteType = {
-    actionName: "getSiteType";
 };
 
 export type SummarizePage = {
@@ -64,6 +52,14 @@ export type GetMacrosForUrl = {
     };
 };
 
+export type GetAllMacros = {
+    actionName: "getAllMacros";
+    parameters: {
+        includeGlobal?: boolean;
+        author?: "discovered" | "user";
+    };
+};
+
 export type DeleteMacro = {
     actionName: "deleteMacro";
     parameters: {
@@ -72,13 +68,11 @@ export type DeleteMacro = {
 };
 
 export type SchemaDiscoveryActions =
-    | FindPageComponents
     | DetectPageActions
-    | GetSiteType
-    | GetPageType
     | RegisterPageDynamicAgent
     | SummarizePage
     | StartAuthoringSession
     | GetIntentFromRecording
     | GetMacrosForUrl
+    | GetAllMacros
     | DeleteMacro;

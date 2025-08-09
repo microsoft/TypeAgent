@@ -14,7 +14,7 @@ import {
 } from "../src/conversationMemory.js";
 import { getTestTranscriptDialog, TestTranscriptInfo } from "./testCommon.js";
 import { verifyConversationBasic } from "./verify.js";
-import { createKnowledgeResponse } from "knowpro";
+import * as kp from "knowpro";
 import { conversation as kpLib } from "knowledge-processor";
 
 describeIf(
@@ -50,6 +50,11 @@ describeIf(
                 );
                 expect(cm2).toBeDefined();
                 verifyMemory(cm2!, cm.messages.length, cm.semanticRefs.length);
+                expect(cm2?.semanticRefs).toBeDefined();
+                expect(cm2?.semanticRefs.length).toBeGreaterThan(0);
+
+                await testTopics(cm2!);
+                await testEntities(cm2!);
             },
             testTimeout,
         );
@@ -82,7 +87,7 @@ describeIf(
                 const idType = "__id";
                 for (let i = 0; i < messages.length; ++i) {
                     const message = messages[i];
-                    message.knowledge = createKnowledgeResponse();
+                    message.knowledge = kp.createKnowledgeResponse();
                     message.knowledge.entities.push({
                         name: idLabel,
                         type: [idType],
@@ -166,6 +171,33 @@ describeIf(
             },
             testTimeout,
         );
+
+        async function testTopics(cm: ConversationMemory): Promise<void> {
+            const topics = kp.filterCollection(
+                cm.semanticRefs!,
+                (sr) => sr.knowledgeType === "topic",
+            );
+            expect(topics.length).toBeGreaterThan(0);
+
+            const topic = topics[0].knowledge as kp.Topic;
+            const topicMatches = await cm.searchTopics(topic.text);
+            expect(topicMatches).toBeDefined();
+            expect(topicMatches?.length).toBeGreaterThan(0);
+            let didMatch = topicMatches?.some((t) => t.text === topic.text);
+            expect(didMatch).toBeTruthy();
+        }
+
+        async function testEntities(cm: ConversationMemory): Promise<void> {
+            const entities = kp.filterCollection(
+                cm.semanticRefs!,
+                (sr) => sr.knowledgeType === "entity",
+            );
+            expect(entities.length).toBeGreaterThan(0);
+
+            const entityMatches = await cm.searchEntities("algernon", "person");
+            expect(entityMatches).toBeDefined();
+            expect(entities?.length).toBeGreaterThan(0);
+        }
 
         // This will obviously grow...
         function verifyMemory(

@@ -35,7 +35,10 @@ export async function handleMessage(
         }
 
         case "getLibraryStats": {
-            return await handleGetWebsiteLibraryStats();
+            return await sendActionToAgent({
+                actionName: "getLibraryStats",
+                parameters: message.parameters || {},
+            });
         }
 
         case "getSearchSuggestions": {
@@ -305,7 +308,7 @@ export async function handleMessage(
 
         case "queryKnowledge": {
             try {
-                const result = await sendActionToAgent({
+                return await sendActionToAgent({
                     actionName: "queryWebKnowledge",
                     parameters: {
                         query: message.parameters.query,
@@ -314,12 +317,6 @@ export async function handleMessage(
                             message.parameters.searchScope || "current_page",
                     },
                 });
-
-                return {
-                    answer: result.answer || "No answer found",
-                    sources: result.sources || [],
-                    relatedEntities: result.relatedEntities || [],
-                };
             } catch (error) {
                 console.error("Error querying knowledge:", error);
                 return { error: "Failed to query knowledge" };
@@ -426,18 +423,12 @@ export async function handleMessage(
 
         case "getPageIndexStatus": {
             try {
-                const result = await sendActionToAgent({
+                return await sendActionToAgent({
                     actionName: "checkPageIndexStatus",
                     parameters: {
                         url: message.url,
                     },
                 });
-
-                return {
-                    isIndexed: result.isIndexed || false,
-                    lastIndexed: result.lastIndexed || null,
-                    entityCount: result.entityCount || 0,
-                };
             } catch (error) {
                 console.error("Error checking page index status:", error);
                 return { isIndexed: false, error: "Failed to check status" };
@@ -506,25 +497,16 @@ export async function handleMessage(
             return { success: true };
         }
 
-        case "checkConnection": {
-            try {
-                const websocket = getWebSocket();
-                return {
-                    connected:
-                        websocket && websocket.readyState === WebSocket.OPEN,
-                };
-            } catch (error) {
-                return { connected: false };
-            }
-        }
-
         // Website Library Panel message handlers
         case "importWebsiteDataWithProgress": {
             return await handleImportWebsiteDataWithProgress(message);
         }
 
         case "getWebsiteLibraryStats": {
-            return await handleGetWebsiteLibraryStats();
+            return await sendActionToAgent({
+                actionName: "getLibraryStats",
+                parameters: {},
+            });
         }
 
         case "clearWebsiteLibrary": {
@@ -562,10 +544,6 @@ export async function handleMessage(
         }
 
         // Enhanced search message handlers (searchWebsitesEnhanced removed - was broken)
-
-        case "getSearchSuggestions": {
-            return await handleGetSearchSuggestions(message);
-        }
 
         case "saveSearchHistory": {
             return await handleSaveSearchHistory(message);
@@ -607,15 +585,12 @@ export async function handleMessage(
         }
         case "getAllMacros": {
             try {
-                const result = await sendActionToAgent({
-                    actionName: "getMacrosForUrl",
+                return await sendActionToAgent({
+                    actionName: "getAllMacros",
                     parameters: {
-                        url: null,
                         includeGlobal: true,
                     },
                 });
-
-                return { actions: result.actions || [] };
             } catch (error) {
                 console.error("Error getting all actions:", error);
                 return { actions: [] };
@@ -623,14 +598,25 @@ export async function handleMessage(
         }
         case "getActionDomains": {
             try {
-                const result = await sendActionToAgent({
+                return await sendActionToAgent({
                     actionName: "getActionDomains",
                     parameters: {},
                 });
-
-                return { domains: result.domains || [] };
             } catch (error) {
                 console.error("Error getting action domains:", error);
+                return { domains: [] };
+            }
+        }
+
+        case "getMacroDomains": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getActionDomains", // Maps to existing action
+                    parameters: {},
+                });
+                return result; // Should return { domains: string[] }
+            } catch (error) {
+                console.error("Error getting macro domains:", error);
                 return { domains: [] };
             }
         }
@@ -920,47 +906,6 @@ function sendProgressToUI(importId: string, progress: any) {
     }
 }
 
-async function handleGetWebsiteLibraryStats() {
-    try {
-        const result = await sendActionToAgent({
-            actionName: "getWebsiteStats",
-            parameters: {
-                groupBy: "source",
-                limit: 50,
-            },
-        });
-
-        if (result.error) {
-            return {
-                success: false,
-                error: result.error,
-            };
-        }
-
-        // Parse the stats from the result text
-        const stats = parseWebsiteStatsFromText(
-            result.literalText || result.text || result.result || "",
-        );
-
-        return {
-            totalWebsites: stats.totalWebsites,
-            totalBookmarks: stats.totalBookmarks,
-            totalHistory: stats.totalHistory,
-            topDomains: stats.topDomains,
-        };
-    } catch (error) {
-        console.error("Error getting website library stats:", error);
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : "Unknown error",
-            totalWebsites: 0,
-            totalBookmarks: 0,
-            totalHistory: 0,
-            topDomains: 0,
-        };
-    }
-}
-
 async function handleClearWebsiteLibrary() {
     try {
         await sendActionToAgent({
@@ -1236,62 +1181,6 @@ async function handleGetSuggestedSearches() {
 }
 
 // Helper function to parse website stats from text response
-function parseWebsiteStatsFromText(text: string) {
-    const defaultStats = {
-        totalWebsites: 0,
-        totalBookmarks: 0,
-        totalHistory: 0,
-        topDomains: 0,
-    };
-
-    if (!text) return defaultStats;
-
-    try {
-        // Parse the text response to extract statistics
-        const lines = text.split("\n");
-        let totalWebsites = 0;
-        let totalBookmarks = 0;
-        let totalHistory = 0;
-        let topDomains = 0;
-
-        // Look for total count line
-        const totalMatch = text.match(/Total:\s*(\d+)\s*sites/i);
-        if (totalMatch) {
-            totalWebsites = parseInt(totalMatch[1]);
-        }
-
-        // Look for source breakdown
-        const bookmarkMatch = text.match(/bookmark:\s*(\d+)/i);
-        if (bookmarkMatch) {
-            totalBookmarks = parseInt(bookmarkMatch[1]);
-        }
-
-        const historyMatch = text.match(/history:\s*(\d+)/i);
-        if (historyMatch) {
-            totalHistory = parseInt(historyMatch[1]);
-        }
-
-        // Count domain entries (rough approximation)
-        const domainLines = lines.filter(
-            (line) =>
-                line.includes(":") &&
-                line.includes("sites") &&
-                !line.includes("Total") &&
-                !line.includes("Source"),
-        );
-        topDomains = domainLines.length;
-
-        return {
-            totalWebsites,
-            totalBookmarks,
-            totalHistory,
-            topDomains,
-        };
-    } catch (error) {
-        console.error("Error parsing website stats:", error);
-        return defaultStats;
-    }
-}
 
 // Helper functions for knowledge indexing
 async function indexPageContent(

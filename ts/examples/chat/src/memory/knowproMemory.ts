@@ -39,10 +39,10 @@ import { createKnowproImageCommands } from "./knowproImage.js";
 import { createKnowproPodcastCommands } from "./knowproPodcast.js";
 import { createKnowproTestCommands } from "./knowproTest.js";
 import { createKnowproDocMemoryCommands } from "./knowproDoc.js";
-import { createKnowproWebsiteCommands } from "./knowproWebsite.js";
 import { Result } from "typechat";
 import { conversation as knowLib } from "knowledge-processor";
 import { createKnowproKnowledgeCommands } from "./knowproKnowledge.js";
+import { createDiagnosticCommands } from "./knowproDiagnostics.js";
 
 export async function runKnowproMemory(): Promise<void> {
     const storePath = "/data/testChat";
@@ -110,8 +110,10 @@ export async function createKnowproCommands(
     await createKnowproDataFrameCommands(context, commands);
     await createKnowproTestCommands(context, commands);
     await createKnowproDocMemoryCommands(context, commands);
-    await createKnowproWebsiteCommands(context, commands);
     await createKnowproKnowledgeCommands(context, commands);
+
+    // Diagnostic commands
+    await createDiagnosticCommands(context, commands);
     /*
      * CREATE GENERAL COMMANDS that are common to all memory types
      * These include: (a) search (b) answer generation (c) enumeration
@@ -263,7 +265,7 @@ export async function createKnowproCommands(
             } else {
                 context.printer.writeLine("No matches");
             }
-            context.printer.writeTiming(chalk.gray, timer);
+            context.printer.writeTiming(timer);
         } else {
             context.printer.writeError("Conversation is not indexed");
         }
@@ -565,11 +567,7 @@ export async function createKnowproCommands(
                 let concreteEntities = entityRefs.map(
                     (e) => e.knowledge as knowLib.ConcreteEntity,
                 );
-                concreteEntities = kp.mergeConcreteEntities(concreteEntities);
-                concreteEntities.sort((x, y) => x.name.localeCompare(y.name));
-                context.printer.writeNumbered(concreteEntities, (printer, ce) =>
-                    printer.writeEntity(ce).writeLine(),
-                );
+                context.printer.writeEntities(concreteEntities);
             }
         }
     }
@@ -613,19 +611,34 @@ export async function createKnowproCommands(
             return;
         }
         if (args.length > 0) {
-            args.push("--ktype");
-            args.push("tag");
-            await searchTerms(args);
+            context.printer.writeHeading("Tags");
+            await searchTerms([...args, "--kType", "tag"]);
+            context.printer.writeHeading("Structured Tags");
+            await searchTerms([...args, "--kType", "sTag"]);
         } else {
             if (conversation.semanticRefs !== undefined) {
                 const tagRefs = kp.filterCollection(
                     conversation.semanticRefs,
                     (sr) => sr.knowledgeType === "tag",
                 );
-                let tags = tagRefs.map((t) => (t.knowledge as kp.Topic).text);
-                let tagStrings = kp.mergeTopics(tags);
-                tagStrings.sort();
-                context.printer.writeList(tagStrings, { type: "ol" });
+                let tags = tagRefs.map((t) => t.knowledge as kp.Tag);
+                if (tags.length > 0) {
+                    context.printer.writeHeading("Tags");
+                    context.printer.writeTags(tags);
+                    context.printer.writeLine();
+                }
+
+                const sTags = kp
+                    .filterCollection(
+                        conversation.semanticRefs,
+                        (sr) => sr.knowledgeType === "sTag",
+                    )
+                    .map((sr) => sr.knowledge as kp.StructuredTag);
+                if (sTags.length > 0) {
+                    context.printer.writeHeading("Structured Tags");
+                    context.printer.writeStructuredTags(sTags);
+                    context.printer.writeLine();
+                }
             }
         }
     }

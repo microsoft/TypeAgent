@@ -3,6 +3,11 @@
 
 // EntitySidebar types and interfaces
 
+interface EntityFacet {
+    name: string;
+    value: string;
+}
+
 interface EntityData {
     name: string;
     type: string;
@@ -112,10 +117,16 @@ export class EntitySidebar {
 
         if (relationshipsEl) {
             // Handle both mock structure and real entity structure
-            const relationshipCount =
-                this.currentEntity.strongRelationships?.length ||
-                this.currentEntity.relationships?.length ||
-                0;
+            let relationshipCount = 0;
+            if (this.currentEntity.strongRelationships?.length) {
+                relationshipCount =
+                    this.currentEntity.strongRelationships.length;
+            } else if (this.currentEntity.relationships?.length) {
+                relationshipCount = this.currentEntity.relationships.length;
+            } else if (Array.isArray(this.currentEntity.relationships)) {
+                relationshipCount = this.currentEntity.relationships.length;
+            }
+
             const relationshipValue =
                 relationshipCount != null ? Number(relationshipCount) : 0;
             relationshipsEl.textContent = isNaN(relationshipValue)
@@ -140,35 +151,115 @@ export class EntitySidebar {
     private renderEntityDetails(): void {
         if (!this.currentEntity) return;
 
-        this.renderAliases();
+        this.renderFacets();
         this.renderDomains();
         this.renderTopics();
     }
 
-    private renderAliases(): void {
-        const aliasesSection = document.getElementById("entityAliases");
-        if (!aliasesSection) return;
+    private renderFacets(): void {
+        const facetsSection = document.getElementById("entityFacets");
+        if (!facetsSection) return;
 
-        const aliasesList = aliasesSection.querySelector(".aliases-list");
-        if (!aliasesList) return;
+        const facetsList = facetsSection.querySelector(".facets-list");
+        if (!facetsList) return;
 
-        // Handle case where aliases might not exist in real entity data
-        const aliases = this.currentEntity.aliases || [];
+        const facets = this.currentEntity.facets || [];
 
-        if (aliases.length === 0) {
-            aliasesList.innerHTML =
-                '<span class="empty-message">No aliases</span>';
+        // Fallback: if no facets but aliases exist, convert aliases to facets
+        if (facets.length === 0 && this.currentEntity.aliases?.length > 0) {
+            const aliasesAsFacets = this.currentEntity.aliases.map(
+                (alias: string, index: number) => ({
+                    name: index === 0 ? "Primary Alias" : `Alias ${index + 1}`,
+                    value: alias,
+                }),
+            );
+
+            const facetsHtml = aliasesAsFacets
+                .map((facet: EntityFacet) => this.renderFacetItem(facet))
+                .join("");
+
+            facetsList.innerHTML = facetsHtml;
             return;
         }
 
-        const aliasesHtml = aliases
-            .map(
-                (alias: string) =>
-                    `<span class="alias-tag">${this.escapeHtml(alias)}</span>`,
-            )
+        if (facets.length === 0) {
+            facetsList.innerHTML =
+                '<span class="empty-message">No facets</span>';
+            return;
+        }
+
+        const facetsHtml = facets
+            .map((facet: EntityFacet) => this.renderFacetItem(facet))
             .join("");
 
-        aliasesList.innerHTML = aliasesHtml;
+        facetsList.innerHTML = facetsHtml;
+    }
+
+    private renderFacetItem(facet: EntityFacet): string {
+        const escapedName = this.escapeHtml(facet.name);
+        const escapedValue = this.escapeHtml(facet.value);
+        const formattedValue = this.formatFacetValue(facet);
+
+        return `
+            <div class="facet-item">
+                <span class="facet-name">${escapedName}:</span>
+                <span class="facet-value" title="${escapedValue}">${formattedValue}</span>
+            </div>
+        `;
+    }
+
+    private formatFacetValue(facet: EntityFacet): string {
+        const value = facet.value;
+
+        // Handle different value types
+        if (this.isUrl(value)) {
+            return `<a href="${value}" target="_blank" class="facet-link">${this.truncateText(value, 30)}</a>`;
+        }
+
+        if (this.isDate(value)) {
+            return this.formatDate(value);
+        }
+
+        if (this.isNumber(value)) {
+            return this.formatNumber(value);
+        }
+
+        // Default: truncate long text values
+        return this.truncateText(this.escapeHtml(value), 50);
+    }
+
+    private isUrl(value: string): boolean {
+        try {
+            new URL(value);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    private isDate(value: string): boolean {
+        const date = new Date(value);
+        return (
+            !isNaN(date.getTime()) && value.match(/^\d{4}-\d{2}-\d{2}/) !== null
+        );
+    }
+
+    private isNumber(value: string): boolean {
+        return (
+            !isNaN(Number(value)) &&
+            !isNaN(parseFloat(value)) &&
+            isFinite(Number(value))
+        );
+    }
+
+    private formatNumber(value: string): string {
+        const num = parseFloat(value);
+        return num.toLocaleString();
+    }
+
+    private truncateText(text: string, maxLength: number): string {
+        if (text.length <= maxLength) return text;
+        return text.substring(0, maxLength - 3) + "...";
     }
 
     private renderDomains(): void {
@@ -179,10 +270,23 @@ export class EntitySidebar {
         if (!domainsList) return;
 
         // Handle case where dominantDomains might not exist in real entity data
-        const domains =
+        let domains =
             this.currentEntity.dominantDomains ||
             this.currentEntity.domains ||
             [];
+
+        // If no domains, try to extract from URL if available
+        if (domains.length === 0 && this.currentEntity.url) {
+            try {
+                const domain = new URL(this.currentEntity.url).hostname.replace(
+                    "www.",
+                    "",
+                );
+                domains = [domain];
+            } catch (e) {
+                // Skip invalid URLs
+            }
+        }
 
         if (domains.length === 0) {
             domainsList.innerHTML =
@@ -236,7 +340,12 @@ export class EntitySidebar {
                 this.currentEntity.firstVisit ||
                 this.currentEntity.dateAdded ||
                 this.currentEntity.createdAt;
-            firstSeenEl.textContent = this.formatDate(firstSeen);
+
+            if (firstSeen) {
+                firstSeenEl.textContent = this.formatDate(firstSeen);
+            } else {
+                firstSeenEl.textContent = "-";
+            }
         }
 
         if (lastSeenEl) {
@@ -246,7 +355,12 @@ export class EntitySidebar {
                 this.currentEntity.lastVisit ||
                 this.currentEntity.lastVisited ||
                 this.currentEntity.updatedAt;
-            lastSeenEl.textContent = this.formatDate(lastSeen);
+
+            if (lastSeen) {
+                lastSeenEl.textContent = this.formatDate(lastSeen);
+            } else {
+                lastSeenEl.textContent = "-";
+            }
         }
     }
 
@@ -270,15 +384,15 @@ export class EntitySidebar {
         if (lastSeenEl) lastSeenEl.textContent = "-";
 
         // Clear details sections
-        const aliasesSection = document.getElementById("entityAliases");
+        const facetsSection = document.getElementById("entityFacets");
         const domainsSection = document.getElementById("entityDomains");
         const topicsSection = document.getElementById("entityTopics");
 
-        if (aliasesSection) {
-            const aliasesList = aliasesSection.querySelector(".aliases-list");
-            if (aliasesList)
-                aliasesList.innerHTML =
-                    '<span class="empty-message">No aliases</span>';
+        if (facetsSection) {
+            const facetsList = facetsSection.querySelector(".facets-list");
+            if (facetsList)
+                facetsList.innerHTML =
+                    '<span class="empty-message">No facets</span>';
         }
 
         if (domainsSection) {
@@ -313,6 +427,9 @@ export class EntitySidebar {
             technology: '<i class="bi bi-cpu"></i>',
             event: '<i class="bi bi-calendar-event"></i>',
             document: '<i class="bi bi-file-text"></i>',
+            website: '<i class="bi bi-globe"></i>',
+            topic: '<i class="bi bi-tag"></i>',
+            related_entity: '<i class="bi bi-link-45deg"></i>',
         };
 
         return iconMap[type] || '<i class="bi bi-diagram-2"></i>';

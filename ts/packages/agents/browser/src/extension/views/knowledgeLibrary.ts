@@ -11,7 +11,7 @@ import {
 } from "../interfaces/websiteImport.types";
 import {
     notificationManager,
-    chromeExtensionService,
+    extensionService,
     TemplateHelpers,
     FormatUtils,
     EventManager,
@@ -57,6 +57,7 @@ interface UserPreferences {
 class WebsiteLibraryPanelFullPage {
     private isConnected: boolean = false;
     private isInitialized: boolean = false;
+    private connectionStatusCallback?: (connected: boolean) => void;
     private navigation: FullPageNavigation = {
         currentPage: "search",
     };
@@ -97,11 +98,11 @@ class WebsiteLibraryPanelFullPage {
 
         // Initialize services with default implementations
         const defaultAnalyticsService = new DefaultAnalyticsServices(
-            chromeExtensionService,
+            extensionService,
         );
         this.services = {
-            search: new DefaultSearchServices(chromeExtensionService),
-            discovery: new DefaultDiscoveryServices(chromeExtensionService),
+            search: new DefaultSearchServices(extensionService),
+            discovery: new DefaultDiscoveryServices(extensionService),
             analytics: new CachedAnalyticsService(defaultAnalyticsService),
         };
     }
@@ -119,6 +120,7 @@ class WebsiteLibraryPanelFullPage {
             this.setupImportFunctionality();
 
             await this.checkConnectionStatus();
+            this.setupConnectionStatusListener();
             await this.loadLibraryStats();
             await this.navigateToPage("search");
         } catch (error) {
@@ -209,8 +211,7 @@ class WebsiteLibraryPanelFullPage {
 
     private async checkConnectionStatus(): Promise<boolean> {
         try {
-            const response =
-                await chromeExtensionService.checkWebSocketConnection();
+            const response = await extensionService.checkWebSocketConnection();
             this.isConnected = response?.connected === true;
             return this.isConnected;
         } catch (error) {
@@ -242,6 +243,29 @@ class WebsiteLibraryPanelFullPage {
         }
     }
 
+    private setupConnectionStatusListener(): void {
+        this.connectionStatusCallback = (connected: boolean) => {
+            console.log(
+                `Connection status changed: ${connected ? "Connected" : "Disconnected"}`,
+            );
+            this.isConnected = connected;
+            this.updateConnectionStatus();
+            this.updatePanelConnectionStatus();
+        };
+
+        extensionService.onConnectionStatusChange(
+            this.connectionStatusCallback,
+        );
+    }
+
+    public cleanup(): void {
+        if (this.connectionStatusCallback) {
+            extensionService.removeConnectionStatusListener(
+                this.connectionStatusCallback,
+            );
+        }
+    }
+
     private updatePanelConnectionStatus() {
         if (this.searchPanel) {
             this.searchPanel.setConnectionStatus(this.isConnected);
@@ -260,7 +284,7 @@ class WebsiteLibraryPanelFullPage {
         }
 
         try {
-            this.libraryStats = await chromeExtensionService.getLibraryStats();
+            this.libraryStats = await extensionService.getLibraryStats();
             this.updateStatsDisplay();
         } catch (error) {
             console.error("Failed to load library stats:", error);
@@ -453,7 +477,7 @@ class WebsiteLibraryPanelFullPage {
 
             const result =
                 await this.importManager.startWebActivityImport(options);
-            this.importUI.showImportComplete(result);
+            // Don't show completion immediately - let progress updates handle it
         } catch (error) {
             this.importUI.showImportError({
                 type: "processing",
@@ -482,7 +506,7 @@ class WebsiteLibraryPanelFullPage {
             });
 
             const result = await this.importManager.startFolderImport(options);
-            this.importUI.showImportComplete(result);
+            // Don't show completion immediately - let progress updates handle it
         } catch (error) {
             this.importUI.showImportError({
                 type: "processing",
@@ -772,3 +796,10 @@ if (document.readyState === "loading") {
 } else {
     initializeLibraryPanel();
 }
+
+// Add cleanup on window unload
+window.addEventListener("beforeunload", () => {
+    if (libraryPanelInstance) {
+        libraryPanelInstance.cleanup();
+    }
+});

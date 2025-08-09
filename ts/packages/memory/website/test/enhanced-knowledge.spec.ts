@@ -329,10 +329,10 @@ describe("Enhanced Website Query Integration", () => {
             pageType: "news",
             detectedActions: [
                 {
-                    actionType: "ShareAction",
-                    name: "Social media sharing",
+                    type: "share",
+                    element: ".share-button",
+                    text: "Social media sharing",
                     confidence: 0.9,
-                    selectors: [".share-button"],
                 },
             ],
         };
@@ -362,7 +362,7 @@ describe("Enhanced Website Query Integration", () => {
             inverseActions: [],
         };
 
-        const mergedKnowledge = meta.getEnhancedKnowledge(enhancedKnowledge);
+        const mergedKnowledge = meta.getMergedKnowledge(enhancedKnowledge);
 
         // Should have entities from both base and enhanced knowledge
         expect(mergedKnowledge.entities.length).toBeGreaterThan(1);

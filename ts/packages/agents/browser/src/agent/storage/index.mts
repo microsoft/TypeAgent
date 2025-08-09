@@ -10,7 +10,7 @@
  * - Macro validation and sanitization
  * - Fast lookup through indexing
  * - URL pattern matching and domain management
- * - Search and analytics capabilities
+ * - Search capabilities
  */
 
 // Core storage classes
@@ -21,11 +21,6 @@ export { MacroValidator, MacroIndexManager } from "./validator.mjs";
 // Pattern matching and domain management
 export { UrlMatcher } from "./urlMatcher.mjs";
 export { PatternResolver } from "./patternResolver.mjs";
-export { DomainManager } from "./domainManager.mjs";
-
-// Advanced features
-export { MacroSearchEngine } from "./searchEngine.mjs";
-export { AnalyticsManager } from "./analyticsManager.mjs";
 
 // Backward compatibility exports
 export { MacroStore as ActionsStore } from "./macroStore.mjs";
@@ -33,7 +28,6 @@ export {
     MacroValidator as ActionValidator,
     MacroIndexManager as ActionIndexManager,
 } from "./validator.mjs";
-export { MacroSearchEngine as ActionSearchEngine } from "./searchEngine.mjs";
 
 // Type definitions
 export * from "./types.mjs";

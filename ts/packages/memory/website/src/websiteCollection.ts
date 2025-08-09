@@ -434,7 +434,7 @@ export class WebsiteCollection
                                         domain:
                                             websitePart.domain ||
                                             websitePart.url,
-                                        actionType: detectedAction.actionType,
+                                        actionType: detectedAction.type,
                                         relatedEntity,
                                         relatedTopic,
                                         confidence: Math.min(
@@ -1022,10 +1022,10 @@ export class WebsiteCollection
                 const hasMatchingAction = actionTypes.some((searchAction) =>
                     websitePart.metadata.detectedActions!.some(
                         (action) =>
-                            action.actionType
+                            action.type
                                 .toLowerCase()
                                 .includes(searchAction.toLowerCase()) ||
-                            action.name
+                            action.text
                                 ?.toLowerCase()
                                 .includes(searchAction.toLowerCase()),
                     ),
@@ -1202,7 +1202,7 @@ export class WebsiteCollection
             // Also count detected action types
             if (website.metadata.detectedActions) {
                 website.metadata.detectedActions.forEach((action) => {
-                    const actionType = action.actionType;
+                    const actionType = action.type;
                     const current = insights.actionTypes.get(actionType) || 0;
                     insights.actionTypes.set(actionType, current + 1);
                 });

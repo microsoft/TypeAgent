@@ -189,7 +189,7 @@ async function handleGetCart(
     action: any,
     ctx: ActionHandlerContext,
 ): Promise<string> {
-    // Support both storeName and default cart (matches planHandler)
+    // Support both storeName and default cart
     if (action.parameters.storeName) {
         await selectStore(action.parameters.storeName, ctx);
     } else {

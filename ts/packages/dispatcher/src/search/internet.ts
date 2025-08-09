@@ -4,13 +4,11 @@
 import fs from "node:fs";
 import { LookupOptions, extractEntities } from "typeagent";
 import { ChatModel, openai } from "aiclient";
+import { ActionContext, ActionResult, Entity } from "@typeagent/agent-sdk";
 import {
-    ActionContext,
-    ActionResult,
-    ActionResultSuccess,
-    Entity,
-} from "@typeagent/agent-sdk";
-import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
+    createActionResultFromError,
+    createActionResultNoDisplay,
+} from "@typeagent/agent-sdk/helpers/action";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { AIProjectClient } from "@azure/ai-projects";
 import { displayError } from "@typeagent/agent-sdk/helpers/display";
@@ -150,10 +148,8 @@ export async function handleLookup(
     settings: LookupSettings,
     originalRequest: string,
 ): Promise<ActionResult> {
-    let literalResponse = createActionResult("No information found");
-
     if (!lookups || lookups.length === 0) {
-        return literalResponse;
+        return createActionResultFromError("No lookups provided.");
     }
 
     context.actionIO.setDisplay({
@@ -165,21 +161,16 @@ export async function handleLookup(
     const results = await runGroundingLookup(request, lookups, sites, context);
 
     if (results.length > 0) {
-        updateActionResult(literalResponse, results);
-        context.actionIO.setDisplay(literalResponse.displayContent);
-
-        if (settings.entityGenModel) {
-            const entities = await runEntityExtraction(results, settings);
-            literalResponse.entities =
-                literalResponse.entities.concat(entities);
-        }
-    } else {
-        literalResponse = createActionResult(
-            "There was an error searching for information on Grounding with Bing.",
-        );
+        context.actionIO.setDisplay({
+            type: "html",
+            content: answersToHtml(results),
+        });
+        return await createActionResultWithMessage(results, settings);
     }
 
-    return literalResponse;
+    return createActionResultFromError(
+        "There was an error searching for information on Grounding with Bing.",
+    );
 }
 
 export async function getLookupSettings(
@@ -231,41 +222,29 @@ export async function getLookupSettings(
 //     return [promptLib.dateTimePromptSection()];
 // }
 
-function updateActionResult(
-    literalResponse: ActionResultSuccess,
-    messages: ThreadMessage[],
-): ActionResultSuccess {
-    if (messages.length > 0) {
-        literalResponse.literalText = "";
-        literalResponse.displayContent = {
-            type: "html",
-            content: answersToHtml(messages),
-        };
-    }
-
-    return literalResponse;
-}
-
-async function runEntityExtraction(
+async function createActionResultWithMessage(
     messages: ThreadMessage[],
     settings: LookupSettings,
-): Promise<Entity[]> {
-    if (!settings.entityGenModel) {
-        return [];
-    }
-    let entityText = "";
+): Promise<ActionResult> {
+    let historyText = "";
+    let linkEntities: Entity[] = [];
+    let refCount = 0;
     for (const message of messages) {
         for (const content of message.content) {
             const textContent = content as MessageTextContent;
 
             if (textContent) {
-                entityText += `${textContent.text.value}\n`;
+                historyText += `${textContent.text.value}\n`;
 
                 for (const a of textContent.text.annotations) {
                     switch (a.type) {
                         case "url_citation":
                             const url = a as MessageTextUrlCitationAnnotation;
-                            entityText += `Reference: ${url.urlCitation.title} - ${url.urlCitation.url}`;
+                            historyText += `Reference: ${url.urlCitation.title} - ${url.urlCitation.url}`;
+                            linkEntities.push({
+                                type: ["link", "url", "website"],
+                                name: `Reference #${++refCount} - ${url.urlCitation.title} - ${url.urlCitation.url}`,
+                            });
                             break;
                         default:
                             console.warn(
@@ -276,14 +255,26 @@ async function runEntityExtraction(
             }
         }
     }
-    if (!entityText) {
-        return [];
+
+    if (!historyText) {
+        return createActionResultFromError(
+            "Grounding with Bing returned not text in the result.",
+        );
     }
-    if (entityText.length > settings.maxEntityTextLength) {
-        entityText = entityText.slice(0, settings.maxEntityTextLength);
+
+    if (!settings.entityGenModel) {
+        return createActionResultNoDisplay(historyText, linkEntities);
     }
-    const results = await extractEntities(settings.entityGenModel, entityText);
-    return results;
+
+    const entityText =
+        historyText.length > settings.maxEntityTextLength
+            ? historyText.slice(0, settings.maxEntityTextLength)
+            : historyText;
+
+    return createActionResultNoDisplay(historyText, [
+        ...(await extractEntities(settings.entityGenModel, entityText)),
+        ...linkEntities,
+    ]);
 }
 
 let groundingConfig: bingWithGrounding.ApiSettings | undefined;

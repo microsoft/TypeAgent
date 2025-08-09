@@ -131,10 +131,135 @@ export class EntityGraphVisualizer {
                     color: "#333",
                 },
             },
-
-            // Edge styles by strength
             {
-                selector: "edge[strength >= 0.7]",
+                selector: 'node[type="document"]',
+                style: {
+                    "background-color": "#50E3C2",
+                    shape: "rectangle",
+                    width: 90,
+                    height: 60,
+                    label: "data(name)",
+                    "text-valign": "center",
+                    "text-halign": "center",
+                    "font-size": 10,
+                    "font-weight": "bold",
+                    color: "#333",
+                    "text-wrap": "wrap",
+                    "text-max-width": 80,
+                },
+            },
+            {
+                selector: 'node[type="website"]',
+                style: {
+                    "background-color": "#4ECDC4",
+                    shape: "roundrectangle",
+                    width: 85,
+                    height: 55,
+                    label: "data(name)",
+                    "text-valign": "center",
+                    "text-halign": "center",
+                    "font-size": 10,
+                    "font-weight": "bold",
+                    color: "#333",
+                    "text-wrap": "wrap",
+                    "text-max-width": 75,
+                },
+            },
+            {
+                selector: 'node[type="technology"]',
+                style: {
+                    "background-color": "#9013FE",
+                    shape: "hexagon",
+                    width: 55,
+                    height: 55,
+                    label: "data(name)",
+                    "text-valign": "bottom",
+                    "text-margin-y": 5,
+                    "font-size": 11,
+                    "font-weight": "bold",
+                    color: "#333",
+                },
+            },
+            {
+                selector: 'node[type="topic"]',
+                style: {
+                    "background-color": "#FF6B9D",
+                    shape: "ellipse",
+                    width: 45,
+                    height: 45,
+                    label: "data(name)",
+                    "text-valign": "bottom",
+                    "text-margin-y": 5,
+                    "font-size": 10,
+                    "font-weight": "bold",
+                    color: "#333",
+                },
+            },
+
+            // Edge styles by relationship type
+            {
+                selector: 'edge[type="contains"]',
+                style: {
+                    "line-color": "#4A90E2",
+                    width: "mapData(strength, 0, 1, 2, 5)",
+                    "line-opacity": 1,
+                    "target-arrow-color": "#4A90E2",
+                    "target-arrow-shape": "triangle",
+                    "curve-style": "bezier",
+                    "line-style": "solid",
+                },
+            },
+            {
+                selector: 'edge[type="related_to"]',
+                style: {
+                    "line-color": "#7ED321",
+                    width: "mapData(strength, 0, 1, 2, 4)",
+                    "line-opacity": 0.8,
+                    "target-arrow-color": "#7ED321",
+                    "target-arrow-shape": "triangle",
+                    "curve-style": "bezier",
+                    "line-style": "dashed",
+                },
+            },
+            {
+                selector: 'edge[type="same_domain"]',
+                style: {
+                    "line-color": "#BD10E0",
+                    width: "mapData(strength, 0, 1, 1, 3)",
+                    "line-opacity": 0.6,
+                    "target-arrow-color": "#BD10E0",
+                    "target-arrow-shape": "triangle",
+                    "curve-style": "bezier",
+                    "line-style": "dotted",
+                },
+            },
+            {
+                selector: 'edge[type="co_occurrence"]',
+                style: {
+                    "line-color": "#F5A623",
+                    width: "mapData(strength, 0, 1, 2, 4)",
+                    "line-opacity": 0.7,
+                    "target-arrow-color": "#F5A623",
+                    "target-arrow-shape": "triangle",
+                    "curve-style": "bezier",
+                    "line-style": "solid",
+                },
+            },
+            {
+                selector: 'edge[type="topic_of"]',
+                style: {
+                    "line-color": "#FF6B9D",
+                    width: "mapData(strength, 0, 1, 1, 3)",
+                    "line-opacity": 0.5,
+                    "target-arrow-color": "#FF6B9D",
+                    "target-arrow-shape": "triangle",
+                    "curve-style": "bezier",
+                    "line-style": "dashed",
+                },
+            },
+            // Fallback edge styles by strength for any unmatched types
+            {
+                selector: "edge[strength >= 0.7]:not([type])",
                 style: {
                     "line-color": "#4A90E2",
                     width: 4,
@@ -145,7 +270,7 @@ export class EntityGraphVisualizer {
                 },
             },
             {
-                selector: "edge[strength >= 0.3][strength < 0.7]",
+                selector: "edge[strength >= 0.3][strength < 0.7]:not([type])",
                 style: {
                     "line-color": "#667eea",
                     width: 2,
@@ -156,7 +281,7 @@ export class EntityGraphVisualizer {
                 },
             },
             {
-                selector: "edge[strength < 0.3]",
+                selector: "edge[strength < 0.3]:not([type])",
                 style: {
                     "line-color": "#999",
                     width: 1,

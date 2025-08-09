@@ -8,6 +8,12 @@ import * as cm from "conversation-memory";
 import { KnowproLog } from "./logging.js";
 import path from "path";
 import { createEmbeddingCache } from "knowledge-processor";
+import { PromptSection } from "typechat";
+
+export type KnowproContextOptions = {
+    retryNoAnswer: boolean;
+    scopedSearch: boolean;
+};
 
 export class KnowproContext {
     public knowledgeModel: ChatModel;
@@ -17,17 +23,23 @@ export class KnowproContext {
     public queryTranslator: kp.SearchQueryTranslator;
     public answerGenerator: kp.AnswerGenerator;
     public termParser: cm.SearchTermParser;
-    public retryNoAnswer: boolean;
     public log: KnowproLog;
+    //
+    // Global options and overrides
+    //
+    public options: KnowproContextOptions;
 
     public tokenStats: openai.CompletionUsageStats;
+    public promptHandler?:
+        | ((request: PromptSection[], response: string) => void)
+        | undefined;
 
     constructor(basePath?: string) {
         this.basePath = basePath ?? "/data/testChat/knowpro";
         this.log = new KnowproLog(path.join(this.basePath, "logs"));
         this.knowledgeModel = createKnowledgeModel();
-        this.knowledgeModel.completionCallback = (_, response) =>
-            this.updateTokenCounts(response.usage);
+        this.knowledgeModel.completionCallback = (request, response) =>
+            this.completionHandler(request, response);
         this.similarityModel = createEmbeddingCache(
             openai.createEmbeddingModel(),
             1024,
@@ -38,12 +50,18 @@ export class KnowproContext {
         this.answerGenerator = new kp.AnswerGenerator(
             kp.createAnswerGeneratorSettings(this.knowledgeModel),
         );
-        this.retryNoAnswer = false;
         this.termParser = new cm.SearchTermParser();
         this.tokenStats = {
             completion_tokens: 0,
             prompt_tokens: 0,
             total_tokens: 0,
+        };
+        //
+        // Set default global options and overrides
+        //
+        this.options = {
+            retryNoAnswer: false,
+            scopedSearch: false,
         };
     }
 
@@ -52,6 +70,31 @@ export class KnowproContext {
             throw new Error("No conversation loaded");
         }
         return this.conversation!;
+    }
+
+    public getConversationQueryTranslator(): kp.SearchQueryTranslator {
+        let queryTranslator = this.queryTranslator;
+
+        if (
+            this.conversation !== undefined &&
+            this.conversation! instanceof cm.Memory
+        ) {
+            queryTranslator = this.conversation!.settings.queryTranslator;
+        }
+        return queryTranslator;
+    }
+
+    public createMemorySettings(): cm.MemorySettings {
+        return cm.createMemorySettings(64, undefined, this.knowledgeModel);
+    }
+
+    private completionHandler(request: any, response: any): void {
+        this.updateTokenCounts(response.usage);
+        if (this.promptHandler) {
+            const messages: PromptSection[] = request.messages;
+            const responseText = response.choices[0]?.message?.content ?? "";
+            this.promptHandler(messages, responseText);
+        }
     }
 
     public startTokenCounter(): void {

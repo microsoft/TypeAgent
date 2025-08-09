@@ -8,7 +8,7 @@ import { createFetchError } from "./utils.js";
 const debugSpotifyRest = registerDebug("typeagent:spotify:rest");
 const debugSpotifyRestVerbose = registerDebug("typeagent:spotify-verbose:rest");
 
-export const limitMax = 50;
+const limitMax = 50;
 
 export async function search(
     query: SpotifyApi.SearchForItemParameterObject,
@@ -430,7 +430,7 @@ export async function play(
     await fetchPutEmptyResult(service, playUrl, smallTrack);
 }
 
-export async function getDevices(service: SpotifyService) {
+export async function getUserDevices(service: SpotifyService) {
     return fetchGet<SpotifyApi.UserDevicesResponse>(
         service,
         "https://api.spotify.com/v1/me/player/devices",
@@ -592,10 +592,14 @@ export async function createPlaylist(
     );
 }
 
-export async function setVolume(service: SpotifyService, amt = limitMax) {
+export async function setVolume(
+    service: SpotifyService,
+    deviceId: string,
+    amt: number,
+) {
     const volumeUrl = getUrlWithParams(
         "https://api.spotify.com/v1/me/player/volume?volume_percent",
-        { volume_percent: amt },
+        { volume_percent: amt, device_id: deviceId },
     );
     return fetchPutEmptyResult(service, volumeUrl);
 }

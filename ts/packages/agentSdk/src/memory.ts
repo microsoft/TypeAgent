@@ -8,5 +8,5 @@ export interface Entity {
     type: string[];
 
     // Stable unique id for this entity, will be round tripped back to the source agent if user refer to the entity in the future.
-    uniqueId?: string;
+    uniqueId?: string | undefined;
 }

@@ -39,11 +39,13 @@ import {
 } from "../../translation/translateRequest.js";
 import { ActivityActions } from "./schema/activityActionSchema.js";
 import { ClarifyEntityAction } from "../../execute/pendingActions.js";
+import { MatchCommandHandler } from "./handlers/matchCommandHandler.js";
 
 const dispatcherHandlers: CommandHandlerTable = {
     description: "Type Agent Dispatcher Commands",
     commands: {
         request: new RequestCommandHandler(),
+        match: new MatchCommandHandler(),
         translate: new TranslateCommandHandler(),
         explain: new ExplainCommandHandler(),
     },
@@ -182,7 +184,7 @@ async function clarifyWithLookup(
 
     if (
         lookupResult.error !== undefined ||
-        lookupResult.literalText === undefined
+        lookupResult.historyText === undefined
     ) {
         return undefined;
     }
@@ -196,7 +198,7 @@ async function clarifyWithLookup(
 
     history.promptSections.push({
         role: "assistant",
-        content: lookupResult.literalText,
+        content: lookupResult.historyText,
     });
 
     const translationResult = await translateRequest(

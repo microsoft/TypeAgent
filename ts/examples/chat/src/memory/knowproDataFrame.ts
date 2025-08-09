@@ -134,7 +134,7 @@ export async function createKnowproDataFrameCommands(
             getFileName(namedArgs.filePath),
         );
         clock.stop();
-        printer.writeTiming(chalk.gray, clock, "Write to file");
+        printer.writeTiming(clock, "Write to file");
     }
 
     function loadDataFrameDef(): CommandMetadata {
@@ -165,7 +165,7 @@ export async function createKnowproDataFrameCommands(
             getFileName(dfFilePath),
         );
         clock.stop();
-        printer.writeTiming(chalk.gray, clock, "Read file");
+        printer.writeTiming(clock, "Read file");
         context.conversation = restaurantIndex?.conversation;
     }
 

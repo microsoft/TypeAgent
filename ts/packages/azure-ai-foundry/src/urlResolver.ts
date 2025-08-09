@@ -5,6 +5,7 @@ import * as bingWithGrounding from "./bingWithGrounding.js";
 import * as agents from "./agents.js";
 import { AIProjectClient } from "@azure/ai-projects";
 import { DefaultAzureCredential } from "@azure/identity";
+import { createTypeChat } from "typeagent";
 import {
     Agent,
     MessageContentUnion,
@@ -12,8 +13,18 @@ import {
     ToolUtility,
 } from "@azure/ai-agents";
 import registerDebug from "debug";
+import {
+    ChatModelWithStreaming,
+    CompletionSettings,
+    openai,
+    wikipedia,
+    wikipediaSchemas,
+} from "aiclient";
+import { readFileSync } from "fs";
+import { Result } from "typechat";
+import { encodeWikipediaTitle } from "../../aiclient/dist/wikipedia.js";
 
-const debug = registerDebug("typeagent:aiClient:urlResolver");
+const debug = registerDebug("typeagent:azure-ai-foundry:urlResolver");
 
 export interface urlResolutionAction {
     originalRequest: string;
@@ -60,14 +71,15 @@ export async function deleteThreads(
 export async function resolveURLWithSearch(
     site: string,
     groundingConfig: bingWithGrounding.ApiSettings,
-): Promise<string | undefined> {
-    let retVal: string = site;
+): Promise<string | undefined | null> {
+    let retVal: string | undefined | null = site;
     const project = new AIProjectClient(
         groundingConfig.endpoint!,
         new DefaultAzureCredential(),
     );
 
     const agent = await ensureResolverAgent(groundingConfig, project);
+    let inCompleteReason;
 
     if (!agent) {
         throw new Error(
@@ -87,10 +99,15 @@ export async function resolveURLWithSearch(
             agent.id,
             {
                 pollingOptions: {
-                    intervalInMs: 500,
+                    intervalInMs: 250,
                 },
                 onResponse: (response): void => {
                     debug(`Received response with status: ${response.status}`);
+
+                    const pb: any = response.parsedBody;
+                    if (pb?.incomplete_details?.reason) {
+                        inCompleteReason = pb.incomplete_details.reason;
+                    }
                 },
             },
         );
@@ -130,13 +147,19 @@ export async function resolveURLWithSearch(
         project.agents.threads.delete(thread.id);
     } catch (e) {
         debug(`Error resolving URL with search: ${e}`);
+
+        if (inCompleteReason === "content_filter") {
+            retVal = null;
+        } else {
+            retVal = undefined;
+        }
     }
 
     // return assistant messages
     return retVal;
 }
 
-/*
+/**
  * Attempts to retrive the URL resolution agent from the AI project and creates it if necessary
  */
 async function ensureResolverAgent(
@@ -149,13 +172,12 @@ async function ensureResolverAgent(
         groundingConfig.urlResolutionAgentId!,
         project,
         {
-            model: "gpt-4o",
+            model: "gpt-4.1",
             name: "TypeAgent_URLResolverAgent",
             description: "Auto created URL Resolution Agent",
             temperature: 0.01,
             instructions: `
-You are an agent that translates user requests in conjunction with search results to URLs.  If the page does not exist just return an empty URL. Do not make up URLs.  
-Choose to answer the user's question by favoring websites closer to the user. Don't restrict searches to specific domains unless the user provided the domain.
+You are an agent that translates user requests in conjunction with search results to URLs.  If the page does not exist just return an empty URL. Do not make up URLs.  Choose to answer the user's question by favoring websites closer to the user. Don't restrict searches to specific domains unless the user provided the domain. If the user request doesn't specify or imply 'website', add that to the search terms.
 
 Respond strictly with JSON. The JSON should be compatible with the TypeScript type Response from the following:
 
@@ -177,7 +199,7 @@ interface Response {
     );
 }
 
-/*
+/**
  * Attempts to retrive the URL resolution agent from the AI project and creates it if necessary
  */
 async function ensureValidatorAgent(
@@ -190,7 +212,7 @@ async function ensureValidatorAgent(
         groundingConfig.validatorAgentId!,
         project,
         {
-            model: "gpt-4o",
+            model: "gpt-4.1",
             name: "TypeAgent_URLValidatorAgent",
             description: "Auto created URL Validation Agent",
             temperature: 0.01,
@@ -251,6 +273,7 @@ export async function validateURL(
         const maxRetries = 5;
         let success = false;
         let lastResponse;
+        const TIMEOUT = 30_000; // 30 seconds
 
         while (retryCount < maxRetries && !success) {
             try {
@@ -282,19 +305,25 @@ export async function validateURL(
                             // Cancel the run if it has been running for more than 30 seconds
                             if (
                                 Date.now() - new Date(runStarted).getTime() >
-                                    30000 &&
+                                    TIMEOUT &&
                                 (response.parsedBody as any).status !=
                                     "cancelling" &&
                                 (response.parsedBody as any).status !=
                                     "completed"
                             ) {
-                                //if (!run.completedAt) {
-                                await project.agents.runs.cancel(
-                                    thread.id,
-                                    (response.parsedBody as any).id,
-                                );
-                                console.log(`TIMEOUT - Canceled ${utterance}`);
-                                //}
+                                try {
+                                    await project.agents.runs.cancel(
+                                        thread.id,
+                                        (response.parsedBody as any).id,
+                                    );
+                                    console.log(
+                                        `TIMEOUT - Canceled ${utterance}`,
+                                    );
+                                } catch (cancelError) {
+                                    console.error(
+                                        `Error canceling run: ${cancelError}`,
+                                    );
+                                }
                             }
                         },
                     },
@@ -367,4 +396,172 @@ export async function validateURL(
     }
 
     return undefined;
+}
+
+/**
+ * Attempts to resolve a website by looking at wikipedia entries and then determining the correct URL from it
+ */
+export async function resolveURLWithWikipedia(
+    site: string,
+    wikipediaConfig: wikipedia.WikipediaApiSettings,
+): Promise<string | undefined> {
+    // TODO: implement
+    console.log(`${site} ${wikipediaConfig}`);
+
+    const languageCode = Intl.DateTimeFormat()
+        .resolvedOptions()
+        .locale.split("-")[0];
+    const searchQuery = `${site}`;
+    const numberOfResults = 1;
+    const headers = await wikipediaConfig.getAPIHeaders();
+
+    const baseUrl = `${wikipediaConfig.endpoint}`;
+    const search_endpoint = "/search/page";
+    const url = `${baseUrl}${languageCode}${search_endpoint}`;
+    const parameters = new URLSearchParams({
+        q: searchQuery,
+        limit: numberOfResults.toString(),
+    });
+
+    let retVal: string | undefined = undefined;
+    await fetch(`${url}?${parameters}`, { method: "GET", headers: headers })
+        .then((response) => response.json())
+        .then(async (data: any) => {
+            // go through the pages (max 3)
+            for (let i = 0; i < data.pages.length && i < 3; i++) {
+                // default the result to the wikipedia page URL
+                if (retVal === undefined) {
+                    retVal = `https://en.wikipedia.org/wiki/${encodeWikipediaTitle(data.pages[i].title)}`;
+                }
+
+                // get the page markdown
+                const content = await wikipedia.getPageMarkdown(
+                    data.pages[i].title,
+                    wikipediaConfig,
+                );
+
+                if (content) {
+                    const response = await getTypeChatResponse(
+                        content!,
+                        wikipediaConfig,
+                    );
+                    if (response.success) {
+                        const externalLinks =
+                            response.data as wikipediaSchemas.WikipediaPageExternalLinks;
+
+                        // get the "official website" out of the page if it exists
+                        if (externalLinks.officialWebsite) {
+                            retVal = externalLinks.officialWebsite.url;
+                            break; // we found the official website, so break out of the loop
+                        }
+
+                        console.log(externalLinks);
+                    }
+                } else {
+                    // no "official website" found, so just use the wikipedia page URL
+                    retVal = `https://en.wikipedia.org/wiki/${encodeWikipediaTitle(data.pages[i].title)}`;
+                }
+            }
+        })
+        .catch((error) => {
+            console.error("Error fetching data:", error);
+        });
+
+    return retVal;
+}
+
+/**
+ * The keyword to site map is a JSON file that maps keywords to sites.
+ */
+export let keyWordsToSites: Record<string, string | undefined> | undefined;
+
+/**
+ * Resolves a URL by keyword using the URL resolver agent.
+ * @param keyword The keyword to resolve.
+ * @returns The resolved URL or undefined if not found.
+ */
+export async function resolveURLByKeyword(
+    keyword: string,
+): Promise<string | undefined | null> {
+    if (!keyWordsToSites) {
+        keyWordsToSites = JSON.parse(
+            readFileSync(
+                "../../examples/websiteAliases/resolvedKeywords.json",
+                "utf-8",
+            ),
+        );
+    }
+
+    return keyWordsToSites![keyword] ?? null;
+}
+
+async function getTypeChatResponse(
+    pageMarkdown: string,
+    config: wikipedia.WikipediaApiSettings,
+): Promise<Result<wikipediaSchemas.WikipediaPageExternalLinks>> {
+    // Create Model instance
+    let chatModel = createModel(true);
+
+    // Create Chat History
+    let maxContextLength = 8196;
+    let maxWindowLength = 30;
+
+    // create TypeChat object
+    const chat = createTypeChat<wikipediaSchemas.WikipediaPageExternalLinks>(
+        chatModel,
+        `
+export type WikipediaPageExternalLinks = {
+    officialWebsite?: WebPageLink;
+}
+
+export type WebPageLink = {
+    url: string;
+    title?: string;
+}            
+        `,
+        "WikipediaPageExternalLinks",
+        "You extract links from Wikipedia markdown pages.",
+        [],
+        maxContextLength,
+        maxWindowLength,
+    );
+
+    // make the request
+    const chatResponse = await chat.translate(pageMarkdown);
+
+    return chatResponse;
+}
+
+function createModel(fastModel: boolean = true): ChatModelWithStreaming {
+    let apiSettings: openai.ApiSettings | undefined;
+    if (!apiSettings) {
+        if (fastModel) {
+            apiSettings = openai.localOpenAIApiSettingsFromEnv(
+                openai.ModelType.Chat,
+                undefined,
+                "GPT_4O_mini",
+                ["wikipedia"],
+            );
+        } else {
+            // Create default model
+            apiSettings = openai.apiSettingsFromEnv();
+        }
+    }
+
+    let completionSettings: CompletionSettings = {
+        temperature: 1.0,
+        // Max response tokens
+        max_tokens: 1000,
+        // createChatModel will remove it if the model doesn't support it
+        response_format: { type: "json_object" },
+    };
+
+    const chatModel = openai.createChatModel(
+        apiSettings,
+        completionSettings,
+        undefined,
+        ["wikipedia"],
+    );
+
+    return chatModel;
 }

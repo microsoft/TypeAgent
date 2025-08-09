@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type PlayerAction =
+export type PlayerActions =
     | PlayRandomAction
     | PlayTrackAction
     | PlayFromCurrentTrackListAction
@@ -15,8 +15,11 @@ export type PlayerAction =
     | PreviousAction
     | ShuffleAction
     | ListDevicesAction
+    | SetDefaultDeviceAction
     | SelectDeviceAction
+    | ShowSelectedDeviceAction
     | SetVolumeAction
+    | SetMaxVolumeAction
     | ChangeVolumeAction
     | SearchTracksAction
     | ListPlaylistsAction
@@ -27,6 +30,9 @@ export type PlayerAction =
     | CreatePlaylistAction
     | DeletePlaylistAction
     | GetQueueAction;
+
+export type PlayerEntities = MusicDevice;
+export type MusicDevice = string;
 
 // Use playRandom when the user asks for some music to play
 export interface PlayRandomAction {
@@ -116,13 +122,25 @@ export interface ListDevicesAction {
     actionName: "listDevices";
 }
 
+export interface SetDefaultDeviceAction {
+    actionName: "setDefaultDevice";
+    parameters: {
+        // device name.  If not specified, the current selected device is set as the default.
+        deviceName?: MusicDevice;
+    };
+}
+
 // select playback device by keyword
 export interface SelectDeviceAction {
     actionName: "selectDevice";
     parameters: {
-        // keyword to match against device name
-        keyword: string;
+        deviceName: MusicDevice;
     };
+}
+
+// show the selected playback device
+export interface ShowSelectedDeviceAction {
+    actionName: "showSelectedDevice";
 }
 
 // set volume
@@ -131,6 +149,15 @@ export interface SetVolumeAction {
     parameters: {
         // new volume level
         newVolumeLevel: number;
+    };
+}
+
+// set max volume for the current device
+export interface SetMaxVolumeAction {
+    actionName: "setMaxVolume";
+    parameters: {
+        // new volume level
+        newMaxVolumeLevel: number;
     };
 }
 

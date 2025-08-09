@@ -7,43 +7,60 @@ import {
     ActionResultSuccess,
     ActionResultSuccessNoDisplay,
 } from "../action.js";
+import { DisplayMessageKind } from "../display.js";
 import { Entity } from "../memory.js";
 
 export function createActionResultNoDisplay(
-    literalText: string,
+    historyText: string,
     entities?: Entity[] | undefined,
 ): ActionResultSuccessNoDisplay {
     return {
-        literalText,
+        historyText,
         entities: entities ? entities : [],
     };
 }
 
 export function createActionResult(
-    literalText: string,
-    speak?: boolean | undefined,
-    entities?: Entity[] | undefined,
+    displayAndHistoryText: string,
+    options?:
+        | {
+              kind?: DisplayMessageKind;
+              speak?: boolean;
+          }
+        | DisplayMessageKind
+        | boolean,
+    entities?: Entity | Entity[],
 ): ActionResultSuccess {
-    entities ??= [];
+    const displayOptions =
+        typeof options === "boolean"
+            ? { speak: options }
+            : typeof options === "string"
+              ? { kind: options }
+              : options;
+
     return {
-        literalText,
-        entities,
-        displayContent: speak
+        historyText: displayAndHistoryText,
+        entities: entities
+            ? Array.isArray(entities)
+                ? entities
+                : [entities]
+            : [],
+        displayContent: displayOptions
             ? {
                   type: "text",
-                  content: literalText,
-                  speak: true,
+                  content: displayAndHistoryText,
+                  ...displayOptions,
               }
-            : literalText,
+            : displayAndHistoryText,
     };
 }
 
 export function createActionResultFromTextDisplay(
     displayText: string,
-    literalText?: string,
+    historyText?: string,
 ): ActionResultSuccess {
     return {
-        literalText,
+        historyText,
         entities: [],
         displayContent: displayText,
     };
@@ -51,11 +68,11 @@ export function createActionResultFromTextDisplay(
 
 export function createActionResultFromHtmlDisplay(
     displayText: string,
-    literalText?: string,
+    historyText?: string,
     entities?: Entity[] | undefined,
 ): ActionResultSuccess {
     return {
-        literalText,
+        historyText,
         entities: entities ? entities : [],
         displayContent: {
             type: "html",
@@ -66,10 +83,10 @@ export function createActionResultFromHtmlDisplay(
 
 export function createActionResultFromHtmlDisplayWithScript(
     displayText: string,
-    literalText?: string,
+    historyText?: string,
 ): ActionResultSuccess {
     return {
-        literalText,
+        historyText,
         entities: [],
         displayContent: {
             type: "iframe",
@@ -87,13 +104,13 @@ export function createActionResultFromHtmlDisplayWithScript(
  */
 export function createActionResultFromMarkdownDisplay(
     markdownText: string | string[],
-    literalText?: string,
+    historyText?: string,
     entities: Entity[] = [],
     resultEntity?: Entity,
 ): ActionResultSuccess {
     return {
-        literalText:
-            literalText ??
+        historyText:
+            historyText ??
             (Array.isArray(markdownText)
                 ? markdownText.join("\n")
                 : markdownText),

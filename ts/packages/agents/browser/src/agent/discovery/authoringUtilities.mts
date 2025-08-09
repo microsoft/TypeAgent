@@ -13,6 +13,9 @@ import { PageActionsPlan, UserIntent } from "./schema/recordedActions.mjs";
 import { createExecutionTracker } from "../planVisualizationClient.mjs";
 import { BrowserActionContext } from "../actionHandler.mjs";
 import { SessionContext } from "@typeagent/agent-sdk";
+import registerDebug from "debug";
+
+const debug = registerDebug("typeagent:browser:discover:utilities");
 
 export function setupAuthoringActions(
     browser: BrowserConnector,
@@ -74,7 +77,7 @@ export function setupAuthoringActions(
             screenshot,
         );
         if (descriptionResponse.success) {
-            console.log(descriptionResponse.data);
+            debug(descriptionResponse.data);
             recordedSteps = JSON.stringify(
                 (descriptionResponse.data as any).actions,
             );
@@ -132,8 +135,7 @@ export function setupAuthoringActions(
         );
         await reset(true);
 
-        console.log(`Running ${targetPlan.planName}`);
-
+        debug(`Running ${targetPlan.planName}`);
         for (const [index, step] of targetPlan.steps.entries()) {
             const screenshot = await browser.getCurrentPageScreenshot();
             await trackState(`__step_${index}`, "", "action", screenshot);

@@ -1,0 +1,52 @@
+{
+  "name": "website-aliases",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Website Aliases Example",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/examples/websiteAliases"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "scripts": {
+    "build": "npm run tsc",
+    "postbuild": "copyfiles -u 1 \"src/**/*Schema.ts\" \"src/**/*.txt\" dist",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "runchat": "node dist/main.js memory",
+    "runcode": "node dist/main.js code",
+    "runcodememory": "node dist/main.js codeMemory",
+    "runtests": "node dist/main.js tests",
+    "tsc": "tsc -p src"
+  },
+  "dependencies": {
+    "@azure/ai-agents": "^1.0.0-beta.3",
+    "@azure/ai-projects": "^1.0.0-beta.8",
+    "@azure/identity": "^4.10.0",
+    "azure-ai-foundry": "workspace:*",
+    "chalk": "^5.4.1",
+    "code-processor": "workspace:*",
+    "common-utils": "workspace:*",
+    "debug": "^4.4.0",
+    "dotenv": "^16.3.1",
+    "fs-extra": "^11.3.0",
+    "puppeteer": "^23.11.1",
+    "typeagent": "workspace:*",
+    "typechat": "^0.1.1",
+    "typescript": "~5.4.5"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "copyfiles": "^2.4.1",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

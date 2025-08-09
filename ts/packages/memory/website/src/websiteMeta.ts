@@ -8,9 +8,9 @@ import {
     MetaTagCollection,
     StructuredDataCollection,
     ActionInfo,
-} from "./contentExtractor.js";
-import { DetectedAction, ActionSummary } from "./actionExtractor.js";
-import { websiteToTextChunksEnhanced } from "./chunkingUtils.js";
+} from "./extraction/types.js";
+import { websiteToTextChunks } from "./chunkingUtils.js";
+import { DetectedAction, ActionSummary } from "./extraction/types.js";
 
 export interface WebsiteVisitInfo {
     url: string;
@@ -35,7 +35,7 @@ export interface WebsiteVisitInfo {
     extractedActions?: ActionInfo[];
     contentSummary?: string;
 
-    // NEW: Action detection fields
+    // Action detection fields
     detectedActions?: DetectedAction[];
     actionSummary?: ActionSummary;
 }
@@ -104,7 +104,7 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
         if (visitInfo.contentSummary !== undefined)
             this.contentSummary = visitInfo.contentSummary;
 
-        // NEW: Action detection properties
+        // Action detection properties
         if (visitInfo.detectedActions !== undefined)
             this.detectedActions = visitInfo.detectedActions;
         if (visitInfo.actionSummary !== undefined)
@@ -127,7 +127,7 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
         return this.websiteToKnowledge();
     }
 
-    public getEnhancedKnowledge(
+    public getMergedKnowledge(
         extractedKnowledge?: kpLib.KnowledgeResponse,
     ): kpLib.KnowledgeResponse {
         const baseKnowledge = this.websiteToKnowledge();
@@ -233,70 +233,118 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
             // Temporal facets for ordering queries
             if (this.bookmarkDate) {
                 const bookmarkDate = new Date(this.bookmarkDate);
-                domainEntity.facets.push({
-                    name: "bookmarkDate",
-                    value: this.bookmarkDate,
-                });
-                domainEntity.facets.push({
-                    name: "bookmarkYear",
-                    value: bookmarkDate.getFullYear().toString(),
-                });
+                const existingFacetNames = new Set(
+                    domainEntity.facets.map((f: any) => f.name),
+                );
+
+                if (!existingFacetNames.has("bookmarkDate")) {
+                    domainEntity.facets.push({
+                        name: "bookmarkDate",
+                        value: this.bookmarkDate,
+                    });
+                }
+                if (!existingFacetNames.has("bookmarkYear")) {
+                    domainEntity.facets.push({
+                        name: "bookmarkYear",
+                        value: bookmarkDate.getFullYear().toString(),
+                    });
+                }
             }
 
             if (this.visitDate) {
                 const visitDate = new Date(this.visitDate);
-                domainEntity.facets.push({
-                    name: "visitDate",
-                    value: this.visitDate,
-                });
-                domainEntity.facets.push({
-                    name: "visitYear",
-                    value: visitDate.getFullYear().toString(),
-                });
+                const existingFacetNames = new Set(
+                    domainEntity.facets.map((f: any) => f.name),
+                );
+
+                if (!existingFacetNames.has("visitDate")) {
+                    domainEntity.facets.push({
+                        name: "visitDate",
+                        value: this.visitDate,
+                    });
+                }
+                if (!existingFacetNames.has("visitYear")) {
+                    domainEntity.facets.push({
+                        name: "visitYear",
+                        value: visitDate.getFullYear().toString(),
+                    });
+                }
             }
 
             // Frequency facets for popularity queries
             if (this.visitCount !== undefined) {
-                domainEntity.facets.push({
-                    name: "visitCount",
-                    value: this.visitCount.toString(),
-                });
-                const frequency = this.calculateVisitFrequency();
-                domainEntity.facets.push({
-                    name: "visitFrequency",
-                    value: frequency,
-                });
+                const existingFacetNames = new Set(
+                    domainEntity.facets.map((f: any) => f.name),
+                );
+
+                if (!existingFacetNames.has("visitCount")) {
+                    domainEntity.facets.push({
+                        name: "visitCount",
+                        value: this.visitCount.toString(),
+                    });
+                }
+                if (!existingFacetNames.has("visitFrequency")) {
+                    const frequency = this.calculateVisitFrequency();
+                    domainEntity.facets.push({
+                        name: "visitFrequency",
+                        value: frequency,
+                    });
+                }
             }
 
             // Category and source facets for filtering
             if (this.pageType) {
-                domainEntity.facets.push({
-                    name: "category",
-                    value: this.pageType,
-                });
-                const confidence = this.calculatePageTypeConfidence();
-                domainEntity.facets.push({
-                    name: "categoryConfidence",
-                    value: confidence.toString(),
-                });
+                const existingFacetNames = new Set(
+                    domainEntity.facets.map((f: any) => f.name),
+                );
+
+                if (!existingFacetNames.has("category")) {
+                    domainEntity.facets.push({
+                        name: "category",
+                        value: this.pageType,
+                    });
+                }
+                if (!existingFacetNames.has("categoryConfidence")) {
+                    const confidence = this.calculatePageTypeConfidence();
+                    domainEntity.facets.push({
+                        name: "categoryConfidence",
+                        value: confidence.toString(),
+                    });
+                }
             }
 
             if (this.websiteSource) {
-                domainEntity.facets.push({
-                    name: "source",
-                    value: this.websiteSource,
-                });
+                const existingFacetNames = new Set(
+                    domainEntity.facets.map((f: any) => f.name),
+                );
+
+                if (!existingFacetNames.has("source")) {
+                    domainEntity.facets.push({
+                        name: "source",
+                        value: this.websiteSource,
+                    });
+                }
             }
 
             // Folder context for bookmarks
             if (this.folder && this.websiteSource === "bookmark") {
-                domainEntity.facets.push({
-                    name: "folder",
-                    value: this.folder,
-                });
+                const existingFacetNames = new Set(
+                    domainEntity.facets.map((f: any) => f.name),
+                );
+
+                if (!existingFacetNames.has("folder")) {
+                    domainEntity.facets.push({
+                        name: "folder",
+                        value: this.folder,
+                    });
+                }
             }
 
-            entities.push(domainEntity);
+            // Check if entity with same name already exists
+            const existingEntityNames = new Set(entities.map((e) => e.name));
+            if (!existingEntityNames.has(domainEntity.name)) {
+                entities.push(domainEntity);
+            }
         }
 
         // Enhanced temporal topics for LLM reasoning
@@ -305,66 +353,133 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
             const year = bookmarkDate.getFullYear();
             const currentYear = new Date().getFullYear();
 
-            topics.push(`bookmarked in ${year}`);
-            topics.push(`${this.domain} bookmark from ${year}`);
+            const potentialTopics = [
+                `bookmarked in ${year}`,
+                `${this.domain} bookmark from ${year}`,
+            ];
 
             // Relative temporal topics
             const yearsAgo = currentYear - year;
             if (yearsAgo === 0) {
-                topics.push("recent bookmark");
-                topics.push("new bookmark");
+                potentialTopics.push("recent bookmark", "new bookmark");
             } else if (yearsAgo >= 3) {
-                topics.push("old bookmark");
-                topics.push("early bookmark");
+                potentialTopics.push("old bookmark", "early bookmark");
+            }
+
+            // Add only unique topics
+            const existingTopics = new Set(topics);
+            for (const topic of potentialTopics) {
+                if (!existingTopics.has(topic)) {
+                    topics.push(topic);
+                    existingTopics.add(topic);
+                }
             }
         }
 
         if (this.visitDate) {
             const visitDate = new Date(this.visitDate);
             const year = visitDate.getFullYear();
-            topics.push(`visited in ${year}`);
-            topics.push(`${this.domain} visit from ${year}`);
+
+            const potentialTopics = [
+                `visited in ${year}`,
+                `${this.domain} visit from ${year}`,
+            ];
+
+            // Add only unique topics
+            const existingTopics = new Set(topics);
+            for (const topic of potentialTopics) {
+                if (!existingTopics.has(topic)) {
+                    topics.push(topic);
+                    existingTopics.add(topic);
+                }
+            }
         }
 
         // Frequency-derived topics
-        if (this.visitCount !== undefined && this.visitCount > 10) {
-            topics.push("frequently visited site");
-            topics.push("popular domain");
-            topics.push("often visited");
-        } else if (this.visitCount !== undefined && this.visitCount <= 2) {
-            topics.push("rarely visited site");
-            topics.push("infrequent visit");
+        if (this.visitCount !== undefined) {
+            let potentialTopics: string[] = [];
+
+            if (this.visitCount > 10) {
+                potentialTopics = [
+                    "frequently visited site",
+                    "popular domain",
+                    "often visited",
+                ];
+            } else if (this.visitCount <= 2) {
+                potentialTopics = ["rarely visited site", "infrequent visit"];
+            }
+
+            // Add only unique topics
+            const existingTopics = new Set(topics);
+            for (const topic of potentialTopics) {
+                if (!existingTopics.has(topic)) {
+                    topics.push(topic);
+                    existingTopics.add(topic);
+                }
+            }
         }
 
         // Enhanced category topics
         if (this.pageType) {
-            topics.push(this.pageType);
-            topics.push(`${this.pageType} site`);
-            topics.push(`${this.pageType} website`);
+            const potentialTopics = [
+                this.pageType,
+                `${this.pageType} site`,
+                `${this.pageType} website`,
+            ];
 
             // Category-specific temporal topics
             if (this.bookmarkDate) {
                 const year = new Date(this.bookmarkDate).getFullYear();
-                topics.push(`${this.pageType} bookmark from ${year}`);
+                potentialTopics.push(`${this.pageType} bookmark from ${year}`);
+            }
+
+            // Add only unique topics
+            const existingTopics = new Set(topics);
+            for (const topic of potentialTopics) {
+                if (!existingTopics.has(topic)) {
+                    topics.push(topic);
+                    existingTopics.add(topic);
+                }
             }
         }
 
         // Add title as topic if available
         if (this.title) {
-            topics.push(this.title);
+            const existingTopics = new Set(topics);
+            if (!existingTopics.has(this.title)) {
+                topics.push(this.title);
+            }
         }
 
         // Add folder as topic if it's a bookmark
         if (this.folder && this.websiteSource === "bookmark") {
-            topics.push(this.folder);
-            topics.push(`bookmark folder: ${this.folder}`);
+            const potentialTopics = [
+                this.folder,
+                `bookmark folder: ${this.folder}`,
+            ];
+
+            // Add only unique topics
+            const existingTopics = new Set(topics);
+            for (const topic of potentialTopics) {
+                if (!existingTopics.has(topic)) {
+                    topics.push(topic);
+                    existingTopics.add(topic);
+                }
+            }
         }
 
         // Add keywords as topics
         if (this.keywords) {
+            const existingTopics = new Set(topics);
             for (const keyword of this.keywords) {
-                topics.push(keyword);
-                topics.push(`keyword: ${keyword}`);
+                const potentialTopics = [keyword, `keyword: ${keyword}`];
+
+                for (const topic of potentialTopics) {
+                    if (!existingTopics.has(topic)) {
+                        topics.push(topic);
+                        existingTopics.add(topic);
+                    }
+                }
             }
         }
 
@@ -399,17 +514,20 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
             });
         }
 
-        actions.push(action);
+        // Check if action already exists (compare by verb, subject, and object)
+        const actionExists = actions.some(
+            (existingAction) =>
+                existingAction.verbs?.[0] === action.verbs[0] &&
+                existingAction.subjectEntityName === action.subjectEntityName &&
+                existingAction.objectEntityName === action.objectEntityName,
+        );
+
+        if (!actionExists) {
+            actions.push(action);
+        }
 
         // Basic content-derived knowledge
         this.addBasicContentTopics(topics);
-
-        // NEW: Action-derived knowledge
-        if (this.detectedActions && this.detectedActions.length > 0) {
-            this.addActionTopics(topics, this.detectedActions);
-            this.addActionEntities(entities, this.detectedActions);
-            this.addActionCapabilities(actions, this.detectedActions);
-        }
 
         return {
             entities,
@@ -445,288 +563,34 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
     }
 
     private addBasicContentTopics(topics: string[]): void {
+        const existingTopics = new Set(topics);
+
         // Basic content analysis from page content
         if (this.pageContent) {
             // Add headings as topics
             this.pageContent.headings.forEach((heading) => {
-                topics.push(heading);
-                topics.push(`topic: ${heading}`);
+                const potentialTopics = [heading, `topic: ${heading}`];
+
+                for (const topic of potentialTopics) {
+                    if (!existingTopics.has(topic)) {
+                        topics.push(topic);
+                        existingTopics.add(topic);
+                    }
+                }
             });
-
-            // Content characteristics
-            if (
-                this.pageContent.codeBlocks &&
-                this.pageContent.codeBlocks.length > 0
-            ) {
-                topics.push("contains code examples");
-                topics.push("programming tutorial");
-                topics.push("technical documentation");
-            }
-
-            // Reading time context
-            if (this.pageContent.readingTime > 10) {
-                topics.push("long form content");
-                topics.push("detailed article");
-            } else if (this.pageContent.readingTime < 3) {
-                topics.push("quick read");
-                topics.push("short content");
-            }
         }
 
         // Meta tag derived knowledge
         if (this.metaTags?.keywords) {
             this.metaTags.keywords.forEach((keyword) => {
-                topics.push(keyword);
-                topics.push(`keyword: ${keyword}`);
-            });
-        }
-    }
+                const potentialTopics = [keyword, `keyword: ${keyword}`];
 
-    private addActionTopics(
-        topics: string[],
-        detectedActions: DetectedAction[],
-    ): void {
-        // Add action type topics - filter out undefined actionTypes
-        const actionTypes = new Set(
-            detectedActions
-                .map((a) => a.actionType)
-                .filter(
-                    (actionType): actionType is string =>
-                        actionType != null && actionType !== "",
-                ),
-        );
-
-        actionTypes.forEach((actionType) => {
-            topics.push(`supports ${actionType}`);
-            topics.push(
-                `${actionType.replace("Action", "").toLowerCase()} available`,
-            );
-
-            // Action type specific topics
-            switch (actionType) {
-                case "BuyAction":
-                    topics.push("commerce site");
-                    topics.push("shopping available");
-                    topics.push("purchase options");
-                    break;
-                case "DownloadAction":
-                    topics.push("downloads available");
-                    topics.push("resource site");
-                    topics.push("file downloads");
-                    break;
-                case "ShareAction":
-                    topics.push("social sharing");
-                    topics.push("shareable content");
-                    topics.push("social features");
-                    break;
-                case "SearchAction":
-                    topics.push("searchable site");
-                    topics.push("search functionality");
-                    topics.push("search interface");
-                    break;
-                case "SubscribeAction":
-                    topics.push("subscription available");
-                    topics.push("newsletter signup");
-                    topics.push("email notifications");
-                    break;
-                case "WatchAction":
-                    topics.push("video content");
-                    topics.push("playable media");
-                    topics.push("multimedia site");
-                    break;
-                case "CommunicateAction":
-                    topics.push("contact available");
-                    topics.push("communication forms");
-                    topics.push("customer support");
-                    break;
-                case "LoginAction":
-                    topics.push("user accounts");
-                    topics.push("authentication required");
-                    topics.push("member login");
-                    break;
-            }
-        });
-
-        // High-confidence action topics
-        const highConfidenceActions = detectedActions.filter(
-            (a) => a.confidence > 0.8,
-        );
-        if (highConfidenceActions.length > 0) {
-            topics.push("high-confidence actions");
-            topics.push("reliable action detection");
-        }
-
-        // Action quantity topics
-        if (detectedActions.length > 5) {
-            topics.push("action-rich site");
-            topics.push("interactive website");
-            topics.push("many features available");
-        } else if (detectedActions.length === 1) {
-            topics.push("focused functionality");
-            topics.push("single primary action");
-        }
-
-        // Target type topics
-        detectedActions.forEach((action) => {
-            if (action.target?.type) {
-                topics.push(`operates on ${action.target.type}`);
-                if (action.target.type === "Product") {
-                    topics.push("product-focused");
-                    topics.push("e-commerce");
-                } else if (action.target.type === "DigitalDocument") {
-                    topics.push("document-focused");
-                    topics.push("resource library");
-                }
-            }
-        });
-    }
-
-    private addActionEntities(
-        entities: any[],
-        detectedActions: DetectedAction[],
-    ): void {
-        // Create action entities for high-confidence actions
-        detectedActions.forEach((action, index) => {
-            if (action.confidence > 0.7 && action.actionType) {
-                const actionEntity: any = {
-                    name: `${this.domain}_action_${index}`,
-                    type: [
-                        "action",
-                        action.actionType.toLowerCase().replace("action", ""),
-                    ],
-                    facets: [
-                        { name: "actionType", value: action.actionType },
-                        { name: "actionName", value: action.name },
-                        {
-                            name: "confidence",
-                            value: action.confidence.toString(),
-                        },
-                        { name: "domain", value: this.domain || "unknown" },
-                        { name: "url", value: this.url },
-                    ],
-                };
-
-                // Add target information
-                if (action.target) {
-                    actionEntity.facets.push({
-                        name: "targetType",
-                        value: action.target.type,
-                    });
-                    if (action.target.name) {
-                        actionEntity.facets.push({
-                            name: "targetName",
-                            value: action.target.name,
-                        });
-                    }
-                    if (action.target.price) {
-                        actionEntity.facets.push(
-                            { name: "hasPrice", value: "true" },
-                            {
-                                name: "priceText",
-                                value: action.target.price.text || "",
-                            },
-                        );
-                    }
-                    if (action.target.fileFormat) {
-                        actionEntity.facets.push({
-                            name: "fileFormat",
-                            value: action.target.fileFormat,
-                        });
+                for (const topic of potentialTopics) {
+                    if (!existingTopics.has(topic)) {
+                        topics.push(topic);
+                        existingTopics.add(topic);
                     }
                 }
-
-                // Add method information for forms
-                if (action.method) {
-                    actionEntity.facets.push({
-                        name: "httpMethod",
-                        value: action.method,
-                    });
-                }
-
-                // Add source information
-                if (action.metadata?.source) {
-                    actionEntity.facets.push({
-                        name: "detectionSource",
-                        value: action.metadata.source,
-                    });
-                }
-
-                entities.push(actionEntity);
-            }
-        });
-    }
-
-    private addActionCapabilities(
-        actions: any[],
-        detectedActions: DetectedAction[],
-    ): void {
-        // Add primary action capability
-        if (detectedActions.length > 0) {
-            const primaryAction = detectedActions.sort(
-                (a, b) => b.confidence - a.confidence,
-            )[0];
-
-            if (primaryAction.actionType) {
-                const actionVerb = primaryAction.actionType
-                    .replace("Action", "")
-                    .toLowerCase();
-
-                actions.push({
-                    verbs: ["can", actionVerb],
-                    verbTense: "present",
-                    subjectEntityName: "user",
-                    objectEntityName: this.domain || this.url,
-                    indirectObjectEntityName: "none",
-                    params: [
-                        { name: "actionType", value: primaryAction.actionType },
-                        {
-                            name: "actionConfidence",
-                            value: primaryAction.confidence.toString(),
-                        },
-                        { name: "actionName", value: primaryAction.name },
-                    ],
-                });
-            }
-        }
-
-        // Add specific high-value actions
-        const buyActions = detectedActions.filter(
-            (a) => a.actionType === "BuyAction" && a.confidence > 0.8,
-        );
-        if (buyActions.length > 0) {
-            actions.push({
-                verbs: ["can", "purchase"],
-                verbTense: "present",
-                subjectEntityName: "user",
-                objectEntityName: this.domain || this.url,
-                indirectObjectEntityName: "none",
-                params: [
-                    { name: "actionType", value: "BuyAction" },
-                    {
-                        name: "actionCount",
-                        value: buyActions.length.toString(),
-                    },
-                ],
-            });
-        }
-
-        const downloadActions = detectedActions.filter(
-            (a) => a.actionType === "DownloadAction" && a.confidence > 0.8,
-        );
-        if (downloadActions.length > 0) {
-            actions.push({
-                verbs: ["can", "download"],
-                verbTense: "present",
-                subjectEntityName: "user",
-                objectEntityName: this.domain || this.url,
-                indirectObjectEntityName: "none",
-                params: [
-                    { name: "actionType", value: "DownloadAction" },
-                    {
-                        name: "actionCount",
-                        value: downloadActions.length.toString(),
-                    },
-                ],
             });
         }
     }
@@ -753,7 +617,7 @@ export class Website implements kp.IMessage {
         this.timestamp = metadata.visitDate || metadata.bookmarkDate;
 
         if (isNew) {
-            const chunks = websiteToTextChunksEnhanced(
+            const chunks = websiteToTextChunks(
                 pageContent,
                 metadata.title,
                 metadata.url,

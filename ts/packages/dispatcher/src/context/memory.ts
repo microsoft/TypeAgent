@@ -201,8 +201,8 @@ export function addActionResultToMemory(
 
         addResultToMemory(
             context,
-            result.literalText
-                ? result.literalText
+            result.historyText
+                ? result.historyText
                 : `Action ${getFullActionName(executableAction)} completed.`,
             schemaName,
             combinedEntities,
@@ -227,19 +227,19 @@ export async function lookupAndAnswerFromMemory(
         throw new Error(`Conversation memory search failed: ${result.message}`);
     }
 
-    const literalText: string[] = [];
+    const historyText: string[] = [];
     for (const [searchResult, answer] of result.data) {
         debug("Conversation memory search result:", searchResult);
         if (answer.type === "Answered") {
-            literalText.push(answer.answer!);
+            historyText.push(answer.answer!);
             displayResult(answer.answer!, context);
         } else {
-            literalText.push(answer.whyNoAnswer!);
+            historyText.push(answer.whyNoAnswer!);
             displayError(answer.whyNoAnswer!, context);
         }
     }
     // TODO: how about entities?
-    return literalText;
+    return historyText;
 }
 
 function ensureMemory(context: ActionContext<CommandHandlerContext>) {

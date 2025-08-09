@@ -26,7 +26,10 @@ export interface KnowledgeExtractor {
         message: string,
         maxRetries: number,
     ): Promise<Result<KnowledgeResponse>>;
-    translator?: TypeChatJsonTranslator<KnowledgeResponse>;
+    /**
+     * Custom translator to use
+     */
+    translator?: TypeChatJsonTranslator<KnowledgeResponse> | undefined;
 }
 
 export type KnowledgeExtractorSettings = {
@@ -49,12 +52,13 @@ export function createKnowledgeExtractor(
 ): KnowledgeExtractor {
     const settings = extractorSettings ?? createKnowledgeExtractorSettings();
     const translator = knowledgeTranslator ?? createKnowledgeTranslator(model);
-    return {
+    const extractor: KnowledgeExtractor = {
         settings,
         extract,
         extractWithRetry,
         translator,
     };
+    return extractor;
 
     async function extract(
         message: string,
@@ -79,7 +83,9 @@ export function createKnowledgeExtractor(
     async function extractKnowledge(
         message: string,
     ): Promise<Result<KnowledgeResponse>> {
-        const result = await translator.translate(message);
+        const result = await (extractor.translator ?? translator).translate(
+            message,
+        );
         if (result.success) {
             if (settings.mergeActionKnowledge || settings.mergeEntityFacets) {
                 mergeActionKnowledge(result.data);

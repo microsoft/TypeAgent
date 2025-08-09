@@ -7,6 +7,7 @@ import {
     ListIndexingResult,
     ScoredSemanticRefOrdinal,
     SemanticRefOrdinal,
+    StructuredTag,
     Tag,
 } from "./interfaces.js";
 import { conversation as kpLib } from "knowledge-processor";
@@ -147,6 +148,13 @@ export function addToPropertyIndex(
                     propertyIndex.addProperty(
                         PropertyNames.Tag,
                         tag.text,
+                        semanticRefOrdinal,
+                    );
+                    break;
+                case "sTag":
+                    addEntityPropertiesToIndex(
+                        semanticRef.knowledge as StructuredTag,
+                        propertyIndex,
                         semanticRefOrdinal,
                     );
                     break;

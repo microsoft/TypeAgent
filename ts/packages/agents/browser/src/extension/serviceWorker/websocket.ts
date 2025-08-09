@@ -16,6 +16,33 @@ let webSocket: WebSocket | undefined;
 let settings: Record<string, any>;
 
 /**
+ * Broadcasts WebSocket connection status changes to all extension pages
+ */
+function broadcastConnectionStatus(connected: boolean): void {
+    chrome.tabs.query({}, (tabs) => {
+        tabs.forEach((tab) => {
+            if (tab.url?.startsWith("chrome-extension://")) {
+                chrome.tabs
+                    .sendMessage(tab.id!, {
+                        type: "connectionStatusChanged",
+                        connected: connected,
+                        timestamp: Date.now(),
+                    })
+                    .catch(() => {});
+            }
+        });
+    });
+
+    chrome.runtime
+        .sendMessage({
+            type: "connectionStatusChanged",
+            connected: connected,
+            timestamp: Date.now(),
+        })
+        .catch(() => {});
+}
+
+/**
  * Creates a new WebSocket connection
  * @returns Promise resolving to the WebSocket or undefined
  */
@@ -69,12 +96,14 @@ export async function ensureWebsocketConnected(): Promise<
         webSocket = await createWebSocket();
         if (!webSocket) {
             showBadgeError();
+            broadcastConnectionStatus(false);
             resolve(undefined);
             return;
         }
 
         webSocket.binaryType = "blob";
         keepWebSocketAlive(webSocket);
+        broadcastConnectionStatus(true);
 
         const browserControlChannel = createGenericChannel((message: any) => {
             if (webSocket && webSocket.readyState === WebSocket.OPEN) {
@@ -163,6 +192,7 @@ export async function ensureWebsocketConnected(): Promise<
             debugWebSocket("websocket connection closed");
             webSocket = undefined;
             showBadgeError();
+            broadcastConnectionStatus(false);
             if (event.reason !== "duplicate") {
                 reconnectWebSocket();
             }
@@ -201,6 +231,7 @@ export function reconnectWebSocket(): void {
             debugWebSocket("Clearing reconnect retry interval");
             clearInterval(connectionCheckIntervalId);
             showBadgeHealthy();
+            broadcastConnectionStatus(true);
         } else {
             debugWebSocket("Retrying connection");
             await ensureWebsocketConnected();

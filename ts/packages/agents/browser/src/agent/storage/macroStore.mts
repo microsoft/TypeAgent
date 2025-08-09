@@ -4,24 +4,18 @@
 import { FileManager } from "./fileManager.mjs";
 import { MacroValidator, MacroIndexManager } from "./validator.mjs";
 import { PatternResolver } from "./patternResolver.mjs";
-import { DomainManager } from "./domainManager.mjs";
-import { MacroSearchEngine } from "./searchEngine.mjs";
-import { AnalyticsManager } from "./analyticsManager.mjs";
 import {
     StoredMacro,
     MacroIndex,
     StoreStatistics,
     SaveResult,
     ValidationResult,
-    DomainConfig,
-    UrlPatternDefinition,
-    UrlPattern,
 } from "./types.mjs";
 import registerDebug from "debug";
 const debug = registerDebug("typeagent:browser:macro:store");
 
 /**
- * MacroStore - storage system with pattern matching, search, and analytics
+ * MacroStore - storage system with pattern matching and search
  *
  */
 export class MacroStore {
@@ -29,9 +23,6 @@ export class MacroStore {
     private validator: MacroValidator;
     private indexManager: MacroIndexManager;
     private patternResolver: PatternResolver;
-    private domainManager: DomainManager;
-    private searchEngine: MacroSearchEngine;
-    private analyticsManager: AnalyticsManager;
     private initialized: boolean = false;
 
     constructor(sessionStorage: any) {
@@ -39,11 +30,6 @@ export class MacroStore {
         this.validator = new MacroValidator();
         this.indexManager = new MacroIndexManager();
         this.patternResolver = new PatternResolver();
-        this.domainManager = new DomainManager(this.fileManager);
-        this.searchEngine = new MacroSearchEngine();
-        this.analyticsManager = new AnalyticsManager(this.fileManager);
-
-        debug(this.searchEngine);
     }
 
     /**
@@ -60,9 +46,6 @@ export class MacroStore {
 
             // Load existing macro index
             await this.loadMacroIndex();
-
-            // Initialize analytics manager
-            await this.analyticsManager.initialize();
 
             this.initialized = true;
             debug("MacroStore initialized successfully with enhanced features");
@@ -294,7 +277,7 @@ export class MacroStore {
                 await this.patternResolver.resolveMacrosForUrl(
                     url,
                     (id: string) => this.getMacro(id),
-                    () => this.getAllUrlPatterns(),
+                    () => Promise.resolve([]), // No URL patterns without domain manager
                     (domain: string) =>
                         this.indexManager.getMacrosForDomain(domain),
                     () => this.indexManager.getMacrosByScope("global"),
@@ -459,124 +442,6 @@ export class MacroStore {
             console.error("Failed to create backup:", error);
             throw new Error("Backup creation failed");
         }
-    }
-
-    // Domain Configuration Methods
-
-    /**
-     * Get domain configuration
-     */
-    async getDomainConfig(domain: string): Promise<DomainConfig | null> {
-        this.ensureInitialized();
-        return await this.domainManager.getDomainConfig(domain);
-    }
-
-    /**
-     * Save domain configuration
-     */
-    async saveDomainConfig(config: DomainConfig): Promise<SaveResult> {
-        this.ensureInitialized();
-        return await this.domainManager.saveDomainConfig(config);
-    }
-
-    /**
-     * Delete domain configuration
-     */
-    async deleteDomainConfig(domain: string): Promise<SaveResult> {
-        this.ensureInitialized();
-        return await this.domainManager.deleteDomainConfig(domain);
-    }
-
-    /**
-     * Add URL pattern to domain
-     */
-    async addDomainPattern(
-        domain: string,
-        pattern: UrlPatternDefinition,
-    ): Promise<SaveResult> {
-        this.ensureInitialized();
-        return await this.domainManager.addUrlPattern(domain, pattern);
-    }
-
-    /**
-     * Remove URL pattern from domain
-     */
-    async removeDomainPattern(
-        domain: string,
-        patternName: string,
-    ): Promise<SaveResult> {
-        this.ensureInitialized();
-        return await this.domainManager.removeUrlPattern(domain, patternName);
-    }
-
-    /**
-     * Get URL patterns for domain
-     */
-    async getUrlPatterns(domain: string): Promise<UrlPatternDefinition[]> {
-        this.ensureInitialized();
-        return await this.domainManager.getUrlPatterns(domain);
-    }
-
-    /**
-     * Get macros for a specific pattern
-     */
-    async getMacrosForPattern(
-        domain: string,
-        pattern: string,
-    ): Promise<StoredMacro[]> {
-        this.ensureInitialized();
-
-        try {
-            // For now, return macros that match the domain
-            // This could be enhanced to match specific patterns
-            return await this.getMacrosForDomain(domain);
-        } catch (error) {
-            console.error(
-                `Failed to get macros for pattern ${pattern} in domain ${domain}:`,
-                error,
-            );
-            return [];
-        }
-    }
-
-    /**
-     * Get all URL patterns from all domains
-     */
-    async getAllUrlPatterns(): Promise<UrlPattern[]> {
-        this.ensureInitialized();
-
-        try {
-            const allDomains = await this.domainManager.getAllDomains();
-            const allPatterns: UrlPattern[] = [];
-
-            for (const domain of allDomains) {
-                const domainPatterns =
-                    await this.domainManager.getUrlPatterns(domain);
-                const urlPatterns = domainPatterns.map(
-                    (dp: UrlPatternDefinition) =>
-                        ({
-                            pattern: dp.pattern,
-                            type: dp.type,
-                            priority: dp.priority,
-                            description: dp.description,
-                        }) as UrlPattern,
-                );
-                allPatterns.push(...urlPatterns);
-            }
-
-            return allPatterns;
-        } catch (error) {
-            console.error("Failed to get all URL patterns:", error);
-            return [];
-        }
-    }
-
-    /**
-     * Initialize domain with default configuration
-     */
-    async initializeDomain(domain: string): Promise<DomainConfig> {
-        this.ensureInitialized();
-        return await this.domainManager.initializeDomain(domain);
     }
 
     /**

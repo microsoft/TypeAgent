@@ -255,7 +255,7 @@ export async function createAgentRpcClient(
         }) => {
             const context = contextMap.get(param.contextId);
             await context.removeDynamicAgent(param.name);
-            channelProvider.deleteChannel(param.name);
+            channelProvider.deleteChannel(`agent:${param.name}`);
         },
         getSharedLocalHostPort: async (param: {
             contextId: number;
@@ -563,14 +563,16 @@ export async function createAgentRpcClient(
             });
         },
         getActionCompletion(
+            context: SessionContext<ShimContext>,
             partialAction,
             propertyName,
-            context: SessionContext<ShimContext>,
+            entityTypeName,
         ) {
             return rpc.invoke("getActionCompletion", {
                 ...getContextParam(context),
                 partialAction,
                 propertyName,
+                entityTypeName,
             });
         },
     };

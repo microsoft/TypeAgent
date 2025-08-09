@@ -7,6 +7,21 @@
  */
 
 import type { AnswerEnhancement } from "../../agent/search/schema/answerEnhancement.mjs";
+import type {
+    StoredMacro,
+    MacroQueryOptions,
+    DeleteMacroResult,
+} from "./macroUtilities";
+import {
+    ExtensionServiceBase,
+    LibraryStats,
+    SearchFilters,
+    KnowledgeStatus,
+    SearchResult,
+    Website,
+    SourceReference,
+    EntityMatch,
+} from "./extensionServiceBase";
 
 // ===================================================================
 // INTERFACES AND TYPES
@@ -18,76 +33,16 @@ export interface NotificationAction {
     style?: "primary" | "secondary" | "success" | "danger";
 }
 
-export interface LibraryStats {
-    totalWebsites: number;
-    totalBookmarks: number;
-    totalHistory: number;
-    topDomains: number;
-    lastImport?: number;
-}
-
-export interface SearchFilters {
-    dateFrom?: string;
-    dateTo?: string;
-    sourceType?: "bookmarks" | "history";
-    domain?: string;
-    minRelevance?: number;
-}
-
-export interface KnowledgeStatus {
-    hasKnowledge: boolean;
-    extractionDate?: string;
-    entityCount?: number;
-    topicCount?: number;
-    suggestionCount?: number;
-    status: "extracted" | "pending" | "error" | "none" | "extracting";
-    confidence?: number;
-}
-
-export interface SearchResult {
-    websites: Website[];
-    summary: {
-        text: string;
-        totalFound: number;
-        searchTime: number;
-        sources: SourceReference[];
-        entities: EntityMatch[];
-    };
-    query: string;
-    filters: SearchFilters;
-    topTopics?: string[];
-    suggestedFollowups?: string[];
-    relatedEntities?: Array<{
-        name: string;
-        type: string;
-        confidence: number;
-    }>;
-    answerEnhancement?: AnswerEnhancement; // NEW: Dynamic enhancement from LLM
-}
-
-export interface Website {
-    url: string;
-    title: string;
-    domain: string;
-    visitCount?: number;
-    lastVisited?: string;
-    source: "bookmarks" | "history";
-    score?: number;
-    snippet?: string;
-    knowledge?: KnowledgeStatus;
-}
-
-export interface SourceReference {
-    url: string;
-    title: string;
-    relevance: number;
-}
-
-export interface EntityMatch {
-    name: string;
-    type: string;
-    confidence: number;
-}
+// Re-export types from base class for backward compatibility
+export type {
+    LibraryStats,
+    SearchFilters,
+    KnowledgeStatus,
+    SearchResult,
+    Website,
+    SourceReference,
+    EntityMatch,
+} from "./extensionServiceBase";
 
 // ===================================================================
 // NOTIFICATION MANAGER
@@ -234,49 +189,19 @@ export class NotificationManager {
 // CHROME EXTENSION SERVICE
 // ===================================================================
 
-export class ChromeExtensionService {
-    async getLibraryStats(): Promise<LibraryStats> {
-        return this.sendMessage({
-            type: "getLibraryStats",
-            includeKnowledge: true,
-        });
-    }
-
-    async getAnalyticsData(options?: {
-        timeRange?: string;
-        includeQuality?: boolean;
-        includeProgress?: boolean;
-        topDomainsLimit?: number;
-        activityGranularity?: "day" | "week" | "month";
-    }): Promise<any> {
-        return this.sendMessage({
-            type: "getAnalyticsData",
-            timeRange: options?.timeRange || "30d",
-            includeQuality: options?.includeQuality !== false,
-            includeProgress: options?.includeProgress !== false,
-            topDomainsLimit: options?.topDomainsLimit || 10,
-            activityGranularity: options?.activityGranularity || "day",
-        });
-    }
-
-    async searchWebMemories(
-        query: string,
-        filters: SearchFilters,
-    ): Promise<SearchResult> {
-        const response = (await this.sendMessage({
-            type: "searchWebMemories",
-            parameters: {
-                query,
-                generateAnswer: true,
-                includeRelatedEntities: true,
-                enableAdvancedSearch: true,
-                limit: 50,
-                minScore: filters.minRelevance || 0.3,
-                domain: filters.domain,
-            },
-        })) as any;
-
-        return response.results;
+export class ChromeExtensionService extends ExtensionServiceBase {
+    // Override getCurrentTab with Chrome-specific implementation
+    protected async getCurrentTabImpl(): Promise<chrome.tabs.Tab | null> {
+        try {
+            const tabs = await chrome.tabs.query({
+                active: true,
+                currentWindow: true,
+            });
+            return tabs.length > 0 ? tabs[0] : null;
+        } catch (error) {
+            console.error("Failed to get current tab:", error);
+            return null;
+        }
     }
 
     async getCurrentTab(): Promise<chrome.tabs.Tab | null> {
@@ -290,47 +215,6 @@ export class ChromeExtensionService {
             console.error("Failed to get current tab:", error);
             return null;
         }
-    }
-
-    async getPageIndexStatus(url: string): Promise<any> {
-        return this.sendMessage({
-            type: "getPageIndexStatus",
-            url,
-        });
-    }
-
-    async indexPageContent(url: string, mode: string): Promise<any> {
-        return this.sendMessage({
-            type: "indexPageContentDirect",
-            url,
-            mode,
-        });
-    }
-
-    async extractPageKnowledge(
-        url: string,
-        mode: string,
-        extractionSettings: any,
-    ): Promise<any> {
-        return this.sendMessage({
-            type: "extractPageKnowledge",
-            url,
-            mode,
-            extractionSettings,
-        });
-    }
-
-    async queryKnowledge(parameters: any): Promise<any> {
-        return this.sendMessage({
-            type: "queryKnowledge",
-            parameters,
-        });
-    }
-
-    async checkConnection(): Promise<any> {
-        return this.sendMessage({
-            type: "checkConnection",
-        });
     }
 
     async getAutoIndexSetting(): Promise<boolean> {
@@ -376,6 +260,7 @@ export class ChromeExtensionService {
         }
     }
 
+    // Override openOptionsPage with Chrome-specific implementation
     async openOptionsPage(): Promise<void> {
         try {
             chrome.runtime.openOptionsPage();
@@ -385,6 +270,7 @@ export class ChromeExtensionService {
         }
     }
 
+    // Override createTab with Chrome-specific implementation
     async createTab(
         url: string,
         active: boolean = true,
@@ -563,7 +449,8 @@ export class ChromeExtensionService {
         });
     }
 
-    private async sendMessage<T>(message: any): Promise<T> {
+    // Implement abstract sendMessage method
+    protected async sendMessage<T>(message: any): Promise<T> {
         if (typeof chrome !== "undefined" && chrome.runtime) {
             try {
                 const response = await chrome.runtime.sendMessage(message);
@@ -577,6 +464,338 @@ export class ChromeExtensionService {
             }
         }
         throw new Error("Chrome extension not available");
+    }
+}
+
+// ===================================================================
+// ELECTRON EXTENSION SERVICE
+// ===================================================================
+
+export class ElectronExtensionService extends ExtensionServiceBase {
+    // Override getAnalyticsData to add success wrapper
+    async getAnalyticsData(options?: {
+        timeRange?: string;
+        includeQuality?: boolean;
+        includeProgress?: boolean;
+        topDomainsLimit?: number;
+        activityGranularity?: "day" | "week" | "month";
+    }): Promise<any> {
+        const result = await super.getAnalyticsData(options);
+        return {
+            success: !result.error,
+            analytics: result,
+            error: result.error,
+        };
+    }
+
+    // Override transformSearchWebMemoriesResponse for Electron-specific response structure
+    protected transformSearchWebMemoriesResponse(result: any): SearchResult {
+        return {
+            websites: result.websites || [],
+            summary: {
+                text: result.answer || "",
+                totalFound: result.websites?.length || 0,
+                searchTime: result.summary?.searchTime || 0,
+                sources: result.answerSources || [],
+                entities: result.relatedEntities || [],
+            },
+            query: result.query || "",
+            filters: result.filters || {},
+            topTopics: result.topTopics || [],
+            suggestedFollowups: result.suggestedFollowups || [],
+            relatedEntities: result.relatedEntities || [],
+        };
+    }
+
+    // Override getCurrentTab with Electron-specific implementation
+    protected async getCurrentTabImpl(): Promise<any> {
+        // Return mock tab object for Electron context
+        return {
+            id: -1,
+            url: window.location.href,
+            title: document.title,
+            active: true,
+        };
+    }
+
+    // Override getAutoIndexSetting with Electron storage implementation
+    protected async getAutoIndexSettingImpl(): Promise<boolean> {
+        try {
+            const settings = await (window as any).electronAPI.getStorage([
+                "autoIndexing",
+            ]);
+            return settings.autoIndexing || false;
+        } catch (error) {
+            console.error("Failed to get auto-index setting:", error);
+            return false;
+        }
+    }
+
+    // Override setAutoIndexSetting with Electron storage implementation
+    protected async setAutoIndexSettingImpl(enabled: boolean): Promise<void> {
+        try {
+            await (window as any).electronAPI.setStorage({
+                autoIndexing: enabled,
+            });
+        } catch (error) {
+            console.error("Failed to set auto-index setting:", error);
+            throw error;
+        }
+    }
+
+    // Override getExtractionSettings with Electron storage implementation
+    protected async getExtractionSettingsImpl(): Promise<any> {
+        try {
+            const settings = await (window as any).electronAPI.getStorage([
+                "extractionSettings",
+            ]);
+            return settings.extractionSettings || null;
+        } catch (error) {
+            console.error("Failed to get extraction settings:", error);
+            return null;
+        }
+    }
+
+    // Override saveExtractionSettings with Electron storage implementation
+    protected async saveExtractionSettingsImpl(settings: any): Promise<void> {
+        try {
+            await (window as any).electronAPI.setStorage({
+                extractionMode: settings.mode,
+                suggestQuestions: settings.suggestQuestions,
+            });
+        } catch (error) {
+            console.error("Failed to save extraction settings:", error);
+            throw error;
+        }
+    }
+
+    async openOptionsPage(): Promise<void> {
+        // In Electron, we could potentially open a new window or navigate
+        console.warn("Options page not available in Electron context");
+    }
+
+    async createTab(url: string, active: boolean = true): Promise<any> {
+        // Mock tab creation for Electron context
+        window.open(url, active ? "_self" : "_blank");
+        return {
+            id: -1,
+            url: url,
+            active: active,
+        };
+    }
+
+    // Include all other methods from ChromeExtensionService with the same signatures
+    async getIndexStats(): Promise<any> {
+        return this.sendMessage({ type: "getIndexStats" });
+    }
+
+    async getPageSourceInfo(url: string): Promise<any> {
+        return this.sendMessage({ type: "getPageSourceInfo", url });
+    }
+
+    async getPageIndexedKnowledge(url: string): Promise<any> {
+        return this.sendMessage({ type: "getPageIndexedKnowledge", url });
+    }
+
+    async discoverRelationships(
+        url: string,
+        knowledge: any,
+        maxResults: number,
+    ): Promise<any> {
+        return this.sendMessage({
+            type: "discoverRelationships",
+            url,
+            knowledge,
+            maxResults,
+        });
+    }
+
+    async generateTemporalSuggestions(maxSuggestions: number): Promise<any> {
+        return this.sendMessage({
+            type: "generateTemporalSuggestions",
+            maxSuggestions,
+        });
+    }
+
+    async searchByEntities(
+        entities: string[],
+        url: string,
+        maxResults: number,
+    ): Promise<any> {
+        return this.sendMessage({
+            type: "searchByEntities",
+            entities,
+            url,
+            maxResults,
+        });
+    }
+
+    async searchByTopics(
+        topics: string[],
+        url: string,
+        maxResults: number,
+    ): Promise<any> {
+        return this.sendMessage({
+            type: "searchByTopics",
+            topics,
+            url,
+            maxResults,
+        });
+    }
+
+    async hybridSearch(
+        query: string,
+        url: string,
+        maxResults: number,
+    ): Promise<any> {
+        return this.sendMessage({
+            type: "hybridSearch",
+            query,
+            url,
+            maxResults,
+        });
+    }
+
+    async searchWebMemoriesAdvanced(parameters: any): Promise<any> {
+        return this.sendMessage({ type: "searchWebMemories", parameters });
+    }
+
+    async checkAIModelAvailability(): Promise<any> {
+        return this.sendMessage({ type: "checkAIModelAvailability" });
+    }
+
+    async getPageQualityMetrics(url: string): Promise<any> {
+        return this.sendMessage({ type: "getPageQualityMetrics", url });
+    }
+
+    async notifyAutoIndexSettingChanged(enabled: boolean): Promise<void> {
+        return this.sendMessage({ type: "autoIndexSettingChanged", enabled });
+    }
+
+    async getRecentKnowledgeItems(limit: number = 10): Promise<any> {
+        return this.sendMessage({ type: "getRecentKnowledgeItems", limit });
+    }
+
+    async extractKnowledge(url: string): Promise<any> {
+        return this.sendMessage({ type: "extractKnowledge", url });
+    }
+
+    async checkKnowledgeStatus(url: string): Promise<any> {
+        return this.sendMessage({ action: "checkKnowledgeStatus", url });
+    }
+
+    async getSearchSuggestions(query: string): Promise<string[]> {
+        try {
+            // For Electron, simulate Chrome storage behavior
+            const settings = await (window as any).electronAPI.getStorage([
+                "searchHistory",
+            ]);
+            const searchHistory = settings.searchHistory || [];
+
+            const suggestions = searchHistory
+                .filter((search: string) =>
+                    search.toLowerCase().includes(query.toLowerCase()),
+                )
+                .slice(0, 5);
+
+            // Match ChromeExtensionService extraction pattern
+            return suggestions; // ChromeExtensionService extracts suggestions from response
+        } catch (error) {
+            console.error("Error getting search suggestions:", error);
+            return [];
+        }
+    }
+
+    async getRecentSearches(): Promise<string[]> {
+        return this.sendMessage({ action: "getRecentSearches" });
+    }
+
+    async getDiscoverInsights(
+        limit: number = 10,
+        timeframe: string = "30d",
+    ): Promise<any> {
+        return this.sendMessage({
+            type: "getDiscoverInsights",
+            limit,
+            timeframe,
+        });
+    }
+
+    async saveSearch(query: string, results: any): Promise<void> {
+        return this.sendMessage({ type: "saveSearch", query, results });
+    }
+
+    async checkWebSocketConnection(): Promise<any> {
+        // Use direct IPC call to browserIPC instead of sending via WebSocket
+        if (typeof window !== "undefined" && (window as any).electronAPI) {
+            try {
+                return await (
+                    window as any
+                ).electronAPI.checkWebSocketConnection();
+            } catch (error) {
+                console.error(
+                    "Direct WebSocket connection check failed:",
+                    error,
+                );
+                return { connected: false };
+            }
+        }
+        return { connected: false };
+    }
+
+    async getViewHostUrl(): Promise<string | null> {
+        try {
+            const response = await this.sendMessage<{ url?: string }>({
+                type: "getViewHostUrl",
+            });
+            return response?.url || null;
+        } catch (error) {
+            console.error("Failed to get view host URL:", error);
+            return null;
+        }
+    }
+
+    // Implement abstract sendMessage method with message transformation
+    protected async sendMessage<T>(message: any): Promise<T> {
+        if (typeof window !== "undefined" && (window as any).electronAPI) {
+            try {
+                // Transform Chrome message format to Electron format
+                const electronMessage =
+                    this.transformChromeMessageToElectron(message);
+                const response = await (
+                    window as any
+                ).electronAPI.sendBrowserMessage(electronMessage);
+                if (response && response.error) {
+                    throw new Error(response.error);
+                }
+                return response;
+            } catch (error) {
+                console.error("Electron IPC message failed:", error);
+                throw error;
+            }
+        }
+        throw new Error("Electron API not available");
+    }
+
+    /**
+     * Transform Chrome message format to Electron format
+     */
+    private transformChromeMessageToElectron(chromeMessage: any): any {
+        const { type, ...params } = chromeMessage;
+
+        // Handle special cases where message structure differs
+        if (type === "searchWebMemories" && chromeMessage.parameters) {
+            return {
+                method: type,
+                params: chromeMessage.parameters,
+            };
+        }
+
+        // Standard transformation: move all properties except 'type' into 'params'
+        return {
+            method: type,
+            params: Object.keys(params).length > 0 ? params : {},
+        };
     }
 }
 
@@ -699,13 +918,21 @@ export class KnowledgeTemplateHelpers {
 export class KnowledgeConnectionManager {
     static async checkConnectionStatus(): Promise<boolean> {
         try {
-            if (typeof chrome === "undefined" || !chrome.runtime) {
-                return false;
+            // Check for Electron context first (has electronAPI in window)
+            if (typeof window !== "undefined" && (window as any).electronAPI) {
+                // Electron context - use direct WebSocket connection check
+                const response = await (
+                    window as any
+                ).electronAPI.checkWebSocketConnection();
+                return response?.connected === true;
+            } else if (typeof chrome !== "undefined" && chrome.runtime) {
+                // Chrome extension context
+                const response = await chrome.runtime.sendMessage({
+                    type: "checkWebSocketConnection",
+                });
+                return response?.connected === true;
             }
-            const response = await chrome.runtime.sendMessage({
-                type: "checkWebSocketConnection",
-            });
-            return response?.connected === true;
+            return false;
         } catch (error) {
             console.error("Connection check failed:", error);
             return false;
@@ -764,16 +991,97 @@ export class ChromeEventManager {
 }
 
 // ===================================================================
+// SERVICE FACTORY AND ENVIRONMENT DETECTION
+// ===================================================================
+
+export function createExtensionService(): ExtensionServiceBase {
+    // Check for Electron context first (has electronAPI in window)
+    // Note: Electron provides Chrome extension APIs but they're not fully implemented
+    if (typeof window !== "undefined" && (window as any).electronAPI) {
+        console.log("Using ElectronExtensionService for Electron context");
+        return new ElectronExtensionService();
+    }
+
+    // Default to Chrome extension context
+    console.log("Using ChromeExtensionService for Chrome extension context");
+    return new ChromeExtensionService();
+}
+
+// ===================================================================
+// CONNECTION MANAGER UPDATES FOR ELECTRON
+// ===================================================================
+
+export class ElectronConnectionManager {
+    static async checkConnectionStatus(): Promise<boolean> {
+        try {
+            const response = await (
+                window as any
+            ).electronAPI.sendBrowserMessage({
+                type: "checkWebSocketConnection",
+            });
+            return response?.connected === true;
+        } catch (error) {
+            return false;
+        }
+    }
+}
+
+// Update the existing connection manager to work with both environments
+export class UnifiedConnectionManager {
+    static async checkConnectionStatus(): Promise<boolean> {
+        try {
+            // Check for Electron context first (has electronAPI in window)
+            if (typeof window !== "undefined" && (window as any).electronAPI) {
+                // Electron context - use direct WebSocket connection check
+                const response = await (
+                    window as any
+                ).electronAPI.checkWebSocketConnection();
+                return response?.connected === true;
+            } else if (typeof chrome !== "undefined" && chrome.runtime) {
+                // Chrome extension context
+                const response = await chrome.runtime.sendMessage({
+                    type: "checkWebSocketConnection",
+                });
+                return response?.connected === true;
+            }
+            return false;
+        } catch (error) {
+            console.error("Connection check failed:", error);
+            return false;
+        }
+    }
+
+    static updateConnectionStatus(isConnected: boolean): void {
+        const statusElement = document.getElementById("connectionStatus");
+        if (statusElement) {
+            const indicator = statusElement.querySelector(".status-indicator");
+            const text = statusElement.querySelector("span:last-child");
+            if (indicator && text) {
+                if (isConnected) {
+                    indicator.className = "status-indicator status-connected";
+                    text.textContent = "Connected";
+                } else {
+                    indicator.className =
+                        "status-indicator status-disconnected";
+                    text.textContent = "Disconnected";
+                }
+            }
+        }
+    }
+}
+
+// ===================================================================
 // EXPORTS
 // ===================================================================
 
 export const notificationManager = new NotificationManager();
 export const chromeExtensionService = new ChromeExtensionService();
+export const extensionService = createExtensionService();
 
 export {
     KnowledgeTemplateHelpers as TemplateHelpers,
     KnowledgeFormatUtils as FormatUtils,
-    KnowledgeConnectionManager as ConnectionManager,
+    UnifiedConnectionManager as ConnectionManager,
     ChromeEventManager as EventManager,
 };
 
@@ -807,7 +1115,7 @@ export interface EntityCacheServices {
 
 // Default implementations using the existing ChromeExtensionService
 export class DefaultAnalyticsServices implements AnalyticsServices {
-    constructor(private chromeService: ChromeExtensionService) {}
+    constructor(private chromeService: ExtensionServiceBase) {}
 
     async loadAnalyticsData(): Promise<any> {
         return this.chromeService.getAnalyticsData({
@@ -824,7 +1132,7 @@ export class DefaultAnalyticsServices implements AnalyticsServices {
 export class CachedDefaultAnalyticsServices extends DefaultAnalyticsServices {
     private cacheManager: any; // Import will be added dynamically
 
-    constructor(chromeService: ChromeExtensionService) {
+    constructor(chromeService: ExtensionServiceBase) {
         super(chromeService);
         // Initialize cache manager when available
         this.initializeCacheManager();
@@ -854,7 +1162,7 @@ export class CachedDefaultAnalyticsServices extends DefaultAnalyticsServices {
 }
 
 export class DefaultSearchServices implements SearchServices {
-    constructor(private chromeService: ChromeExtensionService) {}
+    constructor(private chromeService: ExtensionServiceBase) {}
 
     async performSearch(query: string, filters?: any): Promise<SearchResult> {
         console.log(
@@ -928,7 +1236,7 @@ export class DefaultSearchServices implements SearchServices {
 }
 
 export class DefaultDiscoveryServices implements DiscoveryServices {
-    constructor(private chromeService: ChromeExtensionService) {}
+    constructor(private chromeService: ExtensionServiceBase) {}
 
     async loadDiscoverData(): Promise<any> {
         const response = await this.chromeService.getDiscoverInsights(
@@ -960,15 +1268,15 @@ export class DefaultDiscoveryServices implements DiscoveryServices {
 
 // Default implementations for entity services (connected to real EntityProcessingService)
 export class DefaultEntityGraphServices implements EntityGraphServices {
-    private chromeService: ChromeExtensionService | null = null;
+    private extensionService: ExtensionServiceBase | null = null;
 
-    constructor(chromeService?: ChromeExtensionService) {
-        this.chromeService = chromeService || null;
+    constructor(extensionService?: ExtensionServiceBase) {
+        this.extensionService = extensionService || null;
     }
 
     async searchByEntity(entityName: string, options: any = {}): Promise<any> {
         try {
-            if (!this.chromeService) {
+            if (!this.extensionService) {
                 console.warn(
                     "ChromeExtensionService not available, using empty result",
                 );
@@ -1074,7 +1382,7 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
 
     async getEntityGraph(centerEntity: string, depth: number): Promise<any> {
         try {
-            if (!this.chromeService) {
+            if (!this.extensionService) {
                 console.warn(
                     "ChromeExtensionService not available, using empty result",
                 );
@@ -1113,11 +1421,144 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                 .filter((entity: any) => entity.name && entity.name.trim())
                 .slice(0, 15);
 
-            // Add the center entity itself with aggregated rich data
-            const centerEntityNode = this.createRichCenterEntity(
-                centerEntity,
-                primaryEntities,
-            );
+            // Find the center entity from the search results by case-insensitive name match
+            let centerEntityNode = null;
+            const centerEntityLower = centerEntity.toLowerCase();
+
+            // First, try to find a direct entity match from related entities
+            if (
+                primarySearch.relatedEntities &&
+                primarySearch.relatedEntities.length > 0
+            ) {
+                for (const relatedEntity of primarySearch.relatedEntities) {
+                    const entityName =
+                        typeof relatedEntity === "string"
+                            ? relatedEntity
+                            : relatedEntity.name;
+
+                    if (
+                        entityName &&
+                        entityName.toLowerCase() === centerEntityLower
+                    ) {
+                        // Found the center entity in related entities - get its rich data
+                        centerEntityNode = {
+                            id: "center",
+                            name: centerEntity,
+                            type: Array.isArray(relatedEntity.type)
+                                ? relatedEntity.type.join(", ")
+                                : relatedEntity.type || "concept",
+                            confidence:
+                                typeof relatedEntity === "object"
+                                    ? relatedEntity.confidence || 0.9
+                                    : 0.9,
+                            category: "center",
+                            description: `Center entity: ${centerEntity}`,
+                            facets:
+                                typeof relatedEntity === "object" &&
+                                relatedEntity.facets
+                                    ? relatedEntity.facets
+                                    : [],
+                            // Add occurrence count from search results or default
+                            mentionCount:
+                                typeof relatedEntity === "object" &&
+                                relatedEntity.occurrenceCount
+                                    ? relatedEntity.occurrenceCount
+                                    : 1,
+                            visitCount: 0,
+                            dominantDomains: [],
+                            topicAffinity:
+                                primarySearch.topTopics?.slice(0, 5) || [],
+                            aliases: [],
+                            relationships: [],
+                            contextSnippets: [],
+                            firstSeen: relatedEntity.firstSeen,
+                            lastSeen: relatedEntity.lastSeen,
+                        };
+                        break;
+                    }
+                }
+            }
+
+            // If not found in related entities, look for matching entity in website knowledge
+            if (!centerEntityNode) {
+                for (const website of primarySearch.websites) {
+                    const knowledge = website.getKnowledge
+                        ? website.getKnowledge()
+                        : null;
+                    if (knowledge && knowledge.entities) {
+                        const matchingEntity = knowledge.entities.find(
+                            (e: any) =>
+                                e.name &&
+                                e.name.toLowerCase() === centerEntityLower,
+                        );
+
+                        if (matchingEntity) {
+                            // Found the center entity in website knowledge
+                            centerEntityNode = {
+                                id: "center",
+                                name: matchingEntity.name,
+                                type: Array.isArray(matchingEntity.type)
+                                    ? matchingEntity.type.join(", ")
+                                    : matchingEntity.type || "concept",
+                                confidence: matchingEntity.confidence || 0.9,
+                                category: "center",
+                                description:
+                                    matchingEntity.description ||
+                                    `Center entity: ${centerEntity}`,
+                                facets: matchingEntity.facets || [],
+                                // Add enhanced properties from website context
+                                mentionCount: this.countEntityMentions(
+                                    knowledge,
+                                    centerEntity,
+                                ),
+                                visitCount: website.visitCount || 0,
+                                dominantDomains: [
+                                    this.extractDomain(website.url || ""),
+                                ].filter((d) => d !== "unknown"),
+                                topicAffinity:
+                                    knowledge.topics?.slice(0, 5) || [],
+                                aliases: matchingEntity.aliases || [],
+                                relationships: this.extractRelationships(
+                                    knowledge,
+                                    centerEntity,
+                                ),
+                                contextSnippets: this.extractContextSnippets(
+                                    knowledge.textChunks || [knowledge.content],
+                                    centerEntity,
+                                    3,
+                                ),
+                                firstSeen: matchingEntity.firstSeen,
+                                lastSeen: matchingEntity.lastSeen,
+                                url: website.url,
+                                domain: this.extractDomain(website.url || ""),
+                            };
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // If still not found, create a fallback center entity
+            if (!centerEntityNode) {
+                centerEntityNode = {
+                    id: "center",
+                    name: centerEntity,
+                    type: "concept",
+                    confidence: 0.8,
+                    category: "center",
+                    description: `Center entity: ${centerEntity}`,
+                    facets: [],
+                    mentionCount: 1,
+                    visitCount: 0,
+                    dominantDomains: [],
+                    topicAffinity: primarySearch.topTopics?.slice(0, 5) || [],
+                    aliases: [],
+                    relationships: [],
+                    contextSnippets: [],
+                    firstSeen: new Date().toISOString(),
+                    lastSeen: new Date().toISOString(),
+                };
+            }
 
             // If depth > 1, perform related searches
             let relatedEntities: any[] = [];
@@ -1177,12 +1618,88 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                 }
             }
 
-            // Combine all entities
-            const allEntities = [
-                centerEntityNode,
-                ...primaryEntities,
-                ...relatedEntities,
-            ];
+            // Combine and deduplicate entities by name (case-insensitive)
+            const entityMap = new Map<string, any>();
+
+            // Add center entity first
+            if (centerEntityNode) {
+                entityMap.set(
+                    centerEntityNode.name.toLowerCase(),
+                    centerEntityNode,
+                );
+            }
+
+            // Add primary and related entities, deduplicating and aggregating occurrence counts
+            const entitiesToProcess = [...primaryEntities, ...relatedEntities];
+
+            for (const entity of entitiesToProcess) {
+                if (!entity?.name) continue;
+
+                const entityNameLower = entity.name.toLowerCase();
+
+                if (entityMap.has(entityNameLower)) {
+                    // Entity already exists - aggregate occurrence counts and update properties
+                    const existing = entityMap.get(entityNameLower)!;
+                    const existingOccurrence =
+                        existing.occurrenceCount || existing.mentionCount || 1;
+                    const newOccurrence =
+                        entity.occurrenceCount || entity.mentionCount || 1;
+
+                    // Update the existing entity with aggregated data
+                    existing.occurrenceCount =
+                        existingOccurrence + newOccurrence;
+                    existing.mentionCount = existing.occurrenceCount; // Keep backward compatibility
+
+                    // Update confidence to weighted average
+                    const existingConfidence = existing.confidence || 0.5;
+                    const newConfidence = entity.confidence || 0.5;
+                    existing.confidence =
+                        (existingConfidence * existingOccurrence +
+                            newConfidence * newOccurrence) /
+                        (existingOccurrence + newOccurrence);
+
+                    // Merge other properties if they don't exist in the existing entity
+                    if (!existing.facets && entity.facets) {
+                        existing.facets = entity.facets;
+                    }
+                    if (!existing.description && entity.description) {
+                        existing.description = entity.description;
+                    }
+                    if (!existing.url && entity.url) {
+                        existing.url = entity.url;
+                    }
+
+                    // Merge arrays
+                    if (entity.dominantDomains) {
+                        existing.dominantDomains = [
+                            ...new Set([
+                                ...(existing.dominantDomains || []),
+                                ...entity.dominantDomains,
+                            ]),
+                        ];
+                    }
+                    if (entity.topicAffinity) {
+                        existing.topicAffinity = [
+                            ...new Set([
+                                ...(existing.topicAffinity || []),
+                                ...entity.topicAffinity,
+                            ]),
+                        ];
+                    }
+                } else {
+                    // New entity - ensure it has occurrence count
+                    const processedEntity = {
+                        ...entity,
+                        occurrenceCount:
+                            entity.occurrenceCount || entity.mentionCount || 1,
+                        mentionCount:
+                            entity.occurrenceCount || entity.mentionCount || 1, // Backward compatibility
+                    };
+                    entityMap.set(entityNameLower, processedEntity);
+                }
+            }
+
+            const allEntities = Array.from(entityMap.values());
 
             // Generate relationships
             const relationships = this.generateAdvancedRelationships(
@@ -1231,13 +1748,13 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
 
     /**
      * Smart entity search with fallback strategy
-     * Uses entity search first, then topic search, then hybrid search, then text search
+     * Uses entity search first, then topic search as fallback
      */
     private async performEntitySearchWithFallback(
         entityName: string,
         options: any = {},
     ): Promise<any> {
-        if (!this.chromeService) {
+        if (!this.extensionService) {
             throw new Error("ChromeExtensionService not available");
         }
 
@@ -1248,7 +1765,7 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
 
         try {
             // Strategy 1: Direct entity search (fastest)
-            const entityResults = await this.chromeService.searchByEntities(
+            const entityResults = await this.extensionService.searchByEntities(
                 [entityName],
                 "",
                 maxResults,
@@ -1280,11 +1797,11 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
             console.warn("Entity search failed for %s:", entityName, error);
         }
 
-        // Strategy 2: Topic search if entity search fails or returns few results
-        if (!searchResult || searchResult.websites.length < 3) {
+        // Strategy 2: Topic search if entity search fails
+        if (!searchResult || searchResult.websites.length < 1) {
             try {
                 console.log(`Trying topic search for: ${entityName}`);
-                const topicResults = await this.chromeService.searchByTopics(
+                const topicResults = await this.extensionService.searchByTopics(
                     [entityName],
                     "",
                     maxResults,
@@ -1346,92 +1863,19 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
             }
         }
 
-        // Strategy 3: Hybrid search if still no good results
-        if (!searchResult || searchResult.websites.length < 2) {
-            try {
-                console.log(`Trying hybrid search for: ${entityName}`);
-                const hybridResults = await this.chromeService.hybridSearch(
-                    entityName,
-                    "",
-                    maxResults,
-                );
-
-                if (
-                    hybridResults &&
-                    hybridResults.websites &&
-                    hybridResults.websites.length > 0
-                ) {
-                    const existingWebsites = searchResult?.websites || [];
-                    const existingRelatedEntities =
-                        searchResult?.relatedEntities || [];
-                    const existingTopTopics = searchResult?.topTopics || [];
-
-                    searchResult = {
-                        websites: [
-                            ...existingWebsites,
-                            ...hybridResults.websites,
-                        ].slice(0, maxResults),
-                        relatedEntities: [
-                            ...existingRelatedEntities,
-                            ...(hybridResults.relatedEntities || []),
-                        ],
-                        topTopics: [
-                            ...existingTopTopics,
-                            ...(hybridResults.topTopics || []),
-                        ],
-                        summary:
-                            hybridResults.summary ||
-                            searchResult?.summary ||
-                            null,
-                        metadata: {
-                            ...searchResult?.metadata,
-                            ...hybridResults.metadata,
-                        },
-                        answerSources: [
-                            ...(searchResult?.answerSources || []),
-                            ...(hybridResults.answerSources || []),
-                        ],
-                    };
-                    searchMethod =
-                        searchResult.websites.length > existingWebsites.length
-                            ? "hybrid"
-                            : searchMethod;
-                    console.log(
-                        "✅ Hybrid search found %d additional results for: %s",
-                        hybridResults.websites.length,
-                        entityName,
-                        "Added related entities: %d",
-                        hybridResults.relatedEntities?.length || 0,
-                        "Added topics: %d",
-                        hybridResults.topTopics?.length || 0,
-                    );
-                }
-            } catch (error) {
-                console.warn("Hybrid search failed for: %s", entityName, error);
-            }
-        }
-
-        // Strategy 4: Text search fallback (original slow method)
+        // If no results from entity or topic search, return empty result
         if (!searchResult || searchResult.websites.length === 0) {
-            try {
-                console.log(`Falling back to text search for: ${entityName}`);
-                searchResult = await this.chromeService.searchWebMemories(
-                    entityName,
-                    {},
-                );
-                searchMethod = "text_fallback";
-                console.log(
-                    `⚠️ Text fallback found ${searchResult?.websites?.length || 0} results for: ${entityName}`,
-                );
-            } catch (error) {
-                console.error(
-                    "All search methods failed for: %s",
-                    entityName,
-                    error,
-                );
-                searchResult = { websites: [] };
-                searchMethod = "failed";
-            }
+            console.log(
+                `No results found for entity: ${entityName} using entity or topic search`,
+            );
+            searchResult = {
+                websites: [],
+                relatedEntities: [],
+                topTopics: [],
+                metadata: {},
+                answerSources: [],
+            };
+            searchMethod = "no_results";
         }
 
         // Add metadata about which search method was used
@@ -1466,7 +1910,7 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
         const baseEntity = {
             id: `entity_${index}`,
             name: title.slice(0, 50).trim() || `Entity ${index + 1}`,
-            type: this.inferEntityType(title, url),
+            type: "website",
             confidence: this.calculateConfidence(website),
             url: url,
             description: website.description || "",
@@ -1520,6 +1964,10 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                 enhancedEntity.confidence,
                 matchingEntity.confidence || 0,
             );
+            // Include facets if available
+            if (matchingEntity.facets) {
+                enhancedEntity.facets = matchingEntity.facets;
+            }
         }
 
         // Add topic affinity
@@ -1711,102 +2159,6 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
     }
 
     /**
-     * Create rich center entity by aggregating data from primary entities
-     */
-    private createRichCenterEntity(
-        centerEntityName: string,
-        primaryEntities: any[],
-    ): any {
-        // Aggregate data from primary entities
-        let totalMentions = 0;
-        let totalVisitCount = 0;
-        const allDomains = new Set<string>();
-        const allTopics = new Set<string>();
-        const allAliases = new Set<string>();
-        const allRelationships: any[] = [];
-        const allContextSnippets: string[] = [];
-        let earliestSeen: string | null = null;
-        let latestSeen: string | null = null;
-        let maxConfidence = 0;
-
-        // Aggregate from primary entities
-        primaryEntities.forEach((entity) => {
-            totalMentions += entity.mentionCount || 0;
-            totalVisitCount += entity.visitCount || 0;
-            maxConfidence = Math.max(maxConfidence, entity.confidence || 0);
-
-            if (entity.domain) allDomains.add(entity.domain);
-
-            if (entity.topicAffinity) {
-                entity.topicAffinity.forEach((topic: string) =>
-                    allTopics.add(topic),
-                );
-            }
-
-            if (entity.aliases) {
-                entity.aliases.forEach((alias: string) =>
-                    allAliases.add(alias),
-                );
-            }
-
-            if (entity.relationships) {
-                allRelationships.push(...entity.relationships);
-            }
-
-            if (entity.contextSnippets) {
-                allContextSnippets.push(...entity.contextSnippets.slice(0, 2));
-            }
-
-            // Track temporal bounds
-            if (entity.firstSeen) {
-                if (!earliestSeen || entity.firstSeen < earliestSeen) {
-                    earliestSeen = entity.firstSeen;
-                }
-            }
-
-            if (entity.lastSeen) {
-                if (!latestSeen || entity.lastSeen > latestSeen) {
-                    latestSeen = entity.lastSeen;
-                }
-            }
-        });
-
-        // Deduplicate and limit collections
-        const uniqueRelationships =
-            this.deduplicateRelationships(allRelationships);
-        const uniqueContextSnippets = [...new Set(allContextSnippets)].slice(
-            0,
-            5,
-        );
-
-        return {
-            id: "center",
-            name: centerEntityName.trim() || "Unknown Entity",
-            type: this.inferEntityType(centerEntityName),
-            confidence: Math.min(0.95, maxConfidence + 0.1), // Boost center entity confidence
-            category: "center",
-            description: `Center entity: ${centerEntityName}`,
-
-            // Aggregated rich data
-            mentionCount: Math.max(1, totalMentions),
-            visitCount: totalVisitCount,
-            dominantDomains: Array.from(allDomains).slice(0, 5),
-            topicAffinity: Array.from(allTopics).slice(0, 10),
-            aliases: Array.from(allAliases).slice(0, 5),
-            relationships: uniqueRelationships.slice(0, 10),
-            contextSnippets: uniqueContextSnippets,
-            firstSeen: earliestSeen || new Date().toISOString(),
-            lastSeen: latestSeen || new Date().toISOString(),
-
-            // Center entity specific metadata
-            primarySourceCount: primaryEntities.length,
-            aggregatedFromSources: primaryEntities
-                .map((e) => e.url)
-                .filter(Boolean),
-        };
-    }
-
-    /**
      * Deduplicate relationships by entity name and type
      */
     private deduplicateRelationships(relationships: any[]): any[] {
@@ -1975,104 +2327,76 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
             }
         });
 
+        // Document co-occurrence relationships - entities that appear together in the same document
+        const documentCoOccurrences =
+            this.generateDocumentCoOccurrenceRelationships(entities);
+        relationships.push(...documentCoOccurrences);
+
         return relationships;
     }
 
-    private inferEntityType(text: string, url?: string): string {
-        const lowerText = text.toLowerCase();
+    /**
+     * Generate relationships between entities that co-occur in the same document
+     */
+    private generateDocumentCoOccurrenceRelationships(entities: any[]): any[] {
+        const relationships: any[] = [];
+        const documentEntityMap = new Map<string, any[]>();
 
-        // URL-based detection first
-        if (url) {
-            const domain = this.extractDomain(url);
-
-            // Technology/development sites
-            if (
-                [
-                    "github.com",
-                    "stackoverflow.com",
-                    "npm.org",
-                    "docs.microsoft.com",
-                ].includes(domain)
-            ) {
-                return "technology";
+        // Group entities by their source document URL
+        entities.forEach((entity) => {
+            if (entity.url && entity.category === "primary") {
+                const url = entity.url;
+                if (!documentEntityMap.has(url)) {
+                    documentEntityMap.set(url, []);
+                }
+                documentEntityMap.get(url)!.push(entity);
             }
+        });
 
-            // Social media / person indicators
-            if (
-                ["linkedin.com", "twitter.com", "github.com"].includes(
-                    domain,
-                ) &&
-                lowerText.includes("profile")
-            ) {
-                return "person";
+        // For each document with multiple entities, create co-occurrence relationships
+        documentEntityMap.forEach((documentEntities, documentUrl) => {
+            if (documentEntities.length > 1) {
+                // Create relationships between all pairs of entities in the same document
+                for (let i = 0; i < documentEntities.length; i++) {
+                    for (let j = i + 1; j < documentEntities.length; j++) {
+                        const entity1 = documentEntities[i];
+                        const entity2 = documentEntities[j];
+
+                        if (
+                            entity1.name &&
+                            entity2.name &&
+                            entity1.name.trim() !== entity2.name.trim()
+                        ) {
+                            // Calculate co-occurrence strength based on confidence of both entities
+                            const strength = Math.min(
+                                (entity1.confidence || 0.5) *
+                                    (entity2.confidence || 0.5) *
+                                    1.2,
+                                0.9,
+                            );
+
+                            relationships.push({
+                                id: `co_occurrence_${entity1.id}_${entity2.id}`,
+                                from: entity1.name.trim(),
+                                to: entity2.name.trim(),
+                                type: "co_occurrence",
+                                strength: strength,
+                                source: documentUrl,
+                                direction: "bidirectional",
+                                category: "co_occurrence",
+                                evidence: `Both entities appear in: ${this.extractDomain(documentUrl)}`,
+                            });
+                        }
+                    }
+                }
             }
+        });
 
-            // News/blog sites usually contain concepts
-            if (
-                ["medium.com", "dev.to", "blog", "news"].some((term) =>
-                    domain.includes(term),
-                )
-            ) {
-                return "concept";
-            }
-        }
+        console.log(
+            `Generated ${relationships.length} document co-occurrence relationships from ${documentEntityMap.size} documents`,
+        );
 
-        // Content-based detection
-        // Website/domain detection
-        if (
-            lowerText.includes(".com") ||
-            lowerText.includes(".org") ||
-            lowerText.includes("http")
-        ) {
-            return "website";
-        }
-
-        // Organization detection
-        if (
-            lowerText.includes("corp") ||
-            lowerText.includes("inc") ||
-            lowerText.includes("company") ||
-            lowerText.includes("ltd")
-        ) {
-            return "organization";
-        }
-
-        // Technology detection
-        if (
-            lowerText.includes("api") ||
-            lowerText.includes("framework") ||
-            lowerText.includes("library") ||
-            lowerText.includes("javascript") ||
-            lowerText.includes("typescript") ||
-            lowerText.includes("react") ||
-            lowerText.includes("node") ||
-            lowerText.includes("python") ||
-            lowerText.includes("github")
-        ) {
-            return "technology";
-        }
-
-        // Product detection
-        if (
-            lowerText.includes("app") ||
-            lowerText.includes("tool") ||
-            lowerText.includes("platform") ||
-            lowerText.includes("service") ||
-            lowerText.includes("software")
-        ) {
-            return "product";
-        }
-
-        // Person detection (basic heuristics)
-        if (
-            lowerText.split(" ").length === 2 &&
-            /^[A-Z][a-z]+ [A-Z][a-z]+/.test(text)
-        ) {
-            return "person";
-        }
-
-        // Default to concept for general content
-        return "concept";
+        return relationships;
     }
 }
 

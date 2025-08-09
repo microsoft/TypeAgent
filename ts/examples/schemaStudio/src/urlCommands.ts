@@ -5,6 +5,7 @@ import {
     CommandHandler,
     CommandMetadata,
     CommandResult,
+    ConsoleWriter,
     InteractiveIo,
     parseNamedArguments,
 } from "interactive-app";
@@ -38,6 +39,7 @@ export function createURLResolverCommands(
         io: InteractiveIo,
     ): Promise<CommandResult> {
         const namedArgs = parseNamedArguments(args, argDef);
+        const runStarted = Date.now();
 
         registerDebug.enable("*");
 
@@ -52,13 +54,29 @@ export function createURLResolverCommands(
         // get the grounding config
         const groundingConfig = bingWithGrounding.apiSettingsFromEnv();
 
+        // delete the output file if it exists
+        const outputFile = "examples/schemaStudio/data/resolved.txt";
+        if (fs.existsSync(outputFile)) {
+            fs.unlinkSync(outputFile);
+        }
+
         // Start checking each URL
         let passCount = 0;
         let failCount = 0;
+        let redirectCount = 0;
+        let contentFilteringCount = 0;
         for (const url of urls) {
             const temp = url.split("\t");
-            const utterance = temp[0].trim();
-            const site = temp[1].trim();
+
+            if (temp.length < 2) {
+                io.writer.writeLine(
+                    `Skipping invalid line: '${url}'. Expected format: "utterance\\tsite"`,
+                );
+                continue;
+            }
+
+            const utterance = temp[0] ? temp[0].trim() : "";
+            const site = temp[1] ? temp[1].trim() : "";
 
             const resolved = await urlResolver.resolveURLWithSearch(
                 utterance,
@@ -66,33 +84,122 @@ export function createURLResolverCommands(
             );
             let passFail = "";
 
-            if (resolved !== site) {
+            // resolved site matches expected site accounting for varying / at the end
+            // TODO: handle redirects + default parameters, etc.
+            if (resolved === null) {
+                // resolved site was blocked by content filtering
+                passFail = "CONTENT_FILTERING";
+                contentFilteringCount++;
+            } else if (resolved === undefined) {
+                // unable to resolve
                 passFail = "FAIL";
                 failCount++;
-            } else {
+            } else if (sitesMatch(resolved, site, io.writer)) {
                 passFail = "PASS";
                 passCount++;
+            } else if (resolved?.startsWith(site)) {
+                // resolved site starts with expected site, indicating a redirect
+                passFail = "REDIRECT";
+                redirectCount++;
+            } else {
+                // sites don't match
+                passFail = "FAIL";
+                failCount++;
             }
 
+            const rr =
+                resolved === null
+                    ? "<CONTENT_FILTERING>"
+                    : resolved === undefined
+                      ? "<ERROR>"
+                      : resolved;
+
             io.writer.writeLine(
-                `${passFail}: Resolved '${utterance}' to '${resolved}' (expected: ${site})`,
+                `${passFail}: Resolved '${utterance}' to '${rr}' (expected: ${site})`,
             );
 
             fs.appendFileSync(
-                "examples/schemaStudio/data/resolved.txt",
-                `${passFail}\t${utterance}\t${site}\t${resolved}\n`,
+                outputFile,
+                `${passFail}\t${utterance}\t${site}\t${rr}\n`,
             );
         }
 
         io.writer.writeLine(
             "URL resolution complete. Results written to resolved.txt",
         );
-        io.writer.writeLine(`Passed: ${passCount}, Failed: ${failCount}`);
+        io.writer.writeLine(
+            `Passed: ${passCount}, Failed: ${failCount}, Redirect: ${redirectCount}, Content Filtering: ${contentFilteringCount}`,
+        );
+
+        io.writer.writeLine(`Duration: ${Date.now() - runStarted}ms`);
     };
 
     handler.metadata = argDef;
 
     return handler;
+}
+
+function sitesMatch(
+    resolved: string | undefined | null,
+    site: string,
+    io: ConsoleWriter,
+): boolean {
+    // Check if resolved site matches expected site accounting for varying / at the end
+    if (
+        resolved === site ||
+        (site.endsWith("/") && site === `${resolved}/`) ||
+        (resolved?.endsWith("/") && `${site}/` === resolved)
+    ) {
+        return true;
+    }
+
+    try {
+        // now, is the resolved site just a subdomain of the expected site?
+        const resolvedUrl = new URL(resolved!);
+        const siteUrl = new URL(site);
+
+        // Check if resolved is a subdomain of site by reversing the hostname parts and comparing them
+        const resolvedParts = resolvedUrl.hostname.split(".").reverse();
+        const siteParts = siteUrl.hostname.split(".").reverse();
+
+        // we only match subdomains that have one extra part
+        if (siteParts.length - resolvedParts.length > 1) {
+            return false;
+        }
+
+        let bigParts;
+        let smallParts;
+
+        if (siteParts.length > resolvedParts.length) {
+            bigParts = siteParts;
+            smallParts = resolvedParts;
+        } else {
+            bigParts = resolvedParts;
+            smallParts = siteParts;
+        }
+
+        for (let i = 0; i < smallParts.length; i++) {
+            // special case for culture redirects
+            if (i == smallParts.length - 1) {
+                if (
+                    (smallParts[i] === "en" || bigParts[i] === "en") &&
+                    (smallParts[i] === "www" || bigParts[i] === "www")
+                ) {
+                    return true;
+                }
+            }
+
+            if (smallParts[i] !== bigParts[i]) {
+                return false;
+            }
+        }
+
+        return true;
+    } catch (e) {
+        io.writeLine(`Error parsing URL ('${resolved}', '${site}'): ${e}`);
+        // If we can't parse the URL, we assume it
+        return false;
+    }
 }
 
 export function createURLValidateCommands(
@@ -130,6 +237,7 @@ export function createURLValidateCommands(
         io: InteractiveIo,
     ): Promise<CommandResult> {
         const namedArgs = parseNamedArguments(args, argDef);
+        const runStarted = Date.now();
 
         if (namedArgs.flushAgents) {
             io.writer.writeLine("Flushing agents...");
@@ -171,8 +279,16 @@ export function createURLValidateCommands(
         let failCount = 0;
         for (const url of urls) {
             const temp = url.split("\t");
-            const utterance = temp[0].trim();
-            const site = temp[1].trim();
+
+            if (temp.length < 2) {
+                io.writer.writeLine(
+                    `Skipping invalid line: ${url}. Expected format: "utterance\\tsite"`,
+                );
+                continue;
+            }
+
+            const utterance = temp[0] ? temp[0].trim() : "";
+            const site = temp[1] ? temp[1].trim() : "";
 
             const siteValidity: urlResolver.urlValidityAction | undefined =
                 await urlResolver.validateURL(utterance, site, groundingConfig);
@@ -191,6 +307,7 @@ export function createURLValidateCommands(
             "URL resolution complete. Results written to resolved.txt",
         );
         io.writer.writeLine(`Passed: ${passCount}, Failed: ${failCount}`);
+        io.writer.writeLine(`Duration: ${Date.now() - runStarted}ms`);
     };
 
     handler.metadata = argDef;
