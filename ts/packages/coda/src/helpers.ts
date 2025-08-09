@@ -451,3 +451,156 @@ export function getActiveFileMetadata(): ActiveFileMeta | null {
         isDirty: document.isDirty,
     };
 }
+
+function wait(ms: number) {
+    return new Promise((res) => setTimeout(res, ms));
+}
+
+/**
+ * Moves the caret to a new blank line immediately after the function
+ * that begins at or near `startAnchor` (where we inserted).
+ * Uses document symbols for reliability across edits and Copilot changes.
+ */
+export async function placeCursorAfterCurrentFunction(
+    editor: vscode.TextEditor,
+    startAnchor: vscode.Position,
+    opts: { functionName?: string; retries?: number; delayMs?: number } = {},
+) {
+    const { functionName, retries = 6, delayMs = 120 } = opts;
+    const { document } = editor;
+
+    // Tiny retry loop to let Copilot or snippet finish applying edits.
+    for (let attempt = 0; attempt < retries; attempt++) {
+        try {
+            const symbols = (await vscode.commands.executeCommand(
+                "vscode.executeDocumentSymbolProvider",
+                document.uri,
+            )) as vscode.DocumentSymbol[] | undefined;
+
+            if (!symbols || !symbols.length) {
+                await wait(delayMs);
+                continue;
+            }
+
+            // Flatten symbol tree for easy scanning
+            const flat: vscode.DocumentSymbol[] = [];
+            const collect = (arr: vscode.DocumentSymbol[]) => {
+                for (const s of arr) {
+                    flat.push(s);
+                    if (s.children?.length) collect(s.children);
+                }
+            };
+            collect(symbols);
+
+            // Filter to functions-like symbols
+            const functionKinds = new Set([
+                vscode.SymbolKind.Function,
+                vscode.SymbolKind.Method,
+                vscode.SymbolKind.Constructor,
+            ]);
+
+            let candidate: vscode.DocumentSymbol | undefined;
+
+            if (functionName) {
+                candidate = flat.find(
+                    (s) => functionKinds.has(s.kind) && s.name === functionName,
+                );
+            }
+
+            // If no name or not found, pick the function whose range contains startAnchor
+            if (!candidate) {
+                candidate = flat
+                    .filter((s) => functionKinds.has(s.kind))
+                    .find(
+                        (s) =>
+                            s.range.contains(startAnchor) ||
+                            s.range.start.line === startAnchor.line,
+                    );
+            }
+
+            // As a fallback, pick the nearest function starting at/after the anchor
+            if (!candidate) {
+                candidate = flat
+                    .filter((s) => functionKinds.has(s.kind))
+                    .sort((a, b) => a.range.start.compareTo(b.range.start))
+                    .find((s) => s.range.start.isAfterOrEqual(startAnchor));
+            }
+
+            if (!candidate) {
+                await wait(delayMs);
+                continue;
+            }
+
+            // End of function block
+            let end = candidate.range.end;
+
+            // Ensure there's a blank line after the block
+            const lastLineIndex = document.lineCount - 1;
+            const afterLineIndex = Math.min(end.line + 1, lastLineIndex);
+            const afterLine = document.lineAt(afterLineIndex);
+
+            if (afterLineIndex === end.line) {
+                // Symbol ended mid-line (rare) – move to line end first
+                end = new vscode.Position(
+                    end.line,
+                    document.lineAt(end.line).text.length,
+                );
+            }
+
+            if (afterLine.text.trim().length !== 0) {
+                // Insert a newline after the function so we’re always on a blank line
+                await editor.edit((eb) => {
+                    eb.insert(new vscode.Position(end.line + 1, 0), "\n");
+                });
+            }
+
+            // Place caret at the start of the line after the function
+            const target = new vscode.Position(end.line + 1, 0);
+            editor.selection = new vscode.Selection(target, target);
+            editor.revealRange(
+                new vscode.Range(target, target),
+                vscode.TextEditorRevealType.InCenter,
+            );
+            return;
+        } catch {
+            // keep retrying
+        }
+
+        await wait(delayMs);
+    }
+}
+
+export async function ensureSingleBlankLineAtCursor(editor: vscode.TextEditor) {
+    const pos = editor.selection.active;
+    const line = editor.document.lineAt(pos.line);
+
+    // If current line has text, add a newline and move
+    if (line.text.trim() !== "") {
+        await editor.edit((eb) =>
+            eb.insert(new vscode.Position(pos.line + 1, 0), "\n"),
+        );
+        const next = new vscode.Position(pos.line + 1, 0);
+        editor.selection = new vscode.Selection(next, next);
+        return;
+    }
+
+    // Collapse any extra blank lines to a single one
+    let endLine = pos.line;
+    const lastLine = editor.document.lineCount - 1;
+    while (
+        endLine + 1 <= lastLine &&
+        editor.document.lineAt(endLine + 1).text.trim() === ""
+    ) {
+        endLine++;
+    }
+    if (endLine > pos.line) {
+        await editor.edit((eb) =>
+            eb.delete(
+                new vscode.Range(
+                    new vscode.Position(pos.line + 1, 0),
+                    new vscode.Position(endLine + 1, 0),
+                ),
+            ),
+        );
+    }
+}
