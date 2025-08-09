@@ -3,6 +3,7 @@
 
 export type CodeWorkbenchActions =
     | WorkbenchActionFilesOpenFile
+    | WorkbenchActionFilesOpenFolder
     | WorkbenchActionFilesCreateFolderFromExplorer
     | WorkbenchActionBuildRelatedFolderTask
     | WorkbenchActionOpenInIntegratedTerminal;
@@ -17,6 +18,18 @@ export type WorkbenchActionFilesOpenFile = {
         // Optional: restrict to certain extensions (e.g., [".ts", ".js"])
         extensions?: string[];
         // Optional: whether to include files in dist/build/etc (default: false)
+        includeGenerated?: boolean;
+    };
+};
+
+export type WorkbenchActionFilesOpenFolder = {
+    actionName: "workbenchOpenFolder";
+    parameters: {
+        // Name of the folder to reveal in Explorer
+        folderName: string;
+        // Optional: restrict to folders under this path or name
+        folderRelativeTo?: string;
+        // Optional: whether to include folders in node_modules, dist, etc. default: false
         includeGenerated?: boolean;
     };
 };

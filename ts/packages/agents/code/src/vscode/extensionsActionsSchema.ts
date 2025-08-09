@@ -5,7 +5,9 @@ export type CodeWorkbenchExtensionActions =
     | CheckExtensionAvailabilityAction
     | InstallExtensionAction
     | ReloadWindowAction
-    | ShowExtensionsAction;
+    | ShowExtensionsAction
+    | EnableExtensionAction
+    | DisableExtensionAction;
 
 export type KnownExtensionQuery =
     | "@updates"
@@ -75,3 +77,26 @@ export type ReloadWindowAction = {
 export type ShowExtensionsAction = {
     actionName: "showExtensions";
 };
+export interface EnableExtensionAction {
+    actionName: "enableExtension";
+    parameters: {
+        // e.g. "prettier", "azure functions"
+        extensionQuery: string;
+        // whether to prompt user for confirmation before enabling, default: true
+        promptUser?: boolean;
+        // whether to automatically reload the window after enabling, default: false
+        autoReload?: boolean;
+    };
+}
+
+export interface DisableExtensionAction {
+    actionName: "disableExtension";
+    parameters: {
+        // e.g. "prettier", "azure functions"
+        extensionQuery: string;
+        // whether to prompt user for confirmation before disabling, default: true
+        promptUser?: boolean;
+        // whether to automatically reload the window after disabling, default: false
+        autoReload?: boolean;
+    };
+}

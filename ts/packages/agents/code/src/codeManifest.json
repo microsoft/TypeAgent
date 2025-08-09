@@ -34,9 +34,9 @@
     },
     "code-editor": {
       "schema": {
-        "description": "Code agent that helps you perform vscode editor actions like go to a reference, reveal a declaration, clipboard copy or paste, add a comment line etc.",
-        "schemaFile": "./vscode/editorCommandActionsSchema.ts",
-        "schemaType": "CodeEditorActions"
+        "description": "Code agent that helps you perform vscode editor actions like create a new file, go to a reference, reveal a declaration, clipboard copy or paste, add a comment line etc.",
+        "schemaFile": "./vscode/editorCodeActionsSchema.ts",
+        "schemaType": "EditorCodeActions"
       }
     },
     "code-workbench": {

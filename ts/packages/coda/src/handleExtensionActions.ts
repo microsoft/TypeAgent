@@ -176,6 +176,24 @@ export function findBestMatch(
     });
 }
 
+export function findInstalledExtensionByQuery(
+    query: string,
+): vscode.Extension<any> | undefined {
+    const terms = query.toLowerCase().split(/\s+/);
+    return vscode.extensions.all.find((ext) => {
+        const text = [
+            ext.id,
+            ext.packageJSON.displayName,
+            ext.packageJSON.description,
+            ...(ext.packageJSON.keywords ?? []),
+        ]
+            .join(" ")
+            .toLowerCase();
+
+        return terms.every((term) => text.includes(term));
+    });
+}
+
 export async function handleInstallExtension(
     action: any,
 ): Promise<ActionResult> {
@@ -255,6 +273,105 @@ export async function handleInstallExtension(
     }
 }
 
+export async function handleEnableExtension(
+    action: any,
+): Promise<ActionResult> {
+    const {
+        extensionQuery,
+        promptUser = true,
+        autoReload = false,
+    } = action.parameters ?? {};
+    if (!extensionQuery?.trim()) {
+        return { handled: false, message: "❌ Missing 'extensionQuery'." };
+    }
+
+    const ext = findInstalledExtensionByQuery(extensionQuery);
+    if (!ext) {
+        return {
+            handled: true,
+            message: `❌ Could not find matching installed extension for "${extensionQuery}".`,
+        };
+    }
+
+    if (ext.isActive) {
+        return {
+            handled: true,
+            message: `✅ Extension '${ext.id}' is already enabled.`,
+        };
+    }
+
+    const confirm =
+        !promptUser ||
+        (await vscode.window.showInformationMessage(
+            `Enable extension '${ext.packageJSON.displayName ?? ext.id}'?`,
+            { modal: true },
+            "Yes",
+        )) === "Yes";
+
+    if (!confirm) {
+        return { handled: true, message: "🚫 User cancelled enable request." };
+    }
+
+    await vscode.commands.executeCommand(
+        "workbench.extensions.enableExtension",
+        ext.id,
+    );
+    if (autoReload) {
+        await vscode.commands.executeCommand("workbench.action.reloadWindow");
+    }
+
+    return {
+        handled: true,
+        message: `✅ Extension '${ext.id}' enabled.${autoReload ? " Reloading..." : ""}`,
+    };
+}
+
+export async function handleDisableExtension(
+    action: any,
+): Promise<ActionResult> {
+    const {
+        extensionQuery,
+        promptUser = true,
+        autoReload = false,
+    } = action.parameters ?? {};
+    if (!extensionQuery?.trim()) {
+        return { handled: false, message: "❌ Missing 'extensionQuery'." };
+    }
+
+    const ext = findInstalledExtensionByQuery(extensionQuery);
+    if (!ext) {
+        return {
+            handled: true,
+            message: `❌ Could not find matching installed extension for "${extensionQuery}".`,
+        };
+    }
+
+    const confirm =
+        !promptUser ||
+        (await vscode.window.showInformationMessage(
+            `Disable extension '${ext.packageJSON.displayName ?? ext.id}'?`,
+            { modal: true },
+            "Yes",
+        )) === "Yes";
+
+    if (!confirm) {
+        return { handled: true, message: "🚫 User cancelled disable request." };
+    }
+
+    await vscode.commands.executeCommand(
+        "workbench.extensions.disableExtension",
+        ext.id,
+    );
+    if (autoReload) {
+        await vscode.commands.executeCommand("workbench.action.reloadWindow");
+    }
+
+    return {
+        handled: true,
+        message: `✅ Extension '${ext.id}' disabled.${autoReload ? " Reloading..." : ""}`,
+    };
+}
+
 export async function handleExtensionActions(
     action: any,
 ): Promise<ActionResult> {
@@ -285,6 +402,14 @@ export async function handleExtensionActions(
         case "showExtensions": {
             vscode.commands.executeCommand("workbench.view.extensions");
             actionResult.message = "Showing extensions";
+            break;
+        }
+        case "enableExtension": {
+            actionResult = await handleEnableExtension(action);
+            break;
+        }
+        case "disableExtension": {
+            actionResult = await handleDisableExtension(action);
             break;
         }
         default: {

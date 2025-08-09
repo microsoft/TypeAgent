@@ -3,7 +3,7 @@
 
 import WebSocket from "ws";
 import { createWebSocket, keepWebSocketAlive } from "./webSocket";
-import { handleVSCodeActions } from "./handleCodeEditorActions";
+import { handleVSCodeActions } from "./handleVSCodeActions";
 
 type WebSocketMessageV2 = {
     id?: string;
@@ -39,7 +39,17 @@ async function ensureWebsocketConnected() {
             return;
         }
 
-        if (data.method && data.method.indexOf("/") > 0) {
+        if (data.method !== undefined && data.method === "code/ping") {
+            webSocket?.send(
+                JSON.stringify({
+                    id: data.id,
+                    result: "pong",
+                }),
+            );
+            return;
+        }
+
+        if (data.method !== undefined && data.method.indexOf("/") > 0) {
             const [schema, actionName] = data.method?.split("/");
 
             if (schema == "code") {
