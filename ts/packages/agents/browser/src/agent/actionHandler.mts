@@ -660,18 +660,27 @@ async function resolveEntity(
 ): Promise<ResolveEntityResult | undefined> {
     if (type === "WebPage") {
         try {
-            const url = await resolveWebPage(context, name);
-            if (url) {
+            const urls = await resolveWebPage(context, name);
+            if (urls.length === 1) {
                 return {
                     match: "exact",
                     entities: [
                         {
                             name,
                             type: ["WebPage"],
-                            uniqueId: url,
+                            uniqueId: urls[0],
                         },
                     ],
                 };
+            } else {
+                return {
+                    match: "fuzzy",
+                    entities: urls.map((url) => ({
+                        name,
+                        type: ["WebPage"],
+                        uniqueId: url,
+                    })),
+                }
             }
         } catch {}
     }
@@ -681,7 +690,7 @@ async function resolveEntity(
 async function resolveWebPage(
     context: SessionContext<BrowserActionContext>,
     site: string,
-): Promise<string> {
+): Promise<string[]> {
     debug(`Resolving site '${site}'`);
 
     // Handle library pages with custom protocol
@@ -694,58 +703,65 @@ async function resolveWebPage(
     const libraryUrl = libraryPages[site.toLowerCase()];
     if (libraryUrl) {
         debug(`Resolved library page: ${site} -> ${libraryUrl}`);
-        return libraryUrl;
+        return [libraryUrl];
     }
 
     switch (site.toLowerCase()) {
         case "paleobiodb":
-            return "https://paleobiodb.org/navigator/";
+            return ["https://paleobiodb.org/navigator/"];
 
         case "crossword":
-            return "https://aka.ms/typeagent/sample-crossword";
+            return ["https://aka.ms/typeagent/sample-crossword"];
 
         case "commerce":
-            return "https://www.target.com/";
+            return ["https://www.target.com/"];
 
         case "turtlegraphics":
-            return "http://localhost:9000/";
-        default:
-            if (URL.canParse(site)) {
-                // if the site is a valid URL, return it directly
+            return ["http://localhost:9000/"];
+        case "planviewer":
+            // handle browser views
+            const port =
+                await context.getSharedLocalHostPort("browser");
+            if (port !== undefined) {
+                debug(`Resolved local site on PORT ${port}`);
+
+                return [`http://localhost:${port}/plans`];
+            }
+        default: {
+            // if the site is a valid URL, return it directly
+            if (URL.canParse(site)) {                
                 debug(`Site is a valid URL: ${site}`);
-                return site;
+                return [site];
             }
 
+            // local sites
             try {
-                // handle browser views
-                if (site === "planViewer") {
-                    const port =
-                        await context.getSharedLocalHostPort("browser");
-                    if (port !== undefined) {
-                        debug(`Resolved local site on PORT ${port}`);
-
-                        return `http://localhost:${port}/plans`;
-                    }
-                }
-
                 const port = await context.getSharedLocalHostPort(site);
 
                 if (port !== undefined) {
                     debug(`Resolved local site on PORT ${port}`);
 
-                    return `http://localhost:${port}`;
+                    return [`http://localhost:${port}`];
                 }
             } catch (e) {
                 debug(`Unable to find local host port for '${site}. ${e}'`);
             }
+            
+            // Search for the URL based on heuristics (history, keywords, wikipedia, web-search)
+            // if we get singular matches we assume those are correct and we just return it.
+            // if we get more than one result then we'll return all of them and let the user decide
+            // which URL they want via clarification
+            const urls: string[] = [];
 
             // try to resolve URL using website visit history first
             if (context.agentContext.resolverSettings.historyResolver) {
                 const historyUrl = await resolveURLWithHistory(context, site);
-                if (historyUrl) {
-                    debug(`Resolved URL from history: ${historyUrl}`);
-                    return historyUrl;
-                }
+                // if (historyUrl && historyUrl.length === 1) {
+                //     debug(`Resolved URL from history: ${historyUrl}`);
+                //     return [historyUrl[0]];
+                // } else {
+                    urls.push(...historyUrl ? historyUrl : []);
+                //}
             }
 
             // try to resolve URL string using known keyword matching
@@ -758,9 +774,11 @@ async function resolveWebPage(
                         cachehitUrl.indexOf("https://") !== 0 &&
                         cachehitUrl.indexOf("http://") !== 0
                     ) {
-                        return "https://" + cachehitUrl;
+                        //return ["https://" + cachehitUrl];
+                        urls.push(`https://${cachehitUrl}`);
                     } else {
-                        return cachehitUrl;
+                        //return [cachehitUrl];
+                        urls.push(cachehitUrl);
                     }
                 }
             }
@@ -768,32 +786,42 @@ async function resolveWebPage(
             // try to resolve URL by using the Wikipedia API
             if (context.agentContext.resolverSettings.wikipediaResolver) {
                 debug(`Resolving URL using Wikipedia for: ${site}`);
-                const wikiPediaUrl = await urlResolver.resolveURLWithWikipedia(
+                const wikiPediaUrls: string[] = await urlResolver.resolveURLWithWikipedia(
                     site,
                     wikipedia.apiSettingsFromEnv(),
                 );
-                if (wikiPediaUrl) {
-                    debug(`Resolved URL using Wikipedia: ${wikiPediaUrl}`);
-                    return wikiPediaUrl;
-                }
+                // if (wikiPediaUrl) {
+                //     debug(`Resolved URL using Wikipedia: ${wikiPediaUrl}`);
+                //     return wikiPediaUrl;
+                // }
+                urls.push(...wikiPediaUrls);
             }
 
             // try to resolve URL using LLM + internet search
             if (context.agentContext.resolverSettings.searchResolver) {
-                const url = await urlResolver.resolveURLWithSearch(
+                const search_urls = await urlResolver.resolveURLWithSearch(
                     site,
                     bingWithGrounding.apiSettingsFromEnv(),
                 );
 
-                if (url) {
-                    debug(`Resolved URL using Bing with Grounding: ${url}`);
-                    return url;
+                if (search_urls) {
+                    urls.push(...search_urls);
                 }
+
+                // if (url) {
+                //     debug(`Resolved URL using Bing with Grounding: ${url}`);
+                //     return url;
+                // }
             }
 
-            // can't get a URL
-            throw new Error(`Unable to find a URL for: '${site}'`);
+            if (urls.length > 0) {
+                return [...new Set(urls)]; // return unique URLs
+            }
+        }
     }
+
+    // can't get a URL
+    throw new Error(`Unable to find a URL for: '${site}'`);
 }
 
 export function getActionBrowserControl(
@@ -830,10 +858,10 @@ async function openWebPage(
     const url =
         siteEntity?.type[0] === "WebPage"
             ? siteEntity.uniqueId!
-            : await resolveWebPage(
+            : (await resolveWebPage(
                   context.sessionContext,
                   action.parameters.site,
-              );
+              ))[0]; // only take the first URL
 
     if (url !== action.parameters.site) {
         displayStatus(

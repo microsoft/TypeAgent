@@ -71,8 +71,8 @@ export async function deleteThreads(
 export async function resolveURLWithSearch(
     site: string,
     groundingConfig: bingWithGrounding.ApiSettings,
-): Promise<string | undefined | null> {
-    let retVal: string | undefined | null = site;
+): Promise<string[] | undefined | null> {
+    let retVal: string[] | undefined | null = [];
     const project = new AIProjectClient(
         groundingConfig.endpoint!,
         new DefaultAzureCredential(),
@@ -136,7 +136,8 @@ export async function resolveURLWithSearch(
                                 .replaceAll("```json", "")
                                 .replaceAll("```", "");
                             const url = JSON.parse(txt) as urlResolutionAction;
-                            retVal = url.url;
+                            retVal.push(url.url, ...url.urlsEvaluated);
+                            retVal = [...new Set(retVal)]; // remove duplicates
                         }
                     }
                 }
@@ -404,7 +405,8 @@ export async function validateURL(
 export async function resolveURLWithWikipedia(
     site: string,
     wikipediaConfig: wikipedia.WikipediaApiSettings,
-): Promise<string | undefined> {
+    max_results: number = 3,
+): Promise<string[]> {
     // TODO: implement
     console.log(`${site} ${wikipediaConfig}`);
 
@@ -423,17 +425,12 @@ export async function resolveURLWithWikipedia(
         limit: numberOfResults.toString(),
     });
 
-    let retVal: string | undefined = undefined;
+    let retVal: string[] = [];
     await fetch(`${url}?${parameters}`, { method: "GET", headers: headers })
         .then((response) => response.json())
         .then(async (data: any) => {
-            // go through the pages (max 3)
-            for (let i = 0; i < data.pages.length && i < 3; i++) {
-                // default the result to the wikipedia page URL
-                if (retVal === undefined) {
-                    retVal = `https://en.wikipedia.org/wiki/${encodeWikipediaTitle(data.pages[i].title)}`;
-                }
-
+            // go through the pages
+            for (let i = 0; i < data.pages.length && i < max_results; i++) {
                 // get the page markdown
                 const content = await wikipedia.getPageMarkdown(
                     data.pages[i].title,
@@ -451,7 +448,7 @@ export async function resolveURLWithWikipedia(
 
                         // get the "official website" out of the page if it exists
                         if (externalLinks.officialWebsite) {
-                            retVal = externalLinks.officialWebsite.url;
+                            retVal.push(externalLinks.officialWebsite.url);
                             break; // we found the official website, so break out of the loop
                         }
 
@@ -459,7 +456,7 @@ export async function resolveURLWithWikipedia(
                     }
                 } else {
                     // no "official website" found, so just use the wikipedia page URL
-                    retVal = `https://en.wikipedia.org/wiki/${encodeWikipediaTitle(data.pages[i].title)}`;
+                    retVal.push(`https://en.wikipedia.org/wiki/${encodeWikipediaTitle(data.pages[i].title)}`);
                 }
             }
         })
