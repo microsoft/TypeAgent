@@ -25,8 +25,7 @@ import {
     displayError,
     displayStatus,
     displaySuccess,
-    getMessage
-    
+    getMessage,
 } from "@typeagent/agent-sdk/helpers/display";
 import { Crossword } from "./crossword/schema/pageSchema.mjs";
 import {
@@ -665,7 +664,7 @@ async function resolveEntity(
     if (type === "WebPage") {
         try {
             const resolveStarted = Date.now();
-            
+
             const urls = await resolveWebPage(context, name);
             const duration = Date.now() - resolveStarted;
 
@@ -700,7 +699,7 @@ async function resolveEntity(
 async function resolveWebPage(
     context: SessionContext<BrowserActionContext>,
     site: string,
-    io?: ActionIO
+    io?: ActionIO,
 ): Promise<string[]> {
     debug(`Resolving site '${site}'`);
 
@@ -761,9 +760,7 @@ async function resolveWebPage(
             if (context.agentContext.resolverSettings.keywordResolver) {
                 const cachehitUrl = await urlResolver.resolveURLByKeyword(site);
                 if (cachehitUrl) {
-                    debug(
-                        `Resolved URL from cache: ${cachehitUrl}`,
-                    );
+                    debug(`Resolved URL from cache: ${cachehitUrl}`);
 
                     if (
                         cachehitUrl.indexOf("https://") !== 0 &&
@@ -774,7 +771,7 @@ async function resolveWebPage(
                         return [cachehitUrl];
                     }
                 }
-            }            
+            }
 
             // Search for the URL based on heuristics (history, wikipedia, web-search)
             // if we get singular matches we assume those are correct and we just return it.
@@ -786,19 +783,29 @@ async function resolveWebPage(
             // try to resolve URL using website visit history first
             if (context.agentContext.resolverSettings.historyResolver) {
                 const startTime = Date.now();
-                io?.appendDisplay(getMessage(`Trying to resolve '${site}' by looking at browsing history.\n`, "status"), "temporary");
+                io?.appendDisplay(
+                    getMessage(
+                        `Trying to resolve '${site}' by looking at browsing history.\n`,
+                        "status",
+                    ),
+                    "temporary",
+                );
                 promises.push(
                     resolveURLWithHistory(context, site).then((historyUrls) => {
-
                         if (historyUrls) {
                             const msg = `Found ${historyUrls.length} in browser history.`;
                             debug(msg);
-                            io?.appendDisplay(getMessage(msg, "status"), "temporary");
+                            io?.appendDisplay(
+                                getMessage(msg, "status"),
+                                "temporary",
+                            );
 
                             urls.push(...historyUrls!);
                         }
 
-                        debug(`History resolution duration: ${Date.now () - startTime}`);
+                        debug(
+                            `History resolution duration: ${Date.now() - startTime}`,
+                        );
                     }),
                 );
             }
@@ -806,7 +813,13 @@ async function resolveWebPage(
             // try to resolve URL by using the Wikipedia API
             if (context.agentContext.resolverSettings.wikipediaResolver) {
                 const startTime = Date.now();
-                io?.appendDisplay(getMessage(`Resolving URL using Wikipedia for: '${site}'\n`, "status"), "temporary");
+                io?.appendDisplay(
+                    getMessage(
+                        `Resolving URL using Wikipedia for: '${site}'\n`,
+                        "status",
+                    ),
+                    "temporary",
+                );
                 promises.push(
                     urlResolver
                         .resolveURLWithWikipedia(
@@ -814,14 +827,18 @@ async function resolveWebPage(
                             wikipedia.apiSettingsFromEnv(),
                         )
                         .then((wikiPediaUrls) => {
-
                             const msg = `Found ${wikiPediaUrls.length} urls from Wikipedia.`;
                             debug(msg);
-                            io?.appendDisplay(getMessage(msg, "status"), "temporary");
+                            io?.appendDisplay(
+                                getMessage(msg, "status"),
+                                "temporary",
+                            );
 
                             urls.push(...wikiPediaUrls);
 
-                            debug(`Wikipedia resolution duration: ${Date.now () - startTime}`);
+                            debug(
+                                `Wikipedia resolution duration: ${Date.now() - startTime}`,
+                            );
                         }),
                 );
             }
@@ -829,7 +846,13 @@ async function resolveWebPage(
             // try to resolve URL using LLM + internet search
             if (context.agentContext.resolverSettings.searchResolver) {
                 const startTime = Date.now();
-                io?.appendDisplay(getMessage(`Resolving URL using web search for: '${site}'\n`, "status"), "temporary");
+                io?.appendDisplay(
+                    getMessage(
+                        `Resolving URL using web search for: '${site}'\n`,
+                        "status",
+                    ),
+                    "temporary",
+                );
                 promises.push(
                     urlResolver
                         .resolveURLWithSearch(
@@ -837,16 +860,20 @@ async function resolveWebPage(
                             bingWithGrounding.apiSettingsFromEnv(),
                         )
                         .then((search_urls) => {
-
                             const msg = `Found ${search_urls?.length} urls using Bing With Grounding (search).`;
                             debug(msg);
-                            io?.appendDisplay(getMessage(msg, "status"), "temporary");
+                            io?.appendDisplay(
+                                getMessage(msg, "status"),
+                                "temporary",
+                            );
 
                             if (search_urls) {
                                 urls.push(...search_urls);
                             }
 
-                            debug(`Search (Bing with Grounding) resolution duration: ${Date.now () - startTime}`);
+                            debug(
+                                `Search (Bing with Grounding) resolution duration: ${Date.now() - startTime}`,
+                            );
                         }),
                 );
             }
@@ -882,11 +909,11 @@ async function resolveWebPage(
                     dedupedUrls.push(url);
                 }
             }
-            urls.length = 0;            //clear out urls
-            urls.push(...dedupedUrls);  // add deduped
+            urls.length = 0; //clear out urls
+            urls.push(...dedupedUrls); // add deduped
 
             const msg = `Found ${urls.length} possible urls for '${site}'`;
-            debug (msg);
+            debug(msg);
             io?.appendDisplay(getMessage(msg, "info"));
 
             if (urls.length > 0) {
@@ -929,11 +956,13 @@ async function openWebPage(
     const browserControl = getActionBrowserControl(context);
 
     displayStatus(`Opening web page for ${action.parameters.site}.`, context);
-    const url = (await resolveWebPage(
-                      context.sessionContext,
-                      action.parameters.site,
-                      context.actionIO
-                  ))[0];
+    const url = (
+        await resolveWebPage(
+            context.sessionContext,
+            action.parameters.site,
+            context.actionIO,
+        )
+    )[0];
 
     if (url !== action.parameters.site) {
         displayStatus(

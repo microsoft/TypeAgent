@@ -103,7 +103,10 @@ async function generateResponse(
         }
 
         // Add the related files.
-        if (generateResponseAction.parameters.relatedFiles && generateResponseAction.parameters.relatedFiles.length > 0) {
+        if (
+            generateResponseAction.parameters.relatedFiles &&
+            generateResponseAction.parameters.relatedFiles.length > 0
+        ) {
             context.actionIO.appendDisplay(
                 `<div class='chat-smallImage'>${await rehydrateImages(context, generateResponseAction.parameters.relatedFiles!)}</div>`,
                 "block",
