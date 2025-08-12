@@ -186,6 +186,23 @@ class TextRange:
         else:
             return f"{self.__class__.__name__}({self.start}, {self.end})"
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, TextRange):
+            return NotImplemented
+
+        if self.start != other.start:
+            return False
+
+        # Get the effective end for both ranges
+        self_end = self.end or TextLocation(
+            self.start.message_ordinal, self.start.chunk_ordinal + 1
+        )
+        other_end = other.end or TextLocation(
+            other.start.message_ordinal, other.start.chunk_ordinal + 1
+        )
+
+        return self_end == other_end
+
     def __lt__(self, other: Self) -> bool:
         if self.start != other.start:
             return self.start < other.start
