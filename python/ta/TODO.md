@@ -20,10 +20,10 @@
 # From Meeting 8/12/2025 afternoon
 
 - Toss out character ordinals from TextLocation etc. [DONE]
-- Message ordinal must exist
-- Chunk ordinal of end in range is 1 past last chunk in range
-  (== standard Python slice conventions)
-- TextRange is a half-open interval; end points past last chunk
+  - Message ordinal must exist
+  - Chunk ordinal of end in range is 1 past last chunk in range
+    (== standard Python slice conventions)
+  - TextRange is a half-open interval; end points past last chunk
 - Indexing (knowledge extraction) operates chunk by chunk
 - TimeRange always points to a TextRange
 - Always import VTT, helper to convert podcast to VTT format
