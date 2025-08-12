@@ -38,7 +38,6 @@ export class KnowledgeAnalyticsPanel {
 
     async loadAnalyticsDataWithCache(): Promise<void> {
         if (!this.isConnected) {
-            this.showAnalyticsConnectionError();
             return;
         }
 
@@ -156,27 +155,6 @@ export class KnowledgeAnalyticsPanel {
 
     destroy(): void {
         // Cleanup any event listeners or timers if needed
-    }
-
-    private showAnalyticsConnectionError(): void {
-        const emptyState = document.getElementById("analyticsEmptyState");
-        if (emptyState) {
-            emptyState.style.display = "block";
-        }
-
-        const container = document.getElementById("analyticsContent");
-        if (container) {
-            container.innerHTML = `
-                <div class="connection-required">
-                    <i class="bi bi-wifi-off"></i>
-                    <h3>Connection Required</h3>
-                    <p>The Analytics page requires an active connection to the TypeAgent service.</p>
-                    <button class="btn btn-primary" data-action="reconnect">
-                        <i class="bi bi-arrow-repeat"></i> Reconnect
-                    </button>
-                </div>
-            `;
-        }
     }
 
     private handleAnalyticsDataError(error: any): void {
@@ -584,9 +562,6 @@ export class KnowledgeAnalyticsPanel {
 
     setConnectionStatus(isConnected: boolean): void {
         this.isConnected = isConnected;
-        if (!isConnected) {
-            this.showAnalyticsConnectionError();
-        }
     }
 
     private updateRecentEntitiesDisplay(recentEntities: any[]): void {

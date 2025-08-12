@@ -605,11 +605,6 @@ export class KnowledgeSearchPanel {
         if (searchButton) {
             searchButton.disabled = !isConnected;
         }
-
-        // Show connection error if not connected and user tries to search
-        if (!isConnected && this.currentQuery) {
-            this.showConnectionError();
-        }
     }
 
     private setupConnectionStatusListener(): void {
@@ -1081,28 +1076,6 @@ export class KnowledgeSearchPanel {
             return `${diffDays} days ago`;
         } else {
             return date.toLocaleDateString();
-        }
-    }
-
-    private showConnectionError(): void {
-        const resultsContainer = document.getElementById("searchResults");
-        const resultsContent = document.getElementById("resultsContainer");
-
-        if (resultsContainer) {
-            resultsContainer.style.display = "block";
-        }
-
-        if (resultsContent) {
-            resultsContent.innerHTML = `
-                <div class="connection-required">
-                    <i class="bi bi-wifi-off"></i>
-                    <h3>Connection Required</h3>
-                    <p>Search functionality requires an active connection to the TypeAgent service.</p>
-                    <button class="btn btn-primary" data-action="reconnect">
-                        <i class="bi bi-arrow-repeat"></i> Reconnect
-                    </button>
-                </div>
-            `;
         }
     }
 }

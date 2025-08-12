@@ -29,7 +29,6 @@ export class KnowledgeDiscoveryPanel {
 
     async loadDiscoverData(): Promise<void> {
         if (!this.isConnected) {
-            this.showConnectionError();
             return;
         }
 
@@ -84,27 +83,6 @@ export class KnowledgeDiscoveryPanel {
 
     destroy(): void {
         // Cleanup any event listeners or timers if needed
-    }
-
-    private showConnectionError(): void {
-        const emptyState = document.getElementById("discoverEmptyState");
-        if (emptyState) {
-            emptyState.style.display = "block";
-        }
-
-        const container = document.getElementById("discoverContent");
-        if (container) {
-            container.innerHTML = `
-                <div class="connection-required">
-                    <i class="bi bi-wifi-off"></i>
-                    <h3>Connection Required</h3>
-                    <p>The Discover page requires an active connection to the TypeAgent service.</p>
-                    <button class="btn btn-primary" data-action="reconnect">
-                        <i class="bi bi-arrow-repeat"></i> Reconnect
-                    </button>
-                </div>
-            `;
-        }
     }
 
     private handleDiscoverDataError(error: any): void {
@@ -306,9 +284,6 @@ export class KnowledgeDiscoveryPanel {
 
     setConnectionStatus(isConnected: boolean): void {
         this.isConnected = isConnected;
-        if (!isConnected) {
-            this.showConnectionError();
-        }
     }
 
     private setupConnectionStatusListener(): void {

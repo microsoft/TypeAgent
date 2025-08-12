@@ -13,6 +13,7 @@ import {
 import { QueryEnhancementAdapter } from "./search/queryEnhancementAdapter.mjs";
 import { AnswerEnhancementAdapter } from "./search/answerEnhancementAdapter.mjs";
 import type { AnswerEnhancement } from "./search/schema/answerEnhancement.mjs";
+import * as cm from "conversation-memory";
 
 const debug = registerDebug("typeagent:browser:unified-search");
 
@@ -48,14 +49,6 @@ export interface SearchWebMemoriesRequest {
     metadata?: any;
 }
 
-export interface ParsedQuery {
-    isQuestion: boolean;
-    searchTerms: string[];
-    intent: "question" | "discovery" | "mixed";
-    extractedEntities: string[];
-    temporalTerms: string[];
-}
-
 export interface SearchSummary {
     totalFound: number;
     searchTime: number;
@@ -64,7 +57,7 @@ export interface SearchSummary {
 }
 
 export interface SearchDebugContext {
-    parsedQuery: ParsedQuery;
+    searchTerms: string[];
     searchStrategies: string[];
     knowledgeMatchCount: number;
     timing: {
@@ -104,7 +97,7 @@ export interface SearchWebMemoriesResponse {
 
     // Query understanding
     queryIntent?: "question" | "discovery" | "mixed" | undefined;
-    parsedQuery?: ParsedQuery | undefined;
+    searchTerms?: string[] | undefined;
     suggestedFollowups?: string[] | undefined;
 
     // Answer Enhancement - dynamic summaries and smart follow-ups
@@ -131,7 +124,7 @@ export async function searchWebMemories(
     };
 
     const debugContext: SearchDebugContext = {
-        parsedQuery: {} as ParsedQuery,
+        searchTerms: [],
         searchStrategies: [],
         knowledgeMatchCount: 0,
         timing,
@@ -173,17 +166,15 @@ export async function searchWebMemories(
         const enhancementTime = Date.now() - enhancementStart;
         debug(`Query enhancement completed in ${enhancementTime}ms`);
 
-        // PHASE 1: Query parsing and understanding
+        // PHASE 1: Term parsing - use original query for term extraction
         const parseStart = Date.now();
-        const parsedQuery = await parseAndExpandQuery(
-            enhancedRequest.query,
-            context,
-        );
+        const termParser = new cm.SearchTermParser();
+        const searchTerms = termParser.getTerms(request.query); // Use original query, not enhanced
         timing.parsing = Date.now() - parseStart + enhancementTime;
-        debugContext.parsedQuery = parsedQuery;
+        debugContext.searchTerms = searchTerms;
 
         debug(
-            `Parsed query intent: ${parsedQuery.intent}, isQuestion: ${parsedQuery.isQuestion}`,
+            `Extracted ${searchTerms.length} search terms from original query: ${searchTerms.join(", ")}`,
         );
 
         // PHASE 2: Core search execution
@@ -194,7 +185,8 @@ export async function searchWebMemories(
         debugContext.searchStrategies.push("comprehensive-unified");
         searchResults = await performComprehensiveSearch(
             enhancedRequest,
-            parsedQuery,
+            searchTerms,
+            detectedIntent,
             context,
         );
 
@@ -289,8 +281,8 @@ export async function searchWebMemories(
                     answerEnhancement?.confidence ||
                     0.7,
             },
-            queryIntent: detectedIntent?.intent.type || parsedQuery.intent,
-            parsedQuery,
+            queryIntent: detectedIntent?.intent.type,
+            searchTerms,
             // Use enhanced followups if available, otherwise provide empty array
             suggestedFollowups:
                 answerEnhancement?.followups.map((f) => f.query) || [],
@@ -346,7 +338,8 @@ export async function searchWebMemories(
  */
 async function performComprehensiveSearch(
     request: SearchWebMemoriesRequest,
-    parsedQuery: ParsedQuery,
+    searchTerms: string[],
+    detectedIntent: any,
     context: SessionContext<BrowserActionContext>,
 ): Promise<website.Website[]> {
     const websiteCollection = context.agentContext.websiteCollection;
@@ -361,7 +354,8 @@ async function performComprehensiveSearch(
         try {
             const advancedResults = await performAdvancedSearch(
                 request,
-                parsedQuery,
+                searchTerms,
+                detectedIntent,
                 websiteCollection,
                 context,
             );
@@ -650,93 +644,19 @@ async function performBasicSemanticSearch(
 
 // Helper functions
 
-async function parseAndExpandQuery(
-    query: string,
-    context: SessionContext<BrowserActionContext>,
-): Promise<ParsedQuery> {
-    const queryLower = query.toLowerCase().trim();
-
-    // Detect if this is a question
-    const questionIndicators = [
-        "what",
-        "how",
-        "why",
-        "when",
-        "where",
-        "who",
-        "which",
-        "is",
-        "are",
-        "can",
-        "could",
-        "should",
-        "would",
-        "do",
-        "does",
-        "did",
-    ];
-    const isQuestion = questionIndicators.some(
-        (indicator) =>
-            queryLower.startsWith(indicator + " ") || queryLower.includes("?"),
-    );
-
-    // Extract search terms (simplified)
-    const searchTerms = [query];
-
-    // Detect intent
-    let intent: "question" | "discovery" | "mixed" = "discovery";
-    if (isQuestion) {
-        intent = "question";
-    } else if (
-        queryLower.includes("find") ||
-        queryLower.includes("show") ||
-        queryLower.includes("search")
-    ) {
-        intent = "mixed";
-    }
-
-    // Extract entities (simplified - could be enhanced with NLP)
-    const extractedEntities: string[] = [];
-    const capitalizedWords = query.match(/\b[A-Z][a-z]+\b/g) || [];
-    extractedEntities.push(...capitalizedWords);
-
-    // Extract temporal terms
-    const temporalTerms: string[] = [];
-    const temporalIndicators = [
-        "today",
-        "yesterday",
-        "last week",
-        "last month",
-        "recently",
-        "this year",
-        "last year",
-    ];
-    temporalIndicators.forEach((term) => {
-        if (queryLower.includes(term)) {
-            temporalTerms.push(term);
-        }
-    });
-
-    return {
-        isQuestion,
-        searchTerms,
-        intent,
-        extractedEntities,
-        temporalTerms,
-    };
-}
-
 async function performAdvancedSearch(
     request: SearchWebMemoriesRequest,
-    parsedQuery: ParsedQuery,
+    searchTerms: string[],
+    detectedIntent: any,
     websiteCollection: website.WebsiteCollection,
     context: SessionContext<BrowserActionContext>,
 ): Promise<website.Website[]> {
-    // Build sophisticated search expression
+    // Build sophisticated search expression using properly parsed terms
     const searchSelectExpr: kp.SearchSelectExpr = {
         searchTermGroup: {
-            booleanOp: parsedQuery.isQuestion ? "and" : "or",
-            terms: parsedQuery.searchTerms.map((term) => ({
+            // Use intent analysis for boolean operator decision
+            booleanOp: detectedIntent?.intent?.type === "find_specific" ? "and" : "or_max",
+            terms: searchTerms.map((term) => ({
                 term: { text: term },
             })),
         },
