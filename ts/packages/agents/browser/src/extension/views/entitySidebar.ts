@@ -37,11 +37,55 @@ export class EntitySidebar {
         entityData: EntityData | string,
         fullEntityData?: any,
     ): Promise<void> {
+        // Clear existing data first to prevent stale data issues
+        this.clearStaleData();
+
         this.currentEntity = fullEntityData || entityData;
         this.renderEntityHeader();
         this.renderEntityMetrics();
         this.renderEntityDetails();
         this.renderEntityTimeline();
+    }
+
+    /**
+     * Clear stale data from sidebar before loading new entity
+     */
+    private clearStaleData(): void {
+        // Clear domains list
+        const domainsSection = document.getElementById("entityDomains");
+        if (domainsSection) {
+            const domainsList = domainsSection.querySelector(".domains-list");
+            if (domainsList) {
+                domainsList.innerHTML =
+                    '<span class="empty-message">Loading...</span>';
+            }
+        }
+
+        // Clear topics list
+        const topicsSection = document.getElementById("entityTopics");
+        if (topicsSection) {
+            const topicsList = topicsSection.querySelector(".topics-list");
+            if (topicsList) {
+                topicsList.innerHTML =
+                    '<span class="empty-message">Loading...</span>';
+            }
+        }
+
+        // Clear facets list
+        const facetsSection = document.getElementById("entityFacets");
+        if (facetsSection) {
+            const facetsList = facetsSection.querySelector(".facets-list");
+            if (facetsList) {
+                facetsList.innerHTML =
+                    '<span class="empty-message">Loading...</span>';
+            }
+        }
+
+        // Clear timeline
+        const firstSeenEl = document.getElementById("entityFirstSeen");
+        const lastSeenEl = document.getElementById("entityLastSeen");
+        if (firstSeenEl) firstSeenEl.textContent = "Loading...";
+        if (lastSeenEl) lastSeenEl.textContent = "Loading...";
     }
 
     /**

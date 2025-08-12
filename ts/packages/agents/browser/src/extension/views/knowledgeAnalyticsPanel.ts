@@ -629,7 +629,7 @@ export class KnowledgeAnalyticsPanel {
             .slice(0, 10)
             .map(
                 (topic) => `
-            <div class="topic-pill">
+            <div class="topic-pill clickable" data-topic-name="${this.escapeHtml(topic.name || topic.topic || "Unknown Topic")}" title="Click to view in Entity Graph">
                 <div class="pill-icon">
                     <i class="bi bi-tags"></i>
                 </div>
@@ -643,6 +643,19 @@ export class KnowledgeAnalyticsPanel {
             .join("");
 
         container.innerHTML = topicsHtml;
+
+        // Add click handlers for topic navigation
+        container.querySelectorAll(".topic-pill.clickable").forEach((pill) => {
+            pill.addEventListener("click", (e) => {
+                const topicName = (e.currentTarget as HTMLElement).getAttribute(
+                    "data-topic-name",
+                );
+                if (topicName) {
+                    // Navigate to entity graph view with the selected topic
+                    window.location.href = `entityGraphView.html?topic=${encodeURIComponent(topicName)}`;
+                }
+            });
+        });
     }
 
     private updateRecentActionsDisplay(recentRelationships: any[]): void {
