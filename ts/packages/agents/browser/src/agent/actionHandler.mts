@@ -92,7 +92,6 @@ import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.
 import { deleteCachedSchema } from "./crossword/cachedSchema.mjs";
 import { getCrosswordCommandHandlerTable } from "./crossword/commandHandler.mjs";
 import { MacroStore } from "./storage/index.mjs";
-import { start } from "node:repl";
 
 const debug = registerDebug("typeagent:browser:action");
 const debugWebSocket = registerDebug("typeagent:browser:ws");
