@@ -676,7 +676,7 @@ async function resolveEntity(
                 return {
                     match: "fuzzy",
                     entities: urls.map((url) => ({
-                        name,
+                        name: `${url}`,
                         type: ["WebPage"],
                         uniqueId: url,
                     })),
@@ -752,70 +752,93 @@ async function resolveWebPage(
             // if we get more than one result then we'll return all of them and let the user decide
             // which URL they want via clarification
             const urls: string[] = [];
+            const promises: Promise<any>[] = [];
 
             // try to resolve URL using website visit history first
             if (context.agentContext.resolverSettings.historyResolver) {
-                const historyUrl = await resolveURLWithHistory(context, site);
-                // if (historyUrl && historyUrl.length === 1) {
-                //     debug(`Resolved URL from history: ${historyUrl}`);
-                //     return [historyUrl[0]];
-                // } else {
-                    urls.push(...historyUrl ? historyUrl : []);
-                //}
+                promises.push(resolveURLWithHistory(context, site).then((historyUrls) => {
+                    if (historyUrls) {
+                        urls.push(...historyUrls!);
+                    }
+                }));
             }
 
             // try to resolve URL string using known keyword matching
             if (context.agentContext.resolverSettings.keywordResolver) {
-                const cachehitUrl = await urlResolver.resolveURLByKeyword(site);
-                if (cachehitUrl) {
-                    debug(`Resolved URL from cache: ${cachehitUrl}`);
+                promises.push(urlResolver.resolveURLByKeyword(site).then((cachehitUrl) => {
+                    if (cachehitUrl) {
+                        debug(`Resolved URL from cache: ${cachehitUrl}`);
 
-                    if (
-                        cachehitUrl.indexOf("https://") !== 0 &&
-                        cachehitUrl.indexOf("http://") !== 0
-                    ) {
-                        //return ["https://" + cachehitUrl];
-                        urls.push(`https://${cachehitUrl}`);
-                    } else {
-                        //return [cachehitUrl];
-                        urls.push(cachehitUrl);
+                        if (
+                            cachehitUrl.indexOf("https://") !== 0 &&
+                            cachehitUrl.indexOf("http://") !== 0
+                        ) {
+                            urls.push(`https://${cachehitUrl}`);
+                        } else {
+                            urls.push(cachehitUrl);
+                        }
                     }
-                }
+                }));
             }
 
             // try to resolve URL by using the Wikipedia API
             if (context.agentContext.resolverSettings.wikipediaResolver) {
                 debug(`Resolving URL using Wikipedia for: ${site}`);
-                const wikiPediaUrls: string[] = await urlResolver.resolveURLWithWikipedia(
+                promises.push(urlResolver.resolveURLWithWikipedia(
                     site,
                     wikipedia.apiSettingsFromEnv(),
-                );
-                // if (wikiPediaUrl) {
-                //     debug(`Resolved URL using Wikipedia: ${wikiPediaUrl}`);
-                //     return wikiPediaUrl;
-                // }
-                urls.push(...wikiPediaUrls);
+                ).then((wikiPediaUrls) => {
+                    urls.push(...wikiPediaUrls);
+                }));
             }
 
             // try to resolve URL using LLM + internet search
             if (context.agentContext.resolverSettings.searchResolver) {
-                const search_urls = await urlResolver.resolveURLWithSearch(
+                promises.push(urlResolver.resolveURLWithSearch(
                     site,
                     bingWithGrounding.apiSettingsFromEnv(),
-                );
-
-                if (search_urls) {
-                    urls.push(...search_urls);
-                }
-
-                // if (url) {
-                //     debug(`Resolved URL using Bing with Grounding: ${url}`);
-                //     return url;
-                // }
+                ).then((search_urls) => {
+                    if (search_urls) {
+                        urls.push(...search_urls);
+                    }
+                }));
             }
 
+            // wait for all promises to resolve
+            await Promise.all(promises);
+
+            // Smart deduplication: remove URLs that are the same except for trailing slashes or www prefix
+            function normalizeUrl(url: string): string {
+                try {
+                    let u = new URL(url);
+                    // Remove trailing slash
+                    let pathname = u.pathname.replace(/\/+$/, "");
+                    // Remove www. prefix for comparison
+                    let hostname = u.hostname.replace(/^www\./, "");
+                    // Lowercase protocol and hostname
+                    return `${u.protocol}//${hostname}${pathname}${u.search}${u.hash}`;
+                } catch {
+                    // If not a valid URL, fallback to original
+                    return url.replace(/\/+$/, "").replace(/^www\./, "");
+                }
+            }
+
+            // Remove duplicates by normalized form, but keep the first occurrence
+            const seen = new Set<string>();
+            const dedupedUrls: string[] = [];
+            for (const url of urls) {
+                const norm = normalizeUrl(url);
+                if (!seen.has(norm)) {
+                    seen.add(norm);
+                    dedupedUrls.push(url);
+                }
+            }
+            urls.length = 0;
+            urls.push(...dedupedUrls);
+
             if (urls.length > 0) {
-                return [...new Set(urls)]; // return unique URLs
+                //return [...new Set(urls)]; // return unique URLs
+                return urls;
             }
         }
     }

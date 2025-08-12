@@ -97,7 +97,7 @@ export async function filterEntitySelection(
     const selectionResult = await translator.translate(
         [
             `Select the '${type.toLowerCase()}' entities that '${name}' in the user requested action could refer to.`,
-            "The user requested is",
+            "The user request is",
             JSON.stringify(action, undefined, 2),
             `The following possible '${type}' entities:`,
             JSON.stringify(
