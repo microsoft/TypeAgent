@@ -427,7 +427,8 @@ async function resolveEntityWithMemory(
         )?.value as string;
         if (
             entityAppAgentName === undefined ||
-            entityAppAgentName !== appAgentName
+            (entityAppAgentName !== appAgentName &&
+                entityAppAgentName !== "dispatcher") // allow dispatcher to provide entities for entity resolution
         ) {
             // Our search specify app agent name to match, so we should expect the result to match.
             throw new Error(
@@ -542,7 +543,11 @@ async function processResolvedEntityResult(
     clarifyEntities: ClarifyResolvedEntity[],
     options?: ParameterEntityResolverOptions,
 ) {
-    if (options?.filter && result.match === "fuzzy") {
+    if (
+        options?.filter &&
+        result.match === "fuzzy" &&
+        result.entities.length > 1
+    ) {
         // An extra pass to use LLM to narrow down the selection for fuzzy match.
         await filterEntitySelection(action, type, value, result);
     }
@@ -554,7 +559,11 @@ async function processResolvedEntityResult(
         });
         return;
     }
-    if (result.match === "exact" || result.match === "same") {
+    if (
+        result.match === "exact" ||
+        result.match === "same" ||
+        result.entities.length === 1
+    ) {
         // If it is exact or same match, return the first entity.
         // TODO: use last access to get the latest one?
         return {

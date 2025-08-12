@@ -151,6 +151,61 @@ class HistoryInsertCommandHandler implements CommandHandler {
     }
 }
 
+class HistoryEntityListCommandHandler implements CommandHandler {
+    public readonly description =
+        "Shows all of the entities currently in 'working memory.'";
+    public readonly parameters = {} as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        param: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const translateConfig = systemContext.session.getConfig().translation;
+        const entities = systemContext.chatHistory.getTopKEntities(
+            translateConfig.history.limit,
+        );
+
+        displayResult(
+            entities.map((e) => JSON.stringify(e, null, 2)),
+            context,
+        );
+    }
+}
+
+class HistoryEntityDeleteCommandHandler implements CommandHandler {
+    public readonly description =
+        "Delete entities from the chat history (working memory).";
+    public readonly parameters = {
+        args: {
+            entityId: {
+                description: "The UniqueId of the entity",
+                type: "string",
+                implicitQuotes: true,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        param: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const entityId = param.args.entityId;
+
+        const deleted = systemContext.chatHistory.deleteEntityById(entityId);
+
+        if (deleted) {
+            displayResult(`Entity with id '${entityId}' was deleted.`, context);
+        } else {
+            displayResult(
+                `Entity with id '${entityId}' was not deleted because it was not found.`,
+                context,
+            );
+        }
+    }
+}
+
 export function getHistoryCommandHandlers(): CommandHandlerTable {
     return {
         description: "History commands",
@@ -161,6 +216,14 @@ export function getHistoryCommandHandlers(): CommandHandlerTable {
             delete: new HistoryDeleteCommandHandler(),
             insert: new HistoryInsertCommandHandler(),
             save: new HistorySaveCommandHandler(),
+            entities: {
+                description: "History entity commands",
+                defaultSubCommand: "list",
+                commands: {
+                    list: new HistoryEntityListCommandHandler(),
+                    delete: new HistoryEntityDeleteCommandHandler(),
+                },
+            },
         },
     };
 }

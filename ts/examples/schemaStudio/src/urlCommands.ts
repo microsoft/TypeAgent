@@ -94,10 +94,10 @@ export function createURLResolverCommands(
                 // unable to resolve
                 passFail = "FAIL";
                 failCount++;
-            } else if (sitesMatch(resolved, site, io.writer)) {
+            } else if (sitesMatch(resolved[0], site, io.writer)) {
                 passFail = "PASS";
                 passCount++;
-            } else if (resolved?.startsWith(site)) {
+            } else if (resolved[0]?.startsWith(site)) {
                 // resolved site starts with expected site, indicating a redirect
                 passFail = "REDIRECT";
                 redirectCount++;

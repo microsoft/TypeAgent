@@ -82,7 +82,7 @@ const debug = registerDebug("typeagent:browser:website-memory");
 export async function resolveURLWithHistory(
     context: { agentContext: BrowserActionContext },
     site: string,
-): Promise<string | undefined> {
+): Promise<string[] | undefined> {
     debug(`Attempting to resolve '${site}' using website visit history`);
 
     const websiteCollection = context.agentContext.websiteCollection;
@@ -154,16 +154,20 @@ export async function resolveURLWithHistory(
             (a, b) => b.score - a.score,
         );
 
-        const bestMatch = sortedCandidates[0];
+        // Take the best 3 matches above a reasonable threshold
+        const topMatches = sortedCandidates
+            .filter((c, index) => c.score >= 0.75 || index == 0)
+            .slice(0, 3);
+        topMatches.forEach((match) => {
+            debug(
+                `Found match from searchWebMemories (score: ${match.score.toFixed(2)}): '${match.metadata.title || match.url}' -> ${match.url}`,
+            );
+            debug(
+                `Match details: domain=${match.metadata.domain}, source=${match.metadata.source}`,
+            );
+        });
 
-        debug(
-            `Found best match from searchWebMemories (score: ${bestMatch.score.toFixed(2)}): '${bestMatch.metadata.title || bestMatch.url}' -> ${bestMatch.url}`,
-        );
-        debug(
-            `Match details: domain=${bestMatch.metadata.domain}, source=${bestMatch.metadata.source}`,
-        );
-
-        return bestMatch.url;
+        return topMatches.map((m) => m.url);
     } catch (error) {
         debug(
             `Error in resolveURLWithHistory using searchWebMemories: ${error}`,

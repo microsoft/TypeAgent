@@ -5,6 +5,7 @@ import { createWebSocket } from "common-utils/ws";
 import { WebSocket } from "ws";
 import {
     ActionContext,
+    ActionIO,
     ActionResult,
     AppAgent,
     AppAgentEvent,
@@ -24,6 +25,7 @@ import {
     displayError,
     displayStatus,
     displaySuccess,
+    getMessage,
 } from "@typeagent/agent-sdk/helpers/display";
 import { Crossword } from "./crossword/schema/pageSchema.mjs";
 import {
@@ -660,17 +662,32 @@ async function resolveEntity(
 ): Promise<ResolveEntityResult | undefined> {
     if (type === "WebPage") {
         try {
-            const url = await resolveWebPage(context, name);
-            if (url) {
+            const resolveStarted = Date.now();
+
+            const urls = await resolveWebPage(context, name);
+            const duration = Date.now() - resolveStarted;
+
+            debug(`URL Resolution Duration: ${duration}`);
+
+            if (urls.length === 1) {
                 return {
                     match: "exact",
                     entities: [
                         {
                             name,
                             type: ["WebPage"],
-                            uniqueId: url,
+                            uniqueId: urls[0],
                         },
                     ],
+                };
+            } else {
+                return {
+                    match: "fuzzy",
+                    entities: urls.map((url) => ({
+                        name: `${url}`,
+                        type: ["WebPage"],
+                        uniqueId: url,
+                    })),
                 };
             }
         } catch {}
@@ -681,7 +698,8 @@ async function resolveEntity(
 async function resolveWebPage(
     context: SessionContext<BrowserActionContext>,
     site: string,
-): Promise<string> {
+    io?: ActionIO,
+): Promise<string[]> {
     debug(`Resolving site '${site}'`);
 
     // Handle library pages with custom protocol
@@ -694,58 +712,47 @@ async function resolveWebPage(
     const libraryUrl = libraryPages[site.toLowerCase()];
     if (libraryUrl) {
         debug(`Resolved library page: ${site} -> ${libraryUrl}`);
-        return libraryUrl;
+        return [libraryUrl];
     }
 
     switch (site.toLowerCase()) {
         case "paleobiodb":
-            return "https://paleobiodb.org/navigator/";
+            return ["https://paleobiodb.org/navigator/"];
 
         case "crossword":
-            return "https://aka.ms/typeagent/sample-crossword";
+            return ["https://aka.ms/typeagent/sample-crossword"];
 
         case "commerce":
-            return "https://www.target.com/";
+            return ["https://www.target.com/"];
 
         case "turtlegraphics":
-            return "http://localhost:9000/";
-        default:
+            return ["http://localhost:9000/"];
+        case "planviewer":
+            // handle browser views
+            const port = await context.getSharedLocalHostPort("browser");
+            if (port !== undefined) {
+                debug(`Resolved local site on PORT ${port}`);
+
+                return [`http://localhost:${port}/plans`];
+            }
+        default: {
+            // if the site is a valid URL, return it directly
             if (URL.canParse(site)) {
-                // if the site is a valid URL, return it directly
                 debug(`Site is a valid URL: ${site}`);
-                return site;
+                return [site];
             }
 
+            // local sites
             try {
-                // handle browser views
-                if (site === "planViewer") {
-                    const port =
-                        await context.getSharedLocalHostPort("browser");
-                    if (port !== undefined) {
-                        debug(`Resolved local site on PORT ${port}`);
-
-                        return `http://localhost:${port}/plans`;
-                    }
-                }
-
                 const port = await context.getSharedLocalHostPort(site);
 
                 if (port !== undefined) {
                     debug(`Resolved local site on PORT ${port}`);
 
-                    return `http://localhost:${port}`;
+                    return [`http://localhost:${port}`];
                 }
             } catch (e) {
                 debug(`Unable to find local host port for '${site}. ${e}'`);
-            }
-
-            // try to resolve URL using website visit history first
-            if (context.agentContext.resolverSettings.historyResolver) {
-                const historyUrl = await resolveURLWithHistory(context, site);
-                if (historyUrl) {
-                    debug(`Resolved URL from history: ${historyUrl}`);
-                    return historyUrl;
-                }
             }
 
             // try to resolve URL string using known keyword matching
@@ -758,42 +765,164 @@ async function resolveWebPage(
                         cachehitUrl.indexOf("https://") !== 0 &&
                         cachehitUrl.indexOf("http://") !== 0
                     ) {
-                        return "https://" + cachehitUrl;
+                        return [`https://${cachehitUrl}`];
                     } else {
-                        return cachehitUrl;
+                        return [cachehitUrl];
                     }
                 }
             }
 
+            // Search for the URL based on heuristics (history, wikipedia, web-search)
+            // if we get singular matches we assume those are correct and we just return it.
+            // if we get more than one result then we'll return all of them and let the user decide
+            // which URL they want via clarification
+            const urls: string[] = [];
+            const promises: Promise<any>[] = [];
+
+            // try to resolve URL using website visit history first
+            if (context.agentContext.resolverSettings.historyResolver) {
+                const startTime = Date.now();
+                io?.appendDisplay(
+                    getMessage(
+                        `Trying to resolve '${site}' by looking at browsing history.\n`,
+                        "status",
+                    ),
+                    "temporary",
+                );
+                promises.push(
+                    resolveURLWithHistory(context, site).then((historyUrls) => {
+                        if (historyUrls) {
+                            const msg = `Found ${historyUrls.length} in browser history.`;
+                            debug(msg);
+                            io?.appendDisplay(
+                                getMessage(msg, "status"),
+                                "temporary",
+                            );
+
+                            urls.push(...historyUrls!);
+                        }
+
+                        debug(
+                            `History resolution duration: ${Date.now() - startTime}`,
+                        );
+                    }),
+                );
+            }
+
             // try to resolve URL by using the Wikipedia API
             if (context.agentContext.resolverSettings.wikipediaResolver) {
-                debug(`Resolving URL using Wikipedia for: ${site}`);
-                const wikiPediaUrl = await urlResolver.resolveURLWithWikipedia(
-                    site,
-                    wikipedia.apiSettingsFromEnv(),
+                const startTime = Date.now();
+                io?.appendDisplay(
+                    getMessage(
+                        `Resolving URL using Wikipedia for: '${site}'\n`,
+                        "status",
+                    ),
+                    "temporary",
                 );
-                if (wikiPediaUrl) {
-                    debug(`Resolved URL using Wikipedia: ${wikiPediaUrl}`);
-                    return wikiPediaUrl;
-                }
+                promises.push(
+                    urlResolver
+                        .resolveURLWithWikipedia(
+                            site,
+                            wikipedia.apiSettingsFromEnv(),
+                        )
+                        .then((wikiPediaUrls) => {
+                            const msg = `Found ${wikiPediaUrls.length} urls from Wikipedia.`;
+                            debug(msg);
+                            io?.appendDisplay(
+                                getMessage(msg, "status"),
+                                "temporary",
+                            );
+
+                            urls.push(...wikiPediaUrls);
+
+                            debug(
+                                `Wikipedia resolution duration: ${Date.now() - startTime}`,
+                            );
+                        }),
+                );
             }
 
             // try to resolve URL using LLM + internet search
             if (context.agentContext.resolverSettings.searchResolver) {
-                const url = await urlResolver.resolveURLWithSearch(
-                    site,
-                    bingWithGrounding.apiSettingsFromEnv(),
+                const startTime = Date.now();
+                io?.appendDisplay(
+                    getMessage(
+                        `Resolving URL using web search for: '${site}'\n`,
+                        "status",
+                    ),
+                    "temporary",
                 );
+                promises.push(
+                    urlResolver
+                        .resolveURLWithSearch(
+                            site,
+                            bingWithGrounding.apiSettingsFromEnv(),
+                        )
+                        .then((search_urls) => {
+                            const msg = `Found ${search_urls?.length} urls using Bing With Grounding (search).`;
+                            debug(msg);
+                            io?.appendDisplay(
+                                getMessage(msg, "status"),
+                                "temporary",
+                            );
 
-                if (url) {
-                    debug(`Resolved URL using Bing with Grounding: ${url}`);
-                    return url;
+                            if (search_urls) {
+                                urls.push(...search_urls);
+                            }
+
+                            debug(
+                                `Search (Bing with Grounding) resolution duration: ${Date.now() - startTime}`,
+                            );
+                        }),
+                );
+            }
+
+            // wait for all promises to resolve
+            await Promise.all(promises);
+
+            // Smart deduplication: remove URLs that are the same except for trailing slashes or www prefix
+            function normalizeUrl(url: string): string {
+                try {
+                    let u = new URL(url);
+                    // Remove trailing slash
+                    let pathname = u.pathname.replace(/\/+$/, "");
+                    // Remove www. prefix for comparison
+                    let hostname = u.hostname.replace(/^www\./, "");
+                    // Lowercase protocol and hostname
+                    //return `${u.protocol}//${hostname}${pathname}${u.search}${u.hash}`;
+                    // ignore the protocol
+                    return `${hostname}${pathname}${u.search}${u.hash}`;
+                } catch {
+                    // If not a valid URL, fallback to original
+                    return url.replace(/\/+$/, "").replace(/^www\./, "");
                 }
             }
 
-            // can't get a URL
-            throw new Error(`Unable to find a URL for: '${site}'`);
+            // Remove duplicates by normalized form, and keep the first occurrence
+            const seen = new Set<string>();
+            const dedupedUrls: string[] = [];
+            for (const url of urls) {
+                const norm = normalizeUrl(url);
+                if (!seen.has(norm)) {
+                    seen.add(norm);
+                    dedupedUrls.push(url);
+                }
+            }
+            urls.length = 0; //clear out urls
+            urls.push(...dedupedUrls); // add deduped
+
+            const msg = `Found ${urls.length} possible urls for '${site}'`;
+            debug(msg);
+            io?.appendDisplay(getMessage(msg, "info"));
+
+            if (urls.length > 0) {
+                return [...new Set(urls)];
+            }
+        }
     }
+
+    // can't get a URL
+    throw new Error(`Unable to find a URL for: '${site}'`);
 }
 
 export function getActionBrowserControl(
@@ -826,14 +955,13 @@ async function openWebPage(
     const browserControl = getActionBrowserControl(context);
 
     displayStatus(`Opening web page for ${action.parameters.site}.`, context);
-    const siteEntity = action.entities?.site;
-    const url =
-        siteEntity?.type[0] === "WebPage"
-            ? siteEntity.uniqueId!
-            : await resolveWebPage(
-                  context.sessionContext,
-                  action.parameters.site,
-              );
+    const url = (
+        await resolveWebPage(
+            context.sessionContext,
+            action.parameters.site,
+            context.actionIO,
+        )
+    )[0];
 
     if (url !== action.parameters.site) {
         displayStatus(
@@ -848,7 +976,7 @@ async function openWebPage(
         activityName: "browsingWebPage",
         description: "Browsing a web page",
         state: {
-            site: siteEntity?.name,
+            site: url,
         },
         activityEndAction: {
             actionName: "closeWebPage",

@@ -19,7 +19,7 @@ function gatherMessages(callback: (log: (message?: string) => void) => void) {
 }
 
 type LogFn = (log: (message?: string) => void) => void;
-function getMessage(
+export function getMessage(
     input: MessageContent | LogFn,
     kind?: DisplayMessageKind,
 ): DisplayContent {

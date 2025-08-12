@@ -110,6 +110,7 @@ export interface ChatHistory {
         | undefined;
     count(): number;
     delete(index: number): void;
+    deleteEntityById(entityId: string): boolean;
     clear(): void;
     getStrings(): string[];
     export(): ChatHistoryInputEntry | ChatHistoryInputEntry[] | undefined;
@@ -325,6 +326,22 @@ export function createChatHistory(init: boolean): ChatHistory {
             }
 
             entries.splice(index, 1);
+        },
+        deleteEntityById(entityId: string): boolean {
+            for (let i = entries.length - 1; i >= 0; i--) {
+                const entry = entries[i];
+                if (entry.role === "user" || entry.entities === undefined) {
+                    continue;
+                }
+                for (const entity of entry.entities) {
+                    if (entity.uniqueId === entityId) {
+                        entry.entities.unshift(entity);
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         },
         clear(): void {
             entries.length = 0;
