@@ -93,6 +93,7 @@ import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.
 import { deleteCachedSchema } from "./crossword/cachedSchema.mjs";
 import { getCrosswordCommandHandlerTable } from "./crossword/commandHandler.mjs";
 import { MacroStore } from "./storage/index.mjs";
+import { start } from "node:repl";
 
 const debug = registerDebug("typeagent:browser:action");
 const debugWebSocket = registerDebug("typeagent:browser:ws");
@@ -784,24 +785,28 @@ async function resolveWebPage(
 
             // try to resolve URL using website visit history first
             if (context.agentContext.resolverSettings.historyResolver) {
-                io?.appendDisplay(getMessage(`Trying to resolve '${site}' by looking at browsing history.`, "status"));
+                const startTime = Date.now();
+                io?.appendDisplay(getMessage(`Trying to resolve '${site}' by looking at browsing history.\n`, "status"), "temporary");
                 promises.push(
                     resolveURLWithHistory(context, site).then((historyUrls) => {
 
-                        const msg = `Found ${historyUrls?.length} in browser history.`;
-                        debug(msg);
-                        io?.appendDisplay(getMessage(msg, "info"));
-
                         if (historyUrls) {
+                            const msg = `Found ${historyUrls.length} in browser history.`;
+                            debug(msg);
+                            io?.appendDisplay(getMessage(msg, "status"), "temporary");
+
                             urls.push(...historyUrls!);
                         }
+
+                        debug(`History resolution duration: ${Date.now () - startTime}`);
                     }),
                 );
             }
 
             // try to resolve URL by using the Wikipedia API
             if (context.agentContext.resolverSettings.wikipediaResolver) {
-                io?.appendDisplay(getMessage(`Resolving URL using Wikipedia for: ${site}`, "status"));
+                const startTime = Date.now();
+                io?.appendDisplay(getMessage(`Resolving URL using Wikipedia for: '${site}'\n`, "status"), "temporary");
                 promises.push(
                     urlResolver
                         .resolveURLWithWikipedia(
@@ -812,16 +817,19 @@ async function resolveWebPage(
 
                             const msg = `Found ${wikiPediaUrls.length} urls from Wikipedia.`;
                             debug(msg);
-                            io?.appendDisplay(getMessage(msg, "info"));
+                            io?.appendDisplay(getMessage(msg, "status"), "temporary");
 
                             urls.push(...wikiPediaUrls);
+
+                            debug(`Wikipedia resolution duration: ${Date.now () - startTime}`);
                         }),
                 );
             }
 
             // try to resolve URL using LLM + internet search
             if (context.agentContext.resolverSettings.searchResolver) {
-                io?.appendDisplay(getMessage(`Resolving URL using web search for: ${site}`, "status"));
+                const startTime = Date.now();
+                io?.appendDisplay(getMessage(`Resolving URL using web search for: '${site}'\n`, "status"), "temporary");
                 promises.push(
                     urlResolver
                         .resolveURLWithSearch(
@@ -832,11 +840,13 @@ async function resolveWebPage(
 
                             const msg = `Found ${search_urls?.length} urls using Bing With Grounding (search).`;
                             debug(msg);
-                            io?.appendDisplay(getMessage(msg, "info"));
+                            io?.appendDisplay(getMessage(msg, "status"), "temporary");
 
                             if (search_urls) {
                                 urls.push(...search_urls);
                             }
+
+                            debug(`Search (Bing with Grounding) resolution duration: ${Date.now () - startTime}`);
                         }),
                 );
             }
