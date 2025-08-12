@@ -456,7 +456,9 @@ export async function resolveURLWithWikipedia(
                     }
                 } else {
                     // no "official website" found, so just use the wikipedia page URL
-                    retVal.push(`https://en.wikipedia.org/wiki/${encodeWikipediaTitle(data.pages[i].title)}`);
+                    retVal.push(
+                        `https://en.wikipedia.org/wiki/${encodeWikipediaTitle(data.pages[i].title)}`,
+                    );
                 }
             }
         })

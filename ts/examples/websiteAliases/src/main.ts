@@ -162,7 +162,10 @@ const keyCount = Object.keys(keywordToSites).length;
 let processed = 0;
 for (const keyword of Object.keys(keywordToSites)) {
     console.log(`Resolving URL for keyword: ${keyword}`);
-    const sites = await urlResolver.resolveURLWithSearch(keyword, groundingConfig);
+    const sites = await urlResolver.resolveURLWithSearch(
+        keyword,
+        groundingConfig,
+    );
 
     if (sites) {
         keywordToSiteWithURLResolver[keyword] = sites[0];

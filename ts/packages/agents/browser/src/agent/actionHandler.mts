@@ -680,7 +680,7 @@ async function resolveEntity(
                         type: ["WebPage"],
                         uniqueId: url,
                     })),
-                }
+                };
             }
         } catch {}
     }
@@ -720,8 +720,7 @@ async function resolveWebPage(
             return ["http://localhost:9000/"];
         case "planviewer":
             // handle browser views
-            const port =
-                await context.getSharedLocalHostPort("browser");
+            const port = await context.getSharedLocalHostPort("browser");
             if (port !== undefined) {
                 debug(`Resolved local site on PORT ${port}`);
 
@@ -729,7 +728,7 @@ async function resolveWebPage(
             }
         default: {
             // if the site is a valid URL, return it directly
-            if (URL.canParse(site)) {                
+            if (URL.canParse(site)) {
                 debug(`Site is a valid URL: ${site}`);
                 return [site];
             }
@@ -746,7 +745,7 @@ async function resolveWebPage(
             } catch (e) {
                 debug(`Unable to find local host port for '${site}. ${e}'`);
             }
-            
+
             // Search for the URL based on heuristics (history, keywords, wikipedia, web-search)
             // if we get singular matches we assume those are correct and we just return it.
             // if we get more than one result then we'll return all of them and let the user decide
@@ -756,52 +755,68 @@ async function resolveWebPage(
 
             // try to resolve URL using website visit history first
             if (context.agentContext.resolverSettings.historyResolver) {
-                promises.push(resolveURLWithHistory(context, site).then((historyUrls) => {
-                    if (historyUrls) {
-                        urls.push(...historyUrls!);
-                    }
-                }));
+                promises.push(
+                    resolveURLWithHistory(context, site).then((historyUrls) => {
+                        if (historyUrls) {
+                            urls.push(...historyUrls!);
+                        }
+                    }),
+                );
             }
 
             // try to resolve URL string using known keyword matching
             if (context.agentContext.resolverSettings.keywordResolver) {
-                promises.push(urlResolver.resolveURLByKeyword(site).then((cachehitUrl) => {
-                    if (cachehitUrl) {
-                        debug(`Resolved URL from cache: ${cachehitUrl}`);
+                promises.push(
+                    urlResolver
+                        .resolveURLByKeyword(site)
+                        .then((cachehitUrl) => {
+                            if (cachehitUrl) {
+                                debug(
+                                    `Resolved URL from cache: ${cachehitUrl}`,
+                                );
 
-                        if (
-                            cachehitUrl.indexOf("https://") !== 0 &&
-                            cachehitUrl.indexOf("http://") !== 0
-                        ) {
-                            urls.push(`https://${cachehitUrl}`);
-                        } else {
-                            urls.push(cachehitUrl);
-                        }
-                    }
-                }));
+                                if (
+                                    cachehitUrl.indexOf("https://") !== 0 &&
+                                    cachehitUrl.indexOf("http://") !== 0
+                                ) {
+                                    urls.push(`https://${cachehitUrl}`);
+                                } else {
+                                    urls.push(cachehitUrl);
+                                }
+                            }
+                        }),
+                );
             }
 
             // try to resolve URL by using the Wikipedia API
             if (context.agentContext.resolverSettings.wikipediaResolver) {
                 debug(`Resolving URL using Wikipedia for: ${site}`);
-                promises.push(urlResolver.resolveURLWithWikipedia(
-                    site,
-                    wikipedia.apiSettingsFromEnv(),
-                ).then((wikiPediaUrls) => {
-                    urls.push(...wikiPediaUrls);
-                }));
+                promises.push(
+                    urlResolver
+                        .resolveURLWithWikipedia(
+                            site,
+                            wikipedia.apiSettingsFromEnv(),
+                        )
+                        .then((wikiPediaUrls) => {
+                            urls.push(...wikiPediaUrls);
+                        }),
+                );
             }
 
             // try to resolve URL using LLM + internet search
             if (context.agentContext.resolverSettings.searchResolver) {
-                promises.push(urlResolver.resolveURLWithSearch(
-                    site,
-                    bingWithGrounding.apiSettingsFromEnv(),
-                ).then((search_urls) => {
-                    if (search_urls) {
-                        urls.push(...search_urls);
-                    }
-                }));
+                promises.push(
+                    urlResolver
+                        .resolveURLWithSearch(
+                            site,
+                            bingWithGrounding.apiSettingsFromEnv(),
+                        )
+                        .then((search_urls) => {
+                            if (search_urls) {
+                                urls.push(...search_urls);
+                            }
+                        }),
+                );
             }
 
             // wait for all promises to resolve
@@ -823,7 +838,7 @@ async function resolveWebPage(
                 }
             }
 
-            // Remove duplicates by normalized form, but keep the first occurrence
+            // Remove duplicates by normalized form, and keep the first occurrence
             const seen = new Set<string>();
             const dedupedUrls: string[] = [];
             for (const url of urls) {
@@ -833,11 +848,9 @@ async function resolveWebPage(
                     dedupedUrls.push(url);
                 }
             }
-            urls.length = 0;
             urls.push(...dedupedUrls);
 
             if (urls.length > 0) {
-                //return [...new Set(urls)]; // return unique URLs
                 return urls;
             }
         }
@@ -881,10 +894,12 @@ async function openWebPage(
     const url =
         siteEntity?.type[0] === "WebPage"
             ? siteEntity.uniqueId!
-            : (await resolveWebPage(
-                  context.sessionContext,
-                  action.parameters.site,
-              ))[0]; // only take the first URL
+            : (
+                  await resolveWebPage(
+                      context.sessionContext,
+                      action.parameters.site,
+                  )
+              )[0]; // only take the first URL
 
     if (url !== action.parameters.site) {
         displayStatus(

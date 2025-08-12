@@ -155,7 +155,9 @@ export async function resolveURLWithHistory(
         );
 
         // Take the best 3 matches above a reasonable threshold
-        const topMatches = sortedCandidates.filter((c, index) => c.score >= 0.75 || index == 0).slice(0, 3);
+        const topMatches = sortedCandidates
+            .filter((c, index) => c.score >= 0.75 || index == 0)
+            .slice(0, 3);
         topMatches.forEach((match) => {
             debug(
                 `Found match from searchWebMemories (score: ${match.score.toFixed(2)}): '${match.metadata.title || match.url}' -> ${match.url}`,
