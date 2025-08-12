@@ -189,8 +189,12 @@ class TextRange:
     def __lt__(self, other: Self) -> bool:
         if self.start != other.start:
             return self.start < other.start
-        self_end = self.end or self.start
-        other_end = other.end or other.start
+        self_end = self.end or TextLocation(
+            self.start.message_ordinal, self.start.chunk_ordinal + 1
+        )
+        other_end = other.end or TextLocation(
+            other.start.message_ordinal, other.start.chunk_ordinal + 1
+        )
         return self_end < other_end
 
     def __gt__(self, other: Self) -> bool:
@@ -203,10 +207,13 @@ class TextRange:
         return not other.__lt__(self)
 
     def __contains__(self, other: Self) -> bool:
-        otherend = other.end or other.start
-        selfend = self.end or self.start
-        # TODO: In TS, isInTextRange requires other.end < self.end
-        return self.start <= other.start and otherend <= selfend
+        other_end = other.end or TextLocation(
+            other.start.message_ordinal, other.start.chunk_ordinal + 1
+        )
+        self_end = self.end or TextLocation(
+            self.start.message_ordinal, self.start.chunk_ordinal + 1
+        )
+        return self.start <= other.start and other_end <= self_end
 
     def serialize(self) -> TextRangeData:
         if self.end is None:
