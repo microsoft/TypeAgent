@@ -3382,37 +3382,6 @@ body {
   }
 }
 
-/* Connection Required State */
-.connection-required {
-  text-align: center;
-  padding: 60px 20px;
-  color: #666;
-}
-
-.connection-required i {
-  font-size: 48px;
-  color: #dc3545;
-  margin-bottom: 20px;
-  display: block;
-}
-
-.connection-required h3 {
-  font-size: 24px;
-  color: #333;
-  margin-bottom: 15px;
-}
-
-.connection-required p {
-  font-size: 16px;
-  color: #666;
-  margin-bottom: 25px;
-}
-
-.connection-required .btn {
-  padding: 10px 24px;
-  font-size: 16px;
-}
-
 /* Enhanced Knowledge Display Styles */
 .topic-tags-container {
   display: flex;
@@ -3809,32 +3778,6 @@ body {
   gap: 4px;
   font-size: 0.8rem;
   font-weight: 500;
-}
-
-.error-state,
-.connection-required {
-  text-align: center;
-  padding: 3rem 2rem;
-  color: #6c757d;
-}
-
-.error-state i,
-.connection-required i {
-  font-size: 3rem;
-  margin-bottom: 1rem;
-  opacity: 0.5;
-}
-
-.error-state h3,
-.connection-required h3 {
-  margin-bottom: 1rem;
-  color: #495057;
-}
-
-.error-state p,
-.connection-required p {
-  margin-bottom: 1.5rem;
-  opacity: 0.8;
 }
 
 /* Website Import UI Styles */

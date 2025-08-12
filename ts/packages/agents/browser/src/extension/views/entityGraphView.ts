@@ -283,11 +283,13 @@ class EntityGraphView {
     private handleUrlParameters(): void {
         const urlParams = new URLSearchParams(window.location.search);
         const entityParam = urlParams.get("entity");
+        const topicParam = urlParams.get("topic");
 
         console.log("Handling URL parameters:", {
             fullUrl: window.location.href,
             search: window.location.search,
             entityParam: entityParam,
+            topicParam: topicParam,
         });
 
         if (entityParam) {
@@ -300,9 +302,19 @@ class EntityGraphView {
             if (entityBreadcrumb) {
                 entityBreadcrumb.textContent = ` > ${entityParam}`;
             }
+        } else if (topicParam) {
+            this.currentEntity = topicParam;
+            console.log(`Topic from URL: ${topicParam}`);
+            // Update breadcrumb to show topic name
+            const entityBreadcrumb = document.getElementById(
+                "entityNameBreadcrumb",
+            );
+            if (entityBreadcrumb) {
+                entityBreadcrumb.textContent = ` > ${topicParam}`;
+            }
         } else {
             console.log(
-                "No entity parameter found in URL, will use default fallback",
+                "No entity or topic parameter found in URL, will use default fallback",
             );
         }
     }

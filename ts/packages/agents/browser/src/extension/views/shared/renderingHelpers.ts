@@ -72,21 +72,6 @@ export class RenderingHelpers {
         }, 100);
     }
 
-    static showConnectionRequired(container: HTMLElement): void {
-        if (container) {
-            container.innerHTML = `
-                <div class="connection-required">
-                    <i class="bi bi-wifi-off"></i>
-                    <h3>Connection Required</h3>
-                    <p>This feature requires an active connection to the TypeAgent service.</p>
-                    <button class="btn btn-primary" data-action="reconnect">
-                        <i class="bi bi-arrow-repeat"></i> Reconnect
-                    </button>
-                </div>
-            `;
-        }
-    }
-
     static showError(container: HTMLElement, message: string): void {
         if (container) {
             container.innerHTML = `

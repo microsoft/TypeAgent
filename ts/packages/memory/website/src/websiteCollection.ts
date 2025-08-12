@@ -948,60 +948,104 @@ export class WebsiteCollection
     }
 
     /**
-     * Knowledge-enhanced search methods
+     * Knowledge-enhanced search methods using knowledge graph
      */
     public async searchByEntities(
         entities: string[],
+        type?: string,
+        facetName?: string,
+        facetValue?: string,
     ): Promise<WebsiteDocPart[]> {
         const results: WebsiteDocPart[] = [];
+        const kp = await import("knowpro");
 
-        for (const docPart of this.messages.getAll()) {
-            const websitePart = docPart as WebsiteDocPart;
-            const knowledge = websitePart.getKnowledge();
+        // Search for each entity using knowledge graph
+        for (const entity of entities) {
+            const searchTermGroup = kp.createEntitySearchTermGroup(
+                entity,
+                type,
+                facetName,
+                facetValue,
+                false, // exactMatch
+            );
 
-            if (knowledge && knowledge.entities) {
-                const entityNames = knowledge.entities.map((e) =>
-                    e.name.toLowerCase(),
-                );
-                const hasMatchingEntity = entities.some((searchEntity) =>
-                    entityNames.some(
-                        (entityName) =>
-                            entityName.includes(searchEntity.toLowerCase()) ||
-                            searchEntity.toLowerCase().includes(entityName),
-                    ),
-                );
+            const when = { knowledgeType: "entity" as const };
 
-                if (hasMatchingEntity) {
-                    results.push(websitePart);
+            const searchResult = await kp.searchConversationKnowledge(
+                this,
+                searchTermGroup,
+                when,
+                { maxKnowledgeMatches: 50 },
+            );
+
+            if (searchResult) {
+                // searchResult is a Map<KnowledgeType, SemanticRefSearchResult>
+                const entityResults = searchResult.get("entity");
+                if (entityResults && entityResults.semanticRefMatches) {
+                    for (const match of entityResults.semanticRefMatches) {
+                        // Get the semantic ref first, then the message
+                        const semanticRef = this.semanticRefs?.get(
+                            match.semanticRefOrdinal,
+                        );
+                        if (semanticRef) {
+                            const messageOrdinal =
+                                semanticRef.range.start.messageOrdinal;
+                            const message = this.messages.get(messageOrdinal);
+                            if (message) {
+                                results.push(message as WebsiteDocPart);
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        return results;
+        // Remove duplicates
+        const uniqueResults = new Map<string, WebsiteDocPart>();
+        results.forEach((r) => {
+            const key = r.url || `${r.timestamp}_${Math.random()}`;
+            uniqueResults.set(key, r);
+        });
+        return Array.from(uniqueResults.values());
     }
 
-    public async searchByTopics(topics: string[]): Promise<WebsiteDocPart[]> {
+    public async searchByTopics(
+        topics: string[],
+        when?: any,
+        options?: any,
+    ): Promise<WebsiteDocPart[]> {
+        const kp = await import("knowpro");
+        const searchTermGroup = kp.createTopicSearchTermGroup(topics);
+
+        const whenFilter = {
+            ...when,
+            knowledgeType: "topic" as const,
+        };
+
+        const searchResult = await kp.searchConversationKnowledge(
+            this,
+            searchTermGroup,
+            whenFilter,
+            options || { maxMatches: 50 },
+        );
+
         const results: WebsiteDocPart[] = [];
-
-        for (const docPart of this.messages.getAll()) {
-            const websitePart = docPart as WebsiteDocPart;
-            const knowledge = websitePart.getKnowledge();
-
-            if (knowledge && knowledge.topics) {
-                const hasMatchingTopic = topics.some((searchTopic) =>
-                    knowledge.topics.some(
-                        (topic) =>
-                            topic
-                                .toLowerCase()
-                                .includes(searchTopic.toLowerCase()) ||
-                            searchTopic
-                                .toLowerCase()
-                                .includes(topic.toLowerCase()),
-                    ),
-                );
-
-                if (hasMatchingTopic) {
-                    results.push(websitePart);
+        if (searchResult) {
+            const topicResults = searchResult.get("topic");
+            if (topicResults && topicResults.semanticRefMatches) {
+                for (const match of topicResults.semanticRefMatches) {
+                    // Get the semantic ref first, then the message
+                    const semanticRef = this.semanticRefs?.get(
+                        match.semanticRefOrdinal,
+                    );
+                    if (semanticRef) {
+                        const messageOrdinal =
+                            semanticRef.range.start.messageOrdinal;
+                        const message = this.messages.get(messageOrdinal);
+                        if (message) {
+                            results.push(message as WebsiteDocPart);
+                        }
+                    }
                 }
             }
         }
@@ -1012,45 +1056,36 @@ export class WebsiteCollection
     public async searchByActions(
         actionTypes: string[],
     ): Promise<WebsiteDocPart[]> {
+        const kp = await import("knowpro");
+        // Use topic search since actions are often categorized as topics
+        const searchTermGroup = kp.createTopicSearchTermGroup(actionTypes);
+
+        const when = { knowledgeType: "action" as const };
+
+        const searchResult = await kp.searchConversationKnowledge(
+            this,
+            searchTermGroup,
+            when,
+            { maxKnowledgeMatches: 50 },
+        );
+
         const results: WebsiteDocPart[] = [];
-
-        for (const docPart of this.messages.getAll()) {
-            const websitePart = docPart as WebsiteDocPart;
-
-            // Check detected actions
-            if (websitePart.metadata.detectedActions) {
-                const hasMatchingAction = actionTypes.some((searchAction) =>
-                    websitePart.metadata.detectedActions!.some(
-                        (action) =>
-                            action.type
-                                .toLowerCase()
-                                .includes(searchAction.toLowerCase()) ||
-                            action.text
-                                ?.toLowerCase()
-                                .includes(searchAction.toLowerCase()),
-                    ),
-                );
-
-                if (hasMatchingAction) {
-                    results.push(websitePart);
-                }
-            }
-
-            // Also check knowledge actions
-            const knowledge = websitePart.getKnowledge();
-            if (knowledge && knowledge.actions) {
-                const hasKnowledgeAction = actionTypes.some((searchAction) =>
-                    knowledge.actions.some((action) =>
-                        action.verbs.some((verb) =>
-                            verb
-                                .toLowerCase()
-                                .includes(searchAction.toLowerCase()),
-                        ),
-                    ),
-                );
-
-                if (hasKnowledgeAction) {
-                    results.push(websitePart);
+        if (searchResult) {
+            const actionResults = searchResult.get("action");
+            if (actionResults && actionResults.semanticRefMatches) {
+                for (const match of actionResults.semanticRefMatches) {
+                    // Get the semantic ref first, then the message
+                    const semanticRef = this.semanticRefs?.get(
+                        match.semanticRefOrdinal,
+                    );
+                    if (semanticRef) {
+                        const messageOrdinal =
+                            semanticRef.range.start.messageOrdinal;
+                        const message = this.messages.get(messageOrdinal);
+                        if (message) {
+                            results.push(message as WebsiteDocPart);
+                        }
+                    }
                 }
             }
         }
@@ -1059,83 +1094,43 @@ export class WebsiteCollection
     }
 
     public async hybridSearch(query: string): Promise<WebsiteSearchResult[]> {
-        const searchTerms = query.toLowerCase().split(/\s+/);
+        // Use combined entity and topic search for hybrid approach
+        const [entityResults, topicResults] = await Promise.all([
+            this.searchByEntities([query]),
+            this.searchByTopics([query]),
+        ]);
+
+        // Combine results and calculate relevance scores
         const results: Map<string, WebsiteSearchResult> = new Map();
 
-        for (const docPart of this.messages.getAll()) {
-            const websitePart = docPart as WebsiteDocPart;
-            const knowledge = websitePart.getKnowledge();
-            let relevanceScore = 0;
-            const matchedElements: string[] = [];
+        // Process entity results
+        for (const websitePart of entityResults) {
+            const key =
+                websitePart.url || `${websitePart.timestamp}_${Math.random()}`;
+            results.set(key, {
+                website: websitePart,
+                relevanceScore: 0.6, // Higher score for entity matches
+                matchedElements: ["entities"],
+                knowledgeContext: this.getKnowledgeContext(websitePart),
+            });
+        }
 
-            // Search in titles and URLs
-            if (
-                websitePart.title &&
-                searchTerms.some((term) =>
-                    websitePart.title!.toLowerCase().includes(term),
-                )
-            ) {
-                relevanceScore += 0.3;
-                matchedElements.push("title");
-            }
+        // Process topic results
+        for (const websitePart of topicResults) {
+            const key =
+                websitePart.url || `${websitePart.timestamp}_${Math.random()}`;
+            const existing = results.get(key);
 
-            if (
-                searchTerms.some((term) =>
-                    websitePart.url.toLowerCase().includes(term),
-                )
-            ) {
-                relevanceScore += 0.2;
-                matchedElements.push("url");
-            }
-
-            // Search in knowledge topics
-            if (knowledge && knowledge.topics) {
-                const topicMatches = knowledge.topics.filter((topic) =>
-                    searchTerms.some((term) =>
-                        topic.toLowerCase().includes(term),
-                    ),
-                );
-                if (topicMatches.length > 0) {
-                    relevanceScore += Math.min(topicMatches.length * 0.1, 0.3);
-                    matchedElements.push("topics");
-                }
-            }
-
-            // Search in knowledge entities
-            if (knowledge && knowledge.entities) {
-                const entityMatches = knowledge.entities.filter((entity) =>
-                    searchTerms.some((term) =>
-                        entity.name.toLowerCase().includes(term),
-                    ),
-                );
-                if (entityMatches.length > 0) {
-                    relevanceScore += Math.min(entityMatches.length * 0.1, 0.2);
-                    matchedElements.push("entities");
-                }
-            }
-
-            // Search in text content
-            const textContent = websitePart.textChunks.join(" ").toLowerCase();
-            const textMatches = searchTerms.filter((term) =>
-                textContent.includes(term),
-            );
-            if (textMatches.length > 0) {
-                relevanceScore += Math.min(textMatches.length * 0.05, 0.2);
-                matchedElements.push("content");
-            }
-
-            if (relevanceScore > 0) {
-                results.set(websitePart.url, {
+            if (existing) {
+                // Boost score if found in both
+                existing.relevanceScore += 0.4;
+                existing.matchedElements.push("topics");
+            } else {
+                results.set(key, {
                     website: websitePart,
-                    relevanceScore,
-                    matchedElements,
-                    knowledgeContext: knowledge
-                        ? {
-                              entityCount: knowledge.entities.length,
-                              topicCount: knowledge.topics.length,
-                              actionCount: knowledge.actions.length,
-                          }
-                        : undefined,
+                    relevanceScore: 0.4, // Lower score for topic-only matches
+                    matchedElements: ["topics"],
+                    knowledgeContext: this.getKnowledgeContext(websitePart),
                 });
             }
         }
@@ -1144,6 +1139,17 @@ export class WebsiteCollection
         return Array.from(results.values())
             .sort((a, b) => b.relevanceScore - a.relevanceScore)
             .slice(0, 50);
+    }
+
+    private getKnowledgeContext(websitePart: WebsiteDocPart) {
+        const knowledge = websitePart.getKnowledge();
+        return knowledge
+            ? {
+                  entityCount: knowledge.entities?.length || 0,
+                  topicCount: knowledge.topics?.length || 0,
+                  actionCount: knowledge.actions?.length || 0,
+              }
+            : undefined;
     }
 
     /**
@@ -1295,5 +1301,72 @@ export class WebsiteCollection
             .sort((a, b) => a.date.localeCompare(b.date));
 
         return insights;
+    }
+
+    /**
+     * Search with combined entity and topic criteria
+     */
+    public async searchCombined(query: {
+        entities?: string[];
+        topics?: string[];
+        entityType?: string;
+        facetName?: string;
+        facetValue?: string;
+        when?: any;
+    }): Promise<WebsiteDocPart[]> {
+        const uniqueResults = new Map<string, WebsiteDocPart>();
+
+        // Entity search
+        if (query.entities && query.entities.length > 0) {
+            const entityResults = await this.searchByEntities(
+                query.entities,
+                query.entityType,
+                query.facetName,
+                query.facetValue,
+            );
+            entityResults.forEach((r) => {
+                const key = r.url || `${r.timestamp}_${Math.random()}`;
+                uniqueResults.set(key, r);
+            });
+        }
+
+        // Topic search
+        if (query.topics && query.topics.length > 0) {
+            const topicResults = await this.searchByTopics(
+                query.topics,
+                query.when,
+            );
+            topicResults.forEach((r) => {
+                const key = r.url || `${r.timestamp}_${Math.random()}`;
+                if (!uniqueResults.has(key)) {
+                    uniqueResults.set(key, r);
+                }
+            });
+        }
+
+        return Array.from(uniqueResults.values());
+    }
+
+    /**
+     * Batch search for multiple entities (efficient for graph building)
+     */
+    public async batchSearchEntities(
+        entities: string[],
+        options?: any,
+    ): Promise<Map<string, WebsiteDocPart[]>> {
+        const results = new Map<string, WebsiteDocPart[]>();
+
+        // Use Promise.all for parallel searching
+        const promises = entities.map(async (entity) => {
+            const docs = await this.searchByEntities([entity]);
+            return { entity, docs };
+        });
+
+        const batchResults = await Promise.all(promises);
+        batchResults.forEach(({ entity, docs }) => {
+            results.set(entity, docs);
+        });
+
+        return results;
     }
 }
