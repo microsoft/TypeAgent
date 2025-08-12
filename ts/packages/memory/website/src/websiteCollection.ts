@@ -983,11 +983,14 @@ export class WebsiteCollection
                 const entityResults = searchResult.get("entity");
                 if (entityResults && entityResults.semanticRefMatches) {
                     for (const match of entityResults.semanticRefMatches) {
-                        // Get the message from the conversation
-                        const ref = match as any;
-                        const message = this.messages.get(ref.ordinal);
-                        if (message) {
-                            results.push(message as WebsiteDocPart);
+                        // Get the semantic ref first, then the message
+                        const semanticRef = this.semanticRefs?.get(match.semanticRefOrdinal);
+                        if (semanticRef) {
+                            const messageOrdinal = semanticRef.range.start.messageOrdinal;
+                            const message = this.messages.get(messageOrdinal);
+                            if (message) {
+                                results.push(message as WebsiteDocPart);
+                            }
                         }
                     }
                 }
@@ -1028,10 +1031,14 @@ export class WebsiteCollection
             const topicResults = searchResult.get("topic");
             if (topicResults && topicResults.semanticRefMatches) {
                 for (const match of topicResults.semanticRefMatches) {
-                    const ref = match as any;
-                    const message = this.messages.get(ref.ordinal);
-                    if (message) {
-                        results.push(message as WebsiteDocPart);
+                    // Get the semantic ref first, then the message
+                    const semanticRef = this.semanticRefs?.get(match.semanticRefOrdinal);
+                    if (semanticRef) {
+                        const messageOrdinal = semanticRef.range.start.messageOrdinal;
+                        const message = this.messages.get(messageOrdinal);
+                        if (message) {
+                            results.push(message as WebsiteDocPart);
+                        }
                     }
                 }
             }
@@ -1061,10 +1068,14 @@ export class WebsiteCollection
             const actionResults = searchResult.get("action");
             if (actionResults && actionResults.semanticRefMatches) {
                 for (const match of actionResults.semanticRefMatches) {
-                    const ref = match as any;
-                    const message = this.messages.get(ref.ordinal);
-                    if (message) {
-                        results.push(message as WebsiteDocPart);
+                    // Get the semantic ref first, then the message
+                    const semanticRef = this.semanticRefs?.get(match.semanticRefOrdinal);
+                    if (semanticRef) {
+                        const messageOrdinal = semanticRef.range.start.messageOrdinal;
+                        const message = this.messages.get(messageOrdinal);
+                        if (message) {
+                            results.push(message as WebsiteDocPart);
+                        }
                     }
                 }
             }
