@@ -1752,14 +1752,14 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
      */
     private async performEntitySearchWithFallback(
         entityName: string,
-        options: any = {},
+        options?: { maxResults?: number }
     ): Promise<any> {
         if (!this.extensionService) {
             throw new Error("ChromeExtensionService not available");
         }
 
         const startTime = performance.now();
-        const maxResults = options.maxResults || 10;
+        const maxResults = options?.maxResults || 10;
         let searchResult: any = null;
         let searchMethod = "unknown";
 

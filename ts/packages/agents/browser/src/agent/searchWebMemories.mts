@@ -441,21 +441,27 @@ async function performHybridSearch(
 ): Promise<website.Website[]> {
     try {
         debug(`Attempting hybrid search for: "${request.query}"`);
-        const hybridResults = await websiteCollection.hybridSearch(
-            request.query,
-        );
+        
+        // Use combined search for both entities and topics
+        const results = await websiteCollection.searchCombined({
+            entities: [request.query],
+            topics: [request.query],
+            entityType: request.metadata?.entityType,
+            facetName: request.metadata?.facetName,
+            facetValue: request.metadata?.facetValue,
+            when: (request.dateFrom || request.dateTo) ? {
+                dateRange: {
+                    start: request.dateFrom ? new Date(request.dateFrom) : new Date(0),
+                    end: request.dateTo ? new Date(request.dateTo) : new Date()
+                }
+            } : undefined
+        });
 
-        if (hybridResults.length > 0) {
-            debug(`Found ${hybridResults.length} results using hybrid search`);
-            return hybridResults
-                .filter(
-                    (result) =>
-                        result.relevanceScore >= (request.minScore || 0.3),
-                )
-                .map((result) => result.website.toWebsite())
-                .slice(0, request.limit || 20);
-        }
-        return [];
+        debug(`Found ${results.length} results using hybrid search`);
+        
+        return results
+            .map((result) => result.toWebsite())
+            .slice(0, request.limit || 20);
     } catch (error) {
         debug(`Hybrid search failed: ${error}`);
         return [];
@@ -471,17 +477,25 @@ async function performEntitySearch(
 ): Promise<website.Website[]> {
     try {
         debug(`Attempting entity search for: "${request.query}"`);
-        const searchFilters = [request.query]; // Convert single query to filter array
-        const entityResults =
-            await websiteCollection.searchByEntities(searchFilters);
+        
+        // Extract filters from request metadata (set by QueryEnhancementAdapter)
+        const entityType = request.metadata?.entityType;
+        const facetName = request.metadata?.facetName;
+        const facetValue = request.metadata?.facetValue;
+        
+        // Use the enhanced searchByEntities with optional filters
+        const entityResults = await websiteCollection.searchByEntities(
+            [request.query],
+            entityType,
+            facetName,
+            facetValue
+        );
 
-        if (entityResults.length > 0) {
-            debug(`Found ${entityResults.length} results using entity search`);
-            return entityResults
-                .map((result) => result.toWebsite())
-                .slice(0, request.limit || 20);
-        }
-        return [];
+        debug(`Found ${entityResults.length} results using entity search`);
+        
+        return entityResults
+            .map((result) => result.toWebsite())
+            .slice(0, request.limit || 20);
     } catch (error) {
         debug(`Entity search failed: ${error}`);
         return [];
@@ -497,17 +511,32 @@ async function performTopicSearch(
 ): Promise<website.Website[]> {
     try {
         debug(`Attempting topic search for: "${request.query}"`);
-        const searchFilters = [request.query];
-        const topicResults =
-            await websiteCollection.searchByTopics(searchFilters);
+        
+        // Build temporal filter if dates provided
+        const whenFilter = (request.dateFrom || request.dateTo) ? {
+            dateRange: {
+                start: request.dateFrom ? new Date(request.dateFrom) : new Date(0),
+                end: request.dateTo ? new Date(request.dateTo) : new Date()
+            }
+        } : undefined;
+        
+        const searchOptions = {
+            maxKnowledgeMatches: request.limit || 20,
+            exactMatch: request.exactMatch || false
+        };
+        
+        // Use the enhanced searchByTopics with filters
+        const topicResults = await websiteCollection.searchByTopics(
+            [request.query],
+            whenFilter,
+            searchOptions
+        );
 
-        if (topicResults.length > 0) {
-            debug(`Found ${topicResults.length} results using topic search`);
-            return topicResults
-                .map((result) => result.toWebsite())
-                .slice(0, request.limit || 20);
-        }
-        return [];
+        debug(`Found ${topicResults.length} results using topic search`);
+        
+        return topicResults
+            .map((result) => result.toWebsite())
+            .slice(0, request.limit || 20);
     } catch (error) {
         debug(`Topic search failed: ${error}`);
         return [];
