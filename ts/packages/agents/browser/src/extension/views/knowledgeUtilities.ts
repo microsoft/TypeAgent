@@ -1752,7 +1752,7 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
      */
     private async performEntitySearchWithFallback(
         entityName: string,
-        options?: { maxResults?: number }
+        options?: { maxResults?: number },
     ): Promise<any> {
         if (!this.extensionService) {
             throw new Error("ChromeExtensionService not available");

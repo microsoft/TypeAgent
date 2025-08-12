@@ -958,7 +958,7 @@ export class WebsiteCollection
     ): Promise<WebsiteDocPart[]> {
         const results: WebsiteDocPart[] = [];
         const kp = await import("knowpro");
-        
+
         // Search for each entity using knowledge graph
         for (const entity of entities) {
             const searchTermGroup = kp.createEntitySearchTermGroup(
@@ -966,27 +966,30 @@ export class WebsiteCollection
                 type,
                 facetName,
                 facetValue,
-                false // exactMatch
+                false, // exactMatch
             );
-            
+
             const when = { knowledgeType: "entity" as const };
-            
+
             const searchResult = await kp.searchConversationKnowledge(
                 this,
                 searchTermGroup,
                 when,
-                { maxKnowledgeMatches: 50 }
+                { maxKnowledgeMatches: 50 },
             );
-            
+
             if (searchResult) {
                 // searchResult is a Map<KnowledgeType, SemanticRefSearchResult>
                 const entityResults = searchResult.get("entity");
                 if (entityResults && entityResults.semanticRefMatches) {
                     for (const match of entityResults.semanticRefMatches) {
                         // Get the semantic ref first, then the message
-                        const semanticRef = this.semanticRefs?.get(match.semanticRefOrdinal);
+                        const semanticRef = this.semanticRefs?.get(
+                            match.semanticRefOrdinal,
+                        );
                         if (semanticRef) {
-                            const messageOrdinal = semanticRef.range.start.messageOrdinal;
+                            const messageOrdinal =
+                                semanticRef.range.start.messageOrdinal;
                             const message = this.messages.get(messageOrdinal);
                             if (message) {
                                 results.push(message as WebsiteDocPart);
@@ -996,10 +999,10 @@ export class WebsiteCollection
                 }
             }
         }
-        
+
         // Remove duplicates
         const uniqueResults = new Map<string, WebsiteDocPart>();
-        results.forEach(r => {
+        results.forEach((r) => {
             const key = r.url || `${r.timestamp}_${Math.random()}`;
             uniqueResults.set(key, r);
         });
@@ -1013,28 +1016,31 @@ export class WebsiteCollection
     ): Promise<WebsiteDocPart[]> {
         const kp = await import("knowpro");
         const searchTermGroup = kp.createTopicSearchTermGroup(topics);
-        
-        const whenFilter = { 
-            ...when, 
-            knowledgeType: "topic" as const
+
+        const whenFilter = {
+            ...when,
+            knowledgeType: "topic" as const,
         };
-        
+
         const searchResult = await kp.searchConversationKnowledge(
             this,
             searchTermGroup,
             whenFilter,
-            options || { maxMatches: 50 }
+            options || { maxMatches: 50 },
         );
-        
+
         const results: WebsiteDocPart[] = [];
         if (searchResult) {
             const topicResults = searchResult.get("topic");
             if (topicResults && topicResults.semanticRefMatches) {
                 for (const match of topicResults.semanticRefMatches) {
                     // Get the semantic ref first, then the message
-                    const semanticRef = this.semanticRefs?.get(match.semanticRefOrdinal);
+                    const semanticRef = this.semanticRefs?.get(
+                        match.semanticRefOrdinal,
+                    );
                     if (semanticRef) {
-                        const messageOrdinal = semanticRef.range.start.messageOrdinal;
+                        const messageOrdinal =
+                            semanticRef.range.start.messageOrdinal;
                         const message = this.messages.get(messageOrdinal);
                         if (message) {
                             results.push(message as WebsiteDocPart);
@@ -1043,7 +1049,7 @@ export class WebsiteCollection
                 }
             }
         }
-        
+
         return results;
     }
 
@@ -1053,25 +1059,28 @@ export class WebsiteCollection
         const kp = await import("knowpro");
         // Use topic search since actions are often categorized as topics
         const searchTermGroup = kp.createTopicSearchTermGroup(actionTypes);
-        
+
         const when = { knowledgeType: "action" as const };
-        
+
         const searchResult = await kp.searchConversationKnowledge(
             this,
             searchTermGroup,
             when,
-            { maxKnowledgeMatches: 50 }
+            { maxKnowledgeMatches: 50 },
         );
-        
+
         const results: WebsiteDocPart[] = [];
         if (searchResult) {
             const actionResults = searchResult.get("action");
             if (actionResults && actionResults.semanticRefMatches) {
                 for (const match of actionResults.semanticRefMatches) {
                     // Get the semantic ref first, then the message
-                    const semanticRef = this.semanticRefs?.get(match.semanticRefOrdinal);
+                    const semanticRef = this.semanticRefs?.get(
+                        match.semanticRefOrdinal,
+                    );
                     if (semanticRef) {
-                        const messageOrdinal = semanticRef.range.start.messageOrdinal;
+                        const messageOrdinal =
+                            semanticRef.range.start.messageOrdinal;
                         const message = this.messages.get(messageOrdinal);
                         if (message) {
                             results.push(message as WebsiteDocPart);
@@ -1080,7 +1089,7 @@ export class WebsiteCollection
                 }
             }
         }
-        
+
         return results;
     }
 
@@ -1088,28 +1097,30 @@ export class WebsiteCollection
         // Use combined entity and topic search for hybrid approach
         const [entityResults, topicResults] = await Promise.all([
             this.searchByEntities([query]),
-            this.searchByTopics([query])
+            this.searchByTopics([query]),
         ]);
-        
+
         // Combine results and calculate relevance scores
         const results: Map<string, WebsiteSearchResult> = new Map();
-        
+
         // Process entity results
         for (const websitePart of entityResults) {
-            const key = websitePart.url || `${websitePart.timestamp}_${Math.random()}`;
+            const key =
+                websitePart.url || `${websitePart.timestamp}_${Math.random()}`;
             results.set(key, {
                 website: websitePart,
                 relevanceScore: 0.6, // Higher score for entity matches
                 matchedElements: ["entities"],
-                knowledgeContext: this.getKnowledgeContext(websitePart)
+                knowledgeContext: this.getKnowledgeContext(websitePart),
             });
         }
-        
+
         // Process topic results
         for (const websitePart of topicResults) {
-            const key = websitePart.url || `${websitePart.timestamp}_${Math.random()}`;
+            const key =
+                websitePart.url || `${websitePart.timestamp}_${Math.random()}`;
             const existing = results.get(key);
-            
+
             if (existing) {
                 // Boost score if found in both
                 existing.relevanceScore += 0.4;
@@ -1119,24 +1130,26 @@ export class WebsiteCollection
                     website: websitePart,
                     relevanceScore: 0.4, // Lower score for topic-only matches
                     matchedElements: ["topics"],
-                    knowledgeContext: this.getKnowledgeContext(websitePart)
+                    knowledgeContext: this.getKnowledgeContext(websitePart),
                 });
             }
         }
-        
+
         // Sort by relevance score and return top results
         return Array.from(results.values())
             .sort((a, b) => b.relevanceScore - a.relevanceScore)
             .slice(0, 50);
     }
-    
+
     private getKnowledgeContext(websitePart: WebsiteDocPart) {
         const knowledge = websitePart.getKnowledge();
-        return knowledge ? {
-            entityCount: knowledge.entities?.length || 0,
-            topicCount: knowledge.topics?.length || 0,
-            actionCount: knowledge.actions?.length || 0,
-        } : undefined;
+        return knowledge
+            ? {
+                  entityCount: knowledge.entities?.length || 0,
+                  topicCount: knowledge.topics?.length || 0,
+                  actionCount: knowledge.actions?.length || 0,
+              }
+            : undefined;
     }
 
     /**
@@ -1289,7 +1302,7 @@ export class WebsiteCollection
 
         return insights;
     }
-    
+
     /**
      * Search with combined entity and topic criteria
      */
@@ -1302,58 +1315,58 @@ export class WebsiteCollection
         when?: any;
     }): Promise<WebsiteDocPart[]> {
         const uniqueResults = new Map<string, WebsiteDocPart>();
-        
+
         // Entity search
         if (query.entities && query.entities.length > 0) {
             const entityResults = await this.searchByEntities(
                 query.entities,
                 query.entityType,
                 query.facetName,
-                query.facetValue
+                query.facetValue,
             );
-            entityResults.forEach(r => {
+            entityResults.forEach((r) => {
                 const key = r.url || `${r.timestamp}_${Math.random()}`;
                 uniqueResults.set(key, r);
             });
         }
-        
+
         // Topic search
         if (query.topics && query.topics.length > 0) {
             const topicResults = await this.searchByTopics(
                 query.topics,
-                query.when
+                query.when,
             );
-            topicResults.forEach(r => {
+            topicResults.forEach((r) => {
                 const key = r.url || `${r.timestamp}_${Math.random()}`;
                 if (!uniqueResults.has(key)) {
                     uniqueResults.set(key, r);
                 }
             });
         }
-        
+
         return Array.from(uniqueResults.values());
     }
-    
+
     /**
      * Batch search for multiple entities (efficient for graph building)
      */
     public async batchSearchEntities(
         entities: string[],
-        options?: any
+        options?: any,
     ): Promise<Map<string, WebsiteDocPart[]>> {
         const results = new Map<string, WebsiteDocPart[]>();
-        
+
         // Use Promise.all for parallel searching
         const promises = entities.map(async (entity) => {
             const docs = await this.searchByEntities([entity]);
             return { entity, docs };
         });
-        
+
         const batchResults = await Promise.all(promises);
         batchResults.forEach(({ entity, docs }) => {
             results.set(entity, docs);
         });
-        
+
         return results;
     }
 }

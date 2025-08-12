@@ -435,7 +435,7 @@ async function performHybridSearch(
 ): Promise<website.Website[]> {
     try {
         debug(`Attempting hybrid search for: "${request.query}"`);
-        
+
         // Use combined search for both entities and topics
         const results = await websiteCollection.searchCombined({
             entities: [request.query],
@@ -443,16 +443,23 @@ async function performHybridSearch(
             entityType: request.metadata?.entityType,
             facetName: request.metadata?.facetName,
             facetValue: request.metadata?.facetValue,
-            when: (request.dateFrom || request.dateTo) ? {
-                dateRange: {
-                    start: request.dateFrom ? new Date(request.dateFrom) : new Date(0),
-                    end: request.dateTo ? new Date(request.dateTo) : new Date()
-                }
-            } : undefined
+            when:
+                request.dateFrom || request.dateTo
+                    ? {
+                          dateRange: {
+                              start: request.dateFrom
+                                  ? new Date(request.dateFrom)
+                                  : new Date(0),
+                              end: request.dateTo
+                                  ? new Date(request.dateTo)
+                                  : new Date(),
+                          },
+                      }
+                    : undefined,
         });
 
         debug(`Found ${results.length} results using hybrid search`);
-        
+
         return results
             .map((result) => result.toWebsite())
             .slice(0, request.limit || 20);
@@ -471,22 +478,22 @@ async function performEntitySearch(
 ): Promise<website.Website[]> {
     try {
         debug(`Attempting entity search for: "${request.query}"`);
-        
+
         // Extract filters from request metadata (set by QueryEnhancementAdapter)
         const entityType = request.metadata?.entityType;
         const facetName = request.metadata?.facetName;
         const facetValue = request.metadata?.facetValue;
-        
+
         // Use the enhanced searchByEntities with optional filters
         const entityResults = await websiteCollection.searchByEntities(
             [request.query],
             entityType,
             facetName,
-            facetValue
+            facetValue,
         );
 
         debug(`Found ${entityResults.length} results using entity search`);
-        
+
         return entityResults
             .map((result) => result.toWebsite())
             .slice(0, request.limit || 20);
@@ -505,29 +512,36 @@ async function performTopicSearch(
 ): Promise<website.Website[]> {
     try {
         debug(`Attempting topic search for: "${request.query}"`);
-        
+
         // Build temporal filter if dates provided
-        const whenFilter = (request.dateFrom || request.dateTo) ? {
-            dateRange: {
-                start: request.dateFrom ? new Date(request.dateFrom) : new Date(0),
-                end: request.dateTo ? new Date(request.dateTo) : new Date()
-            }
-        } : undefined;
-        
+        const whenFilter =
+            request.dateFrom || request.dateTo
+                ? {
+                      dateRange: {
+                          start: request.dateFrom
+                              ? new Date(request.dateFrom)
+                              : new Date(0),
+                          end: request.dateTo
+                              ? new Date(request.dateTo)
+                              : new Date(),
+                      },
+                  }
+                : undefined;
+
         const searchOptions = {
             maxKnowledgeMatches: request.limit || 20,
-            exactMatch: request.exactMatch || false
+            exactMatch: request.exactMatch || false,
         };
-        
+
         // Use the enhanced searchByTopics with filters
         const topicResults = await websiteCollection.searchByTopics(
             [request.query],
             whenFilter,
-            searchOptions
+            searchOptions,
         );
 
         debug(`Found ${topicResults.length} results using topic search`);
-        
+
         return topicResults
             .map((result) => result.toWebsite())
             .slice(0, request.limit || 20);
@@ -655,7 +669,10 @@ async function performAdvancedSearch(
     const searchSelectExpr: kp.SearchSelectExpr = {
         searchTermGroup: {
             // Use intent analysis for boolean operator decision
-            booleanOp: detectedIntent?.intent?.type === "find_specific" ? "and" : "or_max",
+            booleanOp:
+                detectedIntent?.intent?.type === "find_specific"
+                    ? "and"
+                    : "or_max",
             terms: searchTerms.map((term) => ({
                 term: { text: term },
             })),
