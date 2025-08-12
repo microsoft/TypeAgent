@@ -22,6 +22,21 @@ Usage: `@browser launch standalone`
 ## @browser close - Close the new Web Content view  
 Usage: `@browser close`  
 
+## @browser resolver list - List all available URL resolvers
+Usage: `@browser resolver list` 
+
+## @browser resolver search - Toggle search resolver
+Usage: `@browser resolver search` 
+
+## @browser resolver keyword - Toggle keyword resolver
+Usage: `@browser resolver keyword` 
+
+## @browser resolver wikipedia - Toggle Wikipedia resolver
+Usage: `@browser resolver wikipedia` 
+
+## @browser resolver history - Toggle history resolver
+Usage: `@browser resolver history` 
+
 ## @calendar login - Log into MS Graph to access calendar  
 Usage: `@calendar login`  
 
@@ -409,6 +424,14 @@ Usage: `@history delete <index>`
 ### Arguments:  
   - &lt;index&gt; - Chat history index to delete. (type: number)  
    
+## @history entities list - Shows all of the entities currently in 'working memory.'
+Usage: `@history entities list` 
+
+## @history entities delete - Delete entities from the chat history (working memory).
+Usage: `@history entities delete <entityId>`
+Arguments:
+  - &lt;entityId&gt; - The UniqueId of the entity (type: string)
+
 ## @history insert - Insert messages to chat history  
 Usage: `@history insert <messages>`  
 ### Arguments:  

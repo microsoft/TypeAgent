@@ -5,6 +5,7 @@ import { createWebSocket } from "common-utils/ws";
 import { WebSocket } from "ws";
 import {
     ActionContext,
+    ActionIO,
     ActionResult,
     AppAgent,
     AppAgentEvent,
@@ -24,6 +25,8 @@ import {
     displayError,
     displayStatus,
     displaySuccess,
+    getMessage
+    
 } from "@typeagent/agent-sdk/helpers/display";
 import { Crossword } from "./crossword/schema/pageSchema.mjs";
 import {
@@ -660,7 +663,13 @@ async function resolveEntity(
 ): Promise<ResolveEntityResult | undefined> {
     if (type === "WebPage") {
         try {
+            const resolveStarted = Date.now();
+            
             const urls = await resolveWebPage(context, name);
+            const duration = Date.now() - resolveStarted;
+
+            debug(`URL Resolution Duration: ${duration}`);
+
             if (urls.length === 1) {
                 return {
                     match: "exact",
@@ -690,6 +699,7 @@ async function resolveEntity(
 async function resolveWebPage(
     context: SessionContext<BrowserActionContext>,
     site: string,
+    io?: ActionIO
 ): Promise<string[]> {
     debug(`Resolving site '${site}'`);
 
@@ -746,7 +756,26 @@ async function resolveWebPage(
                 debug(`Unable to find local host port for '${site}. ${e}'`);
             }
 
-            // Search for the URL based on heuristics (history, keywords, wikipedia, web-search)
+            // try to resolve URL string using known keyword matching
+            if (context.agentContext.resolverSettings.keywordResolver) {
+                const cachehitUrl = await urlResolver.resolveURLByKeyword(site);
+                if (cachehitUrl) {
+                    debug(
+                        `Resolved URL from cache: ${cachehitUrl}`,
+                    );
+
+                    if (
+                        cachehitUrl.indexOf("https://") !== 0 &&
+                        cachehitUrl.indexOf("http://") !== 0
+                    ) {
+                        return [`https://${cachehitUrl}`];
+                    } else {
+                        return [cachehitUrl];
+                    }
+                }
+            }            
+
+            // Search for the URL based on heuristics (history, wikipedia, web-search)
             // if we get singular matches we assume those are correct and we just return it.
             // if we get more than one result then we'll return all of them and let the user decide
             // which URL they want via clarification
@@ -755,8 +784,14 @@ async function resolveWebPage(
 
             // try to resolve URL using website visit history first
             if (context.agentContext.resolverSettings.historyResolver) {
+                io?.appendDisplay(getMessage(`Trying to resolve '${site}' by looking at browsing history.`, "status"));
                 promises.push(
                     resolveURLWithHistory(context, site).then((historyUrls) => {
+
+                        const msg = `Found ${historyUrls?.length} in browser history.`;
+                        debug(msg);
+                        io?.appendDisplay(getMessage(msg, "info"));
+
                         if (historyUrls) {
                             urls.push(...historyUrls!);
                         }
@@ -764,33 +799,9 @@ async function resolveWebPage(
                 );
             }
 
-            // try to resolve URL string using known keyword matching
-            if (context.agentContext.resolverSettings.keywordResolver) {
-                promises.push(
-                    urlResolver
-                        .resolveURLByKeyword(site)
-                        .then((cachehitUrl) => {
-                            if (cachehitUrl) {
-                                debug(
-                                    `Resolved URL from cache: ${cachehitUrl}`,
-                                );
-
-                                if (
-                                    cachehitUrl.indexOf("https://") !== 0 &&
-                                    cachehitUrl.indexOf("http://") !== 0
-                                ) {
-                                    urls.push(`https://${cachehitUrl}`);
-                                } else {
-                                    urls.push(cachehitUrl);
-                                }
-                            }
-                        }),
-                );
-            }
-
             // try to resolve URL by using the Wikipedia API
             if (context.agentContext.resolverSettings.wikipediaResolver) {
-                debug(`Resolving URL using Wikipedia for: ${site}`);
+                io?.appendDisplay(getMessage(`Resolving URL using Wikipedia for: ${site}`, "status"));
                 promises.push(
                     urlResolver
                         .resolveURLWithWikipedia(
@@ -798,6 +809,11 @@ async function resolveWebPage(
                             wikipedia.apiSettingsFromEnv(),
                         )
                         .then((wikiPediaUrls) => {
+
+                            const msg = `Found ${wikiPediaUrls.length} urls from Wikipedia.`;
+                            debug(msg);
+                            io?.appendDisplay(getMessage(msg, "info"));
+
                             urls.push(...wikiPediaUrls);
                         }),
                 );
@@ -805,6 +821,7 @@ async function resolveWebPage(
 
             // try to resolve URL using LLM + internet search
             if (context.agentContext.resolverSettings.searchResolver) {
+                io?.appendDisplay(getMessage(`Resolving URL using web search for: ${site}`, "status"));
                 promises.push(
                     urlResolver
                         .resolveURLWithSearch(
@@ -812,6 +829,11 @@ async function resolveWebPage(
                             bingWithGrounding.apiSettingsFromEnv(),
                         )
                         .then((search_urls) => {
+
+                            const msg = `Found ${search_urls?.length} urls using Bing With Grounding (search).`;
+                            debug(msg);
+                            io?.appendDisplay(getMessage(msg, "info"));
+
                             if (search_urls) {
                                 urls.push(...search_urls);
                             }
@@ -831,7 +853,9 @@ async function resolveWebPage(
                     // Remove www. prefix for comparison
                     let hostname = u.hostname.replace(/^www\./, "");
                     // Lowercase protocol and hostname
-                    return `${u.protocol}//${hostname}${pathname}${u.search}${u.hash}`;
+                    //return `${u.protocol}//${hostname}${pathname}${u.search}${u.hash}`;
+                    // ignore the protocol
+                    return `${hostname}${pathname}${u.search}${u.hash}`;
                 } catch {
                     // If not a valid URL, fallback to original
                     return url.replace(/\/+$/, "").replace(/^www\./, "");
@@ -848,10 +872,15 @@ async function resolveWebPage(
                     dedupedUrls.push(url);
                 }
             }
-            urls.push(...dedupedUrls);
+            urls.length = 0;            //clear out urls
+            urls.push(...dedupedUrls);  // add deduped
+
+            const msg = `Found ${urls.length} possible urls for '${site}'`;
+            debug (msg);
+            io?.appendDisplay(getMessage(msg, "info"));
 
             if (urls.length > 0) {
-                return urls;
+                return [...new Set(urls)];
             }
         }
     }
@@ -890,16 +919,11 @@ async function openWebPage(
     const browserControl = getActionBrowserControl(context);
 
     displayStatus(`Opening web page for ${action.parameters.site}.`, context);
-    const siteEntity = action.entities?.site;
-    const url =
-        siteEntity?.type[0] === "WebPage"
-            ? siteEntity.uniqueId!
-            : (
-                  await resolveWebPage(
+    const url = (await resolveWebPage(
                       context.sessionContext,
                       action.parameters.site,
-                  )
-              )[0]; // only take the first URL
+                      context.actionIO
+                  ))[0];
 
     if (url !== action.parameters.site) {
         displayStatus(
@@ -914,7 +938,7 @@ async function openWebPage(
         activityName: "browsingWebPage",
         description: "Browsing a web page",
         state: {
-            site: siteEntity?.name,
+            site: url,
         },
         activityEndAction: {
             actionName: "closeWebPage",
