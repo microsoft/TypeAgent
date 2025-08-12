@@ -19,7 +19,7 @@
 
 # From Meeting 8/12/2025 afternoon
 
-- Toss out character ordinals from TextLocation etc.
+- Toss out character ordinals from TextLocation etc. [DONE]
 - Message ordinal must exist
 - Chunk ordinal of end in range is 1 past last chunk in range
   (== standard Python slice conventions)

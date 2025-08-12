@@ -140,7 +140,6 @@ type Knowledge = kplib.ConcreteEntity | kplib.Action | Topic | Tag
 class TextLocationData(TypedDict):
     messageOrdinal: MessageOrdinal
     chunkOrdinal: int
-    charOrdinal: int
 
 
 @dataclass(order=True)
@@ -148,28 +147,23 @@ class TextLocation:
     # The ordinal of the message.
     message_ordinal: MessageOrdinal
     # The ordinal of the chunk.
+    # In the end of a TextRange, 1 + ordinal of the last chunk in the range.
     chunk_ordinal: int = 0
-    # The ordinal of the character within the chunk.
-    char_ordinal: int = 0
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.message_ordinal}, {self.chunk_ordinal}, {self.char_ordinal})"
+        return (
+            f"{self.__class__.__name__}({self.message_ordinal}, {self.chunk_ordinal})"
+        )
 
     def serialize(self) -> TextLocationData:
         kwds = dict(messageOrdinal=self.message_ordinal)
         if self.chunk_ordinal != 0:
             kwds["chunkOrdinal"] = self.chunk_ordinal
-        if self.char_ordinal != 0:
-            kwds["charOrdinal"] = self.char_ordinal
         return TextLocationData(**kwds)
 
     @staticmethod
     def deserialize(data: TextLocationData) -> "TextLocation":
-        return TextLocation(
-            message_ordinal=data["messageOrdinal"],
-            chunk_ordinal=data.get("chunkOrdinal", 0),
-            char_ordinal=data.get("charOrdinal", 0),
-        )
+        return TextLocation(data["messageOrdinal"], data.get("chunkOrdinal", 0))
 
 
 class TextRangeData(TypedDict):
