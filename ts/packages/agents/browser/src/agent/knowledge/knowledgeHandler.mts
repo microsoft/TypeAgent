@@ -2267,7 +2267,7 @@ function calculateExtractionProgress(websites: any[]): {
             const knowledge = site.getKnowledge();
             if (knowledge) {
                 if (knowledge.entities?.length > 0) pagesWithEntities++;
-                if (knowledge.keyTopics?.length > 0) pagesWithTopics++;
+                if (knowledge.topics?.length > 0) pagesWithTopics++;
                 if (knowledge.actions?.length > 0) pagesWithActions++;
             }
         } catch (error) {
@@ -2347,7 +2347,7 @@ function calculateCompletionRates(websites: any[]): {
             const knowledge = site.getKnowledge();
             if (knowledge) {
                 if (knowledge.entities?.length > 0) pagesWithEntities++;
-                if (knowledge.keyTopics?.length > 0) pagesWithTopics++;
+                if (knowledge.topics?.length > 0) pagesWithTopics++;
                 if (knowledge.actions?.length > 0) pagesWithActions++;
             }
         } catch (error) {
