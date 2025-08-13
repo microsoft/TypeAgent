@@ -98,7 +98,7 @@ async def main(filename_prefix: str):
                     print(f"  {i}: {line}")
 
     print(f"\nChecking that serialize -> deserialize -> serialize roundtrips ...")
-    ser1 = pod.serialize()
+    ser1 = await pod.serialize()
     assert ser1 is not None, "Failed to serialize podcast"
     assert isinstance(ser1, dict), f"ser1 is not dict but {type(ser1)!r}"
     assert len(ser1) > 0, f"ser1 is empty {ser1!r}"
@@ -113,7 +113,7 @@ async def main(filename_prefix: str):
         pod2.name_tag == pod.name_tag
     ), f"pod2.name_tag is {pod2.name_tag!r} but expected {pod.name_tag!r}"
 
-    ser2 = pod2.serialize()
+    ser2 = await pod2.serialize()
     assert ser2 is not None, "Failed to serialize podcast"
     assert isinstance(ser2, dict), f"ser2 is not dict but {type(ser2)!r}"
     assert len(ser2) > 0, f"ser2 is empty {ser2!r}"
