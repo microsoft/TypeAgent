@@ -176,10 +176,10 @@ class Podcast(
             self.settings.related_term_index_settings
         )
 
-    def add_metadata_to_index(self) -> None:
+    async def add_metadata_to_index(self) -> None:
         if self.semantic_ref_index is not None:
             assert self.semantic_refs is not None
-            convindex.add_metadata_to_index(
+            await convindex.add_metadata_to_index(
                 self.messages,
                 self.semantic_refs,
                 self.semantic_ref_index,
@@ -196,7 +196,7 @@ class Podcast(
         self,
         event_handler: IndexingEventHandlers | None = None,
     ) -> IndexingResults:
-        self.add_metadata_to_index()
+        await self.add_metadata_to_index()
         result = await convindex.build_conversation_index(
             self, self.settings, event_handler
         )
@@ -236,11 +236,11 @@ class Podcast(
         data = self.serialize()
         serialization.write_conversation_data_to_file(data, filename)
 
-    def deserialize(
+    async def deserialize(
         self, podcast_data: ConversationDataWithIndexes[PodcastMessageData]
     ) -> None:
-        if self.messages.size() or (
-            self.semantic_refs is not None and self.semantic_refs.size()
+        if await self.messages.size() or (
+            self.semantic_refs is not None and await self.semantic_refs.size()
         ):
             raise RuntimeError("Cannot deserialize into a non-empty Podcast.")
 
@@ -248,14 +248,14 @@ class Podcast(
 
         for message_data in podcast_data["messages"]:
             msg = PodcastMessage.deserialize(message_data)
-            self.messages.append(msg)
+            await self.messages.append(msg)
 
         semantic_refs_data = podcast_data.get("semanticRefs")
         if semantic_refs_data is not None:
             if self.semantic_refs is None:
                 self.semantic_refs = SemanticRefCollection()
             semrefs = [SemanticRef.deserialize(r) for r in semantic_refs_data]
-            self.semantic_refs.extend(semrefs)
+            await self.semantic_refs.extend(semrefs)
 
         self.tags = podcast_data["tags"]
 
@@ -290,7 +290,7 @@ class Podcast(
         self._build_transient_secondary_indexes(True)
 
     @staticmethod
-    def read_from_file(
+    async def read_from_file(
         filename_prefix: str,
         settings: ConversationSettings | None = None,
         dbname: str | None = None,
@@ -305,12 +305,12 @@ class Podcast(
         provider = get_storage_provider(dbname)
         msgs = provider.create_message_collection(PodcastMessage)
         semrefs = provider.create_semantic_ref_collection()
-        if msgs.size() or semrefs.size():
+        if await msgs.size() or await semrefs.size():
             raise RuntimeError(
                 f"Database {dbname!r} already has messages or semantic refs."
             )
         podcast = Podcast(messages=msgs, semantic_refs=semrefs, settings=settings)
-        podcast.deserialize(data)
+        await podcast.deserialize(data)
         return podcast
 
     def _build_transient_secondary_indexes(self, build_all: bool) -> None:

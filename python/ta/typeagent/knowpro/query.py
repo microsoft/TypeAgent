@@ -169,7 +169,7 @@ def match_entity_name_or_type(
 # TODO: match_property_search_term_to_semantic_ref
 
 
-def lookup_term_filtered(
+async def lookup_term_filtered(
     semantic_ref_index: ITermToSemanticRefIndex,
     term: Term,
     semantic_refs: ISemanticRefCollection,
@@ -178,16 +178,16 @@ def lookup_term_filtered(
     """Look up a term in the semantic reference index and filter the results."""
     scored_refs = semantic_ref_index.lookup_term(term.text)
     if scored_refs:
-        filtered = [
-            sr
-            for sr in scored_refs
-            if filter(semantic_refs.get_item(sr.semantic_ref_ordinal), sr)
-        ]
+        filtered = []
+        for sr in scored_refs:
+            semantic_ref = await semantic_refs.get_item(sr.semantic_ref_ordinal)
+            if filter(semantic_ref, sr):
+                filtered.append(sr)
         return filtered
     return None
 
 
-def lookup_term(
+async def lookup_term(
     semantic_ref_index: ITermToSemanticRefIndex,
     term: Term,
     semantic_refs: ISemanticRefCollection,
@@ -197,7 +197,7 @@ def lookup_term(
     """Look up a term in the semantic reference index, optionally filtering by ranges in scope."""
     if ranges_in_scope is not None:
         # If ranges_in_scope has no actual text ranges, lookups can't possibly match.
-        return lookup_term_filtered(
+        return await lookup_term_filtered(
             semantic_ref_index,
             term,
             semantic_refs,
@@ -257,19 +257,21 @@ class QueryEvalContext[TMessage: IMessage, TIndex: ITermToSemanticRefIndex]:
     def messages(self) -> IMessageCollection:
         return self.conversation.messages
 
-    def get_semantic_ref(self, semantic_ref_ordinal: SemanticRefOrdinal) -> SemanticRef:
+    async def get_semantic_ref(
+        self, semantic_ref_ordinal: SemanticRefOrdinal
+    ) -> SemanticRef:
         """Retrieve a semantic reference by its ordinal."""
         assert self.conversation.semantic_refs is not None
-        return self.conversation.semantic_refs.get_item(semantic_ref_ordinal)
+        return await self.conversation.semantic_refs.get_item(semantic_ref_ordinal)
 
-    def get_message_for_ref(self, semantic_ref: SemanticRef) -> TMessage:
+    async def get_message_for_ref(self, semantic_ref: SemanticRef) -> TMessage:
         """Retrieve the message associated with a semantic reference."""
         message_ordinal = semantic_ref.range.start.message_ordinal
-        return self.conversation.messages.get_item(message_ordinal)
+        return await self.conversation.messages.get_item(message_ordinal)
 
-    def get_message(self, message_ordinal: MessageOrdinal) -> TMessage:
+    async def get_message(self, message_ordinal: MessageOrdinal) -> TMessage:
         """Retrieve a message by its ordinal."""
-        return self.messages.get_item(message_ordinal)
+        return await self.messages.get_item(message_ordinal)
 
     def clear_matched_terms(self) -> None:
         """Clear all matched terms and property terms."""

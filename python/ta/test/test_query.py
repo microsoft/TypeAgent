@@ -188,7 +188,8 @@ class TestConversationSearchability:
 
 
 class TestTermLookup:
-    def test_lookup_term_filtered(self, searchable_conversation):
+    @pytest.mark.asyncio
+    async def test_lookup_term_filtered(self, searchable_conversation):
         """Test lookup_term_filtered function."""
         term = Term("test")
 
@@ -196,7 +197,7 @@ class TestTermLookup:
         def high_score_filter(semantic_ref, scored_ref):
             return scored_ref.score > 0.8
 
-        results = lookup_term_filtered(
+        results = await lookup_term_filtered(
             searchable_conversation.semantic_ref_index,
             term,
             searchable_conversation.semantic_refs,
@@ -208,14 +209,15 @@ class TestTermLookup:
         assert results[0].semantic_ref_ordinal == 0
         assert results[0].score == 0.9
 
-    def test_lookup_term_filtered_no_results(self, searchable_conversation):
+    @pytest.mark.asyncio
+    async def test_lookup_term_filtered_no_results(self, searchable_conversation):
         """Test lookup_term_filtered with no matching results."""
         term = Term("nonexistent")
 
         def any_filter(semantic_ref, scored_ref):
             return True
 
-        results = lookup_term_filtered(
+        results = await lookup_term_filtered(
             searchable_conversation.semantic_ref_index,
             term,
             searchable_conversation.semantic_refs,
@@ -224,11 +226,12 @@ class TestTermLookup:
 
         assert results is None
 
-    def test_lookup_term(self, searchable_conversation):
+    @pytest.mark.asyncio
+    async def test_lookup_term(self, searchable_conversation):
         """Test lookup_term function with no scope."""
         term = Term("test")
 
-        results = lookup_term(
+        results = await lookup_term(
             searchable_conversation.semantic_ref_index,
             term,
             searchable_conversation.semantic_refs,
@@ -239,7 +242,8 @@ class TestTermLookup:
         assert results[0].semantic_ref_ordinal == 0
         assert results[1].semantic_ref_ordinal == 1
 
-    def test_lookup_term_with_scope(self, searchable_conversation):
+    @pytest.mark.asyncio
+    async def test_lookup_term_with_scope(self, searchable_conversation):
         """Test lookup_term function with a scope."""
         term = Term("test")
 
@@ -249,7 +253,7 @@ class TestTermLookup:
         )
         ranges_in_scope = TextRangesInScope([range_collection])
 
-        results = lookup_term(
+        results = await lookup_term(
             searchable_conversation.semantic_ref_index,
             term,
             searchable_conversation.semantic_refs,
@@ -287,9 +291,10 @@ class TestQueryEvalContext:
         assert eval_context.semantic_refs == eval_context.conversation.semantic_refs
         assert eval_context.messages == eval_context.conversation.messages
 
-    def test_get_semantic_ref(self, eval_context: QueryEvalContext):
+    @pytest.mark.asyncio
+    async def test_get_semantic_ref(self, eval_context: QueryEvalContext):
         """Test get_semantic_ref method."""
-        ref = eval_context.get_semantic_ref(0)
+        ref = await eval_context.get_semantic_ref(0)
         assert ref.semantic_ref_ordinal == 0
 
     def test_get_message_for_ref(self, eval_context: QueryEvalContext):
