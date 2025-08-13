@@ -22,6 +22,7 @@ export class WebsiteImportUI {
     private webActivityModalId = "webActivityImportModal";
     private folderImportModalId = "folderImportModal";
     private activeModal: string | null = null;
+    private modalInstances: Map<string, any> = new Map();
     private progressCallback: ((progress: ImportProgress) => void) | null =
         null;
     private completionCallback: ((result: ImportResult) => void) | null = null;
@@ -266,13 +267,23 @@ export class WebsiteImportUI {
 
             let newMessage = phaseMessages[progress.phase] || progress.phase;
 
-            // Add current item info if available
+            // Use currentItem as primary message if it's more specific than the phase message
             if (progress.currentItem) {
                 const truncatedItem =
                     progress.currentItem.length > 50
                         ? progress.currentItem.substring(0, 50) + "..."
                         : progress.currentItem;
-                newMessage += ` (${truncatedItem})`;
+                
+                // If currentItem contains percentage or detailed info, use it as the main message
+                if (truncatedItem.includes('%') || 
+                    truncatedItem.includes('Fetching content') ||
+                    truncatedItem.includes('Processing') ||
+                    truncatedItem.includes('Extracting')) {
+                    newMessage = truncatedItem;
+                } else {
+                    // Otherwise append as additional context
+                    newMessage += ` (${truncatedItem})`;
+                }
             }
 
             console.log("📝 Status message:", newMessage);
@@ -1111,7 +1122,14 @@ export class WebsiteImportUI {
             // Add entrance animation class
             modalElement.classList.add("modal-entering");
 
+            // Clean up any existing instance first
+            const existingInstance = this.modalInstances.get(modalId);
+            if (existingInstance) {
+                existingInstance.dispose();
+            }
+
             const modal = new (window as any).bootstrap.Modal(modalElement);
+            this.modalInstances.set(modalId, modal);
             modal.show();
 
             // Remove animation class after transition
@@ -1130,9 +1148,16 @@ export class WebsiteImportUI {
             // Add exit animation class
             modalElement.classList.add("modal-exiting");
 
-            const modal = (window as any).bootstrap.Modal.getInstance(
-                modalElement,
-            );
+            // Use our stored instance first, fallback to Bootstrap's getInstance
+            let modal = this.modalInstances.get(modalId) || 
+                       (window as any).bootstrap.Modal.getInstance(modalElement);
+            
+            // If still no instance, create one to properly hide the modal
+            if (!modal) {
+                modal = new (window as any).bootstrap.Modal(modalElement);
+                this.modalInstances.set(modalId, modal);
+            }
+            
             if (modal) {
                 modal.hide();
             }
@@ -1150,12 +1175,23 @@ export class WebsiteImportUI {
     private removeModal(modalId: string): void {
         const modalElement = document.getElementById(modalId);
         if (modalElement) {
-            const modalInstance = (window as any).bootstrap.Modal.getInstance(
-                modalElement,
-            );
+            // Use our stored instance first, fallback to Bootstrap's getInstance
+            const modalInstance = this.modalInstances.get(modalId) || 
+                                 (window as any).bootstrap.Modal.getInstance(modalElement);
+            
             if (modalInstance) {
                 modalInstance.dispose();
             }
+            
+            // Clean up our stored reference
+            this.modalInstances.delete(modalId);
+
+            // Force reset modal display and classes
+            modalElement.style.display = "none";
+            modalElement.classList.remove("show");
+            modalElement.setAttribute("aria-hidden", "true");
+            modalElement.removeAttribute("aria-modal");
+            modalElement.removeAttribute("role");
 
             const formContainer = modalElement.querySelector(
                 modalId === this.webActivityModalId

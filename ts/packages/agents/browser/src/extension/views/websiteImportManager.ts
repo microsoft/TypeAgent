@@ -10,15 +10,14 @@ import {
     ImportError,
     ImportSummary,
     ValidationResult,
-    BrowserBookmark,
-    BrowserHistoryItem,
-    ProcessedData,
     ProgressCallback,
     SUPPORTED_FILE_TYPES,
     DEFAULT_MAX_FILE_SIZE,
     DEFAULT_MAX_CONCURRENT,
     DEFAULT_CONTENT_TIMEOUT,
 } from "../interfaces/websiteImport.types";
+import { ExtensionServiceBase } from "./extensionServiceBase";
+import { createExtensionService } from "./knowledgeUtilities";
 
 /**
  * Core import logic and data processing manager
@@ -27,6 +26,11 @@ import {
 export class WebsiteImportManager {
     private progressCallbacks: Map<string, ProgressCallback> = new Map();
     private activeImports: Map<string, boolean> = new Map();
+    private extensionService: ExtensionServiceBase;
+
+    constructor() {
+        this.extensionService = createExtensionService();
+    }
 
     /**
      * Start web activity import (browser bookmarks/history)
@@ -48,92 +52,49 @@ export class WebsiteImportManager {
 
             this.activeImports.set(importId, true);
 
-            // Initialize progress tracking with counting phase
+            // Initialize progress - simplified phases
             this.updateProgress(importId, {
                 importId,
-                phase: "counting",
+                phase: "initializing",
                 totalItems: 0,
                 processedItems: 0,
                 errors: [],
             });
 
-            // Get browser data with options applied to determine actual count
-            this.updateProgress(importId, {
-                importId,
-                phase: "fetching",
-                totalItems: 0,
-                processedItems: 0,
-                errors: [],
-            });
+            // Register progress callback with service
+            const globalCallback = this.progressCallbacks.get("global");
+            if (globalCallback) {
+                this.extensionService.onImportProgress(importId, globalCallback);
+            }
 
-            const browserData = await this.getBrowserDataWithOptions(options);
-
-            // Update progress with actual count from browser data
-            this.updateProgress(importId, {
-                importId,
-                phase: "processing",
-                totalItems: browserData.length,
-                processedItems: 0,
-                errors: [],
-            });
-
-            // Preprocess browser data
-            const processedData = this.preprocessBrowserData(
-                browserData,
-                options,
-            );
-
-            // Send to service worker for further processing
-            const result = await this.sendToServiceWorker({
-                type: "importWebsiteDataWithProgress",
-                parameters: options,
-                importId,
-                totalItems: processedData.length, // Pass the actual count
-            });
+            // Use ExtensionServiceBase abstraction (works in both environments)
+            const result = await this.sendToAgentWithErrorHandling(options, importId);
 
             const duration = Date.now() - startTime;
 
             return {
                 success: true,
                 importId,
-                itemCount: processedData.length,
+                itemCount: result.itemCount || 0,
                 duration,
                 errors: [],
-                summary: {
-                    totalProcessed: processedData.length,
-                    successfullyImported: processedData.length,
-                    knowledgeExtracted: 0, // Will be updated by service worker
-                    entitiesFound: 0,
-                    topicsIdentified: 0,
-                    actionsDetected: 0,
-                },
+                summary: result.summary || this.createEmptySummary(),
             };
         } catch (error) {
             const duration = Date.now() - startTime;
-            const importError: ImportError = {
-                type: "processing",
-                message:
-                    error instanceof Error ? error.message : "Unknown error",
-                timestamp: Date.now(),
-            };
-
+            const enhancedError = this.analyzeAndEnhanceError(error, options);
+            
             return {
                 success: false,
                 importId,
                 itemCount: 0,
                 duration,
-                errors: [importError],
-                summary: {
-                    totalProcessed: 0,
-                    successfullyImported: 0,
-                    knowledgeExtracted: 0,
-                    entitiesFound: 0,
-                    topicsIdentified: 0,
-                    actionsDetected: 0,
-                },
+                errors: [enhancedError],
+                summary: this.createEmptySummary(),
             };
         } finally {
             this.activeImports.delete(importId);
+            this.cleanupProgressCallback(importId);
         }
     }
 
@@ -166,16 +127,13 @@ export class WebsiteImportManager {
                 errors: [],
             });
 
-            // Send folder import request directly to service worker
+            // Send folder import request using ExtensionServiceBase
             // The backend will handle folder enumeration and file processing
-            const result = await this.sendToServiceWorker({
-                type: "importHtmlFolder",
-                parameters: {
-                    folderPath: options.folderPath,
-                    options,
-                    importId,
-                },
-            });
+            const result = await this.extensionService.importHtmlFolder(
+                options.folderPath,
+                options,
+                importId
+            );
 
             const duration = Date.now() - startTime;
 
@@ -271,12 +229,9 @@ export class WebsiteImportManager {
         if (this.activeImports.has(importId)) {
             this.activeImports.set(importId, false);
 
-            // Send cancellation to service worker
+            // Send cancellation using ExtensionServiceBase
             try {
-                await chrome.runtime.sendMessage({
-                    type: "cancelImport",
-                    importId,
-                });
+                await this.extensionService.cancelImport(importId);
             } catch (error) {
                 console.error(`Failed to cancel import ${importId}:`, error);
             }
@@ -311,135 +266,137 @@ export class WebsiteImportManager {
     }
 
     /**
-     * Get browser data (Chrome/Edge bookmarks or history)
+     * Cross-environment agent communication with enhanced error handling
      */
-    async getBrowserData(
-        source: "chrome" | "edge",
-        type: "bookmarks" | "history",
-    ): Promise<any[]> {
+    private async sendToAgentWithErrorHandling(
+        options: ImportOptions, 
+        importId: string
+    ): Promise<ImportResult> {
         try {
-            if (type === "bookmarks") {
-                return await this.getBrowserBookmarks(source);
-            } else {
-                return await this.getBrowserHistory(source);
-            }
+            // Use ExtensionServiceBase abstraction - works in both Chrome and Electron
+            const result = await this.extensionService.importBrowserData(options, importId);
+            
+            return result;
         } catch (error) {
-            console.error(`Failed to get ${source} ${type}:`, error);
-            throw new Error(
-                `Unable to access ${source} ${type}. Please check permissions.`,
-            );
+            console.error("Agent communication failed:", error);
+            
+            // Re-throw with enhanced error analysis
+            throw error; // Error enhancement happens in analyzeAndEnhanceError
         }
     }
 
     /**
-     * Get browser data with import options applied
+     * Enhanced error analysis with SQLite-specific guidance
      */
-    async getBrowserDataWithOptions(options: ImportOptions): Promise<any[]> {
-        try {
-            let data: any[];
-
-            if (options.type === "bookmarks") {
-                const bookmarks =
-                    await this.getBrowserBookmarksWithOptions(options);
-                data = bookmarks;
-            } else {
-                const history =
-                    await this.getBrowserHistoryWithOptions(options);
-                data = history;
-            }
-
-            // Apply limit if specified
-            if (options.limit && options.limit > 0) {
-                data = data.slice(0, options.limit);
-            }
-
-            return data;
-        } catch (error) {
-            console.error(
-                `Failed to get ${options.source} ${options.type} with options:`,
-                error,
-            );
-            throw error;
+    private analyzeAndEnhanceError(error: any, options: ImportOptions): ImportError {
+        const message = error?.message?.toLowerCase() || '';
+        const browserName = options.source === 'chrome' ? 'Chrome' : 'Microsoft Edge';
+        
+        // SQLite database locked error (most common)
+        if (message.includes('database is locked') || 
+            message.includes('sqlite_busy') ||
+            message.includes('cannot access')) {
+            return {
+                type: 'processing',
+                message: `Cannot access ${browserName} ${options.type} while the browser is running.\n\nPlease:\n1. Close all ${browserName} windows completely\n2. Wait a few seconds for the browser to fully exit\n3. Try the import again\n\nIf the problem persists, restart your computer and try again.`,
+                timestamp: Date.now(),
+            };
         }
+        
+        // better-sqlite3 binary compatibility
+        if (message.includes('not a valid sqlite database') || 
+            message.includes('wrong architecture') ||
+            message.includes('module not found') ||
+            message.includes('better-sqlite3')) {
+            return {
+                type: 'processing',
+                message: `Database driver compatibility issue detected.\n\nThe SQLite driver may need to be rebuilt for your system architecture.\n\nRun \`pnpm rebuild\` to rebuild the driver, then \`pnpm install\` to install it.`,
+                timestamp: Date.now(),
+            };
+        }
+        
+        // File not found - browser not installed or different profile
+        if (message.includes('no such file') || 
+            message.includes('enoent') ||
+            message.includes('not found')) {
+            return {
+                type: 'validation',
+                message: `${browserName} data files not found.\n\nThis might mean:\n• ${browserName} is not installed on this system\n• ${browserName} uses a non-standard profile location\n• No ${options.type} data exists for this browser\n\nPlease verify ${browserName} is installed and has ${options.type} data to import.`,
+                timestamp: Date.now(),
+            };
+        }
+        
+        // Permission denied
+        if (message.includes('permission denied') || 
+            message.includes('eacces')) {
+            return {
+                type: 'validation',
+                message: `Permission denied accessing ${browserName} data.\n\nPlease ensure:\n• The application has permission to read browser data\n• ${browserName} is not running with elevated privileges\n• Your user account has access to the browser data directory`,
+                timestamp: Date.now(),
+            };
+        }
+        
+        // Browser data corruption
+        if (message.includes('malformed') || 
+            message.includes('corrupt')) {
+            return {
+                type: 'processing',
+                message: `${browserName} data files appear to be corrupted.\n\nTry:\n• Restarting ${browserName}\n• Running the browser's built-in repair tools\n• Importing again after the browser restart`,
+                timestamp: Date.now(),
+            };
+        }
+        
+        // Extension/service communication issues
+        if (message.includes('extension') || 
+            message.includes('service worker') ||
+            message.includes('runtime') ||
+            message.includes('electronAPI')) {
+            return {
+                type: 'processing',
+                message: `Communication error with the import service.\n\nTry:\n• Refreshing this page\n• Restarting the browser/application\n• Checking if the browser extension is enabled`,
+                timestamp: Date.now(),
+            };
+        }
+        
+        // Generic error with context
+        return {
+            type: 'processing',
+            message: error?.message || 'An unexpected error occurred during import',
+            timestamp: Date.now(),
+        };
     }
 
     /**
-     * Get bookmarks with filtering options
+     * Clean up progress callback listeners
      */
-    private async getBrowserBookmarksWithOptions(
-        options: ImportOptions,
-    ): Promise<BrowserBookmark[]> {
-        try {
-            if (typeof chrome !== "undefined" && chrome.bookmarks) {
-                const bookmarks = await chrome.bookmarks.getTree();
-                const flattened = this.flattenBookmarks(
-                    bookmarks,
-                    options.folder,
-                );
-                return flattened;
+    private cleanupProgressCallback(importId: string): void {
+        const callback = this.progressCallbacks.get(importId);
+        if (callback) {
+            // Clean up environment-specific listeners
+            if ((callback as any)._messageListener) {
+                chrome?.runtime?.onMessage?.removeListener((callback as any)._messageListener);
             }
-        } catch (error) {
-            console.error("Failed to get bookmarks:", error);
-            if (error instanceof Error) {
-                if (error.message.includes("permissions")) {
-                    throw new Error(
-                        "Permission denied. Please enable bookmark access in extension settings.",
-                    );
+            if ((callback as any)._progressHandler && (callback as any)._importId) {
+                // Electron cleanup
+                if ((window as any).electronAPI?.unregisterImportProgressCallback) {
+                    (window as any).electronAPI.unregisterImportProgressCallback((callback as any)._importId);
                 }
-                throw new Error(
-                    `Failed to access ${options.source} bookmarks: ${error.message}`,
-                );
             }
+            this.progressCallbacks.delete(importId);
         }
-        throw new Error(
-            `${options.source} bookmarks not available or permission denied.`,
-        );
     }
 
-    /**
-     * Get history with date filtering options
-     */
-    private async getBrowserHistoryWithOptions(
-        options: ImportOptions,
-    ): Promise<BrowserHistoryItem[]> {
-        try {
-            if (typeof chrome !== "undefined" && chrome.history) {
-                const daysBack = options.days || 30;
-                const startTime = Date.now() - daysBack * 24 * 60 * 60 * 1000;
-                const maxResults = options.limit || 10000;
-
-                const historyItems = await chrome.history.search({
-                    text: "",
-                    startTime: startTime,
-                    maxResults: Math.min(maxResults, 100000), // Chrome API limit
-                });
-
-                return historyItems.map((item) => ({
-                    id: item.id || "",
-                    url: item.url || "",
-                    title: item.title,
-                    visitCount: item.visitCount,
-                    typedCount: item.typedCount,
-                    lastVisitTime: item.lastVisitTime,
-                }));
-            }
-        } catch (error) {
-            console.error("Failed to get history:", error);
-            if (error instanceof Error) {
-                if (error.message.includes("permissions")) {
-                    throw new Error(
-                        "Permission denied. Please enable history access in extension settings.",
-                    );
-                }
-                throw new Error(
-                    `Failed to access ${options.source} history: ${error.message}`,
-                );
-            }
-        }
-        throw new Error(
-            `${options.source} history not available or permission denied.`,
-        );
+    private createEmptySummary(): ImportSummary {
+        return {
+            totalProcessed: 0,
+            successfullyImported: 0,
+            knowledgeExtracted: 0,
+            entitiesFound: 0,
+            topicsIdentified: 0,
+            actionsDetected: 0,
+        };
     }
+
 
     /**
      * Validate import options
@@ -597,62 +554,6 @@ export class WebsiteImportManager {
         };
     }
 
-    /**
-     * Preprocess browser data before sending to service worker
-     */
-    preprocessBrowserData(
-        data: any[],
-        options: ImportOptions,
-    ): ProcessedData[] {
-        const results: ProcessedData[] = [];
-
-        for (const item of data) {
-            try {
-                let processedItem: ProcessedData;
-
-                if (options.type === "bookmarks") {
-                    const bookmark = item as BrowserBookmark;
-                    processedItem = {
-                        url: bookmark.url,
-                        title: bookmark.title,
-                        domain: this.extractDomain(bookmark.url),
-                        source: "bookmarks",
-                        lastVisited: bookmark.dateAdded
-                            ? new Date(bookmark.dateAdded).toISOString()
-                            : undefined,
-                        metadata: {
-                            id: bookmark.id,
-                            parentId: bookmark.parentId,
-                            index: bookmark.index,
-                        },
-                    };
-                } else {
-                    const historyItem = item as BrowserHistoryItem;
-                    processedItem = {
-                        url: historyItem.url,
-                        title: historyItem.title || "",
-                        domain: this.extractDomain(historyItem.url),
-                        source: "history",
-                        visitCount: historyItem.visitCount,
-                        lastVisited: historyItem.lastVisitTime
-                            ? new Date(historyItem.lastVisitTime).toISOString()
-                            : undefined,
-                        metadata: {
-                            id: historyItem.id,
-                            typedCount: historyItem.typedCount,
-                        },
-                    };
-                }
-
-                results.push(processedItem);
-            } catch (error) {
-                console.error("Failed to preprocess item:", error);
-                // Continue with other items
-            }
-        }
-
-        return results;
-    }
 
     // Private helper methods
 
@@ -671,136 +572,4 @@ export class WebsiteImportManager {
         }
     }
 
-    private extractDomain(url: string): string {
-        try {
-            return new URL(url).hostname;
-        } catch {
-            return "unknown";
-        }
-    }
-
-    private async getBrowserBookmarks(
-        source: "chrome" | "edge",
-    ): Promise<BrowserBookmark[]> {
-        try {
-            if (typeof chrome !== "undefined" && chrome.bookmarks) {
-                const bookmarks = await chrome.bookmarks.getTree();
-                const flattened = this.flattenBookmarks(bookmarks);
-
-                // Apply folder filtering if specified in current options
-                // This would be enhanced to accept folder parameter
-                return flattened;
-            }
-        } catch (error) {
-            console.error("Failed to get bookmarks:", error);
-            if (error instanceof Error) {
-                if (error.message.includes("permissions")) {
-                    throw new Error(
-                        "Permission denied. Please enable bookmark access in extension settings.",
-                    );
-                }
-                throw new Error(
-                    `Failed to access ${source} bookmarks: ${error.message}`,
-                );
-            }
-        }
-        throw new Error(
-            `${source} bookmarks not available or permission denied.`,
-        );
-    }
-
-    private async getBrowserHistory(
-        source: "chrome" | "edge",
-    ): Promise<BrowserHistoryItem[]> {
-        try {
-            if (typeof chrome !== "undefined" && chrome.history) {
-                // Default to last 30 days if not specified
-                const daysBack = 30;
-                const startTime = Date.now() - daysBack * 24 * 60 * 60 * 1000;
-
-                const historyItems = await chrome.history.search({
-                    text: "",
-                    startTime: startTime,
-                    maxResults: 10000,
-                });
-
-                return historyItems.map((item) => ({
-                    id: item.id || "",
-                    url: item.url || "",
-                    title: item.title,
-                    visitCount: item.visitCount,
-                    typedCount: item.typedCount,
-                    lastVisitTime: item.lastVisitTime,
-                }));
-            }
-        } catch (error) {
-            console.error("Failed to get history:", error);
-            if (error instanceof Error) {
-                if (error.message.includes("permissions")) {
-                    throw new Error(
-                        "Permission denied. Please enable history access in extension settings.",
-                    );
-                }
-                throw new Error(
-                    `Failed to access ${source} history: ${error.message}`,
-                );
-            }
-        }
-        throw new Error(
-            `${source} history not available or permission denied.`,
-        );
-    }
-
-    private flattenBookmarks(
-        bookmarks: chrome.bookmarks.BookmarkTreeNode[],
-        folderFilter?: string,
-    ): BrowserBookmark[] {
-        const result: BrowserBookmark[] = [];
-
-        const flatten = (
-            nodes: chrome.bookmarks.BookmarkTreeNode[],
-            currentPath: string = "",
-        ) => {
-            for (const node of nodes) {
-                const nodePath = currentPath
-                    ? `${currentPath}/${node.title}`
-                    : node.title;
-
-                if (node.url) {
-                    // Only include if folder filter matches or no filter specified
-                    if (
-                        !folderFilter ||
-                        nodePath
-                            .toLowerCase()
-                            .includes(folderFilter.toLowerCase())
-                    ) {
-                        result.push({
-                            id: node.id,
-                            title: node.title,
-                            url: node.url,
-                            dateAdded: node.dateAdded,
-                            parentId: node.parentId,
-                            index: node.index,
-                        });
-                    }
-                }
-
-                if (node.children) {
-                    flatten(node.children, nodePath);
-                }
-            }
-        };
-
-        flatten(bookmarks);
-        return result;
-    }
-
-    private async sendToServiceWorker(message: any): Promise<any> {
-        try {
-            return await chrome.runtime.sendMessage(message);
-        } catch (error) {
-            console.error("Failed to send message to service worker:", error);
-            throw new Error("Failed to communicate with service worker");
-        }
-    }
 }
