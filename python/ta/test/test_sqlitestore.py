@@ -100,8 +100,9 @@ def test_sqlite_storage_provider_semantic_ref_collection(temp_db_path):
 def test_default_serializer_roundtrip():
     serializer = DefaultSerializer(DummyMessage)
     msg = DummyMessage(["test"])
-    s = serializer.serialize(msg)
-    msg2 = serializer.deserialize(s)
+    json_obj = serializer.serialize(msg)
+    assert isinstance(json_obj, dict)  # Should return a JSON object, not a string
+    msg2 = serializer.deserialize(json_obj)
     assert isinstance(msg2, DummyMessage)
     assert msg2.text_chunks == ["test"]
 

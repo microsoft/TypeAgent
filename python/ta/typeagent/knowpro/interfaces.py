@@ -814,13 +814,13 @@ class ISemanticRefCollection(ICollection[SemanticRef, SemanticRefOrdinal], Proto
 
 
 # This is an ABC, not a Protocol, because some classes have serialize()/deserialize()
-# but with the wrong signature (using dicts instead of strings).
+# but with the wrong signature (using different types).
 class JsonSerializer[T](ABC):
     @abstractmethod
-    def serialize(self, value: T) -> str: ...
+    def serialize(self, value: T) -> dict[str, Any] | list[Any]: ...
 
     @abstractmethod
-    def deserialize(self, data: str) -> T: ...
+    def deserialize(self, data: dict[str, Any] | list[Any]) -> T: ...
 
 
 class IStorageProvider(Protocol):

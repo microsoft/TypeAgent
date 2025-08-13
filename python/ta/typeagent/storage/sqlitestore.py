@@ -4,6 +4,7 @@
 import json
 import sqlite3
 import typing
+from typing import Any
 
 from ..knowpro.storage import MemoryStorageProvider
 from ..knowpro import interfaces
@@ -29,11 +30,11 @@ class DefaultSerializer[TMessage: interfaces.IMessage](interfaces.JsonSerializer
     def __init__(self, cls: type[TMessage]):
         self.cls = cls
 
-    def serialize(self, value: TMessage) -> str:
-        return json.dumps(serialization.serialize_object(value))
+    def serialize(self, value: TMessage) -> dict[str, Any] | list[Any]:
+        return serialization.serialize_object(value)
 
-    def deserialize(self, data: str) -> TMessage:
-        return serialization.deserialize_object(self.cls, json.loads(data))
+    def deserialize(self, data: dict[str, Any] | list[Any]) -> TMessage:
+        return serialization.deserialize_object(self.cls, data)
 
 
 class SqliteMessageCollection[TMessage: interfaces.IMessage](
@@ -59,7 +60,8 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
         cursor = self.db.cursor()
         cursor.execute("SELECT msgdata FROM Messages")
         for row in cursor:
-            yield self._deserialize(row[0])
+            json_data = json.loads(row[0])
+            yield self._deserialize(json_data)
 
     @typing.overload
     def __getitem__(self, arg: int) -> TMessage: ...
@@ -74,7 +76,8 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
             cursor.execute("SELECT msgdata FROM Messages WHERE id = ?", (arg,))
             row = cursor.fetchone()
             if row:
-                return self._deserialize(row[0])
+                json_data = json.loads(row[0])
+                return self._deserialize(json_data)
             raise IndexError("Message not found")
         elif isinstance(arg, list):
             # TODO: Do we really want to support this?
@@ -91,14 +94,15 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
                 (start, stop),
             )
             rows = cursor.fetchall()
-            res = [self._deserialize(row[0]) for row in rows]
+            res = [self._deserialize(json.loads(row[0])) for row in rows]
             return res
         else:
             raise TypeError("Index must be an int, list or slice")
 
     def append(self, item: TMessage) -> None:
         cursor = self.db.cursor()
-        serialized_message = self._serialize(item)
+        json_obj = self._serialize(item)
+        serialized_message = json.dumps(json_obj)
         cursor.execute(
             "INSERT INTO Messages (id, msgdata) VALUES (?, ?)",
             (len(self), serialized_message),
@@ -108,7 +112,8 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
         self.db.commit()
         cursor = self.db.cursor()
         for ord, item in enumerate(items, len(self)):
-            serialized_message = self._serialize(item)
+            json_obj = self._serialize(item)
+            serialized_message = json.dumps(json_obj)
             cursor.execute(
                 "INSERT INTO Messages (id, msgdata) VALUES (?, ?)",
                 (ord, serialized_message),
@@ -120,11 +125,11 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
     def __init__(self, db: sqlite3.Connection):
         self.db = db
 
-    def _serialize(self, sem_ref: interfaces.SemanticRef) -> str:
-        return json.dumps(sem_ref.serialize())
+    def _serialize(self, sem_ref: interfaces.SemanticRef) -> dict[str, Any]:
+        return sem_ref.serialize()  # type: ignore[return-value]
 
-    def _deserialize(self, data: str) -> interfaces.SemanticRef:
-        return interfaces.SemanticRef.deserialize(json.loads(data))
+    def _deserialize(self, data: dict[str, Any]) -> interfaces.SemanticRef:
+        return interfaces.SemanticRef.deserialize(data)  # type: ignore[arg-type]
 
     @property
     def is_persistent(self) -> bool:
@@ -139,7 +144,8 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
         cursor = self.db.cursor()
         cursor.execute("SELECT srdata FROM SemanticRefs")
         for row in cursor:
-            yield self._deserialize(row[0])
+            json_obj = json.loads(row[0])
+            yield self._deserialize(json_obj)
 
     # NOTE: Indexing and slicing are weird since unique ids start at 1.
     @typing.overload
@@ -157,7 +163,8 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
             cursor.execute("SELECT srdata FROM SemanticRefs WHERE id = ?", (arg,))
             row = cursor.fetchone()
             if row:
-                return self._deserialize(row[0])
+                json_obj = json.loads(row[0])
+                return self._deserialize(json_obj)
             raise IndexError("SemanticRef not found")
         elif isinstance(arg, list):
             # TODO: Do we really want to support this?
@@ -173,13 +180,14 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
                 "SELECT srdata FROM SemanticRefs WHERE id >= ? AND id < ?",
                 (start, stop),
             )
-            return [self._deserialize(row[0]) for row in cursor.fetchall()]
+            return [self._deserialize(json.loads(row[0])) for row in cursor.fetchall()]
         else:
             raise TypeError("Index must be an int, list or slice")
 
     def append(self, item: interfaces.SemanticRef) -> None:
         cursor = self.db.cursor()
-        serialized_message = self._serialize(item)
+        json_obj = self._serialize(item)
+        serialized_message = json.dumps(json_obj)
         cursor.execute(
             "INSERT INTO SemanticRefs (id, srdata) VALUES (?, ?)",
             (item.semantic_ref_ordinal, serialized_message),
@@ -189,7 +197,8 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
     def extend(self, items: typing.Iterable[interfaces.SemanticRef]) -> None:
         cursor = self.db.cursor()
         for item in items:
-            serialized_message = self._serialize(item)
+            json_obj = self._serialize(item)
+            serialized_message = json.dumps(json_obj)
             cursor.execute(
                 "INSERT INTO SemanticRefs (id, srdata) VALUES (?, ?)",
                 (item.semantic_ref_ordinal, serialized_message),
