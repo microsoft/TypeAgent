@@ -21,7 +21,7 @@ from .interfaces import (
 
 
 class Collection[T, TOrdinal: int](ICollection[T, TOrdinal]):
-    """A generic collection class."""
+    """A generic in-memory (non-persistent) collection class."""
 
     def __init__(self, items: list[T] | None = None):
         self.items: list[T] = items or []
@@ -32,6 +32,15 @@ class Collection[T, TOrdinal: int](ICollection[T, TOrdinal]):
     def __iter__(self) -> Iterator[T]:
         """Return an iterator over the collection."""
         return iter(self.items)
+
+    def __aiter__(self):
+        """Return an async iterator over the collection."""
+        return self._async_iterator()
+
+    async def _async_iterator(self):
+        """Async generator that yields items from the collection."""
+        for item in self.items:
+            yield item
 
     async def get_item(self, arg: int) -> T:
         """Retrieve an item by its ordinal."""
