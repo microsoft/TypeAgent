@@ -30,6 +30,24 @@
 - Always import VTT, helper to convert podcast to VTT format
 - Rename "Ordinal" to "Id"
 
+## From 8/13/2025 meeting
+
+- Keep "Conversation" as the top-level name; changing it isn't worth it
+- Get rid of event handling API, move this into the front-line extractor
+  - batching is up to the extractor
+  - every batch is processed completely inside one transaction
+  - extractor gets an exception when the transaction fails or is rolled back
+- Move to a toplevel library (structured_rag or python?) and update
+  toplevel README.md to advertise that.
+- If pydantic AI doesn't pan out, vendor TypeChat
+- See images of database schema and API proposals
+- Example data types for which we ship extractors:
+  - VTT (for Teams, YouTube, podcasts); podcast examples converted by unpublished example
+  - Email (MIME messages); GMail example via adapter
+  - Markdown; HTML via Markdown conversion
+- Each of these has a textual format; it's the user's responsibility to provide that format
+- Everything else is unofficial and undocumented
+
 # Other stuff
 
 ## Eval-based improvements
