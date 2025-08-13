@@ -547,6 +547,20 @@ async function initialize() {
             // Route message through browser IPC to TypeAgent backend
             const browserIpc = BrowserAgentIpc.getinstance();
 
+            // Check if this is a long-running import operation
+            // Note: ExtensionServiceBase sends with 'type', but it might also come as 'method'
+            const methodName = message.method || message.type;
+            const isImportOperation =
+                methodName === "importWebsiteDataWithProgress" ||
+                methodName === "importHtmlFolder";
+
+            // For import operations, use a longer timeout and handle differently
+            const timeout = isImportOperation ? 600000 : 30000; // 10 minutes for imports, 30 seconds for others
+
+            console.log(
+                `[browser-extension-message] Processing: ${methodName}, isImport: ${isImportOperation}, timeout: ${timeout}ms`,
+            );
+
             // Create a promise to wait for the WebSocket response
             return new Promise((resolve, reject) => {
                 const messageId = Date.now().toString();
@@ -593,7 +607,7 @@ async function initialize() {
                     reject(
                         new Error(`Extension message timeout - ${messageInfo}`),
                     );
-                }, 30000);
+                }, timeout);
             });
         } catch (error) {
             return { error: (error as Error).message };
