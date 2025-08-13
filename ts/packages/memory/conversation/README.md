@@ -25,7 +25,32 @@ See [knowpro](../../knowPro/README.md) for details on how memories are indexed a
 
 ## Conversation Memory
 
+See example code in [knowproConversation.ts](../../../examples/chat/src/memory/knowproConversation.ts)
+
+```
+import * as cm from "conversation-memory";
+
+memory = cm.createConversationMemory(
+            {
+                dirPath,
+                baseFileName,
+            },
+            createNew,
+        );
+// Add a memory
+message = new cm.ConversationMessage(memoryText);
+await memory.addMessage(message);
+
+// Answer a question using memory
+answer = memory.getAnswerFromLanguage("Your question")
+
+// Search
+results = await memory.searchWithLanguage("Your question")
+```
+
 ## Documents and Transcripts
+
+See example code in [knowproDoc.ts](../../../examples/chat/src/memory/knowproDoc.ts)
 
 A [DocMemory](../conversation/src/docMemory.ts) is a collection of Document Parts.
 
@@ -37,18 +62,24 @@ You can **import** an existing text file as a DocMemory. The importer infers the
 - \*.txt (raw text)
 
 ```
-  memory = DocMemory.importFromTextFile(textFilePath, ...);
-  await memory.buildIndex();
-  await memory.writeToFile(...);
+import * as cm from "conversation-memory";
 
-  memory.settings.useScopedSearch = true;
-  await memory.getAnswerFromLanguage("Summarize the section on XX...");
-  await memory.getAnswerFromLanguage("List all books in the section named YYY");
+memory = cm.DocMemory.importFromTextFile(textFilePath, ...);
+await memory.buildIndex();
+await memory.writeToFile(...);
+
+memory.settings.useScopedSearch = true;
+await memory.getAnswerFromLanguage("Summarize the section on XX...");
+await memory.getAnswerFromLanguage("List all books in the section named YYY");
 ```
 
 ## Podcasts
 
+See example code in [knowproPodcast.ts](../../../examples/chat/src/memory/knowproPodcast.ts)
+
 ## Email
+
+See example code in [knowproEmail.ts](../../../examples/chat/src/memory/knowproEmail.ts)
 
 ## Trademarks
 
