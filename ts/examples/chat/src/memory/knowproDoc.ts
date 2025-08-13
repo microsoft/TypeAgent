@@ -81,7 +81,7 @@ export async function createKnowproDocMemoryCommands(
             context.printer.writeError(`${namedArgs.filePath} not found`);
             return;
         }
-        context.docMemory = await cm.importTextFile(
+        context.docMemory = await cm.importDocMemoryFromTextFile(
             namedArgs.filePath,
             namedArgs.maxCharsPerChunk,
             undefined,

@@ -17,13 +17,15 @@ New memories are analyzed and salient knowledge such as entities, actions and to
 
 Memories can be searched using natural language or knowpro search expressions. You can search memory for discovered knowledge such as entities of a particular type.
 
-Memories can also answer questions, return summaries, analysis, lists and so on using natural language.
+Memories can also **answer** questions, return summaries, analysis, lists and so on. You can ask for answers using natural language.
 
 Memories can be both persisted and loaded on demand.
 
 See [knowpro](../../knowPro/README.md) for details on how memories are indexed and searched and how retrieved information is turned into human readable answers.
 
-## Documents
+## Conversation Memory
+
+## Documents and Transcripts
 
 A [DocMemory](../conversation/src/docMemory.ts) is a collection of Document Parts.
 
@@ -34,8 +36,19 @@ You can **import** an existing text file as a DocMemory. The importer infers the
 - \*.html/htm (html)
 - \*.txt (raw text)
 
-`
-memory = DocMemory.importFromTextFile(textFilePath, ...);`
+```
+  memory = DocMemory.importFromTextFile(textFilePath, ...);
+  await memory.buildIndex();
+  await memory.writeToFile(...);
+
+  memory.settings.useScopedSearch = true;
+  await memory.getAnswerFromLanguage("Summarize the section on XX...");
+  await memory.getAnswerFromLanguage("List all books in the section named YYY");
+```
+
+## Podcasts
+
+## Email
 
 ## Trademarks
 

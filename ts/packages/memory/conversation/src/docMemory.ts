@@ -12,7 +12,7 @@ import {
 } from "./memory.js";
 import { TypeChatLanguageModel } from "typechat";
 import { fileURLToPath } from "url";
-import { importTextFile } from "./docImport.js";
+import { importDocMemoryFromTextFile } from "./docImport.js";
 
 export class DocPartMeta extends MessageMetadata {
     constructor(public sourceUrl?: string | undefined) {
@@ -76,7 +76,7 @@ export function createTextMemorySettings(
  *
  * Doc memories are mutable.
  *
- * You can import text files like .vtt, .html, .md etc as DocMemories using the {@link importTextFile}
+ * You can import text files like .vtt, .html, .md etc as DocMemories using the {@link importDocMemoryFromTextFile}
  *
  * @see Memory base class for APIs
  * @see DocPart
@@ -419,7 +419,7 @@ export class DocMemory
         docName?: string,
         settings?: DocMemorySettings,
     ) {
-        return importTextFile(docFilePath, maxCharsPerChunk);
+        return importDocMemoryFromTextFile(docFilePath, maxCharsPerChunk);
     }
 }
 

@@ -32,7 +32,7 @@ import * as kp from "knowpro";
  * @param {DocMemorySettings} settings (Optional) memory settings
  * @returns {DocMemory} new document memory
  */
-export async function importTextFile(
+export async function importDocMemoryFromTextFile(
     docFilePath: string,
     maxCharsPerChunk: number,
     docName?: string,
@@ -59,7 +59,12 @@ export async function importTextFile(
             type = "md";
             break;
     }
-    let memory = await importText(docText, type, maxCharsPerChunk, sourceUrl);
+    let memory = await importDocMemoryFromText(
+        docText,
+        type,
+        maxCharsPerChunk,
+        sourceUrl,
+    );
     return memory;
 }
 
@@ -75,7 +80,7 @@ export type DocType = "vtt" | "md" | "html" | "txt";
  * @param {DocMemorySettings} settings (Optional) memory settings
  * @returns {DocMemory} new document memory
  */
-export async function importText(
+export async function importDocMemoryFromText(
     docText: string,
     type: DocType,
     maxCharsPerChunk: number,
