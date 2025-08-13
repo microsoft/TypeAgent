@@ -21,15 +21,16 @@ import * as kp from "knowpro";
  * Import a text document as DocMemory
  * You must call buildIndex before you can query the memory
  *
- * Uses file extensions to determine how to import.
+ * Uses file extensions to determine how to import the text files.
  *  default: treat as text
- *  .html => parse html
+ *  .html, .htm => parse html
  *  .vtt => parse vtt transcript
- * @param docFilePath
- * @param maxCharsPerChunk
- * @param docName
- * @param settings
- * @returns
+ *
+ * @param docFilePath file path to file to import
+ * @param maxCharsPerChunk Chunks document into DocParts
+ * @param docName (Optional) Document name
+ * @param {DocMemorySettings} settings (Optional) memory settings
+ * @returns {DocMemory} new document memory
  */
 export async function importTextFile(
     docFilePath: string,
@@ -42,13 +43,52 @@ export async function importTextFile(
     const ext = path.extname(docFilePath);
 
     const sourceUrl = filePathToUrlString(docFilePath);
-    let parts: DocPart[];
+    let type: DocType;
     switch (ext) {
         default:
-            parts = docPartsFromText(docText, maxCharsPerChunk, sourceUrl);
+            type = "txt";
             break;
         case ".html":
         case ".htm":
+            type = "html";
+            break;
+        case ".vtt":
+            type = "vtt";
+            break;
+        case ".md":
+            type = "md";
+            break;
+    }
+    let memory = await importText(docText, type, maxCharsPerChunk, sourceUrl);
+    return memory;
+}
+
+export type DocType = "vtt" | "md" | "html" | "txt";
+/**
+ * Import a text as DocMemory
+ * You must call buildIndex before you can query the memory
+ *
+ * @param docFilePath file path to file to import
+ * @param type Type of text content
+ * @param maxCharsPerChunk Chunks document into DocParts
+ * @param docName (Optional) Document name
+ * @param {DocMemorySettings} settings (Optional) memory settings
+ * @returns {DocMemory} new document memory
+ */
+export async function importText(
+    docText: string,
+    type: DocType,
+    maxCharsPerChunk: number,
+    sourceUrl?: string,
+    docName?: string,
+    settings?: DocMemorySettings,
+): Promise<DocMemory> {
+    let parts: DocPart[];
+    switch (type) {
+        default:
+            parts = docPartsFromText(docText, maxCharsPerChunk, sourceUrl);
+            break;
+        case "html":
             parts = docPartsFromHtml(
                 docText,
                 false,
@@ -56,7 +96,7 @@ export async function importTextFile(
                 sourceUrl,
             );
             break;
-        case ".vtt":
+        case "vtt":
             parts = docPartsFromVtt(docText, sourceUrl);
             if (parts.length > 0) {
                 parts = mergeDocParts(
@@ -66,7 +106,7 @@ export async function importTextFile(
                 );
             }
             break;
-        case ".md":
+        case "md":
             parts = docPartsFromMarkdown(docText, maxCharsPerChunk, sourceUrl);
             break;
     }

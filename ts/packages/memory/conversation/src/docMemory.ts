@@ -12,6 +12,7 @@ import {
 } from "./memory.js";
 import { TypeChatLanguageModel } from "typechat";
 import { fileURLToPath } from "url";
+import { importTextFile } from "./docImport.js";
 
 export class DocPartMeta extends MessageMetadata {
     constructor(public sourceUrl?: string | undefined) {
@@ -20,8 +21,7 @@ export class DocPartMeta extends MessageMetadata {
 }
 
 /**
- * A part of a document.
- * Use tags to annotate headings, etc.
+ * The text of a document is split into document parts
  */
 export class DocPart extends Message<DocPartMeta> {
     constructor(
@@ -38,6 +38,13 @@ export class DocPart extends Message<DocPartMeta> {
     }
 }
 
+/**
+ * The state of indexing a document.
+ * Captured state that allows the document to be indexed incrementally.
+ * Can also capture state the allows indexing to resume in case of failure.
+ *
+ * This object should typically be opaque to the caller, but is useful for displaying status etc.
+ */
 export interface DocIndexingState {
     lastMessageOrdinal: number;
     lastSemanticRefOrdinal: number;
@@ -46,6 +53,12 @@ export interface DocIndexingState {
 
 export interface DocMemorySettings extends MemorySettings {}
 
+/**
+ * Create settings for text memory.
+ * @param embeddingCacheSize Default size of the embedding cache.
+ * @param getPersistentCache Function to retrieve the persistent cache.
+ * @returns Memory settings object.
+ */
 export function createTextMemorySettings(
     embeddingCacheSize = 64,
     getPersistentCache?: () => kpLib.TextEmbeddingCache | undefined,
@@ -55,6 +68,19 @@ export function createTextMemorySettings(
     };
 }
 
+/**
+ * A DocMemory is a collection of {@link DocPart}.
+ * You can search document memories and generate answers like any other memory:
+ * - using natural language
+ * - using direct queries
+ *
+ * Doc memories are mutable.
+ *
+ * You can import text files like .vtt, .html, .md etc as DocMemories using the {@link importTextFile}
+ *
+ * @see Memory base class for APIs
+ * @see DocPart
+ */
 export class DocMemory
     extends Memory<DocMemorySettings, DocPart>
     implements kp.IConversation
@@ -100,6 +126,11 @@ export class DocMemory
         return this;
     }
 
+    /**
+     * Build a new index for this document memory. The index uses all available document parts
+     * @param {kp.IndexingEventHandlers} eventHandler
+     * @returns
+     */
     public async buildIndex(
         eventHandler?: kp.IndexingEventHandlers,
     ): Promise<kp.IndexingResults> {
@@ -117,6 +148,13 @@ export class DocMemory
         }
     }
 
+    /**
+     * Index any new document parts added to the memory.
+     * You can also use this method to resume indexing in case of failure.
+     * @param {kp.IndexingEventHandlers} eventHandler
+     * @returns {IndexingState} How much progress was made during indexing. Sometimes, network or LLM errors
+     * will cause indexing to pause and return indexing state.
+     */
     public async addToIndex(
         eventHandler?: kp.IndexingEventHandlers,
     ): Promise<kp.IndexingResults> {
@@ -141,6 +179,12 @@ export class DocMemory
         }
     }
 
+    /**
+     * Dynamically add a new DocPart to the document index
+     * @param item
+     * @param {kp.IndexingEventHandlers} eventHandler
+     * @returns
+     */
     public async addItemToIndex(
         item: DocPart,
         eventHandler?: kp.IndexingEventHandlers,
@@ -164,6 +208,13 @@ export class DocMemory
         }
     }
 
+    /**
+     * If a document part changed, will dynamically update the index to reflect the new document part
+     * @param messageOrdinal
+     * @param updatedItem
+     * @param eventHandler
+     * @returns
+     */
     public async updateItemInIndex(
         messageOrdinal: number,
         updatedItem: DocPart,
@@ -239,6 +290,10 @@ export class DocMemory
         this.indexingState.lastIndexed = new Date();
     }
 
+    /**
+     * Serialize the memory into a transferable JSON blob
+     * @returns
+     */
     public async serialize(): Promise<DocMemoryData> {
         const data: DocMemoryData = {
             nameTag: this.nameTag,
@@ -254,6 +309,10 @@ export class DocMemory
         return data;
     }
 
+    /**
+     * Deserialize memory from a JSON blob
+     * @param docMemoryData
+     */
     public async deserialize(docMemoryData: DocMemoryData): Promise<void> {
         this.nameTag = docMemoryData.nameTag;
         const docParts = docMemoryData.messages.map((m) => {
@@ -302,6 +361,12 @@ export class DocMemory
         );
     }
 
+    /**
+     * Write this memory to files.
+     * Uses the 2 file format for knowpro: a JSON data file and an embeddings file
+     * @param dirPath
+     * @param baseFileName
+     */
     public async writeToFile(
         dirPath: string,
         baseFileName: string,
@@ -310,6 +375,13 @@ export class DocMemory
         await kp.writeConversationDataToFile(data, dirPath, baseFileName);
     }
 
+    /**
+     * Read this memory from a file. The file must have been written using {@link writeToFile}
+     * @param dirPath
+     * @param baseFileName
+     * @param settings
+     * @returns
+     */
     public static async readFromFile(
         dirPath: string,
         baseFileName: string,
@@ -326,6 +398,28 @@ export class DocMemory
             docMemory.deserialize(data);
         }
         return docMemory;
+    }
+
+    /**
+     * Import a text file as a document memory
+     * Supported formats:
+     *   .vtt
+     *   .md
+     *   .html/htm
+     *   .txt
+     * @param docFilePath
+     * @param maxCharsPerChunk
+     * @param docName
+     * @param settings
+     * @returns
+     */
+    public async importFromTextFile(
+        docFilePath: string,
+        maxCharsPerChunk: number,
+        docName?: string,
+        settings?: DocMemorySettings,
+    ) {
+        return importTextFile(docFilePath, maxCharsPerChunk);
     }
 }
 
