@@ -273,12 +273,14 @@ export class WebsiteImportUI {
                     progress.currentItem.length > 50
                         ? progress.currentItem.substring(0, 50) + "..."
                         : progress.currentItem;
-                
+
                 // If currentItem contains percentage or detailed info, use it as the main message
-                if (truncatedItem.includes('%') || 
-                    truncatedItem.includes('Fetching content') ||
-                    truncatedItem.includes('Processing') ||
-                    truncatedItem.includes('Extracting')) {
+                if (
+                    truncatedItem.includes("%") ||
+                    truncatedItem.includes("Fetching content") ||
+                    truncatedItem.includes("Processing") ||
+                    truncatedItem.includes("Extracting")
+                ) {
                     newMessage = truncatedItem;
                 } else {
                     // Otherwise append as additional context
@@ -1149,15 +1151,16 @@ export class WebsiteImportUI {
             modalElement.classList.add("modal-exiting");
 
             // Use our stored instance first, fallback to Bootstrap's getInstance
-            let modal = this.modalInstances.get(modalId) || 
-                       (window as any).bootstrap.Modal.getInstance(modalElement);
-            
+            let modal =
+                this.modalInstances.get(modalId) ||
+                (window as any).bootstrap.Modal.getInstance(modalElement);
+
             // If still no instance, create one to properly hide the modal
             if (!modal) {
                 modal = new (window as any).bootstrap.Modal(modalElement);
                 this.modalInstances.set(modalId, modal);
             }
-            
+
             if (modal) {
                 modal.hide();
             }
@@ -1176,13 +1179,14 @@ export class WebsiteImportUI {
         const modalElement = document.getElementById(modalId);
         if (modalElement) {
             // Use our stored instance first, fallback to Bootstrap's getInstance
-            const modalInstance = this.modalInstances.get(modalId) || 
-                                 (window as any).bootstrap.Modal.getInstance(modalElement);
-            
+            const modalInstance =
+                this.modalInstances.get(modalId) ||
+                (window as any).bootstrap.Modal.getInstance(modalElement);
+
             if (modalInstance) {
                 modalInstance.dispose();
             }
-            
+
             // Clean up our stored reference
             this.modalInstances.delete(modalId);
 

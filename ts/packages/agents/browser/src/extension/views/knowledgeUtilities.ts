@@ -22,9 +22,7 @@ import {
     SourceReference,
     EntityMatch,
 } from "./extensionServiceBase";
-import type {
-    ProgressCallback,
-} from "../interfaces/websiteImport.types";
+import type { ProgressCallback } from "../interfaces/websiteImport.types";
 
 // ===================================================================
 // INTERFACES AND TYPES
@@ -453,17 +451,23 @@ export class ChromeExtensionService extends ExtensionServiceBase {
         });
     }
 
-    protected onImportProgressImpl(importId: string, callback: ProgressCallback): void {
+    protected onImportProgressImpl(
+        importId: string,
+        callback: ProgressCallback,
+    ): void {
         this.importProgressCallbacks.set(importId, callback);
-        
+
         const messageListener = (message: any) => {
-            if (message.type === "importProgress" && message.importId === importId) {
+            if (
+                message.type === "importProgress" &&
+                message.importId === importId
+            ) {
                 callback(message.progress);
             }
         };
-        
+
         chrome.runtime.onMessage.addListener(messageListener);
-        
+
         (callback as any)._messageListener = messageListener;
     }
 
@@ -483,7 +487,6 @@ export class ChromeExtensionService extends ExtensionServiceBase {
         }
         throw new Error("Chrome extension not available");
     }
-
 }
 
 // ===================================================================
@@ -775,19 +778,25 @@ export class ElectronExtensionService extends ExtensionServiceBase {
         }
     }
 
-    protected onImportProgressImpl(importId: string, callback: ProgressCallback): void {
+    protected onImportProgressImpl(
+        importId: string,
+        callback: ProgressCallback,
+    ): void {
         this.importProgressCallbacks.set(importId, callback);
-        
+
         const progressHandler = (progress: any) => {
             if (progress.importId === importId) {
                 callback(progress.progress);
             }
         };
-        
+
         if ((window as any).electronAPI?.registerImportProgressCallback) {
-            (window as any).electronAPI.registerImportProgressCallback(importId, progressHandler);
+            (window as any).electronAPI.registerImportProgressCallback(
+                importId,
+                progressHandler,
+            );
         }
-        
+
         (callback as any)._progressHandler = progressHandler;
         (callback as any)._importId = importId;
     }
@@ -814,7 +823,6 @@ export class ElectronExtensionService extends ExtensionServiceBase {
         throw new Error("Electron API not available");
     }
 
-
     /**
      * Transform Chrome message format to Electron format
      */
@@ -822,9 +830,11 @@ export class ElectronExtensionService extends ExtensionServiceBase {
         const { type, ...params } = chromeMessage;
 
         // Handle special cases where message structure differs
-        if ((type === "searchWebMemories" ||
-            type === "importWebsiteDataWithProgress"
-        ) && chromeMessage.parameters) {
+        if (
+            (type === "searchWebMemories" ||
+                type === "importWebsiteDataWithProgress") &&
+            chromeMessage.parameters
+        ) {
             return {
                 method: type,
                 params: chromeMessage.parameters,

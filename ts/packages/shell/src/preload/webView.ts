@@ -289,14 +289,17 @@ contextBridge.exposeInMainWorld("electronAPI", {
         const wrappedCallback = (progress: any) => {
             callback(progress);
         };
-        
+
         // For Electron, we'll register a global progress listener
         // The ElectronExtensionService will filter by importId
         (window as any)._electronProgressCallback = wrappedCallback;
     },
 
     // Register progress callback for specific import
-    registerImportProgressCallback: (importId: string, callback: (progress: any) => void) => {
+    registerImportProgressCallback: (
+        importId: string,
+        callback: (progress: any) => void,
+    ) => {
         importProgressCallbacks.set(importId, callback);
     },
 

@@ -418,7 +418,10 @@ export abstract class ExtensionServiceBase {
         return response?.url || null;
     }
 
-    async importBrowserData(options: ImportOptions, importId: string): Promise<ImportResult> {
+    async importBrowserData(
+        options: ImportOptions,
+        importId: string,
+    ): Promise<ImportResult> {
         return this.sendMessage({
             type: "importWebsiteDataWithProgress",
             parameters: {
@@ -426,11 +429,15 @@ export abstract class ExtensionServiceBase {
                 importId,
                 totalItems: 0,
                 progressCallback: true,
-            }
+            },
         });
     }
 
-    async importHtmlFolder(folderPath: string, options: any, importId: string): Promise<any> {
+    async importHtmlFolder(
+        folderPath: string,
+        options: any,
+        importId: string,
+    ): Promise<any> {
         return this.sendMessage({
             type: "importHtmlFolder",
             ...options,
@@ -507,7 +514,10 @@ export abstract class ExtensionServiceBase {
      * Environment-specific progress tracking implementation
      * Concrete classes must implement this method
      */
-    protected abstract onImportProgressImpl(importId: string, callback: ProgressCallback): void;
+    protected abstract onImportProgressImpl(
+        importId: string,
+        callback: ProgressCallback,
+    ): void;
 
     // ===================================================================
     // VIRTUAL METHODS - Can be overridden by concrete classes

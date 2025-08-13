@@ -64,11 +64,17 @@ export class WebsiteImportManager {
             // Register progress callback with service
             const globalCallback = this.progressCallbacks.get("global");
             if (globalCallback) {
-                this.extensionService.onImportProgress(importId, globalCallback);
+                this.extensionService.onImportProgress(
+                    importId,
+                    globalCallback,
+                );
             }
 
             // Use ExtensionServiceBase abstraction (works in both environments)
-            const result = await this.sendToAgentWithErrorHandling(options, importId);
+            const result = await this.sendToAgentWithErrorHandling(
+                options,
+                importId,
+            );
 
             const duration = Date.now() - startTime;
 
@@ -83,7 +89,7 @@ export class WebsiteImportManager {
         } catch (error) {
             const duration = Date.now() - startTime;
             const enhancedError = this.analyzeAndEnhanceError(error, options);
-            
+
             return {
                 success: false,
                 importId,
@@ -132,7 +138,7 @@ export class WebsiteImportManager {
             const result = await this.extensionService.importHtmlFolder(
                 options.folderPath,
                 options,
-                importId
+                importId,
             );
 
             const duration = Date.now() - startTime;
@@ -269,17 +275,20 @@ export class WebsiteImportManager {
      * Cross-environment agent communication with enhanced error handling
      */
     private async sendToAgentWithErrorHandling(
-        options: ImportOptions, 
-        importId: string
+        options: ImportOptions,
+        importId: string,
     ): Promise<ImportResult> {
         try {
             // Use ExtensionServiceBase abstraction - works in both Chrome and Electron
-            const result = await this.extensionService.importBrowserData(options, importId);
-            
+            const result = await this.extensionService.importBrowserData(
+                options,
+                importId,
+            );
+
             return result;
         } catch (error) {
             console.error("Agent communication failed:", error);
-            
+
             // Re-throw with enhanced error analysis
             throw error; // Error enhancement happens in analyzeAndEnhanceError
         }
@@ -288,80 +297,94 @@ export class WebsiteImportManager {
     /**
      * Enhanced error analysis with SQLite-specific guidance
      */
-    private analyzeAndEnhanceError(error: any, options: ImportOptions): ImportError {
-        const message = error?.message?.toLowerCase() || '';
-        const browserName = options.source === 'chrome' ? 'Chrome' : 'Microsoft Edge';
-        
+    private analyzeAndEnhanceError(
+        error: any,
+        options: ImportOptions,
+    ): ImportError {
+        const message = error?.message?.toLowerCase() || "";
+        const browserName =
+            options.source === "chrome" ? "Chrome" : "Microsoft Edge";
+
         // SQLite database locked error (most common)
-        if (message.includes('database is locked') || 
-            message.includes('sqlite_busy') ||
-            message.includes('cannot access')) {
+        if (
+            message.includes("database is locked") ||
+            message.includes("sqlite_busy") ||
+            message.includes("cannot access")
+        ) {
             return {
-                type: 'processing',
+                type: "processing",
                 message: `Cannot access ${browserName} ${options.type} while the browser is running.\n\nPlease:\n1. Close all ${browserName} windows completely\n2. Wait a few seconds for the browser to fully exit\n3. Try the import again\n\nIf the problem persists, restart your computer and try again.`,
                 timestamp: Date.now(),
             };
         }
-        
+
         // better-sqlite3 binary compatibility
-        if (message.includes('not a valid sqlite database') || 
-            message.includes('wrong architecture') ||
-            message.includes('module not found') ||
-            message.includes('better-sqlite3')) {
+        if (
+            message.includes("not a valid sqlite database") ||
+            message.includes("wrong architecture") ||
+            message.includes("module not found") ||
+            message.includes("better-sqlite3")
+        ) {
             return {
-                type: 'processing',
+                type: "processing",
                 message: `Database driver compatibility issue detected.\n\nThe SQLite driver may need to be rebuilt for your system architecture.\n\nRun \`pnpm rebuild\` to rebuild the driver, then \`pnpm install\` to install it.`,
                 timestamp: Date.now(),
             };
         }
-        
+
         // File not found - browser not installed or different profile
-        if (message.includes('no such file') || 
-            message.includes('enoent') ||
-            message.includes('not found')) {
+        if (
+            message.includes("no such file") ||
+            message.includes("enoent") ||
+            message.includes("not found")
+        ) {
             return {
-                type: 'validation',
+                type: "validation",
                 message: `${browserName} data files not found.\n\nThis might mean:\n• ${browserName} is not installed on this system\n• ${browserName} uses a non-standard profile location\n• No ${options.type} data exists for this browser\n\nPlease verify ${browserName} is installed and has ${options.type} data to import.`,
                 timestamp: Date.now(),
             };
         }
-        
+
         // Permission denied
-        if (message.includes('permission denied') || 
-            message.includes('eacces')) {
+        if (
+            message.includes("permission denied") ||
+            message.includes("eacces")
+        ) {
             return {
-                type: 'validation',
+                type: "validation",
                 message: `Permission denied accessing ${browserName} data.\n\nPlease ensure:\n• The application has permission to read browser data\n• ${browserName} is not running with elevated privileges\n• Your user account has access to the browser data directory`,
                 timestamp: Date.now(),
             };
         }
-        
+
         // Browser data corruption
-        if (message.includes('malformed') || 
-            message.includes('corrupt')) {
+        if (message.includes("malformed") || message.includes("corrupt")) {
             return {
-                type: 'processing',
+                type: "processing",
                 message: `${browserName} data files appear to be corrupted.\n\nTry:\n• Restarting ${browserName}\n• Running the browser's built-in repair tools\n• Importing again after the browser restart`,
                 timestamp: Date.now(),
             };
         }
-        
+
         // Extension/service communication issues
-        if (message.includes('extension') || 
-            message.includes('service worker') ||
-            message.includes('runtime') ||
-            message.includes('electronAPI')) {
+        if (
+            message.includes("extension") ||
+            message.includes("service worker") ||
+            message.includes("runtime") ||
+            message.includes("electronAPI")
+        ) {
             return {
-                type: 'processing',
+                type: "processing",
                 message: `Communication error with the import service.\n\nTry:\n• Refreshing this page\n• Restarting the browser/application\n• Checking if the browser extension is enabled`,
                 timestamp: Date.now(),
             };
         }
-        
+
         // Generic error with context
         return {
-            type: 'processing',
-            message: error?.message || 'An unexpected error occurred during import',
+            type: "processing",
+            message:
+                error?.message || "An unexpected error occurred during import",
             timestamp: Date.now(),
         };
     }
@@ -374,12 +397,24 @@ export class WebsiteImportManager {
         if (callback) {
             // Clean up environment-specific listeners
             if ((callback as any)._messageListener) {
-                chrome?.runtime?.onMessage?.removeListener((callback as any)._messageListener);
+                chrome?.runtime?.onMessage?.removeListener(
+                    (callback as any)._messageListener,
+                );
             }
-            if ((callback as any)._progressHandler && (callback as any)._importId) {
+            if (
+                (callback as any)._progressHandler &&
+                (callback as any)._importId
+            ) {
                 // Electron cleanup
-                if ((window as any).electronAPI?.unregisterImportProgressCallback) {
-                    (window as any).electronAPI.unregisterImportProgressCallback((callback as any)._importId);
+                if (
+                    (window as any).electronAPI
+                        ?.unregisterImportProgressCallback
+                ) {
+                    (
+                        window as any
+                    ).electronAPI.unregisterImportProgressCallback(
+                        (callback as any)._importId,
+                    );
                 }
             }
             this.progressCallbacks.delete(importId);
@@ -396,7 +431,6 @@ export class WebsiteImportManager {
             actionsDetected: 0,
         };
     }
-
 
     /**
      * Validate import options
@@ -554,7 +588,6 @@ export class WebsiteImportManager {
         };
     }
 
-
     // Private helper methods
 
     private generateImportId(): string {
@@ -571,5 +604,4 @@ export class WebsiteImportManager {
             callback(progress);
         }
     }
-
 }
