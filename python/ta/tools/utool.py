@@ -146,7 +146,7 @@ def main():
     if args.logfire:
         setup_logfire()
     settings = importing.ConversationSettings()
-    query_context = load_podcast_index(args.podcast, settings)
+    query_context = load_podcast_index(args.podcast, settings, args.sqlite_db)
     ar_list, ar_index = load_index_file(args.qafile, "question", QuestionAnswerData)
     sr_list, sr_index = load_index_file(args.srfile, "searchText", SearchResultData)
 
@@ -445,6 +445,12 @@ def make_arg_parser(description: str) -> argparse.ArgumentParser:
         default=default_srfile,
         help=f"Path to the Search_results.json file ({explain_sr})",
     )
+    parser.add_argument(
+        "--sqlite-db",
+        type=str,
+        default=None,
+        help="Path to the SQLite database file (default: no SQLite)",
+    )
 
     batch = parser.add_argument_group("Batch mode options")
     batch.add_argument(
@@ -558,10 +564,14 @@ def fill_in_debug_defaults(
 
 
 def load_podcast_index(
-    podcast_file_prefix: str, settings: importing.ConversationSettings
+    podcast_file_prefix: str,
+    settings: importing.ConversationSettings,
+    dbname: str | None,
 ) -> query.QueryEvalContext:
     with utils.timelog(f"load podcast from {podcast_file_prefix!r}"):
-        conversation = podcast.Podcast.read_from_file(podcast_file_prefix, settings)
+        conversation = podcast.Podcast.read_from_file(
+            podcast_file_prefix, settings, dbname
+        )
     assert (
         conversation is not None
     ), f"Failed to load podcast from {podcast_file_prefix!r}"
