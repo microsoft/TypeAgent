@@ -2,12 +2,12 @@
 
 TextPro is **sample code** for parsing, converting and manipulating text data and documents.
 
-TextPro uses markdown as in intermediate format. Other formats like html are converted (and simplified) into markdown.
+TextPro uses markdown as an intermediate format. Other formats like html are converted (and simplified) into markdown.
 
 TextPro analyzes markdown documents and extracts:
 
 - Document blocks/chunks such as headings, lists, tables, links, images, etc.
-- Inferred knowledge such as entities, topics structured tags etc. This knowledge can be inferred from markdown information without using an LLM.
+- Inferred knowledge such as entities, topics and structured tags. This knowledge can be inferred from markdown information without using an LLM.
 
 TextPro is used by [Document Memory](../memory//conversation/src/docImport.ts) to import html and markdown documents.
 

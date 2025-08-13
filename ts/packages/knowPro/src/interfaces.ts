@@ -251,11 +251,6 @@ export interface TextLocation {
      * [Optional] The ordinal index of the chunk within the message.
      */
     chunkOrdinal?: number;
-
-    /**
-     * [Optional] The ordinal index of the character within the chunk.
-     */
-    charOrdinal?: number;
 }
 
 /**
