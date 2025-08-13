@@ -702,7 +702,7 @@ def verify_has_semantic_ref_index(conversation: IConversation) -> None:
         raise ValueError("Conversation does not have an index")
 
 
-def dump(
+async def dump(
     semantic_ref_index: ConversationIndex, semantic_refs: ISemanticRefCollection
 ) -> None:
     print("semantic_ref_index = {")
@@ -710,6 +710,6 @@ def dump(
         print(f"    {k!r}: {v},")
     print("}\n")
     print("semantic_refs = []")
-    for semantic_ref in semantic_refs:
+    async for semantic_ref in semantic_refs:
         print(f"    {semantic_ref},")
     print("]\n")

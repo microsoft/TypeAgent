@@ -152,10 +152,11 @@ def test_sqlite_semantic_ref_collection_append_and_get(temp_db_path):
         _ = collection.get_item("bad")  # type: ignore  # Tests runtime behavior
 
 
-def test_sqlite_semantic_ref_collection_iter(temp_db_path):
+@pytest.mark.asyncio
+async def test_sqlite_semantic_ref_collection_iter(temp_db_path):
     db = SqliteStorageProvider(temp_db_path).get_db()
     collection = SqliteSemanticRefCollection(db)
     refs = [make_dummy_semantic_ref(i) for i in range(2)]
     for r in refs:
-        collection.append(r)
-    assert [r.semantic_ref_ordinal for r in collection] == [0, 1]
+        await collection.append(r)
+    assert [r.semantic_ref_ordinal async for r in collection] == [0, 1]

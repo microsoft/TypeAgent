@@ -38,7 +38,7 @@ async def test_import_podcast(needs_auth, temp_dir):
 
     # Write the podcast to files
     filename_prefix = os.path.join(temp_dir, "podcast")
-    pod.write_to_file(filename_prefix)
+    await pod.write_to_file(filename_prefix)
 
     # Verify the files were created
     assert os.path.exists(filename_prefix + DATA_FILE_SUFFIX)
@@ -68,7 +68,7 @@ async def test_import_podcast(needs_auth, temp_dir):
 
     # Write to another pair of files and check they match
     filename2 = os.path.join(temp_dir, "podcast2")
-    pod2.write_to_file(filename2)
+    await pod2.write_to_file(filename2)
     assert os.path.exists(filename2 + DATA_FILE_SUFFIX)
     assert os.path.exists(filename2 + EMBEDDING_FILE_SUFFIX)
 

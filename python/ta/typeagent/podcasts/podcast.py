@@ -208,13 +208,13 @@ class Podcast(
                 await self.secondary_indexes.threads.build_index()  # type: ignore  # TODO
         return result
 
-    def serialize(self) -> PodcastData:
+    async def serialize(self) -> PodcastData:
         data = PodcastData(
             nameTag=self.name_tag,
-            messages=[m.serialize() for m in self.messages],
+            messages=[m.serialize() async for m in self.messages],
             tags=self.tags,
             semanticRefs=(
-                [r.serialize() for r in self.semantic_refs]
+                [r.serialize() async for r in self.semantic_refs]
                 if self.semantic_refs is not None
                 else None
             ),
@@ -232,8 +232,8 @@ class Podcast(
             data["messageIndexData"] = self.secondary_indexes.message_index.serialize()
         return data
 
-    def write_to_file(self, filename: str) -> None:
-        data = self.serialize()
+    async def write_to_file(self, filename: str) -> None:
+        data = await self.serialize()
         serialization.write_conversation_data_to_file(data, filename)
 
     async def deserialize(
