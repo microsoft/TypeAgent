@@ -63,41 +63,30 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
             json_data = json.loads(row[0])
             yield self._deserialize(json_data)
 
-    @typing.overload
-    def __getitem__(self, arg: int) -> TMessage: ...
-    @typing.overload
-    def __getitem__(self, arg: slice) -> list[TMessage]: ...
-    @typing.overload
-    def __getitem__(self, arg: list[int]) -> list[TMessage]: ...
-
-    def __getitem__(self, arg: int | list[int] | slice) -> TMessage | list[TMessage]:
+    def get_item(self, arg: int) -> TMessage:
+        if not isinstance(arg, int):
+            raise TypeError(f"Index must be an int, not {type(arg).__name__}")
         cursor = self.db.cursor()
-        if isinstance(arg, int):
-            cursor.execute("SELECT msgdata FROM Messages WHERE id = ?", (arg,))
-            row = cursor.fetchone()
-            if row:
-                json_data = json.loads(row[0])
-                return self._deserialize(json_data)
-            raise IndexError("Message not found")
-        elif isinstance(arg, list):
-            # TODO: Do we really want to support this?
-            # If so, we should probably try to optimize it.
-            return [self[i] for i in arg]
-        elif isinstance(arg, slice):
-            start, stop, step = arg.indices(999_999_999)  # Avoid len()
-            if step not in (None, 1):
-                raise ValueError("Slice step must be 1")
-            if stop <= start:
-                return []
-            cursor.execute(
-                "SELECT msgdata FROM Messages WHERE id >= ? AND id < ?",
-                (start, stop),
-            )
-            rows = cursor.fetchall()
-            res = [self._deserialize(json.loads(row[0])) for row in rows]
-            return res
-        else:
-            raise TypeError("Index must be an int, list or slice")
+        cursor.execute("SELECT msgdata FROM Messages WHERE id = ?", (arg,))
+        row = cursor.fetchone()
+        if row:
+            json_data = json.loads(row[0])
+            return self._deserialize(json_data)
+        raise IndexError("Message not found")
+
+    def get_slice(self, start: int, stop: int) -> list[TMessage]:
+        if stop <= start:
+            return []
+        cursor = self.db.cursor()
+        cursor.execute(
+            "SELECT msgdata FROM Messages WHERE id >= ? AND id < ?",
+            (start, stop),
+        )
+        rows = cursor.fetchall()
+        return [self._deserialize(json.loads(row[0])) for row in rows]
+
+    def get_multiple(self, arg: list[int]) -> list[TMessage]:
+        return [self.get_item(i) for i in arg]
 
     def append(self, item: TMessage) -> None:
         cursor = self.db.cursor()
@@ -147,42 +136,31 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
             json_obj = json.loads(row[0])
             yield self._deserialize(json_obj)
 
-    # NOTE: Indexing and slicing are weird since unique ids start at 1.
-    @typing.overload
-    def __getitem__(self, arg: int) -> interfaces.SemanticRef: ...
-    @typing.overload
-    def __getitem__(self, arg: slice) -> list[interfaces.SemanticRef]: ...
-    @typing.overload
-    def __getitem__(self, arg: list[int]) -> list[interfaces.SemanticRef]: ...
-
-    def __getitem__(
-        self, arg: int | list[int] | slice
-    ) -> interfaces.SemanticRef | list[interfaces.SemanticRef]:
+    def get_item(self, arg: int) -> interfaces.SemanticRef:
+        if not isinstance(arg, int):
+            raise TypeError(f"Index must be an int, not {type(arg).__name__}")
         cursor = self.db.cursor()
-        if isinstance(arg, int):
-            cursor.execute("SELECT srdata FROM SemanticRefs WHERE id = ?", (arg,))
-            row = cursor.fetchone()
-            if row:
-                json_obj = json.loads(row[0])
-                return self._deserialize(json_obj)
-            raise IndexError("SemanticRef not found")
-        elif isinstance(arg, list):
-            # TODO: Do we really want to support this?
-            # If so, we should probably try to optimize it.
-            return [self[i] for i in arg]
-        elif isinstance(arg, slice):
-            start, stop, step = arg.indices(999_999_999)  # Avoid len()
-            if step not in (None, 1):
-                raise ValueError("Slice step must be 1")
-            if stop <= start:
-                return []
-            cursor.execute(
-                "SELECT srdata FROM SemanticRefs WHERE id >= ? AND id < ?",
-                (start, stop),
-            )
-            return [self._deserialize(json.loads(row[0])) for row in cursor.fetchall()]
-        else:
-            raise TypeError("Index must be an int, list or slice")
+        cursor.execute("SELECT srdata FROM SemanticRefs WHERE id = ?", (arg,))
+        row = cursor.fetchone()
+        if row:
+            json_obj = json.loads(row[0])
+            return self._deserialize(json_obj)
+        raise IndexError("SemanticRef not found")
+
+    def get_slice(self, start: int, stop: int) -> list[interfaces.SemanticRef]:
+        if stop <= start:
+            return []
+        cursor = self.db.cursor()
+        cursor.execute(
+            "SELECT srdata FROM SemanticRefs WHERE id >= ? AND id < ?",
+            (start, stop),
+        )
+        return [self._deserialize(json.loads(row[0])) for row in cursor.fetchall()]
+
+    def get_multiple(self, arg: list[int]) -> list[interfaces.SemanticRef]:
+        # TODO: Do we really want to support this?
+        # If so, we should probably try to optimize it.
+        return [self.get_item(i) for i in arg]
 
     def append(self, item: interfaces.SemanticRef) -> None:
         cursor = self.db.cursor()

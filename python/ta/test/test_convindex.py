@@ -98,8 +98,8 @@ def test_add_entity_to_index(conversation_index: ConversationIndex):
     add_entity_to_index(entity, semantic_refs, conversation_index, 0)
 
     assert len(semantic_refs) == 1
-    assert semantic_refs[0].knowledge_type == "entity"
-    assert semantic_refs[0].knowledge.name == "ExampleEntity"
+    assert semantic_refs.get_item(0).knowledge_type == "entity"
+    assert semantic_refs.get_item(0).knowledge.name == "ExampleEntity"
 
     result = conversation_index.lookup_term("ExampleEntity")
     assert result is not None
