@@ -37,6 +37,7 @@ from .interfaces import (
     ScoredMessageOrdinal,
     ScoredSemanticRefOrdinal,
     SearchTerm,
+    SearchTermGroup,
     SemanticRef,
     SemanticRefOrdinal,
     SemanticRefSearchResult,
@@ -1079,3 +1080,59 @@ async def message_matches_from_knowledge_matches(
             message_matches = MessageAccumulator(relevant_messages)
     message_matches.smooth_scores()
     return message_matches
+
+
+# TODO: Implement proper SelectMessagesInCharBudget functionality
+@dataclass
+class SelectMessagesInCharBudget(QueryOpExpr[MessageAccumulator]):
+    """Selects messages within a character budget."""
+
+    src_expr: IQueryOpExpr[MessageAccumulator]
+    max_chars: int
+
+    async def eval(self, context: QueryEvalContext) -> MessageAccumulator:
+        # TODO: Implement character budget logic
+        return await self.src_expr.eval(context)
+
+
+# TODO: Implement proper KnowledgeTypePredicate functionality
+@dataclass
+class KnowledgeTypePredicate(IQuerySemanticRefPredicate):
+    """Predicate to filter by knowledge type."""
+
+    knowledge_type: KnowledgeType
+
+    async def eval(self, context: QueryEvalContext, semantic_ref: SemanticRef) -> bool:
+        # TODO: Implement knowledge type filtering logic
+        return semantic_ref.knowledge_type == self.knowledge_type
+
+
+# TODO: Implement proper ThreadSelector functionality
+@dataclass
+class ThreadSelector(IQueryTextRangeSelector):
+    """Selector for thread-based text ranges."""
+
+    threads: list  # TODO: Define proper thread type
+
+    async def eval(
+        self,
+        context: QueryEvalContext,
+        semantic_refs: SemanticRefAccumulator | None = None,
+    ) -> TextRangeCollection | None:
+        # TODO: Implement thread selection logic
+        return None
+
+
+def create_tag_search_term_group(tags: list[str]) -> SearchTermGroup:
+    """Create a search term group for tags."""
+    # TODO: Implement proper tag search term group creation
+
+    terms = []
+    for tag in tags:
+        search_term = SearchTerm(term=Term(text=tag))
+        property_term = PropertySearchTerm(
+            property_name="tag", property_value=search_term
+        )
+        terms.append(property_term)
+
+    return SearchTermGroup(boolean_op="or", terms=terms)
