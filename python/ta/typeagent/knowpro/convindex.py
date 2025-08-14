@@ -1,7 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from collections.abc import AsyncIterable, Iterable
+from collections.abc import AsyncIterable
 from typing import Callable
 
 from typechat import Failure

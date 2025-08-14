@@ -2,7 +2,7 @@
 # Licensed under the MIT License.
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterable, AsyncIterator, Iterable, Sequence
+from collections.abc import AsyncIterable, Iterable, Sequence
 from dataclasses import field
 from datetime import (
     datetime as Datetime,  # For export.
@@ -776,10 +776,8 @@ class IndexingResults:
 # --------
 
 
-class IReadonlyCollection[T, TOrdinal](Protocol):
+class IReadonlyCollection[T, TOrdinal](AsyncIterable[T], Protocol):
     async def size(self) -> int: ...
-
-    def __aiter__(self) -> AsyncIterator[T]: ...
 
     async def get_item(self, arg: TOrdinal) -> T: ...
 
