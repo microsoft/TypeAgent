@@ -211,14 +211,14 @@ For example: apple.com could be:
                 apiSettings = openai.localOpenAIApiSettingsFromEnv(
                     openai.ModelType.Chat,
                     undefined,
-                    "GPT_5",
+                    openai.GPT_5_NANO,
                     ["websiteAliases"],
                 );
             } else {
                 apiSettings = openai.localOpenAIApiSettingsFromEnv(
                     openai.ModelType.Chat,
                     undefined,
-                    "GPT_5",
+                    openai.GPT_5,
                     ["websiteAliases"],
                 );
             }
