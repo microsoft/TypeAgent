@@ -63,5 +63,5 @@ async def build_transient_secondary_indexes[
         conversation.secondary_indexes = ConversationSecondaryIndexes()
     result = SecondaryIndexingResults()
     result.properties = await build_property_index(conversation)
-    result.timestamps = build_timestamp_index(conversation)
+    result.timestamps = await build_timestamp_index(conversation)
     return result

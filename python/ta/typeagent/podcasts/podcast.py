@@ -185,10 +185,10 @@ class Podcast(
                 self.semantic_ref_index,
             )
 
-    def generate_timestamps(
+    async def generate_timestamps(
         self, start_date: Datetime, length_minutes: float = 60.0
     ) -> None:
-        timestamp_messages(
+        await timestamp_messages(
             self.messages, start_date, start_date + Timedelta(minutes=length_minutes)
         )
 
@@ -316,14 +316,14 @@ class Podcast(
     async def _build_transient_secondary_indexes(self, build_all: bool) -> None:
         if build_all:
             await secindex.build_transient_secondary_indexes(self)
-        self._build_participant_aliases()
+        await self._build_participant_aliases()
         self._add_synonyms()
 
-    def _build_participant_aliases(self) -> None:
+    async def _build_participant_aliases(self) -> None:
         aliases = self.secondary_indexes.term_to_related_terms_index.aliases  # type: ignore  # TODO
         assert aliases is not None
         aliases.clear()  # type: ignore  # Same issue as above.
-        name_to_alias_map = self._collect_participant_aliases()
+        name_to_alias_map = await self._collect_participant_aliases()
         for name in name_to_alias_map.keys():
             related_terms: list[Term] = [
                 Term(text=alias) for alias in name_to_alias_map[name]
@@ -352,7 +352,7 @@ class Podcast(
                             related_term,
                         )
 
-    def _collect_participant_aliases(self) -> dict[str, set[str]]:
+    async def _collect_participant_aliases(self) -> dict[str, set[str]]:
 
         aliases: dict[str, set[str]] = {}
 
@@ -369,7 +369,7 @@ class Podcast(
                         parsed_name.first_name
                     )
 
-        for message in self.messages:
+        async for message in self.messages:
             collect_name(message.metadata.speaker)
             for listener in message.metadata.listeners:
                 collect_name(listener)
@@ -381,7 +381,7 @@ class Podcast(
 # This text can be partitioned into blocks.
 # However, timestamps for individual blocks are not available.
 # Assigns individual timestamps to blocks proportional to their lengths.
-def timestamp_messages(
+async def timestamp_messages(
     messages: ICollection[PodcastMessage, MessageOrdinal],
     start_time: Datetime,
     end_time: Datetime,
@@ -390,10 +390,13 @@ def timestamp_messages(
     duration = end_time.timestamp() - start
     if duration <= 0:
         raise RuntimeError(f"{start_time} is not < {end_time}")
-    message_lengths = [sum(len(chunk) for chunk in m.text_chunks) for m in messages]
+    message_lengths = [
+        sum(len(chunk) for chunk in m.text_chunks) async for m in messages
+    ]
     text_length = sum(message_lengths)
     seconds_per_char = duration / text_length
-    for message, length in zip(messages, message_lengths):
+    messages_list = [m async for m in messages]
+    for message, length in zip(messages_list, message_lengths):
         message.timestamp = Datetime.fromtimestamp(start).isoformat()
         start += seconds_per_char * length
 

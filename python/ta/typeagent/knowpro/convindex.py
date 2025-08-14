@@ -1,7 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from collections.abc import Iterable
+from collections.abc import AsyncIterable, Iterable
 from typing import Callable
 
 from typechat import Failure
@@ -517,14 +517,15 @@ async def add_knowledge_to_index(
 
 
 async def add_metadata_to_index[TMessage: IMessage](
-    messages: Iterable[TMessage],
+    messages: AsyncIterable[TMessage],
     semantic_refs: ISemanticRefCollection,
     semantic_ref_index: ITermToSemanticRefIndex,
     knowledge_validator: KnowledgeValidator | None = None,
 ) -> None:
     if knowledge_validator is None:
         knowledge_validator = default_knowledge_validator
-    for i, msg in enumerate(messages):
+    i = 0
+    async for msg in messages:
         knowledge_response = msg.get_knowledge()
         for entity in knowledge_response.entities:
             if knowledge_validator("entity", entity):
@@ -536,6 +537,7 @@ async def add_metadata_to_index[TMessage: IMessage](
             topic = Topic(text=topic_response)
             if knowledge_validator("topic", topic):
                 await add_topic_to_index(topic, semantic_refs, semantic_ref_index, i)
+        i += 1
 
 
 class ConversationIndex(ITermToSemanticRefIndex):

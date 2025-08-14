@@ -97,14 +97,14 @@ def is_conversation_searchable(conversation: IConversation) -> bool:
     )
 
 
-def get_text_range_for_date_range(
+async def get_text_range_for_date_range(
     conversation: IConversation,
     date_range: DateRange,
 ) -> TextRange | None:
     messages = conversation.messages
     range_start_ordinal: MessageOrdinal = -1
     range_end_ordinal = range_start_ordinal
-    for message in messages:
+    async for message in messages:
         if Datetime.fromisoformat(message.timestamp) in date_range:
             if range_start_ordinal < 0:
                 range_start_ordinal = message.ordinal
@@ -279,12 +279,12 @@ class QueryEvalContext[TMessage: IMessage, TIndex: ITermToSemanticRefIndex]:
         self.matched_property_terms.clear()
 
 
-def lookup_knowledge_type(
+async def lookup_knowledge_type(
     semantic_refs: ISemanticRefCollection, ktype: KnowledgeType
 ) -> list[ScoredSemanticRefOrdinal]:
     return [
         ScoredSemanticRefOrdinal(sr.semantic_ref_ordinal, 1.0)
-        for sr in semantic_refs
+        async for sr in semantic_refs
         if sr.knowledge_type == ktype
     ]
 
@@ -619,7 +619,7 @@ class MatchTagExpr(MatchSearchTermExpr):
         self, context: QueryEvalContext, term: Term
     ) -> list[ScoredSemanticRefOrdinal] | None:
         if self.tag_term.term.text == "*":
-            return lookup_knowledge_type(context.semantic_refs, "tag")
+            return await lookup_knowledge_type(context.semantic_refs, "tag")
         else:
             return await lookup_term(
                 context.semantic_ref_index,
@@ -639,7 +639,7 @@ class MatchTopicExpr(MatchSearchTermExpr):
         self, context: QueryEvalContext, term: Term
     ) -> list[ScoredSemanticRefOrdinal] | None:
         if self.topic.term.text == "*":
-            return lookup_knowledge_type(context.semantic_refs, "topic")
+            return await lookup_knowledge_type(context.semantic_refs, "topic")
         else:
             return await lookup_term(
                 context.semantic_ref_index,
@@ -802,7 +802,7 @@ class TextRangesInDateRangeSelector(IQueryTextRangeSelector):
             for time_range in text_ranges:
                 text_ranges_in_scope.add_range(time_range.range)
         else:
-            text_range = get_text_range_for_date_range(
+            text_range = await get_text_range_for_date_range(
                 context.conversation,
                 self.date_range_in_scope,
             )

@@ -56,19 +56,16 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
         cursor.execute("SELECT COUNT(*) FROM Messages")
         return cursor.fetchone()[0]
 
-    def __iter__(self) -> typing.Iterator[TMessage]:
-        cursor = self.db.cursor()
-        cursor.execute("SELECT msgdata FROM Messages")
-        for row in cursor:
-            json_data = json.loads(row[0])
-            yield self._deserialize(json_data)
+    def __aiter__(self) -> typing.AsyncIterator[TMessage]:
+        return self._async_iterator()
 
-    async def __aiter__(self) -> typing.AsyncIterator[TMessage]:
+    async def _async_iterator(self) -> typing.AsyncIterator[TMessage]:
         cursor = self.db.cursor()
         cursor.execute("SELECT msgdata FROM Messages")
         for row in cursor:
             json_data = json.loads(row[0])
             yield self._deserialize(json_data)
+            # Potentially add await asyncio.sleep(0) here to yield control
 
     async def get_item(self, arg: int) -> TMessage:
         if not isinstance(arg, int):

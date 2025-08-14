@@ -593,7 +593,8 @@ class TestSelectTopNExpr:
         assert sorted_matches[1].value == 2
 
 
-def test_get_text_range_for_date_range():
+@pytest.mark.asyncio
+async def test_get_text_range_for_date_range():
     from typeagent.knowpro.query import get_text_range_for_date_range
     from typeagent.knowpro.interfaces import (
         TextLocation,
@@ -609,12 +610,12 @@ def test_get_text_range_for_date_range():
         start=Datetime(2020, 1, 1, 0, 0, 0),
         end=Datetime(2020, 1, 2, 0, 0, 0),
     )
-    assert get_text_range_for_date_range(empty_conv, date_range) is None
+    assert await get_text_range_for_date_range(empty_conv, date_range) is None
 
     # Should return a TextRange for a valid date range (simulate all messages in range)
     # (Assume all messages are in the date range for this mock)
     conv = MockConversation()
-    result_with_range = get_text_range_for_date_range(conv, date_range)
+    result_with_range = await get_text_range_for_date_range(conv, date_range)
     assert isinstance(result_with_range, TextRange)
     assert result_with_range.start == TextLocation(0, 0)
     assert result_with_range.end == TextLocation(2, 0)  # End is exclusive
@@ -677,7 +678,8 @@ def test_match_entity_name_or_type():
     assert not match_entity_name_or_type(SearchTerm(term=Term("baz")), entity)
 
 
-def test_lookup_knowledge_type():
+@pytest.mark.asyncio
+async def test_lookup_knowledge_type():
     from typeagent.knowpro.query import lookup_knowledge_type
     from typeagent.knowpro.interfaces import (
         SemanticRef,
@@ -706,9 +708,9 @@ def test_lookup_knowledge_type():
         ),
     ]
     collection = SemanticRefCollection(refs)
-    result = lookup_knowledge_type(collection, "topic")
+    result = await lookup_knowledge_type(collection, "topic")
     assert isinstance(result, list)
     assert all(isinstance(r, ScoredSemanticRefOrdinal) for r in result)
     assert {r.semantic_ref_ordinal for r in result} == {0, 2}
     # Should return empty list if no match
-    assert lookup_knowledge_type(collection, "action") == []
+    assert await lookup_knowledge_type(collection, "action") == []

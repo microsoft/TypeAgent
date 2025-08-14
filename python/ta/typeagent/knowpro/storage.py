@@ -29,10 +29,6 @@ class Collection[T, TOrdinal: int](ICollection[T, TOrdinal]):
     async def size(self) -> int:
         return len(self.items)
 
-    def __iter__(self) -> Iterator[T]:
-        """Return an iterator over the collection."""
-        return iter(self.items)
-
     def __aiter__(self):
         """Return an async iterator over the collection."""
         return self._async_iterator()

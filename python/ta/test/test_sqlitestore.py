@@ -67,11 +67,12 @@ async def test_sqlite_storage_provider_message_collection(temp_db_path):
     msg = DummyMessage(["hello"])
     await collection.append(msg)
     assert await collection.size() == 1
-    # get_item and __iter__
+    # get_item and async iteration
     loaded = await collection.get_item(0)
     assert isinstance(loaded, DummyMessage)
     assert loaded.text_chunks == ["hello"]
-    assert list(collection)[0].text_chunks == ["hello"]
+    collection_list = [item async for item in collection]
+    assert collection_list[0].text_chunks == ["hello"]
     await collection.append(DummyMessage(["world"]))
     await collection.append(DummyMessage(["foo", "bar"]))
     assert await collection.size() == 3
@@ -104,7 +105,8 @@ async def test_sqlite_storage_provider_semantic_ref_collection(temp_db_path):
     loaded = await collection.get_item(0)
     assert isinstance(loaded, SemanticRef)
     assert loaded.semantic_ref_ordinal == 0
-    assert list(collection)[0].semantic_ref_ordinal == 0
+    collection_list = [item async for item in collection]
+    assert collection_list[0].semantic_ref_ordinal == 0
 
 
 def test_default_serializer_roundtrip():
@@ -141,7 +143,7 @@ async def test_sqlite_message_collection_iter(temp_db_path):
     msgs = [DummyMessage([f"msg{i}"]) for i in range(3)]
     for m in msgs:
         await store.append(m)
-    assert [m.text_chunks[0] for m in store] == ["msg0", "msg1", "msg2"]
+    assert [m.text_chunks[0] async for m in store] == ["msg0", "msg1", "msg2"]
 
 
 @pytest.mark.asyncio

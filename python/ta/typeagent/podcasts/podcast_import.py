@@ -82,7 +82,7 @@ async def import_podcast(
         podcast_name, msg_coll, [podcast_name], semref_coll, settings=settings
     )
     if start_date:
-        pod.generate_timestamps(start_date, length_minutes)
+        await pod.generate_timestamps(start_date, length_minutes)
     # TODO: Add more tags.
     return pod
 
