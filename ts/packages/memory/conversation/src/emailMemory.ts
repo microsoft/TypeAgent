@@ -46,6 +46,11 @@ export class EmailMemory
     public serializer: EmailMessageSerializer;
     public indexingState: IndexingState;
 
+    /**
+     * Create a new email memory
+     * @param storageProvider Uses sqlite to persist raw email and extracted knowledge
+     * @param settings
+     */
     constructor(
         public storageProvider: ms.sqlite.SqliteStorageProvider,
         settings?: EmailMemorySettings,
@@ -263,6 +268,12 @@ export class EmailMemory
     }
 }
 
+/**
+ * Creates a new Email memory using a Sqlite storage provider
+ * @param fileSettings
+ * @param createNew
+ * @returns EmailMemory
+ */
 export async function createEmailMemory(
     fileSettings: IndexFileSettings,
     createNew: boolean,

@@ -144,7 +144,7 @@ export class KnowProPrinter extends MemoryConsoleWriter {
                 (t) => typeof t !== "string",
             ) as kp.StructuredTag[];
             if (sTags && sTags.length > 0) {
-                this.writeLine("sTags");
+                this.writeLine("Structured Tags:");
                 this.writeStructuredTags(sTags);
             }
         }

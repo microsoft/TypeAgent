@@ -50,7 +50,7 @@ export interface IMessage extends IKnowledgeSource {
     /**
      * (Optional) tags associated with the message
      */
-    tags: string[] | MessageTag[];
+    tags: MessageTag[];
     /**
      * (Future) Information about the deletion of the message.
      */
