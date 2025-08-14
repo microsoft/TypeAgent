@@ -238,10 +238,15 @@ export async function createKnowproDocMemoryCommands(
     }
 
     function createDocMemorySettings(useScoped: boolean) {
-        const settings = kpContext.createMemorySettings();
-        if (useScoped !== undefined && useScoped === true) {
-            settings.useScopedSearch = true;
+        const settings = cm.createDocMemorySettings(
+            64,
+            undefined,
+            kpContext.knowledgeModel,
+        );
+        if (useScoped !== undefined) {
+            settings.useScopedSearch = useScoped;
         }
+
         return settings;
     }
     return;

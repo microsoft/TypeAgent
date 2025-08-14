@@ -13,6 +13,7 @@ import {
 import { TypeChatLanguageModel } from "typechat";
 import { fileURLToPath } from "url";
 import { importDocMemoryFromTextFile } from "./docImport.js";
+import { ChatModel } from "aiclient";
 
 export class DocPartMeta extends MessageMetadata {
     constructor(public sourceUrl?: string | undefined) {
@@ -53,19 +54,18 @@ export interface DocIndexingState {
 
 export interface DocMemorySettings extends MemorySettings {}
 
-/**
- * Create settings for text memory.
- * @param embeddingCacheSize Default size of the embedding cache.
- * @param getPersistentCache Function to retrieve the persistent cache.
- * @returns Memory settings object.
- */
-export function createTextMemorySettings(
+export function createDocMemorySettings(
     embeddingCacheSize = 64,
     getPersistentCache?: () => kpLib.TextEmbeddingCache | undefined,
-) {
-    return {
-        ...createMemorySettings(embeddingCacheSize, getPersistentCache),
-    };
+    languageModel?: ChatModel,
+): DocMemorySettings {
+    const settings: DocMemorySettings = createMemorySettings(
+        embeddingCacheSize,
+        getPersistentCache,
+        languageModel,
+    );
+    settings.useScopedSearch = true;
+    return settings;
 }
 
 /**
@@ -97,7 +97,7 @@ export class DocMemory
         settings?: DocMemorySettings,
         tags?: string[],
     ) {
-        settings ??= createTextMemorySettings();
+        settings ??= createDocMemorySettings();
         if (!settings.embeddingModel.getPersistentCache) {
             settings.embeddingModel.getPersistentCache = () =>
                 this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex;
@@ -362,10 +362,10 @@ export class DocMemory
     }
 
     /**
-     * Write this memory to files.
+     * Write this Document memory and its indexes to files.
      * Uses the 2 file format for knowpro: a JSON data file and an embeddings file
-     * @param dirPath
-     * @param baseFileName
+     * @param dirPath Directory to write memory files
+     * @param baseFileName Base filename to use for memory files
      */
     public async writeToFile(
         dirPath: string,
@@ -376,9 +376,10 @@ export class DocMemory
     }
 
     /**
-     * Read this memory from a file. The file must have been written using {@link writeToFile}
-     * @param dirPath
-     * @param baseFileName
+     * Read this memory from files.
+     * The files must have been written using {@link writeToFile}
+     * @param dirPath Directory that contains memory files
+     * @param baseFileName Base filename for memory files
      * @param settings
      * @returns
      */

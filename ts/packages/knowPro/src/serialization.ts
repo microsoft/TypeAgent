@@ -13,6 +13,14 @@ import path from "path";
 import { IConversationDataWithIndexes } from "./secondaryIndexes.js";
 import { EmbeddingModelMetadata, modelMetadata_ada002 } from "aiclient";
 
+/**
+ * Write a conversation's data to files.
+ * Persists 2 index files into a directory
+ * @param {IConversationDataWithIndexes} conversationData data to persist
+ * @param dirPath Directory to write persisted files
+ * @param baseFileName Base filename to use for files
+ * @param modelMeta Metadata about embedding models used
+ */
 export async function writeConversationDataToFile(
     conversationData: IConversationDataWithIndexes,
     dirPath: string,

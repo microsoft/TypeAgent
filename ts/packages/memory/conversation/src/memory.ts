@@ -616,3 +616,19 @@ export abstract class Memory<
         return this.settings.useScopedSearch ?? false;
     }
 }
+
+/**
+ * Create settings for text memory.
+ * @param embeddingCacheSize Default size of the embedding cache.
+ * @param getPersistentCache Function to retrieve the persistent cache.
+ * @returns Memory settings object.
+ */
+
+export function createTextMemorySettings(
+    embeddingCacheSize = 64,
+    getPersistentCache?: () => TextEmbeddingCache | undefined,
+) {
+    return {
+        ...createMemorySettings(embeddingCacheSize, getPersistentCache),
+    };
+}

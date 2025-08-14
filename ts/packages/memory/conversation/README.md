@@ -64,13 +64,20 @@ You can **import** an existing text file as a DocMemory. The importer infers the
 ```
 import * as cm from "conversation-memory";
 
+// Import text file as memory.
 memory = cm.DocMemory.importFromTextFile(textFilePath, ...);
+// Index the memory. This will automatically do knowledge extraction etc.
 await memory.buildIndex();
+// Save the index
 await memory.writeToFile(...);
 
-memory.settings.useScopedSearch = true;
+// Run queries
 await memory.getAnswerFromLanguage("Summarize the section on XX...");
 await memory.getAnswerFromLanguage("List all books in the section named YYY");
+
+// Load a memory from disk
+memory = await cm.DocMemory.readFromFile(...)
+
 ```
 
 ## Podcasts
