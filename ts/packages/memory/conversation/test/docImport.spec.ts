@@ -19,7 +19,7 @@ describeIf(
                     2048,
                     "aardvark",
                 );
-                verifyMessages(docMemory.messages, 23);
+                verifyMessages(docMemory.messages, 23, 45);
             },
             testTimeout,
         );
@@ -32,7 +32,7 @@ describeIf(
                     2048,
                     "TypeAgent",
                 );
-                verifyMessages(docMemory.messages, 26);
+                verifyMessages(docMemory.messages, 26, 80);
             },
             testTimeout,
         );

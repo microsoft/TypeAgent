@@ -116,6 +116,7 @@ export function verifyString(value?: string) {
 export function verifyMessages(
     messages: kp.IMessageCollection,
     expectedMessageCount?: number,
+    expectedTagCount?: number,
 ): void {
     expect(messages.length).toBeGreaterThan(0);
     if (expectedMessageCount !== undefined) {
@@ -125,6 +126,9 @@ export function verifyMessages(
         expect(message).toBeDefined();
         verifyMessageTags(message);
         verifyMessageKnowledge(message);
+    }
+    if (expectedTagCount !== undefined) {
+        expect(getTagCount(messages)).toEqual(expectedTagCount);
     }
 }
 
@@ -157,4 +161,12 @@ export function verifyEntity(entity: kpLib.ConcreteEntity) {
             expect(facet.value).toBeDefined();
         });
     }
+}
+
+function getTagCount(messages: kp.IMessageCollection): number {
+    let counter = 0;
+    for (const message of messages) {
+        counter += message.tags.length;
+    }
+    return counter;
 }
