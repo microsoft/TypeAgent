@@ -3,6 +3,7 @@
 
 import { describeIf, hasTestKeys } from "test-lib";
 import { importDocMemoryFromTextFile } from "../src/docImport.js";
+import { verifyMessages } from "./verify.js";
 
 describeIf(
     "docImport.online",
@@ -18,7 +19,7 @@ describeIf(
                     2048,
                     "aardvark",
                 );
-                expect(docMemory.messages.length).toBeGreaterThan(0);
+                verifyMessages(docMemory.messages, 23, 45);
             },
             testTimeout,
         );
@@ -31,7 +32,7 @@ describeIf(
                     2048,
                     "TypeAgent",
                 );
-                expect(docMemory.messages.length).toBeGreaterThan(0);
+                verifyMessages(docMemory.messages, 26, 80);
             },
             testTimeout,
         );
