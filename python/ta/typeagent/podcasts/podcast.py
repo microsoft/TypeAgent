@@ -202,7 +202,7 @@ class Podcast(
         )
         # build_conversation_index automatically builds standard secondary indexes.
         # Pass false here to build podcast specific secondary indexes only.
-        self._build_transient_secondary_indexes(False)
+        await self._build_transient_secondary_indexes(False)
         if self.secondary_indexes is not None:
             if self.secondary_indexes.threads is not None:
                 await self.secondary_indexes.threads.build_index()  # type: ignore  # TODO
@@ -287,7 +287,7 @@ class Podcast(
             )
             self.secondary_indexes.message_index.deserialize(message_index_data)
 
-        self._build_transient_secondary_indexes(True)
+        await self._build_transient_secondary_indexes(True)
 
     @staticmethod
     async def read_from_file(
@@ -313,9 +313,9 @@ class Podcast(
         await podcast.deserialize(data)
         return podcast
 
-    def _build_transient_secondary_indexes(self, build_all: bool) -> None:
+    async def _build_transient_secondary_indexes(self, build_all: bool) -> None:
         if build_all:
-            secindex.build_transient_secondary_indexes(self)
+            await secindex.build_transient_secondary_indexes(self)
         self._build_participant_aliases()
         self._add_synonyms()
 
