@@ -1,11 +1,16 @@
 # KnowPro
 
-**KnowPro** is **experimental sample code** working towards an MVP library for [**Structured RAG**](#structured-rag-overview). KnowPro is early stage, in **active** development, with frequent updates.
+**KnowPro** is **experimental sample code** working towards an MVP library for [**Structured RAG**](#structured-rag-overview). KnowPro is in **active** development, with frequent updates.
 
-- The KnowPro implementation of Structured RAG is used to explore types of [**memory**](../memory/README.md).
+The KnowPro implementation of Structured RAG is used to explore types of [**memory**](../memory/README.md).
+
+- The TypeAgent **Dispatcher** implements **Agent Memory** using [conversation-memory](../memory/conversation/README.md) package.
+- Other [memory types](../memory/conversation/README.md) include:
+  - Transcripts
+  - Documents
+  - Email
+  - Image
 - The [KnowPro test app](../../examples/chat/README.md) demonstrates how to use the KnowPro API and memory implementations.
-
-Note: the TypeAgent **Dispatcher** currently implements **Agent Memory** using an early implementation of Structured RAG found in the [knowledge-processor](../knowledgeProcessor/README.md) package.
 
 ## API
 

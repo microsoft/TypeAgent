@@ -19,6 +19,8 @@ packages/defaultAgentProvider/test/repo
 packages/defaultAgentProvider/data/**/*.json
 packages/knowPro/test/data
 packages/knowPro/test/data/**/*.json
+packages/knowPro/test/data
+packages/memory/conversation/test/data
 
 # Test result
 packages/shell/test-results/*

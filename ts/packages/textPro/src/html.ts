@@ -433,9 +433,9 @@ export class HtmlToMdConvertor {
                         case "code":
                             this.beginBlock(tagName);
                             this.appendPrefix();
-                            this.appendMarkup("\t");
+                            this.appendMarkup("```");
                             this.traverseChildren(childElement);
-                            this.appendMarkup("\n");
+                            this.appendMarkup("```\n");
                             this.endBlock();
                             break;
                         case "ul":
