@@ -359,6 +359,8 @@ export abstract class Memory<
 
     /***
      * Run a natural language query against this memory.
+     * Search returns knowledge and messages relevant to the query.
+     * Knowledge and messages are scored for relevance.
      * @param {string} searchText - The natural language query text.
      * @param {kp.LanguageSearchOptions} [options] - Optional search options.
      * @param {kp.LanguageSearchDebugContext} [debugContext] - Optional debug context.
@@ -419,7 +421,7 @@ export abstract class Memory<
      * @param type (Optional) entity type to match
      * @param facetName (Optional) facet name to match
      * @param facetValue (Optional) facet value  to match
-     * @param {kp.WhenFilter} when
+     * @param {kp.WhenFilter} when (Optional) Scoping filter
      * @param {kp.SearchOptions} options
      * @returns
      */

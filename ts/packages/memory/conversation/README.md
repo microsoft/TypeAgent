@@ -44,7 +44,7 @@ await memory.addMessage(message);
 // Answer a question using memory
 answer = memory.getAnswerFromLanguage("Your question")
 
-// Search
+// Search for relevant knowledge and messages
 results = await memory.searchWithLanguage("Your question")
 ```
 
