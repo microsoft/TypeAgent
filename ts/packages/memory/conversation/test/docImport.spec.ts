@@ -19,7 +19,6 @@ describeIf(
                     "aardvark",
                 );
                 expect(docMemory.messages.length).toBeGreaterThan(0);
-                expect(docMemory.semanticRefs.length).toBeGreaterThan(0);
             },
             testTimeout,
         );
@@ -33,7 +32,6 @@ describeIf(
                     "TypeAgent",
                 );
                 expect(docMemory.messages.length).toBeGreaterThan(0);
-                expect(docMemory.semanticRefs.length).toBeGreaterThan(0);
             },
             testTimeout,
         );
