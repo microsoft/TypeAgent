@@ -30,6 +30,6 @@ if (process.argv.includes("--moz")) {
     
     const topN = parseInt(process.argv[process.argv.indexOf("--topN") + 1], 10);
     const topNExtractor = new topNDomainsExtractor(topN);
-    await topNExtractor.extract();
+    await topNExtractor.extract(process.argv.includes("--clear"));
 }
 

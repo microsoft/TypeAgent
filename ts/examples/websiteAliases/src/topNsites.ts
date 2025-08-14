@@ -4,14 +4,17 @@
 import { openai, CompletionSettings, ChatModelWithStreaming } from "aiclient";
 import chalk from "chalk";
 import { existsSync, readFileSync, writeFileSync } from "fs";
-import { domainAlises } from "./generateOpenCommandPhrasesSchema.js";
+import { domains } from "./generateOpenCommandPhrasesSchema.js";
 import { createTypeChat, loadSchema } from "typeagent";
 import { Result } from "typechat";
 
 export class topNDomainsExtractor {
+    // manually downloadable from: https://radar.cloudflare.com/domains
     private downloadUrl: string = "https://radar.cloudflare.com/charts/LargerTopDomainsTable/attachment?id=1257&top=";
     private topN: number = 100;
-    private topNFile: string = "examples/websiteAliases/topN.csv";
+    private topNFile: string = "examples/websiteAliases/top100_000.csv";
+    private outputFile: string = "examples/websiteAliases/phrases_to_sites.json";
+    private keywordsToSites: Record<string, string[]> = {};
 
     constructor(topN?: number) {
         if (topN && topN > 0) {
@@ -31,18 +34,35 @@ export class topNDomainsExtractor {
     /**
      * Downloads the topN sites from CloudFlare, then systematically attepmpts to resolve a keyword for each site.
      */
-    public async extract() {
+    public async extract(clear: boolean = false): Promise<void> {
         // get the top domains
         this.downloadTopNDomains();
+
+        // start over from scratch?
+        if (!clear && existsSync(this.outputFile)) {
+            this.keywordsToSites = JSON.parse(readFileSync(this.outputFile, "utf-8"));
+        }
 
         // open the file, throw away the headers
         const fileContent = readFileSync(this.topNFile, "utf-8");
         const lines = fileContent.split("\n").slice(1);
 
+        // TODO: go to the web page and see if it's something we even want to index
+        // TODO: use category
+        // TODO: handle when there is no category in the file
+
         // go through each line, get the domain from the 2nd column and then generate
         // the keyword/phrases for that domain
-        for (const line of lines) {
-            const columns = line.split(",");
+        const batch: Promise<void>[] = [];
+        const batchSize = 4;
+        const pageSize = 5;
+        const batchCount = Math.ceil(lines.length / (batchSize * pageSize));                
+        const domains: string[][] = new Array<string[]>(batchCount);    
+        let batchNum = 0;
+        console.log(`${lines.length} domains. Processing in ${batchCount} batches of ${batchSize} domains each.`);    
+        
+        for(let i = 0; i < lines.length; i++) {
+            const columns = lines[i].split(",");
             if (columns.length < 2) {
                 continue; // skip invalid lines
             }
@@ -52,10 +72,33 @@ export class topNDomainsExtractor {
                 continue; // skip empty domains
             }
 
-            // Here you would call a method to generate keywords for the domain
-            console.log(`Processing: ${chalk.blueBright(domain)}`);
-            await this.generateOpenPhrasesForDomain(domain);
+            // accumulate domains till will fill a page
+            if (domains[batchNum] === undefined) {
+                domains[batchNum] = [];
+            }
+            domains[batchNum].push(domain);
+
+            // once the page is full or if it's the last page, send it
+            if (domains[batchNum].length >= pageSize || i === lines.length - 1) {
+                const bb = batchNum++;
+                console.log(`Processing: ${chalk.blueBright(domains[bb])}`);
+
+                batch.push(this.generateOpenPhrasesForDomains(domains[bb]).catch((err) => {
+                    console.error(chalk.red(`Error processing domains ${domains[bb]}: ${err.message}`));
+                }));
+
+                if (batch.length >= batchSize) {
+                    await Promise.all(batch).then(() => {
+                        console.log(chalk.grey(`Processed batch ${bb} of ${batchCount}.`));
+                    });
+
+                    batch.length = 0; // reset the batch
+                }
+            }
         }
+
+        // save the output file
+        writeFileSync(this.outputFile, JSON.stringify(this.keywordsToSites, null, 2));
     }
 
     /**
@@ -70,100 +113,42 @@ export class topNDomainsExtractor {
 
         const response = await fetch(this.downloadUrl);
         if (!response.ok) {
-
-            // Forbidden (bot detection, try built-in browser)
-            if (response.status === 403) {
-                // const browser = await puppeteer.launch({
-                //     headless: false,
-                // });
-
-                // const page = await browser.newPage();
-                // try {
-                //     await page.goto(this.downloadUrl, {
-                //         waitUntil: "load",
-                //     });
-
-                //     a
-
-                //     await page.waitForSelector('div[class="meCS4"]', {
-                //         timeout: 30000,
-                //     });
-
-                //     // const data = await page.$$eval(
-                //     //     'script[type="application/ld+json"]',
-                //     //     `document.documentElement.outerHTML`,
-                //     // );
-                //     // if (data) {
-                //     //     console.log(`Extracted data for ${site}`);
-                //     // }
-                //     // return data as string;
-                // } catch (err) {
-                //     if (err instanceof TimeoutError) {
-                //         console.warn("Element did not appear within 5 seconds.");
-                //     } else {
-                //         console.warn(`Failed to download ${this.downloadUrl}}`);
-                //     }
-                // } finally {
-                //     await page.close();
-                // }
-            }
-
             throw new Error(`Failed to fetch top N domains: ${response.statusText}.  Please download '${this.downloadTopNDomains} manually and put the file at '${this.topNFile}'`);
         }
 
         // save this file locally
         const data = await response.text();
         writeFileSync(this.topNFile, data);
-
-    //     try {
-    //         await closeChrome();
-    //     } catch (e) {
-    //         console.log(e);
-    //     }
-
-    //     const browser = await puppeteer.launch({
-    //         headless: false,
-    //     });
-
-    //     const page = await browser.newPage();
-    //     try {
-    //         await page.goto(this.downloadUrl, {
-    //             waitUntil: "load",
-    //         });
-    //         await page.waitForSelector('div[class="container domain-analysis"]', {
-    //             timeout: 5000,
-    //         });
-
-    //         const data = await page.$$eval(
-    //             'script[type="application/ld+json"]',
-    //             `document.documentElement.outerHTML`,
-    //         );
-    //         if (data) {
-    //             console.log(`Extracted data for ${site}`);
-    //         }
-    //         return data as string;
-    //     } catch (err) {
-    //         if (err instanceof TimeoutError) {
-    //             console.warn("Element did not appear within 5 seconds.");
-    //         } else {
-    //             console.warn(`Failed to scrape ${site}: ${err}`);
-    //         }
-    //         return null;
-    //     } finally {
-    //         await page.close();
-    //     }
     }
 
     /**
      * Generate open command phrases for a given domain.
      * @param domain - The domain to generate open phrases for (i.e. open Adidas, open three stripe brand, etc.)
      */
-    private async generateOpenPhrasesForDomain(domain: string): Promise<void> {
-        const response = await this.getTypeChatResponse(domain);
+    private async generateOpenPhrasesForDomains(domains: string[]): Promise<void> {
+        const response = await this.getTypeChatResponse(domains.join("\n"));
         if (response.success) {
-            console.log(chalk.green(`Generated phrases for ${domain}:`));
+            response.data.domains.forEach(element => {
+                console.log(chalk.green(`Generated ${element.aliases.length} phrases for ${element.domain}:`));
+
+                // merge the aliases with existing keywords
+                element.aliases.forEach(alias => {
+
+                    if (alias.toLowerCase().startsWith("open ")) {
+                        alias = alias.slice(5);
+                    }
+
+                    if (this.keywordsToSites[alias] === undefined) {
+                        this.keywordsToSites[alias] = [element.domain];
+                    } else {
+                        this.keywordsToSites[alias] = [...new Set([...this.keywordsToSites[alias], element.domain])];
+
+                        console.log(chalk.yellow(`\t${alias} now maps to ${this.keywordsToSites[alias].length} sites.`));
+                    }                
+                });
+            }); 
         } else {
-            console.error(chalk.red(`Failed to generate phrases for ${domain}: ${response.message}`));
+            console.error(chalk.red(`Failed to generate phrases for ${domains}: ${response.message}`));
         }
 
         return;
@@ -171,7 +156,7 @@ export class topNDomainsExtractor {
 
     private async getTypeChatResponse(
         pageMarkdown: string,
-    ): Promise<Result<domainAlises>> {
+    ): Promise<Result<domains>> {
         // Create Model instance
         let chatModel = this.createModel(true);
 
@@ -180,12 +165,12 @@ export class topNDomainsExtractor {
         let maxWindowLength = 30;
 
         // create TypeChat object
-        const chat = createTypeChat<domainAlises>(
+        const chat = createTypeChat<domains>(
             chatModel,
             loadSchema(["generateOpenCommandPhrasesSchema.ts"], import.meta.url),
-            "domainAlises",
+            "domains",
             `
-There is a system that uses the command "Open" to open URLs in the browser.  You are helping me generate terms that I can cache such that when the user says "open apple" it goes to "https://apple.com".  YOu generate alternate terms/keywords/phrases/descriptions a user could use to invoke the same site. Avoid using statements that could actually refer to sub pages like (open ipad page). since those are technically different URLs.
+There is a system that uses the command "Open" to open URLs in the browser.  You are helping me generate terms that I can cache such that when the user says "open apple" it goes to "https://apple.com".  You generate alternate terms/keywords/phrases/descriptions a user could use to invoke the same site. Avoid using statements that could actually refer to sub pages like (open ipad page). since those are technically different URLs.
 
 For example: apple.com could be:
 

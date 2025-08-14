@@ -13,7 +13,8 @@
       "name": "list-agent"
     },
     "browser": {
-      "name": "browser-typeagent"
+      "name": "browser-typeagent",
+      "execMode": "dispatcher"
     },
     "desktop": {
       "name": "desktop-automation"
