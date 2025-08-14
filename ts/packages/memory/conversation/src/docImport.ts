@@ -189,7 +189,7 @@ export function docPartFromText(
 /**
  * Break the given html into DocParts
  * @param html html text
- * @param textOnly if true, use only text, removing all formatting etc.
+ * @param textOnly if true, use only text, ignoring all formatting etc.
  * @param maxCharsPerChunk
  * @param sourceUrl
  * @param rootTag

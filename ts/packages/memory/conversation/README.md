@@ -30,6 +30,7 @@ See example code in [knowproConversation.ts](../../../examples/chat/src/memory/k
 ```
 import * as cm from "conversation-memory";
 
+// Create a new OR load an existing conversation memory
 memory = cm.createConversationMemory(
             {
                 dirPath,

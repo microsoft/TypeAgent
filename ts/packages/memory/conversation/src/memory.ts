@@ -62,8 +62,18 @@ export function createMemorySettings(
     return memorySettings;
 }
 
+/**
+ * Settings for how memory index file are stored
+ */
 export type IndexFileSettings = {
+    /**
+     * Directory that contains memory files
+     */
     dirPath: string;
+    /**
+     * Base filename for memory files
+     * Specific filenames used to persist memory use this as a prefix
+     */
     baseFileName: string;
 };
 

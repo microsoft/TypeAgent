@@ -6,6 +6,7 @@ import * as kp from "knowpro";
 import * as tl from "test-lib";
 import { conversation as kpLib } from "knowledge-processor";
 import { EmailMessage } from "../src/emailMessage.js";
+import { Message } from "../src/memory.js";
 
 export function verifyNoIndexingErrors(results: kp.IndexingResults) {
     verifyNoTextIndexingError(results.semanticRefs);
@@ -114,7 +115,7 @@ export function verifyString(value?: string) {
 }
 
 export function verifyMessages(
-    messages: kp.IMessageCollection,
+    messages: kp.IMessageCollection | Message[],
     expectedMessageCount?: number,
     expectedTagCount?: number,
 ): void {
@@ -163,7 +164,7 @@ export function verifyEntity(entity: kpLib.ConcreteEntity) {
     }
 }
 
-function getTagCount(messages: kp.IMessageCollection): number {
+function getTagCount(messages: kp.IMessageCollection | Message[]): number {
     let counter = 0;
     for (const message of messages) {
         counter += message.tags.length;
