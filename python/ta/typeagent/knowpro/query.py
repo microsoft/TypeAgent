@@ -44,6 +44,7 @@ from .interfaces import (
     Term,
     TextLocation,
     TextRange,
+    Thread,
 )
 from .kplib import ConcreteEntity
 from .messageindex import IMessageTextEmbeddingIndex
@@ -1091,8 +1092,9 @@ class SelectMessagesInCharBudget(QueryOpExpr[MessageAccumulator]):
     max_chars: int
 
     async def eval(self, context: QueryEvalContext) -> MessageAccumulator:
-        # TODO: Implement character budget logic
-        return await self.src_expr.eval(context)
+        matches = await self.src_expr.eval(context)
+        await matches.select_messages_in_budget(context.messages, self.max_chars)
+        return matches
 
 
 # TODO: Implement proper KnowledgeTypePredicate functionality
@@ -1103,7 +1105,6 @@ class KnowledgeTypePredicate(IQuerySemanticRefPredicate):
     knowledge_type: KnowledgeType
 
     async def eval(self, context: QueryEvalContext, semantic_ref: SemanticRef) -> bool:
-        # TODO: Implement knowledge type filtering logic
         return semantic_ref.knowledge_type == self.knowledge_type
 
 
@@ -1112,27 +1113,29 @@ class KnowledgeTypePredicate(IQuerySemanticRefPredicate):
 class ThreadSelector(IQueryTextRangeSelector):
     """Selector for thread-based text ranges."""
 
-    threads: list  # TODO: Define proper thread type
+    threads: list[Thread]
 
     async def eval(
         self,
         context: QueryEvalContext,
         semantic_refs: SemanticRefAccumulator | None = None,
     ) -> TextRangeCollection | None:
-        # TODO: Implement thread selection logic
-        return None
+        text_ranges = TextRangeCollection()
+        for thread in self.threads:
+            text_ranges.add_ranges(list(thread.ranges))
+        return text_ranges
 
 
 def create_tag_search_term_group(tags: list[str]) -> SearchTermGroup:
     """Create a search term group for tags."""
-    # TODO: Implement proper tag search term group creation
-
     terms = []
     for tag in tags:
-        search_term = SearchTerm(term=Term(text=tag))
-        property_term = PropertySearchTerm(
-            property_name="tag", property_value=search_term
-        )
+        # Create PropertySearchTerm manually to avoid circular import
+        # with create_property_search_term() from searchlang
+        property_value = SearchTerm(
+            Term(tag), related_terms=[]
+        )  # No related terms for exact match
+        property_term = PropertySearchTerm("tag", property_value)
         terms.append(property_term)
 
-    return SearchTermGroup(boolean_op="or", terms=terms)
+    return SearchTermGroup(boolean_op="or_max", terms=terms)
