@@ -376,7 +376,8 @@ export abstract class Memory<
 
     /***
      * Run a natural language query against this memory.
-     * Search returns knowledge and messages relevant to the query.
+     * Natural language is translated to knowpro {@link kp.SearchSelectExpr | search expressions}
+     * These expressions are used to search memory, which returns knowledge and messages relevant to the query.
      * Knowledge and messages are scored for relevance.
      * @param {string} searchText - The natural language query text.
      * @param {kp.LanguageSearchOptions} [options] - Optional search options.

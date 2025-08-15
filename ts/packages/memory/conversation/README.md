@@ -1,23 +1,23 @@
 # Conversation Memory
 
-The **conversation-memory** package is **experimental sample code** under active development with _frequent_ updates.
+The **conversation-memory** package is experimental sample code under active development with _frequent_ updates.
 
 The **conversation-memory** package explores how to implement types of _conversational memory_ using the [KnowPro](../../knowPro/README.md) library.
 
 **Memory** is defined as sequences of timestamped **messages** between senders and receivers. The following memory types can be considered conversations:
 
-- [Conversation Memory](./src/conversationMemory.ts) such as interactive chats
-- [Podcasts](./src/podcast.ts)
-- [Email](./src/emailMemory.ts)
-- [Document](./src/docMemory.ts)
+- [Conversation Memory](./src/conversationMemory.ts) such as interactive chats, agent interaction memories and other conversations.
+- [Document Memory](./src/docMemory.ts): transcripts, markdown, html documents.
+- [Email](./src/emailMemory.ts): memories containing email messages.
+- [Podcasts](./src/podcast.ts): Transcripts of podcasts etc.
 
-Memories are added to and indexed **incrementally** and on the fly. This allows emails and conversation messages to be added to memory and indexed as they come in.
+Memories are added to and indexed **incrementally** and on demand. Conversation messages, emails, transcript chunks or document parts can be added to memory and indexed as they come in. Memories are mutable.
 
-New memories are analyzed and salient knowledge such as entities, actions and topics extracted and indexed. This indexed knowledge allows memories to support precise [search](./src/memory.ts#search) and retrieval with **low latency**.
+New memories are analyzed and _salient knowledge_ such as entities, actions and topics extracted and indexed. This indexed knowledge allows memories to support precise [search](./src/memory.ts#search) and retrieval with **low latency**.
 
-Memories can be searched using natural language or knowpro search expressions. You can search memory for discovered knowledge such as entities of a particular type.
+Memories can be searched using [natural language](./src/memory.ts#searchWithLanguage) or knowpro [search expressions](./src/memory.ts#search). You can search memory for discovered knowledge such as entities, actions where a subject entity performed an action on an object entity, or topics. \
 
-Memories can also **answer** questions, return summaries, analysis, lists and so on. You can ask for answers using natural language.
+Memories can **[answer](./src/memory.ts#getAnswerFromLanguage)** questions, return summaries, analysis, lists and so on. You can ask for answers using natural language. Memories translate your natural language question into search query expressions. The search results of evaluating these expressions are then used to generate a natural language **answer**.
 
 Memories can be both persisted and loaded on demand.
 

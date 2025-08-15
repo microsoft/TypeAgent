@@ -4,13 +4,9 @@
 
 Memory types currently being explored:
 
-- [Conversational memories](./conversation/README.md) in the [conversation-memory](./conversation/) package.
-  - [Conversation Memory](./conversation/src/conversationMemory.ts)
-  - [Podcast](./conversation/src/podcast.ts)
-  - [Email](./conversation/src/emailMemory.ts)
+- [Conversation memories](./conversation/README.md) are memories that represented
+  as sequences of messages. Such memories include chat and conversation transcripts, agent interactions, emails, document parts, etc. Conversation memories are dynamic, mutable and built/indexed incrementally and on demand.
 - [Image memory](./image/README.md) in the [image-memory](./image/README.md) package
-
-Look at the [memory example](../../examples/chat/README.md) for example usage.
 
 ## Trademarks
 
