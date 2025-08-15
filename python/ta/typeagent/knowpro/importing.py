@@ -2,13 +2,16 @@
 # Licensed under the MIT License.
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from ..aitools.embeddings import AsyncEmbeddingModel
 from ..aitools.vectorbase import TextEmbeddingIndexSettings
 
 from .convknowledge import KnowledgeExtractor
 from .interfaces import IStorageProvider
-from .storage import MemoryStorageProvider
+
+if TYPE_CHECKING:
+    from .storage import MemoryStorageProvider
 
 
 # TODO: RelatedTermIndexSettings belongs in reltermsindex.py.
@@ -75,5 +78,7 @@ class ConversationSettings:
 
         # Default to in-memory storage provider for backward compatibility
         if storage_provider is None:
+            from .storage import MemoryStorageProvider
+
             storage_provider = MemoryStorageProvider()
         self.storage_provider = storage_provider

@@ -12,7 +12,7 @@ from typeagent.knowpro.convindex import (
 )
 from typeagent.knowpro.kplib import ConcreteEntity, Facet, Action, KnowledgeResponse
 from typeagent.knowpro.interfaces import Topic
-from typeagent.knowpro.storage import SemanticRefCollection
+from typeagent.knowpro.collections import SemanticRefCollection
 
 
 @pytest.fixture

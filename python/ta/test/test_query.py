@@ -51,7 +51,10 @@ from typeagent.knowpro.query import (
     lookup_knowledge_type,
 )
 from typeagent.knowpro.propindex import PropertyIndex
-from typeagent.knowpro.storage import MessageCollection, SemanticRefCollection
+from typeagent.knowpro.collections import (
+    MemoryMessageCollection as MessageCollection,
+    SemanticRefCollection,
+)
 
 
 def downcast[T](cls: type[T], obj: object) -> T:
@@ -694,7 +697,7 @@ async def test_lookup_knowledge_type():
         TextLocation,
         Topic,
     )
-    from typeagent.knowpro.storage import SemanticRefCollection
+    from typeagent.knowpro.collections import SemanticRefCollection
 
     # Create valid TextRange and Topic objects
     rng = TextRange(TextLocation(0, 0), TextLocation(0, 1))

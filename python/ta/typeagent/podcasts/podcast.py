@@ -31,7 +31,10 @@ from ..knowpro.interfaces import (
 from ..knowpro.messageindex import MessageTextIndex
 from ..knowpro.reltermsindex import TermToRelatedTermsMap
 from ..knowpro import serialization
-from ..knowpro.storage import MessageCollection, SemanticRefCollection
+from ..knowpro.collections import (
+    MemoryMessageCollection as MessageCollection,
+    SemanticRefCollection,
+)
 from ..storage.sqlitestore import get_storage_provider
 
 

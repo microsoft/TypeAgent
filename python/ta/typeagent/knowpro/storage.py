@@ -9,83 +9,102 @@ from typing import (
     Callable,
 )
 
+from .collections import (
+    MemoryCollection,
+    MemoryMessageCollection,
+    MemorySemanticRefCollection,
+)
+from .convindex import ConversationIndex
+from .convthreads import ConversationThreads
+from .importing import MessageTextIndexSettings, RelatedTermIndexSettings
 from .interfaces import (
-    ICollection,
+    IConversationThreads,
     IMessage,
+    IMessageTextIndex,
+    IPropertyToSemanticRefIndex,
     IStorageProvider,
+    ITermToRelatedTermsIndex,
+    ITermToSemanticRefIndex,
+    ITimestampToTextRangeIndex,
     JsonSerializer,
     MessageOrdinal,
     SemanticRef,
     SemanticRefOrdinal,
 )
+from .messageindex import MessageTextIndex
+from .propindex import PropertyIndex
+from .reltermsindex import RelatedTermsIndex
+from .timestampindex import TimestampToTextRangeIndex
 
 
-class Collection[T, TOrdinal: int](ICollection[T, TOrdinal]):
-    """A generic in-memory (non-persistent) collection class."""
-
-    def __init__(self, items: list[T] | None = None):
-        self.items: list[T] = items or []
-
-    async def size(self) -> int:
-        return len(self.items)
-
-    def __aiter__(self):
-        """Return an async iterator over the collection."""
-        return self._async_iterator()
-
-    async def _async_iterator(self):
-        """Async generator that yields items from the collection."""
-        for item in self.items:
-            yield item
-
-    async def get_item(self, arg: int) -> T:
-        """Retrieve an item by its ordinal."""
-        return self.items[arg]
-
-    async def get_slice(self, start: int, stop: int) -> list[T]:
-        """Retrieve a slice of items."""
-        return self.items[start:stop]
-
-    async def get_multiple(self, arg: list[TOrdinal]) -> list[T]:
-        """Retrieve multiple items by their ordinals."""
-        return [await self.get_item(ordinal) for ordinal in arg]
-
-    @property
-    def is_persistent(self) -> bool:
-        return False
-
-    async def append(self, item: T) -> None:
-        """Append items to the collection."""
-        self.items.append(item)
-
-    async def extend(self, items: Iterable[T]) -> None:
-        """Extend the collection with multiple items."""
-        self.items.extend(items)
-
-
-class SemanticRefCollection(Collection[SemanticRef, SemanticRefOrdinal]):
-    """A collection of semantic references."""
-
-
-class MessageCollection[TMessage: IMessage](Collection[TMessage, MessageOrdinal]):
-    """A collection of messages."""
-
-
-class MemoryStorageProvider(IStorageProvider):
+class MemoryStorageProvider[TMessage: IMessage](IStorageProvider[TMessage]):
     """A storage provider that operates in memory."""
 
-    async def create_message_collection[TMessage: IMessage](
+    def __init__(
+        self,
+        message_text_settings: MessageTextIndexSettings | None = None,
+        related_terms_settings: RelatedTermIndexSettings | None = None,
+    ):
+        # Create all index objects immediately
+        self._conversation_index = ConversationIndex()
+        self._property_index = PropertyIndex()
+        self._timestamp_index = TimestampToTextRangeIndex()
+
+        # Use provided settings or create test-friendly defaults
+        if message_text_settings is None:
+            from ..aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
+            from ..aitools.vectorbase import TextEmbeddingIndexSettings
+
+            test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
+            embedding_settings = TextEmbeddingIndexSettings(test_model)
+            message_text_settings = MessageTextIndexSettings(embedding_settings)
+        self._message_text_index = MessageTextIndex(message_text_settings)
+
+        if related_terms_settings is None:
+            from ..aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
+            from ..aitools.vectorbase import TextEmbeddingIndexSettings
+
+            test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
+            embedding_settings = TextEmbeddingIndexSettings(test_model)
+            related_terms_settings = RelatedTermIndexSettings(embedding_settings)
+        self._related_terms_index = RelatedTermsIndex(related_terms_settings)
+
+        self._conversation_threads = ConversationThreads()
+
+    async def initialize_indexes(self) -> None:
+        """Initialize indexes. For memory storage, this is a no-op since indexes are created in __init__."""
+        pass
+
+    async def get_conversation_index(self) -> ITermToSemanticRefIndex:
+        return self._conversation_index
+
+    async def get_property_index(self) -> IPropertyToSemanticRefIndex:
+        return self._property_index
+
+    async def get_timestamp_index(self) -> ITimestampToTextRangeIndex:
+        return self._timestamp_index
+
+    async def get_message_text_index(self) -> IMessageTextIndex[TMessage]:
+        return self._message_text_index
+
+    async def get_related_terms_index(self) -> ITermToRelatedTermsIndex:
+        return self._related_terms_index
+
+    async def get_conversation_threads(self) -> IConversationThreads:
+        return self._conversation_threads
+
+    async def create_message_collection(
         self,
         serializer: JsonSerializer[TMessage] | type[TMessage] | None = None,
-    ) -> MessageCollection[TMessage]:
+    ) -> MemoryMessageCollection[TMessage]:
         """Create a new message collection."""
         if isinstance(serializer, JsonSerializer):
             raise ValueError("MemoryStorageProvider does not use a serializer.")
-        return MessageCollection[TMessage]()
+        return MemoryMessageCollection[TMessage]()
 
-    async def create_semantic_ref_collection(self) -> SemanticRefCollection:
+    async def create_semantic_ref_collection(self) -> MemorySemanticRefCollection:
         """Create a new semantic reference collection."""
-        return SemanticRefCollection()
+        return MemorySemanticRefCollection()
 
     async def close(self) -> None:
         """Close the storage provider."""
@@ -104,7 +123,7 @@ class Batch[T]:
 
 
 async def get_batches_from_collection[T](
-    collection: Collection[T, int],
+    collection: MemoryCollection[T, int],
     start_at_ordinal: int,
     batch_size: int,
 ) -> list[Batch[T]]:
@@ -121,7 +140,7 @@ async def get_batches_from_collection[T](
 
 
 async def map_collection[T](
-    collection: Collection[T, int],
+    collection: MemoryCollection[T, int],
     callback: Callable[[T, int], T],
 ) -> list[T]:
     """Map a callback function over a collection."""
@@ -134,7 +153,7 @@ async def map_collection[T](
 
 
 async def filter_collection[T](
-    collection: Collection[T, int],
+    collection: MemoryCollection[T, int],
     predicate: Callable[[T, int], bool],
 ) -> list[T]:
     """Filter items in a collection based on a predicate."""

@@ -26,7 +26,7 @@ from typeagent.knowpro.interfaces import (
     Term,
 )
 from typeagent.knowpro.kplib import Action, ConcreteEntity
-from typeagent.knowpro.storage import SemanticRefCollection
+from typeagent.knowpro.collections import SemanticRefCollection
 
 
 def test_match_accumulator_add_and_get():

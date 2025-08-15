@@ -23,10 +23,10 @@ from typeagent.knowpro.secindex import (
     build_secondary_indexes,
     build_transient_secondary_indexes,
 )
-from typeagent.knowpro.storage import (
-    MessageCollection,
+from typeagent.knowpro.storage import MemoryStorageProvider
+from typeagent.knowpro.collections import (
+    MemoryMessageCollection as MessageCollection,
     SemanticRefCollection,
-    MemoryStorageProvider,
 )
 from typeagent.knowpro.timestampindex import TimestampToTextRangeIndex
 

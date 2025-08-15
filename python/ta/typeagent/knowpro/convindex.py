@@ -30,7 +30,7 @@ from .interfaces import (
     Topic,
 )
 from .knowledge import extract_knowledge_from_text_batch
-from .storage import SemanticRefCollection
+from .collections import MemorySemanticRefCollection
 
 
 # TODO: Doesn't exist any more? But used in timestampindex.py currently
@@ -696,7 +696,7 @@ def begin_indexing[
     if conversation.semantic_ref_index is None:
         conversation.semantic_ref_index = ConversationIndex()  # type: ignore  # TODO: Why doesn't pyright like this?
     if conversation.semantic_refs is None:
-        conversation.semantic_refs = SemanticRefCollection()
+        conversation.semantic_refs = MemorySemanticRefCollection()
 
 
 def verify_has_semantic_ref_index(conversation: IConversation) -> None:

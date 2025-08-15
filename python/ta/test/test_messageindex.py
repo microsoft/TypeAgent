@@ -23,7 +23,8 @@ from typeagent.knowpro.interfaces import (
     MessageTextIndexData,
     TextToTextLocationIndexData,
 )
-from typeagent.knowpro.storage import MessageCollection, MemoryStorageProvider
+from typeagent.knowpro.storage import MemoryStorageProvider
+from typeagent.knowpro.collections import MemoryMessageCollection as MessageCollection
 from typeagent.knowpro.textlocindex import TextToTextLocationIndex
 
 from fixtures import needs_auth  # type: ignore  # It's used!
