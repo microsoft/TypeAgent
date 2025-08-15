@@ -74,13 +74,18 @@ export function createDocMemorySettings(
 
 /**
  * A DocMemory is a collection of {@link DocPart}.
- * You can search document memories and generate answers like any other memory:
- * - using natural language
- * - using direct queries
+ * You can search document memories and generate answers using:
+ * - using natural language queries
+ * - Query expressions
+ *
+ * Indexing:
+ * You must call {@link buildIndex} to enable query operations.
+ * You call {@link writeToFile} to persist the memory and any indexes created by buildIndex.
+ * Alternatively, you can incrementally and and index a new DocPart by calling {@link addPartToIndex}
  *
  * Doc memories are mutable.
  *
- * You can import text files like .vtt, .html, .md etc as DocMemories using the {@link importDocMemoryFromTextFile}
+ * You can import text files like .vtt, .html, .md etc as DocMemories using the {@link importDocMemoryFromTextFile} function
  *
  * @see Memory base class for APIs
  * @see DocPart
@@ -184,12 +189,13 @@ export class DocMemory
     }
 
     /**
-     * Dynamically add a new DocPart to the document index
+     * Add a new DocPart this memory and update the index.
+     * Use for incrementally adding to this document
      * @param item
      * @param {kp.IndexingEventHandlers} eventHandler
      * @returns
      */
-    public async addItemToIndex(
+    public async addPartToIndex(
         item: DocPart,
         eventHandler?: kp.IndexingEventHandlers,
     ): Promise<kp.IndexingResults> {

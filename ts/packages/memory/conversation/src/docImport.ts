@@ -19,13 +19,13 @@ import * as kp from "knowpro";
 
 /**
  * Import a text document as DocMemory
- * You must call buildIndex before you can query the memory
- *
  * Uses file extensions to determine how to import the text files.
  *  default: treat as text
  *  .html, .htm => parse html
  *  .vtt => parse vtt transcript
  *
+ * You must call {@link DocMemory.buildIndex} before you can search or get answers from the memory
+ 
  * @param docFilePath file path to file to import
  * @param maxCharsPerChunk Chunks document into DocParts
  * @param docName (Optional) Document name
