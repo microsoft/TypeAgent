@@ -7,8 +7,9 @@ import {
     docPartsFromMarkdown,
     importDocMemoryFromTextFile,
 } from "../src/docImport.js";
-import { verifyMessages } from "./verify.js";
+import { verifyMessages, verifyNoIndexingErrors } from "./verify.js";
 import { getFileName } from "typeagent";
+import { DocMemory } from "../src/docMemory.js";
 
 const mdTestFile = "./test/data/aardvark.md";
 const htmlTestFile = "./test/data/TypeAgent.html";
@@ -72,6 +73,18 @@ describeIf(
                     getFileName(docPath),
                 );
                 verifyMessages(docMemory.messages, 26, 80);
+            },
+            testTimeout,
+        );
+        test(
+            "indexing",
+            async () => {
+                const docPath = mdTestFile;
+                let parts = docPartsFromMarkdown(readTestFile(docPath), 2048);
+                parts = parts.slice(0, 4);
+                const docMemory = new DocMemory("", parts);
+                const result = await docMemory.buildIndex();
+                verifyNoIndexingErrors(result);
             },
             testTimeout,
         );
