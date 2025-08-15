@@ -8,8 +8,8 @@
     "cloudflare.com": true,
     "microsoft.com": true,
     "facebook.com": true,
-    "amazonaws.com": false,
-    "googlevideo.com": false,
+    "amazonaws.com": true,
+    "googlevideo.com": true,
     "whatsapp.net": true,
     "fbcdn.net": true,
     "doubleclick.net": true,
@@ -73,7 +73,7 @@
     "office.net": false,
     "baidu.com": true,
     "skype.com": true,
-    "windows.net": false,
+    "windows.net": true,
     "capcutapi.com": false,
     "tiktokcdn-us.com": false,
     "xiaomi.com": true,
@@ -100,15 +100,923 @@
     "miui.com": true,
     "zoom.us": true,
     "adtrafficquality.google": true,
-    "adsrvr.org": true
+    "adsrvr.org": true,
+    "163.com": true,
+    "1drv.com": false,
+    "1rx.io": false,
+    "2mdn.net": false,
+    "2miners.com": true,
+    "33across.com": false,
+    "360.cn": true,
+    "360safe.com": true,
+    "360yield.com": true,
+    "3lift.com": true,
+    "4dex.io": false,
+    "a-mo.net": true,
+    "a-msedge.net": false,
+    "accuweather.com": true,
+    "acobt.tech": false,
+    "acrobat.com": true,
+    "acronis.com": true,
+    "ad-delivery.net": true,
+    "ad-score.com": true,
+    "ad.gt": false,
+    "adaether.com": false,
+    "adblockplus.org": true,
+    "adentifi.com": true,
+    "adform.net": false,
+    "adgrx.com": false,
+    "adguard.com": true,
+    "adjust.com": true,
+    "adkernel.com": true,
+    "admanmedia.com": true,
+    "admatic.de": true,
+    "adnxs-simple.com": false,
+    "adobe.com": true,
+    "adobe.io": true,
+    "adobedc.net": false,
+    "adobedtm.com": false,
+    "adobelogin.com": true,
+    "adobess.com": false,
+    "adobestats.io": false,
+    "adroll.com": true,
+    "adrta.com": true,
+    "ads-twitter.com": false,
+    "adsafeprotected.com": true,
+    "adsco.re": true,
+    "adsmoloco.com": true,
+    "adtelligent.com": true,
+    "adtng.com": false,
+    "afafb.com": false,
+    "afcdn.net": false,
+    "agkn.com": false,
+    "agora.io": true,
+    "aiv-cdn.net": false,
+    "aiv-delivery.net": false,
+    "aka.ms": false,
+    "akam.net": false,
+    "akamai.com": true,
+    "akamaihd.net": false,
+    "akamaized.net": false,
+    "akaquill.net": false,
+    "akstat.io": false,
+    "al-array.com": false,
+    "algolia.net": false,
+    "alibaba.com": true,
+    "alibabadns.com": false,
+    "alicdn.com": false,
+    "aliexpress-media.com": false,
+    "aliexpress.com": true,
+    "alipay.com": true,
+    "aliyun.com": true,
+    "aliyuncs.com": false,
+    "aliyuncsslbintl.com": false,
+    "allawnos.com": false,
+    "allawntech.com": false,
+    "alphonso.tv": true,
+    "amap.com": true,
+    "amazon.co.jp": true,
+    "amazon.co.uk": true,
+    "amazon.de": true,
+    "amazonalexa.com": false,
+    "amazontrust.com": true,
+    "amazonvideo.com": false,
+    "amemv.com": true,
+    "amp-endpoint2.com": false,
+    "amp-endpoint3.com": false,
+    "amplitude.com": true,
+    "ampproject.org": true,
+    "aniview.com": true,
+    "anydesk.com": true,
+    "ap4r.com": false,
+    "app-analytics-services-att.com": false,
+    "appcenter.ms": true,
+    "appier.net": true,
+    "apple-cloudkit.com": false,
+    "apple.news": true,
+    "applvn.com": false,
+    "appsflyer.com": true,
+    "appspot.com": true,
+    "arubanetworks.com": true,
+    "asus.com": true,
+    "atlassian.com": true,
+    "atlassian.net": true,
+    "atomile.com": false,
+    "attn.tv": true,
+    "autodesk.com": true,
+    "av380.net": true,
+    "avast.com": true,
+    "avcdn.net": false,
+    "avira.com": true,
+    "avsxappcaptiveportal.com": true,
+    "aws.dev": false,
+    "awsglobalaccelerator.com": false,
+    "awswaf.com": false,
+    "ax-msedge.net": false,
+    "axon.ai": false,
+    "azure-api.net": false,
+    "azure-devices.net": false,
+    "azure.net": true,
+    "azureedge.net": false,
+    "azurefd.net": false,
+    "azurewebsites.net": false,
+    "b-cdn.net": true,
+    "b-msedge.net": false,
+    "bamgrid.com": false,
+    "bazaarvoice.com": true,
+    "bdydns.com": false,
+    "belkin.com": true,
+    "betweendigital.com": true,
+    "beyla.site": false,
+    "bfmio.com": false,
+    "bidmachine.io": true,
+    "bidr.io": false,
+    "bidswitch.net": false,
+    "bigo.sg": true,
+    "bilibili.com": true,
+    "binance.com": true,
+    "bing.net": true,
+    "bitdefender.com": true,
+    "bitdefender.net": true,
+    "bixbyllm.com": false,
+    "blockdh100b.net": false,
+    "blockdh100c.co": false,
+    "blogspot.com": true,
+    "booking.com": true,
+    "bootstrapcdn.com": true,
+    "box.com": true,
+    "branch.io": true,
+    "brave.com": true,
+    "braze.com": true,
+    "braze.eu": true,
+    "browser-intake-datadoghq.com": false,
+    "btloader.com": false,
+    "bugsnag.com": true,
+    "bytedance.com": true,
+    "bytefcdn-oversea.com": false,
+    "bytefcdn-ttpeu.com": false,
+    "byteglb.com": false,
+    "byteoversea.com": false,
+    "byteoversea.net": false,
+    "canva.com": false,
+    "capcut.com": true,
+    "cdn20.com": false,
+    "cdngslb.com": false,
+    "cdnhwc1.com": false,
+    "cdnhwc3.com": false,
+    "cedexis-radar.net": false,
+    "cedexis.net": false,
+    "centrastage.net": false,
+    "chartbeat.com": true,
+    "chartbeat.net": true,
+    "chartboost.com": true,
+    "chatgpt.com": false,
+    "checkpoint.com": true,
+    "cisco.com": true,
+    "clarium.io": false,
+    "clevertap-prod.com": true,
+    "cloud.microsoft": true,
+    "cloudflare.net": false,
+    "cloudflareclient.com": false,
+    "cloudflareinsights.com": true,
+    "cloudflarestorage.com": false,
+    "cloudfunctions.net": false,
+    "cloudinary.com": true,
+    "cloudsink.net": false,
+    "cnn.com": true,
+    "cogeco.ca": false,
+    "coinbase.com": false,
+    "coingecko.com": true,
+    "coloros.com": false,
+    "comcast.net": true,
+    "company-target.com": false,
+    "connatix.com": true,
+    "contentsquare.net": false,
+    "contextweb.com": true,
+    "conviva.com": true,
+    "cookiebot.com": true,
+    "cookielaw.org": true,
+    "cootlogix.com": false,
+    "cpmstar.com": true,
+    "cqloud.com": false,
+    "crashlytics.com": true,
+    "creativecdn.com": true,
+    "criteo.net": false,
+    "crowsember.com": true,
+    "crwdcntrl.net": false,
+    "cspserver.net": false,
+    "curseforge.com": false,
+    "cursor.sh": true,
+    "cxense.com": true,
+    "dalyfeds.com": true,
+    "datadoghq.com": true,
+    "datadome.co": true,
+    "datto.com": true,
+    "dbankcdn.com": false,
+    "dbankcloud.cn": false,
+    "dbankcloud.com": false,
+    "ddns.net": true,
+    "debian.org": true,
+    "deepintent.com": true,
+    "deepl.com": true,
+    "dell.com": true,
+    "deltaork.com": true,
+    "demdex.net": false,
+    "discomax.com": false,
+    "discord.com": true,
+    "discord.gg": true,
+    "discord.media": false,
+    "discordapp.com": true,
+    "discordapp.net": false,
+    "disqus.com": true,
+    "docker.com": true,
+    "docker.io": true,
+    "doppiocdn.com": false,
+    "dotomi.com": true,
+    "douyincdn.com": false,
+    "douyinliving.com": false,
+    "dropbox.com": false,
+    "dropboxapi.com": false,
+    "dual-s-msedge.net": false,
+    "duckdns.org": true,
+    "duckduckgo.com": true,
+    "duolingo.com": true,
+    "dv.tech": false,
+    "dynamicyield.com": true,
+    "dynatrace.com": true,
+    "dyndns.org": true,
+    "dzen.ru": true,
+    "e-msedge.net": false,
+    "e5.sk": false,
+    "ea.com": true,
+    "easebar.com": false,
+    "easy4ipcloud.com": false,
+    "ebay.com": true,
+    "edgekey.net": false,
+    "edgesuite.net": false,
+    "entrust.net": false,
+    "epicgames.com": false,
+    "epicgames.dev": false,
+    "erome.com": true,
+    "eset.com": true,
+    "eskimi.com": true,
+    "espn.com": true,
+    "eu-1-id5-sync.com": false,
+    "eu.org": true,
+    "everesttech.net": false,
+    "evergage.com": true,
+    "example.com": true,
+    "example.org": true,
+    "exelator.com": false,
+    "exp-tas.com": false,
+    "eyeota.net": false,
+    "ezvizlife.com": true,
+    "facebook.net": false,
+    "falais.com": false,
+    "fast.com": true,
+    "fastly-edge.com": false,
+    "fb-t-msedge.net": false,
+    "fb.com": true,
+    "fbpigeon.com": false,
+    "fbsbx.com": false,
+    "featureassets.org": false,
+    "figma.com": true,
+    "firebaseio.com": false,
+    "firefox.com": true,
+    "firetvcaptiveportal.com": true,
+    "flashtalking.com": true,
+    "flixcdn.com": false,
+    "fontawesome.com": true,
+    "footprintdns.com": false,
+    "force.com": true,
+    "forter.com": true,
+    "foxnews.com": true,
+    "freefiremobile.com": false,
+    "fullstory.com": true,
+    "fwmrm.net": true,
+    "fyber.com": true,
+    "game-sdk.com": false,
+    "gameanalytics.com": true,
+    "gamepass.com": true,
+    "garena.com": true,
+    "garmin.com": true,
+    "gboxlab.com": true,
+    "gcdn.co": false,
+    "geoedge.be": false,
+    "geotrust.com": true,
+    "getgrass.io": true,
+    "ggblueshark.com": false,
+    "giphy.com": true,
+    "gist.build": true,
+    "github.com": true,
+    "github.io": true,
+    "githubusercontent.com": false,
+    "glance-cdn.com": false,
+    "glanceapis.com": false,
+    "globalsign.com": true,
+    "globo.com": true,
+    "glpals.com": false,
+    "gmx.net": true,
+    "go-mpulse.net": false,
+    "godaddy.com": false,
+    "google.ca": true,
+    "google.cn": true,
+    "google.co.id": true,
+    "google.co.in": true,
+    "google.co.jp": true,
+    "google.co.uk": true,
+    "google.com.au": true,
+    "google.com.br": true,
+    "google.com.hk": true,
+    "google.de": true,
+    "google.fr": true,
+    "google.nl": true,
+    "google.ru": true,
+    "google.us": true,
+    "googleapis.cn": false,
+    "googletagservices.com": false,
+    "googlezip.net": false,
+    "gopsahome.info": false,
+    "gos-gsp.io": false,
+    "goskope.com": false,
+    "grafana.com": true,
+    "grammarly.com": true,
+    "grammarly.io": false,
+    "gravatar.com": true,
+    "gumgum.com": true,
+    "gvt3.com": false,
+    "harman.com": true,
+    "hcaptcha.com": true,
+    "he.net": true,
+    "here.com": true,
+    "heytapdl.com": false,
+    "heytapmobi.com": true,
+    "heytapmobile.com": false,
+    "hicloud.com": false,
+    "hihonorcloud.com": true,
+    "hik-connect.com": false,
+    "holadns.com": false,
+    "home-assistant.io": true,
+    "hotjar.com": true,
+    "hotjar.io": false,
+    "hotmail.com": true,
+    "hoyoverse.com": true,
+    "hp.com": true,
+    "huawei.com": false,
+    "hubspot.com": true,
+    "hulu.com": false,
+    "humeysha.com": false,
+    "huntress.io": true,
+    "i18n-pglstatp.com": false,
+    "ibytedtos.com": false,
+    "ibyteimg.com": false,
+    "icanhazip.com": true,
+    "icloud-content.com": true,
+    "icloud.com.cn": false,
+    "id5-sync.com": true,
+    "ieee.org": false,
+    "ifconfig.me": true,
+    "igamecj.com": false,
+    "igodigital.com": false,
+    "im-apps.net": true,
+    "imoim.net": false,
+    "imolive2.com": false,
+    "impervadns.net": false,
+    "imrworldwide.com": false,
+    "indeed.com": false,
+    "indexww.com": true,
+    "ingage.tech": false,
+    "inkuai.com": false,
+    "inmobi.com": true,
+    "inmobicdn.net": false,
+    "inner-active.mobi": false,
+    "innovid.com": true,
+    "int08h.com": true,
+    "intel.com": true,
+    "intelbras.com.br": true,
+    "intentiq.com": true,
+    "intercom.io": true,
+    "intuit.com": true,
+    "ip-api.com": true,
+    "ipify.org": true,
+    "ipinfo.io": true,
+    "ipredictive.com": false,
+    "ipv4only.arpa": false,
+    "isappcloud.com": false,
+    "isnssdk.com": false,
+    "iterable.com": true,
+    "ixigua.com": true,
+    "jetbrains.com": true,
+    "jhkkjkj.com": false,
+    "joinhoney.com": true,
+    "jquery.com": true,
+    "jsdelivr.net": false,
+    "jtvnw.net": false,
+    "jwplayer.com": true,
+    "jwpltx.com": true,
+    "kargo.com": true,
+    "kaspersky-labs.com": false,
+    "kaspersky.com": true,
+    "keplr.app": true,
+    "klaviyo.com": true,
+    "ks-cdn.com": false,
+    "ksapisrv.com": true,
+    "kskwai.com": false,
+    "kslawin.com": false,
+    "kuaishou.com": true,
+    "kueezrtb.com": true,
+    "kwai-pro.com": false,
+    "kwai.com": true,
+    "kwai.net": false,
+    "kwaicdn.com": false,
+    "kwaipros.com": false,
+    "kwcdn.com": false,
+    "kwimgs.com": true,
+    "kzhi.tech": false,
+    "launchdarkly.com": true,
+    "leiniao.com": true,
+    "lencr.org": true,
+    "lenovo.com": true,
+    "letsmessagenow.com": false,
+    "lge.com": true,
+    "lgsmartad.com": false,
+    "lgtvcommon.com": false,
+    "lgtvsdp.com": false,
+    "liadm.com": false,
+    "libero.it": true,
+    "licdn.com": false,
+    "life360.com": false,
+    "liftoff-creatives.io": false,
+    "liftoff.io": true,
+    "lijit.com": true,
+    "line-apps.com": false,
+    "line-scdn.net": false,
+    "litix.io": false,
+    "live-video.net": false,
+    "live.net": false,
+    "livechatinc.com": true,
+    "ln-msedge.net": false,
+    "loopme.me": true,
+    "ltwebstatic.com": false,
+    "magsrv.com": false,
+    "mail.ru": true,
+    "mapbox.com": true,
+    "marketingcloudapis.com": false,
+    "martianinc.co": false,
+    "match.com": true,
+    "mathtag.com": false,
+    "mcafee.com": true,
+    "me.com": true,
+    "media-amazon.com": false,
+    "media.net": true,
+    "mediago.io": true,
+    "mediatek.com": true,
+    "mediavine.com": true,
+    "meethue.com": true,
+    "mega.co.nz": true,
+    "meraki.com": true,
+    "mercadolibre.com": false,
+    "messenger.com": true,
+    "metamask.io": true,
+    "mfadsrvr.com": true,
+    "mgid.com": true,
+    "mi-img.com": false,
+    "mi.com": true,
+    "microsoftapp.net": false,
+    "microsoftpersonalcontent.com": false,
+    "mikrotik.com": true,
+    "mintegral.net": true,
+    "miro.com": true,
+    "miwifi.com": true,
+    "mixpanel.com": true,
+    "mmcdn.com": true,
+    "mmechocaptiveportal.com": true,
+    "mmstat.com": false,
+    "moengage.com": true,
+    "moloco.com": true,
+    "mookie1.com": true,
+    "mosspf.com": false,
+    "mosspf.net": false,
+    "mossru.com": false,
+    "mozaws.net": false,
+    "mozgcp.net": false,
+    "mozilla.com": true,
+    "mozilla.net": false,
+    "mozilla.org": true,
+    "mparticle.com": true,
+    "msauth.net": false,
+    "msedge.net": false,
+    "msftauth.net": false,
+    "msidentity.com": false,
+    "mtgglobals.com": false,
+    "myhuaweicloud.com": false,
+    "mynetname.net": false,
+    "myqcloud.com": false,
+    "myshopify.com": false,
+    "mythad.com": false,
+    "mzstatic.com": true,
+    "n-able.com": true,
+    "naver.com": true,
+    "ndcpp-os.com": false,
+    "ne.jp": false,
+    "nel.goog": false,
+    "nelreports.net": false,
+    "nest.com": true,
+    "netflix.net": true,
+    "netgear.com": true,
+    "newrelic.com": true,
+    "nextdoor.com": true,
+    "nextlgsdp.com": false,
+    "nextmillmedia.com": false,
+    "nflxext.com": false,
+    "nflximg.com": false,
+    "nflximg.net": false,
+    "nflxso.net": false,
+    "nflxvideo.net": true,
+    "ninjarmm.com": true,
+    "nintendo.net": false,
+    "nist.gov": true,
+    "no-ip.com": true,
+    "norton.com": true,
+    "notion.so": true,
+    "nr-data.net": false,
+    "ns1p.net": false,
+    "ntppool.org": true,
+    "nubank.com.br": true,
+    "nvidia.com": true,
+    "oaistatic.com": false,
+    "oculus.com": true,
+    "okamiboss.com": false,
+    "okcdn.ru": false,
+    "omnitagjs.com": false,
+    "omtrdc.net": false,
+    "on.aws": false,
+    "onedrive.com": false,
+    "onelink.me": true,
+    "onenote.com": true,
+    "onenote.net": true,
+    "onesignal.com": true,
+    "onetag-sys.com": true,
+    "onetrust.com": true,
+    "onetrust.io": false,
+    "online-metrix.net": false,
+    "openai.com": false,
+    "opendns.com": true,
+    "openx.net": true,
+    "opera-api.com": false,
+    "opera-api2.com": false,
+    "opera.com": true,
+    "oppomobile.com": true,
+    "optimizely.com": true,
+    "oracle.com": false,
+    "oraclecloud.com": false,
+    "orange.fr": true,
+    "orbsrv.com": false,
+    "outbrain.com": true,
+    "outlook.com": true,
+    "overwolf.com": true,
+    "ovscdns.com": false,
+    "ovscdns.net": false,
+    "pages.dev": true,
+    "palmplaystore.com": true,
+    "paloaltonetworks.com": true,
+    "pandora.com": true,
+    "pangle.io": false,
+    "parsely.com": true,
+    "paypal.com": true,
+    "pendo.io": true,
+    "permutive.app": false,
+    "permutive.com": true,
+    "pgoriginad.com": false,
+    "phantom.app": true,
+    "phncdn.com": false,
+    "pinimg.com": true,
+    "pinterest.com": true,
+    "pki.goog": true,
+    "playrix.com": true,
+    "playstation.com": true,
+    "playstation.net": false,
+    "plex.tv": true,
+    "pluto.tv": true,
+    "postrelease.com": false,
+    "presage.io": false,
+    "primis.tech": true,
+    "privacy-center.org": false,
+    "privacymanager.io": true,
+    "prodregistryv2.org": false,
+    "protechts.net": false,
+    "pstatic.net": false,
+    "pstatp.com": false,
+    "pubmnet.com": false,
+    "pubnative.net": true,
+    "pullcf.com": false,
+    "pullcm.com": false,
+    "pusher.com": true,
+    "pv-cdn.net": false,
+    "pvp.net": false,
+    "px-cloud.net": false,
+    "qlivecdn.com": false,
+    "qpic.cn": false,
+    "qualtrics.com": true,
+    "quantcount.com": false,
+    "quantserve.com": false,
+    "quantummetric.com": true,
+    "quickconnect.to": true,
+    "rainberrytv.com": true,
+    "rainbird.com": true,
+    "rapid7.com": true,
+    "ravm.tv": false,
+    "rayjump.com": true,
+    "recaptcha.net": false,
+    "redd.it": true,
+    "reddit.com": true,
+    "redditmedia.com": true,
+    "redditstatic.com": false,
+    "revenuecat.com": true,
+    "rfihub.com": false,
+    "richaudience.com": true,
+    "ring.com": true,
+    "rings.solutions": false,
+    "riotcdn.net": false,
+    "riotgames.com": true,
+    "riskified.com": false,
+    "rlcdn.com": false,
+    "rocket-cdn.com": false,
+    "roku.com": true,
+    "rtmark.net": true,
+    "ruijienetworks.com": true,
+    "run.app": false,
+    "sacdnssedge.com": false,
+    "safebrowsing.apple": false,
+    "safedk.com": false,
+    "salesforce.com": true,
+    "salesforceliveagent.com": true,
+    "samba.tv": true,
+    "samsungacr.com": false,
+    "samsungapps.com": true,
+    "samsungcloud.com": false,
+    "samsungcloud.tv": false,
+    "samsungcloudsolution.com": false,
+    "samsungcloudsolution.net": false,
+    "samsungdm.com": false,
+    "samsungelectronics.com": true,
+    "samsungiotcloud.com": false,
+    "samsungnyc.com": false,
+    "samsungosp.com": false,
+    "samsungpositioning.com": false,
+    "samsungqbe.com": false,
+    "sascdn.com": false,
+    "sc-cdn.net": false,
+    "sc-gw.com": false,
+    "sc-static.net": false,
+    "scdn.co": false,
+    "scorecardresearch.com": true,
+    "script.ac": false,
+    "sectigo.com": true,
+    "secu100.net": false,
+    "seedtag.com": true,
+    "segment.com": true,
+    "segment.io": true,
+    "sendgrid.net": false,
+    "sentinelone.net": false,
+    "sfx.ms": false,
+    "sgsnssdk.com": false,
+    "shalltry.com": false,
+    "sharethis.com": true,
+    "sharethrough.com": true,
+    "shein.com": true,
+    "shifen.com": false,
+    "shop.app": false,
+    "shopee.co.id": true,
+    "shopee.com.br": true,
+    "shopee.io": false,
+    "shopee.sg": true,
+    "shopeemobile.com": true,
+    "shopify.com": true,
+    "shopifysvc.com": false,
+    "signal.org": true,
+    "simpli.fi": true,
+    "singular.net": true,
+    "sitescout.com": true,
+    "slack.com": true,
+    "slackb.com": false,
+    "smaato.net": false,
+    "smadex.com": true,
+    "smartadserver.com": true,
+    "smartthings.com": true,
+    "smilewanted.com": false,
+    "snackvideo.in": false,
+    "snapkit.com": true,
+    "socdm.com": false,
+    "sogou.com": true,
+    "sonobi.com": true,
+    "sophos.com": true,
+    "sophosxl.net": false,
+    "soundcloud.com": true,
+    "spacex.com": true,
+    "spamhaus.org": true,
+    "speedtest.net": true,
+    "splashtop.com": true,
+    "split.io": true,
+    "spot.im": true,
+    "spotifycdn.com": false,
+    "springserve.com": true,
+    "ssl-images-amazon.com": false,
+    "ssl.com": true,
+    "stackadapt.com": true,
+    "starlink.com": true,
+    "startappservice.com": false,
+    "static.microsoft": false,
+    "statuspage.io": true,
+    "steamcommunity.com": true,
+    "steamcontent.com": false,
+    "steampowered.com": true,
+    "steamstatic.com": false,
+    "stickyadstv.com": false,
+    "stripchat.com": false,
+    "stripe.com": true,
+    "stripe.network": true,
+    "strpst.com": false,
+    "supercell.com": true,
+    "supersonicads.com": false,
+    "surfshark.com": true,
+    "susercontent.com": false,
+    "svc.ms": false,
+    "swishapps.ai": false,
+    "symcb.com": false,
+    "synology.com": true,
+    "t-msedge.net": false,
+    "t.co": true,
+    "t.me": true,
+    "tailscale.com": true,
+    "taobao.com": true,
+    "tapad.com": true,
+    "target.com": true,
+    "teads.tv": true,
+    "tealiumiq.com": true,
+    "teamviewer.com": true,
+    "telegram.org": true,
+    "telephony.goog": false,
+    "temu.com": true,
+    "tencent-cloud.net": false,
+    "tencent.com": true,
+    "tenda.com.cn": true,
+    "tenor.com": true,
+    "thejeu.com": false,
+    "themoviedb.org": true,
+    "thewsoral.com": true,
+    "tiktok.com": true,
+    "tiktokcdn-eu.com": false,
+    "tiktokeu-cdn.com": false,
+    "tiktokpangle.us": false,
+    "tiktokrow-cdn.com": false,
+    "tiktokv.eu": false,
+    "tiktokv.us": false,
+    "tiktokw.us": false,
+    "tiqcdn.com": false,
+    "tizen.org": true,
+    "tmdb.org": true,
+    "tospotify.com": false,
+    "tp-link.com": true,
+    "tplinkcloud.com": true,
+    "tplinknbu.com": false,
+    "tradingview.com": true,
+    "tradplusad.com": true,
+    "trafficjunky.net": true,
+    "traffmonetizer.com": true,
+    "transmissionbt.com": true,
+    "transsion-os.com": false,
+    "tremorhub.com": false,
+    "trendmicro.com": true,
+    "tribalfusion.com": false,
+    "truecaller.com": true,
+    "trustarc.com": true,
+    "truste.com": true,
+    "tsyndicate.com": true,
+    "ttdns2.com": false,
+    "ttlivecdn.com": false,
+    "ttoverseaus.net": false,
+    "ttvnw.net": false,
+    "ttwstatic.com": false,
+    "turn.com": false,
+    "twilio.com": true,
+    "twimg.com": false,
+    "twitch.tv": true,
+    "twitter.com": true,
+    "tynt.com": true,
+    "typekit.com": true,
+    "typekit.net": false,
+    "uber.com": false,
+    "ubi.com": true,
+    "ubnt.com": true,
+    "ubuntu.com": true,
+    "ucweb.com": true,
+    "ueiwsp.com": false,
+    "uisp.com": true,
+    "umeng.com": true,
+    "unifi-ai.com": true,
+    "unmsapp.com": false,
+    "unpkg.com": true,
+    "unrulymedia.com": true,
+    "uol.com.br": true,
+    "urbanairship.com": true,
+    "ureca-lab.com": false,
+    "useinsider.com": true,
+    "userapi.com": true,
+    "usercentrics.eu": true,
+    "usercontent.goog": false,
+    "usertrust.com": false,
+    "v-videoapp.com": true,
+    "verisign.com": true,
+    "verkada.com": true,
+    "viber.com": true,
+    "vidaahub.com": false,
+    "vidazoo.com": true,
+    "vimeo.com": true,
+    "virtualearth.net": true,
+    "visualstudio.com": true,
+    "visualwebsiteoptimizer.com": true,
+    "vivo.com.cn": true,
+    "vivoglobal.com": true,
+    "vk-analytics.ru": false,
+    "vk.com": true,
+    "volces.com": false,
+    "volcfcdndvs.com": false,
+    "vscode-cdn.net": false,
+    "w3.org": true,
+    "w55c.net": false,
+    "wac-msedge.net": false,
+    "walmart.com": true,
+    "wattpad.com": true,
+    "wbbasket.ru": false,
+    "wbx2.com": false,
+    "weather.com": true,
+    "web.de": true,
+    "webex.com": true,
+    "webrootcloudav.com": false,
+    "wechat.com": true,
+    "weerrhoop.cc": false,
+    "wikimedia.org": true,
+    "wildberries.ru": false,
+    "withgoogle.com": true,
+    "wordpress.com": true,
+    "wp.com": true,
+    "wp.pl": false,
+    "wps.com": true,
+    "wsdvs.com": false,
+    "wshareit.com": true,
+    "wyzecam.com": true,
+    "x.com": true,
+    "xboxlive.com": true,
+    "xhamster.com": true,
+    "xhcdn.com": true,
+    "xhscdn.com": false,
+    "xiaohongshu.com": true,
+    "xiaomi.net": true,
+    "xlivrdr.com": true,
+    "xnxx-cdn.com": false,
+    "xvideos-cdn.com": false,
+    "xvideos.com": true,
+    "xxpkg.com": true,
+    "ya.ru": true,
+    "yahoo.co.jp": true,
+    "yahoodns.net": false,
+    "yammer.com": true,
+    "yandex.com": true,
+    "yandex.net": true,
+    "yandex.ru": true,
+    "yandexadexchange.net": false,
+    "yastatic.net": true,
+    "yellowblue.io": false,
+    "yieldmo.com": true,
+    "yimg.com": true,
+    "yimg.jp": false,
+    "youtube-nocookie.com": false,
+    "ys7.com": true,
+    "yximgs.com": false,
+    "zdassets.com": false,
+    "zemanta.com": true,
+    "zendesk.com": true,
+    "zijieapi.com": false,
+    "zoho.com": true,
+    "zpath.net": false,
+    "zztfly.com": true
   },
   "phrases": {
+    "163": [
+      "163.com"
+    ],
+    "360": [
+      "360.cn"
+    ],
     "google": [
-      "google.com"
+      "google.com",
+      "google.us"
     ],
     "search engine": [
       "google.com",
-      "bing.com"
+      "bing.com",
+      "duckduckgo.com"
     ],
     "google search": [
       "google.com"
@@ -133,7 +1041,8 @@
       "cloudflare-dns.com"
     ],
     "website security": [
-      "cloudflare.com"
+      "cloudflare.com",
+      "digicert.com"
     ],
     "content delivery": [
       "cloudflare.com"
@@ -154,27 +1063,35 @@
       "microsoft.com"
     ],
     "facebook": [
-      "facebook.com"
+      "facebook.com",
+      "fb.com"
     ],
     "social network": [
-      "facebook.com"
+      "facebook.com",
+      "fb.com"
     ],
     "meta platform": [
       "facebook.com"
     ],
     "social media": [
-      "facebook.com"
+      "facebook.com",
+      "twitter.com"
     ],
     "whatsapp": [
       "whatsapp.net",
       "whatsapp.com"
     ],
     "chat app": [
-      "whatsapp.net"
+      "whatsapp.net",
+      "discord.com",
+      "discord.gg",
+      "discordapp.com",
+      "messenger.com"
     ],
     "messaging app": [
       "whatsapp.net",
-      "whatsapp.com"
+      "whatsapp.com",
+      "telegram.org"
     ],
     "whatsapp service": [
       "whatsapp.net"
@@ -199,7 +1116,10 @@
     ],
     "ad network": [
       "doubleclick.net",
-      "googlesyndication.com"
+      "googlesyndication.com",
+      "ad-delivery.net",
+      "mediavine.com",
+      "mfadsrvr.com"
     ],
     "advertising": [
       "doubleclick.net"
@@ -211,10 +1131,12 @@
       "youtube.com"
     ],
     "video platform": [
-      "youtube.com"
+      "youtube.com",
+      "connatix.com"
     ],
     "video streaming": [
-      "youtube.com"
+      "youtube.com",
+      "netflix.net"
     ],
     "amazon": [
       "amazon.com"
@@ -238,7 +1160,8 @@
       "instagram.com"
     ],
     "social media app": [
-      "instagram.com"
+      "instagram.com",
+      "snapchat.com"
     ],
     "facebook's photo platform": [
       "instagram.com"
@@ -262,16 +1185,19 @@
       "live.com"
     ],
     "outlook": [
-      "live.com"
+      "live.com",
+      "outlook.com"
     ],
     "microsoft email": [
-      "live.com"
+      "live.com",
+      "outlook.com"
     ],
     "microsoft live": [
       "live.com"
     ],
     "hotmail": [
-      "live.com"
+      "live.com",
+      "hotmail.com"
     ],
     "ntp": [
       "ntp.org"
@@ -302,7 +1228,8 @@
       "googlesyndication.com"
     ],
     "bing": [
-      "bing.com"
+      "bing.com",
+      "bing.net"
     ],
     "microsoft search": [
       "bing.com"
@@ -311,10 +1238,14 @@
       "bing.com"
     ],
     "netflix": [
-      "netflix.com"
+      "netflix.com",
+      "netflix.net"
     ],
     "streaming service": [
-      "netflix.com"
+      "netflix.com",
+      "netflix.net",
+      "rainberrytv.com",
+      "roku.com"
     ],
     "netflix movies": [
       "netflix.com"
@@ -327,7 +1258,8 @@
       "one.one"
     ],
     "dns provider": [
-      "cloudflare-dns.com"
+      "cloudflare-dns.com",
+      "opendns.com"
     ],
     "cloudflare service": [
       "cloudflare-dns.com"
@@ -367,7 +1299,9 @@
     ],
     "office suite": [
       "office.com",
-      "office365.com"
+      "office365.com",
+      "microsoft.com",
+      "zoho.com"
     ],
     "MS office": [
       "office.com"
@@ -394,7 +1328,8 @@
       "samsung.com"
     ],
     "samsung electronics": [
-      "samsung.com"
+      "samsung.com",
+      "samsungelectronics.com"
     ],
     "samsung site": [
       "samsung.com"
@@ -433,7 +1368,8 @@
       "msn.com"
     ],
     "microsoft network": [
-      "msn.com"
+      "msn.com",
+      "azure.net"
     ],
     "msn news": [
       "msn.com"
@@ -491,13 +1427,16 @@
       "criteo.com"
     ],
     "azure": [
-      "azure.com"
+      "azure.com",
+      "cloud.microsoft"
     ],
     "microsoft cloud": [
-      "azure.com"
+      "azure.com",
+      "cloud.microsoft"
     ],
     "azure cloud": [
-      "azure.com"
+      "azure.com",
+      "cloud.microsoft"
     ],
     "azure services": [
       "azure.com"
@@ -602,7 +1541,9 @@
       "rubiconproject.com"
     ],
     "ad tech company": [
-      "rubiconproject.com"
+      "rubiconproject.com",
+      "flashtalking.com",
+      "richaudience.com"
     ],
     "Rubicon Project ad exchange": [
       "rubiconproject.com"
@@ -635,7 +1576,8 @@
       "baidu.com"
     ],
     "chinese search engine": [
-      "baidu.com"
+      "baidu.com",
+      "sogou.com"
     ],
     "baidu search": [
       "baidu.com"
@@ -662,19 +1604,25 @@
       "skype.com"
     ],
     "xiaomi": [
-      "xiaomi.com"
+      "xiaomi.com",
+      "mi.com",
+      "xiaomi.net"
     ],
     "mi": [
-      "xiaomi.com"
+      "xiaomi.com",
+      "mi.com",
+      "xiaomi.net"
     ],
     "redmi": [
-      "xiaomi.com"
+      "xiaomi.com",
+      "xiaomi.net"
     ],
     "china smartphone": [
       "xiaomi.com"
     ],
     "mi electronics": [
-      "xiaomi.com"
+      "xiaomi.com",
+      "mi.com"
     ],
     "taboola": [
       "taboola.com"
@@ -771,7 +1719,10 @@
       "gmail.com"
     ],
     "email service": [
-      "gmail.com"
+      "gmail.com",
+      "hotmail.com",
+      "mail.ru",
+      "outlook.com"
     ],
     "email": [
       "gmail.com"
@@ -789,7 +1740,8 @@
       "android.com"
     ],
     "mobile OS": [
-      "android.com"
+      "android.com",
+      "tizen.org"
     ],
     "Android operating system": [
       "android.com"
@@ -822,7 +1774,8 @@
       "cloudflare.com"
     ],
     "cdn provider": [
-      "cloudflare.com"
+      "cloudflare.com",
+      "akamai.com"
     ],
     "internet security provider": [
       "cloudflare.com"
@@ -864,7 +1817,8 @@
       "youtube.com"
     ],
     "online shopping": [
-      "amazon.com"
+      "amazon.com",
+      "target.com"
     ],
     "amazon store": [
       "amazon.com"
@@ -909,7 +1863,9 @@
       "netflix.com"
     ],
     "dns service": [
-      "cloudflare-dns.com"
+      "cloudflare-dns.com",
+      "dyndns.org",
+      "opendns.com"
     ],
     "yahoo news": [
       "yahoo.com"
@@ -924,7 +1880,8 @@
       "office.com"
     ],
     "ubiquiti": [
-      "ui.com"
+      "ui.com",
+      "ubnt.com"
     ],
     "ui networks": [
       "ui.com"
@@ -969,7 +1926,9 @@
       "google-analytics.com"
     ],
     "web analytics": [
-      "google-analytics.com"
+      "google-analytics.com",
+      "scorecardresearch.com",
+      "tynt.com"
     ],
     "internet encyclopedia": [
       "wikipedia.org"
@@ -984,11 +1943,20 @@
       "snapchat.com"
     ],
     "online advertising": [
-      "criteo.com"
+      "criteo.com",
+      "contextweb.com",
+      "openx.net"
     ],
     "digital advertising": [
       "criteo.com",
-      "rubiconproject.com"
+      "rubiconproject.com",
+      "betweendigital.com",
+      "connatix.com",
+      "gumgum.com",
+      "mediavine.com",
+      "richaudience.com",
+      "smartadserver.com",
+      "stackadapt.com"
     ],
     "marketing solution": [
       "criteo.com"
@@ -1033,7 +2001,9 @@
       "linkedin.com"
     ],
     "advertising platform": [
-      "rubiconproject.com"
+      "rubiconproject.com",
+      "moloco.com",
+      "smadex.com"
     ],
     "ad marketplace": [
       "rubiconproject.com"
@@ -1066,7 +2036,8 @@
       "skype.com"
     ],
     "smartphone maker": [
-      "xiaomi.com"
+      "xiaomi.com",
+      "oppomobile.com"
     ],
     "xiaomi brand": [
       "xiaomi.com"
@@ -1078,13 +2049,16 @@
       "taboola.com"
     ],
     "chat service": [
-      "whatsapp.com"
+      "whatsapp.com",
+      "livechatinc.com"
     ],
     "ssl provider": [
-      "digicert.com"
+      "digicert.com",
+      "globalsign.com"
     ],
     "certificate authority": [
-      "digicert.com"
+      "digicert.com",
+      "sectigo.com"
     ],
     "double verify": [
       "doubleverify.com"
@@ -1139,6 +2113,6163 @@
     ],
     "android platform": [
       "android.com"
+    ],
+    "3lift": [
+      "3lift.com"
+    ],
+    "ad lift": [
+      "3lift.com"
+    ],
+    "three lift": [
+      "3lift.com"
+    ],
+    "a-mo": [
+      "a-mo.net"
+    ],
+    "amo network": [
+      "a-mo.net"
+    ],
+    "a mo dot net": [
+      "a-mo.net"
+    ],
+    "accuweather": [
+      "accuweather.com"
+    ],
+    "weather forecast": [
+      "accuweather.com",
+      "weather.com"
+    ],
+    "weather tracker": [
+      "accuweather.com"
+    ],
+    "acrobat": [
+      "acrobat.com"
+    ],
+    "pdf reader": [
+      "acrobat.com"
+    ],
+    "adobe acrobat": [
+      "acrobat.com"
+    ],
+    "acronis": [
+      "acronis.com"
+    ],
+    "data protection": [
+      "acronis.com"
+    ],
+    "backup software": [
+      "acronis.com"
+    ],
+    "netease": [
+      "163.com"
+    ],
+    "163 news": [
+      "163.com"
+    ],
+    "chinese news site": [
+      "163.com"
+    ],
+    "netease 163": [
+      "163.com"
+    ],
+    "2miners": [
+      "2miners.com"
+    ],
+    "mining pool": [
+      "2miners.com"
+    ],
+    "crypto mining pool": [
+      "2miners.com"
+    ],
+    "ethereum mining": [
+      "2miners.com"
+    ],
+    "2miners pool": [
+      "2miners.com"
+    ],
+    "360 cn": [
+      "360.cn"
+    ],
+    "360 security": [
+      "360.cn"
+    ],
+    "qihu 360": [
+      "360.cn"
+    ],
+    "chinese security site": [
+      "360.cn"
+    ],
+    "360safe": [
+      "360safe.com"
+    ],
+    "360safe security": [
+      "360safe.com"
+    ],
+    "360 antivirus": [
+      "360safe.com"
+    ],
+    "360safe antivirus": [
+      "360safe.com"
+    ],
+    "security safe site": [
+      "360safe.com"
+    ],
+    "360yield": [
+      "360yield.com"
+    ],
+    "yield optimization": [
+      "360yield.com"
+    ],
+    "ad tech site": [
+      "360yield.com"
+    ],
+    "ad yield": [
+      "360yield.com"
+    ],
+    "360 advertising": [
+      "360yield.com"
+    ],
+    "ad delivery": [
+      "ad-delivery.net"
+    ],
+    "ad management": [
+      "ad-delivery.net"
+    ],
+    "ad score": [
+      "ad-score.com",
+      "adsco.re"
+    ],
+    "ad rating": [
+      "ad-score.com"
+    ],
+    "ad evaluation": [
+      "ad-score.com"
+    ],
+    "adblock plus": [
+      "adblockplus.org"
+    ],
+    "ad blocker": [
+      "adblockplus.org"
+    ],
+    "ad blocking service": [
+      "adblockplus.org"
+    ],
+    "adentifi": [
+      "adentifi.com"
+    ],
+    "ad identification": [
+      "adentifi.com"
+    ],
+    "ad analytics": [
+      "adentifi.com"
+    ],
+    "adguard": [
+      "adguard.com"
+    ],
+    "ad guard": [
+      "adguard.com"
+    ],
+    "ad protection": [
+      "adguard.com",
+      "adsafeprotected.com"
+    ],
+    "adjust": [
+      "adjust.com"
+    ],
+    "adjust analytics": [
+      "adjust.com"
+    ],
+    "adjust tracking": [
+      "adjust.com"
+    ],
+    "adkernel": [
+      "adkernel.com"
+    ],
+    "adkernel ads": [
+      "adkernel.com"
+    ],
+    "adkernel platform": [
+      "adkernel.com"
+    ],
+    "adman media": [
+      "admanmedia.com"
+    ],
+    "adman ad platform": [
+      "admanmedia.com"
+    ],
+    "adman media site": [
+      "admanmedia.com"
+    ],
+    "admatic": [
+      "admatic.de"
+    ],
+    "admatic ads": [
+      "admatic.de"
+    ],
+    "admatic germany": [
+      "admatic.de"
+    ],
+    "adobe": [
+      "adobe.com"
+    ],
+    "photoshop maker": [
+      "adobe.com"
+    ],
+    "lightroom maker": [
+      "adobe.com"
+    ],
+    "adobe developer": [
+      "adobe.io"
+    ],
+    "adobe api": [
+      "adobe.io"
+    ],
+    "adobe dev": [
+      "adobe.io"
+    ],
+    "adobe login": [
+      "adobelogin.com"
+    ],
+    "adobe sign in": [
+      "adobelogin.com"
+    ],
+    "adobe account": [
+      "adobelogin.com"
+    ],
+    "adroll": [
+      "adroll.com"
+    ],
+    "adroll marketing": [
+      "adroll.com"
+    ],
+    "adroll advertising": [
+      "adroll.com"
+    ],
+    "adrta": [
+      "adrta.com"
+    ],
+    "adrta marketing": [
+      "adrta.com"
+    ],
+    "adrta digital": [
+      "adrta.com"
+    ],
+    "adsafeprotected": [
+      "adsafeprotected.com"
+    ],
+    "ad safety": [
+      "adsafeprotected.com"
+    ],
+    "adsco": [
+      "adsco.re"
+    ],
+    "adsco re": [
+      "adsco.re"
+    ],
+    "ad analysis": [
+      "adsco.re"
+    ],
+    "the ad score": [
+      "adsco.re"
+    ],
+    "adsmoloco": [
+      "adsmoloco.com"
+    ],
+    "ads moloco": [
+      "adsmoloco.com"
+    ],
+    "moloco ads": [
+      "adsmoloco.com"
+    ],
+    "advertising moloco": [
+      "adsmoloco.com"
+    ],
+    "moloco ad platform": [
+      "adsmoloco.com"
+    ],
+    "adsrvr": [
+      "adsrvr.org"
+    ],
+    "ads server": [
+      "adsrvr.org"
+    ],
+    "ad server": [
+      "adsrvr.org",
+      "mfadsrvr.com",
+      "smartadserver.com"
+    ],
+    "the ad server": [
+      "adsrvr.org"
+    ],
+    "ads rvr": [
+      "adsrvr.org"
+    ],
+    "adtelligent": [
+      "adtelligent.com"
+    ],
+    "ad intelligent": [
+      "adtelligent.com"
+    ],
+    "intelligent advertising": [
+      "adtelligent.com"
+    ],
+    "adtelligent platform": [
+      "adtelligent.com"
+    ],
+    "adtelligent ad": [
+      "adtelligent.com"
+    ],
+    "adtrafficquality": [
+      "adtrafficquality.google"
+    ],
+    "ad traffic quality": [
+      "adtrafficquality.google"
+    ],
+    "google ad traffic quality": [
+      "adtrafficquality.google"
+    ],
+    "google ad quality": [
+      "adtrafficquality.google"
+    ],
+    "ad traffic analysis google": [
+      "adtrafficquality.google"
+    ],
+    "agora": [
+      "agora.io"
+    ],
+    "agora io": [
+      "agora.io"
+    ],
+    "web rtc platform": [
+      "agora.io"
+    ],
+    "video call provider": [
+      "agora.io"
+    ],
+    "akamai": [
+      "akamai.com"
+    ],
+    "akamai tech": [
+      "akamai.com"
+    ],
+    "cloud service provider": [
+      "akamai.com"
+    ],
+    "alibaba": [
+      "alibaba.com"
+    ],
+    "alibaba group": [
+      "alibaba.com"
+    ],
+    "alibaba online store": [
+      "alibaba.com"
+    ],
+    "e-commerce giant": [
+      "alibaba.com"
+    ],
+    "aliexpress": [
+      "aliexpress.com"
+    ],
+    "ali express": [
+      "aliexpress.com"
+    ],
+    "global online store": [
+      "aliexpress.com"
+    ],
+    "aliexpress ecommerce": [
+      "aliexpress.com"
+    ],
+    "alipay": [
+      "alipay.com"
+    ],
+    "ali pay": [
+      "alipay.com"
+    ],
+    "online payment service": [
+      "alipay.com"
+    ],
+    "alipay wallet": [
+      "alipay.com"
+    ],
+    "aliyun": [
+      "aliyun.com"
+    ],
+    "alibaba cloud": [
+      "aliyun.com"
+    ],
+    "alibaba cloud computing": [
+      "aliyun.com"
+    ],
+    "chinese cloud service": [
+      "aliyun.com"
+    ],
+    "ali cloud": [
+      "aliyun.com"
+    ],
+    "alphonso": [
+      "alphonso.tv"
+    ],
+    "alphonso tv": [
+      "alphonso.tv"
+    ],
+    "smart tv ads": [
+      "alphonso.tv"
+    ],
+    "tv ad analytics": [
+      "alphonso.tv"
+    ],
+    "tv audience insights": [
+      "alphonso.tv"
+    ],
+    "amap": [
+      "amap.com"
+    ],
+    "china maps": [
+      "amap.com"
+    ],
+    "alibaba maps": [
+      "amap.com"
+    ],
+    "navigation in china": [
+      "amap.com"
+    ],
+    "amap navigation": [
+      "amap.com"
+    ],
+    "amazon japan": [
+      "amazon.co.jp"
+    ],
+    "japan amazon": [
+      "amazon.co.jp"
+    ],
+    "amazon.co.jp": [
+      "amazon.co.jp"
+    ],
+    "japanese amazon store": [
+      "amazon.co.jp"
+    ],
+    "amazon jp": [
+      "amazon.co.jp"
+    ],
+    "amazon uk": [
+      "amazon.co.uk"
+    ],
+    "united kingdom amazon": [
+      "amazon.co.uk"
+    ],
+    "amazon.co.uk": [
+      "amazon.co.uk"
+    ],
+    "british amazon store": [
+      "amazon.co.uk"
+    ],
+    "amazon uk store": [
+      "amazon.co.uk"
+    ],
+    "ecommerce giant": [
+      "amazon.com"
+    ],
+    "online retail": [
+      "amazon.com"
+    ],
+    "amazon.de": [
+      "amazon.de"
+    ],
+    "german amazon": [
+      "amazon.de"
+    ],
+    "amazon germany": [
+      "amazon.de"
+    ],
+    "german shopping": [
+      "amazon.de"
+    ],
+    "amazonaws": [
+      "amazonaws.com"
+    ],
+    "amazon web services": [
+      "amazonaws.com"
+    ],
+    "aws": [
+      "amazonaws.com"
+    ],
+    "cloud services": [
+      "amazonaws.com"
+    ],
+    "amazon trust": [
+      "amazontrust.com"
+    ],
+    "amazon security site": [
+      "amazontrust.com"
+    ],
+    "amazon certs": [
+      "amazontrust.com"
+    ],
+    "amazon ssl": [
+      "amazontrust.com"
+    ],
+    "amemv": [
+      "amemv.com"
+    ],
+    "tiktok china": [
+      "amemv.com"
+    ],
+    "douyin": [
+      "amemv.com"
+    ],
+    "chinese tiktok": [
+      "amemv.com"
+    ],
+    "amplitude": [
+      "amplitude.com"
+    ],
+    "amplitude analytics": [
+      "amplitude.com"
+    ],
+    "product analytics": [
+      "amplitude.com",
+      "pendo.io"
+    ],
+    "digital optimization": [
+      "amplitude.com"
+    ],
+    "amp project": [
+      "ampproject.org"
+    ],
+    "amp web": [
+      "ampproject.org"
+    ],
+    "accelerated mobile pages": [
+      "ampproject.org"
+    ],
+    "amp framework": [
+      "ampproject.org"
+    ],
+    "android os": [
+      "android.com"
+    ],
+    "android mobile": [
+      "android.com"
+    ],
+    "google android": [
+      "android.com"
+    ],
+    "aniview": [
+      "aniview.com"
+    ],
+    "video ad platform": [
+      "aniview.com",
+      "unrulymedia.com"
+    ],
+    "digital video ads": [
+      "aniview.com"
+    ],
+    "aniview ads": [
+      "aniview.com"
+    ],
+    "anydesk": [
+      "anydesk.com"
+    ],
+    "remote desktop software": [
+      "anydesk.com"
+    ],
+    "remote access tool": [
+      "anydesk.com"
+    ],
+    "anydesk app": [
+      "anydesk.com"
+    ],
+    "appcenter": [
+      "appcenter.ms"
+    ],
+    "microsoft app center": [
+      "appcenter.ms"
+    ],
+    "ms appcenter": [
+      "appcenter.ms"
+    ],
+    "appcenter ms": [
+      "appcenter.ms"
+    ],
+    "appier": [
+      "appier.net"
+    ],
+    "appier net": [
+      "appier.net"
+    ],
+    "appier.net": [
+      "appier.net"
+    ],
+    "apple web": [
+      "apple.com"
+    ],
+    "apple news": [
+      "apple.news"
+    ],
+    "apple.news": [
+      "apple.news"
+    ],
+    "apple news site": [
+      "apple.news"
+    ],
+    "apple news web": [
+      "apple.news"
+    ],
+    "applovin site": [
+      "applovin.com"
+    ],
+    "applovin web": [
+      "applovin.com"
+    ],
+    "applovin.com": [
+      "applovin.com"
+    ],
+    "appsflyer": [
+      "appsflyer.com"
+    ],
+    "mobile analytics": [
+      "appsflyer.com"
+    ],
+    "app marketing": [
+      "appsflyer.com"
+    ],
+    "app analytics": [
+      "appsflyer.com"
+    ],
+    "appspot": [
+      "appspot.com"
+    ],
+    "google app hosting": [
+      "appspot.com"
+    ],
+    "app hosting": [
+      "appspot.com"
+    ],
+    "app deployment": [
+      "appspot.com"
+    ],
+    "aruba networks": [
+      "arubanetworks.com"
+    ],
+    "wireless networking": [
+      "arubanetworks.com"
+    ],
+    "network security": [
+      "arubanetworks.com"
+    ],
+    "aruba security": [
+      "arubanetworks.com"
+    ],
+    "asus": [
+      "asus.com"
+    ],
+    "computer maker": [
+      "asus.com"
+    ],
+    "laptop maker": [
+      "asus.com"
+    ],
+    "asus tech": [
+      "asus.com"
+    ],
+    "atlassian": [
+      "atlassian.com",
+      "atlassian.net"
+    ],
+    "jira maker": [
+      "atlassian.com"
+    ],
+    "confluence maker": [
+      "atlassian.com"
+    ],
+    "software collaboration": [
+      "atlassian.com"
+    ],
+    "jira": [
+      "atlassian.net"
+    ],
+    "bitbucket": [
+      "atlassian.net"
+    ],
+    "confluence": [
+      "atlassian.net"
+    ],
+    "attn": [
+      "attn.tv"
+    ],
+    "attn tv": [
+      "attn.tv"
+    ],
+    "attn media": [
+      "attn.tv"
+    ],
+    "attention network": [
+      "attn.tv"
+    ],
+    "autodesk": [
+      "autodesk.com"
+    ],
+    "CAD software": [
+      "autodesk.com"
+    ],
+    "autodesk design": [
+      "autodesk.com"
+    ],
+    "3D software": [
+      "autodesk.com"
+    ],
+    "av380": [
+      "av380.net"
+    ],
+    "av380 network": [
+      "av380.net"
+    ],
+    "audio video network": [
+      "av380.net"
+    ],
+    "AV380 media": [
+      "av380.net"
+    ],
+    "avast": [
+      "avast.com"
+    ],
+    "avast antivirus": [
+      "avast.com"
+    ],
+    "avast security": [
+      "avast.com"
+    ],
+    "avast software": [
+      "avast.com"
+    ],
+    "avira": [
+      "avira.com"
+    ],
+    "antivirus provider": [
+      "avira.com"
+    ],
+    "avira antivirus": [
+      "avira.com"
+    ],
+    "endpoint security": [
+      "avira.com"
+    ],
+    "avira solutions": [
+      "avira.com"
+    ],
+    "security software": [
+      "avira.com"
+    ],
+    "avsxappcaptiveportal": [
+      "avsxappcaptiveportal.com"
+    ],
+    "av portal": [
+      "avsxappcaptiveportal.com"
+    ],
+    "captive portal": [
+      "avsxappcaptiveportal.com",
+      "mmechocaptiveportal.com"
+    ],
+    "app captive portal": [
+      "avsxappcaptiveportal.com"
+    ],
+    "azure net": [
+      "azure.net"
+    ],
+    "azure network": [
+      "azure.net"
+    ],
+    "azure infrastructure": [
+      "azure.net"
+    ],
+    "azure web services": [
+      "azure.net"
+    ],
+    "b-cdn": [
+      "b-cdn.net"
+    ],
+    "content delivery network": [
+      "b-cdn.net",
+      "mmcdn.com"
+    ],
+    "bcd network": [
+      "b-cdn.net"
+    ],
+    "edge network": [
+      "b-cdn.net"
+    ],
+    "global cdn": [
+      "b-cdn.net"
+    ],
+    "bazaarvoice": [
+      "bazaarvoice.com"
+    ],
+    "review management": [
+      "bazaarvoice.com"
+    ],
+    "customer engagement platform": [
+      "bazaarvoice.com",
+      "evergage.com"
+    ],
+    "bazaarvoice site": [
+      "bazaarvoice.com"
+    ],
+    "bazaarvoice homepage": [
+      "bazaarvoice.com"
+    ],
+    "belkin": [
+      "belkin.com"
+    ],
+    "electronics accessories": [
+      "belkin.com"
+    ],
+    "belkin site": [
+      "belkin.com"
+    ],
+    "belkin homepage": [
+      "belkin.com"
+    ],
+    "belkin products": [
+      "belkin.com"
+    ],
+    "betweendigital": [
+      "betweendigital.com"
+    ],
+    "programmatic advertising": [
+      "betweendigital.com",
+      "pubmatic.com",
+      "smadex.com",
+      "stackadapt.com",
+      "zemanta.com"
+    ],
+    "betweendigital site": [
+      "betweendigital.com"
+    ],
+    "betweendigital homepage": [
+      "betweendigital.com"
+    ],
+    "bidmachine": [
+      "bidmachine.io"
+    ],
+    "bidmachine site": [
+      "bidmachine.io"
+    ],
+    "bidmachine homepage": [
+      "bidmachine.io"
+    ],
+    "mobile ad technology": [
+      "bidmachine.io"
+    ],
+    "bidmachine platform": [
+      "bidmachine.io"
+    ],
+    "bigo": [
+      "bigo.sg"
+    ],
+    "bigo live": [
+      "bigo.sg"
+    ],
+    "bigo streaming": [
+      "bigo.sg"
+    ],
+    "bigo app": [
+      "bigo.sg"
+    ],
+    "bigo social": [
+      "bigo.sg"
+    ],
+    "bilibili": [
+      "bilibili.com"
+    ],
+    "bilibili video": [
+      "bilibili.com"
+    ],
+    "bilibili streaming": [
+      "bilibili.com"
+    ],
+    "bilibili anime": [
+      "bilibili.com"
+    ],
+    "bilibili app": [
+      "bilibili.com"
+    ],
+    "binance": [
+      "binance.com"
+    ],
+    "binance crypto": [
+      "binance.com"
+    ],
+    "binance exchange": [
+      "binance.com"
+    ],
+    "binance trading": [
+      "binance.com"
+    ],
+    "binance bitcoin": [
+      "binance.com"
+    ],
+    "bing engine": [
+      "bing.com"
+    ],
+    "bing web": [
+      "bing.com"
+    ],
+    "bing results": [
+      "bing.com"
+    ],
+    "bing network": [
+      "bing.net"
+    ],
+    "bing services": [
+      "bing.net"
+    ],
+    "bing cloud": [
+      "bing.net"
+    ],
+    "bing platform": [
+      "bing.net"
+    ],
+    "bitdefender": [
+      "bitdefender.com"
+    ],
+    "antivirus": [
+      "bitdefender.com"
+    ],
+    "bitdefender antivirus": [
+      "bitdefender.com"
+    ],
+    "virus protection": [
+      "bitdefender.com"
+    ],
+    "bitdefender net": [
+      "bitdefender.net"
+    ],
+    "bitdefender network": [
+      "bitdefender.net"
+    ],
+    "virus protection network": [
+      "bitdefender.net"
+    ],
+    "antivirus network": [
+      "bitdefender.net"
+    ],
+    "blogspot": [
+      "blogspot.com"
+    ],
+    "blogger": [
+      "blogspot.com"
+    ],
+    "google blogs": [
+      "blogspot.com"
+    ],
+    "blog site": [
+      "blogspot.com"
+    ],
+    "booking": [
+      "booking.com"
+    ],
+    "hotel booking": [
+      "booking.com"
+    ],
+    "travel booking": [
+      "booking.com"
+    ],
+    "booking site": [
+      "booking.com"
+    ],
+    "bootstrapcdn": [
+      "bootstrapcdn.com"
+    ],
+    "bootstrap cdn": [
+      "bootstrapcdn.com"
+    ],
+    "css cdn": [
+      "bootstrapcdn.com"
+    ],
+    "bootstrap website": [
+      "bootstrapcdn.com"
+    ],
+    "box": [
+      "box.com"
+    ],
+    "file storage": [
+      "box.com"
+    ],
+    "cloud storage": [
+      "box.com",
+      "mega.co.nz"
+    ],
+    "box cloud": [
+      "box.com"
+    ],
+    "box platform": [
+      "box.com"
+    ],
+    "branch": [
+      "branch.io"
+    ],
+    "branch links": [
+      "branch.io"
+    ],
+    "branch tracking": [
+      "branch.io"
+    ],
+    "branch platform": [
+      "branch.io"
+    ],
+    "branch io": [
+      "branch.io"
+    ],
+    "brave": [
+      "brave.com"
+    ],
+    "brave browser": [
+      "brave.com"
+    ],
+    "brave platform": [
+      "brave.com"
+    ],
+    "brave privacy": [
+      "brave.com"
+    ],
+    "brave internet": [
+      "brave.com"
+    ],
+    "braze": [
+      "braze.com"
+    ],
+    "braze marketing": [
+      "braze.com"
+    ],
+    "braze platform": [
+      "braze.com"
+    ],
+    "braze automation": [
+      "braze.com"
+    ],
+    "braze engagement": [
+      "braze.com"
+    ],
+    "braze eu": [
+      "braze.eu"
+    ],
+    "braze Europe": [
+      "braze.eu"
+    ],
+    "braze continental": [
+      "braze.eu"
+    ],
+    "braze international": [
+      "braze.eu"
+    ],
+    "braze european": [
+      "braze.eu"
+    ],
+    "bugsnag": [
+      "bugsnag.com"
+    ],
+    "error monitoring": [
+      "bugsnag.com"
+    ],
+    "bugsnag app": [
+      "bugsnag.com"
+    ],
+    "bugsnag error tracker": [
+      "bugsnag.com"
+    ],
+    "software stability tracker": [
+      "bugsnag.com"
+    ],
+    "bytedance": [
+      "bytedance.com"
+    ],
+    "tiktok parent company": [
+      "bytedance.com"
+    ],
+    "digital media company": [
+      "bytedance.com"
+    ],
+    "byte dance": [
+      "bytedance.com"
+    ],
+    "bytedance website": [
+      "bytedance.com"
+    ],
+    "capcut": [
+      "capcut.com"
+    ],
+    "capcut video editor": [
+      "capcut.com"
+    ],
+    "capcut app": [
+      "capcut.com"
+    ],
+    "video editing software": [
+      "capcut.com"
+    ],
+    "mobile video editor": [
+      "capcut.com"
+    ],
+    "casalemedia": [
+      "casalemedia.com"
+    ],
+    "casalemedia website": [
+      "casalemedia.com"
+    ],
+    "online advertising services": [
+      "casalemedia.com"
+    ],
+    "casalemedia ad services": [
+      "casalemedia.com"
+    ],
+    "casalemedia digital ads": [
+      "casalemedia.com"
+    ],
+    "chartbeat": [
+      "chartbeat.com",
+      "chartbeat.net"
+    ],
+    "web analytics tool": [
+      "chartbeat.com"
+    ],
+    "chartbeat app": [
+      "chartbeat.com"
+    ],
+    "chartbeat analytics": [
+      "chartbeat.com",
+      "chartbeat.net"
+    ],
+    "reader engagement analytics": [
+      "chartbeat.com"
+    ],
+    "chart monitoring": [
+      "chartbeat.net"
+    ],
+    "chartboost": [
+      "chartboost.com"
+    ],
+    "mobile ad platform": [
+      "chartboost.com"
+    ],
+    "game advertising": [
+      "chartboost.com"
+    ],
+    "checkpoint": [
+      "checkpoint.com"
+    ],
+    "cybersecurity solutions": [
+      "checkpoint.com"
+    ],
+    "cyber protection": [
+      "checkpoint.com"
+    ],
+    "cisco": [
+      "cisco.com"
+    ],
+    "networking solutions": [
+      "cisco.com",
+      "netgear.com"
+    ],
+    "cisco systems": [
+      "cisco.com"
+    ],
+    "clevertap": [
+      "clevertap-prod.com"
+    ],
+    "customer engagement": [
+      "clevertap-prod.com",
+      "intercom.io",
+      "moengage.com"
+    ],
+    "clever marketing": [
+      "clevertap-prod.com"
+    ],
+    "microsoft azure": [
+      "cloud.microsoft"
+    ],
+    "cloud platform by microsoft": [
+      "cloud.microsoft"
+    ],
+    "microsoft cloud computing": [
+      "cloud.microsoft"
+    ],
+    "cloudflare domain name system": [
+      "cloudflare-dns.com"
+    ],
+    "cloudflare resolver": [
+      "cloudflare-dns.com"
+    ],
+    "cloudflare dns service": [
+      "cloudflare-dns.com"
+    ],
+    "cloudflare secure dns": [
+      "cloudflare-dns.com"
+    ],
+    "cloudflare internet security": [
+      "cloudflare-dns.com",
+      "cloudflare.com"
+    ],
+    "cloudflare website": [
+      "cloudflare.com"
+    ],
+    "cloudflare web performance": [
+      "cloudflare.com"
+    ],
+    "cloudflare services": [
+      "cloudflare.com"
+    ],
+    "cloudflare insights": [
+      "cloudflareinsights.com"
+    ],
+    "cloudflare analytics": [
+      "cloudflareinsights.com"
+    ],
+    "cloudflare insights platform": [
+      "cloudflareinsights.com"
+    ],
+    "cloudflare website monitoring": [
+      "cloudflareinsights.com"
+    ],
+    "cloudflare analytics platform": [
+      "cloudflareinsights.com"
+    ],
+    "cloudflare site insights": [
+      "cloudflareinsights.com"
+    ],
+    "cloudinary": [
+      "cloudinary.com"
+    ],
+    "cloudinary image management": [
+      "cloudinary.com"
+    ],
+    "cloudinary media management": [
+      "cloudinary.com"
+    ],
+    "cloudinary asset management": [
+      "cloudinary.com"
+    ],
+    "cloudinary cloud storage": [
+      "cloudinary.com"
+    ],
+    "cloudinary digital asset management": [
+      "cloudinary.com"
+    ],
+    "cnn": [
+      "cnn.com"
+    ],
+    "news channel": [
+      "cnn.com",
+      "foxnews.com"
+    ],
+    "breaking news": [
+      "cnn.com"
+    ],
+    "global news": [
+      "cnn.com"
+    ],
+    "coingecko": [
+      "coingecko.com"
+    ],
+    "crypto prices": [
+      "coingecko.com"
+    ],
+    "cryptocurrency tracker": [
+      "coingecko.com"
+    ],
+    "coin market": [
+      "coingecko.com"
+    ],
+    "comcast": [
+      "comcast.net"
+    ],
+    "cable provider": [
+      "comcast.net"
+    ],
+    "internet provider": [
+      "comcast.net"
+    ],
+    "xfinity": [
+      "comcast.net"
+    ],
+    "connatix": [
+      "connatix.com"
+    ],
+    "video solutions": [
+      "connatix.com",
+      "jwplayer.com"
+    ],
+    "contextweb": [
+      "contextweb.com"
+    ],
+    "ad exchange": [
+      "contextweb.com",
+      "openx.net"
+    ],
+    "digital marketplace": [
+      "contextweb.com"
+    ],
+    "conviva": [
+      "conviva.com"
+    ],
+    "streaming analysis": [
+      "conviva.com"
+    ],
+    "video analytics": [
+      "conviva.com"
+    ],
+    "cookiebot": [
+      "cookiebot.com"
+    ],
+    "cookie consent tool": [
+      "cookiebot.com"
+    ],
+    "GDPR cookies": [
+      "cookiebot.com"
+    ],
+    "cookielaw": [
+      "cookielaw.org"
+    ],
+    "cookie compliance": [
+      "cookielaw.org"
+    ],
+    "cookie regulations": [
+      "cookielaw.org"
+    ],
+    "cpmstar": [
+      "cpmstar.com"
+    ],
+    "advertising network": [
+      "cpmstar.com",
+      "trafficjunky.net"
+    ],
+    "game ads": [
+      "cpmstar.com"
+    ],
+    "crashlytics": [
+      "crashlytics.com"
+    ],
+    "crash reports": [
+      "crashlytics.com"
+    ],
+    "mobile app diagnostics": [
+      "crashlytics.com"
+    ],
+    "creativecdn": [
+      "creativecdn.com"
+    ],
+    "creative cdn": [
+      "creativecdn.com"
+    ],
+    "creative cdn platform": [
+      "creativecdn.com"
+    ],
+    "creative content delivery network": [
+      "creativecdn.com"
+    ],
+    "creative content network": [
+      "creativecdn.com"
+    ],
+    "criteo ad solution": [
+      "criteo.com"
+    ],
+    "criteo digital marketing": [
+      "criteo.com"
+    ],
+    "criteo ad platform": [
+      "criteo.com"
+    ],
+    "crowsember": [
+      "crowsember.com"
+    ],
+    "crowsember website": [
+      "crowsember.com"
+    ],
+    "crowsember service": [
+      "crowsember.com"
+    ],
+    "crowsember platform": [
+      "crowsember.com"
+    ],
+    "crowsember portal": [
+      "crowsember.com"
+    ],
+    "cursor.sh": [
+      "cursor.sh"
+    ],
+    "cursor website": [
+      "cursor.sh"
+    ],
+    "cursor file sharing": [
+      "cursor.sh"
+    ],
+    "cursor platform": [
+      "cursor.sh"
+    ],
+    "cursor software": [
+      "cursor.sh"
+    ],
+    "cxense": [
+      "cxense.com"
+    ],
+    "cxense solution": [
+      "cxense.com"
+    ],
+    "cxense platform": [
+      "cxense.com"
+    ],
+    "cxense digital intelligence": [
+      "cxense.com"
+    ],
+    "cxense data management": [
+      "cxense.com"
+    ],
+    "dalyfeds": [
+      "dalyfeds.com"
+    ],
+    "daily feds": [
+      "dalyfeds.com"
+    ],
+    "daly feds": [
+      "dalyfeds.com"
+    ],
+    "datadoghq": [
+      "datadoghq.com"
+    ],
+    "data dog hq": [
+      "datadoghq.com"
+    ],
+    "data dog headquarters": [
+      "datadoghq.com"
+    ],
+    "data monitoring service": [
+      "datadoghq.com"
+    ],
+    "datadog hq": [
+      "datadoghq.com"
+    ],
+    "datadome": [
+      "datadome.co"
+    ],
+    "data dome": [
+      "datadome.co"
+    ],
+    "bot protection": [
+      "datadome.co"
+    ],
+    "data security dome": [
+      "datadome.co"
+    ],
+    "datto": [
+      "datto.com"
+    ],
+    "data protection services": [
+      "datto.com"
+    ],
+    "datto services": [
+      "datto.com"
+    ],
+    "datto tech": [
+      "datto.com"
+    ],
+    "ddns": [
+      "ddns.net"
+    ],
+    "dynamic dns": [
+      "ddns.net",
+      "duckdns.org",
+      "dyndns.org",
+      "no-ip.com"
+    ],
+    "ddns service": [
+      "ddns.net"
+    ],
+    "ddns net": [
+      "ddns.net"
+    ],
+    "debian": [
+      "debian.org"
+    ],
+    "debian linux": [
+      "debian.org"
+    ],
+    "debian project": [
+      "debian.org"
+    ],
+    "debian os": [
+      "debian.org"
+    ],
+    "deepintent": [
+      "deepintent.com"
+    ],
+    "deep intent": [
+      "deepintent.com"
+    ],
+    "healthcare advertising": [
+      "deepintent.com"
+    ],
+    "deepintent marketing": [
+      "deepintent.com"
+    ],
+    "deepl": [
+      "deepl.com"
+    ],
+    "deep l": [
+      "deepl.com"
+    ],
+    "deepl translator": [
+      "deepl.com"
+    ],
+    "deepl dictionary": [
+      "deepl.com"
+    ],
+    "language translator": [
+      "deepl.com"
+    ],
+    "dell": [
+      "dell.com"
+    ],
+    "dell computers": [
+      "dell.com"
+    ],
+    "dell laptops": [
+      "dell.com"
+    ],
+    "dell electronics": [
+      "dell.com"
+    ],
+    "delta": [
+      "delta.com"
+    ],
+    "delta airlines": [
+      "delta.com"
+    ],
+    "delta air": [
+      "delta.com"
+    ],
+    "delta travel": [
+      "delta.com"
+    ],
+    "delta flights": [
+      "delta.com"
+    ],
+    "ssl certificate": [
+      "digicert.com"
+    ],
+    "digital certificate provider": [
+      "digicert.com"
+    ],
+    "discord": [
+      "discord.com",
+      "discord.gg",
+      "discordapp.com"
+    ],
+    "gaming chat": [
+      "discord.com",
+      "discord.gg",
+      "discordapp.com"
+    ],
+    "voice and video chat": [
+      "discord.com",
+      "discord.gg",
+      "discordapp.com"
+    ],
+    "disqus": [
+      "disqus.com"
+    ],
+    "comment platform": [
+      "disqus.com"
+    ],
+    "website comments": [
+      "disqus.com"
+    ],
+    "online discussion": [
+      "disqus.com"
+    ],
+    "dns resolver google": [
+      "dns.google"
+    ],
+    "google domain name system": [
+      "dns.google"
+    ],
+    "docker": [
+      "docker.com"
+    ],
+    "docker containers": [
+      "docker.com"
+    ],
+    "docker site": [
+      "docker.com"
+    ],
+    "docker registry": [
+      "docker.io"
+    ],
+    "docker hub": [
+      "docker.io"
+    ],
+    "docker images": [
+      "docker.io"
+    ],
+    "dotomi": [
+      "dotomi.com"
+    ],
+    "dotomi marketing": [
+      "dotomi.com"
+    ],
+    "dotomi site": [
+      "dotomi.com"
+    ],
+    "google doubleclick": [
+      "doubleclick.net"
+    ],
+    "doubleclick advertising": [
+      "doubleclick.net"
+    ],
+    "dv company": [
+      "doubleverify.com"
+    ],
+    "duck dns": [
+      "duckdns.org"
+    ],
+    "free dns service": [
+      "duckdns.org",
+      "no-ip.com"
+    ],
+    "duck duck go": [
+      "duckduckgo.com"
+    ],
+    "privacy search": [
+      "duckduckgo.com"
+    ],
+    "ddg": [
+      "duckduckgo.com"
+    ],
+    "duolingo": [
+      "duolingo.com"
+    ],
+    "language learning": [
+      "duolingo.com"
+    ],
+    "learn languages": [
+      "duolingo.com"
+    ],
+    "free language app": [
+      "duolingo.com"
+    ],
+    "dynamic yield": [
+      "dynamicyield.com"
+    ],
+    "personalization platform": [
+      "dynamicyield.com"
+    ],
+    "experience optimization": [
+      "dynamicyield.com"
+    ],
+    "dy company": [
+      "dynamicyield.com"
+    ],
+    "dynatrace": [
+      "dynatrace.com"
+    ],
+    "performance monitoring": [
+      "dynatrace.com"
+    ],
+    "software intelligence": [
+      "dynatrace.com"
+    ],
+    "application monitoring": [
+      "dynatrace.com"
+    ],
+    "dyndns": [
+      "dyndns.org"
+    ],
+    "hostname service": [
+      "dyndns.org"
+    ],
+    "dzen": [
+      "dzen.ru"
+    ],
+    "russian news": [
+      "dzen.ru"
+    ],
+    "yandex media": [
+      "dzen.ru"
+    ],
+    "online journal": [
+      "dzen.ru"
+    ],
+    "ea": [
+      "ea.com"
+    ],
+    "electronic arts": [
+      "ea.com"
+    ],
+    "video game company": [
+      "ea.com"
+    ],
+    "game developer": [
+      "ea.com",
+      "garena.com",
+      "riotgames.com",
+      "ubi.com"
+    ],
+    "ebay": [
+      "ebay.com"
+    ],
+    "online auction": [
+      "ebay.com"
+    ],
+    "online marketplace": [
+      "ebay.com"
+    ],
+    "ecommerce site": [
+      "ebay.com"
+    ],
+    "erome": [
+      "erome.com"
+    ],
+    "image upload site": [
+      "erome.com"
+    ],
+    "photo sharing site": [
+      "erome.com"
+    ],
+    "erome share images": [
+      "erome.com"
+    ],
+    "eset": [
+      "eset.com"
+    ],
+    "antivirus site": [
+      "eset.com"
+    ],
+    "eset security": [
+      "eset.com"
+    ],
+    "eset protection": [
+      "eset.com"
+    ],
+    "eskimi": [
+      "eskimi.com"
+    ],
+    "digital advertising site": [
+      "eskimi.com"
+    ],
+    "eskimi advertising": [
+      "eskimi.com"
+    ],
+    "eskimi media": [
+      "eskimi.com"
+    ],
+    "espn": [
+      "espn.com"
+    ],
+    "sports news site": [
+      "espn.com"
+    ],
+    "espn sports": [
+      "espn.com"
+    ],
+    "espn news": [
+      "espn.com"
+    ],
+    "eu.org": [
+      "eu.org"
+    ],
+    "eu domain registry": [
+      "eu.org"
+    ],
+    "eu organization": [
+      "eu.org"
+    ],
+    "european domain registry": [
+      "eu.org"
+    ],
+    "evergage": [
+      "evergage.com"
+    ],
+    "evergage website": [
+      "evergage.com"
+    ],
+    "evergage site": [
+      "evergage.com"
+    ],
+    "personalization software": [
+      "evergage.com"
+    ],
+    "example": [
+      "example.com"
+    ],
+    "sample site": [
+      "example.com"
+    ],
+    "example website": [
+      "example.com"
+    ],
+    "example site": [
+      "example.com"
+    ],
+    "test site": [
+      "example.com"
+    ],
+    "example org": [
+      "example.org"
+    ],
+    "example organization": [
+      "example.org"
+    ],
+    "sample org site": [
+      "example.org"
+    ],
+    "example non-profit": [
+      "example.org"
+    ],
+    "test org": [
+      "example.org"
+    ],
+    "ezvizlife": [
+      "ezvizlife.com"
+    ],
+    "ezvizlife website": [
+      "ezvizlife.com"
+    ],
+    "ezvizlife site": [
+      "ezvizlife.com"
+    ],
+    "ezviz": [
+      "ezvizlife.com",
+      "ys7.com"
+    ],
+    "home security cameras site": [
+      "ezvizlife.com"
+    ],
+    "social network site": [
+      "facebook.com"
+    ],
+    "social connection site": [
+      "facebook.com"
+    ],
+    "fast": [
+      "fast.com"
+    ],
+    "speed test": [
+      "fast.com"
+    ],
+    "internet speed": [
+      "fast.com"
+    ],
+    "CDN service": [
+      "fastly.net"
+    ],
+    "fb": [
+      "fb.com"
+    ],
+    "fb content delivery": [
+      "fbcdn.net"
+    ],
+    "figma": [
+      "figma.com"
+    ],
+    "design tool": [
+      "figma.com"
+    ],
+    "figma design": [
+      "figma.com"
+    ],
+    "firefox": [
+      "firefox.com"
+    ],
+    "mozilla browser": [
+      "firefox.com"
+    ],
+    "firefox browser": [
+      "firefox.com"
+    ],
+    "mozilla firefox": [
+      "firefox.com"
+    ],
+    "fire tv captive portal": [
+      "firetvcaptiveportal.com"
+    ],
+    "amazon fire tv portal": [
+      "firetvcaptiveportal.com"
+    ],
+    "fire tv login": [
+      "firetvcaptiveportal.com"
+    ],
+    "fire tv captive site": [
+      "firetvcaptiveportal.com"
+    ],
+    "flashtalking": [
+      "flashtalking.com"
+    ],
+    "flash ad solutions": [
+      "flashtalking.com"
+    ],
+    "flashtalking ads": [
+      "flashtalking.com"
+    ],
+    "font awesome": [
+      "fontawesome.com"
+    ],
+    "icon library": [
+      "fontawesome.com"
+    ],
+    "fontawesome icons": [
+      "fontawesome.com"
+    ],
+    "fontawesome site": [
+      "fontawesome.com"
+    ],
+    "force": [
+      "force.com"
+    ],
+    "salesforce platform": [
+      "force.com"
+    ],
+    "force site": [
+      "force.com"
+    ],
+    "cloud platform": [
+      "force.com"
+    ],
+    "salesforce cloud": [
+      "force.com",
+      "salesforce.com"
+    ],
+    "forter": [
+      "forter.com"
+    ],
+    "fraud prevention": [
+      "forter.com"
+    ],
+    "ecommerce fraud prevention": [
+      "forter.com"
+    ],
+    "forter fraud solutions": [
+      "forter.com"
+    ],
+    "forter security": [
+      "forter.com"
+    ],
+    "fox news": [
+      "foxnews.com"
+    ],
+    "fox": [
+      "foxnews.com"
+    ],
+    "fox news website": [
+      "foxnews.com"
+    ],
+    "fox news online": [
+      "foxnews.com"
+    ],
+    "full story": [
+      "fullstory.com"
+    ],
+    "customer experience": [
+      "fullstory.com"
+    ],
+    "fullstory analytics": [
+      "fullstory.com"
+    ],
+    "fullstory user insights": [
+      "fullstory.com"
+    ],
+    "user experience analytics": [
+      "fullstory.com"
+    ],
+    "freewheel": [
+      "fwmrm.net"
+    ],
+    "fwmrm": [
+      "fwmrm.net"
+    ],
+    "freewheel advertising": [
+      "fwmrm.net"
+    ],
+    "freewheel media": [
+      "fwmrm.net"
+    ],
+    "freewheel digital ads": [
+      "fwmrm.net"
+    ],
+    "fyber": [
+      "fyber.com"
+    ],
+    "mobile advertising": [
+      "fyber.com",
+      "mintegral.net",
+      "moloco.com",
+      "smadex.com",
+      "vungle.com"
+    ],
+    "fyber ads": [
+      "fyber.com"
+    ],
+    "fyber monetization": [
+      "fyber.com"
+    ],
+    "fyber revenue": [
+      "fyber.com"
+    ],
+    "game analytics": [
+      "gameanalytics.com"
+    ],
+    "game stats": [
+      "gameanalytics.com"
+    ],
+    "game data analysis": [
+      "gameanalytics.com"
+    ],
+    "game insights": [
+      "gameanalytics.com"
+    ],
+    "game metrics": [
+      "gameanalytics.com"
+    ],
+    "game pass": [
+      "gamepass.com"
+    ],
+    "xbox game pass": [
+      "gamepass.com"
+    ],
+    "gaming subscription": [
+      "gamepass.com"
+    ],
+    "xbox subscription": [
+      "gamepass.com"
+    ],
+    "xbox games": [
+      "gamepass.com"
+    ],
+    "garena": [
+      "garena.com"
+    ],
+    "free fire": [
+      "garena.com"
+    ],
+    "online games": [
+      "garena.com"
+    ],
+    "esports platform": [
+      "garena.com"
+    ],
+    "garmin": [
+      "garmin.com"
+    ],
+    "gps maker": [
+      "garmin.com"
+    ],
+    "fitness devices": [
+      "garmin.com"
+    ],
+    "navigation devices": [
+      "garmin.com"
+    ],
+    "smartwatches": [
+      "garmin.com"
+    ],
+    "gbox lab": [
+      "gboxlab.com"
+    ],
+    "mobile apps": [
+      "gboxlab.com"
+    ],
+    "software development": [
+      "gboxlab.com"
+    ],
+    "app testing": [
+      "gboxlab.com"
+    ],
+    "tech solutions": [
+      "gboxlab.com"
+    ],
+    "geotrust": [
+      "geotrust.com"
+    ],
+    "SSL certificate provider": [
+      "geotrust.com"
+    ],
+    "trust certification": [
+      "geotrust.com"
+    ],
+    "getgrass": [
+      "getgrass.io"
+    ],
+    "grass solution": [
+      "getgrass.io"
+    ],
+    "lawn service": [
+      "getgrass.io"
+    ],
+    "giphy": [
+      "giphy.com"
+    ],
+    "gif search": [
+      "giphy.com"
+    ],
+    "gif library": [
+      "giphy.com"
+    ],
+    "gist.build": [
+      "gist.build"
+    ],
+    "build gist": [
+      "gist.build"
+    ],
+    "code snippet service": [
+      "gist.build"
+    ],
+    "github": [
+      "github.com"
+    ],
+    "code repository": [
+      "github.com"
+    ],
+    "software development platform": [
+      "github.com"
+    ],
+    "github pages": [
+      "github.io"
+    ],
+    "github site": [
+      "github.io"
+    ],
+    "git site": [
+      "github.io"
+    ],
+    "git pages": [
+      "github.io"
+    ],
+    "code pages": [
+      "github.io"
+    ],
+    "global sign": [
+      "globalsign.com"
+    ],
+    "global certificate": [
+      "globalsign.com"
+    ],
+    "security certificate": [
+      "globalsign.com"
+    ],
+    "global ssl": [
+      "globalsign.com"
+    ],
+    "globo": [
+      "globo.com"
+    ],
+    "brazil news": [
+      "globo.com"
+    ],
+    "globo news": [
+      "globo.com"
+    ],
+    "globo site": [
+      "globo.com"
+    ],
+    "globo channel": [
+      "globo.com"
+    ],
+    "mail.google": [
+      "gmail.com"
+    ],
+    "google email": [
+      "gmail.com"
+    ],
+    "gmx mail": [
+      "gmx.net"
+    ],
+    "gmx email": [
+      "gmx.net"
+    ],
+    "gmx service": [
+      "gmx.net"
+    ],
+    "gmx site": [
+      "gmx.net"
+    ],
+    "global mail exchange": [
+      "gmx.net"
+    ],
+    "site statistics": [
+      "google-analytics.com"
+    ],
+    "website tracking": [
+      "google-analytics.com"
+    ],
+    "analytics tool": [
+      "google-analytics.com",
+      "mixpanel.com"
+    ],
+    "google ca": [
+      "google.ca"
+    ],
+    "canadian google": [
+      "google.ca"
+    ],
+    "google canada": [
+      "google.ca"
+    ],
+    "google search canada": [
+      "google.ca"
+    ],
+    "google china": [
+      "google.cn"
+    ],
+    "google cn": [
+      "google.cn"
+    ],
+    "chinese google": [
+      "google.cn"
+    ],
+    "google search china": [
+      "google.cn"
+    ],
+    "google indonesia": [
+      "google.co.id"
+    ],
+    "google co id": [
+      "google.co.id"
+    ],
+    "indonesian google": [
+      "google.co.id"
+    ],
+    "google search indonesia": [
+      "google.co.id"
+    ],
+    "google india": [
+      "google.co.in"
+    ],
+    "google co in": [
+      "google.co.in"
+    ],
+    "indian google": [
+      "google.co.in"
+    ],
+    "google search india": [
+      "google.co.in"
+    ],
+    "google japan": [
+      "google.co.jp"
+    ],
+    "google jp": [
+      "google.co.jp"
+    ],
+    "google 日本": [
+      "google.co.jp"
+    ],
+    "google uk": [
+      "google.co.uk"
+    ],
+    "google united kingdom": [
+      "google.co.uk"
+    ],
+    "google britain": [
+      "google.co.uk"
+    ],
+    "google usa": [
+      "google.com",
+      "google.us"
+    ],
+    "google america": [
+      "google.com"
+    ],
+    "google australia": [
+      "google.com.au"
+    ],
+    "google au": [
+      "google.com.au"
+    ],
+    "google aussie": [
+      "google.com.au"
+    ],
+    "google brazil": [
+      "google.com.br"
+    ],
+    "google br": [
+      "google.com.br"
+    ],
+    "google brasil": [
+      "google.com.br"
+    ],
+    "google hong kong": [
+      "google.com.hk"
+    ],
+    "hong kong google": [
+      "google.com.hk"
+    ],
+    "hk google": [
+      "google.com.hk"
+    ],
+    "google in hk": [
+      "google.com.hk"
+    ],
+    "google chinese": [
+      "google.com.hk"
+    ],
+    "google germany": [
+      "google.de"
+    ],
+    "german google": [
+      "google.de"
+    ],
+    "google deutsch": [
+      "google.de"
+    ],
+    "google in germany": [
+      "google.de"
+    ],
+    "google de": [
+      "google.de"
+    ],
+    "google france": [
+      "google.fr"
+    ],
+    "french google": [
+      "google.fr"
+    ],
+    "google french": [
+      "google.fr"
+    ],
+    "google in france": [
+      "google.fr"
+    ],
+    "google fr": [
+      "google.fr"
+    ],
+    "google netherlands": [
+      "google.nl"
+    ],
+    "dutch google": [
+      "google.nl"
+    ],
+    "google dutch": [
+      "google.nl"
+    ],
+    "google in netherlands": [
+      "google.nl"
+    ],
+    "google nl": [
+      "google.nl"
+    ],
+    "google russia": [
+      "google.ru"
+    ],
+    "russian google": [
+      "google.ru"
+    ],
+    "google russian": [
+      "google.ru"
+    ],
+    "google in russia": [
+      "google.ru"
+    ],
+    "google ru": [
+      "google.ru"
+    ],
+    "us google": [
+      "google.us"
+    ],
+    "american google": [
+      "google.us"
+    ],
+    "google united states": [
+      "google.us"
+    ],
+    "ad services": [
+      "googlesyndication.com"
+    ],
+    "ad platform by google": [
+      "googlesyndication.com"
+    ],
+    "google ad network": [
+      "googlesyndication.com"
+    ],
+    "google video": [
+      "googlevideo.com"
+    ],
+    "google media": [
+      "googlevideo.com"
+    ],
+    "google videos": [
+      "googlevideo.com"
+    ],
+    "video service by google": [
+      "googlevideo.com"
+    ],
+    "multimedia google": [
+      "googlevideo.com"
+    ],
+    "grafana": [
+      "grafana.com"
+    ],
+    "grafana dashboard": [
+      "grafana.com"
+    ],
+    "grafana platform": [
+      "grafana.com"
+    ],
+    "analytics grafana": [
+      "grafana.com"
+    ],
+    "grafana monitoring": [
+      "grafana.com"
+    ],
+    "grammarly": [
+      "grammarly.com"
+    ],
+    "grammarly tool": [
+      "grammarly.com"
+    ],
+    "grammar check": [
+      "grammarly.com"
+    ],
+    "writing assistant": [
+      "grammarly.com"
+    ],
+    "grammarly editor": [
+      "grammarly.com"
+    ],
+    "gravatar": [
+      "gravatar.com"
+    ],
+    "gravatar site": [
+      "gravatar.com"
+    ],
+    "profile picture platform": [
+      "gravatar.com"
+    ],
+    "gravatar profile": [
+      "gravatar.com"
+    ],
+    "avatar service": [
+      "gravatar.com"
+    ],
+    "gumgum": [
+      "gumgum.com"
+    ],
+    "gumgum site": [
+      "gumgum.com"
+    ],
+    "gumgum platform": [
+      "gumgum.com"
+    ],
+    "gumgum services": [
+      "gumgum.com"
+    ],
+    "harman": [
+      "harman.com"
+    ],
+    "harman site": [
+      "harman.com"
+    ],
+    "audio solutions": [
+      "harman.com"
+    ],
+    "harman platform": [
+      "harman.com"
+    ],
+    "harman services": [
+      "harman.com"
+    ],
+    "hcaptcha": [
+      "hcaptcha.com"
+    ],
+    "hcaptcha site": [
+      "hcaptcha.com"
+    ],
+    "captcha service": [
+      "hcaptcha.com"
+    ],
+    "hcaptcha platform": [
+      "hcaptcha.com"
+    ],
+    "hcaptcha verification": [
+      "hcaptcha.com"
+    ],
+    "he.net": [
+      "he.net"
+    ],
+    "hurricane electric": [
+      "he.net"
+    ],
+    "he.net site": [
+      "he.net"
+    ],
+    "hurricane electric services": [
+      "he.net"
+    ],
+    "he.net platform": [
+      "he.net"
+    ],
+    "here maps": [
+      "here.com"
+    ],
+    "here navigation": [
+      "here.com"
+    ],
+    "map provider": [
+      "here.com"
+    ],
+    "gps maps": [
+      "here.com"
+    ],
+    "heytap mobile": [
+      "heytapmobi.com"
+    ],
+    "heytap smartphones": [
+      "heytapmobi.com"
+    ],
+    "oppo phones": [
+      "heytapmobi.com"
+    ],
+    "heytap website": [
+      "heytapmobi.com"
+    ],
+    "honor cloud": [
+      "hihonorcloud.com"
+    ],
+    "hihonor cloud": [
+      "hihonorcloud.com"
+    ],
+    "honor services": [
+      "hihonorcloud.com"
+    ],
+    "honor website": [
+      "hihonorcloud.com"
+    ],
+    "home assistant": [
+      "home-assistant.io"
+    ],
+    "smart home control": [
+      "home-assistant.io"
+    ],
+    "home automation": [
+      "home-assistant.io",
+      "smartthings.com"
+    ],
+    "home assistant website": [
+      "home-assistant.io"
+    ],
+    "hotjar": [
+      "hotjar.com"
+    ],
+    "user analytics": [
+      "hotjar.com"
+    ],
+    "website heatmaps": [
+      "hotjar.com"
+    ],
+    "hotjar insights": [
+      "hotjar.com"
+    ],
+    "Microsoft email": [
+      "hotmail.com"
+    ],
+    "Outlook": [
+      "hotmail.com"
+    ],
+    "Outlook mail": [
+      "hotmail.com"
+    ],
+    "hoyoverse": [
+      "hoyoverse.com"
+    ],
+    "genshin impact": [
+      "hoyoverse.com"
+    ],
+    "game company": [
+      "hoyoverse.com"
+    ],
+    "miHoYo": [
+      "hoyoverse.com"
+    ],
+    "honkai impact": [
+      "hoyoverse.com"
+    ],
+    "hp": [
+      "hp.com"
+    ],
+    "Hewlett-Packard": [
+      "hp.com"
+    ],
+    "laptop brand": [
+      "hp.com"
+    ],
+    "printer company": [
+      "hp.com"
+    ],
+    "computer manufacturer": [
+      "hp.com"
+    ],
+    "hubspot": [
+      "hubspot.com"
+    ],
+    "marketing software": [
+      "hubspot.com"
+    ],
+    "CRM platform": [
+      "hubspot.com"
+    ],
+    "inbound marketing": [
+      "hubspot.com"
+    ],
+    "hubspot academy": [
+      "hubspot.com"
+    ],
+    "huntress": [
+      "huntress.io"
+    ],
+    "cybersecurity platform": [
+      "huntress.io"
+    ],
+    "threat detection": [
+      "huntress.io",
+      "rapid7.com"
+    ],
+    "managed security": [
+      "huntress.io"
+    ],
+    "huntress labs": [
+      "huntress.io"
+    ],
+    "ip address lookup": [
+      "icanhazip.com"
+    ],
+    "icanhazip": [
+      "icanhazip.com"
+    ],
+    "my ip checker": [
+      "icanhazip.com"
+    ],
+    "icloud content": [
+      "icloud-content.com"
+    ],
+    "apple cloud content": [
+      "icloud-content.com"
+    ],
+    "icloud data": [
+      "icloud-content.com"
+    ],
+    "id5 sync": [
+      "id5-sync.com"
+    ],
+    "id5 tracking": [
+      "id5-sync.com"
+    ],
+    "id5 analytics": [
+      "id5-sync.com"
+    ],
+    "ifconfig": [
+      "ifconfig.me"
+    ],
+    "ifconfig ip checker": [
+      "ifconfig.me"
+    ],
+    "my ip address": [
+      "ifconfig.me"
+    ],
+    "int08h": [
+      "int08h.com"
+    ],
+    "tech blog": [
+      "int08h.com"
+    ],
+    "hardware research": [
+      "int08h.com"
+    ],
+    "int08h tech": [
+      "int08h.com"
+    ],
+    "intel": [
+      "intel.com"
+    ],
+    "cpu maker": [
+      "intel.com"
+    ],
+    "semiconductor giant": [
+      "intel.com"
+    ],
+    "intel corporation": [
+      "intel.com"
+    ],
+    "intelbras": [
+      "intelbras.com.br"
+    ],
+    "brazilian technology": [
+      "intelbras.com.br"
+    ],
+    "intelbras technology": [
+      "intelbras.com.br"
+    ],
+    "security solutions": [
+      "intelbras.com.br"
+    ],
+    "intentiq": [
+      "intentiq.com"
+    ],
+    "ai solutions": [
+      "intentiq.com"
+    ],
+    "machine learning services": [
+      "intentiq.com"
+    ],
+    "intentiq ai": [
+      "intentiq.com"
+    ],
+    "intercom": [
+      "intercom.io"
+    ],
+    "chat software": [
+      "intercom.io"
+    ],
+    "intercom platform": [
+      "intercom.io"
+    ],
+    "im-apps": [
+      "im-apps.net"
+    ],
+    "im apps": [
+      "im-apps.net"
+    ],
+    "imapps": [
+      "im-apps.net"
+    ],
+    "im apps website": [
+      "im-apps.net"
+    ],
+    "im applications": [
+      "im-apps.net"
+    ],
+    "indexww": [
+      "indexww.com"
+    ],
+    "index ww": [
+      "indexww.com"
+    ],
+    "indexww website": [
+      "indexww.com"
+    ],
+    "index worldwide": [
+      "indexww.com"
+    ],
+    "index worldwide website": [
+      "indexww.com"
+    ],
+    "inmobi": [
+      "inmobi.com"
+    ],
+    "in mobi": [
+      "inmobi.com"
+    ],
+    "inmobi website": [
+      "inmobi.com"
+    ],
+    "in mobi website": [
+      "inmobi.com"
+    ],
+    "in mobile": [
+      "inmobi.com"
+    ],
+    "innovid": [
+      "innovid.com"
+    ],
+    "innovid website": [
+      "innovid.com"
+    ],
+    "innovation videos": [
+      "innovid.com"
+    ],
+    "innovid technologies": [
+      "innovid.com"
+    ],
+    "innovid ad platform": [
+      "innovid.com"
+    ],
+    "ig": [
+      "instagram.com"
+    ],
+    "instagram website": [
+      "instagram.com"
+    ],
+    "social media photo app": [
+      "instagram.com"
+    ],
+    "intuit": [
+      "intuit.com"
+    ],
+    "turbotax": [
+      "intuit.com"
+    ],
+    "quickbooks": [
+      "intuit.com"
+    ],
+    "mint": [
+      "intuit.com"
+    ],
+    "ip api": [
+      "ip-api.com"
+    ],
+    "ip-api": [
+      "ip-api.com"
+    ],
+    "ip location api": [
+      "ip-api.com"
+    ],
+    "IP geolocation API": [
+      "ip-api.com"
+    ],
+    "ipify": [
+      "ipify.org"
+    ],
+    "ipify api": [
+      "ipify.org"
+    ],
+    "public IP address API": [
+      "ipify.org"
+    ],
+    "ipify service": [
+      "ipify.org"
+    ],
+    "ipinfo": [
+      "ipinfo.io"
+    ],
+    "ipinfo api": [
+      "ipinfo.io"
+    ],
+    "IP information API": [
+      "ipinfo.io"
+    ],
+    "ipinfo service": [
+      "ipinfo.io"
+    ],
+    "iterable": [
+      "iterable.com"
+    ],
+    "marketing automation": [
+      "iterable.com",
+      "zemanta.com"
+    ],
+    "growth marketing platform": [
+      "iterable.com"
+    ],
+    "iterable service": [
+      "iterable.com"
+    ],
+    "ixigua": [
+      "ixigua.com"
+    ],
+    "video site ixigua": [
+      "ixigua.com"
+    ],
+    "chinese video platform": [
+      "ixigua.com"
+    ],
+    "ixigua videos": [
+      "ixigua.com"
+    ],
+    "douyin sister site": [
+      "ixigua.com"
+    ],
+    "jetbrains": [
+      "jetbrains.com"
+    ],
+    "developer tools": [
+      "jetbrains.com"
+    ],
+    "programming software": [
+      "jetbrains.com"
+    ],
+    "jetbrains tools": [
+      "jetbrains.com"
+    ],
+    "jetbrains products": [
+      "jetbrains.com"
+    ],
+    "honey": [
+      "joinhoney.com"
+    ],
+    "join honey": [
+      "joinhoney.com"
+    ],
+    "coupon site": [
+      "joinhoney.com"
+    ],
+    "shopping discounts": [
+      "joinhoney.com"
+    ],
+    "join honey deals": [
+      "joinhoney.com"
+    ],
+    "jquery": [
+      "jquery.com"
+    ],
+    "javascript library": [
+      "jquery.com"
+    ],
+    "jquery library": [
+      "jquery.com"
+    ],
+    "web development tool": [
+      "jquery.com"
+    ],
+    "jquery framework": [
+      "jquery.com"
+    ],
+    "jwplayer": [
+      "jwplayer.com"
+    ],
+    "video player site": [
+      "jwplayer.com"
+    ],
+    "jw player": [
+      "jwplayer.com",
+      "jwpltx.com"
+    ],
+    "jw video platform": [
+      "jwplayer.com"
+    ],
+    "jw platform": [
+      "jwpltx.com"
+    ],
+    "jwpltx": [
+      "jwpltx.com"
+    ],
+    "kargo": [
+      "kargo.com"
+    ],
+    "kargo ads": [
+      "kargo.com"
+    ],
+    "kargo advertising": [
+      "kargo.com"
+    ],
+    "kaspersky": [
+      "kaspersky.com"
+    ],
+    "kaspersky antivirus": [
+      "kaspersky.com"
+    ],
+    "kaspersky security": [
+      "kaspersky.com"
+    ],
+    "keplr": [
+      "keplr.app"
+    ],
+    "keplr wallet": [
+      "keplr.app"
+    ],
+    "keplr crypto": [
+      "keplr.app"
+    ],
+    "klaviyo": [
+      "klaviyo.com"
+    ],
+    "klaviyo marketing": [
+      "klaviyo.com"
+    ],
+    "klaviyo email": [
+      "klaviyo.com"
+    ],
+    "ksapisrv": [
+      "ksapisrv.com"
+    ],
+    "ksapi service": [
+      "ksapisrv.com"
+    ],
+    "ksapi": [
+      "ksapisrv.com"
+    ],
+    "kuaishou": [
+      "kuaishou.com"
+    ],
+    "Chinese video app": [
+      "kuaishou.com"
+    ],
+    "short video platform": [
+      "kuaishou.com"
+    ],
+    "kuaishou video": [
+      "kuaishou.com"
+    ],
+    "kueezrtb": [
+      "kueezrtb.com"
+    ],
+    "kueez RTB": [
+      "kueezrtb.com"
+    ],
+    "kueez advertising": [
+      "kueezrtb.com"
+    ],
+    "kwai": [
+      "kwai.com"
+    ],
+    "kwai app": [
+      "kwai.com"
+    ],
+    "kwai video": [
+      "kwai.com"
+    ],
+    "kwimgs": [
+      "kwimgs.com"
+    ],
+    "kwai images": [
+      "kwimgs.com"
+    ],
+    "kwai img": [
+      "kwimgs.com"
+    ],
+    "kwai pictures": [
+      "kwimgs.com"
+    ],
+    "launchdarkly": [
+      "launchdarkly.com"
+    ],
+    "feature flag service": [
+      "launchdarkly.com"
+    ],
+    "lauch darkly website": [
+      "launchdarkly.com"
+    ],
+    "launchdarkly service": [
+      "launchdarkly.com"
+    ],
+    "launch darkly": [
+      "launchdarkly.com"
+    ],
+    "leiniao": [
+      "leiniao.com"
+    ],
+    "leiniao website": [
+      "leiniao.com"
+    ],
+    "cloud service": [
+      "leiniao.com"
+    ],
+    "leiniao service": [
+      "leiniao.com"
+    ],
+    "lencr": [
+      "lencr.org"
+    ],
+    "lencr website": [
+      "lencr.org"
+    ],
+    "lencr org": [
+      "lencr.org"
+    ],
+    "lencr org site": [
+      "lencr.org"
+    ],
+    "lencr online": [
+      "lencr.org"
+    ],
+    "lenovo": [
+      "lenovo.com"
+    ],
+    "lenovo site": [
+      "lenovo.com"
+    ],
+    "lenovo website": [
+      "lenovo.com"
+    ],
+    "laptop maker site": [
+      "lenovo.com"
+    ],
+    "lenovo laptops": [
+      "lenovo.com"
+    ],
+    "lge website": [
+      "lge.com"
+    ],
+    "lg electronics": [
+      "lge.com"
+    ],
+    "lge site": [
+      "lge.com"
+    ],
+    "lg site": [
+      "lge.com"
+    ],
+    "lg electronics site": [
+      "lge.com"
+    ],
+    "libero": [
+      "libero.it"
+    ],
+    "libero website": [
+      "libero.it"
+    ],
+    "libero italy": [
+      "libero.it"
+    ],
+    "libero portal": [
+      "libero.it"
+    ],
+    "italian portal": [
+      "libero.it"
+    ],
+    "liftoff": [
+      "liftoff.io"
+    ],
+    "liftoff site": [
+      "liftoff.io"
+    ],
+    "liftoff website": [
+      "liftoff.io"
+    ],
+    "liftoff io": [
+      "liftoff.io"
+    ],
+    "liftoff startup": [
+      "liftoff.io"
+    ],
+    "lijit": [
+      "lijit.com"
+    ],
+    "lijit site": [
+      "lijit.com"
+    ],
+    "lijit website": [
+      "lijit.com"
+    ],
+    "lijit platform": [
+      "lijit.com"
+    ],
+    "lijit network": [
+      "lijit.com"
+    ],
+    "linkedin website": [
+      "linkedin.com"
+    ],
+    "live site": [
+      "live.com"
+    ],
+    "live website": [
+      "live.com"
+    ],
+    "Microsoft live": [
+      "live.com"
+    ],
+    "outlook live": [
+      "live.com"
+    ],
+    "livechat": [
+      "livechatinc.com"
+    ],
+    "live chat": [
+      "livechatinc.com"
+    ],
+    "livechatinc": [
+      "livechatinc.com"
+    ],
+    "live chat support": [
+      "livechatinc.com"
+    ],
+    "livechat support": [
+      "livechatinc.com"
+    ],
+    "loopme": [
+      "loopme.me"
+    ],
+    "loop me": [
+      "loopme.me"
+    ],
+    "mobile ads": [
+      "loopme.me"
+    ],
+    "loopme ads": [
+      "loopme.me"
+    ],
+    "ad platform": [
+      "loopme.me",
+      "mgid.com",
+      "mintegral.net",
+      "tradplusad.com"
+    ],
+    "loop advertising": [
+      "loopme.me"
+    ],
+    "mailru": [
+      "mail.ru"
+    ],
+    "mail ru": [
+      "mail.ru"
+    ],
+    "russian mail": [
+      "mail.ru"
+    ],
+    "mailru service": [
+      "mail.ru"
+    ],
+    "russian email": [
+      "mail.ru"
+    ],
+    "mapbox": [
+      "mapbox.com"
+    ],
+    "map box": [
+      "mapbox.com"
+    ],
+    "maps service": [
+      "mapbox.com"
+    ],
+    "mapping platform": [
+      "mapbox.com"
+    ],
+    "mapbox maps": [
+      "mapbox.com"
+    ],
+    "location services": [
+      "mapbox.com"
+    ],
+    "match": [
+      "match.com"
+    ],
+    "matchcom": [
+      "match.com"
+    ],
+    "dating site": [
+      "match.com"
+    ],
+    "match dating": [
+      "match.com"
+    ],
+    "online dating": [
+      "match.com"
+    ],
+    "match service": [
+      "match.com"
+    ],
+    "mcafee": [
+      "mcafee.com"
+    ],
+    "mcafee security": [
+      "mcafee.com"
+    ],
+    "mcafee antivirus": [
+      "mcafee.com"
+    ],
+    "mcafee website": [
+      "mcafee.com"
+    ],
+    "mcafee site": [
+      "mcafee.com"
+    ],
+    "mcafee page": [
+      "mcafee.com"
+    ],
+    "me": [
+      "me.com"
+    ],
+    "apple me": [
+      "me.com"
+    ],
+    "icloud me": [
+      "me.com"
+    ],
+    "me website": [
+      "me.com"
+    ],
+    "me site": [
+      "me.com"
+    ],
+    "me page": [
+      "me.com"
+    ],
+    "media net": [
+      "media.net"
+    ],
+    "mediaplex": [
+      "media.net"
+    ],
+    "media net website": [
+      "media.net"
+    ],
+    "media net site": [
+      "media.net"
+    ],
+    "media net page": [
+      "media.net"
+    ],
+    "mediago": [
+      "mediago.io"
+    ],
+    "mediago io": [
+      "mediago.io"
+    ],
+    "mediago website": [
+      "mediago.io"
+    ],
+    "mediago site": [
+      "mediago.io"
+    ],
+    "mediago page": [
+      "mediago.io"
+    ],
+    "mediatek": [
+      "mediatek.com"
+    ],
+    "mediatek technology": [
+      "mediatek.com"
+    ],
+    "mediatek website": [
+      "mediatek.com"
+    ],
+    "mediatek site": [
+      "mediatek.com"
+    ],
+    "mediatek page": [
+      "mediatek.com"
+    ],
+    "mediavine": [
+      "mediavine.com"
+    ],
+    "influencer marketing": [
+      "mediavine.com"
+    ],
+    "blog network": [
+      "mediavine.com"
+    ],
+    "meethue": [
+      "meethue.com"
+    ],
+    "philips hue": [
+      "meethue.com"
+    ],
+    "smart lighting": [
+      "meethue.com"
+    ],
+    "home lighting": [
+      "meethue.com"
+    ],
+    "hue lights": [
+      "meethue.com"
+    ],
+    "mega": [
+      "mega.co.nz"
+    ],
+    "secure storage": [
+      "mega.co.nz"
+    ],
+    "mega cloud": [
+      "mega.co.nz"
+    ],
+    "file sharing": [
+      "mega.co.nz"
+    ],
+    "meraki": [
+      "meraki.com"
+    ],
+    "cisco meraki": [
+      "meraki.com"
+    ],
+    "network management": [
+      "meraki.com",
+      "n-able.com"
+    ],
+    "cloud networking": [
+      "meraki.com"
+    ],
+    "meraki products": [
+      "meraki.com"
+    ],
+    "messenger": [
+      "messenger.com"
+    ],
+    "facebook messenger": [
+      "messenger.com"
+    ],
+    "messaging platform": [
+      "messenger.com"
+    ],
+    "instant messenger": [
+      "messenger.com"
+    ],
+    "metamask": [
+      "metamask.io"
+    ],
+    "crypto wallet": [
+      "metamask.io",
+      "phantom.app"
+    ],
+    "ethereum wallet": [
+      "metamask.io"
+    ],
+    "blockchain wallet": [
+      "metamask.io"
+    ],
+    "mfadsrvr": [
+      "mfadsrvr.com"
+    ],
+    "marketing server": [
+      "mfadsrvr.com"
+    ],
+    "mgid": [
+      "mgid.com"
+    ],
+    "native advertising": [
+      "mgid.com",
+      "outbrain.com",
+      "pubnative.net",
+      "seedtag.com"
+    ],
+    "online ads": [
+      "mgid.com"
+    ],
+    "mi store": [
+      "mi.com"
+    ],
+    "tech giant": [
+      "microsoft.com"
+    ],
+    "mikrotik": [
+      "mikrotik.com"
+    ],
+    "router manufacturer": [
+      "mikrotik.com",
+      "netgear.com",
+      "tp-link.com"
+    ],
+    "networking hardware": [
+      "mikrotik.com"
+    ],
+    "mikrotik routers": [
+      "mikrotik.com"
+    ],
+    "mintegral": [
+      "mintegral.net"
+    ],
+    "mintegral ads": [
+      "mintegral.net"
+    ],
+    "miro": [
+      "miro.com"
+    ],
+    "online whiteboard": [
+      "miro.com"
+    ],
+    "miro app": [
+      "miro.com"
+    ],
+    "remote collaboration tool": [
+      "miro.com"
+    ],
+    "miui": [
+      "miui.com"
+    ],
+    "xiaomi ui": [
+      "miui.com"
+    ],
+    "miui system": [
+      "miui.com"
+    ],
+    "miui software": [
+      "miui.com"
+    ],
+    "miwifi": [
+      "miwifi.com"
+    ],
+    "xiaomi wifi": [
+      "miwifi.com"
+    ],
+    "mi router": [
+      "miwifi.com"
+    ],
+    "miwifi app": [
+      "miwifi.com"
+    ],
+    "mixpanel": [
+      "mixpanel.com"
+    ],
+    "mixpanel website": [
+      "mixpanel.com"
+    ],
+    "mixpanel analytics": [
+      "mixpanel.com"
+    ],
+    "mmcdn": [
+      "mmcdn.com"
+    ],
+    "media server": [
+      "mmcdn.com"
+    ],
+    "mmcdn website": [
+      "mmcdn.com"
+    ],
+    "mmechocaptiveportal": [
+      "mmechocaptiveportal.com"
+    ],
+    "mechocaptive portal": [
+      "mmechocaptiveportal.com"
+    ],
+    "mmecho portal": [
+      "mmechocaptiveportal.com"
+    ],
+    "moengage": [
+      "moengage.com"
+    ],
+    "engagement platform": [
+      "moengage.com"
+    ],
+    "moengage website": [
+      "moengage.com"
+    ],
+    "moloco": [
+      "moloco.com"
+    ],
+    "moloco website": [
+      "moloco.com"
+    ],
+    "mookie": [
+      "mookie1.com"
+    ],
+    "mookie one": [
+      "mookie1.com"
+    ],
+    "mookie1": [
+      "mookie1.com"
+    ],
+    "mozilla": [
+      "mozilla.com"
+    ],
+    "firefox site": [
+      "mozilla.com"
+    ],
+    "browser maker": [
+      "mozilla.com"
+    ],
+    "thunderbird site": [
+      "mozilla.com"
+    ],
+    "mozilla organization": [
+      "mozilla.org"
+    ],
+    "mozilla org": [
+      "mozilla.org"
+    ],
+    "firefox organization": [
+      "mozilla.org"
+    ],
+    "mparticle": [
+      "mparticle.com"
+    ],
+    "particle platform": [
+      "mparticle.com"
+    ],
+    "mparticle site": [
+      "mparticle.com"
+    ],
+    "apple media": [
+      "mzstatic.com"
+    ],
+    "itunes content": [
+      "mzstatic.com"
+    ],
+    "apple music": [
+      "mzstatic.com"
+    ],
+    "it solutions": [
+      "n-able.com"
+    ],
+    "network performance monitoring": [
+      "n-able.com"
+    ],
+    "naver": [
+      "naver.com"
+    ],
+    "korean web portal": [
+      "naver.com"
+    ],
+    "naver search": [
+      "naver.com"
+    ],
+    "nest": [
+      "nest.com"
+    ],
+    "smart home": [
+      "nest.com",
+      "smartthings.com"
+    ],
+    "nest thermostats": [
+      "nest.com"
+    ],
+    "watch movies": [
+      "netflix.com"
+    ],
+    "netflix.net": [
+      "netflix.net"
+    ],
+    "online movies": [
+      "netflix.net"
+    ],
+    "netgear": [
+      "netgear.com"
+    ],
+    "network hardware": [
+      "netgear.com",
+      "ubnt.com"
+    ],
+    "netgear.com": [
+      "netgear.com"
+    ],
+    "new relic": [
+      "newrelic.com"
+    ],
+    "software monitoring": [
+      "newrelic.com"
+    ],
+    "newrelic.com": [
+      "newrelic.com"
+    ],
+    "application performance management": [
+      "newrelic.com"
+    ],
+    "new relic tool": [
+      "newrelic.com"
+    ],
+    "nextdoor": [
+      "nextdoor.com"
+    ],
+    "neighborhood network": [
+      "nextdoor.com"
+    ],
+    "nextdoor.com": [
+      "nextdoor.com"
+    ],
+    "local community": [
+      "nextdoor.com"
+    ],
+    "social network for neighbors": [
+      "nextdoor.com"
+    ],
+    "nflxvideo": [
+      "nflxvideo.net"
+    ],
+    "netflix video": [
+      "nflxvideo.net"
+    ],
+    "nflxvideo.net": [
+      "nflxvideo.net"
+    ],
+    "streaming video": [
+      "nflxvideo.net"
+    ],
+    "netflix streaming video": [
+      "nflxvideo.net"
+    ],
+    "ninjarmm": [
+      "ninjarmm.com"
+    ],
+    "ninja rmm": [
+      "ninjarmm.com"
+    ],
+    "rmm software": [
+      "ninjarmm.com"
+    ],
+    "endpoint management": [
+      "ninjarmm.com"
+    ],
+    "nist": [
+      "nist.gov"
+    ],
+    "national institute of standards and technology": [
+      "nist.gov"
+    ],
+    "cybersecurity framework": [
+      "nist.gov"
+    ],
+    "us standards agency": [
+      "nist.gov"
+    ],
+    "no-ip": [
+      "no-ip.com"
+    ],
+    "noip": [
+      "no-ip.com"
+    ],
+    "norton": [
+      "norton.com"
+    ],
+    "antivirus software": [
+      "norton.com"
+    ],
+    "symantec": [
+      "norton.com"
+    ],
+    "computer security": [
+      "norton.com"
+    ],
+    "notion": [
+      "notion.so"
+    ],
+    "notion app": [
+      "notion.so"
+    ],
+    "note-taking app": [
+      "notion.so"
+    ],
+    "productivity tool": [
+      "notion.so"
+    ],
+    "ntp pool": [
+      "ntppool.org"
+    ],
+    "time server pool": [
+      "ntppool.org"
+    ],
+    "global time network": [
+      "ntppool.org"
+    ],
+    "nubank": [
+      "nubank.com.br"
+    ],
+    "brazilian neobank": [
+      "nubank.com.br"
+    ],
+    "digital bank brazil": [
+      "nubank.com.br"
+    ],
+    "nvidia": [
+      "nvidia.com"
+    ],
+    "gpu manufacturer": [
+      "nvidia.com"
+    ],
+    "graphics card maker": [
+      "nvidia.com"
+    ],
+    "oculus": [
+      "oculus.com"
+    ],
+    "vr headset maker": [
+      "oculus.com"
+    ],
+    "virtual reality company": [
+      "oculus.com"
+    ],
+    "office tools": [
+      "office.com"
+    ],
+    "microsoft office 365": [
+      "office365.com"
+    ],
+    "office cloud": [
+      "office365.com"
+    ],
+    "office subscription": [
+      "office365.com"
+    ],
+    "one dot one": [
+      "one.one"
+    ],
+    "1.1": [
+      "one.one"
+    ],
+    "onelink": [
+      "onelink.me"
+    ],
+    "onelink.me": [
+      "onelink.me"
+    ],
+    "one link": [
+      "onelink.me"
+    ],
+    "one-link": [
+      "onelink.me"
+    ],
+    "onenote": [
+      "onenote.com",
+      "onenote.net"
+    ],
+    "microsoft onenote": [
+      "onenote.com"
+    ],
+    "note app": [
+      "onenote.com"
+    ],
+    "note taker": [
+      "onenote.com"
+    ],
+    "microsoft notes": [
+      "onenote.net"
+    ],
+    "note taking app": [
+      "onenote.net"
+    ],
+    "digital notebook": [
+      "onenote.net"
+    ],
+    "note maker": [
+      "onenote.net"
+    ],
+    "onesignal": [
+      "onesignal.com"
+    ],
+    "push notification service": [
+      "onesignal.com"
+    ],
+    "notifications provider": [
+      "onesignal.com"
+    ],
+    "signal company": [
+      "onesignal.com"
+    ],
+    "push service": [
+      "onesignal.com"
+    ],
+    "onetag-sys": [
+      "onetag-sys.com"
+    ],
+    "ad tracking service": [
+      "onetag-sys.com"
+    ],
+    "tag management system": [
+      "onetag-sys.com"
+    ],
+    "online tracking": [
+      "onetag-sys.com"
+    ],
+    "ad system": [
+      "onetag-sys.com"
+    ],
+    "onetrust": [
+      "onetrust.com"
+    ],
+    "privacy management": [
+      "onetrust.com"
+    ],
+    "compliance platform": [
+      "onetrust.com"
+    ],
+    "trust company": [
+      "onetrust.com"
+    ],
+    "data privacy": [
+      "onetrust.com"
+    ],
+    "opendns": [
+      "opendns.com"
+    ],
+    "internet security": [
+      "opendns.com",
+      "verisign.com"
+    ],
+    "web filtering": [
+      "opendns.com"
+    ],
+    "openx": [
+      "openx.net"
+    ],
+    "openx advertising": [
+      "openx.net"
+    ],
+    "opera": [
+      "opera.com"
+    ],
+    "browser": [
+      "opera.com"
+    ],
+    "opera browser": [
+      "opera.com"
+    ],
+    "web browser": [
+      "opera.com"
+    ],
+    "oppomobile": [
+      "oppomobile.com"
+    ],
+    "oppo": [
+      "oppomobile.com"
+    ],
+    "oppo smartphones": [
+      "oppomobile.com"
+    ],
+    "optimizely": [
+      "optimizely.com"
+    ],
+    "experimentation platform": [
+      "optimizely.com",
+      "split.io"
+    ],
+    "optimization tool": [
+      "optimizely.com"
+    ],
+    "testing platform": [
+      "optimizely.com"
+    ],
+    "orange": [
+      "orange.fr"
+    ],
+    "orange france": [
+      "orange.fr"
+    ],
+    "telecom provider": [
+      "orange.fr"
+    ],
+    "french telecom": [
+      "orange.fr"
+    ],
+    "outbrain": [
+      "outbrain.com"
+    ],
+    "content discovery": [
+      "outbrain.com"
+    ],
+    "outbrain services": [
+      "outbrain.com"
+    ],
+    "outlook mail": [
+      "outlook.com"
+    ],
+    "overwolf": [
+      "overwolf.com"
+    ],
+    "gaming apps": [
+      "overwolf.com"
+    ],
+    "overwolf platform": [
+      "overwolf.com"
+    ],
+    "game extensions": [
+      "overwolf.com"
+    ],
+    "pages dev": [
+      "pages.dev"
+    ],
+    "development pages": [
+      "pages.dev"
+    ],
+    "cloudflare pages": [
+      "pages.dev"
+    ],
+    "pages platform": [
+      "pages.dev"
+    ],
+    "palm play store": [
+      "palmplaystore.com"
+    ],
+    "palm apps": [
+      "palmplaystore.com"
+    ],
+    "palm store": [
+      "palmplaystore.com"
+    ],
+    "palm app marketplace": [
+      "palmplaystore.com"
+    ],
+    "palo alto networks": [
+      "paloaltonetworks.com"
+    ],
+    "palo alto security": [
+      "paloaltonetworks.com"
+    ],
+    "PA networks": [
+      "paloaltonetworks.com"
+    ],
+    "palo alto": [
+      "paloaltonetworks.com"
+    ],
+    "pan networks": [
+      "paloaltonetworks.com"
+    ],
+    "pandora": [
+      "pandora.com"
+    ],
+    "pandora music": [
+      "pandora.com"
+    ],
+    "music streams": [
+      "pandora.com"
+    ],
+    "pandora radio": [
+      "pandora.com"
+    ],
+    "pandora site": [
+      "pandora.com"
+    ],
+    "parsely": [
+      "parsely.com"
+    ],
+    "article analytics": [
+      "parsely.com"
+    ],
+    "parsely analytics": [
+      "parsely.com"
+    ],
+    "article data service": [
+      "parsely.com"
+    ],
+    "parsely site": [
+      "parsely.com"
+    ],
+    "paypal": [
+      "paypal.com"
+    ],
+    "payment service": [
+      "paypal.com"
+    ],
+    "paypal payments": [
+      "paypal.com"
+    ],
+    "online payments": [
+      "paypal.com",
+      "stripe.com"
+    ],
+    "paypal site": [
+      "paypal.com"
+    ],
+    "pendo": [
+      "pendo.io"
+    ],
+    "pendo.io": [
+      "pendo.io"
+    ],
+    "user engagement": [
+      "pendo.io"
+    ],
+    "pendo site": [
+      "pendo.io"
+    ],
+    "permutive": [
+      "permutive.com"
+    ],
+    "advertising intelligence": [
+      "permutive.com"
+    ],
+    "data management platform": [
+      "permutive.com"
+    ],
+    "phantom": [
+      "phantom.app"
+    ],
+    "phantom wallet": [
+      "phantom.app"
+    ],
+    "pinimg": [
+      "pinimg.com"
+    ],
+    "pinterest images": [
+      "pinimg.com"
+    ],
+    "pinterest pins": [
+      "pinimg.com"
+    ],
+    "pinterest": [
+      "pinterest.com"
+    ],
+    "picture sharing site": [
+      "pinterest.com"
+    ],
+    "social media images": [
+      "pinterest.com"
+    ],
+    "pki goog": [
+      "pki.goog"
+    ],
+    "google certificate authority": [
+      "pki.goog"
+    ],
+    "google pki": [
+      "pki.goog"
+    ],
+    "playrix": [
+      "playrix.com"
+    ],
+    "gardenscapes creator": [
+      "playrix.com"
+    ],
+    "homescapes creator": [
+      "playrix.com"
+    ],
+    "playstation": [
+      "playstation.com"
+    ],
+    "sony gaming": [
+      "playstation.com"
+    ],
+    "ps console": [
+      "playstation.com"
+    ],
+    "plex": [
+      "plex.tv"
+    ],
+    "streaming media": [
+      "plex.tv"
+    ],
+    "plex media server": [
+      "plex.tv"
+    ],
+    "pluto tv": [
+      "pluto.tv"
+    ],
+    "free streaming": [
+      "pluto.tv"
+    ],
+    "live tv streaming": [
+      "pluto.tv"
+    ],
+    "primis": [
+      "primis.tech"
+    ],
+    "video monetization": [
+      "primis.tech"
+    ],
+    "video platform tech": [
+      "primis.tech"
+    ],
+    "privacymanager": [
+      "privacymanager.io"
+    ],
+    "privacy manager": [
+      "privacymanager.io"
+    ],
+    "consent manager": [
+      "privacymanager.io"
+    ],
+    "pubmatic": [
+      "pubmatic.com"
+    ],
+    "ad tech": [
+      "pubmatic.com"
+    ],
+    "pubnative": [
+      "pubnative.net"
+    ],
+    "native ads platform": [
+      "pubnative.net"
+    ],
+    "pusher": [
+      "pusher.com"
+    ],
+    "real-time notifications": [
+      "pusher.com"
+    ],
+    "realtime app platform": [
+      "pusher.com"
+    ],
+    "qq": [
+      "qq.com"
+    ],
+    "tencent qq": [
+      "qq.com"
+    ],
+    "qq messenger": [
+      "qq.com"
+    ],
+    "qualtrics": [
+      "qualtrics.com"
+    ],
+    "survey platform": [
+      "qualtrics.com"
+    ],
+    "survey creator": [
+      "qualtrics.com"
+    ],
+    "qualtrics platform": [
+      "qualtrics.com"
+    ],
+    "quantum metric": [
+      "quantummetric.com"
+    ],
+    "user experience platform": [
+      "quantummetric.com"
+    ],
+    "behavior analytics": [
+      "quantummetric.com"
+    ],
+    "quantum analytics": [
+      "quantummetric.com"
+    ],
+    "quickconnect": [
+      "quickconnect.to"
+    ],
+    "quick connect to": [
+      "quickconnect.to"
+    ],
+    "synology quickconnect": [
+      "quickconnect.to"
+    ],
+    "synology remote access": [
+      "quickconnect.to"
+    ],
+    "rainberry tv": [
+      "rainberrytv.com"
+    ],
+    "rainberry streaming": [
+      "rainberrytv.com"
+    ],
+    "rainberry videos": [
+      "rainberrytv.com"
+    ],
+    "rainbird": [
+      "rainbird.com"
+    ],
+    "rainbird irrigation": [
+      "rainbird.com"
+    ],
+    "irrigation solutions": [
+      "rainbird.com"
+    ],
+    "rainbird sprinklers": [
+      "rainbird.com"
+    ],
+    "rapid7": [
+      "rapid7.com"
+    ],
+    "cyber security": [
+      "rapid7.com"
+    ],
+    "vulnerability management": [
+      "rapid7.com"
+    ],
+    "rayjump": [
+      "rayjump.com"
+    ],
+    "mobile games": [
+      "rayjump.com"
+    ],
+    "game development": [
+      "rayjump.com"
+    ],
+    "app development": [
+      "rayjump.com"
+    ],
+    "redd.it": [
+      "redd.it"
+    ],
+    "reddit shortlink": [
+      "redd.it"
+    ],
+    "reddit link": [
+      "redd.it"
+    ],
+    "social news shortlink": [
+      "redd.it"
+    ],
+    "reddit": [
+      "reddit.com"
+    ],
+    "social news": [
+      "reddit.com"
+    ],
+    "online community": [
+      "reddit.com"
+    ],
+    "discussion forum": [
+      "reddit.com"
+    ],
+    "redditmedia": [
+      "redditmedia.com"
+    ],
+    "reddit images": [
+      "redditmedia.com"
+    ],
+    "social news media": [
+      "redditmedia.com"
+    ],
+    "reddit content": [
+      "redditmedia.com"
+    ],
+    "revenuecat": [
+      "revenuecat.com"
+    ],
+    "subscription analytics": [
+      "revenuecat.com"
+    ],
+    "revenue tracking": [
+      "revenuecat.com"
+    ],
+    "app revenue": [
+      "revenuecat.com"
+    ],
+    "richaudience": [
+      "richaudience.com"
+    ],
+    "audience analysis": [
+      "richaudience.com"
+    ],
+    "ring": [
+      "ring.com"
+    ],
+    "home security": [
+      "ring.com"
+    ],
+    "doorbell camera": [
+      "ring.com"
+    ],
+    "ring devices": [
+      "ring.com"
+    ],
+    "riotgames": [
+      "riotgames.com"
+    ],
+    "league of legends maker": [
+      "riotgames.com"
+    ],
+    "valorant creator": [
+      "riotgames.com"
+    ],
+    "game platform": [
+      "roblox.com"
+    ],
+    "virtual world": [
+      "roblox.com"
+    ],
+    "roku": [
+      "roku.com"
+    ],
+    "roku streaming": [
+      "roku.com"
+    ],
+    "roku TV": [
+      "roku.com"
+    ],
+    "rtmark": [
+      "rtmark.net"
+    ],
+    "rtmark site": [
+      "rtmark.net"
+    ],
+    "rtmark network": [
+      "rtmark.net"
+    ],
+    "rubicon": [
+      "rubiconproject.com"
+    ],
+    "advertising automation": [
+      "rubiconproject.com"
+    ],
+    "rubicon ad service": [
+      "rubiconproject.com"
+    ],
+    "ruijie": [
+      "ruijienetworks.com"
+    ],
+    "ruijie networks": [
+      "ruijienetworks.com"
+    ],
+    "ruijie network solutions": [
+      "ruijienetworks.com"
+    ],
+    "ruijie communications": [
+      "ruijienetworks.com"
+    ],
+    "salesforce": [
+      "salesforce.com"
+    ],
+    "CRM salesforce": [
+      "salesforce.com"
+    ],
+    "salesforce CRM": [
+      "salesforce.com"
+    ],
+    "salesforce live agent": [
+      "salesforceliveagent.com"
+    ],
+    "live agent by salesforce": [
+      "salesforceliveagent.com"
+    ],
+    "salesforce support chat": [
+      "salesforceliveagent.com"
+    ],
+    "salesforce agent": [
+      "salesforceliveagent.com"
+    ],
+    "samba": [
+      "samba.tv"
+    ],
+    "samba tv": [
+      "samba.tv"
+    ],
+    "smart tv analytics": [
+      "samba.tv"
+    ],
+    "tv analytics by samba": [
+      "samba.tv"
+    ],
+    "samsung electronics website": [
+      "samsung.com"
+    ],
+    "samsung apps": [
+      "samsungapps.com"
+    ],
+    "galaxy apps": [
+      "samsungapps.com"
+    ],
+    "galaxy store": [
+      "samsungapps.com"
+    ],
+    "samsung app store": [
+      "samsungapps.com"
+    ],
+    "apps by samsung": [
+      "samsungapps.com"
+    ],
+    "samsung products": [
+      "samsungelectronics.com"
+    ],
+    "samsung gadgets": [
+      "samsungelectronics.com"
+    ],
+    "electronics by samsung": [
+      "samsungelectronics.com"
+    ],
+    "samsung electronics site": [
+      "samsungelectronics.com"
+    ],
+    "scorecard research": [
+      "scorecardresearch.com"
+    ],
+    "comscore tracking": [
+      "scorecardresearch.com"
+    ],
+    "sectigo": [
+      "sectigo.com"
+    ],
+    "web security": [
+      "sectigo.com"
+    ],
+    "seedtag": [
+      "seedtag.com"
+    ],
+    "contextual advertising": [
+      "seedtag.com"
+    ],
+    "segment": [
+      "segment.com"
+    ],
+    "customer data platform": [
+      "segment.com"
+    ],
+    "data analytics": [
+      "segment.com"
+    ],
+    "segment io": [
+      "segment.io"
+    ],
+    "segment data": [
+      "segment.io"
+    ],
+    "segment analytics": [
+      "segment.io"
+    ],
+    "sentry error tracking": [
+      "sentry.io"
+    ],
+    "sentry monitoring": [
+      "sentry.io"
+    ],
+    "microsoft sharepoint": [
+      "sharepoint.com"
+    ],
+    "sharepoint collaboration": [
+      "sharepoint.com"
+    ],
+    "sharethis": [
+      "sharethis.com"
+    ],
+    "sharethis social sharing": [
+      "sharethis.com"
+    ],
+    "sharethis tools": [
+      "sharethis.com"
+    ],
+    "sharethrough": [
+      "sharethrough.com"
+    ],
+    "sharethrough advertising": [
+      "sharethrough.com"
+    ],
+    "sharethrough platform": [
+      "sharethrough.com"
+    ],
+    "shein": [
+      "shein.com"
+    ],
+    "shein fashion": [
+      "shein.com"
+    ],
+    "shein clothing": [
+      "shein.com"
+    ],
+    "shopee indonesia": [
+      "shopee.co.id"
+    ],
+    "shopee id": [
+      "shopee.co.id"
+    ],
+    "shopee co id": [
+      "shopee.co.id"
+    ],
+    "shopee brazil": [
+      "shopee.com.br"
+    ],
+    "shopee br": [
+      "shopee.com.br"
+    ],
+    "shopee com br": [
+      "shopee.com.br"
+    ],
+    "shopee singapore": [
+      "shopee.sg"
+    ],
+    "shopee sg": [
+      "shopee.sg"
+    ],
+    "shopee mobile": [
+      "shopeemobile.com"
+    ],
+    "shopeemobile": [
+      "shopeemobile.com"
+    ],
+    "shopify": [
+      "shopify.com"
+    ],
+    "ecommerce builder": [
+      "shopify.com"
+    ],
+    "online store builder": [
+      "shopify.com"
+    ],
+    "shopify platform": [
+      "shopify.com"
+    ],
+    "signal": [
+      "signal.org"
+    ],
+    "signal messenger": [
+      "signal.org"
+    ],
+    "signal app": [
+      "signal.org"
+    ],
+    "signal website": [
+      "signal.org"
+    ],
+    "simpli": [
+      "simpli.fi"
+    ],
+    "simpli.fi advertisers": [
+      "simpli.fi"
+    ],
+    "simpli.fi marketing": [
+      "simpli.fi"
+    ],
+    "simpli.fi website": [
+      "simpli.fi"
+    ],
+    "singular": [
+      "singular.net"
+    ],
+    "singular analytics": [
+      "singular.net"
+    ],
+    "singular mobile": [
+      "singular.net"
+    ],
+    "singular website": [
+      "singular.net"
+    ],
+    "sitescout": [
+      "sitescout.com"
+    ],
+    "sitescout advertising": [
+      "sitescout.com"
+    ],
+    "sitescout platform": [
+      "sitescout.com"
+    ],
+    "sitescout website": [
+      "sitescout.com"
+    ],
+    "skype app": [
+      "skype.com"
+    ],
+    "skype website": [
+      "skype.com"
+    ],
+    "slack": [
+      "slack.com"
+    ],
+    "team communication": [
+      "slack.com"
+    ],
+    "workplace chat": [
+      "slack.com"
+    ],
+    "team collaboration tool": [
+      "slack.com"
+    ],
+    "messaging for teams": [
+      "slack.com"
+    ],
+    "smadex": [
+      "smadex.com"
+    ],
+    "mobile ad tech": [
+      "smadex.com"
+    ],
+    "smartadserver": [
+      "smartadserver.com"
+    ],
+    "advanced ad tech": [
+      "smartadserver.com"
+    ],
+    "advertising solutions": [
+      "smartadserver.com"
+    ],
+    "smartthings": [
+      "smartthings.com"
+    ],
+    "connected home": [
+      "smartthings.com"
+    ],
+    "smart devices": [
+      "smartthings.com"
+    ],
+    "multimedia messaging": [
+      "snapchat.com"
+    ],
+    "snapkit": [
+      "snapkit.com"
+    ],
+    "snap developer": [
+      "snapkit.com"
+    ],
+    "snapchat tools": [
+      "snapkit.com"
+    ],
+    "snapkit website": [
+      "snapkit.com"
+    ],
+    "snapchat developer site": [
+      "snapkit.com"
+    ],
+    "sogou": [
+      "sogou.com"
+    ],
+    "sogou website": [
+      "sogou.com"
+    ],
+    "sogou search": [
+      "sogou.com"
+    ],
+    "sogou homepage": [
+      "sogou.com"
+    ],
+    "sonobi": [
+      "sonobi.com"
+    ],
+    "sonobi website": [
+      "sonobi.com"
+    ],
+    "sonobi advertising": [
+      "sonobi.com"
+    ],
+    "sonobi ad platform": [
+      "sonobi.com"
+    ],
+    "sonobi homepage": [
+      "sonobi.com"
+    ],
+    "sophos": [
+      "sophos.com"
+    ],
+    "sophos website": [
+      "sophos.com"
+    ],
+    "sophos security": [
+      "sophos.com"
+    ],
+    "sophos homepage": [
+      "sophos.com"
+    ],
+    "sophos cybersecurity": [
+      "sophos.com"
+    ],
+    "soundcloud": [
+      "soundcloud.com"
+    ],
+    "soundcloud website": [
+      "soundcloud.com"
+    ],
+    "sound cloud": [
+      "soundcloud.com"
+    ],
+    "music sharing site": [
+      "soundcloud.com"
+    ],
+    "soundcloud homepage": [
+      "soundcloud.com"
+    ],
+    "spacex": [
+      "spacex.com"
+    ],
+    "rocket maker": [
+      "spacex.com"
+    ],
+    "elon musk company": [
+      "spacex.com"
+    ],
+    "starship creator": [
+      "spacex.com"
+    ],
+    "falcon operator": [
+      "spacex.com"
+    ],
+    "spamhaus": [
+      "spamhaus.org"
+    ],
+    "spam blocker": [
+      "spamhaus.org"
+    ],
+    "email security": [
+      "spamhaus.org"
+    ],
+    "phishing protector": [
+      "spamhaus.org"
+    ],
+    "internet safety": [
+      "spamhaus.org"
+    ],
+    "speedtest": [
+      "speedtest.net"
+    ],
+    "internet speed test": [
+      "speedtest.net"
+    ],
+    "broadband checker": [
+      "speedtest.net"
+    ],
+    "connection tester": [
+      "speedtest.net"
+    ],
+    "speed assessment": [
+      "speedtest.net"
+    ],
+    "splashtop": [
+      "splashtop.com"
+    ],
+    "remote desktop": [
+      "splashtop.com"
+    ],
+    "remote access": [
+      "splashtop.com"
+    ],
+    "screen sharing": [
+      "splashtop.com"
+    ],
+    "virtual workspace": [
+      "splashtop.com"
+    ],
+    "split": [
+      "split.io"
+    ],
+    "feature flags": [
+      "split.io"
+    ],
+    "split testing": [
+      "split.io"
+    ],
+    "a/b testing": [
+      "split.io"
+    ],
+    "spot": [
+      "spot.im"
+    ],
+    "spot.im": [
+      "spot.im"
+    ],
+    "community engagement platform": [
+      "spot.im"
+    ],
+    "online community tool": [
+      "spot.im"
+    ],
+    "audio streaming service": [
+      "spotify.com"
+    ],
+    "springserve": [
+      "springserve.com"
+    ],
+    "ad serving": [
+      "springserve.com"
+    ],
+    "springserve ads": [
+      "springserve.com"
+    ],
+    "advertising technology": [
+      "springserve.com"
+    ],
+    "ssl": [
+      "ssl.com"
+    ],
+    "ssl.com": [
+      "ssl.com"
+    ],
+    "security certificates": [
+      "ssl.com"
+    ],
+    "ssl certificates": [
+      "ssl.com"
+    ],
+    "stackadapt": [
+      "stackadapt.com"
+    ],
+    "marketing platform": [
+      "stackadapt.com"
+    ],
+    "starlink": [
+      "starlink.com"
+    ],
+    "satellite internet": [
+      "starlink.com"
+    ],
+    "space internet": [
+      "starlink.com"
+    ],
+    "spacex internet": [
+      "starlink.com"
+    ],
+    "starlink internet": [
+      "starlink.com"
+    ],
+    "statuspage": [
+      "statuspage.io"
+    ],
+    "service status": [
+      "statuspage.io"
+    ],
+    "status page": [
+      "statuspage.io"
+    ],
+    "uptime status": [
+      "statuspage.io"
+    ],
+    "status monitoring": [
+      "statuspage.io"
+    ],
+    "steam community": [
+      "steamcommunity.com"
+    ],
+    "gaming community": [
+      "steamcommunity.com"
+    ],
+    "steam social": [
+      "steamcommunity.com"
+    ],
+    "steam forums": [
+      "steamcommunity.com"
+    ],
+    "steam players": [
+      "steamcommunity.com"
+    ],
+    "steam": [
+      "steampowered.com"
+    ],
+    "steampowered": [
+      "steampowered.com"
+    ],
+    "steam games": [
+      "steampowered.com"
+    ],
+    "steam store": [
+      "steampowered.com"
+    ],
+    "steam downloads": [
+      "steampowered.com"
+    ],
+    "stripe": [
+      "stripe.com",
+      "stripe.network"
+    ],
+    "payment processor": [
+      "stripe.com"
+    ],
+    "stripe payments": [
+      "stripe.com"
+    ],
+    "stripe services": [
+      "stripe.com"
+    ],
+    "stripe network": [
+      "stripe.network"
+    ],
+    "stripe payment": [
+      "stripe.network"
+    ],
+    "stripe service": [
+      "stripe.network"
+    ],
+    "stripe site": [
+      "stripe.network"
+    ],
+    "supercell": [
+      "supercell.com"
+    ],
+    "supercell games": [
+      "supercell.com"
+    ],
+    "clash of clans maker": [
+      "supercell.com"
+    ],
+    "supercell website": [
+      "supercell.com"
+    ],
+    "supercell site": [
+      "supercell.com"
+    ],
+    "surfshark": [
+      "surfshark.com"
+    ],
+    "surfshark vpn": [
+      "surfshark.com"
+    ],
+    "surfshark site": [
+      "surfshark.com"
+    ],
+    "surfshark service": [
+      "surfshark.com"
+    ],
+    "surfshark website": [
+      "surfshark.com"
+    ],
+    "synology": [
+      "synology.com"
+    ],
+    "synology nas": [
+      "synology.com"
+    ],
+    "synology site": [
+      "synology.com"
+    ],
+    "synology storage": [
+      "synology.com"
+    ],
+    "synology website": [
+      "synology.com"
+    ],
+    "tco": [
+      "t.co"
+    ],
+    "twitter link": [
+      "t.co"
+    ],
+    "t co": [
+      "t.co"
+    ],
+    "tco link": [
+      "t.co"
+    ],
+    "t.co site": [
+      "t.co"
+    ],
+    "t.me": [
+      "t.me"
+    ],
+    "telegram": [
+      "t.me",
+      "telegram.org"
+    ],
+    "telegram link": [
+      "t.me"
+    ],
+    "telegram URL": [
+      "t.me"
+    ],
+    "taboola site": [
+      "taboola.com"
+    ],
+    "taboola URL": [
+      "taboola.com"
+    ],
+    "tailscale": [
+      "tailscale.com"
+    ],
+    "tailscale site": [
+      "tailscale.com"
+    ],
+    "tailscale URL": [
+      "tailscale.com"
+    ],
+    "VPN Tailscale": [
+      "tailscale.com"
+    ],
+    "taobao": [
+      "taobao.com"
+    ],
+    "taobao site": [
+      "taobao.com"
+    ],
+    "taobao URL": [
+      "taobao.com"
+    ],
+    "alibaba shopping": [
+      "taobao.com"
+    ],
+    "tapad": [
+      "tapad.com"
+    ],
+    "tapad site": [
+      "tapad.com"
+    ],
+    "tapad URL": [
+      "tapad.com"
+    ],
+    "ad tech tapad": [
+      "tapad.com"
+    ],
+    "marketing technology tapad": [
+      "tapad.com"
+    ],
+    "target": [
+      "target.com"
+    ],
+    "retail store": [
+      "target.com"
+    ],
+    "department store": [
+      "target.com"
+    ],
+    "target shopping": [
+      "target.com"
+    ],
+    "teads": [
+      "teads.tv"
+    ],
+    "teads tv": [
+      "teads.tv"
+    ],
+    "video advertising": [
+      "teads.tv"
+    ],
+    "teads video": [
+      "teads.tv"
+    ],
+    "teads ads": [
+      "teads.tv"
+    ],
+    "tealium": [
+      "tealiumiq.com"
+    ],
+    "tealium iq": [
+      "tealiumiq.com"
+    ],
+    "tealium analytics": [
+      "tealiumiq.com"
+    ],
+    "tealium data": [
+      "tealiumiq.com"
+    ],
+    "tealium platform": [
+      "tealiumiq.com"
+    ],
+    "teamviewer": [
+      "teamviewer.com"
+    ],
+    "remote support": [
+      "teamviewer.com"
+    ],
+    "teamviewer remote control": [
+      "teamviewer.com"
+    ],
+    "teamviewer software": [
+      "teamviewer.com"
+    ],
+    "teamviewer app": [
+      "teamviewer.com"
+    ],
+    "telegram messenger": [
+      "telegram.org"
+    ],
+    "telegram app": [
+      "telegram.org"
+    ],
+    "telegram.org": [
+      "telegram.org"
+    ],
+    "temu": [
+      "temu.com"
+    ],
+    "temu shopping": [
+      "temu.com"
+    ],
+    "temu online store": [
+      "temu.com"
+    ],
+    "temu website": [
+      "temu.com"
+    ],
+    "tencent": [
+      "tencent.com"
+    ],
+    "chinese tech giant": [
+      "tencent.com"
+    ],
+    "tencent company": [
+      "tencent.com"
+    ],
+    "tencent website": [
+      "tencent.com"
+    ],
+    "tenda": [
+      "tenda.com.cn"
+    ],
+    "tenda networking": [
+      "tenda.com.cn"
+    ],
+    "tenda china": [
+      "tenda.com.cn"
+    ],
+    "tenda website": [
+      "tenda.com.cn"
+    ],
+    "tenor": [
+      "tenor.com"
+    ],
+    "tenor gifs": [
+      "tenor.com"
+    ],
+    "tenor website": [
+      "tenor.com"
+    ],
+    "tenor images": [
+      "tenor.com"
+    ],
+    "the movie database": [
+      "themoviedb.org"
+    ],
+    "tmdb": [
+      "themoviedb.org",
+      "tmdb.org"
+    ],
+    "movie database": [
+      "themoviedb.org",
+      "tmdb.org"
+    ],
+    "tmdb website": [
+      "themoviedb.org"
+    ],
+    "thewsoral": [
+      "thewsoral.com"
+    ],
+    "oral health guide": [
+      "thewsoral.com"
+    ],
+    "dental wellness": [
+      "thewsoral.com"
+    ],
+    "oral care tips": [
+      "thewsoral.com"
+    ],
+    "oral hygiene resource": [
+      "thewsoral.com"
+    ],
+    "tiktok": [
+      "tiktok.com"
+    ],
+    "video sharing app": [
+      "tiktok.com"
+    ],
+    "short videos": [
+      "tiktok.com"
+    ],
+    "viral videos": [
+      "tiktok.com"
+    ],
+    "popular app": [
+      "tiktok.com"
+    ],
+    "tizen": [
+      "tizen.org"
+    ],
+    "open source OS": [
+      "tizen.org"
+    ],
+    "tizen platform": [
+      "tizen.org"
+    ],
+    "linux based OS": [
+      "tizen.org"
+    ],
+    "film info": [
+      "tmdb.org"
+    ],
+    "tv shows database": [
+      "tmdb.org"
+    ],
+    "movie ratings": [
+      "tmdb.org"
+    ],
+    "tp-link": [
+      "tp-link.com",
+      "tplinkcloud.com"
+    ],
+    "network devices": [
+      "tp-link.com"
+    ],
+    "wifi solutions": [
+      "tp-link.com"
+    ],
+    "internet access devices": [
+      "tp-link.com"
+    ],
+    "tplink": [
+      "tplinkcloud.com"
+    ],
+    "tp-link cloud": [
+      "tplinkcloud.com"
+    ],
+    "tradingview": [
+      "tradingview.com"
+    ],
+    "trading charts": [
+      "tradingview.com"
+    ],
+    "stock charts": [
+      "tradingview.com"
+    ],
+    "trading analysis": [
+      "tradingview.com"
+    ],
+    "tradplusad": [
+      "tradplusad.com"
+    ],
+    "tradplus": [
+      "tradplusad.com"
+    ],
+    "trafficjunky": [
+      "trafficjunky.net"
+    ],
+    "traffic junky": [
+      "trafficjunky.net"
+    ],
+    "traffic ads": [
+      "trafficjunky.net"
+    ],
+    "traffmonetizer": [
+      "traffmonetizer.com"
+    ],
+    "traffic monetizer": [
+      "traffmonetizer.com"
+    ],
+    "monetizing traffic": [
+      "traffmonetizer.com"
+    ],
+    "earn money online": [
+      "traffmonetizer.com"
+    ],
+    "transmission": [
+      "transmissionbt.com"
+    ],
+    "transmission bt": [
+      "transmissionbt.com"
+    ],
+    "transmission bittorrent": [
+      "transmissionbt.com"
+    ],
+    "transmission client": [
+      "transmissionbt.com"
+    ],
+    "transmission website": [
+      "transmissionbt.com"
+    ],
+    "trend micro": [
+      "trendmicro.com"
+    ],
+    "trendmicro": [
+      "trendmicro.com"
+    ],
+    "trend micro website": [
+      "trendmicro.com"
+    ],
+    "antivirus trend micro": [
+      "trendmicro.com"
+    ],
+    "cybersecurity trend micro": [
+      "trendmicro.com"
+    ],
+    "truecaller": [
+      "truecaller.com"
+    ],
+    "true caller": [
+      "truecaller.com"
+    ],
+    "caller id truecaller": [
+      "truecaller.com"
+    ],
+    "spam detection truecaller": [
+      "truecaller.com"
+    ],
+    "truecaller website": [
+      "truecaller.com"
+    ],
+    "trustarc": [
+      "trustarc.com"
+    ],
+    "trust arc": [
+      "trustarc.com"
+    ],
+    "trustarc website": [
+      "trustarc.com"
+    ],
+    "privacy compliance trustarc": [
+      "trustarc.com"
+    ],
+    "truste": [
+      "truste.com"
+    ],
+    "trust e": [
+      "truste.com"
+    ],
+    "privacy certification truste": [
+      "truste.com"
+    ],
+    "data protection truste": [
+      "truste.com"
+    ],
+    "truste website": [
+      "truste.com"
+    ],
+    "tsyndicate": [
+      "tsyndicate.com"
+    ],
+    "t syndicate": [
+      "tsyndicate.com"
+    ],
+    "team syndicate": [
+      "tsyndicate.com"
+    ],
+    "twilio": [
+      "twilio.com"
+    ],
+    "communications api": [
+      "twilio.com"
+    ],
+    "cloud communications": [
+      "twilio.com"
+    ],
+    "twitch": [
+      "twitch.tv"
+    ],
+    "game streaming": [
+      "twitch.tv"
+    ],
+    "live gaming": [
+      "twitch.tv"
+    ],
+    "twitter": [
+      "twitter.com"
+    ],
+    "tweet platform": [
+      "twitter.com"
+    ],
+    "tynt": [
+      "tynt.com"
+    ],
+    "tynt insights": [
+      "tynt.com"
+    ],
+    "typekit": [
+      "typekit.com"
+    ],
+    "adobe fonts": [
+      "typekit.com"
+    ],
+    "font library": [
+      "typekit.com"
+    ],
+    "web fonts": [
+      "typekit.com"
+    ],
+    "ubi": [
+      "ubi.com"
+    ],
+    "ubisoft": [
+      "ubi.com"
+    ],
+    "assassin's creed maker": [
+      "ubi.com"
+    ],
+    "ubnt": [
+      "ubnt.com",
+      "ui.com"
+    ],
+    "wireless products": [
+      "ubnt.com"
+    ],
+    "ubuntu": [
+      "ubuntu.com"
+    ],
+    "linux distribution": [
+      "ubuntu.com"
+    ],
+    "canonical": [
+      "ubuntu.com"
+    ],
+    "open-source OS": [
+      "ubuntu.com"
+    ],
+    "ucweb": [
+      "ucweb.com"
+    ],
+    "uc browser": [
+      "ucweb.com"
+    ],
+    "mobile internet": [
+      "ucweb.com"
+    ],
+    "internet services": [
+      "ucweb.com"
+    ],
+    "uisp": [
+      "uisp.com"
+    ],
+    "ubiquiti isp": [
+      "uisp.com"
+    ],
+    "ubnt isp": [
+      "uisp.com"
+    ],
+    "umeng": [
+      "umeng.com"
+    ],
+    "umeng analytics": [
+      "umeng.com"
+    ],
+    "alibaba analytics": [
+      "umeng.com"
+    ],
+    "unifi ai": [
+      "unifi-ai.com"
+    ],
+    "psychological ai": [
+      "unifi-ai.com"
+    ],
+    "ai for psychology": [
+      "unifi-ai.com"
+    ],
+    "unity": [
+      "unity3d.com"
+    ],
+    "unity development": [
+      "unity3d.com"
+    ],
+    "unpkg": [
+      "unpkg.com"
+    ],
+    "npm cdn": [
+      "unpkg.com"
+    ],
+    "unpkg cdn": [
+      "unpkg.com"
+    ],
+    "unruly media": [
+      "unrulymedia.com"
+    ],
+    "unruly ads": [
+      "unrulymedia.com"
+    ],
+    "uol": [
+      "uol.com.br"
+    ],
+    "brazilian portal": [
+      "uol.com.br"
+    ],
+    "universo online": [
+      "uol.com.br"
+    ],
+    "urbanairship": [
+      "urbanairship.com"
+    ],
+    "airship": [
+      "urbanairship.com"
+    ],
+    "consumer engagement platform": [
+      "urbanairship.com"
+    ],
+    "insider": [
+      "useinsider.com"
+    ],
+    "growth management": [
+      "useinsider.com"
+    ],
+    "digital growth platform": [
+      "useinsider.com"
+    ],
+    "user api": [
+      "userapi.com"
+    ],
+    "user resources": [
+      "userapi.com"
+    ],
+    "api user platform": [
+      "userapi.com"
+    ],
+    "user data hub": [
+      "userapi.com"
+    ],
+    "user api site": [
+      "userapi.com"
+    ],
+    "user centrics": [
+      "usercentrics.eu"
+    ],
+    "user consent platform": [
+      "usercentrics.eu"
+    ],
+    "user privacy management": [
+      "usercentrics.eu"
+    ],
+    "user compliance": [
+      "usercentrics.eu"
+    ],
+    "euros user centrics": [
+      "usercentrics.eu"
+    ],
+    "video app": [
+      "v-videoapp.com"
+    ],
+    "v app": [
+      "v-videoapp.com"
+    ],
+    "video application": [
+      "v-videoapp.com"
+    ],
+    "video platforms": [
+      "v-videoapp.com"
+    ],
+    "video services": [
+      "v-videoapp.com"
+    ],
+    "verisign": [
+      "verisign.com"
+    ],
+    "domain provider": [
+      "verisign.com"
+    ],
+    "cybersecurity site": [
+      "verisign.com"
+    ],
+    "verisign services": [
+      "verisign.com"
+    ],
+    "verkada": [
+      "verkada.com"
+    ],
+    "security systems": [
+      "verkada.com"
+    ],
+    "camera security": [
+      "verkada.com"
+    ],
+    "verkada solutions": [
+      "verkada.com"
+    ],
+    "verkada site": [
+      "verkada.com"
+    ],
+    "viber": [
+      "viber.com"
+    ],
+    "viber app": [
+      "viber.com"
+    ],
+    "viber messaging": [
+      "viber.com"
+    ],
+    "viber chat": [
+      "viber.com"
+    ],
+    "vidazoo": [
+      "vidazoo.com"
+    ],
+    "vidazoo platform": [
+      "vidazoo.com"
+    ],
+    "vidazoo advertising": [
+      "vidazoo.com"
+    ],
+    "vidazoo video ads": [
+      "vidazoo.com"
+    ],
+    "vimeo": [
+      "vimeo.com"
+    ],
+    "vimeo videos": [
+      "vimeo.com"
+    ],
+    "vimeo platform": [
+      "vimeo.com"
+    ],
+    "vimeo streaming": [
+      "vimeo.com"
+    ],
+    "virtual earth": [
+      "virtualearth.net"
+    ],
+    "virtualearth": [
+      "virtualearth.net"
+    ],
+    "virtual earth maps": [
+      "virtualearth.net"
+    ],
+    "virtual earth navigation": [
+      "virtualearth.net"
+    ],
+    "visual studio": [
+      "visualstudio.com"
+    ],
+    "visualstudio": [
+      "visualstudio.com"
+    ],
+    "visual studio platform": [
+      "visualstudio.com"
+    ],
+    "visual studio developer": [
+      "visualstudio.com"
+    ],
+    "visual website optimizer": [
+      "visualwebsiteoptimizer.com"
+    ],
+    "web optimizer": [
+      "visualwebsiteoptimizer.com"
+    ],
+    "vwo": [
+      "visualwebsiteoptimizer.com"
+    ],
+    "site optimizer": [
+      "visualwebsiteoptimizer.com"
+    ],
+    "vivo china": [
+      "vivo.com.cn"
+    ],
+    "vivo cn": [
+      "vivo.com.cn"
+    ],
+    "vivo china website": [
+      "vivo.com.cn"
+    ],
+    "vivo": [
+      "vivo.com.cn"
+    ],
+    "vivo global": [
+      "vivoglobal.com"
+    ],
+    "vivi worldwide": [
+      "vivoglobal.com"
+    ],
+    "vivo international": [
+      "vivoglobal.com"
+    ],
+    "vivi": [
+      "vivoglobal.com"
+    ],
+    "vk": [
+      "vk.com"
+    ],
+    "vkontakte": [
+      "vk.com"
+    ],
+    "vk social network": [
+      "vk.com"
+    ],
+    "vk site": [
+      "vk.com"
+    ],
+    "vungle": [
+      "vungle.com"
+    ],
+    "vungle ads": [
+      "vungle.com"
+    ],
+    "vungle ad network": [
+      "vungle.com"
+    ],
+    "w3": [
+      "w3.org"
+    ],
+    "world wide web consortium": [
+      "w3.org"
+    ],
+    "www consortium": [
+      "w3.org"
+    ],
+    "web standards organization": [
+      "w3.org"
+    ],
+    "w3c": [
+      "w3.org"
+    ],
+    "walmart": [
+      "walmart.com"
+    ],
+    "wal-mart": [
+      "walmart.com"
+    ],
+    "retail giant": [
+      "walmart.com"
+    ],
+    "largest retailer": [
+      "walmart.com"
+    ],
+    "supercenter": [
+      "walmart.com"
+    ],
+    "wattpad": [
+      "wattpad.com"
+    ],
+    "storytelling platform": [
+      "wattpad.com"
+    ],
+    "online writing community": [
+      "wattpad.com"
+    ],
+    "wattpad stories": [
+      "wattpad.com"
+    ],
+    "wattpad writers": [
+      "wattpad.com"
+    ],
+    "weather": [
+      "weather.com"
+    ],
+    "weather channel": [
+      "weather.com"
+    ],
+    "weather updates": [
+      "weather.com"
+    ],
+    "meteorology site": [
+      "weather.com"
+    ],
+    "web": [
+      "web.de"
+    ],
+    "web.de email": [
+      "web.de"
+    ],
+    "german email service": [
+      "web.de"
+    ],
+    "web.de portal": [
+      "web.de"
+    ],
+    "web.de provider": [
+      "web.de"
+    ],
+    "webex": [
+      "webex.com"
+    ],
+    "webex site": [
+      "webex.com"
+    ],
+    "webex meetings": [
+      "webex.com"
+    ],
+    "webex app": [
+      "webex.com"
+    ],
+    "webex platform": [
+      "webex.com"
+    ],
+    "wechat": [
+      "wechat.com"
+    ],
+    "wechat site": [
+      "wechat.com"
+    ],
+    "wechat app": [
+      "wechat.com"
+    ],
+    "wechat messaging": [
+      "wechat.com"
+    ],
+    "wechat platform": [
+      "wechat.com"
+    ],
+    "whatsapp site": [
+      "whatsapp.com"
+    ],
+    "whatsapp messaging": [
+      "whatsapp.com"
+    ],
+    "whatsapp network": [
+      "whatsapp.net"
+    ],
+    "whatsapp online": [
+      "whatsapp.net"
+    ],
+    "wikimedia": [
+      "wikimedia.org"
+    ],
+    "wikimedia site": [
+      "wikimedia.org"
+    ],
+    "wikimedia project": [
+      "wikimedia.org"
+    ],
+    "wikimedia foundation": [
+      "wikimedia.org"
+    ],
+    "wikimedia platform": [
+      "wikimedia.org"
+    ],
+    "knowledge base": [
+      "wikipedia.org"
+    ],
+    "windows official site": [
+      "windows.com"
+    ],
+    "windows OS": [
+      "windows.com"
+    ],
+    "windows portal": [
+      "windows.com"
+    ],
+    "windows net": [
+      "windows.net"
+    ],
+    "microsoft windows net": [
+      "windows.net"
+    ],
+    "windows cloud": [
+      "windows.net"
+    ],
+    "windows services": [
+      "windows.net"
+    ],
+    "windows network": [
+      "windows.net"
+    ],
+    "with google": [
+      "withgoogle.com"
+    ],
+    "google tools": [
+      "withgoogle.com"
+    ],
+    "google collaborations": [
+      "withgoogle.com"
+    ],
+    "google resources": [
+      "withgoogle.com"
+    ],
+    "google partnerships": [
+      "withgoogle.com"
+    ],
+    "wordpress": [
+      "wordpress.com",
+      "wp.com"
+    ],
+    "wordpress blog": [
+      "wordpress.com"
+    ],
+    "wordpress website": [
+      "wordpress.com"
+    ],
+    "wordpress CMS": [
+      "wordpress.com"
+    ],
+    "wordpress platform": [
+      "wordpress.com"
+    ],
+    "wp": [
+      "wp.com"
+    ],
+    "wps": [
+      "wps.com"
+    ],
+    "wps office": [
+      "wps.com"
+    ],
+    "wshareit": [
+      "wshareit.com"
+    ],
+    "shareit site": [
+      "wshareit.com"
+    ],
+    "wyzecam": [
+      "wyzecam.com"
+    ],
+    "wyze camera": [
+      "wyzecam.com"
+    ],
+    "x": [
+      "x.com"
+    ],
+    "twitter x": [
+      "x.com"
+    ],
+    "xbox live": [
+      "xboxlive.com"
+    ],
+    "xbox gaming": [
+      "xboxlive.com"
+    ],
+    "xbox network": [
+      "xboxlive.com"
+    ],
+    "xbox multiplayer": [
+      "xboxlive.com"
+    ],
+    "xbox online": [
+      "xboxlive.com"
+    ],
+    "xhamster": [
+      "xhamster.com"
+    ],
+    "adult videos": [
+      "xhamster.com",
+      "xvideos.com"
+    ],
+    "xhamster videos": [
+      "xhamster.com"
+    ],
+    "xhamster site": [
+      "xhamster.com"
+    ],
+    "xhamster adult": [
+      "xhamster.com"
+    ],
+    "xhcdn": [
+      "xhcdn.com"
+    ],
+    "video content network": [
+      "xhcdn.com"
+    ],
+    "xhcdn videos": [
+      "xhcdn.com"
+    ],
+    "xhcdn platform": [
+      "xhcdn.com"
+    ],
+    "xhcdn site": [
+      "xhcdn.com"
+    ],
+    "xiaohongshu": [
+      "xiaohongshu.com"
+    ],
+    "little red book": [
+      "xiaohongshu.com"
+    ],
+    "xiaohongshu app": [
+      "xiaohongshu.com"
+    ],
+    "xiaohongshu social": [
+      "xiaohongshu.com"
+    ],
+    "xiaohongshu site": [
+      "xiaohongshu.com"
+    ],
+    "xiaomi tech": [
+      "xiaomi.com"
+    ],
+    "xiaomi gadgets": [
+      "xiaomi.com"
+    ],
+    "xiaomi site": [
+      "xiaomi.com"
+    ],
+    "mi phone": [
+      "xiaomi.net"
+    ],
+    "xlivrdr": [
+      "xlivrdr.com"
+    ],
+    "xlivr": [
+      "xlivrdr.com"
+    ],
+    "x live rdr": [
+      "xlivrdr.com"
+    ],
+    "x live reader": [
+      "xlivrdr.com"
+    ],
+    "xvideos": [
+      "xvideos.com"
+    ],
+    "x vids": [
+      "xvideos.com"
+    ],
+    "x videos": [
+      "xvideos.com"
+    ],
+    "xxpkg": [
+      "xxpkg.com"
+    ],
+    "xxx pkg": [
+      "xxpkg.com"
+    ],
+    "double x pkg": [
+      "xxpkg.com"
+    ],
+    "xx package": [
+      "xxpkg.com"
+    ],
+    "ya ru": [
+      "ya.ru"
+    ],
+    "yandex": [
+      "ya.ru",
+      "yandex.com",
+      "yandex.ru"
+    ],
+    "russian search": [
+      "ya.ru",
+      "yandex.ru"
+    ],
+    "yandex search": [
+      "ya.ru",
+      "yandex.com"
+    ],
+    "yahoo japan": [
+      "yahoo.co.jp"
+    ],
+    "yahoo japan site": [
+      "yahoo.co.jp"
+    ],
+    "yahoo jp": [
+      "yahoo.co.jp"
+    ],
+    "japanese yahoo": [
+      "yahoo.co.jp"
+    ],
+    "japan yahoo site": [
+      "yahoo.co.jp"
+    ],
+    "yahoo site": [
+      "yahoo.com"
+    ],
+    "yahoo homepage": [
+      "yahoo.com"
+    ],
+    "international yahoo": [
+      "yahoo.com"
+    ],
+    "main yahoo site": [
+      "yahoo.com"
+    ],
+    "yammer": [
+      "yammer.com"
+    ],
+    "yammer site": [
+      "yammer.com"
+    ],
+    "yammer app": [
+      "yammer.com"
+    ],
+    "yammer homepage": [
+      "yammer.com"
+    ],
+    "yammer platform": [
+      "yammer.com"
+    ],
+    "yandex site": [
+      "yandex.com"
+    ],
+    "yandex homepage": [
+      "yandex.com"
+    ],
+    "yandex engine": [
+      "yandex.com"
+    ],
+    "yandex net": [
+      "yandex.net"
+    ],
+    "yandex network": [
+      "yandex.net"
+    ],
+    "yandex services": [
+      "yandex.net"
+    ],
+    "yandex net site": [
+      "yandex.net"
+    ],
+    "yandex net homepage": [
+      "yandex.net"
+    ],
+    "yandex search engine": [
+      "yandex.ru"
+    ],
+    "yandex static": [
+      "yastatic.net"
+    ],
+    "yastatic": [
+      "yastatic.net"
+    ],
+    "static resources by yandex": [
+      "yastatic.net"
+    ],
+    "yieldmo": [
+      "yieldmo.com"
+    ],
+    "yieldmo advertising": [
+      "yieldmo.com"
+    ],
+    "yieldmo ads": [
+      "yieldmo.com"
+    ],
+    "yimg": [
+      "yimg.com"
+    ],
+    "yahoo images": [
+      "yimg.com"
+    ],
+    "yahoo img": [
+      "yimg.com"
+    ],
+    "youtube videos": [
+      "youtube.com"
+    ],
+    "ys7": [
+      "ys7.com"
+    ],
+    "easyvision": [
+      "ys7.com"
+    ],
+    "video surveillance": [
+      "ys7.com"
+    ],
+    "zemanta": [
+      "zemanta.com"
+    ],
+    "content recommendations": [
+      "zemanta.com"
+    ],
+    "zendesk": [
+      "zendesk.com"
+    ],
+    "support software": [
+      "zendesk.com"
+    ],
+    "customer support": [
+      "zendesk.com"
+    ],
+    "help desk software": [
+      "zendesk.com"
+    ],
+    "zoho": [
+      "zoho.com"
+    ],
+    "business software": [
+      "zoho.com"
+    ],
+    "CRM": [
+      "zoho.com"
+    ],
+    "zoom": [
+      "zoom.us"
+    ],
+    "video conferencing": [
+      "zoom.us"
+    ],
+    "online meetings": [
+      "zoom.us"
+    ],
+    "webinar software": [
+      "zoom.us"
     ]
   }
 }
