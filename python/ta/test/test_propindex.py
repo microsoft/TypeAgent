@@ -12,6 +12,7 @@ from typeagent.knowpro.interfaces import (
     ICollection,
     IConversation,
     IMessage,
+    IStorageProvider,
     ITermToSemanticRefIndex,
     SemanticRef,
     ListIndexingResult,
@@ -34,9 +35,28 @@ from typeagent.knowpro.propindex import (
     is_known_property,
 )
 from typeagent.knowpro.secindex import ConversationSecondaryIndexes
-from typeagent.knowpro.storage import MessageCollection, SemanticRefCollection
+from typeagent.knowpro.storage import (
+    MessageCollection,
+    SemanticRefCollection,
+    MemoryStorageProvider,
+)
+from typeagent.knowpro.importing import ConversationSettings
 
 from fixtures import needs_auth  # type: ignore  # Yes we use it!
+
+
+class SimpleFakeConversation(IConversation):
+    """Fake conversation for testing."""
+
+    def __init__(self, semantic_refs):
+        self.name_tag = "test"
+        self.tags = []
+        self.messages = MessageCollection()
+        self.semantic_refs = SemanticRefCollection(semantic_refs)
+        self.semantic_ref_index = None
+        self.secondary_indexes = ConversationSecondaryIndexes()
+        # Store settings with storage provider for access via conversation.settings.storage_provider
+        self.settings = ConversationSettings(storage_provider=MemoryStorageProvider())
 
 
 @pytest.fixture
@@ -164,7 +184,7 @@ async def test_build_property_index(needs_auth):
         ),
     ]
 
-    conversation = FakeConversation(semantic_refs)
+    conversation = SimpleFakeConversation(semantic_refs)
 
     # Call the function
     result = await build_property_index(conversation)
@@ -259,6 +279,11 @@ class FakeConversation[
         self.semantic_ref_index = None
         self.messages: IMessageCollection[TMessage] = MessageCollection([FakeMessage(["Hello"])])  # type: ignore[assignment]
         self.secondary_indexes = ConversationSecondaryIndexes()
+        self._storage_provider = MemoryStorageProvider()
+
+    @property
+    def storage_provider(self) -> "IStorageProvider":
+        return self._storage_provider
 
 
 @pytest.mark.asyncio

@@ -20,6 +20,7 @@ from ..knowpro.interfaces import (
     IMessageCollection,
     IMessageMetadata,
     ISemanticRefCollection,
+    IStorageProvider,
     IndexingEventHandlers,
     IndexingResults,
     MessageOrdinal,

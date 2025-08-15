@@ -14,6 +14,7 @@ from typeagent.knowpro.collections import (
 from typeagent.knowpro.interfaces import (
     IConversation,
     IMessage,
+    IStorageProvider,
     ITermToSemanticRefIndex,
     Term,
     SearchTerm,
@@ -25,6 +26,8 @@ from typeagent.knowpro.interfaces import (
     Topic,
 )
 from typeagent.knowpro.kplib import KnowledgeResponse
+from typeagent.knowpro.storage import MemoryStorageProvider
+from typeagent.knowpro.importing import ConversationSettings
 from typeagent.knowpro.query import (
     TextRangeSelector,
     is_conversation_searchable,
@@ -120,6 +123,9 @@ class MockConversation(IConversation[MockMessage, MockTermIndex]):
         self.semantic_refs = None
         self.semantic_ref_index = None
         self.secondary_indexes = None
+
+        # Store settings with storage provider for access via conversation.settings.storage_provider
+        self.settings = ConversationSettings(storage_provider=MemoryStorageProvider())
 
         # Create semantic refs
         refs = []

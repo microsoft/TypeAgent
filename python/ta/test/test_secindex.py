@@ -9,6 +9,7 @@ from typeagent.knowpro.interfaces import (
     DeletionInfo,
     IConversation,
     IMessage,
+    IStorageProvider,
     ListIndexingResult,
     SecondaryIndexingResults,
     TextIndexingResult,
@@ -22,7 +23,11 @@ from typeagent.knowpro.secindex import (
     build_secondary_indexes,
     build_transient_secondary_indexes,
 )
-from typeagent.knowpro.storage import MessageCollection, SemanticRefCollection
+from typeagent.knowpro.storage import (
+    MessageCollection,
+    SemanticRefCollection,
+    MemoryStorageProvider,
+)
 from typeagent.knowpro.timestampindex import TimestampToTextRangeIndex
 
 from fixtures import needs_auth  # type: ignore  # Yes it is used!
@@ -51,6 +56,8 @@ class SimpleConversation(IConversation):
         self.semantic_refs = SemanticRefCollection()
         self.semantic_ref_index = None
         self.secondary_indexes = None
+        # Store settings with storage provider for access via conversation.settings.storage_provider
+        self.settings = ConversationSettings(storage_provider=MemoryStorageProvider())
 
 
 @pytest.fixture

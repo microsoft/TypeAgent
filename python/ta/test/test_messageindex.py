@@ -12,7 +12,7 @@ from typeagent.knowpro.messageindex import (
     MessageTextIndex,
     build_message_index,
 )
-from typeagent.knowpro.importing import MessageTextIndexSettings
+from typeagent.knowpro.importing import MessageTextIndexSettings, ConversationSettings
 
 from typeagent.knowpro.interfaces import (
     IConversation,
@@ -23,7 +23,7 @@ from typeagent.knowpro.interfaces import (
     MessageTextIndexData,
     TextToTextLocationIndexData,
 )
-from typeagent.knowpro.storage import MessageCollection
+from typeagent.knowpro.storage import MessageCollection, MemoryStorageProvider
 from typeagent.knowpro.textlocindex import TextToTextLocationIndex
 
 from fixtures import needs_auth  # type: ignore  # It's used!
@@ -173,6 +173,10 @@ async def test_build_message_index(needs_auth: None):
             # Convert plain list to MessageCollection for proper async iteration
             self.messages = MessageCollection(messages)
             self.secondary_indexes = ConversationSecondaryIndexes()
+            # Store settings with storage provider for access via conversation.settings.storage_provider
+            self.settings = ConversationSettings(
+                storage_provider=MemoryStorageProvider()
+            )
 
     # Create test messages and conversation
     messages = [
