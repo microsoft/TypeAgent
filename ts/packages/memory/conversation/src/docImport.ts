@@ -19,13 +19,13 @@ import * as kp from "knowpro";
 
 /**
  * Import a text document as DocMemory
- * You must call buildIndex before you can query the memory
- *
  * Uses file extensions to determine how to import the text files.
  *  default: treat as text
  *  .html, .htm => parse html
  *  .vtt => parse vtt transcript
  *
+ * You must call {@link DocMemory.buildIndex} before you can search or get answers from the memory
+ 
  * @param docFilePath file path to file to import
  * @param maxCharsPerChunk Chunks document into DocParts
  * @param docName (Optional) Document name
@@ -69,6 +69,7 @@ export async function importDocMemoryFromTextFile(
 }
 
 export type DocType = "vtt" | "md" | "html" | "txt";
+
 /**
  * Import a text as DocMemory
  * You must call buildIndex before you can query the memory
@@ -119,11 +120,10 @@ export async function importDocMemoryFromText(
 }
 
 /**
- * Import a web page as DocMemory
- * You must call buildIndex before you can query the memory
- * @param url
- * @param maxCharsPerChunk
- * @param settings
+ * Import a web page as a {@link DocMemory}
+ * @param url Url for web page to download
+ * @param maxCharsPerChunk Best effort chunk size
+ * @param {DocMemorySettings} settings (Optional) memory settings
  * @returns
  */
 export async function importWebPage(
@@ -144,6 +144,7 @@ export async function importWebPage(
     const docMemory = new DocMemory(url, parts, settings);
     return success(docMemory);
 }
+
 /**
  * Import the given text as separate blocks
  * @param documentText
@@ -169,30 +170,18 @@ export function docPartsFromText(
 }
 
 /**
- * Import the text as a single DocBlock with multiple chunks
- * @param documentText
- * @param maxCharsPerChunk
- * @param sourceUrl
- * @returns
- */
-export function docPartFromText(
-    documentText: string,
-    maxCharsPerChunk: number,
-    sourceUrl?: string,
-): DocPart {
-    const textChunks = [
-        ...splitLargeTextIntoChunks(documentText, maxCharsPerChunk, false),
-    ];
-    return new DocPart(textChunks, new DocPartMeta(sourceUrl));
-}
-
-/**
- * Break the given html into DocParts
+ * Chunk the given html into an array of {@link DocPart | DocParts}.
+ * DocParts will contain:
+ *  - Text chunks.
+ *  - textOnly true: simplifies html to raw text before chunking.
+ *  - textOnly false: Converts html to compact markdown and then creates DocParts using {@link docPartsFromMarkdown}. The resulting DocParts retain
+ *  structural and other knowledge implied by markup.
+ *
  * @param html html text
- * @param textOnly if true, use only text, ignoring all formatting etc.
- * @param maxCharsPerChunk
+ * @param textOnly if true, use only text, ignoring all formatting etc. Else analyzes structure and formatting
+ * @param maxCharsPerChunk Best effort maximum size of each chunk.
  * @param sourceUrl
- * @param rootTag
+ * @param rootTag Root html tag to start extracted doc parts from. Default is "body"
  * @returns
  */
 export function docPartsFromHtml(
@@ -212,11 +201,19 @@ export function docPartsFromHtml(
 }
 
 /**
- * Convert markdown text into DocParts. These can be added to DocMemory
- * @param markdown
- * @param maxCharsPerChunk
- * @param sourceUrl
- * @returns
+ * Chunk the given markdown text into {@link DocPart | DocParts}.
+ * DocParts will contain:
+ *  - Text chunks. Chunking will obey logical "blocks" such as tables, lists, paragraphs. Large blocks are split appropriately.
+ *  - Chunking respects "blocks" such as tables, lists, paragraphs etc, splitting them appropriately.
+ *  - Structured information inside a chunk (headings, lists, images, links etc), are captured as entities, structured tags and topics.
+ *    These are indexed when the DocPart is added to DocMemory
+ *
+ *  When a DocPart is added to a DocMemory and the {@link DocMemory} is indexed, detailed contextual knowledge is automatically extracted using an LLM.
+ *  You can also extract knowledge using other means, or using knowpro APIs.
+ * @param markdown markdown text
+ * @param maxCharsPerChunk Best effort maximum size of a chunk
+ * @param sourceUrl sourceUrl for this markdown
+ * @returns Array of {@link DocPart}
  */
 export function docPartsFromMarkdown(
     markdown: string,

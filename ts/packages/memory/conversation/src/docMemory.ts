@@ -22,13 +22,17 @@ export class DocPartMeta extends MessageMetadata {
 }
 
 /**
- * The text of a document is split into document parts
+ * A document contains document parts
+ * A DocPart is a {@link Message} that can be added to a {@link DocMemory}
  */
 export class DocPart extends Message<DocPartMeta> {
+    /**
+     * See {@link Message} for parameter/property descriptions
+     */
     constructor(
         textChunks: string | string[] = [],
         metadata?: DocPartMeta | undefined,
-        tags?: string[] | kp.MessageTag[] | undefined,
+        tags?: kp.MessageTag[] | undefined,
         timestamp?: string | undefined,
         knowledge?: kpLib.conversation.KnowledgeResponse | undefined,
         deletionInfo: kp.DeletionInfo | undefined = undefined,
@@ -70,13 +74,18 @@ export function createDocMemorySettings(
 
 /**
  * A DocMemory is a collection of {@link DocPart}.
- * You can search document memories and generate answers like any other memory:
- * - using natural language
- * - using direct queries
+ * You can search document memories and generate answers using:
+ * - using natural language queries
+ * - Query expressions
+ *
+ * Indexing:
+ * You must call {@link buildIndex} to enable query operations.
+ * You call {@link writeToFile} to persist the memory and any indexes created by buildIndex.
+ * Alternatively, you can incrementally and and index a new DocPart by calling {@link addDocPartToIndex}
  *
  * Doc memories are mutable.
  *
- * You can import text files like .vtt, .html, .md etc as DocMemories using the {@link importDocMemoryFromTextFile}
+ * You can import text files like .vtt, .html, .md etc as DocMemories using the {@link importDocMemoryFromTextFile} function
  *
  * @see Memory base class for APIs
  * @see DocPart
@@ -180,18 +189,19 @@ export class DocMemory
     }
 
     /**
-     * Dynamically add a new DocPart to the document index
-     * @param item
+     * Add a new DocPart this memory and update the index.
+     * Use for incrementally adding to this document
+     * @param docPart
      * @param {kp.IndexingEventHandlers} eventHandler
      * @returns
      */
-    public async addItemToIndex(
-        item: DocPart,
+    public async addDocPartToIndex(
+        docPart: DocPart,
         eventHandler?: kp.IndexingEventHandlers,
     ): Promise<kp.IndexingResults> {
         this.beginIndexing();
         try {
-            this.messages.append(item);
+            this.messages.append(docPart);
             const messageOrdinal = this.messages.length - 1;
 
             const result = await kp.addToConversationIndex(

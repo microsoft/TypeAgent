@@ -54,7 +54,7 @@ export class EmailMessage extends Message<EmailMeta> {
     constructor(
         metadata: EmailMeta,
         emailBody: string | string[],
-        tags: string[] | kp.MessageTag[] = [],
+        tags: kp.MessageTag[] = [],
         knowledge?: kpLib.KnowledgeResponse | undefined,
         deletionInfo?: kp.DeletionInfo | undefined,
         isNew: boolean = true,

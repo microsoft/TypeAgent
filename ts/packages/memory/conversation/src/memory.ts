@@ -136,24 +136,31 @@ export class MessageMetadata
 
 /**
  * A Message in a Memory {@link Memory}
+ * Message implements {@link kp.IMessage}
  */
 export class Message<TMeta extends MessageMetadata = MessageMetadata>
     implements kp.IMessage
 {
+    /**
+     * Text chunk associated with this messages
+     */
     public textChunks: string[];
 
     constructor(
+        /**
+         * {@link MessageMetadata}
+         */
         public metadata: TMeta,
-        messageBody: string | string[],
-        public tags: string[] | kp.MessageTag[] = [],
+        textChunks: string | string[],
+        public tags: kp.MessageTag[] = [],
         public timestamp: string | undefined = undefined,
         public knowledge: kpLib.KnowledgeResponse | undefined = undefined,
         public deletionInfo: kp.DeletionInfo | undefined = undefined,
     ) {
-        if (Array.isArray(messageBody)) {
-            this.textChunks = messageBody;
+        if (Array.isArray(textChunks)) {
+            this.textChunks = textChunks;
         } else {
-            this.textChunks = [messageBody];
+            this.textChunks = [textChunks];
         }
     }
 
@@ -484,11 +491,17 @@ export abstract class Memory<
     }
 
     /**
-     * Get an answer from a natural language question.
+     * Get an answer from a natural language question. The returned result object will indicate success or failure.  
+     * If the returned result is a success:
+     * - A single question can be turned into multiple search queries, although most single phrase questions are a single query.
+     * - The result is a tuple of (a) Raw search results (b) The natural language answer generated from the search results.
+     * @see kp.AnswerResponse. 
+     * - If the question was answered, the response {@link kp.AnswerType} will be "Answered". Else "NoAnswer" and a reason is provided in {@link kp.AnswerResponse.whyNoAnswer}
+     
      * @param {string} question - The natural language question.
      * @param {kp.LanguageSearchOptions} [searchOptions] - Optional search options.
      * @param progress - Optional progress callback.
-     * @returns {Promise<Result<[kp.ConversationSearchResult, kp.AnswerResponse][]>>} - Search Results and the answers generated for them.
+     * @returns {Promise<Result<[kp.ConversationSearchResult, kp.AnswerResponse][]>>} Tuple: [Raw Search Results, Answers generated using Search Results].
      */
     public async getAnswerFromLanguage(
         question: string,
