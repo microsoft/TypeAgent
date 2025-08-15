@@ -152,7 +152,7 @@ export class Message<TMeta extends MessageMetadata = MessageMetadata>
          */
         public metadata: TMeta,
         textChunks: string | string[],
-        public tags: string[] | kp.MessageTag[] = [],
+        public tags: kp.MessageTag[] = [],
         public timestamp: string | undefined = undefined,
         public knowledge: kpLib.KnowledgeResponse | undefined = undefined,
         public deletionInfo: kp.DeletionInfo | undefined = undefined,

@@ -32,7 +32,7 @@ export class DocPart extends Message<DocPartMeta> {
     constructor(
         textChunks: string | string[] = [],
         metadata?: DocPartMeta | undefined,
-        tags?: string[] | kp.MessageTag[] | undefined,
+        tags?: kp.MessageTag[] | undefined,
         timestamp?: string | undefined,
         knowledge?: kpLib.conversation.KnowledgeResponse | undefined,
         deletionInfo: kp.DeletionInfo | undefined = undefined,
