@@ -81,7 +81,7 @@ export function createDocMemorySettings(
  * Indexing:
  * You must call {@link buildIndex} to enable query operations.
  * You call {@link writeToFile} to persist the memory and any indexes created by buildIndex.
- * Alternatively, you can incrementally and and index a new DocPart by calling {@link addPartToIndex}
+ * Alternatively, you can incrementally and and index a new DocPart by calling {@link addDocPartToIndex}
  *
  * Doc memories are mutable.
  *
@@ -191,17 +191,17 @@ export class DocMemory
     /**
      * Add a new DocPart this memory and update the index.
      * Use for incrementally adding to this document
-     * @param item
+     * @param docPart
      * @param {kp.IndexingEventHandlers} eventHandler
      * @returns
      */
-    public async addPartToIndex(
-        item: DocPart,
+    public async addDocPartToIndex(
+        docPart: DocPart,
         eventHandler?: kp.IndexingEventHandlers,
     ): Promise<kp.IndexingResults> {
         this.beginIndexing();
         try {
-            this.messages.append(item);
+            this.messages.append(docPart);
             const messageOrdinal = this.messages.length - 1;
 
             const result = await kp.addToConversationIndex(

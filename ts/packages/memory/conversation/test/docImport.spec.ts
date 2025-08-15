@@ -80,11 +80,29 @@ describeIf(
             "indexing",
             async () => {
                 const docPath = mdTestFile;
+                const testCount = 4;
                 let parts = docPartsFromMarkdown(readTestFile(docPath), 2048);
-                parts = parts.slice(0, 4);
+                parts = parts.slice(0, testCount);
                 const docMemory = new DocMemory("", parts);
+                verifyMessages(docMemory.messages, testCount);
                 const result = await docMemory.buildIndex();
                 verifyNoIndexingErrors(result);
+            },
+            testTimeout,
+        );
+        test(
+            "indexing.incremental",
+            async () => {
+                const docPath = mdTestFile;
+                const testCount = 3;
+                let parts = docPartsFromMarkdown(readTestFile(docPath), 2048);
+                parts = parts.slice(0, testCount);
+                const docMemory = new DocMemory("");
+                for (const part of parts) {
+                    const result = await docMemory.addDocPartToIndex(part);
+                    verifyNoIndexingErrors(result);
+                }
+                verifyMessages(docMemory.messages, testCount);
             },
             testTimeout,
         );
