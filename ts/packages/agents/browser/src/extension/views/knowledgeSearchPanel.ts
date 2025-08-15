@@ -131,37 +131,18 @@ export class KnowledgeSearchPanel {
      */
     private navigateToEntityGraph(entityOrTopic: string): void {
         try {
-            // Build URL to entity graph view
-            const entityGraphUrl = chrome.runtime.getURL(
-                "views/entityGraphView.html",
-            );
-            const fullUrl = `${entityGraphUrl}?entity=${encodeURIComponent(entityOrTopic)}`;
+            // Navigate to entity graph view in the same tab (matching analytics panel behavior)
+            const entityGraphUrl = `entityGraphView.html?entity=${encodeURIComponent(entityOrTopic)}`;
 
             console.log(`Navigating to entity graph for: ${entityOrTopic}`);
-            console.log(`URL: ${fullUrl}`);
+            console.log(`URL: ${entityGraphUrl}`);
 
-            // Open in new tab
-            chrome.tabs.create({
-                url: fullUrl,
-                active: true,
-            });
+            window.location.href = entityGraphUrl;
         } catch (error) {
             console.error("Failed to navigate to entity graph:", error);
 
-            // Fallback: try to open in same window
-            try {
-                const entityGraphUrl = "entityGraphView.html";
-                const fullUrl = `${entityGraphUrl}?entity=${encodeURIComponent(entityOrTopic)}`;
-                window.open(fullUrl, "_blank");
-            } catch (fallbackError) {
-                console.error(
-                    "Fallback navigation also failed:",
-                    fallbackError,
-                );
-
-                // Show user a message about the failure
-                this.showNavigationError(entityOrTopic);
-            }
+            // Show user a message about the failure
+            this.showNavigationError(entityOrTopic);
         }
     }
 
@@ -318,7 +299,7 @@ export class KnowledgeSearchPanel {
         loadingDiv.style.display = "block";
         loadingDiv.innerHTML = `
             <div class="results-header">
-                <h2 class="results-title">Searching...</h2>
+                <h2 class="results-title"></h2>
             </div>
             <div class="text-center p-4">
                 <div class="spinner-border text-primary" role="status">

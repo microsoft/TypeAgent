@@ -541,7 +541,7 @@ async function initialize() {
         await BrowserAgentIpc.getinstance().send(data);
     });
 
-    // Extension service adapter IPC handlers - CRITICAL: Must handle async response waiting
+    // Extension service adapter IPC handlers - Must handle async response waiting
     ipcMain.handle("browser-extension-message", async (_, message) => {
         try {
             // Route message through browser IPC to TypeAgent backend
@@ -556,10 +556,6 @@ async function initialize() {
 
             // For import operations, use a longer timeout and handle differently
             const timeout = isImportOperation ? 600000 : 30000; // 10 minutes for imports, 30 seconds for others
-
-            console.log(
-                `[browser-extension-message] Processing: ${methodName}, isImport: ${isImportOperation}, timeout: ${timeout}ms`,
-            );
 
             // Create a promise to wait for the WebSocket response
             return new Promise((resolve, reject) => {
@@ -605,7 +601,9 @@ async function initialize() {
                         hasParams: !!(message.params || message.parameters),
                     });
                     reject(
-                        new Error(`Extension message timeout - ${messageInfo}`),
+                        new Error(
+                            `Inline-browser message timeout - ${messageInfo}`,
+                        ),
                     );
                 }, timeout);
             });
