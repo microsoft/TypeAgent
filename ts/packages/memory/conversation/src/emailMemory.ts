@@ -279,9 +279,9 @@ export class EmailMemory
 }
 
 /**
- * Creates a new Email memory using a Sqlite storage provider
- * @param fileSettings
- * @param createNew
+ * Loads or creates an new Email memory persisted with the given file settings
+ * @param fileSettings Where memory is persisted
+ * @param createNew true: clear any old memory, create new one
  * @returns EmailMemory
  */
 export async function createEmailMemory(
