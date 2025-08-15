@@ -162,7 +162,7 @@ export class topNDomainsExtractor {
         
         const response = await fetch(`https://index.commoncrawl.org/CC-MAIN-2025-30-index?url=${url}&showNumPages=true`);
 
-        console.log(`${chalk.dim(response)}`);
+        console.log(`${chalk.dim(JSON.stringify(response))}`);
         if (response.ok) {
             const pages: crawlPages = JSON.parse(await response.text()) as crawlPages;
             if (pages && pages.pages > 0) {
