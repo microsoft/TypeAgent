@@ -8,13 +8,36 @@ import { domains } from "./generateOpenCommandPhrasesSchema.js";
 import { createTypeChat, loadSchema } from "typeagent";
 import { Result } from "typechat";
 
+type extractedDomains = {
+    dateIndexed: number;
+    domains: {
+        [key: string]: {
+            status: boolean | undefined;
+        };
+    }
+    phrases: {
+        [key: string]: string[];
+    }
+}
+
+type crawlPages = {
+    pages: number;
+    pageSize: number;
+    blocks: number;
+}
+
 export class topNDomainsExtractor {
     // manually downloadable from: https://radar.cloudflare.com/domains
     private downloadUrl: string = "https://radar.cloudflare.com/charts/LargerTopDomainsTable/attachment?id=1257&top=";
     private topN: number = 100;
-    private topNFile: string = "examples/websiteAliases/top100_000.csv";
+    private topNFile: string = `examples/websiteAliases/top${this.topN}.csv`;
     private outputFile: string = "examples/websiteAliases/phrases_to_sites.json";
-    private keywordsToSites: Record<string, string[]> = {};
+    //private keywordsToSites: Record<string, string[]> = {};
+    private processed: extractedDomains = {
+        dateIndexed: Date.now(),
+        domains: {},
+        phrases: {}
+    }
 
     constructor(topN?: number) {
         if (topN && topN > 0) {
@@ -40,7 +63,7 @@ export class topNDomainsExtractor {
 
         // start over from scratch?
         if (!clear && existsSync(this.outputFile)) {
-            this.keywordsToSites = JSON.parse(readFileSync(this.outputFile, "utf-8"));
+            this.processed = JSON.parse(readFileSync(this.outputFile, "utf-8"));
         }
 
         // open the file, throw away the headers
@@ -63,13 +86,41 @@ export class topNDomainsExtractor {
         
         for(let i = 0; i < lines.length; i++) {
             const columns = lines[i].split(",");
+            
+            // skip invalid lines
             if (columns.length < 2) {
-                continue; // skip invalid lines
+                continue; 
             }
 
+            // skip empty domains
             const domain = columns[1].trim();
             if (!domain) {
-                continue; // skip empty domains
+                continue; 
+            }
+
+            // can we even get to this domain?
+            // For CDNs, there's nothing hosted at the root domain and for those
+            // we just skip them and don't try to index them cause they just pollute the cache
+            let isInCommonCrawl: boolean | undefined = undefined;
+            let retryCount = 0;
+            const MAX_RETRIES = 10;
+
+            // common crawl is flakey....
+            do {
+                try {
+                    isInCommonCrawl = await this.isPageInCommonCrawl(domain);
+                } catch (error: any) {
+                    console.error(chalk.red(`Error checking common crawl for ${domain}: ${error?.message}`));
+                    await new Promise(resolve => setTimeout(resolve, 10000));
+                    retryCount++;
+                }
+            } while (isInCommonCrawl === undefined && retryCount < MAX_RETRIES);
+
+            this.processed.domains[domain] = { status: isInCommonCrawl };
+
+            if (!isInCommonCrawl) {
+                console.warn(chalk.yellow(`Skipping domain: ${domain}`));
+                continue;
             }
 
             // accumulate domains till will fill a page
@@ -98,7 +149,30 @@ export class topNDomainsExtractor {
         }
 
         // save the output file
-        writeFileSync(this.outputFile, JSON.stringify(this.keywordsToSites, null, 2));
+        writeFileSync(this.outputFile, JSON.stringify(this.processed, null, 2));
+    }
+
+    /**
+     * Determines if the supplied URL is in the common crawl dataset
+     * @param url - The URL to determine if it's in the common crawl
+     */
+    private async isPageInCommonCrawl(url: string): Promise<boolean> {
+        // https://index.commoncrawl.org/CC-MAIN-2025-30-index?url=google.com&showNumPages=true  
+        // {"pages": 1, "pageSize": 5, "blocks": 1}     
+        
+        const response = await fetch(`https://index.commoncrawl.org/CC-MAIN-2025-30-index?url=${url}&showNumPages=true`);
+
+        console.log(`${chalk.dim(response)}`);
+        if (response.ok) {
+            const pages: crawlPages = JSON.parse(await response.text()) as crawlPages;
+            if (pages && pages.pages > 0) {
+                return true;
+            }
+        } else {
+            console.log(`${chalk.dim(JSON.stringify(await response.text()))}`);
+        }
+
+        return false;
     }
 
     /**
@@ -138,12 +212,12 @@ export class topNDomainsExtractor {
                         alias = alias.slice(5);
                     }
 
-                    if (this.keywordsToSites[alias] === undefined) {
-                        this.keywordsToSites[alias] = [element.domain];
+                    if (this.processed.phrases[alias] === undefined) {
+                        this.processed.phrases[alias] = [element.domain];
                     } else {
-                        this.keywordsToSites[alias] = [...new Set([...this.keywordsToSites[alias], element.domain])];
+                        this.processed.phrases[alias] = [...new Set([...this.processed.phrases[alias], element.domain])];
 
-                        console.log(chalk.yellow(`\t${alias} now maps to ${this.keywordsToSites[alias].length} sites.`));
+                        console.log(chalk.yellow(`\t${alias} now maps to ${this.processed.phrases[alias].length} sites.`));
                     }                
                 });
             }); 
