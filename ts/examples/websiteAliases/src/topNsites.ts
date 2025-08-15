@@ -3,7 +3,7 @@
 
 import { openai, CompletionSettings, ChatModelWithStreaming } from "aiclient";
 import chalk from "chalk";
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, readFileSync, unlinkSync, writeFileSync, statSync } from "fs";
 import { domains } from "./generateOpenCommandPhrasesSchema.js";
 import { createTypeChat, loadSchema } from "typeagent";
 import { Result } from "typechat";
@@ -11,7 +11,11 @@ import { Result } from "typechat";
 type extractedDomains = {
     dateIndexed: number;
     domains: {
-        [key: string]: boolean | undefined;
+        [key: string]: {
+            accessible: boolean | undefined;
+            phrase_count?: number;
+            phrases?: string[];
+        }
     }
     phrases: {
         [key: string]: string[];
@@ -27,7 +31,7 @@ type extractedDomains = {
 export class topNDomainsExtractor {
     // manually downloadable from: https://radar.cloudflare.com/domains
     private downloadUrl: string = "https://radar.cloudflare.com/charts/LargerTopDomainsTable/attachment?id=1257&top=";
-    private topN: number = 1000;
+    private topN: number = 100;
     private topNFile: string = `examples/websiteAliases/top${this.topN}.csv`;
     private outputFile: string = "examples/websiteAliases/phrases_to_sites.json";
     //private keywordsToSites: Record<string, string[]> = {};
@@ -59,9 +63,15 @@ export class topNDomainsExtractor {
         // get the top domains
         this.downloadTopNDomains();
 
-        // start over from scratch?
-        if (!clear && existsSync(this.outputFile)) {
-            this.processed = JSON.parse(readFileSync(this.outputFile, "utf-8"));
+        try {
+            // start over from scratch?
+            if (!clear && existsSync(this.outputFile)) {
+                this.processed = JSON.parse(readFileSync(this.outputFile, "utf-8")) as extractedDomains;
+            }
+        } catch (error) {
+            console.error(chalk.red(`Error reading output file ${this.outputFile}: ${error}`));
+            console.warn("Deleting output file...");
+            unlinkSync(this.outputFile);
         }
 
         // open the file, throw away the headers
@@ -79,7 +89,8 @@ export class topNDomainsExtractor {
         const pageSize = 5;
         const batchCount = Math.ceil(lines.length / (batchSize * pageSize));                
         const domains: string[][] = new Array<string[]>(batchCount);    
-        let batchNum = 0;
+        let pageNumber = 0;
+        let batchNumber = 0;
         console.log(`${lines.length} domains. Processing in ${batchCount} batches of ${batchSize} domains each.`);    
         
         for(let i = 0; i < lines.length; i++) {
@@ -91,8 +102,9 @@ export class topNDomainsExtractor {
                 domain = columns[1].trim();
             }
 
-            // skip empty domains
-            if (!domain) {
+            // skip empty domains or domains that are already processed
+            if (!domain || this.processed.domains[domain] !== undefined) {
+                console.warn(chalk.yellowBright(`Skipping domain: ${domain}`));
                 continue; 
             }
 
@@ -100,7 +112,7 @@ export class topNDomainsExtractor {
             // For CDNs, there's nothing hosted at the root domain and for those
             // we just skip them and don't try to index them cause they just pollute the cache
             let isValid: boolean | undefined = await this.isPageAvailable(domain);;
-            this.processed.domains[domain] = isValid ? isValid : false;
+            this.processed.domains[domain] = { accessible: isValid ? isValid : false };
 
             if (!isValid) {
                 console.warn(chalk.yellow(`Skipping domain: ${domain}`));
@@ -108,26 +120,32 @@ export class topNDomainsExtractor {
             }
 
             // accumulate domains till will fill a page
-            if (domains[batchNum] === undefined) {
-                domains[batchNum] = [];
+            if (domains[pageNumber] === undefined) {
+                domains[pageNumber] = [];
             }
-            domains[batchNum].push(domain);
+            domains[pageNumber].push(domain);
 
             // once the page is full or if it's the last page, send it
-            if (domains[batchNum].length >= pageSize || i === lines.length - 1) {
-                const bb = batchNum++;
-                console.log(`Processing: ${chalk.blueBright(domains[bb])}`);
+            if (domains[pageNumber].length >= pageSize || i === lines.length - 1) {
+                const page = pageNumber++;
+                console.log(`Processing page ${page}: ${chalk.blueBright(domains[page])}`);
 
-                batch.push(this.generateOpenPhrasesForDomains(domains[bb]).catch((err) => {
-                    console.error(chalk.red(`Error processing domains ${domains[bb]}: ${err.message}`));
+                batch.push(this.generateOpenPhrasesForDomains(domains[page]).catch((err) => {
+                    console.error(chalk.red(`Error processing domains ${domains[page]}: ${err.message}`));
                 }));
 
                 if (batch.length >= batchSize) {
+                    const batchNum = batchNumber++;
                     await Promise.all(batch).then(() => {
-                        console.log(chalk.grey(`Processed batch ${bb} of ${batchCount}.`));
+                        console.log(chalk.grey(`Processed batch ${batchNum} of ${batchCount}.`));
                     });
 
                     batch.length = 0; // reset the batch
+
+                    // periodically save the output file so we don't have to start from scratch if we restart
+                    writeFileSync(this.outputFile, JSON.stringify(this.processed, null, 2));
+                    console.log(chalk.green(`Saved progress to ${this.outputFile} (${statSync(this.outputFile).size} bytes)`));
+
                 }
             }
         }
@@ -277,6 +295,7 @@ export class topNDomainsExtractor {
                         alias = alias.slice(5);
                     }
 
+                    // record the phrase redirection entry
                     if (this.processed.phrases[alias] === undefined) {
                         this.processed.phrases[alias] = [element.domain];
                     } else {
@@ -285,6 +304,10 @@ export class topNDomainsExtractor {
                         console.log(chalk.yellow(`\t${alias} now maps to ${this.processed.phrases[alias].length} sites.`));
                     }                
                 });
+
+                // record domain stats
+                this.processed.domains[element.domain].phrase_count = element.aliases.length;
+                this.processed.domains[element.domain].phrases = element.aliases;
             }); 
         } else {
             console.error(chalk.red(`Failed to generate phrases for ${domains}: ${response.message}`));
@@ -366,15 +389,67 @@ For example: apple.com could be:
         return chatModel;
     }    
 
-/*
-There is a system that uses the command "Open" to open URLs in the browser.  You are helping me generate terms that I can cache such that when the user says "open apple" it goes to "https://apple.com".  YOu generate alternate terms/keywords/phrases/descriptions a user could use to invoke the same site. Avoid using statements that could actually refer to sub pages like (open ipad page). since those are technically different URLs.
+    /**
+     * Summarize the domain statistics.
+     */
+    public summarize() {
 
-For example: apple.com could be:
+        console.log(chalk.dim("Processing..."));
 
-- open apple
-- open iphone maker
-- open ipad maker
+        console.log(`Loading previous results from ${this.outputFile}`);
+        this.processed = JSON.parse(readFileSync(this.outputFile, "utf-8"));
 
-*/
+        let min: number = Number.MAX_SAFE_INTEGER;
+        let max: number = Number.MIN_SAFE_INTEGER;
+        let avg: number = 0;
+        let count: number = 0;
+        let minD: string = "";
+        let maxD: string = "";
+
+        for (const [domain, stats] of Object.entries(this.processed.domains)) {
+
+            if (!stats.phrase_count) {
+                continue;
+            }
+
+            if (stats.phrase_count < min) {
+                min = stats.phrase_count;
+                minD = domain;
+            }
+
+            if (stats.phrase_count > max) {
+                max = stats.phrase_count;
+                maxD = domain;
+            }
+
+            count++;
+            avg += stats.phrase_count;
+        }
+
+        let avgPhraseCount: number = 0;
+        let maxCollisions: number = 0;
+        let mCollision: string[] = [];
+        for (const [phrase, sites] of Object.entries(this.processed.phrases)) {
+            avgPhraseCount += sites.length;
+
+            if (sites.length >= maxCollisions) {
+
+                if (sites.length > maxCollisions) {
+                    mCollision.length = 0;
+                }
+
+                mCollision.push(phrase);
+                maxCollisions = sites.length;
+            }
+
+        }
+
+        console.log(chalk.blueBright(`${Object.keys(this.processed.domains).length} domains indexed. ${Object.keys(this.processed.phrases).length} phrases generated.`));
+        console.log(chalk.green(`Min domain: ${minD} (${min} phrases)`));
+        console.log(chalk.red(`Max domain: ${maxD} (${max} phrases)`));
+        console.log(chalk.yellow(`Average phrases per domain: ${avg / count}`));
+        console.log(chalk.cyan(`Average sites per phrase: ${avgPhraseCount / Object.keys(this.processed.phrases).length}`));
+        console.log(chalk.magenta(`Max collisions: ${maxCollisions} (${mCollision.length} times)`));
+    }
 
 }
