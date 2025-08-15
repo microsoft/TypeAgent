@@ -143,8 +143,13 @@ export class topNDomainsExtractor {
     // private async isPageInCommonCrawl(url: string): Promise<boolean> {
     //     // https://index.commoncrawl.org/CC-MAIN-2025-30-index?url=google.com&showNumPages=true  
     //     // {"pages": 1, "pageSize": 5, "blocks": 1}     
-        
-    //     const response = await fetch(`https://index.commoncrawl.org/CC-MAIN-2025-30-index?url=${url}&showNumPages=true`);
+
+    //     const response = await fetch(`https://index.commoncrawl.org/CC-MAIN-2025-30-index?url=${url}&showNumPages=true`, {
+    //         method: "GET",
+    //         headers: {
+    //             "User-Agent": "TypeAgent/1.0/WebSiteAliases"
+    //         }
+    //     });
 
     //     console.log(`${chalk.dim(response)}`);
     //     if (response.ok) {
@@ -193,7 +198,7 @@ export class topNDomainsExtractor {
                 }
 
                 await new Promise(resolve => setTimeout(resolve, 500));
-                
+
             } finally {
                 retryCount++;
             }
