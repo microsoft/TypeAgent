@@ -120,11 +120,10 @@ export async function importDocMemoryFromText(
 }
 
 /**
- * Import a web page as DocMemory
- * You must call buildIndex before you can query the memory
- * @param url
- * @param maxCharsPerChunk
- * @param settings
+ * Import a web page as a {@link DocMemory}
+ * @param url Url for web page to download
+ * @param maxCharsPerChunk Best effort chunk size
+ * @param {DocMemorySettings} settings (Optional) memory settings
  * @returns
  */
 export async function importWebPage(
@@ -145,6 +144,7 @@ export async function importWebPage(
     const docMemory = new DocMemory(url, parts, settings);
     return success(docMemory);
 }
+
 /**
  * Import the given text as separate blocks
  * @param documentText
@@ -167,24 +167,6 @@ export function docPartsFromText(
         blocks.push(block);
     }
     return blocks;
-}
-
-/**
- * Import the text as a single DocPart with multiple chunks
- * @param documentText
- * @param maxCharsPerChunk
- * @param sourceUrl
- * @returns
- */
-export function docPartFromText(
-    documentText: string,
-    maxCharsPerChunk: number,
-    sourceUrl?: string,
-): DocPart {
-    const textChunks = [
-        ...splitLargeTextIntoChunks(documentText, maxCharsPerChunk, false),
-    ];
-    return new DocPart(textChunks, new DocPartMeta(sourceUrl));
 }
 
 /**
