@@ -693,9 +693,15 @@ def begin_indexing[
 ](
     conversation: IConversation[TMessage, TTermToSemanticRefIndex],
 ) -> None:
+    # TODO: This function creates indexes/collections directly, bypassing the storage provider.
+    # In the future, this should be updated to use the storage provider pattern.
+    # For now, we maintain backward compatibility with direct creation.
+
     if conversation.semantic_ref_index is None:
         conversation.semantic_ref_index = ConversationIndex()  # type: ignore  # TODO: Why doesn't pyright like this?
     if conversation.semantic_refs is None:
+        from .collections import MemorySemanticRefCollection
+
         conversation.semantic_refs = MemorySemanticRefCollection()
 
 
