@@ -69,6 +69,7 @@ export async function importDocMemoryFromTextFile(
 }
 
 export type DocType = "vtt" | "md" | "html" | "txt";
+
 /**
  * Import a text as DocMemory
  * You must call buildIndex before you can query the memory
@@ -169,7 +170,7 @@ export function docPartsFromText(
 }
 
 /**
- * Import the text as a single DocBlock with multiple chunks
+ * Import the text as a single DocPart with multiple chunks
  * @param documentText
  * @param maxCharsPerChunk
  * @param sourceUrl
@@ -187,12 +188,18 @@ export function docPartFromText(
 }
 
 /**
- * Break the given html into DocParts
+ * Chunk the given html into an array of {@link DocPart | DocParts}.
+ * DocParts will contain:
+ *  - Text chunks.
+ *  - textOnly true: simplifies html to raw text before chunking.
+ *  - textOnly false: Converts html to compact markdown and then creates DocParts using {@link docPartsFromMarkdown}. The resulting DocParts retain
+ *  structural and other knowledge implied by markup.
+ *
  * @param html html text
- * @param textOnly if true, use only text, ignoring all formatting etc.
- * @param maxCharsPerChunk
+ * @param textOnly if true, use only text, ignoring all formatting etc. Else analyzes structure and formatting
+ * @param maxCharsPerChunk Best effort maximum size of each chunk.
  * @param sourceUrl
- * @param rootTag
+ * @param rootTag Root html tag to start extracted doc parts from. Default is "body"
  * @returns
  */
 export function docPartsFromHtml(
@@ -212,11 +219,19 @@ export function docPartsFromHtml(
 }
 
 /**
- * Convert markdown text into DocParts. These can be added to DocMemory
- * @param markdown
- * @param maxCharsPerChunk
- * @param sourceUrl
- * @returns
+ * Chunk the given markdown text into {@link DocPart | DocParts}.
+ * DocParts will contain:
+ *  - Text chunks. Chunking will obey logical "blocks" such as tables, lists, paragraphs. Large blocks are split appropriately.
+ *  - Chunking respects "blocks" such as tables, lists, paragraphs etc, splitting them appropriately.
+ *  - Structured information inside a chunk (headings, lists, images, links etc), are captured as entities, structured tags and topics.
+ *    These are indexed when the DocPart is added to DocMemory
+ *
+ *  When a DocPart is added to a DocMemory and the {@link DocMemory} is indexed, detailed contextual knowledge is automatically extracted using an LLM.
+ *  You can also extract knowledge using other means, or using knowpro APIs.
+ * @param markdown markdown text
+ * @param maxCharsPerChunk Best effort maximum size of a chunk
+ * @param sourceUrl sourceUrl for this markdown
+ * @returns Array of {@link DocPart}
  */
 export function docPartsFromMarkdown(
     markdown: string,

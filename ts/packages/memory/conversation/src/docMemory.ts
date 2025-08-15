@@ -22,9 +22,13 @@ export class DocPartMeta extends MessageMetadata {
 }
 
 /**
- * The text of a document is split into document parts
+ * A document contains document parts
+ * A DocPart is a {@link Message} that can be added to a {@link DocMemory}
  */
 export class DocPart extends Message<DocPartMeta> {
+    /**
+     * See {@link Message} for parameter/property descriptions
+     */
     constructor(
         textChunks: string | string[] = [],
         metadata?: DocPartMeta | undefined,

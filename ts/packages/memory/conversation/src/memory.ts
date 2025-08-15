@@ -136,24 +136,31 @@ export class MessageMetadata
 
 /**
  * A Message in a Memory {@link Memory}
+ * Message implements {@link kp.IMessage}
  */
 export class Message<TMeta extends MessageMetadata = MessageMetadata>
     implements kp.IMessage
 {
+    /**
+     * Text chunk associated with this messages
+     */
     public textChunks: string[];
 
     constructor(
+        /**
+         * {@link MessageMetadata}
+         */
         public metadata: TMeta,
-        messageBody: string | string[],
+        textChunks: string | string[],
         public tags: string[] | kp.MessageTag[] = [],
         public timestamp: string | undefined = undefined,
         public knowledge: kpLib.KnowledgeResponse | undefined = undefined,
         public deletionInfo: kp.DeletionInfo | undefined = undefined,
     ) {
-        if (Array.isArray(messageBody)) {
-            this.textChunks = messageBody;
+        if (Array.isArray(textChunks)) {
+            this.textChunks = textChunks;
         } else {
-            this.textChunks = [messageBody];
+            this.textChunks = [textChunks];
         }
     }
 
