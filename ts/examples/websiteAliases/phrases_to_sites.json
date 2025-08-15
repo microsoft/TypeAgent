@@ -1,5 +1,1144 @@
 {
   "dateIndexed": 1755227665667,
-  "domains": {},
-  "phrases": {}
+  "domains": {
+    "google.com": true,
+    "googleapis.com": false,
+    "apple.com": true,
+    "gstatic.com": false,
+    "cloudflare.com": true,
+    "microsoft.com": true,
+    "facebook.com": true,
+    "amazonaws.com": false,
+    "googlevideo.com": false,
+    "whatsapp.net": true,
+    "fbcdn.net": true,
+    "doubleclick.net": true,
+    "youtube.com": true,
+    "amazon.com": true,
+    "instagram.com": true,
+    "icloud.com": true,
+    "googleusercontent.com": false,
+    "akadns.net": false,
+    "live.com": true,
+    "tiktokcdn.com": false,
+    "ntp.org": true,
+    "googlesyndication.com": true,
+    "bing.com": true,
+    "apple-dns.net": false,
+    "gvt2.com": false,
+    "netflix.com": true,
+    "cloudfront.net": false,
+    "akamai.net": false,
+    "tiktokv.com": false,
+    "aaplimg.com": false,
+    "cloudflare-dns.com": true,
+    "ytimg.com": false,
+    "yahoo.com": true,
+    "spotify.com": true,
+    "akamaiedge.net": false,
+    "office.com": true,
+    "cdninstagram.com": false,
+    "ui.com": true,
+    "gvt1.com": false,
+    "samsung.com": true,
+    "dns.google": true,
+    "googleadservices.com": false,
+    "one.one": true,
+    "msn.com": true,
+    "google-analytics.com": true,
+    "app-analytics-services.com": false,
+    "msftncsi.com": false,
+    "googletagmanager.com": false,
+    "wikipedia.org": true,
+    "snapchat.com": true,
+    "trafficmanager.net": false,
+    "amazon-adsystem.com": false,
+    "criteo.com": true,
+    "azure.com": true,
+    "app-measurement.com": false,
+    "roblox.com": true,
+    "fastly.net": true,
+    "3gppnetwork.org": false,
+    "applovin.com": true,
+    "steamserver.net": false,
+    "unity3d.com": true,
+    "sentry.io": true,
+    "a2z.com": false,
+    "linkedin.com": true,
+    "appsflyersdk.com": false,
+    "ggpht.com": false,
+    "rubiconproject.com": true,
+    "microsoftonline.com": false,
+    "windows.com": true,
+    "office.net": false,
+    "baidu.com": true,
+    "skype.com": true,
+    "windows.net": false,
+    "capcutapi.com": false,
+    "tiktokcdn-us.com": false,
+    "xiaomi.com": true,
+    "adnxs.com": false,
+    "taboola.com": true,
+    "windowsupdate.com": false,
+    "whatsapp.com": true,
+    "digicert.com": true,
+    "doubleverify.com": true,
+    "sharepoint.com": true,
+    "office365.com": true,
+    "gmail.com": true,
+    "android.com": true,
+    "cdn-apple.com": false,
+    "vungle.com": true,
+    "pubmatic.com": true,
+    "rbxcdn.com": false,
+    "casalemedia.com": true,
+    "qq.com": true,
+    "msftconnecttest.com": false,
+    "amazon.dev": false,
+    "cdn77.org": false,
+    "clarity.ms": false,
+    "miui.com": true,
+    "zoom.us": true,
+    "adtrafficquality.google": true,
+    "adsrvr.org": true
+  },
+  "phrases": {
+    "google": [
+      "google.com"
+    ],
+    "search engine": [
+      "google.com",
+      "bing.com"
+    ],
+    "google search": [
+      "google.com"
+    ],
+    "google home": [
+      "google.com"
+    ],
+    "apple": [
+      "apple.com"
+    ],
+    "iphone maker": [
+      "apple.com"
+    ],
+    "ipad maker": [
+      "apple.com"
+    ],
+    "macbook maker": [
+      "apple.com"
+    ],
+    "cloudflare": [
+      "cloudflare.com",
+      "cloudflare-dns.com"
+    ],
+    "website security": [
+      "cloudflare.com"
+    ],
+    "content delivery": [
+      "cloudflare.com"
+    ],
+    "web performance": [
+      "cloudflare.com"
+    ],
+    "microsoft": [
+      "microsoft.com"
+    ],
+    "windows maker": [
+      "microsoft.com"
+    ],
+    "office suite maker": [
+      "microsoft.com"
+    ],
+    "surface maker": [
+      "microsoft.com"
+    ],
+    "facebook": [
+      "facebook.com"
+    ],
+    "social network": [
+      "facebook.com"
+    ],
+    "meta platform": [
+      "facebook.com"
+    ],
+    "social media": [
+      "facebook.com"
+    ],
+    "whatsapp": [
+      "whatsapp.net",
+      "whatsapp.com"
+    ],
+    "chat app": [
+      "whatsapp.net"
+    ],
+    "messaging app": [
+      "whatsapp.net",
+      "whatsapp.com"
+    ],
+    "whatsapp service": [
+      "whatsapp.net"
+    ],
+    "facebook content delivery": [
+      "fbcdn.net"
+    ],
+    "fbcdn": [
+      "fbcdn.net"
+    ],
+    "facebook assets": [
+      "fbcdn.net"
+    ],
+    "fb content": [
+      "fbcdn.net"
+    ],
+    "doubleclick": [
+      "doubleclick.net"
+    ],
+    "ad service": [
+      "doubleclick.net"
+    ],
+    "ad network": [
+      "doubleclick.net",
+      "googlesyndication.com"
+    ],
+    "advertising": [
+      "doubleclick.net"
+    ],
+    "youtube": [
+      "youtube.com"
+    ],
+    "video site": [
+      "youtube.com"
+    ],
+    "video platform": [
+      "youtube.com"
+    ],
+    "video streaming": [
+      "youtube.com"
+    ],
+    "amazon": [
+      "amazon.com"
+    ],
+    "online store": [
+      "amazon.com"
+    ],
+    "ecommerce": [
+      "amazon.com"
+    ],
+    "shopping site": [
+      "amazon.com"
+    ],
+    "instagram": [
+      "instagram.com"
+    ],
+    "insta": [
+      "instagram.com"
+    ],
+    "photo sharing platform": [
+      "instagram.com"
+    ],
+    "social media app": [
+      "instagram.com"
+    ],
+    "facebook's photo platform": [
+      "instagram.com"
+    ],
+    "icloud": [
+      "icloud.com"
+    ],
+    "apple cloud": [
+      "icloud.com"
+    ],
+    "apple storage": [
+      "icloud.com"
+    ],
+    "apple backup": [
+      "icloud.com"
+    ],
+    "apple sync": [
+      "icloud.com"
+    ],
+    "live": [
+      "live.com"
+    ],
+    "outlook": [
+      "live.com"
+    ],
+    "microsoft email": [
+      "live.com"
+    ],
+    "microsoft live": [
+      "live.com"
+    ],
+    "hotmail": [
+      "live.com"
+    ],
+    "ntp": [
+      "ntp.org"
+    ],
+    "network time protocol": [
+      "ntp.org"
+    ],
+    "ntp organization": [
+      "ntp.org"
+    ],
+    "time synchronization": [
+      "ntp.org"
+    ],
+    "internet time": [
+      "ntp.org"
+    ],
+    "google syndication": [
+      "googlesyndication.com"
+    ],
+    "google ads": [
+      "googlesyndication.com",
+      "doubleclick.net"
+    ],
+    "google ad platform": [
+      "googlesyndication.com"
+    ],
+    "google marketing": [
+      "googlesyndication.com"
+    ],
+    "bing": [
+      "bing.com"
+    ],
+    "microsoft search": [
+      "bing.com"
+    ],
+    "bing search": [
+      "bing.com"
+    ],
+    "netflix": [
+      "netflix.com"
+    ],
+    "streaming service": [
+      "netflix.com"
+    ],
+    "netflix movies": [
+      "netflix.com"
+    ],
+    "netflix shows": [
+      "netflix.com"
+    ],
+    "cloudflare dns": [
+      "cloudflare-dns.com",
+      "one.one"
+    ],
+    "dns provider": [
+      "cloudflare-dns.com"
+    ],
+    "cloudflare service": [
+      "cloudflare-dns.com"
+    ],
+    "yahoo": [
+      "yahoo.com"
+    ],
+    "yahoo search": [
+      "yahoo.com"
+    ],
+    "yahoo portal": [
+      "yahoo.com"
+    ],
+    "yahoo services": [
+      "yahoo.com"
+    ],
+    "spotify": [
+      "spotify.com"
+    ],
+    "music streaming": [
+      "spotify.com"
+    ],
+    "spotify music": [
+      "spotify.com"
+    ],
+    "spotify service": [
+      "spotify.com"
+    ],
+    "office": [
+      "office.com"
+    ],
+    "microsoft office": [
+      "office.com"
+    ],
+    "office software": [
+      "office.com"
+    ],
+    "office suite": [
+      "office.com",
+      "office365.com"
+    ],
+    "MS office": [
+      "office.com"
+    ],
+    "ui": [
+      "ui.com"
+    ],
+    "ui site": [
+      "ui.com"
+    ],
+    "ui company": [
+      "ui.com"
+    ],
+    "ui brand": [
+      "ui.com"
+    ],
+    "UBNT": [
+      "ui.com"
+    ],
+    "samsung": [
+      "samsung.com"
+    ],
+    "galaxy maker": [
+      "samsung.com"
+    ],
+    "samsung electronics": [
+      "samsung.com"
+    ],
+    "samsung site": [
+      "samsung.com"
+    ],
+    "samsung brand": [
+      "samsung.com"
+    ],
+    "dns google": [
+      "dns.google"
+    ],
+    "google dns": [
+      "dns.google"
+    ],
+    "google public dns": [
+      "dns.google"
+    ],
+    "DNS service google": [
+      "dns.google"
+    ],
+    "google DNS resolver": [
+      "dns.google"
+    ],
+    "one one": [
+      "one.one"
+    ],
+    "1.1.1.1 site": [
+      "one.one"
+    ],
+    "one.one dns": [
+      "one.one"
+    ],
+    "one.one service": [
+      "one.one"
+    ],
+    "msn": [
+      "msn.com"
+    ],
+    "microsoft network": [
+      "msn.com"
+    ],
+    "msn news": [
+      "msn.com"
+    ],
+    "msn site": [
+      "msn.com"
+    ],
+    "google analytics": [
+      "google-analytics.com"
+    ],
+    "analytics": [
+      "google-analytics.com"
+    ],
+    "google measurement": [
+      "google-analytics.com"
+    ],
+    "website analytics": [
+      "google-analytics.com"
+    ],
+    "wikipedia": [
+      "wikipedia.org"
+    ],
+    "online encyclopedia": [
+      "wikipedia.org"
+    ],
+    "free encyclopedia": [
+      "wikipedia.org"
+    ],
+    "wiki": [
+      "wikipedia.org"
+    ],
+    "snapchat": [
+      "snapchat.com"
+    ],
+    "snap": [
+      "snapchat.com"
+    ],
+    "photo sharing app": [
+      "snapchat.com",
+      "instagram.com"
+    ],
+    "snapchat app": [
+      "snapchat.com"
+    ],
+    "criteo": [
+      "criteo.com"
+    ],
+    "criteo ads": [
+      "criteo.com"
+    ],
+    "criteo ad network": [
+      "criteo.com"
+    ],
+    "criteo advertising": [
+      "criteo.com"
+    ],
+    "azure": [
+      "azure.com"
+    ],
+    "microsoft cloud": [
+      "azure.com"
+    ],
+    "azure cloud": [
+      "azure.com"
+    ],
+    "azure services": [
+      "azure.com"
+    ],
+    "azure platform": [
+      "azure.com"
+    ],
+    "roblox": [
+      "roblox.com"
+    ],
+    "roblox games": [
+      "roblox.com"
+    ],
+    "roblox platform": [
+      "roblox.com"
+    ],
+    "roblox gaming": [
+      "roblox.com"
+    ],
+    "roblox website": [
+      "roblox.com"
+    ],
+    "fastly": [
+      "fastly.net"
+    ],
+    "fastly cdn": [
+      "fastly.net"
+    ],
+    "fastly network": [
+      "fastly.net"
+    ],
+    "fastly services": [
+      "fastly.net"
+    ],
+    "fastly platform": [
+      "fastly.net"
+    ],
+    "applovin": [
+      "applovin.com"
+    ],
+    "applovin media": [
+      "applovin.com"
+    ],
+    "applovin services": [
+      "applovin.com"
+    ],
+    "applovin ads": [
+      "applovin.com"
+    ],
+    "applovin platform": [
+      "applovin.com"
+    ],
+    "unity3d": [
+      "unity3d.com"
+    ],
+    "unity engine": [
+      "unity3d.com"
+    ],
+    "unity3d platform": [
+      "unity3d.com"
+    ],
+    "unity game engine": [
+      "unity3d.com"
+    ],
+    "unity software": [
+      "unity3d.com"
+    ],
+    "sentry": [
+      "sentry.io"
+    ],
+    "error tracking tool": [
+      "sentry.io"
+    ],
+    "bug tracker sentry": [
+      "sentry.io"
+    ],
+    "Sentry error monitoring": [
+      "sentry.io"
+    ],
+    "sentry error reporting": [
+      "sentry.io"
+    ],
+    "linkedin": [
+      "linkedin.com"
+    ],
+    "professional network": [
+      "linkedin.com"
+    ],
+    "job search site": [
+      "linkedin.com"
+    ],
+    "business network": [
+      "linkedin.com"
+    ],
+    "career site": [
+      "linkedin.com"
+    ],
+    "LinkedIn profiles": [
+      "linkedin.com"
+    ],
+    "rubicon project": [
+      "rubiconproject.com"
+    ],
+    "ad tech company": [
+      "rubiconproject.com"
+    ],
+    "Rubicon Project ad exchange": [
+      "rubiconproject.com"
+    ],
+    "digital advertising platform": [
+      "rubiconproject.com"
+    ],
+    "Rubicon ads": [
+      "rubiconproject.com"
+    ],
+    "windows": [
+      "windows.com"
+    ],
+    "Microsoft Windows": [
+      "windows.com"
+    ],
+    "Windows OS": [
+      "windows.com"
+    ],
+    "Windows operating system": [
+      "windows.com"
+    ],
+    "windows software": [
+      "windows.com"
+    ],
+    "Windows platform": [
+      "windows.com"
+    ],
+    "baidu": [
+      "baidu.com"
+    ],
+    "chinese search engine": [
+      "baidu.com"
+    ],
+    "baidu search": [
+      "baidu.com"
+    ],
+    "Baidu website": [
+      "baidu.com"
+    ],
+    "baidu online services": [
+      "baidu.com"
+    ],
+    "baidu search engine": [
+      "baidu.com"
+    ],
+    "skype": [
+      "skype.com"
+    ],
+    "skype messenger": [
+      "skype.com"
+    ],
+    "skype calls": [
+      "skype.com"
+    ],
+    "skype chat": [
+      "skype.com"
+    ],
+    "xiaomi": [
+      "xiaomi.com"
+    ],
+    "mi": [
+      "xiaomi.com"
+    ],
+    "redmi": [
+      "xiaomi.com"
+    ],
+    "china smartphone": [
+      "xiaomi.com"
+    ],
+    "mi electronics": [
+      "xiaomi.com"
+    ],
+    "taboola": [
+      "taboola.com"
+    ],
+    "taboola ads": [
+      "taboola.com"
+    ],
+    "taboola advertising": [
+      "taboola.com"
+    ],
+    "taboola marketing": [
+      "taboola.com"
+    ],
+    "whatsapp messenger": [
+      "whatsapp.com",
+      "whatsapp.net"
+    ],
+    "whatsapp app": [
+      "whatsapp.com"
+    ],
+    "whatsapp chat": [
+      "whatsapp.com"
+    ],
+    "digicert": [
+      "digicert.com"
+    ],
+    "digicert certification": [
+      "digicert.com"
+    ],
+    "digicert ssl": [
+      "digicert.com"
+    ],
+    "digicert security": [
+      "digicert.com"
+    ],
+    "doubleverify": [
+      "doubleverify.com"
+    ],
+    "digital ad verifier": [
+      "doubleverify.com"
+    ],
+    "ad performance checker": [
+      "doubleverify.com"
+    ],
+    "ad fraud prevention": [
+      "doubleverify.com"
+    ],
+    "ad effectiveness tool": [
+      "doubleverify.com"
+    ],
+    "DV": [
+      "doubleverify.com"
+    ],
+    "sharepoint": [
+      "sharepoint.com"
+    ],
+    "document management": [
+      "sharepoint.com"
+    ],
+    "SharePoint Online": [
+      "sharepoint.com"
+    ],
+    "SP site": [
+      "sharepoint.com"
+    ],
+    "Microsoft SharePoint": [
+      "sharepoint.com"
+    ],
+    "team collaboration site": [
+      "sharepoint.com"
+    ],
+    "office365": [
+      "office365.com"
+    ],
+    "Microsoft Office": [
+      "office365.com"
+    ],
+    "Office Online": [
+      "office365.com"
+    ],
+    "Office 365 apps": [
+      "office365.com"
+    ],
+    "Office web apps": [
+      "office365.com"
+    ],
+    "Microsoft 365": [
+      "office365.com"
+    ],
+    "gmail": [
+      "gmail.com"
+    ],
+    "Google Mail": [
+      "gmail.com"
+    ],
+    "email service": [
+      "gmail.com"
+    ],
+    "email": [
+      "gmail.com"
+    ],
+    "my inbox": [
+      "gmail.com"
+    ],
+    "Google email": [
+      "gmail.com"
+    ],
+    "android": [
+      "android.com"
+    ],
+    "Google Android": [
+      "android.com"
+    ],
+    "mobile OS": [
+      "android.com"
+    ],
+    "Android operating system": [
+      "android.com"
+    ],
+    "Android website": [
+      "android.com"
+    ],
+    "mobile platform": [
+      "android.com"
+    ],
+    "google site": [
+      "google.com"
+    ],
+    "google homepage": [
+      "google.com"
+    ],
+    "apple site": [
+      "apple.com"
+    ],
+    "apple homepage": [
+      "apple.com"
+    ],
+    "mac maker": [
+      "apple.com"
+    ],
+    "cloudflare site": [
+      "cloudflare.com"
+    ],
+    "cloudflare homepage": [
+      "cloudflare.com"
+    ],
+    "cdn provider": [
+      "cloudflare.com"
+    ],
+    "internet security provider": [
+      "cloudflare.com"
+    ],
+    "office maker": [
+      "microsoft.com"
+    ],
+    "microsoft site": [
+      "microsoft.com"
+    ],
+    "microsoft homepage": [
+      "microsoft.com"
+    ],
+    "xbox maker": [
+      "microsoft.com"
+    ],
+    "social media site": [
+      "facebook.com"
+    ],
+    "facebook site": [
+      "facebook.com"
+    ],
+    "facebook homepage": [
+      "facebook.com"
+    ],
+    "whatsapp net": [
+      "whatsapp.net"
+    ],
+    "facebook cdn": [
+      "fbcdn.net"
+    ],
+    "fb cdn": [
+      "fbcdn.net"
+    ],
+    "ads by google": [
+      "doubleclick.net"
+    ],
+    "youtube site": [
+      "youtube.com"
+    ],
+    "online shopping": [
+      "amazon.com"
+    ],
+    "amazon store": [
+      "amazon.com"
+    ],
+    "IG": [
+      "instagram.com"
+    ],
+    "icloud storage": [
+      "icloud.com"
+    ],
+    "icloud backup": [
+      "icloud.com"
+    ],
+    "apple data storage": [
+      "icloud.com"
+    ],
+    "live mail": [
+      "live.com"
+    ],
+    "time sync service": [
+      "ntp.org"
+    ],
+    "ntp service": [
+      "ntp.org"
+    ],
+    "googlesyndication": [
+      "googlesyndication.com"
+    ],
+    "google ad services": [
+      "googlesyndication.com"
+    ],
+    "google advertising": [
+      "googlesyndication.com"
+    ],
+    "Microsoft search": [
+      "bing.com"
+    ],
+    "movie streaming": [
+      "netflix.com"
+    ],
+    "tv streaming": [
+      "netflix.com"
+    ],
+    "dns service": [
+      "cloudflare-dns.com"
+    ],
+    "yahoo news": [
+      "yahoo.com"
+    ],
+    "music service": [
+      "spotify.com"
+    ],
+    "ms office": [
+      "office.com"
+    ],
+    "office online": [
+      "office.com"
+    ],
+    "ubiquiti": [
+      "ui.com"
+    ],
+    "ui networks": [
+      "ui.com"
+    ],
+    "network tech": [
+      "ui.com"
+    ],
+    "samsung mobile": [
+      "samsung.com"
+    ],
+    "dns": [
+      "dns.google"
+    ],
+    "google dns service": [
+      "dns.google"
+    ],
+    "google network": [
+      "dns.google"
+    ],
+    "1.1.1.1": [
+      "one.one"
+    ],
+    "one.one": [
+      "one.one"
+    ],
+    "fast dns": [
+      "one.one"
+    ],
+    "microsoft news": [
+      "msn.com"
+    ],
+    "bing news": [
+      "msn.com"
+    ],
+    "msn homepage": [
+      "msn.com"
+    ],
+    "google metrics": [
+      "google-analytics.com"
+    ],
+    "google tracking": [
+      "google-analytics.com"
+    ],
+    "web analytics": [
+      "google-analytics.com"
+    ],
+    "internet encyclopedia": [
+      "wikipedia.org"
+    ],
+    "snap app": [
+      "snapchat.com"
+    ],
+    "snap messaging": [
+      "snapchat.com"
+    ],
+    "snap social media": [
+      "snapchat.com"
+    ],
+    "online advertising": [
+      "criteo.com"
+    ],
+    "digital advertising": [
+      "criteo.com",
+      "rubiconproject.com"
+    ],
+    "marketing solution": [
+      "criteo.com"
+    ],
+    "azure solutions": [
+      "azure.com"
+    ],
+    "roblox developer": [
+      "roblox.com"
+    ],
+    "fastly edge cloud": [
+      "fastly.net"
+    ],
+    "applovin solutions": [
+      "applovin.com"
+    ],
+    "unity platform": [
+      "unity3d.com"
+    ],
+    "unity gaming": [
+      "unity3d.com"
+    ],
+    "unity developer": [
+      "unity3d.com"
+    ],
+    "error tracker": [
+      "sentry.io"
+    ],
+    "monitoring tool": [
+      "sentry.io"
+    ],
+    "sentry dashboard": [
+      "sentry.io"
+    ],
+    "sentry platform": [
+      "sentry.io"
+    ],
+    "job network": [
+      "linkedin.com"
+    ],
+    "linkedin site": [
+      "linkedin.com"
+    ],
+    "advertising platform": [
+      "rubiconproject.com"
+    ],
+    "ad marketplace": [
+      "rubiconproject.com"
+    ],
+    "rubicon site": [
+      "rubiconproject.com"
+    ],
+    "microsoft windows": [
+      "windows.com"
+    ],
+    "windows home": [
+      "windows.com"
+    ],
+    "pc os": [
+      "windows.com"
+    ],
+    "windows operating system": [
+      "windows.com"
+    ],
+    "baidu homepage": [
+      "baidu.com"
+    ],
+    "baidu site": [
+      "baidu.com"
+    ],
+    "skype software": [
+      "skype.com"
+    ],
+    "video call app": [
+      "skype.com"
+    ],
+    "smartphone maker": [
+      "xiaomi.com"
+    ],
+    "xiaomi brand": [
+      "xiaomi.com"
+    ],
+    "ad discovery": [
+      "taboola.com"
+    ],
+    "content recommendation": [
+      "taboola.com"
+    ],
+    "chat service": [
+      "whatsapp.com"
+    ],
+    "ssl provider": [
+      "digicert.com"
+    ],
+    "certificate authority": [
+      "digicert.com"
+    ],
+    "double verify": [
+      "doubleverify.com"
+    ],
+    "ad verification": [
+      "doubleverify.com"
+    ],
+    "ad quality": [
+      "doubleverify.com"
+    ],
+    "campaign performance": [
+      "doubleverify.com"
+    ],
+    "microsoft collaboration": [
+      "sharepoint.com"
+    ],
+    "team site": [
+      "sharepoint.com"
+    ],
+    "intranet site": [
+      "sharepoint.com"
+    ],
+    "office 365": [
+      "office365.com"
+    ],
+    "microsoft office online": [
+      "office365.com"
+    ],
+    "office web": [
+      "office365.com"
+    ],
+    "online productivity": [
+      "office365.com"
+    ],
+    "google mail": [
+      "gmail.com"
+    ],
+    "email provider": [
+      "gmail.com"
+    ],
+    "email platform": [
+      "gmail.com"
+    ],
+    "google os": [
+      "android.com"
+    ],
+    "mobile operating system": [
+      "android.com"
+    ],
+    "smartphone os": [
+      "android.com"
+    ],
+    "android platform": [
+      "android.com"
+    ]
+  }
 }

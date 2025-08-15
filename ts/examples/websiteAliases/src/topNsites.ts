@@ -11,25 +11,23 @@ import { Result } from "typechat";
 type extractedDomains = {
     dateIndexed: number;
     domains: {
-        [key: string]: {
-            status: boolean | undefined;
-        };
+        [key: string]: boolean | undefined;
     }
     phrases: {
         [key: string]: string[];
     }
 }
 
-type crawlPages = {
-    pages: number;
-    pageSize: number;
-    blocks: number;
-}
+// type crawlPages = {
+//     pages: number;
+//     pageSize: number;
+//     blocks: number;
+// }
 
 export class topNDomainsExtractor {
     // manually downloadable from: https://radar.cloudflare.com/domains
     private downloadUrl: string = "https://radar.cloudflare.com/charts/LargerTopDomainsTable/attachment?id=1257&top=";
-    private topN: number = 100;
+    private topN: number = 1000;
     private topNFile: string = `examples/websiteAliases/top${this.topN}.csv`;
     private outputFile: string = "examples/websiteAliases/phrases_to_sites.json";
     //private keywordsToSites: Record<string, string[]> = {};
@@ -86,14 +84,14 @@ export class topNDomainsExtractor {
         
         for(let i = 0; i < lines.length; i++) {
             const columns = lines[i].split(",");
+            let domain = lines[i];
             
-            // skip invalid lines
-            if (columns.length < 2) {
-                continue; 
+            // get the domain from the 2nd column if we have one
+            if (columns.length === 3) {
+                domain = columns[1].trim();
             }
 
             // skip empty domains
-            const domain = columns[1].trim();
             if (!domain) {
                 continue; 
             }
@@ -101,24 +99,10 @@ export class topNDomainsExtractor {
             // can we even get to this domain?
             // For CDNs, there's nothing hosted at the root domain and for those
             // we just skip them and don't try to index them cause they just pollute the cache
-            let isInCommonCrawl: boolean | undefined = undefined;
-            let retryCount = 0;
-            const MAX_RETRIES = 10;
+            let isValid: boolean | undefined = await this.isPageAvailable(domain);;
+            this.processed.domains[domain] = isValid ? isValid : false;
 
-            // common crawl is flakey....
-            do {
-                try {
-                    isInCommonCrawl = await this.isPageInCommonCrawl(domain);
-                } catch (error: any) {
-                    console.error(chalk.red(`Error checking common crawl for ${domain}: ${error?.message}`));
-                    await new Promise(resolve => setTimeout(resolve, 10000));
-                    retryCount++;
-                }
-            } while (isInCommonCrawl === undefined && retryCount < MAX_RETRIES);
-
-            this.processed.domains[domain] = { status: isInCommonCrawl };
-
-            if (!isInCommonCrawl) {
+            if (!isValid) {
                 console.warn(chalk.yellow(`Skipping domain: ${domain}`));
                 continue;
             }
@@ -152,27 +136,103 @@ export class topNDomainsExtractor {
         writeFileSync(this.outputFile, JSON.stringify(this.processed, null, 2));
     }
 
-    /**
-     * Determines if the supplied URL is in the common crawl dataset
-     * @param url - The URL to determine if it's in the common crawl
-     */
-    private async isPageInCommonCrawl(url: string): Promise<boolean> {
-        // https://index.commoncrawl.org/CC-MAIN-2025-30-index?url=google.com&showNumPages=true  
-        // {"pages": 1, "pageSize": 5, "blocks": 1}     
+    // /**
+    //  * Determines if the supplied URL is in the common crawl dataset
+    //  * @param url - The URL to determine if it's in the common crawl
+    //  */
+    // private async isPageInCommonCrawl(url: string): Promise<boolean> {
+    //     // https://index.commoncrawl.org/CC-MAIN-2025-30-index?url=google.com&showNumPages=true  
+    //     // {"pages": 1, "pageSize": 5, "blocks": 1}     
         
-        const response = await fetch(`https://index.commoncrawl.org/CC-MAIN-2025-30-index?url=${url}&showNumPages=true`);
+    //     const response = await fetch(`https://index.commoncrawl.org/CC-MAIN-2025-30-index?url=${url}&showNumPages=true`);
 
-        console.log(`${chalk.dim(response)}`);
-        if (response.ok) {
-            const pages: crawlPages = JSON.parse(await response.text()) as crawlPages;
-            if (pages && pages.pages > 0) {
-                return true;
+    //     console.log(`${chalk.dim(response)}`);
+    //     if (response.ok) {
+    //         const pages: crawlPages = JSON.parse(await response.text()) as crawlPages;
+    //         if (pages && pages.pages > 0) {
+    //             return true;
+    //         }
+    //     } else {
+    //         console.log(`${chalk.dim(JSON.stringify(await response.text()))}`);
+    //     }
+
+    //     return false;
+    // }
+
+    /**
+     * Checks if a page is available by making a request.
+     * @param url - The URL to check
+     * @returns True if there was a semi-valid response from the server, false otherwise
+     */
+    private async isPageAvailable(url: string): Promise<boolean> {
+
+        let retryCount = 0;
+        const MAX_RETRIES = 3;
+
+        // HTTPS 
+        do {
+            try {
+                const httpsResponse = await fetch(`https://${url}`);
+                const httpsStatus = httpsResponse.status
+
+                if (httpsResponse.ok || httpsStatus === 400) {
+                    return true;
+                }
+
+                const httpsText = await httpsResponse.text();
+                console.log(`HTTPS ${chalk.red(httpsStatus)}\n${chalk.red(httpsText.substring(0, 20))}`);
+
+                break;
+
+            } catch (error: any) {
+                console.error(chalk.red(`Error checking page availability ${url}: ${error?.message}`));                 
+                
+                // name not found
+                if (error.cause.code === "ENOTFOUND") {
+                    break;
+                }
+
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+            } finally {
+                retryCount++;
             }
-        } else {
-            console.log(`${chalk.dim(JSON.stringify(await response.text()))}`);
-        }
+        } while (retryCount < MAX_RETRIES);
 
-        return false;
+        retryCount = 0;
+
+        // fallback to HTTP
+        do {
+            try {
+                const httpResponse = await fetch(`http://${url}`);
+                const status = httpResponse.status
+
+                if (httpResponse.ok || status === 400) {
+                    return true;
+                }
+
+                const r = await httpResponse.text();
+                console.log(`HTTP ${chalk.red(status)}\n${chalk.red(r.substring(0, 20))}`);
+
+                break;
+
+            } catch (error: any) {
+                console.error(chalk.red(`Error checking page availability ${url}: ${error?.message}`));
+                
+
+                // name not found
+                if (error.cause.code === "ENOTFOUND") {
+                    break;
+                }
+
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+            } finally {
+                retryCount++;
+            }
+        } while (retryCount < MAX_RETRIES);
+
+        return false;        
     }
 
     /**
