@@ -18,18 +18,19 @@ import {
 export class BrowserContentDownloader implements ContentDownloadAdapter {
     private offscreenCreated: boolean = false;
     private readonly maxRetries: number = 3;
-    private readonly defaultTimeout: number = 30000;
-    private readonly maxTimeout: number = 10000; // Lowered to 10 seconds to prevent resource exhaustion
+    private readonly defaultTimeout: number = 5000;
+    private readonly minTimeout: number = 1000;
+    private readonly maxTimeout: number = 10000;
 
     /**
      * Sanitize and clamp the timeout value to a safe range
      */
     private sanitizeTimeout(timeout: any): number {
         let t = Number(timeout);
-        if (!Number.isFinite(t) || t <= 0) {
+        if (!Number.isFinite(t) || t < this.minTimeout) {
             return this.defaultTimeout;
         }
-        return Math.min(t, this.maxTimeout);
+        return Math.max(this.minTimeout, Math.min(t, this.maxTimeout));
     }
 
     /**

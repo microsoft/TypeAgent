@@ -44,7 +44,29 @@ class ActionDiscoveryPanel {
         launchUrl = await this.getActiveTabUrl();
         await this.updateConnectionStatus();
         await this.loadAutoDiscoverySettings();
-        await this.requestSchemaUpdate();
+
+        // Only run schema update for HTTP/HTTPS URLs
+        if (
+            launchUrl &&
+            (launchUrl.startsWith("http://") ||
+                launchUrl.startsWith("https://"))
+        ) {
+            await this.requestSchemaUpdate();
+        } else {
+            console.log(
+                "Skipping initial schema update for non-HTTP/HTTPS URL:",
+                launchUrl,
+            );
+            const itemsList = document.getElementById(
+                "detectedSchemaItemsList",
+            ) as HTMLElement;
+            showEmptyState(
+                itemsList,
+                "Action detection not available for this page type",
+                "bi-exclamation-circle",
+            );
+        }
+
         await this.updateUserActionsUI();
     }
 
@@ -139,8 +161,26 @@ class ActionDiscoveryPanel {
         launchUrl = await this.getActiveTabUrl();
         await this.updateConnectionStatus();
 
-        if (autoDiscoveryEnabled) {
+        if (
+            autoDiscoveryEnabled &&
+            launchUrl &&
+            (launchUrl.startsWith("http://") ||
+                launchUrl.startsWith("https://"))
+        ) {
             await this.requestSchemaUpdate(true);
+        } else if (autoDiscoveryEnabled) {
+            console.log(
+                "Skipping auto-discovery for non-HTTP/HTTPS URL:",
+                launchUrl,
+            );
+            const itemsList = document.getElementById(
+                "detectedSchemaItemsList",
+            ) as HTMLElement;
+            showEmptyState(
+                itemsList,
+                "Action detection not available for this page type",
+                "bi-exclamation-circle",
+            );
         }
 
         await this.updateUserActionsUI();
@@ -154,6 +194,24 @@ class ActionDiscoveryPanel {
             "refreshDetectedActions",
         ) as HTMLButtonElement;
         const originalHtml = refreshButton.innerHTML;
+
+        // Skip action detection for non-HTTP/HTTPS protocols
+        if (
+            launchUrl &&
+            !launchUrl.startsWith("http://") &&
+            !launchUrl.startsWith("https://")
+        ) {
+            console.log(
+                "Skipping action detection for non-HTTP/HTTPS URL:",
+                launchUrl,
+            );
+            showEmptyState(
+                itemsList,
+                "Action detection not available for this page type",
+                "bi-exclamation-circle",
+            );
+            return;
+        }
 
         showLoadingState(itemsList, "Scanning ...");
         refreshButton.innerHTML =
