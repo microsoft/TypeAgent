@@ -3,8 +3,9 @@
 
 import * as kpLib from "knowledge-processor";
 import * as kp from "knowpro";
+import * as ms from "memory-storage";
 import { openai } from "aiclient";
-import { IndexingState } from "./memory.js";
+import { IndexFileSettings, IndexingState } from "./memory.js";
 
 export function createEmbeddingModelWithCache(
     cacheSize: number,
@@ -59,4 +60,25 @@ export function addAliasesForName(
             aliases.addRelatedTerm(name, { text: parsedName.lastName });
         }
     }
+}
+
+export function getCollectionData<T>(
+    collection: kp.ICollection<T>,
+    forExport: boolean,
+): T[] {
+    return forExport || !collection.isPersistent ? collection.getAll() : [];
+}
+
+export function createStorageProvider(
+    fileSettings: IndexFileSettings,
+    useSqlite: boolean = true,
+): kp.IStorageProvider {
+    const storageProvider = useSqlite
+        ? ms.sqlite.createSqlStorageProvider(
+              fileSettings.dirPath,
+              fileSettings.baseFileName,
+              false,
+          )
+        : new kp.MemoryStorageProvider();
+    return storageProvider;
 }

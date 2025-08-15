@@ -85,6 +85,14 @@ export function importEmailMessage(email: email.Email): EmailMessage {
     return new EmailMessage(meta, email.body);
 }
 
+/**
+ * Load an email message from a file. Parses the file suitably according
+ * to the file extension.
+ * .eml: Parses the .eml message as a MIME file
+ * .json: Parses the JSON file as an object of type {@link email.Email}
+ * @param filePath
+ * @returns
+ */
 export async function loadEmailMessageFromFile(
     filePath: string,
 ): Promise<EmailMessage | undefined> {

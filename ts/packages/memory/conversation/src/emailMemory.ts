@@ -12,7 +12,12 @@ import {
     Memory,
     MemorySettings,
 } from "./memory.js";
-import { createIndexingState, getIndexingErrors } from "./common.js";
+import {
+    createIndexingState,
+    createStorageProvider,
+    getCollectionData,
+    getIndexingErrors,
+} from "./common.js";
 import { Result, success, error, PromptSection } from "typechat";
 
 export interface EmailMemorySettings extends MemorySettings {
@@ -52,7 +57,7 @@ export class EmailMemory
      * @param settings
      */
     constructor(
-        public storageProvider: ms.sqlite.SqliteStorageProvider,
+        public storageProvider: kp.IStorageProvider,
         settings?: EmailMemorySettings,
     ) {
         settings ??= createMemorySettings(
@@ -141,13 +146,15 @@ export class EmailMemory
         }
     }
 
-    public async serialize(): Promise<EmailMemoryData> {
+    public async serialize(
+        forExport: boolean = false,
+    ): Promise<EmailMemoryData> {
         const data: EmailMemoryData = {
             indexingState: this.indexingState,
             nameTag: this.nameTag,
-            messages: [],
+            messages: getCollectionData(this.messages, forExport),
             tags: this.tags,
-            semanticRefs: [],
+            semanticRefs: getCollectionData(this.semanticRefs, forExport),
             semanticIndexData: this.semanticRefIndex?.serialize(),
             relatedTermsIndexData:
                 this.secondaryIndexes.termToRelatedTermsIndex.serialize(),
@@ -160,6 +167,12 @@ export class EmailMemory
         this.indexingState = emailData.indexingState;
         this.nameTag = emailData.nameTag;
         this.tags = emailData.tags;
+        if (emailData.messages.length > 0) {
+            this.messages.append(...emailData.messages);
+        }
+        if (emailData.semanticRefs.length > 0) {
+            this.semanticRefs.append(...emailData.semanticRefs);
+        }
         if (emailData.semanticIndexData) {
             this.semanticRefIndex = new kp.ConversationIndex(
                 emailData.semanticIndexData,
@@ -203,12 +216,9 @@ export class EmailMemory
 
     public static async readFromFile(
         fileSettings: IndexFileSettings,
+        useSqlite: boolean = true,
     ): Promise<EmailMemory | undefined> {
-        const storageProvider = ms.sqlite.createSqlStorageProvider(
-            fileSettings.dirPath,
-            fileSettings.baseFileName,
-            false,
-        );
+        const storageProvider = createStorageProvider(fileSettings, useSqlite);
         const memory = new EmailMemory(storageProvider);
         memory.settings.fileSaveSettings = fileSettings;
         const data = (await kp.readConversationDataFromFile(
@@ -269,14 +279,15 @@ export class EmailMemory
 }
 
 /**
- * Creates a new Email memory using a Sqlite storage provider
- * @param fileSettings
- * @param createNew
+ * Loads or creates an new Email memory persisted with the given file settings
+ * @param fileSettings Where memory is persisted
+ * @param createNew true: clear any old memory, create new one
  * @returns EmailMemory
  */
 export async function createEmailMemory(
     fileSettings: IndexFileSettings,
     createNew: boolean,
+    useSqlite: boolean = true,
 ): Promise<EmailMemory> {
     let em: EmailMemory | undefined;
     if (createNew) {
@@ -285,14 +296,10 @@ export async function createEmailMemory(
             fileSettings.baseFileName,
         );
     } else {
-        em = await EmailMemory.readFromFile(fileSettings);
+        em = await EmailMemory.readFromFile(fileSettings, useSqlite);
     }
     if (!em) {
-        const db = ms.sqlite.createSqlStorageProvider(
-            fileSettings.dirPath,
-            fileSettings.baseFileName,
-            true,
-        );
+        const db = createStorageProvider(fileSettings, useSqlite);
         em = new EmailMemory(db);
     }
     em.settings.fileSaveSettings = fileSettings;

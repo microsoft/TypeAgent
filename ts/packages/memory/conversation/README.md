@@ -30,8 +30,8 @@ See example code in [knowproConversation.ts](../../../examples/chat/src/memory/k
 ```
 import * as cm from "conversation-memory";
 
-// Create a new OR load an existing conversation memory
-memory = cm.createConversationMemory(
+// Load an existing or create a new conversation memory
+const memory = cm.createConversationMemory(
             {
                 dirPath,
                 baseFileName,
@@ -43,7 +43,7 @@ message = new cm.ConversationMessage(memoryText);
 await memory.addMessage(message);
 
 // Answer a question using memory
-answer = memory.getAnswerFromLanguage("Your question")
+const answer = memory.getAnswerFromLanguage("Your question")
 
 // Search for relevant knowledge and messages
 results = await memory.searchWithLanguage("Your question")
@@ -66,7 +66,7 @@ You can **import** an existing text file as a DocMemory. The importer infers the
 import * as cm from "conversation-memory";
 
 // Import text file as memory.
-memory = cm.DocMemory.importFromTextFile(textFilePath, ...);
+let memory = cm.DocMemory.importFromTextFile(textFilePath, ...);
 // Index the memory. This will automatically do knowledge extraction etc.
 await memory.buildIndex();
 // Save the index
@@ -88,6 +88,27 @@ See example code in [knowproPodcast.ts](../../../examples/chat/src/memory/knowpr
 ## Email
 
 See example code in [knowproEmail.ts](../../../examples/chat/src/memory/knowproEmail.ts)
+
+```
+import * as cm from "conversation-memory";
+
+// Load an existing or create a new email memory
+let memory = cm.createEmailMemory(
+            {
+                dirPath,
+                baseFileName,
+            },
+            createNew,
+        );
+
+// Load an .eml file. Will parse the MIME message automatically
+const message = await cm.loadEmailMessageFromFile(...);
+// Add email to memory. This will automatically index the email
+await memory.addMessages(message);
+
+// Answer a question using memory.
+answer = memory.getAnswerFromLanguage("What did X say to Y about Z?")
+```
 
 ## Trademarks
 
