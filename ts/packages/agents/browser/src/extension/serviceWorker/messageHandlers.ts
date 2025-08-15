@@ -1436,9 +1436,16 @@ async function handleDownloadContentWithBrowser(message: any): Promise<any> {
     try {
         const downloader = getContentDownloader();
 
+        // Clamp timeout to safe range (min 1000 ms, max 10000 ms)
+        const requestedTimeout = Number(message.options?.timeout);
+        const safeTimeout =
+            Number.isFinite(requestedTimeout) && requestedTimeout >= 1000
+                ? Math.min(requestedTimeout, 10000)
+                : 3000; // fallback to 3 seconds if invalid
+
         const result = await downloader.downloadContent(message.url, {
             useAuthentication: message.options?.useAuthentication ?? true,
-            timeout: message.options?.timeout ?? 30000,
+            timeout: safeTimeout,
             fallbackToFetch: message.options?.fallbackToFetch ?? true,
             waitForDynamic: message.options?.waitForDynamic ?? false,
             scrollBehavior:
