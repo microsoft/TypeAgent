@@ -408,7 +408,7 @@
       "request": "launch",
       "skipFiles": ["<node_internals>/**"],
       "program": "${workspaceFolder}/examples/websiteAliases/src/main.ts",
-      "args": ["--summary"],
+      "args": [],
       "console": "externalTerminal",
       "outFiles": ["${workspaceFolder}/**/*.js"]
     },       
