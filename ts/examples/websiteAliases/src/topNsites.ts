@@ -31,7 +31,7 @@ type extractedDomains = {
 export class topNDomainsExtractor {
     // manually downloadable from: https://radar.cloudflare.com/domains
     private downloadUrl: string = "https://radar.cloudflare.com/charts/LargerTopDomainsTable/attachment?id=1257&top=";
-    private topN: number = 100;
+    private topN: number = 1000;
     private topNFile: string = `examples/websiteAliases/top${this.topN}.csv`;
     private outputFile: string = "examples/websiteAliases/phrases_to_sites.json";
     //private keywordsToSites: Record<string, string[]> = {};
@@ -429,6 +429,8 @@ For example: apple.com could be:
         let avgPhraseCount: number = 0;
         let maxCollisions: number = 0;
         let mCollision: string[] = [];
+        let lastCollision: string[] = [];
+        let lastCollisionPhrase: string = "";
         for (const [phrase, sites] of Object.entries(this.processed.phrases)) {
             avgPhraseCount += sites.length;
 
@@ -440,6 +442,9 @@ For example: apple.com could be:
 
                 mCollision.push(phrase);
                 maxCollisions = sites.length;
+
+                lastCollision = sites;
+                lastCollisionPhrase = phrase;
             }
 
         }
@@ -449,7 +454,7 @@ For example: apple.com could be:
         console.log(chalk.red(`Max domain: ${maxD} (${max} phrases)`));
         console.log(chalk.yellow(`Average phrases per domain: ${avg / count}`));
         console.log(chalk.cyan(`Average sites per phrase: ${avgPhraseCount / Object.keys(this.processed.phrases).length}`));
-        console.log(chalk.magenta(`Max collisions: ${maxCollisions} (${mCollision.length} times)`));
+        console.log(chalk.magenta(`Max collisions: ${maxCollisions} (${mCollision.length} times, Last one: ${lastCollisionPhrase} - ${lastCollision})`));
     }
 
 }
