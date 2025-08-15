@@ -71,8 +71,8 @@ async def import_podcast(
     assign_message_listeners(msgs, participants)
 
     provider = get_storage_provider(dbname)
-    msg_coll = provider.create_message_collection(PodcastMessage)
-    semref_coll = provider.create_semantic_ref_collection()
+    msg_coll = await provider.create_message_collection(PodcastMessage)
+    semref_coll = await provider.create_semantic_ref_collection()
     if await msg_coll.size() or await semref_coll.size():
         raise RuntimeError(f"{dbname!r} already has messages or semantic refs.")
 

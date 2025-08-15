@@ -213,7 +213,7 @@ class SqliteStorageProvider(interfaces.IStorageProvider):
         self.db_path = db_path
         self.db: sqlite3.Connection | None = None
 
-    def close(self) -> None:
+    async def close(self) -> None:
         if self.db is not None:
             self.db.close()
             self.db = None
@@ -226,7 +226,7 @@ class SqliteStorageProvider(interfaces.IStorageProvider):
             self.db.commit()
         return self.db
 
-    def create_message_collection[TMessage: interfaces.IMessage](
+    async def create_message_collection[TMessage: interfaces.IMessage](
         self,
         serializer: interfaces.JsonSerializer[TMessage] | type[TMessage] | None = None,
     ) -> SqliteMessageCollection[TMessage]:
@@ -236,7 +236,7 @@ class SqliteStorageProvider(interfaces.IStorageProvider):
             serializer = DefaultSerializer[TMessage](serializer)
         return SqliteMessageCollection[TMessage](self.get_db(), serializer)
 
-    def create_semantic_ref_collection(self) -> interfaces.ISemanticRefCollection:
+    async def create_semantic_ref_collection(self) -> interfaces.ISemanticRefCollection:
         return SqliteSemanticRefCollection(self.get_db())
 
 

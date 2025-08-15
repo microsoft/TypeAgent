@@ -60,7 +60,7 @@ def temp_db_path():
 @pytest.mark.asyncio
 async def test_sqlite_storage_provider_message_collection(temp_db_path):
     provider = SqliteStorageProvider(temp_db_path)
-    collection = provider.create_message_collection(DummyMessage)
+    collection = await provider.create_message_collection(DummyMessage)
     assert collection.is_persistent
     assert await collection.size() == 0
 
@@ -93,7 +93,7 @@ async def test_sqlite_storage_provider_message_collection(temp_db_path):
 @pytest.mark.asyncio
 async def test_sqlite_storage_provider_semantic_ref_collection(temp_db_path):
     provider = SqliteStorageProvider(temp_db_path)
-    collection = provider.create_semantic_ref_collection()
+    collection = await provider.create_semantic_ref_collection()
     assert collection.is_persistent
     assert await collection.size() == 0
 

@@ -822,14 +822,14 @@ class JsonSerializer[T](ABC):
 
 
 class IStorageProvider(Protocol):
-    def create_message_collection[TMessage: IMessage](
+    async def create_message_collection[TMessage: IMessage](
         self,
         serializer: JsonSerializer[TMessage] | type[TMessage] | None = None,
     ) -> IMessageCollection[TMessage]: ...
 
-    def create_semantic_ref_collection(self) -> ISemanticRefCollection: ...
+    async def create_semantic_ref_collection(self) -> ISemanticRefCollection: ...
 
-    def close(self) -> None: ...
+    async def close(self) -> None: ...
 
 
 # TODO: What does this comment by Umesh mean? Who should look?

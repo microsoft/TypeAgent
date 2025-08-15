@@ -303,8 +303,8 @@ class Podcast(
         if not data:
             return None
         provider = get_storage_provider(dbname)
-        msgs = provider.create_message_collection(PodcastMessage)
-        semrefs = provider.create_semantic_ref_collection()
+        msgs = await provider.create_message_collection(PodcastMessage)
+        semrefs = await provider.create_semantic_ref_collection()
         if await msgs.size() or await semrefs.size():
             raise RuntimeError(
                 f"Database {dbname!r} already has messages or semantic refs."

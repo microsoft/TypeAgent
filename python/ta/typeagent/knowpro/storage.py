@@ -74,7 +74,7 @@ class MessageCollection[TMessage: IMessage](Collection[TMessage, MessageOrdinal]
 class MemoryStorageProvider(IStorageProvider):
     """A storage provider that operates in memory."""
 
-    def create_message_collection[TMessage: IMessage](
+    async def create_message_collection[TMessage: IMessage](
         self,
         serializer: JsonSerializer[TMessage] | type[TMessage] | None = None,
     ) -> MessageCollection[TMessage]:
@@ -83,11 +83,11 @@ class MemoryStorageProvider(IStorageProvider):
             raise ValueError("MemoryStorageProvider does not use a serializer.")
         return MessageCollection[TMessage]()
 
-    def create_semantic_ref_collection(self) -> SemanticRefCollection:
+    async def create_semantic_ref_collection(self) -> SemanticRefCollection:
         """Create a new semantic reference collection."""
         return SemanticRefCollection()
 
-    def close(self) -> None:
+    async def close(self) -> None:
         """Close the storage provider."""
         pass
 
