@@ -27,7 +27,7 @@ export function initializeContextMenu(): void {
     });
 
     chrome.contextMenus.create({
-        title: "Discover page actions",
+        title: "Discover page macros",
         id: "discoverPageActions",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
@@ -57,7 +57,7 @@ export function initializeContextMenu(): void {
     });
 
     chrome.contextMenus.create({
-        title: "View Web Activity",
+        title: "View Knowledge Library",
         id: "showWebsiteLibrary",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
