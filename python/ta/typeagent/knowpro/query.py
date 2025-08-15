@@ -49,7 +49,7 @@ from .interfaces import (
 from .kplib import ConcreteEntity
 from .messageindex import IMessageTextEmbeddingIndex
 from .propindex import PropertyNames, lookup_property_in_property_index
-from .searchlib import create_property_search_term
+from .searchlib import create_property_search_term, create_tag_search_term_group
 
 
 # TODO: Move to compilelib.py
@@ -1125,13 +1125,3 @@ class ThreadSelector(IQueryTextRangeSelector):
         for thread in self.threads:
             text_ranges.add_ranges(list(thread.ranges))
         return text_ranges
-
-
-def create_tag_search_term_group(tags: list[str]) -> SearchTermGroup:
-    """Create a search term group for tags."""
-    terms = []
-    for tag in tags:
-        property_term = create_property_search_term("tag", tag, exact_match_value=True)
-        terms.append(property_term)
-
-    return SearchTermGroup(boolean_op="or_max", terms=terms)

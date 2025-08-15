@@ -23,6 +23,7 @@ from .interfaces import (
 )
 from .kplib import ConcreteEntity
 from .messageindex import IMessageTextEmbeddingIndex
+from .searchlib import create_tag_search_term_group
 from .query import (
     BooleanOp,
     CompiledSearchTerm,
@@ -59,7 +60,6 @@ from .query import (
     TextRangesInDateRangeSelector,
     ThreadSelector,
     WhereSemanticRefExpr,
-    create_tag_search_term_group,
     is_conversation_searchable,
     match_entity_name_or_type,
     to_non_required_search_term,
