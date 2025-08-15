@@ -491,11 +491,17 @@ export abstract class Memory<
     }
 
     /**
-     * Get an answer from a natural language question.
+     * Get an answer from a natural language question. The returned result object will indicate success or failure.  
+     * If the returned result is a success:
+     * - A single question can be turned into multiple search queries, although most single phrase questions are a single query.
+     * - The result is a tuple of (a) Raw search results (b) The natural language answer generated from the search results.
+     * @see kp.AnswerResponse. 
+     * - If the question was answered, the response {@link kp.AnswerType} will be "Answered". Else "NoAnswer" and a reason is provided in {@link kp.AnswerResponse.whyNoAnswer}
+     
      * @param {string} question - The natural language question.
      * @param {kp.LanguageSearchOptions} [searchOptions] - Optional search options.
      * @param progress - Optional progress callback.
-     * @returns {Promise<Result<[kp.ConversationSearchResult, kp.AnswerResponse][]>>} - Search Results and the answers generated for them.
+     * @returns {Promise<Result<[kp.ConversationSearchResult, kp.AnswerResponse][]>>} Tuple: [Raw Search Results, Answers generated using Search Results].
      */
     public async getAnswerFromLanguage(
         question: string,

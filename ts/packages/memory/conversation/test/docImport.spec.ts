@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { describeIf, hasTestKeys, readTestFile } from "test-lib";
+import { describeIf, hasTestKeys, readTestFile, verifyResult } from "test-lib";
 import {
     docPartsFromHtml,
     docPartsFromMarkdown,
@@ -87,6 +87,15 @@ describeIf(
                 verifyMessages(docMemory.messages, testCount);
                 const result = await docMemory.buildIndex();
                 verifyNoIndexingErrors(result);
+                // Verify the index is functional
+                const answerResult = await docMemory.getAnswerFromLanguage(
+                    "List all headings at level 3",
+                );
+                verifyResult(answerResult);
+                if (answerResult.success) {
+                    const [_, answer] = answerResult.data[0];
+                    expect(answer.type).toBe("Answered");
+                }
             },
             testTimeout,
         );
