@@ -35,10 +35,10 @@ from typeagent.knowpro.propindex import (
     is_known_property,
 )
 from typeagent.knowpro.secindex import ConversationSecondaryIndexes
-from typeagent.knowpro.storage import (
-    MessageCollection,
-    SemanticRefCollection,
-    MemoryStorageProvider,
+from typeagent.knowpro.storage import MemoryStorageProvider
+from typeagent.knowpro.collections import (
+    MemoryMessageCollection,
+    MemorySemanticRefCollection,
 )
 from typeagent.knowpro.importing import ConversationSettings
 
@@ -51,12 +51,13 @@ class SimpleFakeConversation(IConversation):
     def __init__(self, semantic_refs):
         self.name_tag = "test"
         self.tags = []
-        self.messages = MessageCollection()
-        self.semantic_refs = SemanticRefCollection(semantic_refs)
+        self.messages = MemoryMessageCollection()
+        self.semantic_refs = MemorySemanticRefCollection(semantic_refs)
         self.semantic_ref_index = None
-        self.secondary_indexes = ConversationSecondaryIndexes()
+        storage_provider = MemoryStorageProvider()
+        self.secondary_indexes = ConversationSecondaryIndexes(storage_provider)
         # Store settings with storage provider for access via conversation.settings.storage_provider
-        self.settings = ConversationSettings(storage_provider=MemoryStorageProvider())
+        self.settings = ConversationSettings(storage_provider=storage_provider)
 
 
 @pytest.fixture
@@ -275,11 +276,11 @@ class FakeConversation[
     def __init__(self, semantic_refs: list[SemanticRef] | None = None):
         self.name_tag = "test_conversation"
         self.tags = []
-        self.semantic_refs = SemanticRefCollection(semantic_refs or [])
+        self.semantic_refs = MemorySemanticRefCollection(semantic_refs or [])
         self.semantic_ref_index = None
-        self.messages: IMessageCollection[TMessage] = MessageCollection([FakeMessage(["Hello"])])  # type: ignore[assignment]
-        self.secondary_indexes = ConversationSecondaryIndexes()
+        self.messages: IMessageCollection[TMessage] = MemoryMessageCollection([FakeMessage(["Hello"])])  # type: ignore[assignment]
         self._storage_provider = MemoryStorageProvider()
+        self.secondary_indexes = ConversationSecondaryIndexes(self._storage_provider)
 
     @property
     def storage_provider(self) -> "IStorageProvider":
@@ -346,7 +347,7 @@ async def test_lookup_property_in_property_index(property_index):
         property_index,
         "name",
         "value1",
-        SemanticRefCollection(semantic_refs),
+        MemorySemanticRefCollection(semantic_refs),
         ranges_in_scope,
     )
     assert result is not None
@@ -357,7 +358,7 @@ async def test_lookup_property_in_property_index(property_index):
         property_index,
         "name",
         "value2",
-        SemanticRefCollection(semantic_refs),
+        MemorySemanticRefCollection(semantic_refs),
         ranges_in_scope,
     )
     assert result is None

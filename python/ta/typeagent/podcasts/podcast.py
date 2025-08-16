@@ -35,7 +35,6 @@ from ..knowpro.collections import (
     MemoryMessageCollection as MessageCollection,
     SemanticRefCollection,
 )
-from ..storage.sqlitestore import get_storage_provider
 
 
 @dataclass
@@ -177,7 +176,7 @@ class Podcast(
 
     def __post_init__(self) -> None:
         self.secondary_indexes = secindex.ConversationSecondaryIndexes(  # type: ignore  # TODO
-            self.settings.related_term_index_settings
+            self.settings.storage_provider
         )
 
     async def add_metadata_to_index(self) -> None:
@@ -306,6 +305,8 @@ class Podcast(
         )
         if not data:
             return None
+        from ..storage.sqlitestore import get_storage_provider
+
         provider = get_storage_provider(dbname)
         msgs = await provider.create_message_collection(PodcastMessage)
         semrefs = await provider.create_semantic_ref_collection()
@@ -318,6 +319,8 @@ class Podcast(
         return podcast
 
     async def _build_transient_secondary_indexes(self, build_all: bool) -> None:
+        # Ensure secondary indexes are properly initialized
+        await self.secondary_indexes.initialize()
         if build_all:
             await secindex.build_transient_secondary_indexes(self)
         await self._build_participant_aliases()

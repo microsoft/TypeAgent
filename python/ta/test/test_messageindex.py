@@ -173,11 +173,10 @@ async def test_build_message_index(needs_auth: None):
             self.semantic_ref_index = None
             # Convert plain list to MessageCollection for proper async iteration
             self.messages = MessageCollection(messages)
-            self.secondary_indexes = ConversationSecondaryIndexes()
+            storage_provider = MemoryStorageProvider()
+            self.secondary_indexes = ConversationSecondaryIndexes(storage_provider)
             # Store settings with storage provider for access via conversation.settings.storage_provider
-            self.settings = ConversationSettings(
-                storage_provider=MemoryStorageProvider()
-            )
+            self.settings = ConversationSettings(storage_provider=storage_provider)
 
     # Create test messages and conversation
     messages = [

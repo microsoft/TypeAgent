@@ -18,6 +18,7 @@ from typeagent.knowpro.interfaces import (
 from typeagent.knowpro import kplib
 from typeagent.knowpro.propindex import PropertyIndex
 from typeagent.knowpro.reltermsindex import RelatedTermsIndex
+from typeagent.knowpro.storage import MemoryStorageProvider
 from typeagent.knowpro.secindex import (
     ConversationSecondaryIndexes,
     build_secondary_indexes,
@@ -72,20 +73,17 @@ def conversation_settings(needs_auth):
 
 def test_conversation_secondary_indexes_initialization(needs_auth):
     """Test initialization of ConversationSecondaryIndexes."""
-    indexes = ConversationSecondaryIndexes()
-    assert isinstance(indexes.property_to_semantic_ref_index, PropertyIndex)
-    assert isinstance(indexes.timestamp_index, TimestampToTextRangeIndex)
-    assert isinstance(indexes.term_to_related_terms_index, RelatedTermsIndex)
+    storage_provider = MemoryStorageProvider()
+    indexes = ConversationSecondaryIndexes(storage_provider)
+    # Note: indexes are None until initialize() is called
+    assert indexes.property_to_semantic_ref_index is None
+    assert indexes.timestamp_index is None
+    assert indexes.term_to_related_terms_index is None
 
     # Test with custom settings
     settings = RelatedTermIndexSettings()
-    indexes_with_settings = ConversationSecondaryIndexes(settings)
-    assert (
-        cast(
-            RelatedTermsIndex, indexes_with_settings.term_to_related_terms_index
-        ).settings
-        == settings
-    )
+    indexes_with_settings = ConversationSecondaryIndexes(storage_provider, settings)
+    assert indexes_with_settings.property_to_semantic_ref_index is None
 
 
 @pytest.mark.asyncio

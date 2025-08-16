@@ -9,6 +9,12 @@ from typing import Any, AsyncIterator
 from ..knowpro.storage import MemoryStorageProvider
 from ..knowpro import interfaces
 from ..knowpro import serialization
+from ..knowpro.convindex import ConversationIndex
+from ..knowpro.propindex import PropertyIndex
+from ..knowpro.timestampindex import TimestampToTextRangeIndex
+from ..knowpro.messageindex import MessageTextIndex
+from ..knowpro.reltermsindex import RelatedTermsIndex, RelatedTermIndexSettings
+from ..knowpro.convthreads import ConversationThreads
 
 
 MESSAGES_SCHEMA = """
@@ -202,16 +208,26 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
         self.db.commit()
 
 
-class SqliteStorageProvider(interfaces.IStorageProvider):
+class SqliteStorageProvider[TMessage: interfaces.IMessage](
+    interfaces.IStorageProvider[TMessage]
+):
     """A storage provider backed by SQLite.
 
     NOTE: You can create only one message collection
     and one semantic ref collection per provider.
+    For now, indexes are stored in memory (not persisted to SQLite).
     """
 
     def __init__(self, db_path: str):
         self.db_path = db_path
         self.db: sqlite3.Connection | None = None
+        # In-memory indexes for now - TODO: persist to SQLite
+        self._conversation_index: ConversationIndex | None = None
+        self._property_index: PropertyIndex | None = None
+        self._timestamp_index: TimestampToTextRangeIndex | None = None
+        self._message_text_index: interfaces.IMessageTextIndex[TMessage] | None = None
+        self._related_terms_index: RelatedTermsIndex | None = None
+        self._conversation_threads: ConversationThreads | None = None
 
     async def close(self) -> None:
         if self.db is not None:
@@ -226,7 +242,7 @@ class SqliteStorageProvider(interfaces.IStorageProvider):
             self.db.commit()
         return self.db
 
-    async def create_message_collection[TMessage: interfaces.IMessage](
+    async def create_message_collection(
         self,
         serializer: interfaces.JsonSerializer[TMessage] | type[TMessage] | None = None,
     ) -> SqliteMessageCollection[TMessage]:
@@ -238,6 +254,53 @@ class SqliteStorageProvider(interfaces.IStorageProvider):
 
     async def create_semantic_ref_collection(self) -> interfaces.ISemanticRefCollection:
         return SqliteSemanticRefCollection(self.get_db())
+
+    # Index management methods
+    async def initialize_indexes(self) -> None:
+        """Initialize all indexes. For SQLite, this ensures they exist in memory."""
+        # Create all indexes to ensure they exist
+        await self.get_conversation_index()
+        await self.get_property_index()
+        await self.get_timestamp_index()
+        await self.get_message_text_index()
+        await self.get_related_terms_index()
+        await self.get_conversation_threads()
+
+    async def get_conversation_index(self) -> interfaces.ITermToSemanticRefIndex:
+        if self._conversation_index is None:
+            self._conversation_index = ConversationIndex()
+        return self._conversation_index
+
+    async def get_property_index(self) -> interfaces.IPropertyToSemanticRefIndex:
+        if self._property_index is None:
+            self._property_index = PropertyIndex()
+        return self._property_index
+
+    async def get_timestamp_index(self) -> interfaces.ITimestampToTextRangeIndex:
+        if self._timestamp_index is None:
+            self._timestamp_index = TimestampToTextRangeIndex()
+        return self._timestamp_index
+
+    async def get_message_text_index(self) -> interfaces.IMessageTextIndex[TMessage]:
+        if self._message_text_index is None:
+            # Use default settings for now
+            from ..knowpro.messageindex import MessageTextIndexSettings
+
+            settings = MessageTextIndexSettings()
+            self._message_text_index = MessageTextIndex(settings)
+        return self._message_text_index
+
+    async def get_related_terms_index(self) -> interfaces.ITermToRelatedTermsIndex:
+        if self._related_terms_index is None:
+            # Use default settings for now
+            settings = RelatedTermIndexSettings()
+            self._related_terms_index = RelatedTermsIndex(settings)
+        return self._related_terms_index
+
+    async def get_conversation_threads(self) -> interfaces.IConversationThreads:
+        if self._conversation_threads is None:
+            self._conversation_threads = ConversationThreads()
+        return self._conversation_threads
 
 
 def get_storage_provider(dbname: str | None = None) -> interfaces.IStorageProvider:
