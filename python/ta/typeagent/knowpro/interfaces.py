@@ -110,7 +110,7 @@ class ITermToSemanticRefIndex(Protocol):
 
     async def get_terms(self) -> list[str]: ...
 
-    def add_term(
+    async def add_term(
         self,
         term: str,
         semantic_ref_ordinal: SemanticRefOrdinal | ScoredSemanticRefOrdinal,

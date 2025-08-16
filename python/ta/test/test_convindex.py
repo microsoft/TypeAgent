@@ -21,11 +21,12 @@ def conversation_index() -> ConversationIndex:
     return ConversationIndex()
 
 
-def test_conversation_index_add_and_lookup(conversation_index: ConversationIndex):
+@pytest.mark.asyncio
+async def test_conversation_index_add_and_lookup(conversation_index: ConversationIndex):
     """Test adding and looking up terms in the ConversationIndex."""
-    conversation_index.add_term("example", 1)
-    conversation_index.add_term("example", 2)
-    conversation_index.add_term("test", 3)
+    await conversation_index.add_term("example", 1)
+    await conversation_index.add_term("example", 2)
+    await conversation_index.add_term("test", 3)
 
     result = conversation_index.lookup_term("example")
     assert result is not None
@@ -42,10 +43,11 @@ def test_conversation_index_add_and_lookup(conversation_index: ConversationIndex
     assert result == []
 
 
-def test_conversation_index_remove_term(conversation_index: ConversationIndex):
+@pytest.mark.asyncio
+async def test_conversation_index_remove_term(conversation_index: ConversationIndex):
     """Test removing terms from the ConversationIndex."""
-    conversation_index.add_term("example", 1)
-    conversation_index.add_term("example", 2)
+    await conversation_index.add_term("example", 1)
+    await conversation_index.add_term("example", 2)
 
     conversation_index.remove_term("example", 1)
     result = conversation_index.lookup_term("example")
@@ -58,7 +60,7 @@ async def test_conversation_index_remove_term_if_empty(
     conversation_index: ConversationIndex,
 ):
     """Test removing terms if they are empty."""
-    conversation_index.add_term("example", 1)
+    await conversation_index.add_term("example", 1)
     conversation_index.remove_term("example", 1)
     conversation_index.remove_term_if_empty("example")
 
@@ -70,8 +72,8 @@ async def test_conversation_index_serialize_and_deserialize(
     conversation_index: ConversationIndex,
 ):
     """Test serialization and deserialization of the ConversationIndex."""
-    conversation_index.add_term("example", 1)
-    conversation_index.add_term("test", 2)
+    await conversation_index.add_term("example", 1)
+    await conversation_index.add_term("test", 2)
 
     serialized = conversation_index.serialize()
     assert "items" in serialized
@@ -227,17 +229,18 @@ async def test_conversation_index_size_and_get_terms(
 ):
     """Test size() and get_terms method."""
     assert await conversation_index.size() == 0
-    conversation_index.add_term("foo", 1)
-    conversation_index.add_term("bar", 2)
+    await conversation_index.add_term("foo", 1)
+    await conversation_index.add_term("bar", 2)
     terms = await conversation_index.get_terms()
     assert "foo" in terms
     assert "bar" in terms
     assert await conversation_index.size() == 2
 
 
-def test_conversation_index_contains(conversation_index: ConversationIndex):
+@pytest.mark.asyncio
+async def test_conversation_index_contains(conversation_index: ConversationIndex):
     """Test presence of a term using lookup_term."""
-    conversation_index.add_term("foo", 1)
+    await conversation_index.add_term("foo", 1)
     assert conversation_index.lookup_term("foo") != []
     assert conversation_index.lookup_term("bar") == []
 
@@ -245,8 +248,8 @@ def test_conversation_index_contains(conversation_index: ConversationIndex):
 @pytest.mark.asyncio
 async def test_conversation_index_clear(conversation_index: ConversationIndex):
     """Test clear method."""
-    conversation_index.add_term("foo", 1)
-    conversation_index.add_term("bar", 2)
+    await conversation_index.add_term("foo", 1)
+    await conversation_index.add_term("bar", 2)
     conversation_index.clear()
     assert await conversation_index.size() == 0
     assert conversation_index.lookup_term("foo") == []

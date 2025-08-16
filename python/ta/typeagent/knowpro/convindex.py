@@ -137,17 +137,17 @@ async def add_entity_to_index(
             knowledge=entity,
         )
     )
-    semantic_ref_index.add_term(entity.name, ref_ordinal)
+    await semantic_ref_index.add_term(entity.name, ref_ordinal)
     # Add each type as a separate term.
     for type in entity.type:
-        semantic_ref_index.add_term(type, ref_ordinal)
+        await semantic_ref_index.add_term(type, ref_ordinal)
     # Add every facet name as a separate term.
     if entity.facets:
         for facet in entity.facets:
-            add_facet(facet, ref_ordinal, semantic_ref_index)
+            await add_facet(facet, ref_ordinal, semantic_ref_index)
 
 
-def add_term_to_index(
+async def add_term_to_index(
     index: ITermToSemanticRefIndex,
     term: str,
     semantic_ref_ordinal: SemanticRefOrdinal,
@@ -161,7 +161,7 @@ def add_term_to_index(
         semantic_ref_ordinal: Ordinal of the semantic reference
         terms_added: Optional set to track terms added to the index
     """
-    term = index.add_term(term, semantic_ref_ordinal)
+    term = await index.add_term(term, semantic_ref_ordinal)
     if terms_added is not None:
         terms_added.add(term)
 
@@ -193,7 +193,7 @@ async def add_entity(
             knowledge=entity,
         )
     )
-    add_term_to_index(
+    await add_term_to_index(
         semantic_ref_index,
         entity.name,
         semantic_ref_ordinal,
@@ -202,31 +202,31 @@ async def add_entity(
 
     # Add each type as a separate term
     for type_name in entity.type:
-        add_term_to_index(
+        await add_term_to_index(
             semantic_ref_index, type_name, semantic_ref_ordinal, terms_added
         )
 
     # Add every facet name as a separate term
     if entity.facets:
         for facet in entity.facets:
-            add_facet(facet, semantic_ref_ordinal, semantic_ref_index)
+            await add_facet(facet, semantic_ref_ordinal, semantic_ref_index)
 
 
-def add_facet(
+async def add_facet(
     facet: kplib.Facet | None,
     semantic_ref_ordinal: SemanticRefOrdinal,
     semantic_ref_index: ITermToSemanticRefIndex,
     terms_added: set[str] | None = None,
 ) -> None:
     if facet is not None:
-        add_term_to_index(
+        await add_term_to_index(
             semantic_ref_index,
             facet.name,
             semantic_ref_ordinal,
             terms_added,
         )
         if facet.value is not None:
-            add_term_to_index(
+            await add_term_to_index(
                 semantic_ref_index,
                 str(facet.value),
                 semantic_ref_ordinal,
@@ -264,7 +264,7 @@ async def add_topic(
         )
     )
 
-    add_term_to_index(
+    await add_term_to_index(
         semantic_ref_index,
         topic.text,
         semantic_ref_ordinal,
@@ -300,7 +300,7 @@ async def add_action(
         )
     )
 
-    add_term_to_index(
+    await add_term_to_index(
         semantic_ref_index,
         " ".join(action.verbs),
         semantic_ref_ordinal,
@@ -308,7 +308,7 @@ async def add_action(
     )
 
     if action.subject_entity_name != "none":
-        add_term_to_index(
+        await add_term_to_index(
             semantic_ref_index,
             action.subject_entity_name,
             semantic_ref_ordinal,
@@ -316,7 +316,7 @@ async def add_action(
         )
 
     if action.object_entity_name != "none":
-        add_term_to_index(
+        await add_term_to_index(
             semantic_ref_index,
             action.object_entity_name,
             semantic_ref_ordinal,
@@ -324,7 +324,7 @@ async def add_action(
         )
 
     if action.indirect_object_entity_name != "none":
-        add_term_to_index(
+        await add_term_to_index(
             semantic_ref_index,
             action.indirect_object_entity_name,
             semantic_ref_ordinal,
@@ -334,28 +334,28 @@ async def add_action(
     if action.params:
         for param in action.params:
             if isinstance(param, str):
-                add_term_to_index(
+                await add_term_to_index(
                     semantic_ref_index,
                     param,
                     semantic_ref_ordinal,
                     terms_added,
                 )
             else:
-                add_term_to_index(
+                await add_term_to_index(
                     semantic_ref_index,
                     param.name,
                     semantic_ref_ordinal,
                     terms_added,
                 )
                 if isinstance(param.value, str):
-                    add_term_to_index(
+                    await add_term_to_index(
                         semantic_ref_index,
                         param.value,
                         semantic_ref_ordinal,
                         terms_added,
                     )
 
-    add_facet(
+    await add_facet(
         action.subject_entity_facet,
         semantic_ref_ordinal,
         semantic_ref_index,
@@ -455,7 +455,7 @@ async def add_topic_to_index(
             knowledge=topic,
         )
     )
-    semantic_ref_index.add_term(topic.text, ref_ordinal)
+    await semantic_ref_index.add_term(topic.text, ref_ordinal)
 
 
 async def add_action_to_index(
@@ -474,22 +474,24 @@ async def add_action_to_index(
             knowledge=action,
         )
     )
-    semantic_ref_index.add_term(" ".join(action.verbs), ref_ordinal)
+    await semantic_ref_index.add_term(" ".join(action.verbs), ref_ordinal)
     if action.subject_entity_name != "none":
-        semantic_ref_index.add_term(action.subject_entity_name, ref_ordinal)
+        await semantic_ref_index.add_term(action.subject_entity_name, ref_ordinal)
     if action.object_entity_name != "none":
-        semantic_ref_index.add_term(action.object_entity_name, ref_ordinal)
+        await semantic_ref_index.add_term(action.object_entity_name, ref_ordinal)
     if action.indirect_object_entity_name != "none":
-        semantic_ref_index.add_term(action.indirect_object_entity_name, ref_ordinal)
+        await semantic_ref_index.add_term(
+            action.indirect_object_entity_name, ref_ordinal
+        )
     if action.params:
         for param in action.params:
             if isinstance(param, str):
-                semantic_ref_index.add_term(param, ref_ordinal)
+                await semantic_ref_index.add_term(param, ref_ordinal)
             else:
-                semantic_ref_index.add_term(param.name, ref_ordinal)
+                await semantic_ref_index.add_term(param.name, ref_ordinal)
                 if isinstance(param.value, str):
-                    semantic_ref_index.add_term(param.value, ref_ordinal)
-    add_facet(action.subject_entity_facet, ref_ordinal, semantic_ref_index)
+                    await semantic_ref_index.add_term(param.value, ref_ordinal)
+    await add_facet(action.subject_entity_facet, ref_ordinal, semantic_ref_index)
 
 
 async def add_knowledge_to_index(
@@ -558,7 +560,7 @@ class ConversationIndex(ITermToSemanticRefIndex):
     def clear(self) -> None:
         self._map.clear()
 
-    def add_term(
+    async def add_term(
         self,
         term: str,
         semantic_ref_ordinal: SemanticRefOrdinal | ScoredSemanticRefOrdinal,
