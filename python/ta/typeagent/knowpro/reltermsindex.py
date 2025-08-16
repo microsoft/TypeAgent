@@ -94,7 +94,7 @@ async def build_related_terms_index(
                 settings.related_term_index_settings
             )
         fuzzy_index = csi.term_to_related_terms_index.fuzzy_index
-        all_terms = csr.get_terms()
+        all_terms = await csr.get_terms()
         if fuzzy_index and all_terms:
             await fuzzy_index.add_terms(all_terms)
         return ListIndexingResult(len(all_terms))

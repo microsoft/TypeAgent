@@ -229,7 +229,7 @@ async def test_conversation_index_size_and_get_terms(
     assert await conversation_index.size() == 0
     conversation_index.add_term("foo", 1)
     conversation_index.add_term("bar", 2)
-    terms = conversation_index.get_terms()
+    terms = await conversation_index.get_terms()
     assert "foo" in terms
     assert "bar" in terms
     assert await conversation_index.size() == 2

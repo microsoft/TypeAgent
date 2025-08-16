@@ -552,7 +552,7 @@ class ConversationIndex(ITermToSemanticRefIndex):
     async def size(self) -> int:
         return len(self._map)
 
-    def get_terms(self) -> list[str]:
+    async def get_terms(self) -> list[str]:
         return list(self._map)
 
     def clear(self) -> None:

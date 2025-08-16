@@ -56,6 +56,8 @@ from typeagent.knowpro.collections import (
     SemanticRefCollection,
 )
 
+from fixtures import needs_auth
+
 
 def downcast[T](cls: type[T], obj: object) -> T:
     """Downcast an object to a specific type."""
@@ -97,7 +99,10 @@ class MockTermIndex(ITermToSemanticRefIndex):
     def __init__(self, term_to_refs: dict[str, list[ScoredSemanticRefOrdinal]]):
         self.term_to_refs = term_to_refs
 
-    def get_terms(self) -> list[str]:
+    async def size(self) -> int:
+        return len(self.term_to_refs)
+
+    async def get_terms(self) -> list[str]:
         return list(self.term_to_refs.keys())
 
     def add_term(self, term, semantic_ref_ordinal):
@@ -176,12 +181,12 @@ class MockConversation(IConversation[MockMessage, MockTermIndex]):
 
 
 @pytest.fixture
-def searchable_conversation():
+def searchable_conversation(needs_auth):
     return MockConversation(has_refs=True, has_index=True)
 
 
 @pytest.fixture
-def non_searchable_conversation():
+def non_searchable_conversation(needs_auth):
     return MockConversation(has_refs=False, has_index=False)
 
 
