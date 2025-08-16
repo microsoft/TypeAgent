@@ -143,13 +143,6 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
         cursor.execute("SELECT COUNT(*) FROM SemanticRefs")
         return cursor.fetchone()[0]
 
-    def __iter__(self) -> typing.Iterator[interfaces.SemanticRef]:
-        cursor = self.db.cursor()
-        cursor.execute("SELECT srdata FROM SemanticRefs")
-        for row in cursor:
-            json_obj = json.loads(row[0])
-            yield self._deserialize(json_obj)
-
     async def __aiter__(self) -> typing.AsyncIterator[interfaces.SemanticRef]:
         cursor = self.db.cursor()
         cursor.execute("SELECT srdata FROM SemanticRefs")

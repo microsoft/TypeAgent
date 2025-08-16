@@ -549,12 +549,8 @@ class ConversationIndex(ITermToSemanticRefIndex):
         if data:
             self.deserialize(data)
 
-    def __len__(self) -> int:
+    async def size(self) -> int:
         return len(self._map)
-
-    # Needed because otherwise an empty index would be falsy.
-    def __bool__(self) -> bool:
-        return True
 
     def get_terms(self) -> list[str]:
         return list(self._map)

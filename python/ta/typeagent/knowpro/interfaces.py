@@ -106,6 +106,8 @@ class ScoredMessageOrdinal:
 
 
 class ITermToSemanticRefIndex(Protocol):
+    async def size(self) -> int: ...
+
     def get_terms(self) -> list[str]: ...
 
     def add_term(

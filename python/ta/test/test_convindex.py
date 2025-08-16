@@ -53,16 +53,20 @@ def test_conversation_index_remove_term(conversation_index: ConversationIndex):
     assert len(result) == 0
 
 
-def test_conversation_index_remove_term_if_empty(conversation_index: ConversationIndex):
+@pytest.mark.asyncio
+async def test_conversation_index_remove_term_if_empty(
+    conversation_index: ConversationIndex,
+):
     """Test removing terms if they are empty."""
     conversation_index.add_term("example", 1)
     conversation_index.remove_term("example", 1)
     conversation_index.remove_term_if_empty("example")
 
-    assert len(conversation_index) == 0
+    assert await conversation_index.size() == 0
 
 
-def test_conversation_index_serialize_and_deserialize(
+@pytest.mark.asyncio
+async def test_conversation_index_serialize_and_deserialize(
     conversation_index: ConversationIndex,
 ):
     """Test serialization and deserialization of the ConversationIndex."""
@@ -76,7 +80,8 @@ def test_conversation_index_serialize_and_deserialize(
     new_index = ConversationIndex()
     new_index.deserialize(serialized)
 
-    assert len(new_index) == 2
+    # Test that the new index has the correct size
+    assert await new_index.size() == 2
 
     example = new_index.lookup_term("example")
     assert example is not None
@@ -216,15 +221,18 @@ async def test_add_knowledge_to_index(conversation_index: ConversationIndex):
     assert len(result) == 1
 
 
-def test_conversation_index_len_and_get_terms(conversation_index: ConversationIndex):
-    """Test __len__ and get_terms method."""
-    assert len(conversation_index) == 0
+@pytest.mark.asyncio
+async def test_conversation_index_size_and_get_terms(
+    conversation_index: ConversationIndex,
+):
+    """Test size() and get_terms method."""
+    assert await conversation_index.size() == 0
     conversation_index.add_term("foo", 1)
     conversation_index.add_term("bar", 2)
     terms = conversation_index.get_terms()
     assert "foo" in terms
     assert "bar" in terms
-    assert len(conversation_index) == 2
+    assert await conversation_index.size() == 2
 
 
 def test_conversation_index_contains(conversation_index: ConversationIndex):
@@ -234,12 +242,13 @@ def test_conversation_index_contains(conversation_index: ConversationIndex):
     assert conversation_index.lookup_term("bar") == []
 
 
-def test_conversation_index_clear(conversation_index: ConversationIndex):
+@pytest.mark.asyncio
+async def test_conversation_index_clear(conversation_index: ConversationIndex):
     """Test clear method."""
     conversation_index.add_term("foo", 1)
     conversation_index.add_term("bar", 2)
     conversation_index.clear()
-    assert len(conversation_index) == 0
+    assert await conversation_index.size() == 0
     assert conversation_index.lookup_term("foo") == []
 
 
