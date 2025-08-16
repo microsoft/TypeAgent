@@ -107,11 +107,10 @@ async def main(filename_prefix: str):
     # Create a fresh settings object with a new storage provider for the second podcast
     # to avoid conflicts with the first podcast's data
     settings2 = ConversationSettings()
-    pod2 = podcast.Podcast(settings=settings2)
+    pod2 = await podcast.Podcast.create(settings=settings2)
     assert pod2 is not None, "Failed to create podcast"
     assert isinstance(pod2, podcast.Podcast), f"pod2 is not Podcast but {type(pod2)!r}"
 
-    await pod2.initialize_async()
     await pod2.deserialize(ser1)
     assert (
         pod2.name_tag == pod.name_tag
