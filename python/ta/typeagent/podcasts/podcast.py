@@ -176,22 +176,41 @@ class Podcast(
         init=False, default=None
     )
 
-    def __post_init__(self) -> None:
-        # Secondary indexes will be initialized in initialize_async() using factory method
-        pass
+    @classmethod
+    async def create(
+        cls,
+        name_tag: str = "",
+        messages: IMessageCollection[PodcastMessage] | None = None,
+        tags: list[str] | None = None,
+        semantic_refs: ISemanticRefCollection | None = None,
+        settings: ConversationSettings | None = None,
+        semantic_ref_index: convindex.ConversationIndex | None = None,
+    ) -> "Podcast":
+        """Create a fully initialized Podcast instance."""
+        # Create instance with provided or default values
+        instance = cls(
+            name_tag=name_tag,
+            messages=messages or MessageCollection[PodcastMessage](),
+            tags=tags or [],
+            semantic_refs=semantic_refs or SemanticRefCollection(),
+            settings=settings or ConversationSettings(),
+            semantic_ref_index=semantic_ref_index or convindex.ConversationIndex(),
+        )
 
-    async def initialize_async(self) -> None:
-        """Initialize async components - must be called after construction."""
+        # Initialize async components
         # Ensure storage provider is initialized using async factory method
-        storage_provider = await self.settings.get_storage_provider()
+        storage_provider = await instance.settings.get_storage_provider()
         # Create secondary indexes using the factory method
-        self.secondary_indexes = await secindex.ConversationSecondaryIndexes.create(
+        instance.secondary_indexes = await secindex.ConversationSecondaryIndexes.create(
             storage_provider
         )
+        return instance
 
     def _get_secondary_indexes(self) -> IConversationSecondaryIndexes[PodcastMessage]:
         """Get secondary indexes, asserting they are initialized."""
-        assert self.secondary_indexes is not None, "Call initialize_async() first"
+        assert (
+            self.secondary_indexes is not None
+        ), "Use await Podcast.create() to create an initialized instance"
         return self.secondary_indexes
 
     async def add_metadata_to_index(self) -> None:
@@ -343,8 +362,9 @@ class Podcast(
             raise RuntimeError(
                 f"Database {dbname!r} already has messages or semantic refs."
             )
-        podcast = Podcast(messages=msgs, semantic_refs=semrefs, settings=settings)
-        await podcast.initialize_async()
+        podcast = await Podcast.create(
+            messages=msgs, semantic_refs=semrefs, settings=settings
+        )
         await podcast.deserialize(data)
         return podcast
 

@@ -78,10 +78,13 @@ async def import_podcast(
 
     await msg_coll.extend(msgs)
 
-    pod = Podcast(
-        podcast_name, msg_coll, [podcast_name], semref_coll, settings=settings
+    pod = await Podcast.create(
+        name_tag=podcast_name,
+        messages=msg_coll,
+        tags=[podcast_name],
+        semantic_refs=semref_coll,
+        settings=settings,
     )
-    await pod.initialize_async()
     if start_date:
         await pod.generate_timestamps(start_date, length_minutes)
     # TODO: Add more tags.
