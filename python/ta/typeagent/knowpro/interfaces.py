@@ -347,16 +347,16 @@ class ScoredKnowledge:
 
 # Allows for faster retrieval of name, value properties
 class IPropertyToSemanticRefIndex(Protocol):
-    def get_values(self) -> list[str]: ...
+    async def get_values(self) -> list[str]: ...
 
-    def add_property(
+    async def add_property(
         self,
         property_name: str,
         value: str,
         semantic_ref_ordinal: SemanticRefOrdinal | ScoredSemanticRefOrdinal,
     ) -> None: ...
 
-    def lookup_property(
+    async def lookup_property(
         self, property_name: str, value: str
     ) -> list[ScoredSemanticRefOrdinal] | None: ...
 

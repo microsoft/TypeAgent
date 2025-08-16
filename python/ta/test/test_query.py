@@ -417,6 +417,11 @@ class MockPropertyIndex(PropertyIndex):
 
     def __init__(self):
         super().__init__()
+
+    @classmethod
+    async def create(cls):
+        """Create and initialize a MockPropertyIndex with test data."""
+        instance = cls()
         properties = {
             "name": [
                 ScoredSemanticRefOrdinal(0, 1.0),
@@ -431,7 +436,8 @@ class MockPropertyIndex(PropertyIndex):
         }
         for name, values in properties.items():
             for value in values:
-                self.add_property(name, "test", value)
+                await instance.add_property(name, "test", value)
+        return instance
 
 
 class TestMatchPropertySearchTermExpr:
@@ -441,7 +447,7 @@ class TestMatchPropertySearchTermExpr:
     async def test_accumulate_matches_known_prop(self, eval_context: QueryEvalContext):
         """Test accumulating matches for a property search term."""
         # property_name is a string (KnowledgePropertyName); calls accumulate_matches_for_property()
-        eval_context.property_index = MockPropertyIndex()
+        eval_context.property_index = await MockPropertyIndex.create()
         property_search_term = PropertySearchTerm("name", SearchTerm(term=Term("test")))
         expr = MatchPropertySearchTermExpr(property_search_term)
         matches = SemanticRefAccumulator()
@@ -452,7 +458,7 @@ class TestMatchPropertySearchTermExpr:
     async def test_accumulate_matches_user_prop(self, eval_context: QueryEvalContext):
         """Test accumulating matches for a property search term with SearchTerm property name."""
         # property_name is a SearchTerm(Term()); calls accumulate_matches_for_facets()
-        eval_context.property_index = MockPropertyIndex()
+        eval_context.property_index = await MockPropertyIndex.create()
         property_search_term = PropertySearchTerm(
             SearchTerm(Term("name")),
             SearchTerm(term=Term("test")),
@@ -467,7 +473,7 @@ class TestMatchPropertySearchTermExpr:
         self, eval_context: QueryEvalContext
     ):
         """Test accumulate_matches_for_property method."""
-        eval_context.property_index = MockPropertyIndex()
+        eval_context.property_index = await MockPropertyIndex.create()
         dummy_search_term = PropertySearchTerm("name", SearchTerm(term=Term("test")))
         expr = MatchPropertySearchTermExpr(dummy_search_term)
         matches = SemanticRefAccumulator()
@@ -479,7 +485,7 @@ class TestMatchPropertySearchTermExpr:
     @pytest.mark.asyncio
     async def test_accumulate_matches_for_facets(self, eval_context: QueryEvalContext):
         """Test accumulate_matches_for_facets method."""
-        eval_context.property_index = MockPropertyIndex()
+        eval_context.property_index = await MockPropertyIndex.create()
         dummy_search_term = PropertySearchTerm("name", SearchTerm(term=Term("test")))
         expr = MatchPropertySearchTermExpr(dummy_search_term)
         matches = SemanticRefAccumulator()
@@ -492,7 +498,7 @@ class TestMatchPropertySearchTermExpr:
         self, eval_context: QueryEvalContext
     ):
         """Test accumulate_matches_for_property_value method."""
-        eval_context.property_index = MockPropertyIndex()
+        eval_context.property_index = await MockPropertyIndex.create()
         dummy_search_term = PropertySearchTerm("name", SearchTerm(term=Term("test")))
         expr = MatchPropertySearchTermExpr(dummy_search_term)
 
