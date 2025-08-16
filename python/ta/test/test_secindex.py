@@ -4,6 +4,7 @@
 from typing import cast
 import pytest
 
+from fixtures import storage, needs_auth  # Import the storage fixture
 from typeagent.knowpro.importing import RelatedTermIndexSettings, ConversationSettings
 from typeagent.knowpro.interfaces import (
     DeletionInfo,
@@ -50,7 +51,7 @@ class SimpleMessage(IMessage):
 class SimpleConversation(IConversation):
     """A simple implementation of IConversation for testing purposes."""
 
-    def __init__(self):
+    def __init__(self, storage_provider=None):
         self.name_tag = "SimpleConversation"
         self.tags = []
         self.messages = MessageCollection[SimpleMessage]()
@@ -58,7 +59,28 @@ class SimpleConversation(IConversation):
         self.semantic_ref_index = None
         self.secondary_indexes = None
         # Store settings with storage provider for access via conversation.settings.storage_provider
-        self.settings = ConversationSettings(storage_provider=MemoryStorageProvider())
+        if storage_provider is None:
+            # Create default storage provider for backward compatibility
+            from typeagent.aitools.embeddings import (
+                AsyncEmbeddingModel,
+                TEST_MODEL_NAME,
+            )
+            from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
+            from typeagent.knowpro.importing import (
+                MessageTextIndexSettings,
+                RelatedTermIndexSettings,
+            )
+            from typeagent.knowpro.storage import MemoryStorageProvider
+
+            test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
+            embedding_settings = TextEmbeddingIndexSettings(test_model)
+            message_text_settings = MessageTextIndexSettings(embedding_settings)
+            related_terms_settings = RelatedTermIndexSettings(embedding_settings)
+            storage_provider = MemoryStorageProvider(
+                message_text_settings, related_terms_settings
+            )
+
+        self.settings = ConversationSettings(storage_provider=storage_provider)
 
 
 @pytest.fixture
@@ -71,9 +93,9 @@ def conversation_settings(needs_auth):
     return ConversationSettings()
 
 
-def test_conversation_secondary_indexes_initialization(needs_auth):
+def test_conversation_secondary_indexes_initialization(storage, needs_auth):
     """Test initialization of ConversationSecondaryIndexes."""
-    storage_provider = MemoryStorageProvider()
+    storage_provider = storage
     indexes = ConversationSecondaryIndexes(storage_provider)
     # Note: indexes are None until initialize() is called
     assert indexes.property_to_semantic_ref_index is None

@@ -179,6 +179,11 @@ class Podcast(
             self.settings.storage_provider
         )
 
+    async def initialize_async(self) -> None:
+        """Initialize async components - must be called after construction."""
+        await self.settings.storage_provider.initialize_indexes()
+        await self.secondary_indexes.initialize()
+
     async def add_metadata_to_index(self) -> None:
         if self.semantic_ref_index is not None:
             assert self.semantic_refs is not None
@@ -315,6 +320,7 @@ class Podcast(
                 f"Database {dbname!r} already has messages or semantic refs."
             )
         podcast = Podcast(messages=msgs, semantic_refs=semrefs, settings=settings)
+        await podcast.initialize_async()
         await podcast.deserialize(data)
         return podcast
 

@@ -40,57 +40,63 @@ from .timestampindex import TimestampToTextRangeIndex
 class MemoryStorageProvider[TMessage: IMessage](IStorageProvider[TMessage]):
     """A storage provider that operates in memory."""
 
+    # Declare indexes as not-None but uninitialized - initialize() must be called
+    _conversation_index: ConversationIndex
+    _property_index: PropertyIndex
+    _timestamp_index: TimestampToTextRangeIndex
+    _message_text_index: MessageTextIndex
+    _related_terms_index: RelatedTermsIndex
+    _conversation_threads: ConversationThreads
+
     def __init__(
         self,
-        message_text_settings: MessageTextIndexSettings | None = None,
-        related_terms_settings: RelatedTermIndexSettings | None = None,
+        message_text_settings: MessageTextIndexSettings,
+        related_terms_settings: RelatedTermIndexSettings,
     ):
-        # Create all index objects immediately
+        # Store settings privately - no defaults, caller must provide
+        self._message_text_settings = message_text_settings
+        self._related_terms_settings = related_terms_settings
+        # Indexes will be created in initialize()
+
+    async def initialize_indexes(self) -> None:
+        """Initialize all indexes using the provided settings."""
         self._conversation_index = ConversationIndex()
         self._property_index = PropertyIndex()
         self._timestamp_index = TimestampToTextRangeIndex()
-
-        # Use provided settings or create test-friendly defaults
-        if message_text_settings is None:
-            from ..aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
-            from ..aitools.vectorbase import TextEmbeddingIndexSettings
-
-            test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
-            embedding_settings = TextEmbeddingIndexSettings(test_model)
-            message_text_settings = MessageTextIndexSettings(embedding_settings)
-        self._message_text_index = MessageTextIndex(message_text_settings)
-
-        if related_terms_settings is None:
-            from ..aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
-            from ..aitools.vectorbase import TextEmbeddingIndexSettings
-
-            test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
-            embedding_settings = TextEmbeddingIndexSettings(test_model)
-            related_terms_settings = RelatedTermIndexSettings(embedding_settings)
-        self._related_terms_index = RelatedTermsIndex(related_terms_settings)
-
-        self._conversation_threads = ConversationThreads()
-
-    async def initialize_indexes(self) -> None:
-        """Initialize indexes. For memory storage, this is a no-op since indexes are created in __init__."""
-        pass
+        self._message_text_index = MessageTextIndex(self._message_text_settings)
+        self._related_terms_index = RelatedTermsIndex(self._related_terms_settings)
+        # Use the same embedding settings for conversation threads
+        thread_settings = self._message_text_settings.embedding_index_settings
+        self._conversation_threads = ConversationThreads(thread_settings)
 
     async def get_conversation_index(self) -> ITermToSemanticRefIndex:
+        if not hasattr(self, "_conversation_index"):
+            await self.initialize_indexes()
         return self._conversation_index
 
     async def get_property_index(self) -> IPropertyToSemanticRefIndex:
+        if not hasattr(self, "_property_index"):
+            await self.initialize_indexes()
         return self._property_index
 
     async def get_timestamp_index(self) -> ITimestampToTextRangeIndex:
+        if not hasattr(self, "_timestamp_index"):
+            await self.initialize_indexes()
         return self._timestamp_index
 
     async def get_message_text_index(self) -> IMessageTextIndex[TMessage]:
+        if not hasattr(self, "_message_text_index"):
+            await self.initialize_indexes()
         return self._message_text_index
 
     async def get_related_terms_index(self) -> ITermToRelatedTermsIndex:
+        if not hasattr(self, "_related_terms_index"):
+            await self.initialize_indexes()
         return self._related_terms_index
 
     async def get_conversation_threads(self) -> IConversationThreads:
+        if not hasattr(self, "_conversation_threads"):
+            await self.initialize_indexes()
         return self._conversation_threads
 
     async def create_message_collection(

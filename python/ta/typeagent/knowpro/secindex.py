@@ -55,6 +55,8 @@ async def build_secondary_indexes[
     event_handler: IndexingEventHandlers | None,
 ) -> SecondaryIndexingResults:
     if conversation.secondary_indexes is None:
+        # Ensure storage provider is initialized before creating secondary indexes
+        await conversation_settings.storage_provider.initialize_indexes()
         conversation.secondary_indexes = ConversationSecondaryIndexes(
             conversation_settings.storage_provider
         )
@@ -101,6 +103,8 @@ async def build_transient_secondary_indexes[
             )
 
         conversation.secondary_indexes = ConversationSecondaryIndexes(storage_provider)
+        # Ensure storage provider is initialized before initializing secondary indexes
+        await storage_provider.initialize_indexes()
         await conversation.secondary_indexes.initialize()
     result = SecondaryIndexingResults()
     result.properties = await build_property_index(conversation)

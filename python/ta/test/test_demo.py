@@ -108,6 +108,7 @@ async def main(filename_prefix: str):
     assert pod2 is not None, "Failed to create podcast"
     assert isinstance(pod2, podcast.Podcast), f"pod2 is not Podcast but {type(pod2)!r}"
 
+    await pod2.initialize_async()
     await pod2.deserialize(ser1)
     assert (
         pod2.name_tag == pod.name_tag

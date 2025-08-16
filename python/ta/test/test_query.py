@@ -128,7 +128,23 @@ class MockConversation(IConversation[MockMessage, MockTermIndex]):
         self.secondary_indexes = None
 
         # Store settings with storage provider for access via conversation.settings.storage_provider
-        self.settings = ConversationSettings(storage_provider=MemoryStorageProvider())
+        # Create storage provider with test settings
+        from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
+        from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
+        from typeagent.knowpro.importing import (
+            MessageTextIndexSettings,
+            RelatedTermIndexSettings,
+        )
+
+        test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
+        embedding_settings = TextEmbeddingIndexSettings(test_model)
+        message_text_settings = MessageTextIndexSettings(embedding_settings)
+        related_terms_settings = RelatedTermIndexSettings(embedding_settings)
+
+        storage_provider = MemoryStorageProvider(
+            message_text_settings, related_terms_settings
+        )
+        self.settings = ConversationSettings(storage_provider=storage_provider)
 
         # Create semantic refs
         refs = []

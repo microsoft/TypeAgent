@@ -173,7 +173,25 @@ async def test_build_message_index(needs_auth: None):
             self.semantic_ref_index = None
             # Convert plain list to MessageCollection for proper async iteration
             self.messages = MessageCollection(messages)
-            storage_provider = MemoryStorageProvider()
+            # Create storage provider with test settings
+            from typeagent.aitools.embeddings import (
+                AsyncEmbeddingModel,
+                TEST_MODEL_NAME,
+            )
+            from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
+            from typeagent.knowpro.importing import (
+                MessageTextIndexSettings,
+                RelatedTermIndexSettings,
+            )
+
+            test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
+            embedding_settings = TextEmbeddingIndexSettings(test_model)
+            message_text_settings = MessageTextIndexSettings(embedding_settings)
+            related_terms_settings = RelatedTermIndexSettings(embedding_settings)
+
+            storage_provider = MemoryStorageProvider(
+                message_text_settings, related_terms_settings
+            )
             self.secondary_indexes = ConversationSecondaryIndexes(storage_provider)
             # Store settings with storage provider for access via conversation.settings.storage_provider
             self.settings = ConversationSettings(storage_provider=storage_provider)

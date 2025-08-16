@@ -1,15 +1,15 @@
 # Test that ConversationSecondaryIndexes now uses storage provider properly
 import pytest
 
-from fixtures import needs_auth  # type: ignore  # It's used!
+from fixtures import needs_auth, storage  # type: ignore  # It's used!
 from typeagent.knowpro.secindex import ConversationSecondaryIndexes
 from typeagent.knowpro.storage import MemoryStorageProvider
 
 
 @pytest.mark.asyncio
-async def test_conversation_secondary_indexes_uses_storage_provider(needs_auth):
+async def test_secondary_indexes_use_storage_provider(storage, needs_auth):
     """Test that ConversationSecondaryIndexes gets indexes from storage provider."""
-    storage_provider = MemoryStorageProvider()
+    storage_provider = storage
     indexes = ConversationSecondaryIndexes(storage_provider)
 
     # Before initialization, indexes should be None

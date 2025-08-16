@@ -80,5 +80,8 @@ class ConversationSettings:
         if storage_provider is None:
             from .storage import MemoryStorageProvider
 
-            storage_provider = MemoryStorageProvider()
+            storage_provider = MemoryStorageProvider(
+                message_text_settings=self.message_text_index_settings,
+                related_terms_settings=self.related_term_index_settings,
+            )
         self.storage_provider = storage_provider

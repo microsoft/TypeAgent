@@ -3,17 +3,14 @@
 
 import pytest
 
-from fixtures import needs_auth  # type: ignore  # It's used!
+from fixtures import needs_auth, storage  # type: ignore  # It's used!
 from typeagent.knowpro.storage import MemoryStorageProvider
 
 
 @pytest.mark.asyncio
-async def test_all_index_creation(needs_auth):
+async def test_all_index_creation(storage, needs_auth):
     """Test that all 6 index types are created and accessible."""
-    storage = MemoryStorageProvider()
-
-    # Initialize indexes
-    await storage.initialize_indexes()
+    # storage fixture already initializes indexes
 
     # Test all index types are created and return objects
     conv_index = await storage.get_conversation_index()
@@ -36,10 +33,9 @@ async def test_all_index_creation(needs_auth):
 
 
 @pytest.mark.asyncio
-async def test_index_persistence(needs_auth):
+async def test_index_persistence(storage, needs_auth):
     """Test that same index instance is returned across calls."""
-    storage = MemoryStorageProvider()
-    await storage.initialize_indexes()
+    # storage fixture already initializes indexes
 
     # All index types should return same instance across calls
     conv1 = await storage.get_conversation_index()
@@ -54,8 +50,21 @@ async def test_index_persistence(needs_auth):
 @pytest.mark.asyncio
 async def test_indexes_work_independently(needs_auth):
     """Test that different storage providers have independent indexes."""
-    storage1 = MemoryStorageProvider()
-    storage2 = MemoryStorageProvider()
+    # Create two separate storage providers with test settings
+    from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
+    from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
+    from typeagent.knowpro.importing import (
+        MessageTextIndexSettings,
+        RelatedTermIndexSettings,
+    )
+
+    test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
+    embedding_settings = TextEmbeddingIndexSettings(test_model)
+    message_text_settings = MessageTextIndexSettings(embedding_settings)
+    related_terms_settings = RelatedTermIndexSettings(embedding_settings)
+
+    storage1 = MemoryStorageProvider(message_text_settings, related_terms_settings)
+    storage2 = MemoryStorageProvider(message_text_settings, related_terms_settings)
 
     await storage1.initialize_indexes()
     await storage2.initialize_indexes()
@@ -69,11 +78,9 @@ async def test_indexes_work_independently(needs_auth):
 
 
 @pytest.mark.asyncio
-async def test_initialize_indexes_is_idempotent(needs_auth):
+async def test_initialize_indexes_is_idempotent(storage, needs_auth):
     """Test that initialize_indexes can be called multiple times safely."""
-    storage = MemoryStorageProvider()
-
-    # Call initialize multiple times
+    # Call initialize multiple times on already initialized storage
     await storage.initialize_indexes()
     await storage.initialize_indexes()
     await storage.initialize_indexes()
@@ -86,7 +93,20 @@ async def test_initialize_indexes_is_idempotent(needs_auth):
 @pytest.mark.asyncio
 async def test_indexes_available_without_explicit_initialize(needs_auth):
     """Test that indexes are available even without calling initialize_indexes (for backward compatibility)."""
-    storage = MemoryStorageProvider()
+    # Create storage provider with test settings
+    from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
+    from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
+    from typeagent.knowpro.importing import (
+        MessageTextIndexSettings,
+        RelatedTermIndexSettings,
+    )
+
+    test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
+    embedding_settings = TextEmbeddingIndexSettings(test_model)
+    message_text_settings = MessageTextIndexSettings(embedding_settings)
+    related_terms_settings = RelatedTermIndexSettings(embedding_settings)
+
+    storage = MemoryStorageProvider(message_text_settings, related_terms_settings)
 
     # Should work without explicit initialize call
     conv_index = await storage.get_conversation_index()
@@ -96,7 +116,20 @@ async def test_indexes_available_without_explicit_initialize(needs_auth):
 @pytest.mark.asyncio
 async def test_storage_provider_collections_still_work(needs_auth):
     """Test that existing collection functionality still works."""
-    storage = MemoryStorageProvider()
+    # Create storage provider with test settings
+    from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
+    from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
+    from typeagent.knowpro.importing import (
+        MessageTextIndexSettings,
+        RelatedTermIndexSettings,
+    )
+
+    test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
+    embedding_settings = TextEmbeddingIndexSettings(test_model)
+    message_text_settings = MessageTextIndexSettings(embedding_settings)
+    related_terms_settings = RelatedTermIndexSettings(embedding_settings)
+
+    storage = MemoryStorageProvider(message_text_settings, related_terms_settings)
 
     # Test message collection creation
     msg_collection = await storage.create_message_collection()
