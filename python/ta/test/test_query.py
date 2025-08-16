@@ -108,7 +108,7 @@ class MockTermIndex(ITermToSemanticRefIndex):
     async def add_term(self, term, semantic_ref_ordinal):
         raise RuntimeError
 
-    def remove_term(self, term, semantic_ref_ordinal):
+    async def remove_term(self, term, semantic_ref_ordinal):
         raise RuntimeError
 
     def lookup_term(self, term: str) -> list[ScoredSemanticRefOrdinal]:

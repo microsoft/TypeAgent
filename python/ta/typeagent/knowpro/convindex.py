@@ -580,7 +580,7 @@ class ConversationIndex(ITermToSemanticRefIndex):
     def lookup_term(self, term: str) -> list[ScoredSemanticRefOrdinal] | None:
         return self._map.get(self._prepare_term(term)) or []
 
-    def remove_term(self, term: str, semantic_ref_ordinal: SemanticRefOrdinal) -> None:
+    async def remove_term(self, term: str, semantic_ref_ordinal: SemanticRefOrdinal) -> None:
         self._map.pop(self._prepare_term(term), None)
 
     def remove_term_if_empty(self, term: str) -> None:

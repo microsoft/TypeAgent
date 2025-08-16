@@ -49,7 +49,7 @@ async def test_conversation_index_remove_term(conversation_index: ConversationIn
     await conversation_index.add_term("example", 1)
     await conversation_index.add_term("example", 2)
 
-    conversation_index.remove_term("example", 1)
+    await conversation_index.remove_term("example", 1)
     result = conversation_index.lookup_term("example")
     assert result is not None
     assert len(result) == 0
@@ -61,7 +61,7 @@ async def test_conversation_index_remove_term_if_empty(
 ):
     """Test removing terms if they are empty."""
     await conversation_index.add_term("example", 1)
-    conversation_index.remove_term("example", 1)
+    await conversation_index.remove_term("example", 1)
     conversation_index.remove_term_if_empty("example")
 
     assert await conversation_index.size() == 0
@@ -255,11 +255,12 @@ async def test_conversation_index_clear(conversation_index: ConversationIndex):
     assert conversation_index.lookup_term("foo") == []
 
 
-def test_conversation_index_remove_term_nonexistent(
+@pytest.mark.asyncio
+async def test_conversation_index_remove_term_nonexistent(
     conversation_index: ConversationIndex,
 ):
     """Test removing a term that does not exist does not raise."""
-    conversation_index.remove_term("nonexistent", 123)  # Should not raise
+    await conversation_index.remove_term("nonexistent", 123)  # Should not raise
 
 
 def test_conversation_index_remove_term_if_empty_nonexistent(

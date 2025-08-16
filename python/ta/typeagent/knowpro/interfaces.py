@@ -116,7 +116,7 @@ class ITermToSemanticRefIndex(Protocol):
         semantic_ref_ordinal: SemanticRefOrdinal | ScoredSemanticRefOrdinal,
     ) -> str: ...
 
-    def remove_term(
+    async def remove_term(
         self, term: str, semantic_ref_ordinal: SemanticRefOrdinal
     ) -> None: ...
 
