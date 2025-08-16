@@ -63,8 +63,12 @@ async def test_indexes_work_independently(needs_auth):
     message_text_settings = MessageTextIndexSettings(embedding_settings)
     related_terms_settings = RelatedTermIndexSettings(embedding_settings)
 
-    storage1 = await MemoryStorageProvider.create(message_text_settings, related_terms_settings)
-    storage2 = await MemoryStorageProvider.create(message_text_settings, related_terms_settings)
+    storage1 = await MemoryStorageProvider.create(
+        message_text_settings, related_terms_settings
+    )
+    storage2 = await MemoryStorageProvider.create(
+        message_text_settings, related_terms_settings
+    )
 
     # Get indexes from both storage providers
     index1 = await storage1.get_conversation_index()
@@ -75,21 +79,9 @@ async def test_indexes_work_independently(needs_auth):
 
 
 @pytest.mark.asyncio
-async def test_initialize_indexes_is_idempotent(storage, needs_auth):
-    """Test that initialize_indexes can be called multiple times safely."""
-    # Call initialize multiple times on already initialized storage
-    await storage.initialize_indexes()
-    await storage.initialize_indexes()
-    await storage.initialize_indexes()
-
-    # Should still work
-    conv_index = await storage.get_conversation_index()
-    assert conv_index is not None
-
-
 @pytest.mark.asyncio
-async def test_indexes_available_without_explicit_initialize(needs_auth):
-    """Test that indexes are available even without calling initialize_indexes (for backward compatibility)."""
+async def test_indexes_available_after_create(needs_auth):
+    """Test that indexes are available after using create() factory method."""
     # Create storage provider with test settings
     from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
     from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
@@ -103,9 +95,12 @@ async def test_indexes_available_without_explicit_initialize(needs_auth):
     message_text_settings = MessageTextIndexSettings(embedding_settings)
     related_terms_settings = RelatedTermIndexSettings(embedding_settings)
 
-    storage = MemoryStorageProvider(message_text_settings, related_terms_settings)
+    # Use the async factory method
+    storage = await MemoryStorageProvider.create(
+        message_text_settings, related_terms_settings
+    )
 
-    # Should work without explicit initialize call
+    # Should work immediately after create
     conv_index = await storage.get_conversation_index()
     assert conv_index is not None
 

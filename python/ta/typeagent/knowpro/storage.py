@@ -66,48 +66,33 @@ class MemoryStorageProvider[TMessage: IMessage](IStorageProvider[TMessage]):
     ) -> "MemoryStorageProvider[TMessage]":
         """Create and initialize a MemoryStorageProvider with all indexes."""
         instance = cls(message_text_settings, related_terms_settings)
-        await instance.initialize_indexes()
+        # Initialize all indexes using the provided settings
+        instance._conversation_index = ConversationIndex()
+        instance._property_index = PropertyIndex()
+        instance._timestamp_index = TimestampToTextRangeIndex()
+        instance._message_text_index = MessageTextIndex(message_text_settings)
+        instance._related_terms_index = RelatedTermsIndex(related_terms_settings)
+        # Use the same embedding settings for conversation threads
+        thread_settings = message_text_settings.embedding_index_settings
+        instance._conversation_threads = ConversationThreads(thread_settings)
         return instance
 
-    async def initialize_indexes(self) -> None:
-        """Initialize all indexes using the provided settings."""
-        self._conversation_index = ConversationIndex()
-        self._property_index = PropertyIndex()
-        self._timestamp_index = TimestampToTextRangeIndex()
-        self._message_text_index = MessageTextIndex(self._message_text_settings)
-        self._related_terms_index = RelatedTermsIndex(self._related_terms_settings)
-        # Use the same embedding settings for conversation threads
-        thread_settings = self._message_text_settings.embedding_index_settings
-        self._conversation_threads = ConversationThreads(thread_settings)
-
     async def get_conversation_index(self) -> ITermToSemanticRefIndex:
-        if not hasattr(self, "_conversation_index"):
-            await self.initialize_indexes()
         return self._conversation_index
 
     async def get_property_index(self) -> IPropertyToSemanticRefIndex:
-        if not hasattr(self, "_property_index"):
-            await self.initialize_indexes()
         return self._property_index
 
     async def get_timestamp_index(self) -> ITimestampToTextRangeIndex:
-        if not hasattr(self, "_timestamp_index"):
-            await self.initialize_indexes()
         return self._timestamp_index
 
     async def get_message_text_index(self) -> IMessageTextIndex[TMessage]:
-        if not hasattr(self, "_message_text_index"):
-            await self.initialize_indexes()
         return self._message_text_index
 
     async def get_related_terms_index(self) -> ITermToRelatedTermsIndex:
-        if not hasattr(self, "_related_terms_index"):
-            await self.initialize_indexes()
         return self._related_terms_index
 
     async def get_conversation_threads(self) -> IConversationThreads:
-        if not hasattr(self, "_conversation_threads"):
-            await self.initialize_indexes()
         return self._conversation_threads
 
     async def create_message_collection(

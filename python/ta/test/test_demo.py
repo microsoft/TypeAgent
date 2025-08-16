@@ -104,7 +104,10 @@ async def main(filename_prefix: str):
     assert len(ser1) > 0, f"ser1 is empty {ser1!r}"
     assert "semanticRefs" in ser1, f"'semantic_refs' is not a key in {ser1.keys()!r}"
 
-    pod2 = podcast.Podcast(settings=settings)
+    # Create a fresh settings object with a new storage provider for the second podcast
+    # to avoid conflicts with the first podcast's data
+    settings2 = ConversationSettings()
+    pod2 = podcast.Podcast(settings=settings2)
     assert pod2 is not None, "Failed to create podcast"
     assert isinstance(pod2, podcast.Podcast), f"pod2 is not Podcast but {type(pod2)!r}"
 

@@ -54,7 +54,6 @@ class ConversationSettings:
     thread_settings: TextEmbeddingIndexSettings
     message_text_index_settings: MessageTextIndexSettings
     semantic_ref_index_settings: SemanticRefIndexSettings
-    storage_provider: IStorageProvider
 
     def __init__(
         self,
@@ -76,12 +75,38 @@ class ConversationSettings:
             auto_extract_knowledge=False,
         )
 
-        # Default to in-memory storage provider for backward compatibility
-        if storage_provider is None:
+        # Storage provider will be created lazily if not provided
+        self._storage_provider: IStorageProvider | None = storage_provider
+        self._storage_provider_created = storage_provider is not None
+
+    @property
+    def storage_provider(self) -> IStorageProvider:
+        if not self._storage_provider_created:
+            raise RuntimeError(
+                "Storage provider not initialized. Use await ConversationSettings.get_storage_provider() "
+                "or provide storage_provider in constructor."
+            )
+        assert (
+            self._storage_provider is not None
+        ), "Storage provider should be set when _storage_provider_created is True"
+        return self._storage_provider
+
+    @storage_provider.setter
+    def storage_provider(self, value: IStorageProvider) -> None:
+        self._storage_provider = value
+        self._storage_provider_created = True
+
+    async def get_storage_provider(self) -> IStorageProvider:
+        """Get or create the storage provider asynchronously."""
+        if not self._storage_provider_created:
             from .storage import MemoryStorageProvider
 
-            storage_provider = MemoryStorageProvider(
+            self._storage_provider = await MemoryStorageProvider.create(
                 message_text_settings=self.message_text_index_settings,
                 related_terms_settings=self.related_term_index_settings,
             )
-        self.storage_provider = storage_provider
+            self._storage_provider_created = True
+        assert (
+            self._storage_provider is not None
+        ), "Storage provider should be set after creation"
+        return self._storage_provider

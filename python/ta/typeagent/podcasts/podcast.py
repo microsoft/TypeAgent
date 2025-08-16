@@ -172,17 +172,27 @@ class Podcast(
         default_factory=convindex.ConversationIndex
     )
 
-    secondary_indexes: IConversationSecondaryIndexes[PodcastMessage] = field(init=False)
+    secondary_indexes: IConversationSecondaryIndexes[PodcastMessage] | None = field(
+        init=False, default=None
+    )
 
     def __post_init__(self) -> None:
-        self.secondary_indexes = secindex.ConversationSecondaryIndexes(  # type: ignore  # TODO
-            self.settings.storage_provider
-        )
+        # Secondary indexes will be initialized in initialize_async() using factory method
+        pass
 
     async def initialize_async(self) -> None:
         """Initialize async components - must be called after construction."""
-        await self.settings.storage_provider.initialize_indexes()
-        await self.secondary_indexes.initialize()
+        # Ensure storage provider is initialized using async factory method
+        storage_provider = await self.settings.get_storage_provider()
+        # Create secondary indexes using the factory method
+        self.secondary_indexes = await secindex.ConversationSecondaryIndexes.create(
+            storage_provider
+        )
+
+    def _get_secondary_indexes(self) -> IConversationSecondaryIndexes[PodcastMessage]:
+        """Get secondary indexes, asserting they are initialized."""
+        assert self.secondary_indexes is not None, "Call initialize_async() first"
+        return self.secondary_indexes
 
     async def add_metadata_to_index(self) -> None:
         if self.semantic_ref_index is not None:
@@ -230,14 +240,16 @@ class Podcast(
         # Set the rest only if they aren't None.
         if self.semantic_ref_index:
             data["semanticIndexData"] = self.semantic_ref_index.serialize()
-        if self.secondary_indexes.term_to_related_terms_index:
+
+        secondary_indexes = self._get_secondary_indexes()
+        if secondary_indexes.term_to_related_terms_index:
             data["relatedTermsIndexData"] = (
-                self.secondary_indexes.term_to_related_terms_index.serialize()
+                secondary_indexes.term_to_related_terms_index.serialize()
             )
-        if self.secondary_indexes.threads:
-            data["threadData"] = self.secondary_indexes.threads.serialize()
-        if self.secondary_indexes.message_index:
-            data["messageIndexData"] = self.secondary_indexes.message_index.serialize()
+        if secondary_indexes.threads:
+            data["threadData"] = secondary_indexes.threads.serialize()
+        if secondary_indexes.message_index:
+            data["messageIndexData"] = secondary_indexes.message_index.serialize()
         return data
 
     async def write_to_file(self, filename: str) -> None:
@@ -275,9 +287,8 @@ class Podcast(
 
         related_terms_index_data = podcast_data.get("relatedTermsIndexData")
         if related_terms_index_data is not None:
-            term_to_related_terms_index = (
-                self.secondary_indexes.term_to_related_terms_index
-            )
+            secondary_indexes = self._get_secondary_indexes()
+            term_to_related_terms_index = secondary_indexes.term_to_related_terms_index
             if term_to_related_terms_index is not None:
                 # Assert empty before deserializing
                 assert (
@@ -287,24 +298,26 @@ class Podcast(
 
         thread_data = podcast_data.get("threadData")
         if thread_data is not None:
-            self.secondary_indexes.threads = ConversationThreads(
+            secondary_indexes = self._get_secondary_indexes()
+            secondary_indexes.threads = ConversationThreads(
                 self.settings.thread_settings
             )
-            self.secondary_indexes.threads.deserialize(thread_data)
+            secondary_indexes.threads.deserialize(thread_data)
 
         message_index_data = podcast_data.get("messageIndexData")
         if message_index_data is not None:
+            secondary_indexes = self._get_secondary_indexes()
             # Assert the message index is empty before deserializing
             assert (
-                self.secondary_indexes.message_index is not None
+                secondary_indexes.message_index is not None
             ), "Message index should be initialized"
             from ..knowpro.messageindex import MessageTextIndex
 
-            if isinstance(self.secondary_indexes.message_index, MessageTextIndex):
+            if isinstance(secondary_indexes.message_index, MessageTextIndex):
                 assert (
-                    len(self.secondary_indexes.message_index) == 0
+                    len(secondary_indexes.message_index) == 0
                 ), "Message index must be empty before deserializing"
-            self.secondary_indexes.message_index.deserialize(message_index_data)
+            secondary_indexes.message_index.deserialize(message_index_data)
 
         await self._build_transient_secondary_indexes(True)
 
@@ -336,15 +349,15 @@ class Podcast(
         return podcast
 
     async def _build_transient_secondary_indexes(self, build_all: bool) -> None:
-        # Ensure secondary indexes are properly initialized
-        await self.secondary_indexes.initialize()
+        # Secondary indexes are already initialized via create() factory method
         if build_all:
             await secindex.build_transient_secondary_indexes(self)
         await self._build_participant_aliases()
         self._add_synonyms()
 
     async def _build_participant_aliases(self) -> None:
-        term_to_related_terms_index = self.secondary_indexes.term_to_related_terms_index
+        secondary_indexes = self._get_secondary_indexes()
+        term_to_related_terms_index = secondary_indexes.term_to_related_terms_index
         assert term_to_related_terms_index is not None
         aliases = term_to_related_terms_index.aliases
         aliases.clear()  # type: ignore  # Same issue as above.
@@ -356,10 +369,11 @@ class Podcast(
             aliases.add_related_term(name, related_terms)  # type: ignore  # TODO: Same issue as above.
 
     def _add_synonyms(self) -> None:
-        assert self.secondary_indexes.term_to_related_terms_index is not None
+        secondary_indexes = self._get_secondary_indexes()
+        assert secondary_indexes.term_to_related_terms_index is not None
         aliases = cast(
             TermToRelatedTermsMap,
-            self.secondary_indexes.term_to_related_terms_index.aliases,
+            secondary_indexes.term_to_related_terms_index.aliases,
         )
         synonym_file = os.path.join(os.path.dirname(__file__), "podcastVerbs.json")
         with open(synonym_file) as f:

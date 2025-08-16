@@ -226,7 +226,18 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
     async def create(cls, db_path: str) -> "SqliteStorageProvider[TMessage]":
         """Create and initialize a SqliteStorageProvider with all indexes."""
         instance = cls(db_path)
-        await instance.initialize_indexes()
+        # Initialize all indexes to ensure they exist in memory
+        instance._conversation_index = ConversationIndex()
+        instance._property_index = PropertyIndex()
+        instance._timestamp_index = TimestampToTextRangeIndex()
+        # Use default settings for these indexes
+        from ..knowpro.messageindex import MessageTextIndexSettings
+
+        settings = MessageTextIndexSettings()
+        instance._message_text_index = MessageTextIndex(settings)
+        related_settings = RelatedTermIndexSettings()
+        instance._related_terms_index = RelatedTermsIndex(related_settings)
+        instance._conversation_threads = ConversationThreads()
         return instance
 
     async def close(self) -> None:
@@ -255,55 +266,47 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
     async def create_semantic_ref_collection(self) -> interfaces.ISemanticRefCollection:
         return SqliteSemanticRefCollection(self.get_db())
 
-    # Index management methods
-    async def initialize_indexes(self) -> None:
-        """Initialize all indexes. For SQLite, this ensures they exist in memory."""
-        # Create all indexes to ensure they exist
-        await self.get_conversation_index()
-        await self.get_property_index()
-        await self.get_timestamp_index()
-        await self.get_message_text_index()
-        await self.get_related_terms_index()
-        await self.get_conversation_threads()
-
+    # Index getter methods
     async def get_conversation_index(self) -> interfaces.ITermToSemanticRefIndex:
-        if self._conversation_index is None:
-            self._conversation_index = ConversationIndex()
+        assert (
+            self._conversation_index is not None
+        ), "Use SqliteStorageProvider.create() to create an initialized instance"
         return self._conversation_index
 
     async def get_property_index(self) -> interfaces.IPropertyToSemanticRefIndex:
-        if self._property_index is None:
-            self._property_index = PropertyIndex()
+        assert (
+            self._property_index is not None
+        ), "Use SqliteStorageProvider.create() to create an initialized instance"
         return self._property_index
 
     async def get_timestamp_index(self) -> interfaces.ITimestampToTextRangeIndex:
-        if self._timestamp_index is None:
-            self._timestamp_index = TimestampToTextRangeIndex()
+        assert (
+            self._timestamp_index is not None
+        ), "Use SqliteStorageProvider.create() to create an initialized instance"
         return self._timestamp_index
 
     async def get_message_text_index(self) -> interfaces.IMessageTextIndex[TMessage]:
-        if self._message_text_index is None:
-            # Use default settings for now
-            from ..knowpro.messageindex import MessageTextIndexSettings
-
-            settings = MessageTextIndexSettings()
-            self._message_text_index = MessageTextIndex(settings)
+        assert (
+            self._message_text_index is not None
+        ), "Use SqliteStorageProvider.create() to create an initialized instance"
         return self._message_text_index
 
     async def get_related_terms_index(self) -> interfaces.ITermToRelatedTermsIndex:
-        if self._related_terms_index is None:
-            # Use default settings for now
-            settings = RelatedTermIndexSettings()
-            self._related_terms_index = RelatedTermsIndex(settings)
+        assert (
+            self._related_terms_index is not None
+        ), "Use SqliteStorageProvider.create() to create an initialized instance"
         return self._related_terms_index
 
     async def get_conversation_threads(self) -> interfaces.IConversationThreads:
-        if self._conversation_threads is None:
-            self._conversation_threads = ConversationThreads()
+        assert (
+            self._conversation_threads is not None
+        ), "Use SqliteStorageProvider.create() to create an initialized instance"
         return self._conversation_threads
 
 
-async def get_storage_provider(dbname: str | None = None) -> interfaces.IStorageProvider:
+async def get_storage_provider(
+    dbname: str | None = None,
+) -> interfaces.IStorageProvider:
     if dbname is None:
         # Create MemoryStorageProvider with test-friendly settings
         from ..aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
@@ -318,6 +321,8 @@ async def get_storage_provider(dbname: str | None = None) -> interfaces.IStorage
         message_text_settings = MessageTextIndexSettings(embedding_settings)
         related_terms_settings = RelatedTermIndexSettings(embedding_settings)
 
-        return await MemoryStorageProvider.create(message_text_settings, related_terms_settings)
+        return await MemoryStorageProvider.create(
+            message_text_settings, related_terms_settings
+        )
     else:
         return await SqliteStorageProvider.create(dbname)

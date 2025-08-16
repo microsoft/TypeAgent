@@ -41,11 +41,22 @@ class ConversationSecondaryIndexes(IConversationSecondaryIndexes):
     ) -> "ConversationSecondaryIndexes":
         """Create and initialize a ConversationSecondaryIndexes with all indexes."""
         instance = cls(storage_provider, settings)
-        await instance.initialize()
+        # Initialize all indexes from storage provider
+        instance.property_to_semantic_ref_index = (
+            await storage_provider.get_property_index()
+        )
+        instance.timestamp_index = await storage_provider.get_timestamp_index()
+        instance.term_to_related_terms_index = (
+            await storage_provider.get_related_terms_index()
+        )
+        instance.threads = await storage_provider.get_conversation_threads()
+        instance.message_index = await storage_provider.get_message_text_index()
         return instance
 
     async def initialize(self) -> None:
-        """Initialize all indexes from storage provider."""
+        """Initialize all indexes from storage provider (for backward compatibility)."""
+        if self.property_to_semantic_ref_index is not None:
+            return  # Already initialized
         self.property_to_semantic_ref_index = (
             await self._storage_provider.get_property_index()
         )
@@ -66,10 +77,9 @@ async def build_secondary_indexes[
     event_handler: IndexingEventHandlers | None,
 ) -> SecondaryIndexingResults:
     if conversation.secondary_indexes is None:
-        # Ensure storage provider is initialized before creating secondary indexes
-        await conversation_settings.storage_provider.initialize_indexes()
+        storage_provider = await conversation_settings.get_storage_provider()
         conversation.secondary_indexes = await ConversationSecondaryIndexes.create(
-            conversation_settings.storage_provider
+            storage_provider
         )
     result: SecondaryIndexingResults = await build_transient_secondary_indexes(
         conversation, conversation_settings
@@ -102,19 +112,22 @@ async def build_transient_secondary_indexes[
         if hasattr(conversation, "settings"):
             # Use getattr to avoid type checker issues
             settings = getattr(conversation, "settings", None)
-            if settings and hasattr(settings, "storage_provider"):
+            if settings and hasattr(settings, "get_storage_provider"):
+                storage_provider = await settings.get_storage_provider()
+            elif settings and hasattr(settings, "storage_provider"):
+                # Fallback for settings that already have initialized storage_provider
                 storage_provider = settings.storage_provider
         if storage_provider is None and conversation_settings is not None:
-            storage_provider = conversation_settings.storage_provider
+            storage_provider = await conversation_settings.get_storage_provider()
         if storage_provider is None:
             # Fallback - this shouldn't happen in normal usage
             raise RuntimeError(
                 "Cannot create secondary indexes without storage provider"
             )
 
-        conversation.secondary_indexes = await ConversationSecondaryIndexes.create(storage_provider)
-        # Ensure storage provider is initialized before initializing secondary indexes
-        await storage_provider.initialize_indexes()
+        conversation.secondary_indexes = await ConversationSecondaryIndexes.create(
+            storage_provider
+        )
     result = SecondaryIndexingResults()
     result.properties = await build_property_index(conversation)
     result.timestamps = await build_timestamp_index(conversation)

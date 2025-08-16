@@ -60,7 +60,17 @@ class SimpleConversation(IConversation):
         self.secondary_indexes = None
         # Store settings with storage provider for access via conversation.settings.storage_provider
         if storage_provider is None:
-            # Create default storage provider for backward compatibility
+            # Default storage provider will be created lazily in async context
+            self.settings = None
+            self._needs_async_init = True
+        else:
+            self.settings = ConversationSettings(storage_provider=storage_provider)
+            self._needs_async_init = False
+
+    async def ensure_initialized(self):
+        """Ensure async initialization is complete."""
+        if self._needs_async_init:
+            # Create default storage provider using factory method
             from typeagent.aitools.embeddings import (
                 AsyncEmbeddingModel,
                 TEST_MODEL_NAME,
@@ -76,11 +86,11 @@ class SimpleConversation(IConversation):
             embedding_settings = TextEmbeddingIndexSettings(test_model)
             message_text_settings = MessageTextIndexSettings(embedding_settings)
             related_terms_settings = RelatedTermIndexSettings(embedding_settings)
-            storage_provider = MemoryStorageProvider(
+            storage_provider = await MemoryStorageProvider.create(
                 message_text_settings, related_terms_settings
             )
-
-        self.settings = ConversationSettings(storage_provider=storage_provider)
+            self.settings = ConversationSettings(storage_provider=storage_provider)
+            self._needs_async_init = False
 
 
 @pytest.fixture
@@ -111,6 +121,9 @@ def test_conversation_secondary_indexes_initialization(storage, needs_auth):
 @pytest.mark.asyncio
 async def test_build_secondary_indexes(simple_conversation, conversation_settings):
     """Test building secondary indexes asynchronously."""
+    # Ensure the conversation is properly initialized
+    await simple_conversation.ensure_initialized()
+
     # Add some dummy data to the conversation
     await simple_conversation.messages.append(SimpleMessage("Message 1"))
     await simple_conversation.messages.append(SimpleMessage("Message 2"))
@@ -130,6 +143,9 @@ async def test_build_secondary_indexes(simple_conversation, conversation_setting
 @pytest.mark.asyncio
 async def test_build_transient_secondary_indexes(simple_conversation, needs_auth):
     """Test building transient secondary indexes."""
+    # Ensure the conversation is properly initialized
+    await simple_conversation.ensure_initialized()
+
     # Add some dummy data to the conversation
     await simple_conversation.messages.append(SimpleMessage("Message 1"))
     await simple_conversation.messages.append(SimpleMessage("Message 2"))
