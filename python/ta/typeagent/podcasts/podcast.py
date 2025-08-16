@@ -290,10 +290,9 @@ class Podcast(
 
         message_index_data = podcast_data.get("messageIndexData")
         if message_index_data is not None:
-            self.secondary_indexes.message_index = MessageTextIndex(
-                self.settings.message_text_index_settings
-            )
-            self.secondary_indexes.message_index.deserialize(message_index_data)
+            message_index = MessageTextIndex(self.settings.message_text_index_settings)
+            message_index.deserialize(message_index_data)
+            self.secondary_indexes.message_index = message_index
 
         await self._build_transient_secondary_indexes(True)
 
