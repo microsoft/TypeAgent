@@ -323,7 +323,7 @@ class Podcast(
             return None
         from ..storage.sqlitestore import get_storage_provider
 
-        provider = get_storage_provider(dbname)
+        provider = await get_storage_provider(dbname)
         msgs = await provider.create_message_collection(PodcastMessage)
         semrefs = await provider.create_semantic_ref_collection()
         if await msgs.size() or await semrefs.size():

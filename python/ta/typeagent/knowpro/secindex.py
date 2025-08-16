@@ -33,6 +33,17 @@ class ConversationSecondaryIndexes(IConversationSecondaryIndexes):
         self.threads = None
         self.message_index = None
 
+    @classmethod
+    async def create(
+        cls,
+        storage_provider: IStorageProvider,
+        settings: RelatedTermIndexSettings | None = None,
+    ) -> "ConversationSecondaryIndexes":
+        """Create and initialize a ConversationSecondaryIndexes with all indexes."""
+        instance = cls(storage_provider, settings)
+        await instance.initialize()
+        return instance
+
     async def initialize(self) -> None:
         """Initialize all indexes from storage provider."""
         self.property_to_semantic_ref_index = (
@@ -57,10 +68,9 @@ async def build_secondary_indexes[
     if conversation.secondary_indexes is None:
         # Ensure storage provider is initialized before creating secondary indexes
         await conversation_settings.storage_provider.initialize_indexes()
-        conversation.secondary_indexes = ConversationSecondaryIndexes(
+        conversation.secondary_indexes = await ConversationSecondaryIndexes.create(
             conversation_settings.storage_provider
         )
-        await conversation.secondary_indexes.initialize()
     result: SecondaryIndexingResults = await build_transient_secondary_indexes(
         conversation, conversation_settings
     )
@@ -102,10 +112,9 @@ async def build_transient_secondary_indexes[
                 "Cannot create secondary indexes without storage provider"
             )
 
-        conversation.secondary_indexes = ConversationSecondaryIndexes(storage_provider)
+        conversation.secondary_indexes = await ConversationSecondaryIndexes.create(storage_provider)
         # Ensure storage provider is initialized before initializing secondary indexes
         await storage_provider.initialize_indexes()
-        await conversation.secondary_indexes.initialize()
     result = SecondaryIndexingResults()
     result.properties = await build_property_index(conversation)
     result.timestamps = await build_timestamp_index(conversation)

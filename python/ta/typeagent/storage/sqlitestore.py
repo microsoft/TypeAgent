@@ -222,6 +222,13 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         self._related_terms_index: RelatedTermsIndex | None = None
         self._conversation_threads: ConversationThreads | None = None
 
+    @classmethod
+    async def create(cls, db_path: str) -> "SqliteStorageProvider[TMessage]":
+        """Create and initialize a SqliteStorageProvider with all indexes."""
+        instance = cls(db_path)
+        await instance.initialize_indexes()
+        return instance
+
     async def close(self) -> None:
         if self.db is not None:
             self.db.close()
@@ -296,7 +303,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         return self._conversation_threads
 
 
-def get_storage_provider(dbname: str | None = None) -> interfaces.IStorageProvider:
+async def get_storage_provider(dbname: str | None = None) -> interfaces.IStorageProvider:
     if dbname is None:
         # Create MemoryStorageProvider with test-friendly settings
         from ..aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
@@ -311,6 +318,6 @@ def get_storage_provider(dbname: str | None = None) -> interfaces.IStorageProvid
         message_text_settings = MessageTextIndexSettings(embedding_settings)
         related_terms_settings = RelatedTermIndexSettings(embedding_settings)
 
-        return MemoryStorageProvider(message_text_settings, related_terms_settings)
+        return await MemoryStorageProvider.create(message_text_settings, related_terms_settings)
     else:
-        return SqliteStorageProvider(dbname)
+        return await SqliteStorageProvider.create(dbname)

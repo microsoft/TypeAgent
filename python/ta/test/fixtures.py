@@ -37,12 +37,9 @@ async def storage():
     message_text_settings = MessageTextIndexSettings(embedding_settings)
     related_terms_settings = RelatedTermIndexSettings(embedding_settings)
 
-    storage_provider = MemoryStorageProvider(
+    storage_provider = await MemoryStorageProvider.create(
         message_text_settings=message_text_settings,
         related_terms_settings=related_terms_settings,
     )
-
-    # Initialize the indexes
-    await storage_provider.initialize_indexes()
 
     return storage_provider

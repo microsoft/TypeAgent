@@ -58,6 +58,17 @@ class MemoryStorageProvider[TMessage: IMessage](IStorageProvider[TMessage]):
         self._related_terms_settings = related_terms_settings
         # Indexes will be created in initialize()
 
+    @classmethod
+    async def create(
+        cls,
+        message_text_settings: MessageTextIndexSettings,
+        related_terms_settings: RelatedTermIndexSettings,
+    ) -> "MemoryStorageProvider[TMessage]":
+        """Create and initialize a MemoryStorageProvider with all indexes."""
+        instance = cls(message_text_settings, related_terms_settings)
+        await instance.initialize_indexes()
+        return instance
+
     async def initialize_indexes(self) -> None:
         """Initialize all indexes using the provided settings."""
         self._conversation_index = ConversationIndex()

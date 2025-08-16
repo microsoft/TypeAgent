@@ -63,11 +63,8 @@ async def test_indexes_work_independently(needs_auth):
     message_text_settings = MessageTextIndexSettings(embedding_settings)
     related_terms_settings = RelatedTermIndexSettings(embedding_settings)
 
-    storage1 = MemoryStorageProvider(message_text_settings, related_terms_settings)
-    storage2 = MemoryStorageProvider(message_text_settings, related_terms_settings)
-
-    await storage1.initialize_indexes()
-    await storage2.initialize_indexes()
+    storage1 = await MemoryStorageProvider.create(message_text_settings, related_terms_settings)
+    storage2 = await MemoryStorageProvider.create(message_text_settings, related_terms_settings)
 
     # Get indexes from both storage providers
     index1 = await storage1.get_conversation_index()
