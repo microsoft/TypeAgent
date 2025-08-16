@@ -157,12 +157,8 @@ class PropertyIndex(IPropertyToSemanticRefIndex):
     def __init__(self):
         self._map: dict[str, list[ScoredSemanticRefOrdinal]] = {}
 
-    def __len__(self) -> int:
+    async def size(self) -> int:
         return len(self._map)
-
-    # Needed because otherwise an empty index would be falsy.
-    def __bool__(self) -> bool:
-        return True
 
     def get_values(self) -> list[str]:
         terms: list[str] = []

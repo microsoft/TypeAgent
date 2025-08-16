@@ -214,7 +214,7 @@ async def test_build_property_index(needs_auth):
 
     # Verify the property index contents
     property_index = conversation.secondary_indexes.property_to_semantic_ref_index
-    assert len(property_index) > 0
+    assert await property_index.size() > 0
     assert property_index.lookup_property("name", "Entity1") is not None
     assert property_index.lookup_property("type", "Type1") is not None
     assert property_index.lookup_property("verb", "run jump") is not None
@@ -394,13 +394,14 @@ async def test_lookup_property_in_property_index(property_index):
     assert result is None
 
 
-def test_property_index_clear(property_index):
+@pytest.mark.asyncio
+async def test_property_index_clear(property_index):
     """Test clearing all properties in the PropertyIndex."""
     property_index.add_property("name", "value", 0)
-    assert len(property_index) > 0
+    assert await property_index.size() > 0
 
     property_index.clear()
-    assert len(property_index) == 0
+    assert await property_index.size() == 0
 
 
 def test_property_index_get_values(property_index):
