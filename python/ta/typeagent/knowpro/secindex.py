@@ -43,8 +43,7 @@ class ConversationSecondaryIndexes(IConversationSecondaryIndexes):
             await self._storage_provider.get_related_terms_index()
         )
         self.threads = await self._storage_provider.get_conversation_threads()
-        if self.message_index is None:
-            self.message_index = await self._storage_provider.get_message_text_index()
+        self.message_index = await self._storage_provider.get_message_text_index()
 
 
 async def build_secondary_indexes[

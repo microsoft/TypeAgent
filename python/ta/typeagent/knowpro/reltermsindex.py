@@ -50,6 +50,9 @@ class TermToRelatedTermsMap(ITermToRelatedTerms):
     def clear(self) -> None:
         self.map.clear()
 
+    async def size(self) -> int:
+        return len(self.map)
+
     def serialize(self) -> TermToRelatedTermsData:
         related_terms: list[TermsToRelatedTermsDataItem] = []
         for key, value in self.map.items():
@@ -155,10 +158,7 @@ async def resolve_related_terms(
         searchable_terms.add_or_union(search_term.term)
         term_text = search_term.term.text
         # Resolve any specific term to related term mappings
-        if (
-            related_terms_index.aliases is not None
-            and search_term.related_terms is None
-        ):
+        if search_term.related_terms is None:
             search_term.related_terms = related_terms_index.aliases.lookup_term(
                 term_text
             )

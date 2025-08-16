@@ -279,6 +279,10 @@ class Podcast(
                 self.secondary_indexes.term_to_related_terms_index
             )
             if term_to_related_terms_index is not None:
+                # Assert empty before deserializing
+                assert (
+                    await term_to_related_terms_index.aliases.size() == 0
+                ), "Term to related terms index must be empty before deserializing"
                 term_to_related_terms_index.deserialize(related_terms_index_data)
 
         thread_data = podcast_data.get("threadData")
@@ -290,9 +294,17 @@ class Podcast(
 
         message_index_data = podcast_data.get("messageIndexData")
         if message_index_data is not None:
-            message_index = MessageTextIndex(self.settings.message_text_index_settings)
-            message_index.deserialize(message_index_data)
-            self.secondary_indexes.message_index = message_index
+            # Assert the message index is empty before deserializing
+            assert (
+                self.secondary_indexes.message_index is not None
+            ), "Message index should be initialized"
+            from ..knowpro.messageindex import MessageTextIndex
+
+            if isinstance(self.secondary_indexes.message_index, MessageTextIndex):
+                assert (
+                    len(self.secondary_indexes.message_index) == 0
+                ), "Message index must be empty before deserializing"
+            self.secondary_indexes.message_index.deserialize(message_index_data)
 
         await self._build_transient_secondary_indexes(True)
 
@@ -332,8 +344,9 @@ class Podcast(
         self._add_synonyms()
 
     async def _build_participant_aliases(self) -> None:
-        aliases = self.secondary_indexes.term_to_related_terms_index.aliases  # type: ignore  # TODO
-        assert aliases is not None
+        term_to_related_terms_index = self.secondary_indexes.term_to_related_terms_index
+        assert term_to_related_terms_index is not None
+        aliases = term_to_related_terms_index.aliases
         aliases.clear()  # type: ignore  # Same issue as above.
         name_to_alias_map = await self._collect_participant_aliases()
         for name in name_to_alias_map.keys():
@@ -348,7 +361,6 @@ class Podcast(
             TermToRelatedTermsMap,
             self.secondary_indexes.term_to_related_terms_index.aliases,
         )
-        assert aliases is not None
         synonym_file = os.path.join(os.path.dirname(__file__), "podcastVerbs.json")
         with open(synonym_file) as f:
             data: list[dict] = json.load(f)

@@ -381,6 +381,8 @@ class ITimestampToTextRangeIndex(Protocol):
 class ITermToRelatedTerms(Protocol):
     def lookup_term(self, text: str) -> list[Term] | None: ...
 
+    async def size(self) -> int: ...
+
 
 class ITermToRelatedTermsFuzzy(Protocol):
     async def add_terms(
@@ -404,7 +406,7 @@ class ITermToRelatedTermsFuzzy(Protocol):
 
 class ITermToRelatedTermsIndex(Protocol):
     @property
-    def aliases(self) -> ITermToRelatedTerms | None: ...
+    def aliases(self) -> ITermToRelatedTerms: ...
 
     @property
     def fuzzy_index(self) -> ITermToRelatedTermsFuzzy | None: ...
