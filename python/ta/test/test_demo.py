@@ -59,7 +59,7 @@ async def main(filename_prefix: str):
 
     term = "book"
     print(f"\nSearching {pod.name_tag!r} for term {term!r} ...")
-    results = pod.semantic_ref_index.lookup_term(term)
+    results = await pod.semantic_ref_index.lookup_term(term)
     assert results is not None
     assert isinstance(results, list), f"results is {results!r}"
     assert len(results) > 0, f"results is {results!r}"

@@ -179,7 +179,7 @@ async def lookup_term_filtered(
     filter: Callable[[SemanticRef, ScoredSemanticRefOrdinal], bool],
 ) -> list[ScoredSemanticRefOrdinal] | None:
     """Look up a term in the semantic reference index and filter the results."""
-    scored_refs = semantic_ref_index.lookup_term(term.text)
+    scored_refs = await semantic_ref_index.lookup_term(term.text)
     if scored_refs:
         filtered = []
         for sr in scored_refs:
@@ -207,7 +207,7 @@ async def lookup_term(
             lambda sr, _: (not ktype or sr.knowledge_type == ktype)
             and ranges_in_scope.is_range_in_scope(sr.range),
         )
-    return semantic_ref_index.lookup_term(term.text)
+    return await semantic_ref_index.lookup_term(term.text)
 
 
 # TODO: lookup_property

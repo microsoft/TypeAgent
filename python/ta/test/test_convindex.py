@@ -28,18 +28,18 @@ async def test_conversation_index_add_and_lookup(conversation_index: Conversatio
     await conversation_index.add_term("example", 2)
     await conversation_index.add_term("test", 3)
 
-    result = conversation_index.lookup_term("example")
+    result = await conversation_index.lookup_term("example")
     assert result is not None
     assert len(result) == 2
     assert result[0].semantic_ref_ordinal == 1
     assert result[1].semantic_ref_ordinal == 2
 
-    result = conversation_index.lookup_term("test")
+    result = await conversation_index.lookup_term("test")
     assert result is not None
     assert len(result) == 1
     assert result[0].semantic_ref_ordinal == 3
 
-    result = conversation_index.lookup_term("nonexistent")
+    result = await conversation_index.lookup_term("nonexistent")
     assert result == []
 
 
@@ -50,7 +50,7 @@ async def test_conversation_index_remove_term(conversation_index: ConversationIn
     await conversation_index.add_term("example", 2)
 
     await conversation_index.remove_term("example", 1)
-    result = conversation_index.lookup_term("example")
+    result = await conversation_index.lookup_term("example")
     assert result is not None
     assert len(result) == 0
 
@@ -85,12 +85,12 @@ async def test_conversation_index_serialize_and_deserialize(
     # Test that the new index has the correct size
     assert await new_index.size() == 2
 
-    example = new_index.lookup_term("example")
+    example = await new_index.lookup_term("example")
     assert example is not None
     assert len(example) >= 1
     assert example[0].semantic_ref_ordinal == 1
 
-    test = new_index.lookup_term("test")
+    test = await new_index.lookup_term("test")
     assert test is not None
     assert len(test) >= 1
     assert test[0].semantic_ref_ordinal == 2
@@ -114,15 +114,15 @@ async def test_add_entity_to_index(conversation_index: ConversationIndex):
         == "ExampleEntity"
     )
 
-    result = conversation_index.lookup_term("ExampleEntity")
+    result = await conversation_index.lookup_term("ExampleEntity")
     assert result is not None
     assert len(result) == 1
 
-    result = conversation_index.lookup_term("object")
+    result = await conversation_index.lookup_term("object")
     assert result is not None
     assert len(result) == 1
 
-    result = conversation_index.lookup_term("color")
+    result = await conversation_index.lookup_term("color")
     assert result is not None
     assert len(result) == 1
 
@@ -140,7 +140,7 @@ async def test_add_topic_to_index(conversation_index: ConversationIndex):
         cast(Topic, (await semantic_refs.get_item(0)).knowledge).text == "ExampleTopic"
     )
 
-    result = conversation_index.lookup_term("ExampleTopic")
+    result = await conversation_index.lookup_term("ExampleTopic")
     assert result is not None
     assert len(result) == 1
 
@@ -167,15 +167,15 @@ async def test_add_action_to_index(conversation_index: ConversationIndex):
         "jump",
     ]
 
-    result = conversation_index.lookup_term("run jump")
+    result = await conversation_index.lookup_term("run jump")
     assert result is not None
     assert len(result) == 1
 
-    result = conversation_index.lookup_term("John")
+    result = await conversation_index.lookup_term("John")
     assert result is not None
     assert len(result) == 1
 
-    result = conversation_index.lookup_term("Ball")
+    result = await conversation_index.lookup_term("Ball")
     assert result
     assert len(result) == 1
 
@@ -210,15 +210,15 @@ async def test_add_knowledge_to_index(conversation_index: ConversationIndex):
 
     assert await semantic_refs.size() == 3  # 1 entity + 1 action + 1 topic
 
-    result = conversation_index.lookup_term("ExampleEntity")
+    result = await conversation_index.lookup_term("ExampleEntity")
     assert result is not None
     assert len(result) == 1
 
-    result = conversation_index.lookup_term("run jump")
+    result = await conversation_index.lookup_term("run jump")
     assert result is not None
     assert len(result) == 1
 
-    result = conversation_index.lookup_term("ExampleTopic")
+    result = await conversation_index.lookup_term("ExampleTopic")
     assert result is not None
     assert len(result) == 1
 
@@ -241,8 +241,8 @@ async def test_conversation_index_size_and_get_terms(
 async def test_conversation_index_contains(conversation_index: ConversationIndex):
     """Test presence of a term using lookup_term."""
     await conversation_index.add_term("foo", 1)
-    assert conversation_index.lookup_term("foo") != []
-    assert conversation_index.lookup_term("bar") == []
+    assert await conversation_index.lookup_term("foo") != []
+    assert await conversation_index.lookup_term("bar") == []
 
 
 @pytest.mark.asyncio
@@ -252,7 +252,7 @@ async def test_conversation_index_clear(conversation_index: ConversationIndex):
     await conversation_index.add_term("bar", 2)
     conversation_index.clear()
     assert await conversation_index.size() == 0
-    assert conversation_index.lookup_term("foo") == []
+    assert await conversation_index.lookup_term("foo") == []
 
 
 @pytest.mark.asyncio
