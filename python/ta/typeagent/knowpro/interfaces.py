@@ -389,9 +389,7 @@ class ITermToRelatedTerms(Protocol):
 
 
 class ITermToRelatedTermsFuzzy(Protocol):
-    async def add_terms(
-        self, texts: list[str], event_handler: "IndexingEventHandlers | None" = None
-    ) -> "ListIndexingResult": ...
+    async def add_terms(self, texts: list[str]) -> "ListIndexingResult": ...
 
     async def lookup_term(
         self,
@@ -475,7 +473,6 @@ class IMessageTextIndex[TMessage: IMessage](Protocol):
     async def add_messages(
         self,
         messages: Iterable[TMessage],
-        event_handler: "IndexingEventHandlers | None" = None,
     ) -> "ListIndexingResult": ...
 
     async def lookup_messages(
@@ -718,44 +715,6 @@ class ConversationDataWithIndexes[TMessageData](ConversationData[TMessageData]):
 # --------------------------------
 # Indexing helper data structures
 # --------------------------------
-
-
-# TODO: Should the callables become methods with a default implementation?
-@dataclass
-class IndexingEventHandlers:
-    on_knowledge_extracted: (
-        Callable[
-            [
-                TextLocation,  # chunk
-                kplib.KnowledgeResponse,  # knowledge_result
-            ],
-            bool,
-        ]
-        | None
-    ) = None
-    on_embeddings_created: (
-        Callable[
-            [
-                Sequence[str],  # source_texts
-                Sequence[str],  # batch
-                int,  # batch_start_at
-            ],
-            bool,
-        ]
-        | None
-    ) = None
-    on_text_indexed: (
-        Callable[
-            [
-                list[tuple[str, TextLocation]],  # text_and_locations
-                list[tuple[str, TextLocation]],  # batch
-                int,  # batch_start_at
-            ],
-            bool,
-        ]
-        | None
-    ) = None
-    on_message_started: Callable[[MessageOrdinal], bool] | None = None
 
 
 @dataclass

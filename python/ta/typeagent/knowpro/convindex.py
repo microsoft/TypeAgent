@@ -14,7 +14,6 @@ from .interfaces import (
     ISemanticRefCollection,
     ITermToSemanticRefIndex,
     # Other imports.
-    IndexingEventHandlers,
     IndexingResults,
     Knowledge,
     KnowledgeType,
@@ -77,7 +76,6 @@ async def add_batch_to_semantic_ref_index[
     conversation: IConversation[TMessage, TTermToSemanticRefIndex],
     batch: list[TextLocation],
     knowledge_extractor: convknowledge.KnowledgeExtractor,
-    event_handler: IndexingEventHandlers | None = None,
     terms_added: set[str] | None = None,
 ) -> TextIndexingResult:
     begin_indexing(conversation)
@@ -111,12 +109,6 @@ async def add_batch_to_semantic_ref_index[
             terms_added,
         )
         indexing_result.completed_upto = text_location
-        if (
-            event_handler
-            and event_handler.on_knowledge_extracted
-            and not event_handler.on_knowledge_extracted(text_location, knowledge)
-        ):
-            break
 
     return indexing_result
 
@@ -630,13 +622,11 @@ class ConversationIndex(ITermToSemanticRefIndex):
 async def build_conversation_index[TMessage: IMessage](
     conversation: IConversation[TMessage, ConversationIndex],
     conversation_settings: importing.ConversationSettings,
-    event_handler: IndexingEventHandlers | None = None,
 ) -> IndexingResults:
     result = IndexingResults()
     result.semantic_refs = await build_semantic_ref_index(
         conversation,
         conversation_settings.semantic_ref_index_settings,
-        event_handler,
     )
     if (
         result.semantic_refs
@@ -646,7 +636,6 @@ async def build_conversation_index[TMessage: IMessage](
         result.secondary_index_results = await secindex.build_secondary_indexes(
             conversation,
             conversation_settings,
-            event_handler,
         )
     return result
 
@@ -654,9 +643,8 @@ async def build_conversation_index[TMessage: IMessage](
 async def build_semantic_ref_index[TM: IMessage](
     conversation: IConversation[TM, ConversationIndex],
     settings: importing.SemanticRefIndexSettings,
-    event_handler: IndexingEventHandlers | None = None,
 ) -> TextIndexingResult:
-    return await add_to_semantic_ref_index(conversation, settings, 0, event_handler)
+    return await add_to_semantic_ref_index(conversation, settings, 0)
 
 
 async def add_to_semantic_ref_index[
@@ -665,7 +653,6 @@ async def add_to_semantic_ref_index[
     conversation: IConversation[TMessage, TTermToSemanticRefIndex],
     settings: importing.SemanticRefIndexSettings,
     message_ordinal_start_at: MessageOrdinal,
-    event_handler: IndexingEventHandlers | None = None,
     terms_added: list[str] | None = None,
 ) -> TextIndexingResult:
     """Add semantic references to the conversation's semantic reference index."""
@@ -686,7 +673,6 @@ async def add_to_semantic_ref_index[
     #         conversation,
     #         text_location_batch,
     #         knowledge_extractor,
-    #         event_handler,
     #         terms_added,
     #     )
 

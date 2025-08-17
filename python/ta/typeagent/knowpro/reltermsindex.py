@@ -10,17 +10,19 @@ from .common import is_search_term_wildcard
 from .importing import ConversationSettings, RelatedTermIndexSettings
 from .interfaces import (
     IConversation,
+    IMessage,
+    IStorageProvider,
     ITermToRelatedTerms,
     ITermToRelatedTermsFuzzy,
-    SearchTerm,
-    TermToRelatedTermsData,
     ITermToRelatedTermsIndex,
+    ITermToSemanticRefIndex,
+    ListIndexingResult,
+    SearchTerm,
+    Term,
+    TermToRelatedTermsData,
     TermsToRelatedTermsDataItem,
     TermsToRelatedTermsIndexData,
     TextEmbeddingIndexData,
-    IndexingEventHandlers,
-    ListIndexingResult,
-    Term,
 )
 from .query import CompiledSearchTerm, CompiledTermGroup
 
@@ -92,7 +94,6 @@ class TermToRelatedTermsMap(ITermToRelatedTerms):
 async def build_related_terms_index(
     conversation: IConversation,
     settings: ConversationSettings,
-    event_handler: IndexingEventHandlers | None = None,
 ) -> ListIndexingResult:
     csr = conversation.semantic_ref_index
     csi = conversation.secondary_indexes
@@ -279,9 +280,7 @@ class TermEmbeddingIndex(ITermEmbeddingIndex):
             self._texts = data.get("textItems", [])
             self._vectorbase.deserialize(data.get("embeddings"))
 
-    async def add_terms(
-        self, texts: list[str], event_handler: IndexingEventHandlers | None = None
-    ) -> ListIndexingResult:
+    async def add_terms(self, texts: list[str]) -> ListIndexingResult:
         await self._vectorbase.add_keys(texts)
         self._texts.extend(texts)
         return ListIndexingResult(len(texts))

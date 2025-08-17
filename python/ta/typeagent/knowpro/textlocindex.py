@@ -13,7 +13,6 @@ import asyncio
 from typing import Sequence
 from .interfaces import (
     TextToTextLocationIndexData,
-    IndexingEventHandlers,
     ListIndexingResult,
     TextLocation,
 )
@@ -33,7 +32,6 @@ class ITextToTextLocationIndex(Protocol):
     async def add_text_locations(
         self,
         text_and_locations: list[tuple[str, TextLocation]],
-        event_handler: IndexingEventHandlers | None = None,
     ) -> ListIndexingResult: ...
 
     async def lookup_text(
@@ -83,7 +81,6 @@ class TextToTextLocationIndex(ITextToTextLocationIndex):
     async def add_text_locations(
         self,
         text_and_locations: list[tuple[str, TextLocation]],
-        event_handler: IndexingEventHandlers | None = None,
     ) -> ListIndexingResult:
         await self._embedding_index.add_texts([text for text, _ in text_and_locations])
         self._text_locations.extend([loc for _, loc in text_and_locations])

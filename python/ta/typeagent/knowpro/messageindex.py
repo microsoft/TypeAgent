@@ -12,7 +12,6 @@ from .interfaces import (
     IMessageTextIndex,
     MessageTextIndexData,
     ITermToSemanticRefIndex,
-    IndexingEventHandlers,
     ListIndexingResult,
     MessageOrdinal,
     ScoredMessageOrdinal,
@@ -27,7 +26,6 @@ async def build_message_index[
 ](
     conversation: IConversation[TMessage, TTermToSemanticRefIndex],
     settings: MessageTextIndexSettings | None = None,
-    event_handler: IndexingEventHandlers | None = None,
 ) -> ListIndexingResult:
     csi = conversation.secondary_indexes
     if csi is None:
@@ -37,7 +35,7 @@ async def build_message_index[
     messages = conversation.messages
     # Convert collection to list for add_messages
     messages_list = [message async for message in messages]
-    return await csi.message_index.add_messages(messages_list, event_handler)
+    return await csi.message_index.add_messages(messages_list)
 
 
 class IMessageTextEmbeddingIndex(IMessageTextIndex):
@@ -83,7 +81,6 @@ class MessageTextIndex(IMessageTextEmbeddingIndex):
     async def add_messages[TMessage: IMessage](
         self,
         messages: Iterable[TMessage],
-        event_handler: IndexingEventHandlers | None = None,
     ) -> ListIndexingResult:
         base_message_ordinal: MessageOrdinal = await self.text_location_index.size()
         all_chunks: list[tuple[str, TextLocation]] = []
@@ -91,9 +88,7 @@ class MessageTextIndex(IMessageTextEmbeddingIndex):
         for message_ordinal, message in enumerate(messages, base_message_ordinal):
             for chunk_ordinal, chunk in enumerate(message.text_chunks):
                 all_chunks.append((chunk, TextLocation(message_ordinal, chunk_ordinal)))
-        return await self.text_location_index.add_text_locations(
-            all_chunks, event_handler
-        )
+        return await self.text_location_index.add_text_locations(all_chunks)
 
     async def lookup_messages(
         self,

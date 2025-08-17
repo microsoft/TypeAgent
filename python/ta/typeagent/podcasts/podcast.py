@@ -21,7 +21,6 @@ from ..knowpro.interfaces import (
     IMessageMetadata,
     ISemanticRefCollection,
     IStorageProvider,
-    IndexingEventHandlers,
     IndexingResults,
     MessageOrdinal,
     SemanticRef,
@@ -241,12 +240,9 @@ class Podcast(
 
     async def build_index(
         self,
-        event_handler: IndexingEventHandlers | None = None,
     ) -> IndexingResults:
         await self.add_metadata_to_index()
-        result = await convindex.build_conversation_index(
-            self, self.settings, event_handler
-        )
+        result = await convindex.build_conversation_index(self, self.settings)
         # build_conversation_index automatically builds standard secondary indexes.
         # Pass false here to build podcast specific secondary indexes only.
         await self._build_transient_secondary_indexes(False)

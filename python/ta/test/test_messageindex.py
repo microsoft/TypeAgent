@@ -17,10 +17,13 @@ from typeagent.knowpro.importing import MessageTextIndexSettings, ConversationSe
 from typeagent.knowpro.interfaces import (
     IConversation,
     IMessage,
-    TextLocation,
+    IStorageProvider,
+    ITermToSemanticRefIndex,
     ListIndexingResult,
-    IndexingEventHandlers,
+    MessageOrdinal,
     MessageTextIndexData,
+    ScoredMessageOrdinal,
+    TextLocation,
     TextToTextLocationIndexData,
 )
 from typeagent.knowpro.storage import MemoryStorageProvider
@@ -34,6 +37,9 @@ from fixtures import needs_auth  # type: ignore  # It's used!
 def mock_text_location_index():
     """Fixture to mock the TextToTextLocationIndex."""
     mock_index = MagicMock(spec=TextToTextLocationIndex)
+    mock_index.size = AsyncMock(
+        return_value=0
+    )  # Empty index, so first message starts at ordinal 0
     mock_index.add_text_locations = AsyncMock(return_value=ListIndexingResult(2))
     mock_index.lookup_text = AsyncMock(return_value=[])
     mock_index.lookup_text_in_subset = AsyncMock(return_value=[])
@@ -67,12 +73,25 @@ async def test_add_messages(message_text_index, needs_auth: None):
         MagicMock(text_chunks=["chunk3"]),
     ]
 
-    event_handler = MagicMock()
-
-    result = await message_text_index.add_messages(messages, event_handler)
+    result = await message_text_index.add_messages(messages)
 
     assert result.number_completed == 2
-    message_text_index.text_location_index.add_text_locations.assert_awaited_once()
+    # Check that add_text_locations was called with the expected text and location data
+    call_args = message_text_index.text_location_index.add_text_locations.call_args
+    assert call_args is not None
+    text_and_locations = call_args[0][0]  # First positional argument
+    assert (
+        len(text_and_locations) == 3
+    )  # Two chunks from first message, one from second
+    assert text_and_locations[0] == (
+        "chunk1",
+        TextLocation(0, 0),
+    )  # First message starts at ordinal 0
+    assert text_and_locations[1] == ("chunk2", TextLocation(0, 1))
+    assert text_and_locations[2] == (
+        "chunk3",
+        TextLocation(1, 0),
+    )  # Second message at ordinal 1
 
 
 @pytest.mark.asyncio
@@ -205,8 +224,7 @@ async def test_build_message_index(needs_auth: None):
 
     # Build the message index
     settings = MessageTextIndexSettings()
-    event_handler = IndexingEventHandlers()
-    result = await build_message_index(conversation, settings, event_handler)
+    result = await build_message_index(conversation, settings)
 
     # Assertions
     assert result.error is None

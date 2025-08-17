@@ -16,7 +16,6 @@ from typeagent.knowpro.interfaces import (
     TextRange,
     SemanticRef,
     Thread,
-    IndexingEventHandlers,
     TextIndexingResult,
     ListIndexingResult,
     SecondaryIndexingResults,
@@ -374,25 +373,6 @@ def test_thread_serialization():
             {"start": {"messageOrdinal": 3}, "end": {"messageOrdinal": 4}},
         ],
     }
-
-
-def test_indexing_event_handlers():
-    """Test that IndexingEventHandlers can be initialized and invoked."""
-
-    def mock_handler(*args):
-        return True
-
-    handlers = IndexingEventHandlers(
-        on_knowledge_extracted=mock_handler,
-        on_embeddings_created=mock_handler,
-        on_text_indexed=mock_handler,
-        on_message_started=mock_handler,
-    )
-
-    assert handlers.on_knowledge_extracted is not None
-    assert handlers.on_embeddings_created is not None
-    assert handlers.on_text_indexed is not None
-    assert handlers.on_message_started is not None
 
 
 def test_text_indexing_result():

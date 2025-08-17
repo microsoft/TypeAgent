@@ -8,7 +8,6 @@ from .interfaces import (
     IMessage,
     IStorageProvider,
     ITermToSemanticRefIndex,
-    IndexingEventHandlers,
     SecondaryIndexingResults,
     TextIndexingResult,
     TextLocation,
@@ -74,7 +73,6 @@ async def build_secondary_indexes[
 ](
     conversation: IConversation[TMessage, TTermToSemanticRefIndex],
     conversation_settings: ConversationSettings,
-    event_handler: IndexingEventHandlers | None,
 ) -> SecondaryIndexingResults:
     if conversation.secondary_indexes is None:
         storage_provider = await conversation_settings.get_storage_provider()
@@ -85,13 +83,12 @@ async def build_secondary_indexes[
         conversation, conversation_settings
     )
     result.related_terms = await build_related_terms_index(
-        conversation, conversation_settings, event_handler
+        conversation, conversation_settings
     )
     if result.related_terms is not None and not result.related_terms.error:
         res = await build_message_index(
             conversation,
             conversation_settings.message_text_index_settings,
-            event_handler,
         )
         result.message = TextIndexingResult(
             completed_upto=TextLocation(message_ordinal=res.number_completed)

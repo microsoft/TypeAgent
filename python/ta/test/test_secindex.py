@@ -128,9 +128,7 @@ async def test_build_secondary_indexes(simple_conversation, conversation_setting
     await simple_conversation.messages.append(SimpleMessage("Message 1"))
     await simple_conversation.messages.append(SimpleMessage("Message 2"))
 
-    result = await build_secondary_indexes(
-        simple_conversation, conversation_settings, None
-    )
+    result = await build_secondary_indexes(simple_conversation, conversation_settings)
 
     assert isinstance(result, SecondaryIndexingResults)
     assert result.related_terms is not None
