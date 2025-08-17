@@ -769,6 +769,11 @@ class MemoryCollection[T, TOrdinal: int](ICollection[T, TOrdinal]):
     async def size(self) -> int:
         return len(self.items)
 
+    def __bool__(self) -> bool:
+        raise RuntimeError(
+            "Use 'if x is None' instead of 'if x' for collection objects. For emptiness check, use 'await x.size() == 0'."
+        )
+
     def __aiter__(self):
         """Return an async iterator over the collection."""
         return self._async_iterator()

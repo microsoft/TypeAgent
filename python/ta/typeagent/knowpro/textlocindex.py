@@ -64,6 +64,11 @@ class TextToTextLocationIndex(ITextToTextLocationIndex):
     async def is_empty(self) -> bool:
         return await self._embedding_index.is_empty()
 
+    def __bool__(self) -> bool:
+        raise RuntimeError(
+            "Use 'if x is None' instead of 'if x' for index objects. For emptiness check, use 'await x.is_empty()'."
+        )
+
     def get(self, pos: int, default: TextLocation | None = None) -> TextLocation | None:
         size = len(self._text_locations)
         if 0 <= pos < size:

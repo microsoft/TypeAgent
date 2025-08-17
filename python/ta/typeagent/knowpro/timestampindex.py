@@ -93,7 +93,11 @@ def get_in_range[T, S: Any](
 
 
 async def build_timestamp_index(conversation: IConversation) -> ListIndexingResult:
-    if conversation.messages and conversation.secondary_indexes:
+    if conversation.messages is not None and conversation.secondary_indexes is not None:
+        # Check if messages collection is not empty
+        if await conversation.messages.size() == 0:
+            return ListIndexingResult(number_completed=0)
+
         if conversation.secondary_indexes.timestamp_index is None:
             conversation.secondary_indexes.timestamp_index = TimestampToTextRangeIndex()
         return await add_to_timestamp_index(
@@ -101,7 +105,7 @@ async def build_timestamp_index(conversation: IConversation) -> ListIndexingResu
             conversation.messages,
             0,
         )
-    return ListIndexingResult(0)
+    return ListIndexingResult(number_completed=0)
 
 
 async def add_to_timestamp_index(

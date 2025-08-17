@@ -114,7 +114,13 @@ async def add_to_property_index(
     start_at_ordinal: SemanticRefOrdinal,
 ) -> ListIndexingResult:
     """Add semantic references from a conversation to the property index starting at a specific ordinal."""
-    if (csi := conversation.secondary_indexes) and conversation.semantic_refs:
+    if (
+        csi := conversation.secondary_indexes
+    ) and conversation.semantic_refs is not None:
+        # Check if semantic_refs collection is not empty
+        if await conversation.semantic_refs.size() == 0:
+            return ListIndexingResult(number_completed=0)
+
         if (property_index := csi.property_to_semantic_ref_index) is None:
             property_index = csi.property_to_semantic_ref_index = PropertyIndex()
 
@@ -159,6 +165,11 @@ class PropertyIndex(IPropertyToSemanticRefIndex):
 
     async def size(self) -> int:
         return len(self._map)
+
+    def __bool__(self) -> bool:
+        raise RuntimeError(
+            "Use 'if x is None' instead of 'if x' for index objects. For emptiness check, use 'await x.is_empty()'."
+        )
 
     async def get_values(self) -> list[str]:
         terms: list[str] = []

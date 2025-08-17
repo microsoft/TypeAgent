@@ -56,6 +56,11 @@ class TermToRelatedTermsMap(ITermToRelatedTerms):
     async def is_empty(self) -> bool:
         return len(self.map) == 0
 
+    def __bool__(self) -> bool:
+        raise RuntimeError(
+            "Use 'if x is None' instead of 'if x' for index objects. For emptiness check, use 'await x.is_empty()'."
+        )
+
     def serialize(self) -> TermToRelatedTermsData:
         related_terms: list[TermsToRelatedTermsDataItem] = []
         for key, value in self.map.items():
@@ -91,7 +96,7 @@ async def build_related_terms_index(
 ) -> ListIndexingResult:
     csr = conversation.semantic_ref_index
     csi = conversation.secondary_indexes
-    if csr and csi:
+    if csr is not None and csi is not None:
         if csi.term_to_related_terms_index is None:
             csi.term_to_related_terms_index = RelatedTermsIndex(
                 settings.related_term_index_settings

@@ -554,6 +554,11 @@ class ConversationIndex(ITermToSemanticRefIndex):
     async def size(self) -> int:
         return len(self._map)
 
+    def __bool__(self) -> bool:
+        raise RuntimeError(
+            "Use 'if x is None' instead of 'if x' for index objects. For emptiness check, use 'await x.is_empty()'."
+        )
+
     async def get_terms(self) -> list[str]:
         return list(self._map)
 
@@ -636,7 +641,7 @@ async def build_conversation_index[TMessage: IMessage](
     if (
         result.semantic_refs
         and not result.semantic_refs.error
-        and conversation.semantic_ref_index
+        and conversation.semantic_ref_index is not None
     ):
         result.secondary_index_results = await secindex.build_secondary_indexes(
             conversation,

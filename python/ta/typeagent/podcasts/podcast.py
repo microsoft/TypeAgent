@@ -190,11 +190,21 @@ class Podcast(
         # Create instance with provided or default values
         instance = cls(
             name_tag=name_tag,
-            messages=messages or MessageCollection[PodcastMessage](),
-            tags=tags or [],
-            semantic_refs=semantic_refs or SemanticRefCollection(),
-            settings=settings or ConversationSettings(),
-            semantic_ref_index=semantic_ref_index or convindex.ConversationIndex(),
+            messages=(
+                messages
+                if messages is not None
+                else MessageCollection[PodcastMessage]()
+            ),
+            tags=tags if tags is not None else [],
+            semantic_refs=(
+                semantic_refs if semantic_refs is not None else SemanticRefCollection()
+            ),
+            settings=settings if settings is not None else ConversationSettings(),
+            semantic_ref_index=(
+                semantic_ref_index
+                if semantic_ref_index is not None
+                else convindex.ConversationIndex()
+            ),
         )
 
         # Initialize async components
@@ -257,17 +267,17 @@ class Podcast(
             ),
         )
         # Set the rest only if they aren't None.
-        if self.semantic_ref_index:
+        if self.semantic_ref_index is not None:
             data["semanticIndexData"] = self.semantic_ref_index.serialize()
 
         secondary_indexes = self._get_secondary_indexes()
-        if secondary_indexes.term_to_related_terms_index:
+        if secondary_indexes.term_to_related_terms_index is not None:
             data["relatedTermsIndexData"] = (
                 secondary_indexes.term_to_related_terms_index.serialize()
             )
         if secondary_indexes.threads:
             data["threadData"] = secondary_indexes.threads.serialize()
-        if secondary_indexes.message_index:
+        if secondary_indexes.message_index is not None:
             data["messageIndexData"] = secondary_indexes.message_index.serialize()
         return data
 
