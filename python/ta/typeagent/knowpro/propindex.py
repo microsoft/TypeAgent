@@ -166,11 +166,6 @@ class PropertyIndex(IPropertyToSemanticRefIndex):
     async def size(self) -> int:
         return len(self._map)
 
-    def __bool__(self) -> bool:
-        raise RuntimeError(
-            "Use 'if x is None' instead of 'if x' for index objects. For emptiness check, use 'await x.is_empty()'."
-        )
-
     async def get_values(self) -> list[str]:
         terms: list[str] = []
         for key in self._map.keys():

@@ -102,11 +102,6 @@ class MockTermIndex(ITermToSemanticRefIndex):
     async def size(self) -> int:
         return len(self.term_to_refs)
 
-    def __bool__(self) -> bool:
-        raise RuntimeError(
-            "Use 'if x is None' instead of 'if x' for index objects. For emptiness check, use 'await x.is_empty()'."
-        )
-
     async def get_terms(self) -> list[str]:
         return list(self.term_to_refs.keys())
 

@@ -73,11 +73,6 @@ class MessageTextIndex(IMessageTextEmbeddingIndex):
     async def is_empty(self) -> bool:
         return await self.text_location_index.is_empty()
 
-    def __bool__(self) -> bool:
-        raise RuntimeError(
-            "Use 'if x is None' instead of 'if x' for index objects. For emptiness check, use 'await x.is_empty()'."
-        )
-
     async def add_messages[TMessage: IMessage](
         self,
         messages: Iterable[TMessage],

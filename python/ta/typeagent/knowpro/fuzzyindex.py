@@ -37,11 +37,6 @@ class EmbeddingIndex:
     async def is_empty(self) -> bool:
         return len(self._vector_base) == 0
 
-    def __bool__(self) -> bool:
-        raise RuntimeError(
-            "Use 'if x is None' instead of 'if x' for index objects. For emptiness check, use 'await x.is_empty()'."
-        )
-
     async def get_embedding(self, key: str, cache: bool = True) -> NormalizedEmbedding:
         return await self._vector_base.get_embedding(key, cache)
 
