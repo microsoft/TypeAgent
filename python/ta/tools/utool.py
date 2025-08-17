@@ -145,7 +145,8 @@ async def main():
     fill_in_debug_defaults(parser, args)
     if args.logfire:
         setup_logfire()
-    settings = importing.ConversationSettings()
+    model = embeddings.AsyncEmbeddingModel()
+    settings = importing.ConversationSettings(model)
     query_context = await load_podcast_index(args.podcast, settings, args.sqlite_db)
     ar_list, ar_index = load_index_file(args.qafile, "question", QuestionAnswerData)
     sr_list, sr_index = load_index_file(args.srfile, "searchText", SearchResultData)

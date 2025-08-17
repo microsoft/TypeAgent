@@ -70,9 +70,11 @@ class SimpleFakeConversation(IConversation):
         storage_provider = MemoryStorageProvider(
             message_text_settings, related_terms_settings
         )
-        self.secondary_indexes = ConversationSecondaryIndexes(storage_provider)
+        self.secondary_indexes = ConversationSecondaryIndexes(
+            storage_provider, related_terms_settings
+        )
         # Store settings with storage provider for access via conversation.settings.storage_provider
-        self.settings = ConversationSettings(storage_provider=storage_provider)
+        self.settings = ConversationSettings(test_model, storage_provider)
 
 
 @pytest.fixture
@@ -326,7 +328,9 @@ class FakeConversation[
         self._storage_provider = MemoryStorageProvider(
             message_text_settings, related_terms_settings
         )
-        self.secondary_indexes = ConversationSecondaryIndexes(self._storage_provider)
+        self.secondary_indexes = ConversationSecondaryIndexes(
+            self._storage_provider, related_terms_settings
+        )
 
     @property
     def storage_provider(self) -> "IStorageProvider":

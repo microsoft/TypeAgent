@@ -25,7 +25,7 @@ async def build_message_index[
     TTermToSemanticRefIndex: ITermToSemanticRefIndex,
 ](
     conversation: IConversation[TMessage, TTermToSemanticRefIndex],
-    settings: MessageTextIndexSettings | None = None,
+    settings: MessageTextIndexSettings,
 ) -> ListIndexingResult:
     csi = conversation.secondary_indexes
     if csi is None:
@@ -59,9 +59,7 @@ class IMessageTextEmbeddingIndex(IMessageTextIndex):
 
 
 class MessageTextIndex(IMessageTextEmbeddingIndex):
-    def __init__(self, settings: MessageTextIndexSettings | None = None):
-        if settings is None:
-            settings = MessageTextIndexSettings()
+    def __init__(self, settings: MessageTextIndexSettings):
         self.settings = settings
         self.text_location_index = TextToTextLocationIndex(
             settings.embedding_index_settings

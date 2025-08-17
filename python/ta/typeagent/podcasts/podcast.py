@@ -166,7 +166,7 @@ class Podcast(
     semantic_refs: ISemanticRefCollection | None = field(
         default_factory=SemanticRefCollection
     )
-    settings: ConversationSettings = field(default_factory=ConversationSettings)
+    settings: ConversationSettings | None = field(default=None)
     semantic_ref_index: convindex.ConversationIndex = field(
         default_factory=convindex.ConversationIndex
     )
@@ -178,11 +178,11 @@ class Podcast(
     @classmethod
     async def create(
         cls,
+        settings: ConversationSettings,
         name_tag: str = "",
         messages: IMessageCollection[PodcastMessage] | None = None,
         tags: list[str] | None = None,
         semantic_refs: ISemanticRefCollection | None = None,
-        settings: ConversationSettings | None = None,
         semantic_ref_index: convindex.ConversationIndex | None = None,
     ) -> "Podcast":
         """Create a fully initialized Podcast instance."""
@@ -198,7 +198,7 @@ class Podcast(
             semantic_refs=(
                 semantic_refs if semantic_refs is not None else SemanticRefCollection()
             ),
-            settings=settings if settings is not None else ConversationSettings(),
+            settings=settings,
             semantic_ref_index=(
                 semantic_ref_index
                 if semantic_ref_index is not None
@@ -208,10 +208,13 @@ class Podcast(
 
         # Initialize async components
         # Ensure storage provider is initialized using async factory method
+        assert (
+            instance.settings is not None
+        ), "Settings must be provided through create() method"
         storage_provider = await instance.settings.get_storage_provider()
         # Create secondary indexes using the factory method
         instance.secondary_indexes = await secindex.ConversationSecondaryIndexes.create(
-            storage_provider
+            storage_provider, instance.settings.related_term_index_settings
         )
         return instance
 
@@ -242,6 +245,9 @@ class Podcast(
         self,
     ) -> IndexingResults:
         await self.add_metadata_to_index()
+        assert (
+            self.settings is not None
+        ), "Settings must be initialized before building index"
         result = await convindex.build_conversation_index(self, self.settings)
         # build_conversation_index automatically builds standard secondary indexes.
         # Pass false here to build podcast specific secondary indexes only.
@@ -323,6 +329,9 @@ class Podcast(
 
         thread_data = podcast_data.get("threadData")
         if thread_data is not None:
+            assert (
+                self.settings is not None
+            ), "Settings must be initialized for deserialization"
             secondary_indexes = self._get_secondary_indexes()
             secondary_indexes.threads = ConversationThreads(
                 self.settings.thread_settings
@@ -350,10 +359,9 @@ class Podcast(
     @staticmethod
     async def read_from_file(
         filename_prefix: str,
-        settings: ConversationSettings | None = None,
+        settings: ConversationSettings,
         dbname: str | None = None,
     ) -> "Podcast | None":
-        settings = settings or ConversationSettings()
         embedding_size = settings.embedding_model.embedding_size
         data = serialization.read_conversation_data_from_file(
             filename_prefix, embedding_size
@@ -369,9 +377,7 @@ class Podcast(
             raise RuntimeError(
                 f"Database {dbname!r} already has messages or semantic refs."
             )
-        podcast = await Podcast.create(
-            messages=msgs, semantic_refs=semrefs, settings=settings
-        )
+        podcast = await Podcast.create(settings, messages=msgs, semantic_refs=semrefs)
         await podcast.deserialize(data)
         return podcast
 

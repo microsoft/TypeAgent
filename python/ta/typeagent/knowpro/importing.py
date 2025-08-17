@@ -19,11 +19,7 @@ if TYPE_CHECKING:
 class RelatedTermIndexSettings:
     embedding_index_settings: TextEmbeddingIndexSettings
 
-    def __init__(
-        self, embedding_index_settings: TextEmbeddingIndexSettings | None = None
-    ):
-        if embedding_index_settings is None:
-            embedding_index_settings = TextEmbeddingIndexSettings()
+    def __init__(self, embedding_index_settings: TextEmbeddingIndexSettings):
         self.embedding_index_settings = embedding_index_settings
 
 
@@ -32,11 +28,7 @@ class RelatedTermIndexSettings:
 class MessageTextIndexSettings:
     embedding_index_settings: TextEmbeddingIndexSettings
 
-    def __init__(
-        self, embedding_index_settings: TextEmbeddingIndexSettings | None = None
-    ):
-        if embedding_index_settings is None:
-            embedding_index_settings = TextEmbeddingIndexSettings()
+    def __init__(self, embedding_index_settings: TextEmbeddingIndexSettings):
         self.embedding_index_settings = embedding_index_settings
 
 
@@ -57,11 +49,11 @@ class ConversationSettings:
 
     def __init__(
         self,
-        model: AsyncEmbeddingModel | None = None,
+        model: AsyncEmbeddingModel,
         storage_provider: IStorageProvider | None = None,
     ):
         # All settings share the same model, so they share the embedding cache.
-        self.embedding_model = model = model or AsyncEmbeddingModel()
+        self.embedding_model = model
         min_score = 0.85
         self.related_term_index_settings = RelatedTermIndexSettings(
             TextEmbeddingIndexSettings(model, min_score=min_score, max_matches=50)

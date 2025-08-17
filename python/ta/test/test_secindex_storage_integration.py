@@ -1,7 +1,7 @@
 # Test that ConversationSecondaryIndexes now uses storage provider properly
 import pytest
 
-from fixtures import needs_auth, storage  # type: ignore  # It's used!
+from fixtures import needs_auth, storage, embedding_model  # type: ignore  # It's used!
 from typeagent.knowpro.secindex import ConversationSecondaryIndexes
 from typeagent.knowpro.storage import MemoryStorageProvider
 
@@ -9,8 +9,18 @@ from typeagent.knowpro.storage import MemoryStorageProvider
 @pytest.mark.asyncio
 async def test_secondary_indexes_use_storage_provider(storage, needs_auth):
     """Test that ConversationSecondaryIndexes gets indexes from storage provider."""
+    from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
+    from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
+    from typeagent.knowpro.importing import RelatedTermIndexSettings
+
     storage_provider = storage
-    indexes = ConversationSecondaryIndexes(storage_provider)
+
+    # Create test settings
+    test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
+    embedding_settings = TextEmbeddingIndexSettings(test_model)
+    related_terms_settings = RelatedTermIndexSettings(embedding_settings)
+
+    indexes = ConversationSecondaryIndexes(storage_provider, related_terms_settings)
 
     # Before initialization, indexes should be None
     assert indexes.property_to_semantic_ref_index is None

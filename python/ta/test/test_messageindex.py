@@ -51,7 +51,12 @@ def mock_text_location_index():
 @pytest.fixture
 def message_text_index(mock_text_location_index):
     """Fixture to create a MessageTextIndex instance with a mocked TextToTextLocationIndex."""
-    settings = MessageTextIndexSettings()
+    from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
+    from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
+
+    test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
+    embedding_settings = TextEmbeddingIndexSettings(test_model)
+    settings = MessageTextIndexSettings(embedding_settings)
     index = MessageTextIndex(settings)
     index.text_location_index = mock_text_location_index
     return index
@@ -59,7 +64,12 @@ def message_text_index(mock_text_location_index):
 
 def test_message_text_index_init(needs_auth: None):
     """Test initialization of MessageTextIndex."""
-    settings = MessageTextIndexSettings()
+    from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
+    from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
+
+    test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
+    embedding_settings = TextEmbeddingIndexSettings(test_model)
+    settings = MessageTextIndexSettings(embedding_settings)
     index = MessageTextIndex(settings)
     assert index.settings == settings
     assert isinstance(index.text_location_index, TextToTextLocationIndex)
@@ -211,9 +221,13 @@ async def test_build_message_index(needs_auth: None):
             storage_provider = MemoryStorageProvider(
                 message_text_settings, related_terms_settings
             )
-            self.secondary_indexes = ConversationSecondaryIndexes(storage_provider)
+            self.secondary_indexes = ConversationSecondaryIndexes(
+                storage_provider, related_terms_settings
+            )
             # Store settings with storage provider for access via conversation.settings.storage_provider
-            self.settings = ConversationSettings(storage_provider=storage_provider)
+            self.settings = ConversationSettings(
+                test_model, storage_provider=storage_provider
+            )
 
     # Create test messages and conversation
     messages = [
@@ -223,7 +237,12 @@ async def test_build_message_index(needs_auth: None):
     conversation = FakeConversation(messages)
 
     # Build the message index
-    settings = MessageTextIndexSettings()
+    from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
+    from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
+
+    test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
+    embedding_settings = TextEmbeddingIndexSettings(test_model)
+    settings = MessageTextIndexSettings(embedding_settings)
     result = await build_message_index(conversation, settings)
 
     # Assertions

@@ -49,9 +49,7 @@ class VectorBase:
     _model: AsyncEmbeddingModel
     _embedding_size: int
 
-    def __init__(self, settings: TextEmbeddingIndexSettings | None = None):
-        if settings is None:
-            settings = TextEmbeddingIndexSettings()
+    def __init__(self, settings: TextEmbeddingIndexSettings):
         self.settings = settings
         self._model = settings.embedding_model
         self._embedding_size = self._model.embedding_size
@@ -199,7 +197,8 @@ async def main():
         log(f"{heading}: bool={bool(v)}, len={len(v)}")
 
     utils.load_dotenv()
-    v = VectorBase()
+    settings = TextEmbeddingIndexSettings(AsyncEmbeddingModel(model_name="test"))
+    v = VectorBase(settings)
     debugv("\nEmpty vector base")
 
     words: list[str] = (

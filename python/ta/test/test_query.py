@@ -149,7 +149,7 @@ class MockConversation(IConversation[MockMessage, MockTermIndex]):
         storage_provider = MemoryStorageProvider(
             message_text_settings, related_terms_settings
         )
-        self.settings = ConversationSettings(storage_provider=storage_provider)
+        self.settings = ConversationSettings(test_model, storage_provider)
 
         # Create semantic refs
         refs = []

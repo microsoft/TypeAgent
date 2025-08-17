@@ -3,7 +3,7 @@
 
 import pytest
 
-from fixtures import needs_auth, storage  # type: ignore  # It's used!
+from fixtures import needs_auth, storage, embedding_model  # type: ignore  # It's used!
 from typeagent.knowpro.storage import MemoryStorageProvider
 
 

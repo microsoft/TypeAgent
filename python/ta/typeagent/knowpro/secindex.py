@@ -1,6 +1,8 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+from ..aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
+from ..aitools.vectorbase import TextEmbeddingIndexSettings
 from .importing import ConversationSettings, RelatedTermIndexSettings
 from .interfaces import (
     IConversation,
@@ -22,7 +24,7 @@ class ConversationSecondaryIndexes(IConversationSecondaryIndexes):
     def __init__(
         self,
         storage_provider: IStorageProvider,
-        settings: RelatedTermIndexSettings | None = None,
+        settings: RelatedTermIndexSettings,
     ):
         self._storage_provider = storage_provider
         # Initialize all indexes through storage provider immediately
@@ -36,7 +38,7 @@ class ConversationSecondaryIndexes(IConversationSecondaryIndexes):
     async def create(
         cls,
         storage_provider: IStorageProvider,
-        settings: RelatedTermIndexSettings | None = None,
+        settings: RelatedTermIndexSettings,
     ) -> "ConversationSecondaryIndexes":
         """Create and initialize a ConversationSecondaryIndexes with all indexes."""
         instance = cls(storage_provider, settings)
@@ -77,7 +79,7 @@ async def build_secondary_indexes[
     if conversation.secondary_indexes is None:
         storage_provider = await conversation_settings.get_storage_provider()
         conversation.secondary_indexes = await ConversationSecondaryIndexes.create(
-            storage_provider
+            storage_provider, conversation_settings.related_term_index_settings
         )
     result: SecondaryIndexingResults = await build_transient_secondary_indexes(
         conversation, conversation_settings
@@ -123,7 +125,16 @@ async def build_transient_secondary_indexes[
             )
 
         conversation.secondary_indexes = await ConversationSecondaryIndexes.create(
-            storage_provider
+            storage_provider,
+            (
+                conversation_settings.related_term_index_settings
+                if conversation_settings is not None
+                else RelatedTermIndexSettings(
+                    TextEmbeddingIndexSettings(
+                        AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
+                    )
+                )
+            ),
         )
     result = SecondaryIndexingResults()
     result.properties = await build_property_index(conversation)

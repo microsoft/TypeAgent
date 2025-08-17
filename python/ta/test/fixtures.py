@@ -21,6 +21,12 @@ def needs_auth():
     utils.load_dotenv()
 
 
+@pytest.fixture(scope="session")
+def embedding_model():
+    """Fixture to create a test embedding model with small embedding size for faster tests."""
+    return AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
+
+
 @pytest.fixture
 def temp_dir():
     with tempfile.TemporaryDirectory() as dir:
@@ -28,11 +34,9 @@ def temp_dir():
 
 
 @pytest_asyncio.fixture
-async def storage():
+async def storage(embedding_model):
     """Create a properly configured MemoryStorageProvider for testing."""
-    # Create test model with small embedding size for faster tests
-    test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
-    embedding_settings = TextEmbeddingIndexSettings(test_model)
+    embedding_settings = TextEmbeddingIndexSettings(embedding_model)
 
     message_text_settings = MessageTextIndexSettings(embedding_settings)
     related_terms_settings = RelatedTermIndexSettings(embedding_settings)

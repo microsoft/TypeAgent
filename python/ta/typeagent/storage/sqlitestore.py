@@ -231,13 +231,20 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         instance._property_index = PropertyIndex()
         instance._timestamp_index = TimestampToTextRangeIndex()
         # Use default settings for these indexes
+        from ..aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
+        from ..aitools.vectorbase import TextEmbeddingIndexSettings
         from ..knowpro.messageindex import MessageTextIndexSettings
+        from ..knowpro.importing import RelatedTermIndexSettings
 
-        settings = MessageTextIndexSettings()
-        instance._message_text_index = MessageTextIndex(settings)
-        related_settings = RelatedTermIndexSettings()
+        # Create test model and embedding settings for storage
+        test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
+        embedding_settings = TextEmbeddingIndexSettings(test_model)
+
+        message_settings = MessageTextIndexSettings(embedding_settings)
+        instance._message_text_index = MessageTextIndex(message_settings)
+        related_settings = RelatedTermIndexSettings(embedding_settings)
         instance._related_terms_index = RelatedTermsIndex(related_settings)
-        instance._conversation_threads = ConversationThreads()
+        instance._conversation_threads = ConversationThreads(embedding_settings)
         return instance
 
     async def close(self) -> None:

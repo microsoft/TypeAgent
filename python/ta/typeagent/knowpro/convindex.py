@@ -653,9 +653,12 @@ async def add_to_semantic_ref_index[
     """Add semantic references to the conversation's semantic reference index."""
     begin_indexing(conversation)
 
-    knowledge_extractor = (
-        settings.knowledge_extractor or convknowledge.KnowledgeExtractor()
-    )
+    # Only create knowledge extractor if auto extraction is enabled
+    knowledge_extractor = None
+    if settings.auto_extract_knowledge:
+        knowledge_extractor = (
+            settings.knowledge_extractor or convknowledge.KnowledgeExtractor()
+        )
     indexing_result: TextIndexingResult | None = None
 
     # TODO: get_message_chunk_batch

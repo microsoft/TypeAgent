@@ -34,7 +34,10 @@ class ProcessingContext:
 
 async def make_context() -> ProcessingContext:
     utils.load_dotenv()
-    settings = importing.ConversationSettings()
+    from typeagent.aitools.embeddings import AsyncEmbeddingModel
+
+    model = AsyncEmbeddingModel()
+    settings = importing.ConversationSettings(model)
     lang_search_options = searchlang.LanguageSearchOptions(
         compile_options=searchlang.LanguageQueryCompileOptions(
             exact_scope=False, verb_scope=True, term_filter=None, apply_scope=True

@@ -12,13 +12,12 @@ from .podcast import Podcast, PodcastMessage, PodcastMessageMeta
 
 async def import_podcast(
     transcript_file_path: str,
+    settings: ConversationSettings,
     podcast_name: str | None = None,
     start_date: Datetime | None = None,
     length_minutes: float = 60.0,
-    settings: ConversationSettings | None = None,
     dbname: str | None = None,
 ) -> Podcast:
-    settings = settings or ConversationSettings()
     with open(transcript_file_path, "r") as f:
         transcript_lines = f.readlines()
     if not podcast_name:
@@ -79,11 +78,11 @@ async def import_podcast(
     await msg_coll.extend(msgs)
 
     pod = await Podcast.create(
+        settings,
         name_tag=podcast_name,
         messages=msg_coll,
         tags=[podcast_name],
         semantic_refs=semref_coll,
-        settings=settings,
     )
     if start_date:
         await pod.generate_timestamps(start_date, length_minutes)
