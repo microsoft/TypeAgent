@@ -53,6 +53,9 @@ class TermToRelatedTermsMap(ITermToRelatedTerms):
     async def size(self) -> int:
         return len(self.map)
 
+    async def is_empty(self) -> bool:
+        return len(self.map) == 0
+
     def serialize(self) -> TermToRelatedTermsData:
         related_terms: list[TermsToRelatedTermsDataItem] = []
         for key, value in self.map.items():

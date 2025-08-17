@@ -461,7 +461,7 @@ class QueryCompiler:
         if (
             raw_query_text is not None
             and isinstance(message_index, IMessageTextEmbeddingIndex)
-            and len(message_index) > 0
+            and not await message_index.is_empty()
         ):
             embedding = await message_index.generate_embedding(raw_query_text)
             return RankMessagesBySimilarityExpr(

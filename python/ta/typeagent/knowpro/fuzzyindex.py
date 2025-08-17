@@ -31,6 +31,12 @@ class EmbeddingIndex:
     def __len__(self) -> int:
         return len(self._vector_base)
 
+    async def size(self) -> int:
+        return len(self._vector_base)
+
+    async def is_empty(self) -> bool:
+        return len(self._vector_base) == 0
+
     async def get_embedding(self, key: str, cache: bool = True) -> NormalizedEmbedding:
         return await self._vector_base.get_embedding(key, cache)
 

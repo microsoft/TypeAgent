@@ -43,6 +43,10 @@ class ITextToTextLocationIndex(Protocol):
         threshold_score: float | None = None,
     ) -> list[ScoredTextLocation]: ...
 
+    async def size(self) -> int: ...
+
+    async def is_empty(self) -> bool: ...
+
     def serialize(self) -> TextToTextLocationIndexData: ...
 
     def deserialize(self, data: TextToTextLocationIndexData) -> None: ...
@@ -54,11 +58,11 @@ class TextToTextLocationIndex(ITextToTextLocationIndex):
         self._embedding_index: EmbeddingIndex = EmbeddingIndex(settings=settings)
         self._settings = settings
 
-    def __len__(self) -> int:
-        return len(self._embedding_index)
+    async def size(self) -> int:
+        return await self._embedding_index.size()
 
-    def __bool__(self) -> bool:
-        return True
+    async def is_empty(self) -> bool:
+        return await self._embedding_index.is_empty()
 
     def get(self, pos: int, default: TextLocation | None = None) -> TextLocation | None:
         size = len(self._text_locations)

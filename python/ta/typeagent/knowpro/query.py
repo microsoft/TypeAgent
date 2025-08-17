@@ -906,7 +906,7 @@ class RankMessagesBySimilarityExpr(QueryOpExpr[MessageAccumulator]):
             else context.conversation.secondary_indexes.message_index
         )
         if isinstance(message_index, IMessageTextEmbeddingIndex):
-            message_ordinals = self._get_message_ordinals_in_index(
+            message_ordinals = await self._get_message_ordinals_in_index(
                 message_index, matches
             )
             if len(message_ordinals) == len(matches):
@@ -926,11 +926,11 @@ class RankMessagesBySimilarityExpr(QueryOpExpr[MessageAccumulator]):
             matches.select_top_n_scoring(self.max_messages)
         return matches
 
-    def _get_message_ordinals_in_index(
+    async def _get_message_ordinals_in_index(
         self, message_index, matches: MessageAccumulator
     ):
         message_ordinals: list[MessageOrdinal] = []
-        index_size = len(message_index)
+        index_size = await message_index.size()
         for message_ordinal in matches.get_matched_values():
             if message_ordinal >= index_size:
                 break

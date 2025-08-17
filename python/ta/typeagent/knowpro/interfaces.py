@@ -385,6 +385,8 @@ class ITermToRelatedTerms(Protocol):
 
     async def size(self) -> int: ...
 
+    async def is_empty(self) -> bool: ...
+
 
 class ITermToRelatedTermsFuzzy(Protocol):
     async def add_terms(
@@ -490,6 +492,11 @@ class IMessageTextIndex[TMessage: IMessage](Protocol):
         max_matches: int | None = None,
         threshold_score: float | None = None,
     ) -> list[ScoredMessageOrdinal]: ...
+
+    # Async alternatives to __len__ and __bool__
+    async def size(self) -> int: ...
+
+    async def is_empty(self) -> bool: ...
 
     # TODO: Others?
 

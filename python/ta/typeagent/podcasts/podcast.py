@@ -311,7 +311,7 @@ class Podcast(
             if term_to_related_terms_index is not None:
                 # Assert empty before deserializing
                 assert (
-                    await term_to_related_terms_index.aliases.size() == 0
+                    await term_to_related_terms_index.aliases.is_empty()
                 ), "Term to related terms index must be empty before deserializing"
                 term_to_related_terms_index.deserialize(related_terms_index_data)
 
@@ -333,8 +333,9 @@ class Podcast(
             from ..knowpro.messageindex import MessageTextIndex
 
             if isinstance(secondary_indexes.message_index, MessageTextIndex):
+                index_size = await secondary_indexes.message_index.size()
                 assert (
-                    len(secondary_indexes.message_index) == 0
+                    index_size == 0
                 ), "Message index must be empty before deserializing"
             secondary_indexes.message_index.deserialize(message_index_data)
 

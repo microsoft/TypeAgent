@@ -41,8 +41,6 @@ async def build_message_index[
 
 
 class IMessageTextEmbeddingIndex(IMessageTextIndex):
-    def __len__(self) -> int: ...
-
     async def generate_embedding(self, text: str) -> NormalizedEmbedding: ...
 
     def lookup_by_embedding(
@@ -71,18 +69,18 @@ class MessageTextIndex(IMessageTextEmbeddingIndex):
             settings.embedding_index_settings
         )
 
-    def __len__(self) -> int:
-        return len(self.text_location_index)
+    async def size(self) -> int:
+        return await self.text_location_index.size()
 
-    def __bool__(self) -> bool:
-        return True
+    async def is_empty(self) -> bool:
+        return await self.text_location_index.is_empty()
 
     async def add_messages[TMessage: IMessage](
         self,
         messages: Iterable[TMessage],
         event_handler: IndexingEventHandlers | None = None,
     ) -> ListIndexingResult:
-        base_message_ordinal: MessageOrdinal = len(self.text_location_index)
+        base_message_ordinal: MessageOrdinal = await self.text_location_index.size()
         all_chunks: list[tuple[str, TextLocation]] = []
         # Collect everything so we can batch efficiently.
         for message_ordinal, message in enumerate(messages, base_message_ordinal):
