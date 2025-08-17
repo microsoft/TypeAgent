@@ -849,9 +849,3 @@ class IStorageProvider[TMessage: IMessage](Protocol):
     async def get_conversation_threads(self) -> IConversationThreads: ...
 
     async def close(self) -> None: ...
-
-
-# TODO: What does this comment by Umesh mean? Who should look?
-# Also look at:
-# search.py
-# searchlang.py (SearchQueryTranslator)
