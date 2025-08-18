@@ -25,7 +25,6 @@
     "tsc": "tsc -p src"
   },
   "dependencies": {
-    "@azure/search-documents": "12.1.0",
     "aiclient": "workspace:*",
     "better-sqlite3": "11.9.1",
     "chalk": "^5.4.1",
