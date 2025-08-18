@@ -2,16 +2,12 @@
 # Licensed under the MIT License.
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 from ..aitools.embeddings import AsyncEmbeddingModel
 from ..aitools.vectorbase import TextEmbeddingIndexSettings
 
 from .convknowledge import KnowledgeExtractor
 from .interfaces import IStorageProvider
-
-if TYPE_CHECKING:
-    from .storage import MemoryStorageProvider
 
 
 # TODO: RelatedTermIndexSettings belongs in reltermsindex.py.
