@@ -1,19 +1,17 @@
-# Conversation Memory
+# Conversational Memory
 
-The **conversation-memory** package is experimental sample code under active development with _frequent_ updates.
+The **conversation-memory** package is sample code that explores how to implement types of _conversational memory_ using [Structured RAG](../../knowPro/README.md#structured-rag-overview) and the [KnowPro](../../knowPro/README.md) package.
 
-The **conversation-memory** package explores how to implement types of _conversational memory_ using the [KnowPro](../../knowPro/README.md) library.
+**_Conversational_ Memory** is defined as sequences of timestamped **messages** between senders and receivers. The following memory types can be considered conversations:
 
-**Memory** is defined as sequences of timestamped **messages** between senders and receivers. The following memory types can be considered conversations:
-
-- [Conversation Memory](./src/conversationMemory.ts) such as interactive chats, agent interaction memories and other conversations.
-- [Document Memory](./src/docMemory.ts): transcripts, markdown, html documents.
-- [Email](./src/emailMemory.ts): memories containing email messages.
+- [Conversation Memory](./src/conversationMemory.ts) such as interactive chats and conversations, agent interaction history, agent invocation and response memory, etc.
+- [Document Memory](./src/docMemory.ts): transcripts (meeting, videos, chats etc.), markdown and html documents.
+- [Email](./src/emailMemory.ts): collections of email messages.
 - [Podcasts](./src/podcast.ts): Transcripts of podcasts etc.
 
-Memories are added to and indexed **incrementally** and on demand. Conversation messages, emails, transcript chunks or document parts can be added to memory and indexed as they come in. Memories are mutable.
+Conversational memories are added to and indexed **incrementally** and on demand. Conversation messages, emails, transcript chunks or document parts can be added to memory and indexed as they come in. Memories are mutable.
 
-New memories are analyzed and _salient knowledge_ such as entities, actions and topics extracted and indexed. This indexed knowledge allows memories to support precise [search](./src/memory.ts#search) and retrieval with **low latency**.
+New messages are analyzed and _salient knowledge_ such as entities, actions and topics extracted and indexed. This indexed knowledge allows memories to support precise [search](./src/memory.ts#search) and retrieval with **low latency**.
 
 Memories can be searched using [natural language](./src/memory.ts#searchWithLanguage) or knowpro [search expressions](./src/memory.ts#search). You can search memory for discovered knowledge such as entities, actions where a subject entity performed an action on an object entity, or topics. \
 
