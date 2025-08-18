@@ -496,12 +496,14 @@ export function resolveURLByKeyword(
     if (keyWordsToSites![keyword] && Array.isArray(keyWordsToSites![keyword])) {
         for (let i = 0; i < keyWordsToSites![keyword]!.length; i++) {
             if (!/^https?:\/\//i.test(keyWordsToSites![keyword]![i])) {
-                keyWordsToSites![keyword]![i] = `https://${keyWordsToSites![keyword]![i]}`;
+                keyWordsToSites![keyword]![i] =
+                    `https://${keyWordsToSites![keyword]![i]}`;
             }
         }
         for (let i = 0; i < keyWordsToSites![keyword]!.length; i++) {
             if (!/^https?:\/\//i.test(keyWordsToSites![keyword]![i])) {
-                keyWordsToSites![keyword]![i] = `https://${keyWordsToSites![keyword]![i]}`;
+                keyWordsToSites![keyword]![i] =
+                    `https://${keyWordsToSites![keyword]![i]}`;
             }
         }
     }

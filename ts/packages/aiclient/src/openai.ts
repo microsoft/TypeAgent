@@ -782,8 +782,7 @@ export type AzureChatModelName =
     | "GPT_5"
     | "GPT_5_MINI"
     | "GPT_5_NANO"
-    | "GPT_5_CHAT"
-    ;
+    | "GPT_5_CHAT";
 
 export const GPT_5: AzureChatModelName = "GPT_5";
 export const GPT_5_NANO: AzureChatModelName = "GPT_5_NANO";

@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 export type domains = {
-    domains: domainAlises[]
-}
+    domains: domainAlises[];
+};
 
 export type domainAlises = {
     domain: string;

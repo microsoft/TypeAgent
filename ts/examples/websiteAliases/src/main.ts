@@ -25,10 +25,9 @@ if (process.argv.includes("--moz")) {
     const ee = new searchKeywordExtractor(project, groundingConfig);
     await ee.extract();
 } else {
-
     // go get top NNN sites from CloudFlare
     console.log("Top N sites extractor selected.");
-    
+
     const topN = parseInt(process.argv[process.argv.indexOf("--topN") + 1], 10);
     const topNExtractor = new topNDomainsExtractor(topN);
 
@@ -38,4 +37,3 @@ if (process.argv.includes("--moz")) {
         await topNExtractor.extract(process.argv.includes("--clear"));
     }
 }
-

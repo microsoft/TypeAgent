@@ -3,7 +3,13 @@
 
 import { openai, CompletionSettings, ChatModelWithStreaming } from "aiclient";
 import chalk from "chalk";
-import { existsSync, readFileSync, unlinkSync, writeFileSync, statSync } from "fs";
+import {
+    existsSync,
+    readFileSync,
+    unlinkSync,
+    writeFileSync,
+    statSync,
+} from "fs";
 import { domains } from "./generateOpenCommandPhrasesSchema.js";
 import { createTypeChat, loadSchema } from "typeagent";
 import { Result } from "typechat";
@@ -15,12 +21,12 @@ type extractedDomains = {
             accessible: boolean | undefined;
             phrase_count?: number;
             phrases?: string[];
-        }
-    }
+        };
+    };
     phrases: {
         [key: string]: string[];
-    }
-}
+    };
+};
 
 // type crawlPages = {
 //     pages: number;
@@ -30,26 +36,35 @@ type extractedDomains = {
 
 export class topNDomainsExtractor {
     // manually downloadable from: https://radar.cloudflare.com/domains
-    private downloadUrl: string = "https://radar.cloudflare.com/charts/LargerTopDomainsTable/attachment?id=1257&top=";
+    private downloadUrl: string =
+        "https://radar.cloudflare.com/charts/LargerTopDomainsTable/attachment?id=1257&top=";
     private topN: number = 10000;
     private topNFile: string = `examples/websiteAliases/top${this.topN}.csv`;
-    private outputFile: string = "examples/websiteAliases/phrases_to_sites.json";
+    private outputFile: string =
+        "examples/websiteAliases/phrases_to_sites.json";
     //private keywordsToSites: Record<string, string[]> = {};
     private processed: extractedDomains = {
         dateIndexed: Date.now(),
         domains: {},
-        phrases: {}
-    }
+        phrases: {},
+    };
 
     constructor(topN?: number) {
         if (topN && topN > 0) {
             this.topN = topN;
         }
 
-        const possibleOptions: number[] = [100, 200, 500, 1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000, 200_000, 500_000, 1_000_000];
+        const possibleOptions: number[] = [
+            100, 200, 500, 1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000,
+            200_000, 500_000, 1_000_000,
+        ];
 
         if (!possibleOptions.includes(this.topN)) {
-            console.warn(chalk.yellow(`Invalid topN value. Falling back to default: ${this.topN}`));
+            console.warn(
+                chalk.yellow(
+                    `Invalid topN value. Falling back to default: ${this.topN}`,
+                ),
+            );
             this.topN = 100;
         }
 
@@ -66,10 +81,16 @@ export class topNDomainsExtractor {
         try {
             // start over from scratch?
             if (!clear && existsSync(this.outputFile)) {
-                this.processed = JSON.parse(readFileSync(this.outputFile, "utf-8")) as extractedDomains;
+                this.processed = JSON.parse(
+                    readFileSync(this.outputFile, "utf-8"),
+                ) as extractedDomains;
             }
         } catch (error) {
-            console.error(chalk.red(`Error reading output file ${this.outputFile}: ${error}`));
+            console.error(
+                chalk.red(
+                    `Error reading output file ${this.outputFile}: ${error}`,
+                ),
+            );
             console.warn("Deleting output file...");
             unlinkSync(this.outputFile);
         }
@@ -87,16 +108,18 @@ export class topNDomainsExtractor {
         const batch: Promise<void>[] = [];
         const batchSize = 5;
         const pageSize = 5;
-        const batchCount = Math.ceil(lines.length / (batchSize * pageSize));                
-        const domains: string[][] = new Array<string[]>(batchCount);    
+        const batchCount = Math.ceil(lines.length / (batchSize * pageSize));
+        const domains: string[][] = new Array<string[]>(batchCount);
         let pageNumber = 0;
         let batchNumber = 0;
-        console.log(`${lines.length} domains. Processing in ${batchCount} batches of ${batchSize} domains each.`);    
-        
-        for(let i = 0; i < lines.length; i++) {
+        console.log(
+            `${lines.length} domains. Processing in ${batchCount} batches of ${batchSize} domains each.`,
+        );
+
+        for (let i = 0; i < lines.length; i++) {
             const columns = lines[i].split(",");
             let domain = lines[i];
-            
+
             // get the domain from the 2nd column if we have one
             if (columns.length === 3) {
                 domain = columns[1].trim();
@@ -105,14 +128,17 @@ export class topNDomainsExtractor {
             // skip empty domains or domains that are already processed
             if (!domain || this.processed.domains[domain] !== undefined) {
                 console.warn(chalk.yellowBright(`Skipping domain: ${domain}`));
-                continue; 
+                continue;
             }
 
             // can we even get to this domain?
             // For CDNs, there's nothing hosted at the root domain and for those
             // we just skip them and don't try to index them cause they just pollute the cache
-            let isValid: boolean | undefined = await this.isPageAvailable(domain);;
-            this.processed.domains[domain] = { accessible: isValid ? isValid : false };
+            let isValid: boolean | undefined =
+                await this.isPageAvailable(domain);
+            this.processed.domains[domain] = {
+                accessible: isValid ? isValid : false,
+            };
 
             if (!isValid) {
                 console.warn(chalk.yellow(`Skipping domain: ${domain}`));
@@ -126,26 +152,49 @@ export class topNDomainsExtractor {
             domains[pageNumber].push(domain);
 
             // once the page is full or if it's the last page, send it
-            if (domains[pageNumber].length >= pageSize || i === lines.length - 1) {
+            if (
+                domains[pageNumber].length >= pageSize ||
+                i === lines.length - 1
+            ) {
                 const page = pageNumber++;
-                console.log(`Processing page ${page}: ${chalk.blueBright(domains[page])}`);
+                console.log(
+                    `Processing page ${page}: ${chalk.blueBright(domains[page])}`,
+                );
 
-                batch.push(this.generateOpenPhrasesForDomains(domains[page]).catch((err) => {
-                    console.error(chalk.red(`Error processing domains ${domains[page]}: ${err.message}`));
-                }));
+                batch.push(
+                    this.generateOpenPhrasesForDomains(domains[page]).catch(
+                        (err) => {
+                            console.error(
+                                chalk.red(
+                                    `Error processing domains ${domains[page]}: ${err.message}`,
+                                ),
+                            );
+                        },
+                    ),
+                );
 
                 if (batch.length >= batchSize) {
                     const batchNum = batchNumber++;
                     await Promise.all(batch).then(() => {
-                        console.log(chalk.grey(`Processed batch ${batchNum} of ${batchCount}.`));
+                        console.log(
+                            chalk.grey(
+                                `Processed batch ${batchNum} of ${batchCount}.`,
+                            ),
+                        );
                     });
 
                     batch.length = 0; // reset the batch
 
                     // periodically save the output file so we don't have to start from scratch if we restart
-                    writeFileSync(this.outputFile, JSON.stringify(this.processed, null, 2));
-                    console.log(chalk.green(`Saved progress to ${this.outputFile} (${statSync(this.outputFile).size} bytes)`));
-
+                    writeFileSync(
+                        this.outputFile,
+                        JSON.stringify(this.processed, null, 2),
+                    );
+                    console.log(
+                        chalk.green(
+                            `Saved progress to ${this.outputFile} (${statSync(this.outputFile).size} bytes)`,
+                        ),
+                    );
                 }
             }
         }
@@ -159,8 +208,8 @@ export class topNDomainsExtractor {
     //  * @param url - The URL to determine if it's in the common crawl
     //  */
     // private async isPageInCommonCrawl(url: string): Promise<boolean> {
-    //     // https://index.commoncrawl.org/CC-MAIN-2025-30-index?url=google.com&showNumPages=true  
-    //     // {"pages": 1, "pageSize": 5, "blocks": 1}     
+    //     // https://index.commoncrawl.org/CC-MAIN-2025-30-index?url=google.com&showNumPages=true
+    //     // {"pages": 1, "pageSize": 5, "blocks": 1}
 
     //     const response = await fetch(`https://index.commoncrawl.org/CC-MAIN-2025-30-index?url=${url}&showNumPages=true`, {
     //         method: "GET",
@@ -188,35 +237,41 @@ export class topNDomainsExtractor {
      * @returns True if there was a semi-valid response from the server, false otherwise
      */
     private async isPageAvailable(url: string): Promise<boolean> {
-
         let retryCount = 0;
         const MAX_RETRIES = 3;
 
-        // HTTPS 
+        // HTTPS
         do {
             try {
                 const httpsResponse = await fetch(`https://${url}`);
-                const httpsStatus = httpsResponse.status
+                const httpsStatus = httpsResponse.status;
 
                 if (httpsResponse.ok || httpsStatus === 400) {
                     return true;
                 }
 
                 const httpsText = await httpsResponse.text();
-                console.log(`HTTPS ${chalk.red(httpsStatus)}\n${chalk.red(httpsText.substring(0, 20))}`);
+                console.log(
+                    `HTTPS ${chalk.red(httpsStatus)}\n${chalk.red(httpsText.substring(0, 20))}`,
+                );
 
                 break;
-
             } catch (error: any) {
-                console.error(chalk.red(`Error checking page availability ${url}: ${error?.message}`));                 
-                
+                console.error(
+                    chalk.red(
+                        `Error checking page availability ${url}: ${error?.message}`,
+                    ),
+                );
+
                 // name not found
-                if (error.cause.code === "ENOTFOUND" || error.cause.code === "UND_ERR_CONNECT_TIMEOUT") {
+                if (
+                    error.cause.code === "ENOTFOUND" ||
+                    error.cause.code === "UND_ERR_CONNECT_TIMEOUT"
+                ) {
                     break;
                 }
 
-                await new Promise(resolve => setTimeout(resolve, 500));
-
+                await new Promise((resolve) => setTimeout(resolve, 500));
             } finally {
                 retryCount++;
             }
@@ -228,49 +283,58 @@ export class topNDomainsExtractor {
         do {
             try {
                 const httpResponse = await fetch(`http://${url}`);
-                const status = httpResponse.status
+                const status = httpResponse.status;
 
                 if (httpResponse.ok || status === 400) {
                     return true;
                 }
 
                 const r = await httpResponse.text();
-                console.log(`HTTP ${chalk.red(status)}\n${chalk.red(r.substring(0, 20))}`);
+                console.log(
+                    `HTTP ${chalk.red(status)}\n${chalk.red(r.substring(0, 20))}`,
+                );
 
                 break;
-
             } catch (error: any) {
-                console.error(chalk.red(`Error checking page availability ${url}: ${error?.message}`));
-                
+                console.error(
+                    chalk.red(
+                        `Error checking page availability ${url}: ${error?.message}`,
+                    ),
+                );
 
                 // name not found
-                if (error.cause.code === "ENOTFOUND" || error.cause.code === "UND_ERR_CONNECT_TIMEOUT") {
+                if (
+                    error.cause.code === "ENOTFOUND" ||
+                    error.cause.code === "UND_ERR_CONNECT_TIMEOUT"
+                ) {
                     break;
                 }
 
-                await new Promise(resolve => setTimeout(resolve, 500));
-                
+                await new Promise((resolve) => setTimeout(resolve, 500));
             } finally {
                 retryCount++;
             }
         } while (retryCount < MAX_RETRIES);
 
-        return false;        
+        return false;
     }
 
     /**
      * Downloads the topN domains from CloudFlare
      */
     private async downloadTopNDomains(): Promise<void> {
-
         if (existsSync(this.topNFile)) {
-            console.log(`Top N domains file already downloaded to '${this.topNFile}'`);
+            console.log(
+                `Top N domains file already downloaded to '${this.topNFile}'`,
+            );
             return;
         }
 
         const response = await fetch(this.downloadUrl);
         if (!response.ok) {
-            throw new Error(`Failed to fetch top N domains: ${response.statusText}.  Please download '${this.downloadTopNDomains} manually and put the file at '${this.topNFile}'`);
+            throw new Error(
+                `Failed to fetch top N domains: ${response.statusText}.  Please download '${this.downloadTopNDomains} manually and put the file at '${this.topNFile}'`,
+            );
         }
 
         // save this file locally
@@ -282,15 +346,20 @@ export class topNDomainsExtractor {
      * Generate open command phrases for a given domain.
      * @param domain - The domain to generate open phrases for (i.e. open Adidas, open three stripe brand, etc.)
      */
-    private async generateOpenPhrasesForDomains(domains: string[]): Promise<void> {
+    private async generateOpenPhrasesForDomains(
+        domains: string[],
+    ): Promise<void> {
         const response = await this.getTypeChatResponse(domains.join("\n"));
         if (response.success) {
-            response.data.domains.forEach(element => {
-                console.log(chalk.green(`Generated ${element.aliases.length} phrases for ${element.domain}:`));
+            response.data.domains.forEach((element) => {
+                console.log(
+                    chalk.green(
+                        `Generated ${element.aliases.length} phrases for ${element.domain}:`,
+                    ),
+                );
 
                 // merge the aliases with existing keywords
-                element.aliases.forEach(alias => {
-
+                element.aliases.forEach((alias) => {
                     if (alias.toLowerCase().startsWith("open ")) {
                         alias = alias.slice(5);
                     }
@@ -299,18 +368,33 @@ export class topNDomainsExtractor {
                     if (this.processed.phrases[alias] === undefined) {
                         this.processed.phrases[alias] = [element.domain];
                     } else {
-                        this.processed.phrases[alias] = [...new Set([...this.processed.phrases[alias], element.domain])];
+                        this.processed.phrases[alias] = [
+                            ...new Set([
+                                ...this.processed.phrases[alias],
+                                element.domain,
+                            ]),
+                        ];
 
-                        console.log(chalk.yellow(`\t${alias} now maps to ${this.processed.phrases[alias].length} sites.`));
-                    }                
+                        console.log(
+                            chalk.yellow(
+                                `\t${alias} now maps to ${this.processed.phrases[alias].length} sites.`,
+                            ),
+                        );
+                    }
                 });
 
                 // record domain stats
-                this.processed.domains[element.domain].phrase_count = element.aliases.length;
-                this.processed.domains[element.domain].phrases = element.aliases;
-            }); 
+                this.processed.domains[element.domain].phrase_count =
+                    element.aliases.length;
+                this.processed.domains[element.domain].phrases =
+                    element.aliases;
+            });
         } else {
-            console.error(chalk.red(`Failed to generate phrases for ${domains}: ${response.message}`));
+            console.error(
+                chalk.red(
+                    `Failed to generate phrases for ${domains}: ${response.message}`,
+                ),
+            );
         }
 
         return;
@@ -329,7 +413,10 @@ export class topNDomainsExtractor {
         // create TypeChat object
         const chat = createTypeChat<domains>(
             chatModel,
-            loadSchema(["generateOpenCommandPhrasesSchema.ts"], import.meta.url),
+            loadSchema(
+                ["generateOpenCommandPhrasesSchema.ts"],
+                import.meta.url,
+            ),
             "domains",
             `
 There is a system that uses the command "Open" to open URLs in the browser.  You are helping me generate terms that I can cache such that when the user says "open apple" it goes to "https://apple.com".  You generate alternate terms/keywords/phrases/descriptions a user could use to invoke the same site. Avoid using statements that could actually refer to sub pages like (open ipad page). since those are technically different URLs.
@@ -388,13 +475,12 @@ For example: apple.com could be:
         );
 
         return chatModel;
-    }    
+    }
 
     /**
      * Summarize the domain statistics.
      */
     public summarize() {
-
         console.log(chalk.dim("Processing..."));
 
         console.log(`Loading previous results from ${this.outputFile}`);
@@ -408,7 +494,6 @@ For example: apple.com could be:
         let maxD: string = "";
 
         for (const [domain, stats] of Object.entries(this.processed.domains)) {
-
             if (!stats.phrase_count) {
                 continue;
             }
@@ -436,7 +521,6 @@ For example: apple.com could be:
             avgPhraseCount += sites.length;
 
             if (sites.length >= maxCollisions) {
-
                 if (sites.length > maxCollisions) {
                     mCollision.length = 0;
                 }
@@ -447,15 +531,25 @@ For example: apple.com could be:
                 lastCollision = sites;
                 lastCollisionPhrase = phrase;
             }
-
         }
 
-        console.log(chalk.blueBright(`${Object.keys(this.processed.domains).length} domains indexed. ${Object.keys(this.processed.phrases).length} phrases generated.`));
+        console.log(
+            chalk.blueBright(
+                `${Object.keys(this.processed.domains).length} domains indexed. ${Object.keys(this.processed.phrases).length} phrases generated.`,
+            ),
+        );
         console.log(chalk.green(`Min domain: ${minD} (${min} phrases)`));
         console.log(chalk.red(`Max domain: ${maxD} (${max} phrases)`));
         console.log(chalk.yellow(`Average phrases per domain: ${avg / count}`));
-        console.log(chalk.cyan(`Average sites per phrase: ${avgPhraseCount / Object.keys(this.processed.phrases).length}`));
-        console.log(chalk.magenta(`Max collisions: ${maxCollisions} (${mCollision.length} times, Last one: ${lastCollisionPhrase} - ${lastCollision})`));
+        console.log(
+            chalk.cyan(
+                `Average sites per phrase: ${avgPhraseCount / Object.keys(this.processed.phrases).length}`,
+            ),
+        );
+        console.log(
+            chalk.magenta(
+                `Max collisions: ${maxCollisions} (${mCollision.length} times, Last one: ${lastCollisionPhrase} - ${lastCollision})`,
+            ),
+        );
     }
-
 }

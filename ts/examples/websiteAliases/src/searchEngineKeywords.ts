@@ -7,15 +7,22 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import puppeteer, { TimeoutError } from "puppeteer";
 import chalk from "chalk";
 import { urlResolver } from "azure-ai-foundry";
-import { closeChrome, getRandomDelay, keywordSiteMapFile, resolvedKeyWordFile } from "./common.js";
+import {
+    closeChrome,
+    getRandomDelay,
+    keywordSiteMapFile,
+    resolvedKeyWordFile,
+} from "./common.js";
 import { AIProjectClient } from "@azure/ai-projects";
-
 
 export class searchKeywordExtractor {
     project: AIProjectClient;
     groundingConfig: bingWithGrounding.ApiSettings;
 
-    constructor(project: AIProjectClient, groundingConfig: bingWithGrounding.ApiSettings) {
+    constructor(
+        project: AIProjectClient,
+        groundingConfig: bingWithGrounding.ApiSettings,
+    ) {
         this.project = project;
         this.groundingConfig = groundingConfig;
     }
@@ -44,9 +51,12 @@ export class searchKeywordExtractor {
             await page.goto(`https://moz.com/domain-analysis/${site}`, {
                 waitUntil: "load",
             });
-            await page.waitForSelector('div[class="container domain-analysis"]', {
-                timeout: 5000,
-            });
+            await page.waitForSelector(
+                'div[class="container domain-analysis"]',
+                {
+                    timeout: 5000,
+                },
+            );
 
             const data = await page.$$eval(
                 'script[type="application/ld+json"]',
@@ -85,7 +95,9 @@ export class searchKeywordExtractor {
                     const extracted:
                         | extractorAgent.extractedAliases
                         | null
-                        | undefined = await this.extractAliases(JSON.stringify(data));
+                        | undefined = await this.extractAliases(
+                        JSON.stringify(data),
+                    );
 
                     // merge extracted keywords
                     if (extracted) {
@@ -101,7 +113,9 @@ export class searchKeywordExtractor {
                         );
                     }
                 } else {
-                    console.error(`Failed to fetch aliases for ${site}: ${data}`);
+                    console.error(
+                        `Failed to fetch aliases for ${site}: ${data}`,
+                    );
                 }
             }
             console.log(
@@ -119,16 +133,22 @@ export class searchKeywordExtractor {
         }
 
         // Serialize keywordToSites to disk in JSON format
-        writeFileSync(keywordSiteMapFile, JSON.stringify(this.keywordToSites, null, 2));
+        writeFileSync(
+            keywordSiteMapFile,
+            JSON.stringify(this.keywordToSites, null, 2),
+        );
     }
 
     public async extract() {
         if (!existsSync(keywordSiteMapFile)) {
             // go get top 500 sites
-            const topSitesUrl = "https://moz.com/top-500/download/?table=top500Domains";
+            const topSitesUrl =
+                "https://moz.com/top-500/download/?table=top500Domains";
             const response = await fetch(topSitesUrl);
             if (!response.ok) {
-                throw new Error(`Failed to fetch top sites: ${response.statusText}`);
+                throw new Error(
+                    `Failed to fetch top sites: ${response.statusText}`,
+                );
             }
 
             // extract the site names from the response
@@ -145,12 +165,16 @@ export class searchKeywordExtractor {
 
             this.getKeywords(sites);
         } else {
-            this.keywordToSites = JSON.parse(readFileSync(keywordSiteMapFile, "utf-8"));
+            this.keywordToSites = JSON.parse(
+                readFileSync(keywordSiteMapFile, "utf-8"),
+            );
         }
 
         // Now go through the keywords and use the URLResolver to get the URLs for each keyword
-        const keywordToSiteWithURLResolver: Record<string, string | null | undefined> =
-            {};
+        const keywordToSiteWithURLResolver: Record<
+            string,
+            string | null | undefined
+        > = {};
         const keyCount = Object.keys(this.keywordToSites).length;
         let processed = 0;
         for (const keyword of Object.keys(this.keywordToSites)) {
@@ -181,7 +205,7 @@ export class searchKeywordExtractor {
         writeFileSync(
             resolvedKeyWordFile,
             JSON.stringify(keywordToSiteWithURLResolver, null, 2),
-        );        
+        );
     }
 
     /**
@@ -212,7 +236,11 @@ export class searchKeywordExtractor {
             const chunkSize = 128 * 1024; // 128k chunks
             for (let i = 0; i < data.length; i += chunkSize) {
                 const chunk = data.slice(i, i + chunkSize);
-                await this.project.agents.messages.create(thread.id, "user", chunk);
+                await this.project.agents.messages.create(
+                    thread.id,
+                    "user",
+                    chunk,
+                );
             }
 
             // Create run
@@ -243,9 +271,12 @@ export class searchKeywordExtractor {
             if (run.status === "completed") {
                 if (run.completedAt) {
                     // Retrieve messages
-                    const messages = await this.project.agents.messages.list(thread.id, {
-                        order: "asc",
-                    });
+                    const messages = await this.project.agents.messages.list(
+                        thread.id,
+                        {
+                            order: "asc",
+                        },
+                    );
 
                     // accumulate assistant messages
                     for await (const m of messages) {

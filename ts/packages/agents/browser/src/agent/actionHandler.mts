@@ -699,7 +699,7 @@ async function resolveWebPage(
     context: SessionContext<BrowserActionContext>,
     site: string,
     io?: ActionIO,
-    fastResolution?: boolean  // flag that indicates whether to use fast resolution only
+    fastResolution?: boolean, // flag that indicates whether to use fast resolution only
 ): Promise<string[]> {
     debug(`Resolving site '${site}'`);
 
@@ -757,7 +757,10 @@ async function resolveWebPage(
             }
 
             // try to resolve URL string using known keyword matching
-            if (context.agentContext.resolverSettings.keywordResolver || fastResolution) {
+            if (
+                context.agentContext.resolverSettings.keywordResolver ||
+                fastResolution
+            ) {
                 const cachehitUrls = urlResolver.resolveURLByKeyword(site);
                 if (cachehitUrls && cachehitUrls.length > 0) {
                     debug(`Resolved URLs from cache: ${cachehitUrls}`);
@@ -789,14 +792,11 @@ async function resolveWebPage(
                     "temporary",
                 );
                 const historyUrls = await resolveURLWithHistory(context, site);
-                
+
                 if (historyUrls && historyUrls.length > 0) {
                     const msg = `Found ${historyUrls.length} in browser history.\n`;
                     debug(msg);
-                    io?.appendDisplay(
-                        getMessage(msg, "status"),
-                        "temporary",
-                    );
+                    io?.appendDisplay(getMessage(msg, "status"), "temporary");
 
                     debug(
                         `History resolution duration: ${Date.now() - startTime}`,
@@ -808,8 +808,9 @@ async function resolveWebPage(
 
             // default to search
             // TODO: use preferred search provider
-            return ["https://www.bing.com/search?q=" + encodeURIComponent(site)];
-
+            return [
+                "https://www.bing.com/search?q=" + encodeURIComponent(site),
+            ];
         }
     }
 

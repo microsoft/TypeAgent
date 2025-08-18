@@ -123,7 +123,12 @@ export function createInlineBrowserControl(
         },
         async search(query: string) {
             // TODO: use configured search provider
-            await shellWindow.openInlineBrowser(new URL("https://www.bing.com/search?q=" + encodeURIComponent(query)));
+            await shellWindow.openInlineBrowser(
+                new URL(
+                    "https://www.bing.com/search?q=" +
+                        encodeURIComponent(query),
+                ),
+            );
         },
         async readPage() {
             throw new Error("Reading page is not supported in inline browser.");
