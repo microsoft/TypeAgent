@@ -40,10 +40,7 @@ export function equalNormalizedParamValue(
     return a === b || normalizeParamValue(a) === normalizeParamValue(b);
 }
 
-export function equalNormalizedParamObject(
-    a: ParamObjectType = {},
-    b: ParamObjectType = {},
-) {
+export function equalNormalizedObject(a: any, b: any) {
     return (
         normalizeParamString(JSON.stringify(a)) ===
         normalizeParamString(JSON.stringify(b))
