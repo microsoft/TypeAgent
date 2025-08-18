@@ -1,6 +1,22 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+# Timestamp-to-text-range in-memory index (pre-SQLite prep).
+#
+# Contract (stable regardless of backing store):
+# - add_timestamp(s) accepts ISO 8601 timestamps that are lexicographically sortable
+#   (Datetime.isoformat). Missing/None timestamps are ignored.
+# - lookup_range(DateRange) returns items whose ISO timestamp t satisfies
+#   start <= t < end (end is exclusive). If end is None, treat as a point
+#   query with end = start + epsilon.
+# - Results are sorted ascending by timestamp; stability across runs is expected.
+#
+# SQLite plan (no behavior change now):
+# - This in-memory structure will be replaced by direct queries over a Messages table
+#   with a timestamp column (or start/end timestamps if ranges are later needed).
+# - The public methods and semantics here define the contract for the future provider
+#   implementation; callers should not rely on internal list layout or mutability.
+
 
 import bisect
 from collections.abc import AsyncIterable, Iterable
@@ -19,6 +35,14 @@ from .interfaces import (
 
 
 class TimestampToTextRangeIndex(ITimestampToTextRangeIndex):
+    # In-memory implementation of ITimestampToTextRangeIndex.
+    #
+    # Notes for SQLite implementation:
+    # - add_timestamp(s): will translate to inserting/updating rows in the Messages
+    #   storage (or a dedicated index table) keyed by message ordinal with an ISO
+    #   timestamp column indexed for range scans.
+    # - lookup_range(): will map to a single indexed range query on the timestamp
+    #   column and project the corresponding text ranges.
     def __init__(self):
         self._ranges: list[TimestampedTextRange] = []
 
@@ -77,17 +101,21 @@ def get_in_range[T, S: Any](
     stop_at: S | None,
     key: Callable[[T], S],
 ) -> list[T]:
+    # Return the sublist of values with key in [start_at, stop_at), sorted.
+    # Details:
+    # - End is exclusive: values with key == stop_at are not returned.
+    # - If stop_at is None, treat as a point query with end = start_at + epsilon.
+    # - Requires that values are already sorted by the provided key.
     istart = bisect.bisect_left(values, start_at, key=key)
     if istart == len(values):
         return []
     if stop_at is None:
-        return values[istart:]
-    istop = bisect.bisect_right(values, stop_at, istart, key=key)
-    # If istop has a value that matches the range, use it.
-    if istop < len(values) and key(values[istop]) == stop_at:
-        return values[istart : istop + 1]
-    else:
+        # Point query: include only items exactly equal to start_at
+        istop = bisect.bisect_right(values, start_at, istart, key=key)
         return values[istart:istop]
+    # End-exclusive: do not include items with key == stop_at
+    istop = bisect.bisect_left(values, stop_at, istart, key=key)
+    return values[istart:istop]
 
 
 async def build_timestamp_index(conversation: IConversation) -> None:
@@ -103,6 +131,9 @@ async def build_timestamp_index(conversation: IConversation) -> None:
             conversation.messages,
             0,
         )
+    # SQLite note: when backed by SQLite, explicit "building" should be unnecessary
+    # as timestamps are persisted incrementally with messages. This function remains
+    # a no-op for that provider while preserving the call graph during migration.
 
 
 async def add_to_timestamp_index(

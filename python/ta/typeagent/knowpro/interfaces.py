@@ -364,6 +364,10 @@ class TimestampedTextRange:
 
 # Return text ranges in the given date range.
 class ITimestampToTextRangeIndex(Protocol):
+    # Contract (stable across providers):
+    # - Timestamps must be ISO-8601 strings sortable lexicographically.
+    # - lookup_range(DateRange) returns items with start <= t < end (end exclusive).
+    #   If end is None, treat as a point query with end = start + epsilon.
     def add_timestamp(
         self, message_ordinal: MessageOrdinal, timestamp: str
     ) -> bool: ...
@@ -402,6 +406,8 @@ class ITermToRelatedTermsFuzzy(Protocol):
 
 
 class ITermToRelatedTermsIndex(Protocol):
+    # Providers may implement aliases and fuzzy via separate tables, but must
+    # expose them through these properties.
     @property
     def aliases(self) -> ITermToRelatedTerms: ...
 
