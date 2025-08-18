@@ -9,7 +9,7 @@ from typing import Any, AsyncIterator
 from ..knowpro.storage import MemoryStorageProvider
 from ..knowpro import interfaces
 from ..knowpro import serialization
-from ..knowpro.semrefindex import ConversationIndex
+from ..knowpro.semrefindex import TermToSemanticRefIndex
 from ..knowpro.propindex import PropertyIndex
 from ..knowpro.timestampindex import TimestampToTextRangeIndex
 from ..knowpro.messageindex import MessageTextIndex
@@ -215,7 +215,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         self.db_path = db_path
         self.db: sqlite3.Connection | None = None
         # In-memory indexes for now - TODO: persist to SQLite
-        self._conversation_index: ConversationIndex | None = None
+        self._conversation_index: TermToSemanticRefIndex | None = None
         self._property_index: PropertyIndex | None = None
         self._timestamp_index: TimestampToTextRangeIndex | None = None
         self._message_text_index: interfaces.IMessageTextIndex[TMessage] | None = None
@@ -227,7 +227,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         """Create and initialize a SqliteStorageProvider with all indexes."""
         instance = cls(db_path)
         # Initialize all indexes to ensure they exist in memory
-        instance._conversation_index = ConversationIndex()
+        instance._conversation_index = TermToSemanticRefIndex()
         instance._property_index = PropertyIndex()
         instance._timestamp_index = TimestampToTextRangeIndex()
         # Use default settings for these indexes

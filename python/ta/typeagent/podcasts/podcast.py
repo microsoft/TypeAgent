@@ -155,7 +155,7 @@ class PodcastData(ConversationDataWithIndexes[PodcastMessageData]):
 class Podcast(
     IConversation[
         PodcastMessage,
-        semrefindex.ConversationIndex,
+        semrefindex.TermToSemanticRefIndex,
     ]
 ):
     name_tag: str = ""
@@ -167,7 +167,7 @@ class Podcast(
         default_factory=SemanticRefCollection
     )
     settings: ConversationSettings | None = field(default=None)
-    semantic_ref_index: semrefindex.ConversationIndex | None = field(default=None)
+    semantic_ref_index: semrefindex.TermToSemanticRefIndex | None = field(default=None)
 
     secondary_indexes: IConversationSecondaryIndexes[PodcastMessage] | None = field(
         init=False, default=None
@@ -181,7 +181,7 @@ class Podcast(
         messages: IMessageCollection[PodcastMessage] | None = None,
         tags: list[str] | None = None,
         semantic_refs: ISemanticRefCollection | None = None,
-        semantic_ref_index: semrefindex.ConversationIndex | None = None,
+        semantic_ref_index: semrefindex.TermToSemanticRefIndex | None = None,
     ) -> "Podcast":
         """Create a fully initialized Podcast instance."""
         # Create instance with provided or default values
@@ -215,7 +215,7 @@ class Podcast(
             # For now, we assume the storage provider returns ConversationIndex
             # TODO: Update when we have proper interface-based serialization
             instance.semantic_ref_index = cast(
-                semrefindex.ConversationIndex, index_from_provider
+                semrefindex.TermToSemanticRefIndex, index_from_provider
             )
         # Create secondary indexes using the factory method
         instance.secondary_indexes = await secindex.ConversationSecondaryIndexes.create(
@@ -318,7 +318,7 @@ class Podcast(
         if semantic_index_data is not None:
             # Direct construction is correct here during deserialization
             # We're reconstructing a previously created index from saved data
-            self.semantic_ref_index = semrefindex.ConversationIndex(  # type: ignore  # TODO
+            self.semantic_ref_index = semrefindex.TermToSemanticRefIndex(  # type: ignore  # TODO
                 semantic_index_data
             )
 

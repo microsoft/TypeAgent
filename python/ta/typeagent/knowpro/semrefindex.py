@@ -527,7 +527,7 @@ async def add_metadata_to_index[TMessage: IMessage](
         i += 1
 
 
-class ConversationIndex(ITermToSemanticRefIndex):
+class TermToSemanticRefIndex(ITermToSemanticRefIndex):
     _map: dict[str, list[ScoredSemanticRefOrdinal]]
 
     def __init__(self, data: TermToSemanticRefIndexData | None = None):
@@ -608,7 +608,7 @@ class ConversationIndex(ITermToSemanticRefIndex):
 
 
 async def build_conversation_index[TMessage: IMessage](
-    conversation: IConversation[TMessage, ConversationIndex],
+    conversation: IConversation[TMessage, TermToSemanticRefIndex],
     conversation_settings: importing.ConversationSettings,
 ) -> None:
     await build_semantic_ref_index(
@@ -623,7 +623,7 @@ async def build_conversation_index[TMessage: IMessage](
 
 
 async def build_semantic_ref_index[TM: IMessage](
-    conversation: IConversation[TM, ConversationIndex],
+    conversation: IConversation[TM, TermToSemanticRefIndex],
     settings: importing.SemanticRefIndexSettings,
 ) -> None:
     await add_to_semantic_ref_index(conversation, settings, 0)
@@ -688,10 +688,10 @@ async def begin_indexing[
                     raise AttributeError("settings is None")
             except Exception:
                 # Fallback to direct creation if storage provider fails
-                conversation.semantic_ref_index = ConversationIndex()  # type: ignore  # TODO: Why doesn't pyright like this?
+                conversation.semantic_ref_index = TermToSemanticRefIndex()  # type: ignore  # TODO: Why doesn't pyright like this?
         else:
             # Fallback to direct creation if no settings available
-            conversation.semantic_ref_index = ConversationIndex()  # type: ignore  # TODO: Why doesn't pyright like this?
+            conversation.semantic_ref_index = TermToSemanticRefIndex()  # type: ignore  # TODO: Why doesn't pyright like this?
 
     if conversation.semantic_refs is None:
         # Similar pattern for semantic refs collection
@@ -724,7 +724,7 @@ def verify_has_semantic_ref_index(conversation: IConversation) -> None:
 
 
 async def dump(
-    semantic_ref_index: ConversationIndex, semantic_refs: ISemanticRefCollection
+    semantic_ref_index: TermToSemanticRefIndex, semantic_refs: ISemanticRefCollection
 ) -> None:
     print("semantic_ref_index = {")
     for k, v in semantic_ref_index._map.items():

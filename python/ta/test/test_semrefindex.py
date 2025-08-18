@@ -4,7 +4,7 @@
 import pytest
 from typing import cast
 from typeagent.knowpro.semrefindex import (
-    ConversationIndex,
+    TermToSemanticRefIndex,
     add_entity_to_index,
     add_topic_to_index,
     add_action_to_index,
@@ -16,70 +16,70 @@ from typeagent.knowpro.collections import SemanticRefCollection
 
 
 @pytest.fixture
-def conversation_index() -> ConversationIndex:
-    """Fixture to create a ConversationIndex instance."""
-    return ConversationIndex()
+def semantic_ref_index() -> TermToSemanticRefIndex:
+    """Fixture to create a TermToSemanticRefIndex instance."""
+    return TermToSemanticRefIndex()
 
 
 @pytest.mark.asyncio
-async def test_conversation_index_add_and_lookup(conversation_index: ConversationIndex):
-    """Test adding and looking up terms in the ConversationIndex."""
-    await conversation_index.add_term("example", 1)
-    await conversation_index.add_term("example", 2)
-    await conversation_index.add_term("test", 3)
+async def test_semantic_ref_index_add_and_lookup(semantic_ref_index: TermToSemanticRefIndex):
+    """Test adding and looking up terms in the TermToSemanticRefIndex."""
+    await semantic_ref_index.add_term("example", 1)
+    await semantic_ref_index.add_term("example", 2)
+    await semantic_ref_index.add_term("test", 3)
 
-    result = await conversation_index.lookup_term("example")
+    result = await semantic_ref_index.lookup_term("example")
     assert result is not None
     assert len(result) == 2
     assert result[0].semantic_ref_ordinal == 1
     assert result[1].semantic_ref_ordinal == 2
 
-    result = await conversation_index.lookup_term("test")
+    result = await semantic_ref_index.lookup_term("test")
     assert result is not None
     assert len(result) == 1
     assert result[0].semantic_ref_ordinal == 3
 
-    result = await conversation_index.lookup_term("nonexistent")
+    result = await semantic_ref_index.lookup_term("nonexistent")
     assert result == []
 
 
 @pytest.mark.asyncio
-async def test_conversation_index_remove_term(conversation_index: ConversationIndex):
-    """Test removing terms from the ConversationIndex."""
-    await conversation_index.add_term("example", 1)
-    await conversation_index.add_term("example", 2)
+async def test_term_to_semantic_ref_index_remove_term(semantic_ref_index: TermToSemanticRefIndex):
+    """Test removing terms from the TermToSemanticRefIndex."""
+    await semantic_ref_index.add_term("example", 1)
+    await semantic_ref_index.add_term("example", 2)
 
-    await conversation_index.remove_term("example", 1)
-    result = await conversation_index.lookup_term("example")
+    await semantic_ref_index.remove_term("example", 1)
+    result = await semantic_ref_index.lookup_term("example")
     assert result is not None
     assert len(result) == 0
 
 
 @pytest.mark.asyncio
 async def test_conversation_index_remove_term_if_empty(
-    conversation_index: ConversationIndex,
+    semantic_ref_index: TermToSemanticRefIndex,
 ):
     """Test removing terms if they are empty."""
-    await conversation_index.add_term("example", 1)
-    await conversation_index.remove_term("example", 1)
-    conversation_index.remove_term_if_empty("example")
+    await semantic_ref_index.add_term("example", 1)
+    await semantic_ref_index.remove_term("example", 1)
+    semantic_ref_index.remove_term_if_empty("example")
 
-    assert await conversation_index.size() == 0
+    assert await semantic_ref_index.size() == 0
 
 
 @pytest.mark.asyncio
 async def test_conversation_index_serialize_and_deserialize(
-    conversation_index: ConversationIndex,
+    semantic_ref_index: TermToSemanticRefIndex,
 ):
-    """Test serialization and deserialization of the ConversationIndex."""
-    await conversation_index.add_term("example", 1)
-    await conversation_index.add_term("test", 2)
+    """Test serialization and deserialization of the TermToSemanticRefIndex."""
+    await semantic_ref_index.add_term("example", 1)
+    await semantic_ref_index.add_term("test", 2)
 
-    serialized = conversation_index.serialize()
+    serialized = semantic_ref_index.serialize()
     assert "items" in serialized
     assert len(serialized["items"]) == 2
 
-    new_index = ConversationIndex()
+    new_index = TermToSemanticRefIndex()
     new_index.deserialize(serialized)
 
     # Test that the new index has the correct size
@@ -97,7 +97,7 @@ async def test_conversation_index_serialize_and_deserialize(
 
 
 @pytest.mark.asyncio
-async def test_add_entity_to_index(conversation_index: ConversationIndex):
+async def test_add_entity_to_index(semantic_ref_index: TermToSemanticRefIndex):
     """Test adding an entity to the index."""
     entity = ConcreteEntity(
         name="ExampleEntity",
@@ -105,7 +105,7 @@ async def test_add_entity_to_index(conversation_index: ConversationIndex):
         facets=[Facet(name="color", value="blue")],
     )
     semantic_refs = SemanticRefCollection()
-    await add_entity_to_index(entity, semantic_refs, conversation_index, 0)
+    await add_entity_to_index(entity, semantic_refs, semantic_ref_index, 0)
 
     assert await semantic_refs.size() == 1
     assert (await semantic_refs.get_item(0)).knowledge_type == "entity"
@@ -114,25 +114,25 @@ async def test_add_entity_to_index(conversation_index: ConversationIndex):
         == "ExampleEntity"
     )
 
-    result = await conversation_index.lookup_term("ExampleEntity")
+    result = await semantic_ref_index.lookup_term("ExampleEntity")
     assert result is not None
     assert len(result) == 1
 
-    result = await conversation_index.lookup_term("object")
+    result = await semantic_ref_index.lookup_term("object")
     assert result is not None
     assert len(result) == 1
 
-    result = await conversation_index.lookup_term("color")
+    result = await semantic_ref_index.lookup_term("color")
     assert result is not None
     assert len(result) == 1
 
 
 @pytest.mark.asyncio
-async def test_add_topic_to_index(conversation_index: ConversationIndex):
+async def test_add_topic_to_index(semantic_ref_index: TermToSemanticRefIndex):
     """Test adding a topic to the index."""
     topic = "ExampleTopic"
     semantic_refs = SemanticRefCollection()
-    await add_topic_to_index(topic, semantic_refs, conversation_index, 0)
+    await add_topic_to_index(topic, semantic_refs, semantic_ref_index, 0)
 
     assert await semantic_refs.size() == 1
     assert (await semantic_refs.get_item(0)).knowledge_type == "topic"
@@ -140,13 +140,13 @@ async def test_add_topic_to_index(conversation_index: ConversationIndex):
         cast(Topic, (await semantic_refs.get_item(0)).knowledge).text == "ExampleTopic"
     )
 
-    result = await conversation_index.lookup_term("ExampleTopic")
+    result = await semantic_ref_index.lookup_term("ExampleTopic")
     assert result is not None
     assert len(result) == 1
 
 
 @pytest.mark.asyncio
-async def test_add_action_to_index(conversation_index: ConversationIndex):
+async def test_add_action_to_index(semantic_ref_index: TermToSemanticRefIndex):
     """Test adding an action to the index."""
     action = Action(
         verbs=["run", "jump"],
@@ -158,7 +158,7 @@ async def test_add_action_to_index(conversation_index: ConversationIndex):
         subject_entity_facet=None,
     )
     semantic_refs = SemanticRefCollection()
-    await add_action_to_index(action, semantic_refs, conversation_index, 0)
+    await add_action_to_index(action, semantic_refs, semantic_ref_index, 0)
 
     assert await semantic_refs.size() == 1
     assert (await semantic_refs.get_item(0)).knowledge_type == "action"
@@ -167,21 +167,21 @@ async def test_add_action_to_index(conversation_index: ConversationIndex):
         "jump",
     ]
 
-    result = await conversation_index.lookup_term("run jump")
+    result = await semantic_ref_index.lookup_term("run jump")
     assert result is not None
     assert len(result) == 1
 
-    result = await conversation_index.lookup_term("John")
+    result = await semantic_ref_index.lookup_term("John")
     assert result is not None
     assert len(result) == 1
 
-    result = await conversation_index.lookup_term("Ball")
+    result = await semantic_ref_index.lookup_term("Ball")
     assert result
     assert len(result) == 1
 
 
 @pytest.mark.asyncio
-async def test_add_knowledge_to_index(conversation_index: ConversationIndex):
+async def test_add_knowledge_to_index(semantic_ref_index: TermToSemanticRefIndex):
     """Test adding knowledge to the index."""
     knowledge = KnowledgeResponse(
         entities=[
@@ -206,72 +206,72 @@ async def test_add_knowledge_to_index(conversation_index: ConversationIndex):
         topics=["ExampleTopic"],
     )
     semantic_refs = SemanticRefCollection()
-    await add_knowledge_to_index(semantic_refs, conversation_index, 0, knowledge)
+    await add_knowledge_to_index(semantic_refs, semantic_ref_index, 0, knowledge)
 
     assert await semantic_refs.size() == 3  # 1 entity + 1 action + 1 topic
 
-    result = await conversation_index.lookup_term("ExampleEntity")
+    result = await semantic_ref_index.lookup_term("ExampleEntity")
     assert result is not None
     assert len(result) == 1
 
-    result = await conversation_index.lookup_term("run jump")
+    result = await semantic_ref_index.lookup_term("run jump")
     assert result is not None
     assert len(result) == 1
 
-    result = await conversation_index.lookup_term("ExampleTopic")
+    result = await semantic_ref_index.lookup_term("ExampleTopic")
     assert result is not None
     assert len(result) == 1
 
 
 @pytest.mark.asyncio
 async def test_conversation_index_size_and_get_terms(
-    conversation_index: ConversationIndex,
+    semantic_ref_index: TermToSemanticRefIndex,
 ):
     """Test size() and get_terms method."""
-    assert await conversation_index.size() == 0
-    await conversation_index.add_term("foo", 1)
-    await conversation_index.add_term("bar", 2)
-    terms = await conversation_index.get_terms()
+    assert await semantic_ref_index.size() == 0
+    await semantic_ref_index.add_term("foo", 1)
+    await semantic_ref_index.add_term("bar", 2)
+    terms = await semantic_ref_index.get_terms()
     assert "foo" in terms
     assert "bar" in terms
-    assert await conversation_index.size() == 2
+    assert await semantic_ref_index.size() == 2
 
 
 @pytest.mark.asyncio
-async def test_conversation_index_contains(conversation_index: ConversationIndex):
+async def test_conversation_index_contains(semantic_ref_index: TermToSemanticRefIndex):
     """Test presence of a term using lookup_term."""
-    await conversation_index.add_term("foo", 1)
-    assert await conversation_index.lookup_term("foo") != []
-    assert await conversation_index.lookup_term("bar") == []
+    await semantic_ref_index.add_term("foo", 1)
+    assert await semantic_ref_index.lookup_term("foo") != []
+    assert await semantic_ref_index.lookup_term("bar") == []
 
 
 @pytest.mark.asyncio
-async def test_conversation_index_clear(conversation_index: ConversationIndex):
+async def test_conversation_index_clear(semantic_ref_index: TermToSemanticRefIndex):
     """Test clear method."""
-    await conversation_index.add_term("foo", 1)
-    await conversation_index.add_term("bar", 2)
-    conversation_index.clear()
-    assert await conversation_index.size() == 0
-    assert await conversation_index.lookup_term("foo") == []
+    await semantic_ref_index.add_term("foo", 1)
+    await semantic_ref_index.add_term("bar", 2)
+    semantic_ref_index.clear()
+    assert await semantic_ref_index.size() == 0
+    assert await semantic_ref_index.lookup_term("foo") == []
 
 
 @pytest.mark.asyncio
 async def test_conversation_index_remove_term_nonexistent(
-    conversation_index: ConversationIndex,
+    semantic_ref_index: TermToSemanticRefIndex,
 ):
     """Test removing a term that does not exist does not raise."""
-    await conversation_index.remove_term("nonexistent", 123)  # Should not raise
+    await semantic_ref_index.remove_term("nonexistent", 123)  # Should not raise
 
 
 def test_conversation_index_remove_term_if_empty_nonexistent(
-    conversation_index: ConversationIndex,
+    semantic_ref_index: TermToSemanticRefIndex,
 ):
     """Test remove_term_if_empty on a term that does not exist."""
-    conversation_index.remove_term_if_empty("nonexistent")  # Should not raise
+    semantic_ref_index.remove_term_if_empty("nonexistent")  # Should not raise
 
 
-def test_conversation_index_serialize_empty(conversation_index: ConversationIndex):
+def test_conversation_index_serialize_empty(semantic_ref_index: TermToSemanticRefIndex):
     """Test serialize on an empty index."""
-    serialized = conversation_index.serialize()
+    serialized = semantic_ref_index.serialize()
     assert "items" in serialized
     assert serialized["items"] == []

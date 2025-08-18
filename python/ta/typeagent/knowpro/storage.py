@@ -14,7 +14,7 @@ from .collections import (
     MemoryMessageCollection,
     MemorySemanticRefCollection,
 )
-from .semrefindex import ConversationIndex
+from .semrefindex import TermToSemanticRefIndex
 from .convthreads import ConversationThreads
 from .messageindex import MessageTextIndexSettings
 from .reltermsindex import RelatedTermIndexSettings
@@ -42,7 +42,7 @@ class MemoryStorageProvider[TMessage: IMessage](IStorageProvider[TMessage]):
     """A storage provider that operates in memory."""
 
     # Declare indexes as not-None but uninitialized - initialize() must be called
-    _conversation_index: ConversationIndex
+    _conversation_index: TermToSemanticRefIndex
     _property_index: PropertyIndex
     _timestamp_index: TimestampToTextRangeIndex
     _message_text_index: MessageTextIndex
@@ -68,7 +68,7 @@ class MemoryStorageProvider[TMessage: IMessage](IStorageProvider[TMessage]):
         """Create and initialize a MemoryStorageProvider with all indexes."""
         instance = cls(message_text_settings, related_terms_settings)
         # Initialize all indexes using the provided settings
-        instance._conversation_index = ConversationIndex()
+        instance._conversation_index = TermToSemanticRefIndex()
         instance._property_index = PropertyIndex()
         instance._timestamp_index = TimestampToTextRangeIndex()
         instance._message_text_index = MessageTextIndex(message_text_settings)
