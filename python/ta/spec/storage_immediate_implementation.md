@@ -523,60 +523,25 @@ To avoid breaking existing code during transition:
 
 ## UPDATED Implementation Plan - Next Steps
 
-Based on current implementation status, here are the remaining steps in priority order:
+Update (Aug 18, 2025): Team decision — Steps 1–3 are not needed now. Focus shifts to docs and SQLite.
 
-### ❌ TODO: Add Index Lifecycle Methods (High Priority)
+### Decisions
 
-**Estimated time: 1-2 hours**
+- Add Index Lifecycle Methods (create/drop): Not needed now. Deferred until we truly need explicit lifecycle hooks.
+- Multi-conversation support in MemoryStorageProvider: Not needed now. Defer until there’s a concrete multi-conversation use case.
+- Additional/edge-case test coverage: Skipped for now; covered by existing suite and separate slow E2E tests.
 
-Add missing methods to `IStorageProvider` interface and implement in `MemoryStorageProvider`:
+### Current Focus
 
-```python
-# Add to interfaces.py:
-async def create_indexes_for_conversation(self, conversation_id: str) -> None: ...
-async def drop_indexes_for_conversation(self, conversation_id: str) -> None: ...
+1. Documentation updates to reflect the finalized pattern (30–45 minutes)
+2. Proceed to SQLite implementation (tracked separately)
 
-# Implement in storage.py - currently only supports single conversation,
-# but structure for multi-conversation when needed
-```
+### Notes
 
-**Note**: No changes needed to index building functions - they correctly use `conversation.secondary_indexes` as designed.Add missing methods to `IStorageProvider` interface and implement in `MemoryStorageProvider`:
+- By design, index-building functions continue to use `conversation.secondary_indexes`. No migration is required.
+- `ConversationSecondaryIndexes` remains the integration layer and pulls real indexes from the storage provider lazily.
 
-```python
-# Add to interfaces.py:
-async def create_indexes_for_conversation(self, conversation_id: str) -> None: ...
-async def drop_indexes_for_conversation(self, conversation_id: str) -> None: ...
-
-# Implement in storage.py - currently only supports single conversation,
-# but structure for multi-conversation when needed
-```
-
-### ❌ TODO: Update Multi-Conversation Support (Medium Priority)
-
-**Estimated time: 2-3 hours**
-
-Currently `MemoryStorageProvider` only handles a single conversation. For full implementation:
-
-1. **Change storage structure**:
-   ```python
-   # From:
-   self._conversation_index = ConversationIndex()
-
-   # To:
-   self._conversation_indexes: dict[str, ConversationIndex] = {}
-   ```
-
-2. **Update all getter methods** to take `conversation_id` parameter
-3. **Update interface** to include `conversation_id` in all methods
-4. **Update all calling code** to pass conversation IDs
-
-### ❌ TODO: Complete Test Coverage (Lower Priority)
-
-**Estimated time: 1 hour**
-
-1. **Test multi-conversation isolation** when implemented
-2. **Test index lifecycle methods**
-3. **Add performance/stress tests** for large conversation scenarios## Updated Success Criteria
+## Updated Success Criteria
 
 ### ✅ COMPLETED:
 - [x] Storage provider interface extended with index methods
@@ -586,25 +551,21 @@ Currently `MemoryStorageProvider` only handles a single conversation. For full i
 - [x] Backward compatibility maintained
 
 ### ❌ REMAINING:
-- [ ] All index building functions use storage provider (not conversation.secondary_indexes)
-- [ ] Index lifecycle methods implemented
-- [ ] Multi-conversation support in storage provider
-- [ ] Complete test coverage
-- [ ] Documentation updated
+- [ ] Documentation updated (reflect centralized storage provider usage and current design)
+
+### Deferred (not needed now):
+- Index lifecycle methods (create/drop)
+- Multi-conversation support in MemoryStorageProvider
+- Additional/edge-case tests beyond current suite and separate E2E
 
 ## Recommended Next Action Sequence
 
-1. **When needed**: Add multi-conversation support (2-3 hours)
-   - Only implement when actually working with multiple conversations
-   - Current single conversation approach works fine for now
+1. Update documentation (30–45 minutes)
+    - Clarify the finalized pattern and developer-facing guidance.
+2. Start SQLite storage provider implementation (separate effort)
+3. Keep lifecycle/multi-conversation work deferred until a concrete need arises
 
-2. **Optional**: Complete edge case testing (1 hour)
-   - Current tests cover the core functionality well
-
-3. **Optional**: Update documentation (30 minutes)
-   - Ensure any remaining docs reflect the new architecture
-
-**Total remaining estimated effort: 2-4 hours (only when multi-conversation support is actually needed)**
+**Total immediate effort: ~30–45 minutes for docs. SQLite tracked separately.**
 
 **Current Status: READY FOR SQLITE IMPLEMENTATION** ✅
 

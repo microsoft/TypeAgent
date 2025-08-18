@@ -78,10 +78,11 @@ def get_indexes_of_nearest(
 ```python
 async def build_message_index(
     conversation: IConversation,
-    settings: MessageTextIndexSettings,
-) -> ListIndexingResult:
-    # Gets text chunks from all messages
-    # Indexes each chunk with its location
+    storage_provider: IStorageProvider,
+) -> None:
+    # Called by build_secondary_indexes; lazily obtains
+    # the message index from the storage provider and
+    # indexes message chunks
 ```
 
 **How it's used**:
@@ -292,6 +293,32 @@ All indexes support saving and loading through the `IStorageProvider` interface,
 - Backup and recovery operations
 
 The storage system is designed to be pluggable, allowing different backends (file system, databases, cloud storage) while keeping a consistent API.
+
+## Storage provider integration and access pattern
+
+- Recommended access: use `conversation.secondary_indexes` everywhere. This is the stable API that orchestrates all secondary indexes.
+- Under the hood, `ConversationSecondaryIndexes` lazily gets real index instances from the configured `IStorageProvider`.
+- Indexes are created on first use. No explicit lifecycle calls (create/drop) are required for in-memory.
+- Index-building helpers (e.g., `build_property_index`, `build_timestamp_index`, `build_message_index`) are typically invoked by `build_secondary_indexes` and operate through `conversation.secondary_indexes`.
+
+Example usage:
+
+```python
+# Access via the coordinator (recommended)
+idx = conversation.secondary_indexes
+prop_idx = idx.property_to_semantic_ref_index
+# … use prop_idx, timestamp_index, message_index, etc.
+```
+
+Notes:
+- You usually don’t call storage provider methods directly; the coordinator handles that.
+- Multi-conversation support in the in-memory provider is deferred until needed; today we use one provider per conversation.
+
+## SQLite readiness notes
+
+- Timestamp index: in SQLite, time-range queries will go directly against message timestamps in the database rather than an in-memory list.
+- Related terms: will be split into exact alias and fuzzy/learned tables. Call sites remain the same via `conversation.secondary_indexes`.
+- No changes are required in calling code when switching backends; the storage provider abstraction owns persistence details.
 
 ## Summary
 
