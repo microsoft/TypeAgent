@@ -341,13 +341,6 @@ class Term:
             return TermData(text=self.text, weight=self.weight)
 
 
-@dataclass
-class ScoredKnowledge:
-    knowledge_type: KnowledgeType
-    knowledge: Knowledge
-    score: float
-
-
 # Allows for faster retrieval of name, value properties
 class IPropertyToSemanticRefIndex(Protocol):
     async def get_values(self) -> list[str]: ...
