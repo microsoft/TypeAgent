@@ -670,7 +670,7 @@ async function resolveEntity(
 
             debug(`URL Resolution Duration: ${duration}`);
 
-            if (urls.length === 1s.length === 1) {
+            if (urls.length === 1) {
                 return {
                     match: "exact",
                     entities: [
