@@ -88,7 +88,6 @@ def make_semantic_ref(ordinal: int, text_range: TextRange):
     return SemanticRef(
         semantic_ref_ordinal=ordinal,
         range=text_range,
-        knowledge_type="topic",
         knowledge=Topic("test_topic"),
     )
 
@@ -736,19 +735,16 @@ async def test_lookup_knowledge_type():
         SemanticRef(
             semantic_ref_ordinal=0,
             range=rng,
-            knowledge_type=topic1.knowledge_type,
             knowledge=topic1,
         ),
         SemanticRef(
             semantic_ref_ordinal=1,
             range=rng,
-            knowledge_type=entity1.knowledge_type,
             knowledge=entity1,
         ),
         SemanticRef(
             semantic_ref_ordinal=2,
             range=rng,
-            knowledge_type=topic2.knowledge_type,
             knowledge=topic2,
         ),
     ]

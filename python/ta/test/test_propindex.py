@@ -200,19 +200,16 @@ async def test_build_property_index(needs_auth):
     semantic_refs = [
         SemanticRef(
             semantic_ref_ordinal=0,
-            knowledge_type=entity1.knowledge_type,
             knowledge=entity1,
             range=TextRange(start=TextLocation(0), end=TextLocation(10)),
         ),
         SemanticRef(
             semantic_ref_ordinal=1,
-            knowledge_type=action1.knowledge_type,
             knowledge=action1,
             range=TextRange(start=TextLocation(10), end=TextLocation(20)),
         ),
         SemanticRef(
             semantic_ref_ordinal=2,
-            knowledge_type=tag1.knowledge_type,
             knowledge=tag1,
             range=TextRange(start=TextLocation(20), end=TextLocation(30)),
         ),
@@ -346,7 +343,6 @@ async def test_add_to_property_index(needs_auth, property_index):
         SemanticRef(
             semantic_ref_ordinal=0,
             range=TextRange(start=TextLocation(0), end=None),
-            knowledge_type=entity.knowledge_type,
             knowledge=entity,
         )
     ]
@@ -375,13 +371,11 @@ async def test_lookup_property_in_property_index(property_index):
         SemanticRef(
             semantic_ref_ordinal=0,
             range=TextRange(start=TextLocation(0), end=TextLocation(10)),
-            knowledge_type=entity0.knowledge_type,
             knowledge=entity0,
         ),
         SemanticRef(
             semantic_ref_ordinal=1,
             range=TextRange(start=TextLocation(20), end=TextLocation(30)),
-            knowledge_type=entity1.knowledge_type,
             knowledge=entity1,
         ),
     ]

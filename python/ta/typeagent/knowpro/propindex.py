@@ -12,6 +12,7 @@ from .interfaces import (
     ScoredSemanticRefOrdinal,
     SemanticRefOrdinal,
     Tag,
+    Topic,
 )
 from . import kplib
 
@@ -131,27 +132,23 @@ async def add_to_property_index(
             start_at_ordinal,
         ):
             assert semantic_ref.semantic_ref_ordinal == semantic_ref_ordinal
-            match semantic_ref.knowledge_type:
-                case "action":
-                    assert isinstance(semantic_ref.knowledge, kplib.Action)
-                    await add_action_properties_to_index(
-                        semantic_ref.knowledge, property_index, semantic_ref_ordinal
-                    )
-                case "entity":
-                    assert isinstance(semantic_ref.knowledge, kplib.ConcreteEntity)
-                    await add_entity_properties_to_index(
-                        semantic_ref.knowledge, property_index, semantic_ref_ordinal
-                    )
-                case "tag":
-                    tag = semantic_ref.knowledge
-                    assert isinstance(tag, Tag)
-                    await property_index.add_property(
-                        PropertyNames.Tag.value, tag.text, semantic_ref_ordinal
-                    )
-                case "topic":
-                    pass
-                case _:
-                    assert_never(semantic_ref.knowledge_type)
+            if isinstance(semantic_ref.knowledge, kplib.Action):
+                await add_action_properties_to_index(
+                    semantic_ref.knowledge, property_index, semantic_ref_ordinal
+                )
+            elif isinstance(semantic_ref.knowledge, kplib.ConcreteEntity):
+                await add_entity_properties_to_index(
+                    semantic_ref.knowledge, property_index, semantic_ref_ordinal
+                )
+            elif isinstance(semantic_ref.knowledge, Tag):
+                tag = semantic_ref.knowledge
+                await property_index.add_property(
+                    PropertyNames.Tag.value, tag.text, semantic_ref_ordinal
+                )
+            elif isinstance(semantic_ref.knowledge, Topic):
+                pass
+            else:
+                assert_never(semantic_ref.knowledge)
 
 
 class PropertyIndex(IPropertyToSemanticRefIndex):

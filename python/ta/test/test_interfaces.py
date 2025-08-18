@@ -329,7 +329,6 @@ def test_semantic_ref_serialization():
     semantic_ref = SemanticRef(
         semantic_ref_ordinal=42,
         range=range_obj,
-        knowledge_type=knowledge.knowledge_type,
         knowledge=knowledge,
     )
 

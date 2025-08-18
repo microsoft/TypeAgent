@@ -273,7 +273,6 @@ class SemanticRefData(TypedDict):
 class SemanticRef:
     semantic_ref_ordinal: SemanticRefOrdinal
     range: TextRange
-    knowledge_type: KnowledgeType
     knowledge: Knowledge
 
     def __repr__(self) -> str:
@@ -299,7 +298,6 @@ class SemanticRef:
         return SemanticRef(
             semantic_ref_ordinal=data["semanticRefOrdinal"],
             range=TextRange.deserialize(data["range"]),
-            knowledge_type=knowledge.knowledge_type,
             knowledge=knowledge,
         )
 

@@ -111,7 +111,6 @@ async def add_entity_to_index(
         SemanticRef(
             semantic_ref_ordinal=ref_ordinal,
             range=text_range_from_location(message_ordinal, chunk_ordinal),
-            knowledge_type=entity.knowledge_type,
             knowledge=entity,
         )
     )
@@ -167,7 +166,6 @@ async def add_entity(
         SemanticRef(
             semantic_ref_ordinal=semantic_ref_ordinal,
             range=text_range_from_message_chunk(message_ordinal, chunk_ordinal),
-            knowledge_type=entity.knowledge_type,
             knowledge=entity,
         )
     )
@@ -237,7 +235,6 @@ async def add_topic(
         SemanticRef(
             semantic_ref_ordinal=semantic_ref_ordinal,
             range=text_range_from_message_chunk(message_ordinal, chunk_ordinal),
-            knowledge_type=topic.knowledge_type,
             knowledge=topic,
         )
     )
@@ -273,7 +270,6 @@ async def add_action(
         SemanticRef(
             semantic_ref_ordinal=semantic_ref_ordinal,
             range=text_range_from_message_chunk(message_ordinal, chunk_ordinal),
-            knowledge_type=action.knowledge_type,
             knowledge=action,
         )
     )
@@ -429,7 +425,6 @@ async def add_topic_to_index(
         SemanticRef(
             semantic_ref_ordinal=ref_ordinal,
             range=text_range_from_location(message_ordinal, chunk_ordinal),
-            knowledge_type=topic.knowledge_type,
             knowledge=topic,
         )
     )
@@ -448,7 +443,6 @@ async def add_action_to_index(
         SemanticRef(
             semantic_ref_ordinal=ref_ordinal,
             range=text_range_from_location(message_ordinal, chunk_ordinal),
-            knowledge_type=action.knowledge_type,
             knowledge=action,
         )
     )

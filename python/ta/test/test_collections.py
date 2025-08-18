@@ -146,13 +146,11 @@ async def test_semantic_ref_accumulator_group_matches_by_type():
         SemanticRef(
             0,
             range=TextRange(TextLocation(0)),
-            knowledge_type=ConcreteEntity("ref1", ["ref"]).knowledge_type,
             knowledge=ConcreteEntity("ref1", ["ref"]),
         ),
         SemanticRef(
             1,
             range=TextRange(TextLocation(2)),
-            knowledge_type=Action(["go"], "past").knowledge_type,
             knowledge=Action(["go"], "past"),
         ),
     ]
@@ -339,13 +337,11 @@ async def test_semantic_ref_accumulator_get_semantic_refs():
         SemanticRef(
             0,
             range=TextRange(TextLocation(0)),
-            knowledge_type=ConcreteEntity("ref1", ["ref"]).knowledge_type,
             knowledge=ConcreteEntity("ref1", ["ref"]),
         ),
         SemanticRef(
             1,
             range=TextRange(TextLocation(2)),
-            knowledge_type=Action(["go"], "past").knowledge_type,
             knowledge=Action(["go"], "past"),
         ),
     ]
@@ -371,13 +367,11 @@ async def test_semantic_ref_accumulator_get_matches_in_scope():
         SemanticRef(
             0,
             range=TextRange(TextLocation(0), TextLocation(10)),
-            knowledge_type=ConcreteEntity("ref1", ["ref"]).knowledge_type,
             knowledge=ConcreteEntity("ref1", ["ref"]),
         ),
         SemanticRef(
             1,
             range=TextRange(TextLocation(20), TextLocation(30)),
-            knowledge_type=Action(["go"], "past").knowledge_type,
             knowledge=Action(["go"], "past"),
         ),
     ]
