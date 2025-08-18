@@ -143,11 +143,14 @@ export class AgentCache {
             }
 
             const store = this._constructionStore;
-
+            const namespaceKeys = this.getNamespaceKeys(
+                getTranslationNamesForActions(executableActions),
+            );
             // Make sure that we don't already have a construction that will match (but reject because of options)
             const matchResult = store.match(requestAction.request, {
                 rejectReferences: false,
                 history: requestAction.history,
+                namespaceKeys,
             });
 
             const actions = executableActions.map((e) => e.action);
@@ -194,9 +197,6 @@ export class AgentCache {
                 if (construction === undefined) {
                     message = `Explainer '${this.explainerName}' doesn't support constructions.`;
                 } else {
-                    const namespaceKeys = this.getNamespaceKeys(
-                        getTranslationNamesForActions(executableActions),
-                    );
                     const result = await store.addConstruction(
                         namespaceKeys,
                         construction,
