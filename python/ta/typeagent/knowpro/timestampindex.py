@@ -6,7 +6,7 @@ import bisect
 from collections.abc import AsyncIterable, Iterable
 from typing import Any, Callable
 
-from . import convindex
+from . import semrefindex
 from .interfaces import (
     DateRange,
     Datetime,
@@ -59,7 +59,7 @@ class TimestampToTextRangeIndex(ITimestampToTextRangeIndex):
             return False
         timestamp_datetime = Datetime.fromisoformat(timestamp)
         entry: TimestampedTextRange = TimestampedTextRange(
-            range=convindex.text_range_from_message_chunk(message_ordinal),
+            range=semrefindex.text_range_from_message_chunk(message_ordinal),
             # This string is formatted to be lexically sortable.
             timestamp=timestamp_datetime.isoformat(),
         )

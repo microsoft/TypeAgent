@@ -58,7 +58,7 @@ The foundation is solid. The current lazy index creation approach is sufficient 
 
 Based on code analysis, we have **7 index implementations** in `IConversationSecondaryIndexes`:
 
-1. **ConversationIndex** (`convindex.py`):
+1. **ConversationIndex** (`semrefindex.py`):
    - Type: `ITermToSemanticRefIndex`
    - Storage: `_map: dict[str, list[ScoredSemanticRefOrdinal]]`
    - Creates: Term → SemanticRef mappings for entities, topics, actions
@@ -101,7 +101,7 @@ Based on code analysis, we have **7 index implementations** in `IConversationSec
 Index creation is currently **scattered** across multiple files:
 
 - `secindex.py`: `ConversationSecondaryIndexes` class coordinates some indexes
-- `convindex.py`: Functions like `build_conversation_index()`, `build_semantic_ref_index()`
+- `semrefindex.py`: Functions like `build_conversation_index()`, `build_semantic_ref_index()`
 - `timestampindex.py`: `build_timestamp_index()`
 - `messageindex.py`: Index creation within `MessageTextIndex.add_messages()`
 - Individual index classes have their own `add_*()` methods
@@ -319,7 +319,7 @@ class ConversationSecondaryIndexes[TMessage: IMessage](IConversationSecondaryInd
 Modify existing functions to use storage provider indexes:
 
 ```python
-# In convindex.py
+# In semrefindex.py
 async def build_conversation_index[TMessage: IMessage](
     conversation: IConversation[TMessage, ConversationIndex],
     conversation_settings: importing.ConversationSettings,

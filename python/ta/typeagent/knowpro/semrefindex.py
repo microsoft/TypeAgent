@@ -32,7 +32,6 @@ from .knowledge import extract_knowledge_from_text_batch
 from .collections import MemorySemanticRefCollection
 
 
-# TODO: Doesn't exist any more? But used in timestampindex.py currently
 def text_range_from_message_chunk(
     message_ordinal: MessageOrdinal,
     chunk_ordinal: int = 0,
@@ -62,8 +61,7 @@ type KnowledgeValidator = Callable[
 ]
 
 
-# TODO: Get ruid of this?
-def default_knowledge_validator(
+def _default_knowledge_validator(
     knowledg_Type: KnowledgeType,
     knowledge: Knowledge,
 ) -> bool:
@@ -517,7 +515,7 @@ async def add_metadata_to_index[TMessage: IMessage](
     knowledge_validator: KnowledgeValidator | None = None,
 ) -> None:
     if knowledge_validator is None:
-        knowledge_validator = default_knowledge_validator
+        knowledge_validator = _default_knowledge_validator
     i = 0
     async for msg in messages:
         knowledge_response = msg.get_knowledge()

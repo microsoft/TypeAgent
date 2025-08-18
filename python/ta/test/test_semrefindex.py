@@ -3,7 +3,7 @@
 
 import pytest
 from typing import cast
-from typeagent.knowpro.convindex import (
+from typeagent.knowpro.semrefindex import (
     ConversationIndex,
     add_entity_to_index,
     add_topic_to_index,

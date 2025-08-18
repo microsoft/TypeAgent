@@ -14,7 +14,7 @@ from .collections import (
     MemoryMessageCollection,
     MemorySemanticRefCollection,
 )
-from .convindex import ConversationIndex
+from .semrefindex import ConversationIndex
 from .convthreads import ConversationThreads
 from .messageindex import MessageTextIndexSettings
 from .reltermsindex import RelatedTermIndexSettings

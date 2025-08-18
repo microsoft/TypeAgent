@@ -6,7 +6,7 @@ import json
 import os
 from typing import TypedDict, cast
 
-from ..knowpro import convindex, kplib, secindex
+from ..knowpro import semrefindex, kplib, secindex
 from ..knowpro.convthreads import ConversationThreads
 from ..knowpro.importing import ConversationSettings
 from ..knowpro.interfaces import (
@@ -156,7 +156,7 @@ class PodcastData(ConversationDataWithIndexes[PodcastMessageData]):
 class Podcast(
     IConversation[
         PodcastMessage,
-        convindex.ConversationIndex,
+        semrefindex.ConversationIndex,
     ]
 ):
     name_tag: str = ""
@@ -168,8 +168,8 @@ class Podcast(
         default_factory=SemanticRefCollection
     )
     settings: ConversationSettings | None = field(default=None)
-    semantic_ref_index: convindex.ConversationIndex = field(
-        default_factory=convindex.ConversationIndex
+    semantic_ref_index: semrefindex.ConversationIndex = field(
+        default_factory=semrefindex.ConversationIndex
     )
 
     secondary_indexes: IConversationSecondaryIndexes[PodcastMessage] | None = field(
@@ -184,7 +184,7 @@ class Podcast(
         messages: IMessageCollection[PodcastMessage] | None = None,
         tags: list[str] | None = None,
         semantic_refs: ISemanticRefCollection | None = None,
-        semantic_ref_index: convindex.ConversationIndex | None = None,
+        semantic_ref_index: semrefindex.ConversationIndex | None = None,
     ) -> "Podcast":
         """Create a fully initialized Podcast instance."""
         # Create instance with provided or default values
@@ -203,7 +203,7 @@ class Podcast(
             semantic_ref_index=(
                 semantic_ref_index
                 if semantic_ref_index is not None
-                else convindex.ConversationIndex()
+                else semrefindex.ConversationIndex()
             ),
         )
 
@@ -229,7 +229,7 @@ class Podcast(
     async def add_metadata_to_index(self) -> None:
         if self.semantic_ref_index is not None:
             assert self.semantic_refs is not None
-            await convindex.add_metadata_to_index(
+            await semrefindex.add_metadata_to_index(
                 self.messages,
                 self.semantic_refs,
                 self.semantic_ref_index,
@@ -249,7 +249,7 @@ class Podcast(
         assert (
             self.settings is not None
         ), "Settings must be initialized before building index"
-        result = await convindex.build_conversation_index(self, self.settings)
+        result = await semrefindex.build_conversation_index(self, self.settings)
         # build_conversation_index automatically builds standard secondary indexes.
         # Pass false here to build podcast specific secondary indexes only.
         await self._build_transient_secondary_indexes(False)
@@ -313,7 +313,7 @@ class Podcast(
 
         semantic_index_data = podcast_data.get("semanticIndexData")
         if semantic_index_data is not None:
-            self.semantic_ref_index = convindex.ConversationIndex(  # type: ignore  # TODO
+            self.semantic_ref_index = semrefindex.ConversationIndex(  # type: ignore  # TODO
                 semantic_index_data
             )
 

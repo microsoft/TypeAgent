@@ -9,7 +9,7 @@ from typing import Any, AsyncIterator
 from ..knowpro.storage import MemoryStorageProvider
 from ..knowpro import interfaces
 from ..knowpro import serialization
-from ..knowpro.convindex import ConversationIndex
+from ..knowpro.semrefindex import ConversationIndex
 from ..knowpro.propindex import PropertyIndex
 from ..knowpro.timestampindex import TimestampToTextRangeIndex
 from ..knowpro.messageindex import MessageTextIndex
