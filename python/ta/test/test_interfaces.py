@@ -16,10 +16,6 @@ from typeagent.knowpro.interfaces import (
     TextRange,
     SemanticRef,
     Thread,
-    TextIndexingResult,
-    ListIndexingResult,
-    SecondaryIndexingResults,
-    IndexingResults,
     WhenFilter,
 )
 from typeagent.knowpro.kplib import ConcreteEntity
@@ -373,58 +369,6 @@ def test_thread_serialization():
             {"start": {"messageOrdinal": 3}, "end": {"messageOrdinal": 4}},
         ],
     }
-
-
-def test_text_indexing_result():
-    """Test initialization of TextIndexingResult."""
-    result = TextIndexingResult(
-        completed_upto=TextLocation(message_ordinal=1),
-        error="Test error",
-    )
-
-    assert result.completed_upto == TextLocation(message_ordinal=1)
-    assert result.error == "Test error"
-
-
-def test_list_indexing_result():
-    """Test initialization of ListIndexingResult."""
-    result = ListIndexingResult(number_completed=10, error=None)
-
-    assert result.number_completed == 10
-    assert result.error is None
-
-
-def test_secondary_indexing_results():
-    """Test initialization of SecondaryIndexingResults."""
-    properties_result = ListIndexingResult(number_completed=5, error=None)
-    timestamps_result = ListIndexingResult(number_completed=3, error="Test error")
-    secondary_results = SecondaryIndexingResults(
-        properties=properties_result,
-        timestamps=timestamps_result,
-    )
-
-    assert secondary_results.properties == properties_result
-    assert secondary_results.timestamps == timestamps_result
-    assert secondary_results.related_terms is None
-    assert secondary_results.message is None
-
-
-def test_indexing_results():
-    """Test initialization of IndexingResults."""
-    semantic_result = TextIndexingResult(
-        completed_upto=TextLocation(message_ordinal=1),
-        error=None,
-    )
-    secondary_results = SecondaryIndexingResults(
-        properties=ListIndexingResult(number_completed=5, error=None)
-    )
-    results = IndexingResults(
-        semantic_refs=semantic_result,
-        secondary_index_results=secondary_results,
-    )
-
-    assert results.semantic_refs == semantic_result
-    assert results.secondary_index_results == secondary_results
 
 
 def test_search_term():

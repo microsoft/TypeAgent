@@ -21,7 +21,6 @@ from ..knowpro.interfaces import (
     IMessageMetadata,
     ISemanticRefCollection,
     IStorageProvider,
-    IndexingResults,
     MessageOrdinal,
     SemanticRef,
     Term,
@@ -244,19 +243,18 @@ class Podcast(
 
     async def build_index(
         self,
-    ) -> IndexingResults:
+    ) -> None:
         await self.add_metadata_to_index()
         assert (
             self.settings is not None
         ), "Settings must be initialized before building index"
-        result = await semrefindex.build_conversation_index(self, self.settings)
+        await semrefindex.build_conversation_index(self, self.settings)
         # build_conversation_index automatically builds standard secondary indexes.
         # Pass false here to build podcast specific secondary indexes only.
         await self._build_transient_secondary_indexes(False)
         if self.secondary_indexes is not None:
             if self.secondary_indexes.threads is not None:
                 await self.secondary_indexes.threads.build_index()  # type: ignore  # TODO
-        return result
 
     async def serialize(self) -> PodcastData:
         data = PodcastData(

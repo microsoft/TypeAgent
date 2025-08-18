@@ -15,7 +15,6 @@ from typeagent.knowpro.interfaces import (
     IStorageProvider,
     ITermToSemanticRefIndex,
     SemanticRef,
-    ListIndexingResult,
     Tag,
     TextLocation,
     TextRange,
@@ -219,10 +218,9 @@ async def test_build_property_index(needs_auth):
     conversation = SimpleFakeConversation(semantic_refs)
 
     # Call the function
-    result = await build_property_index(conversation)
+    await build_property_index(conversation)
 
     # Assertions
-    assert result.number_completed == 3  # All semantic references should be processed
     assert conversation.secondary_indexes is not None
     assert isinstance(
         conversation.secondary_indexes.property_to_semantic_ref_index, PropertyIndex
@@ -349,9 +347,7 @@ async def test_add_to_property_index(needs_auth, property_index):
         )
     ]
     conversation = FakeConversation(semantic_refs)
-    result = await add_to_property_index(conversation, 0)
-    assert isinstance(result, ListIndexingResult)
-    assert result.number_completed == 1
+    await add_to_property_index(conversation, 0)
 
     assert conversation.secondary_indexes is not None
     assert conversation.secondary_indexes.property_to_semantic_ref_index is not None

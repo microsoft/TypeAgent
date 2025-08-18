@@ -12,7 +12,6 @@ import asyncio
 from typing import Sequence
 from .interfaces import (
     TextToTextLocationIndexData,
-    ListIndexingResult,
     TextLocation,
 )
 
@@ -26,12 +25,12 @@ class ScoredTextLocation:
 class ITextToTextLocationIndex(Protocol):
     async def add_text_location(
         self, text: str, text_location: TextLocation
-    ) -> ListIndexingResult: ...
+    ) -> None: ...
 
     async def add_text_locations(
         self,
         text_and_locations: list[tuple[str, TextLocation]],
-    ) -> ListIndexingResult: ...
+    ) -> None: ...
 
     async def lookup_text(
         self,
@@ -67,18 +66,15 @@ class TextToTextLocationIndex(ITextToTextLocationIndex):
             return self._text_locations[pos]
         return default
 
-    async def add_text_location(
-        self, text: str, text_location: TextLocation
-    ) -> ListIndexingResult:
-        return await self.add_text_locations([(text, text_location)])
+    async def add_text_location(self, text: str, text_location: TextLocation) -> None:
+        await self.add_text_locations([(text, text_location)])
 
     async def add_text_locations(
         self,
         text_and_locations: list[tuple[str, TextLocation]],
-    ) -> ListIndexingResult:
+    ) -> None:
         await self._embedding_index.add_texts([text for text, _ in text_and_locations])
         self._text_locations.extend([loc for _, loc in text_and_locations])
-        return ListIndexingResult(number_completed=len(text_and_locations))
 
     async def lookup_text(
         self,

@@ -9,7 +9,6 @@ from .interfaces import (
     IConversation,
     IPropertyToSemanticRefIndex,
     ISemanticRefCollection,
-    ListIndexingResult,
     ScoredSemanticRefOrdinal,
     SemanticRefOrdinal,
     Tag,
@@ -105,21 +104,21 @@ async def add_action_properties_to_index(
         )
 
 
-async def build_property_index(conversation: IConversation) -> ListIndexingResult:
-    return await add_to_property_index(conversation, 0)
+async def build_property_index(conversation: IConversation) -> None:
+    await add_to_property_index(conversation, 0)
 
 
 async def add_to_property_index(
     conversation: IConversation,
     start_at_ordinal: SemanticRefOrdinal,
-) -> ListIndexingResult:
+) -> None:
     """Add semantic references from a conversation to the property index starting at a specific ordinal."""
     if (
         csi := conversation.secondary_indexes
     ) and conversation.semantic_refs is not None:
         # Check if semantic_refs collection is not empty
         if await conversation.semantic_refs.size() == 0:
-            return ListIndexingResult(number_completed=0)
+            return
 
         if (property_index := csi.property_to_semantic_ref_index) is None:
             property_index = csi.property_to_semantic_ref_index = PropertyIndex()
@@ -153,10 +152,6 @@ async def add_to_property_index(
                     pass
                 case _:
                     assert_never(semantic_ref.knowledge_type)
-
-        return ListIndexingResult(number_completed=size - start_at_ordinal)
-
-    return ListIndexingResult(number_completed=0)
 
 
 class PropertyIndex(IPropertyToSemanticRefIndex):

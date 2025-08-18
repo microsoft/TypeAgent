@@ -32,9 +32,9 @@ async def test_import_podcast(needs_auth, temp_dir, embedding_model):
     assert await pod.messages.size() > 0
 
     # Build the index
-    indexing_result = await pod.build_index()
-    assert indexing_result.semantic_refs is not None
-    assert indexing_result.semantic_refs.error is None
+    await pod.build_index()
+    # Verify the semantic refs were built by checking they exist
+    assert pod.semantic_refs is not None
 
     # Write the podcast to files
     filename_prefix = os.path.join(temp_dir, "podcast")

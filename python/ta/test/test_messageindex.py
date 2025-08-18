@@ -20,7 +20,6 @@ from typeagent.knowpro.interfaces import (
     IMessage,
     IStorageProvider,
     ITermToSemanticRefIndex,
-    ListIndexingResult,
     MessageOrdinal,
     MessageTextIndexData,
     ScoredMessageOrdinal,
@@ -41,7 +40,7 @@ def mock_text_location_index():
     mock_index.size = AsyncMock(
         return_value=0
     )  # Empty index, so first message starts at ordinal 0
-    mock_index.add_text_locations = AsyncMock(return_value=ListIndexingResult(2))
+    mock_index.add_text_locations = AsyncMock(return_value=None)
     mock_index.lookup_text = AsyncMock(return_value=[])
     mock_index.lookup_text_in_subset = AsyncMock(return_value=[])
     mock_index.serialize = MagicMock(return_value={"mock": "data"})
@@ -84,9 +83,8 @@ async def test_add_messages(message_text_index, needs_auth: None):
         MagicMock(text_chunks=["chunk3"]),
     ]
 
-    result = await message_text_index.add_messages(messages)
+    await message_text_index.add_messages(messages)
 
-    assert result.number_completed == 2
     # Check that add_text_locations was called with the expected text and location data
     call_args = message_text_index.text_location_index.add_text_locations.call_args
     assert call_args is not None
@@ -242,11 +240,8 @@ async def test_build_message_index(needs_auth: None):
     test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
     embedding_settings = TextEmbeddingIndexSettings(test_model)
     settings = MessageTextIndexSettings(embedding_settings)
-    result = await build_message_index(conversation, settings)
+    await build_message_index(conversation, settings)
 
-    # Assertions
-    assert result.error is None
-    assert result.number_completed == 3  # Counts chunks, not messages
     # TODO: The final assert triggers; fix this
     # assert conversation.secondary_indexes is not None
     # assert conversation.secondary_indexes.message_index is not None

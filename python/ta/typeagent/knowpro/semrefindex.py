@@ -14,7 +14,6 @@ from .interfaces import (
     ISemanticRefCollection,
     ITermToSemanticRefIndex,
     # Other imports.
-    IndexingResults,
     Knowledge,
     KnowledgeType,
     MessageOrdinal,
@@ -23,7 +22,6 @@ from .interfaces import (
     SemanticRef,
     TermToSemanticRefIndexItemData,
     TermToSemanticRefIndexData,
-    TextIndexingResult,
     TextLocation,
     TextRange,
     Topic,
@@ -75,11 +73,10 @@ async def add_batch_to_semantic_ref_index[
     batch: list[TextLocation],
     knowledge_extractor: convknowledge.KnowledgeExtractor,
     terms_added: set[str] | None = None,
-) -> TextIndexingResult:
+) -> None:
     begin_indexing(conversation)
 
     messages = conversation.messages
-    indexing_result = TextIndexingResult()
 
     text_batch = [
         (await messages.get_item(tl.message_ordinal))
@@ -95,8 +92,9 @@ async def add_batch_to_semantic_ref_index[
     )
     for i, knowledge_result in enumerate(knowledge_results):
         if isinstance(knowledge_result, Failure):
-            indexing_result.error = knowledge_result.message
-            return indexing_result
+            raise RuntimeError(
+                f"Knowledge extraction failed: {knowledge_result.message}"
+            )
         text_location = batch[i]
         knowledge = knowledge_result.value
         await add_knowledge_to_semantic_ref_index(
@@ -106,9 +104,6 @@ async def add_batch_to_semantic_ref_index[
             knowledge,
             terms_added,
         )
-        indexing_result.completed_upto = text_location
-
-    return indexing_result
 
 
 async def add_entity_to_index(
@@ -615,29 +610,23 @@ class ConversationIndex(ITermToSemanticRefIndex):
 async def build_conversation_index[TMessage: IMessage](
     conversation: IConversation[TMessage, ConversationIndex],
     conversation_settings: importing.ConversationSettings,
-) -> IndexingResults:
-    result = IndexingResults()
-    result.semantic_refs = await build_semantic_ref_index(
+) -> None:
+    await build_semantic_ref_index(
         conversation,
         conversation_settings.semantic_ref_index_settings,
     )
-    if (
-        result.semantic_refs
-        and not result.semantic_refs.error
-        and conversation.semantic_ref_index is not None
-    ):
-        result.secondary_index_results = await secindex.build_secondary_indexes(
+    if conversation.semantic_ref_index is not None:
+        await secindex.build_secondary_indexes(
             conversation,
             conversation_settings,
         )
-    return result
 
 
 async def build_semantic_ref_index[TM: IMessage](
     conversation: IConversation[TM, ConversationIndex],
     settings: importing.SemanticRefIndexSettings,
-) -> TextIndexingResult:
-    return await add_to_semantic_ref_index(conversation, settings, 0)
+) -> None:
+    await add_to_semantic_ref_index(conversation, settings, 0)
 
 
 async def add_to_semantic_ref_index[
@@ -647,7 +636,7 @@ async def add_to_semantic_ref_index[
     settings: importing.SemanticRefIndexSettings,
     message_ordinal_start_at: MessageOrdinal,
     terms_added: list[str] | None = None,
-) -> TextIndexingResult:
+) -> None:
     """Add semantic references to the conversation's semantic reference index."""
     begin_indexing(conversation)
 
@@ -657,7 +646,6 @@ async def add_to_semantic_ref_index[
         knowledge_extractor = (
             settings.knowledge_extractor or convknowledge.KnowledgeExtractor()
         )
-    indexing_result: TextIndexingResult | None = None
 
     # TODO: get_message_chunk_batch
     # for text_location_batch in get_message_chunk_batch(
@@ -665,14 +653,12 @@ async def add_to_semantic_ref_index[
     #     message_ordinal_start_at,
     #     settings.batch_size,
     # ):
-    #     indexing_result = await add_batch_to_semantic_ref_index(
+    #     await add_batch_to_semantic_ref_index(
     #         conversation,
     #         text_location_batch,
     #         knowledge_extractor,
     #         terms_added,
     #     )
-
-    return indexing_result or TextIndexingResult()
 
 
 def begin_indexing[

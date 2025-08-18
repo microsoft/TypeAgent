@@ -375,7 +375,7 @@ class ITimestampToTextRangeIndex(Protocol):
 
     def add_timestamps(
         self, message_timestamps: list[tuple[MessageOrdinal, str]]
-    ) -> "ListIndexingResult": ...
+    ) -> None: ...
 
     def lookup_range(self, date_range: DateRange) -> list[TimestampedTextRange]: ...
 
@@ -389,7 +389,7 @@ class ITermToRelatedTerms(Protocol):
 
 
 class ITermToRelatedTermsFuzzy(Protocol):
-    async def add_terms(self, texts: list[str]) -> "ListIndexingResult": ...
+    async def add_terms(self, texts: list[str]) -> None: ...
 
     async def lookup_term(
         self,
@@ -473,7 +473,7 @@ class IMessageTextIndex[TMessage: IMessage](Protocol):
     async def add_messages(
         self,
         messages: Iterable[TMessage],
-    ) -> "ListIndexingResult": ...
+    ) -> None: ...
 
     async def lookup_messages(
         self,
@@ -715,32 +715,6 @@ class ConversationDataWithIndexes[TMessageData](ConversationData[TMessageData]):
 # --------------------------------
 # Indexing helper data structures
 # --------------------------------
-
-
-@dataclass
-class TextIndexingResult:
-    completed_upto: TextLocation | None = None  # Last message and chunk indexed
-    error: str | None = None
-
-
-@dataclass
-class ListIndexingResult:
-    number_completed: int
-    error: str | None = None
-
-
-@dataclass
-class SecondaryIndexingResults:
-    properties: ListIndexingResult | None = None
-    timestamps: ListIndexingResult | None = None
-    related_terms: ListIndexingResult | None = None
-    message: TextIndexingResult | None = None
-
-
-@dataclass
-class IndexingResults:
-    semantic_refs: TextIndexingResult | None = None
-    secondary_index_results: SecondaryIndexingResults | None = None
 
 
 # --------

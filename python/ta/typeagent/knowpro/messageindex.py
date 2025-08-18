@@ -13,7 +13,6 @@ from .interfaces import (
     IMessageTextIndex,
     MessageTextIndexData,
     ITermToSemanticRefIndex,
-    ListIndexingResult,
     MessageOrdinal,
     ScoredMessageOrdinal,
     TextLocation,
@@ -35,16 +34,16 @@ async def build_message_index[
 ](
     conversation: IConversation[TMessage, TTermToSemanticRefIndex],
     settings: MessageTextIndexSettings,
-) -> ListIndexingResult:
+) -> None:
     csi = conversation.secondary_indexes
     if csi is None:
-        return ListIndexingResult(0)
+        return
     if csi.message_index is None:
         csi.message_index = MessageTextIndex(settings)
     messages = conversation.messages
     # Convert collection to list for add_messages
     messages_list = [message async for message in messages]
-    return await csi.message_index.add_messages(messages_list)
+    await csi.message_index.add_messages(messages_list)
 
 
 class IMessageTextEmbeddingIndex(IMessageTextIndex):
@@ -83,14 +82,14 @@ class MessageTextIndex(IMessageTextEmbeddingIndex):
     async def add_messages[TMessage: IMessage](
         self,
         messages: Iterable[TMessage],
-    ) -> ListIndexingResult:
+    ) -> None:
         base_message_ordinal: MessageOrdinal = await self.text_location_index.size()
         all_chunks: list[tuple[str, TextLocation]] = []
         # Collect everything so we can batch efficiently.
         for message_ordinal, message in enumerate(messages, base_message_ordinal):
             for chunk_ordinal, chunk in enumerate(message.text_chunks):
                 all_chunks.append((chunk, TextLocation(message_ordinal, chunk_ordinal)))
-        return await self.text_location_index.add_text_locations(all_chunks)
+        await self.text_location_index.add_text_locations(all_chunks)
 
     async def lookup_messages(
         self,

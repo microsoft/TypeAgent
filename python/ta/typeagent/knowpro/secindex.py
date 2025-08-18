@@ -11,13 +11,15 @@ from .interfaces import (
     IMessage,
     IStorageProvider,
     ITermToSemanticRefIndex,
-    SecondaryIndexingResults,
-    TextIndexingResult,
     TextLocation,
 )
 from .messageindex import build_message_index
 from .propindex import PropertyIndex, build_property_index
-from .reltermsindex import RelatedTermsIndex, RelatedTermIndexSettings, build_related_terms_index
+from .reltermsindex import (
+    RelatedTermsIndex,
+    RelatedTermIndexSettings,
+    build_related_terms_index,
+)
 from .timestampindex import TimestampToTextRangeIndex, build_timestamp_index
 
 if TYPE_CHECKING:
@@ -79,28 +81,21 @@ async def build_secondary_indexes[
 ](
     conversation: IConversation[TMessage, TTermToSemanticRefIndex],
     conversation_settings: "ConversationSettings",
-) -> SecondaryIndexingResults:
+) -> None:
     if conversation.secondary_indexes is None:
         storage_provider = await conversation_settings.get_storage_provider()
         conversation.secondary_indexes = await ConversationSecondaryIndexes.create(
             storage_provider, conversation_settings.related_term_index_settings
         )
-    result: SecondaryIndexingResults = await build_transient_secondary_indexes(
-        conversation, conversation_settings
-    )
-    result.related_terms = await build_related_terms_index(
+    await build_transient_secondary_indexes(conversation, conversation_settings)
+    await build_related_terms_index(
         conversation, conversation_settings.related_term_index_settings
     )
-    if result.related_terms is not None and not result.related_terms.error:
-        res = await build_message_index(
+    if conversation.secondary_indexes is not None:
+        await build_message_index(
             conversation,
             conversation_settings.message_text_index_settings,
         )
-        result.message = TextIndexingResult(
-            completed_upto=TextLocation(message_ordinal=res.number_completed)
-        )
-
-    return result
 
 
 async def build_transient_secondary_indexes[
@@ -108,7 +103,7 @@ async def build_transient_secondary_indexes[
 ](
     conversation: IConversation[TMessage, TTermToSemanticRefIndex],
     conversation_settings: "ConversationSettings | None" = None,
-) -> SecondaryIndexingResults:
+) -> None:
     if conversation.secondary_indexes is None:
         # Try to get storage provider from conversation.settings first, then from parameter
         storage_provider = None
@@ -140,7 +135,5 @@ async def build_transient_secondary_indexes[
                 )
             ),
         )
-    result = SecondaryIndexingResults()
-    result.properties = await build_property_index(conversation)
-    result.timestamps = await build_timestamp_index(conversation)
-    return result
+    await build_property_index(conversation)
+    await build_timestamp_index(conversation)

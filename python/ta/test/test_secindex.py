@@ -13,9 +13,6 @@ from typeagent.knowpro.interfaces import (
     IConversation,
     IMessage,
     IStorageProvider,
-    ListIndexingResult,
-    SecondaryIndexingResults,
-    TextIndexingResult,
     TextLocation,
 )
 from typeagent.knowpro import kplib
@@ -147,14 +144,10 @@ async def test_build_secondary_indexes(simple_conversation, conversation_setting
     await simple_conversation.messages.append(SimpleMessage("Message 1"))
     await simple_conversation.messages.append(SimpleMessage("Message 2"))
 
-    result = await build_secondary_indexes(simple_conversation, conversation_settings)
+    await build_secondary_indexes(simple_conversation, conversation_settings)
 
-    assert isinstance(result, SecondaryIndexingResults)
-    assert result.related_terms is not None
-    assert isinstance(result.message, TextIndexingResult)
-    assert result.message.completed_upto == TextLocation(
-        await simple_conversation.messages.size()
-    )
+    # Verify that the indexes were built by checking they exist
+    assert simple_conversation.secondary_indexes is not None
 
 
 @pytest.mark.asyncio
@@ -167,10 +160,7 @@ async def test_build_transient_secondary_indexes(simple_conversation, needs_auth
     await simple_conversation.messages.append(SimpleMessage("Message 1"))
     await simple_conversation.messages.append(SimpleMessage("Message 2"))
 
-    result = await build_transient_secondary_indexes(simple_conversation)
+    await build_transient_secondary_indexes(simple_conversation)
 
-    assert isinstance(result, SecondaryIndexingResults)
-    assert result.properties is not None
-    assert result.timestamps is not None
-    assert isinstance(result.properties, ListIndexingResult)
-    assert isinstance(result.timestamps, ListIndexingResult)
+    # Verify that the indexes were built by checking they exist
+    assert simple_conversation.secondary_indexes is not None

@@ -13,7 +13,6 @@ from .interfaces import (
     IConversation,
     IMessage,
     ITimestampToTextRangeIndex,
-    ListIndexingResult,
     MessageOrdinal,
     TimestampedTextRange,
 )
@@ -43,11 +42,10 @@ class TimestampToTextRangeIndex(ITimestampToTextRangeIndex):
     def add_timestamps(
         self,
         message_timestamps: list[tuple[MessageOrdinal, str]],
-    ) -> ListIndexingResult:
+    ) -> None:
         for message_ordinal, timestamp in message_timestamps:
             self._insert_timestamp(message_ordinal, timestamp, False)
         self._ranges.sort(key=lambda x: x.timestamp)
-        return ListIndexingResult(len(message_timestamps))
 
     def _insert_timestamp(
         self,
@@ -92,27 +90,26 @@ def get_in_range[T, S: Any](
         return values[istart:istop]
 
 
-async def build_timestamp_index(conversation: IConversation) -> ListIndexingResult:
+async def build_timestamp_index(conversation: IConversation) -> None:
     if conversation.messages is not None and conversation.secondary_indexes is not None:
         # Check if messages collection is not empty
         if await conversation.messages.size() == 0:
-            return ListIndexingResult(number_completed=0)
+            return
 
         if conversation.secondary_indexes.timestamp_index is None:
             conversation.secondary_indexes.timestamp_index = TimestampToTextRangeIndex()
-        return await add_to_timestamp_index(
+        await add_to_timestamp_index(
             conversation.secondary_indexes.timestamp_index,
             conversation.messages,
             0,
         )
-    return ListIndexingResult(number_completed=0)
 
 
 async def add_to_timestamp_index(
     timestamp_index: ITimestampToTextRangeIndex,
     messages: AsyncIterable[IMessage],
     base_message_ordinal: int,
-) -> ListIndexingResult:
+) -> None:
     message_timestamps: list[tuple[int, str]] = []
     i = 0
     async for message in messages:
@@ -120,4 +117,4 @@ async def add_to_timestamp_index(
         if timestamp:
             message_timestamps.append((base_message_ordinal + i, timestamp))
         i += 1
-    return timestamp_index.add_timestamps(message_timestamps)
+    timestamp_index.add_timestamps(message_timestamps)

@@ -16,7 +16,6 @@ from .interfaces import (
     ITermToRelatedTermsFuzzy,
     ITermToRelatedTermsIndex,
     ITermToSemanticRefIndex,
-    ListIndexingResult,
     SearchTerm,
     Term,
     TermToRelatedTermsData,
@@ -97,7 +96,7 @@ class TermToRelatedTermsMap(ITermToRelatedTerms):
 async def build_related_terms_index(
     conversation: IConversation,
     settings: RelatedTermIndexSettings,
-) -> ListIndexingResult:
+) -> None:
     csr = conversation.semantic_ref_index
     csi = conversation.secondary_indexes
     if csr is not None and csi is not None:
@@ -107,9 +106,6 @@ async def build_related_terms_index(
         all_terms = await csr.get_terms()
         if fuzzy_index and all_terms:
             await fuzzy_index.add_terms(all_terms)
-        return ListIndexingResult(len(all_terms))
-    else:
-        return ListIndexingResult(0)
 
 
 class RelatedTermsIndex(ITermToRelatedTermsIndex):
@@ -281,10 +277,9 @@ class TermEmbeddingIndex(ITermEmbeddingIndex):
             self._texts = data.get("textItems", [])
             self._vectorbase.deserialize(data.get("embeddings"))
 
-    async def add_terms(self, texts: list[str]) -> ListIndexingResult:
+    async def add_terms(self, texts: list[str]) -> None:
         await self._vectorbase.add_keys(texts)
         self._texts.extend(texts)
-        return ListIndexingResult(len(texts))
 
     async def lookup_term(
         self, text: str, max_hits: int | None = None, min_score: float | None = None
