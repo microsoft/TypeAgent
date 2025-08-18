@@ -277,7 +277,7 @@ class SemanticRef:
     knowledge: Knowledge
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.semantic_ref_ordinal}, {self.range}, {self.knowledge_type!r}, {self.knowledge})"
+        return f"{self.__class__.__name__}({self.semantic_ref_ordinal}, {self.range}, {self.knowledge.knowledge_type!r}, {self.knowledge})"
 
     def serialize(self) -> SemanticRefData:
         from . import serialization
@@ -285,7 +285,7 @@ class SemanticRef:
         return SemanticRefData(
             semanticRefOrdinal=self.semantic_ref_ordinal,
             range=self.range.serialize(),
-            knowledgeType=self.knowledge_type,
+            knowledgeType=self.knowledge.knowledge_type,
             knowledge=serialization.serialize_object(self.knowledge),
         )
 

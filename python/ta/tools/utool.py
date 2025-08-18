@@ -35,6 +35,7 @@ from typeagent.knowpro.interfaces import (
     ScoredMessageOrdinal,
     ScoredSemanticRefOrdinal,
     SemanticRef,
+    Tag,
     Topic,
 )
 from typeagent.knowpro import answers, answer_response_schema
@@ -647,52 +648,48 @@ def summarize_knowledge(sem_ref: SemanticRef) -> str:
     knowledge = sem_ref.knowledge
     if knowledge is None:
         return f"{sem_ref.semantic_ref_ordinal}: <No knowledge>"
-    match sem_ref.knowledge_type:
-        case "entity":
-            entity = knowledge
-            assert isinstance(entity, kplib.ConcreteEntity)
-            res = [f"{entity.name} [{', '.join(entity.type)}]"]
-            if entity.facets:
-                for facet in entity.facets:
-                    value = facet.value
-                    if isinstance(value, kplib.Quantity):
-                        value = f"{value.amount} {value.units}"
-                    elif isinstance(value, float) and value.is_integer():
-                        value = int(value)
-                    res.append(f"<{facet.name}:{value}>")
-            return f"{sem_ref.semantic_ref_ordinal}: {' '.join(res)}"
-        case "action":
-            action = knowledge
-            assert isinstance(action, kplib.Action)
-            res = []
-            res.append("/".join(repr(verb) for verb in action.verbs))
-            if action.verb_tense:
-                res.append(f"[{action.verb_tense}]")
-            if action.subject_entity_name != "none":
-                res.append(f"subj={action.subject_entity_name!r}")
-            if action.object_entity_name != "none":
-                res.append(f"obj={action.object_entity_name!r}")
-            if action.indirect_object_entity_name != "none":
-                res.append(f"ind_obj={action.indirect_object_entity_name}")
-            if action.params:
-                for param in action.params:
-                    if isinstance(param, kplib.ActionParam):
-                        res.append(f"<{param.name}:{param.value}>")
-                    else:
-                        res.append(f"<{param}>")
-            if action.subject_entity_facet is not None:
-                res.append(f"subj_facet={action.subject_entity_facet}")
-            return f"{sem_ref.semantic_ref_ordinal}: {' '.join(res)}"
-        case "topic":
-            topic = knowledge
-            assert isinstance(topic, Topic)
-            return f"{sem_ref.semantic_ref_ordinal}: {topic.text!r}]"
-        case "tag":
-            tag = knowledge
-            assert isinstance(tag, str)
-            return f"{sem_ref.semantic_ref_ordinal}: #{tag!r}"
-        case _:
-            return f"{sem_ref.semantic_ref_ordinal}: {sem_ref.knowledge!r}"
+    
+    if isinstance(knowledge, kplib.ConcreteEntity):
+        entity = knowledge
+        res = [f"{entity.name} [{', '.join(entity.type)}]"]
+        if entity.facets:
+            for facet in entity.facets:
+                value = facet.value
+                if isinstance(value, kplib.Quantity):
+                    value = f"{value.amount} {value.units}"
+                elif isinstance(value, float) and value.is_integer():
+                    value = int(value)
+                res.append(f"<{facet.name}:{value}>")
+        return f"{sem_ref.semantic_ref_ordinal}: {' '.join(res)}"
+    elif isinstance(knowledge, kplib.Action):
+        action = knowledge
+        res = []
+        res.append("/".join(repr(verb) for verb in action.verbs))
+        if action.verb_tense:
+            res.append(f"[{action.verb_tense}]")
+        if action.subject_entity_name != "none":
+            res.append(f"subj={action.subject_entity_name!r}")
+        if action.object_entity_name != "none":
+            res.append(f"obj={action.object_entity_name!r}")
+        if action.indirect_object_entity_name != "none":
+            res.append(f"ind_obj={action.indirect_object_entity_name}")
+        if action.params:
+            for param in action.params:
+                if isinstance(param, kplib.ActionParam):
+                    res.append(f"<{param.name}:{param.value}>")
+                else:
+                    res.append(f"<{param}>")
+        if action.subject_entity_facet is not None:
+            res.append(f"subj_facet={action.subject_entity_facet}")
+        return f"{sem_ref.semantic_ref_ordinal}: {' '.join(res)}"
+    elif isinstance(knowledge, Topic):
+        topic = knowledge
+        return f"{sem_ref.semantic_ref_ordinal}: {topic.text!r}"
+    elif isinstance(knowledge, Tag):
+        tag = knowledge
+        return f"{sem_ref.semantic_ref_ordinal}: #{tag.text!r}"
+    else:
+        return f"{sem_ref.semantic_ref_ordinal}: {sem_ref.knowledge!r}"
 
 
 def compare_results(
