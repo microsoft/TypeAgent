@@ -640,9 +640,9 @@ export class HtmlToMdConvertor {
     }
 
     private appendEm(element: cheerio.Element) {
-        this.appendMarkup("__");
+        this.appendMarkup("_");
         this.traverseChildren(element);
-        this.appendMarkup("__");
+        this.appendMarkup("_");
     }
 
     private appendUrl(element: cheerio.Element) {
