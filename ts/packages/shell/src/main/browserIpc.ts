@@ -75,10 +75,12 @@ export class BrowserAgentIpc {
                         let schema = data.method?.split("/")[0];
                         schema = schema || "browser";
 
+                        // Forward messages for browser, webAgent schemas, and import progress updates
                         if (
                             (schema == "browser" ||
                                 schema == "webAgent" ||
-                                schema.startsWith("browser.")) &&
+                                schema.startsWith("browser.") ||
+                                data.method === "importProgress") &&
                             this.onMessageReceived
                         ) {
                             debugBrowserIPC("Browser -> Dispatcher", data);

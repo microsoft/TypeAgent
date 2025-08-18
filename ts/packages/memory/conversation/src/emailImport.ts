@@ -5,6 +5,11 @@ import { AddressObject, simpleParser } from "mailparser";
 import { email } from "knowledge-processor";
 import { readAllText } from "typeagent";
 
+/**
+ * Load an email in MIME format
+ * @param filePath
+ * @returns
+ */
 export async function importEmlFile(
     filePath: string,
 ): Promise<email.Email | undefined> {
@@ -15,6 +20,11 @@ export async function importEmlFile(
     return importEmailFromMimeText(text);
 }
 
+/**
+ * Parse emailText in MIME format
+ * @param emailText
+ * @returns {email.Email}
+ */
 export async function importEmailFromMimeText(
     emailText: string,
 ): Promise<email.Email | undefined> {

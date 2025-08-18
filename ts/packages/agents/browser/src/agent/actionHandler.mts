@@ -662,6 +662,7 @@ async function resolveEntity(
 ): Promise<ResolveEntityResult | undefined> {
     if (type === "WebPage") {
         try {
+
             const resolveStarted = Date.now();
 
             const urls = await resolveWebPage(context, name, undefined, true);
@@ -669,7 +670,7 @@ async function resolveEntity(
 
             debug(`URL Resolution Duration: ${duration}`);
 
-            if (urls.length === 1) {
+            if (urls.length === 1s.length === 1) {
                 return {
                     match: "exact",
                     entities: [

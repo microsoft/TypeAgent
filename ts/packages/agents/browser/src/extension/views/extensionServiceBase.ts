@@ -7,6 +7,11 @@ import type {
     MacroQueryOptions,
     DeleteMacroResult,
 } from "./macroUtilities";
+import type {
+    ImportOptions,
+    ImportResult,
+    ProgressCallback,
+} from "../interfaces/websiteImport.types";
 
 // ===================================================================
 // INTERFACE DEFINITIONS
@@ -413,6 +418,45 @@ export abstract class ExtensionServiceBase {
         return response?.url || null;
     }
 
+    async importBrowserData(
+        options: ImportOptions,
+        importId: string,
+    ): Promise<ImportResult> {
+        return this.sendMessage({
+            type: "importWebsiteDataWithProgress",
+            parameters: {
+                ...options, // TODO: remove "type" from this dictionary. That will remove the need to wrap these values in a "parameters" object
+                importId,
+                totalItems: 0,
+                progressCallback: true,
+            },
+        });
+    }
+
+    async importHtmlFolder(
+        folderPath: string,
+        options: any,
+        importId: string,
+    ): Promise<any> {
+        return this.sendMessage({
+            type: "importHtmlFolder",
+            ...options,
+            folderPath,
+            importId,
+        });
+    }
+
+    async cancelImport(importId: string): Promise<void> {
+        await this.sendMessage({
+            type: "cancelImport",
+            importId,
+        });
+    }
+
+    onImportProgress(importId: string, callback: ProgressCallback): void {
+        this.onImportProgressImpl(importId, callback);
+    }
+
     // Macro methods
     async getMacrosForUrl(
         url: string,
@@ -465,6 +509,15 @@ export abstract class ExtensionServiceBase {
      * Concrete classes must implement this method
      */
     protected abstract sendMessage<T>(message: any): Promise<T>;
+
+    /**
+     * Environment-specific progress tracking implementation
+     * Concrete classes must implement this method
+     */
+    protected abstract onImportProgressImpl(
+        importId: string,
+        callback: ProgressCallback,
+    ): void;
 
     // ===================================================================
     // VIRTUAL METHODS - Can be overridden by concrete classes

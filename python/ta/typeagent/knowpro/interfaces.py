@@ -2,7 +2,7 @@
 # Licensed under the MIT License.
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Sequence
+from collections.abc import AsyncIterable, Iterable, Sequence
 from dataclasses import field
 from datetime import (
     datetime as Datetime,  # For export.
@@ -140,7 +140,6 @@ type Knowledge = kplib.ConcreteEntity | kplib.Action | Topic | Tag
 class TextLocationData(TypedDict):
     messageOrdinal: MessageOrdinal
     chunkOrdinal: int
-    charOrdinal: int
 
 
 @dataclass(order=True)
@@ -148,28 +147,23 @@ class TextLocation:
     # The ordinal of the message.
     message_ordinal: MessageOrdinal
     # The ordinal of the chunk.
+    # In the end of a TextRange, 1 + ordinal of the last chunk in the range.
     chunk_ordinal: int = 0
-    # The ordinal of the character within the chunk.
-    char_ordinal: int = 0
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.message_ordinal}, {self.chunk_ordinal}, {self.char_ordinal})"
+        return (
+            f"{self.__class__.__name__}({self.message_ordinal}, {self.chunk_ordinal})"
+        )
 
     def serialize(self) -> TextLocationData:
         kwds = dict(messageOrdinal=self.message_ordinal)
         if self.chunk_ordinal != 0:
             kwds["chunkOrdinal"] = self.chunk_ordinal
-        if self.char_ordinal != 0:
-            kwds["charOrdinal"] = self.char_ordinal
         return TextLocationData(**kwds)
 
     @staticmethod
     def deserialize(data: TextLocationData) -> "TextLocation":
-        return TextLocation(
-            message_ordinal=data["messageOrdinal"],
-            chunk_ordinal=data.get("chunkOrdinal", 0),
-            char_ordinal=data.get("charOrdinal", 0),
-        )
+        return TextLocation(data["messageOrdinal"], data.get("chunkOrdinal", 0))
 
 
 class TextRangeData(TypedDict):
@@ -192,11 +186,32 @@ class TextRange:
         else:
             return f"{self.__class__.__name__}({self.start}, {self.end})"
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, TextRange):
+            return NotImplemented
+
+        if self.start != other.start:
+            return False
+
+        # Get the effective end for both ranges
+        self_end = self.end or TextLocation(
+            self.start.message_ordinal, self.start.chunk_ordinal + 1
+        )
+        other_end = other.end or TextLocation(
+            other.start.message_ordinal, other.start.chunk_ordinal + 1
+        )
+
+        return self_end == other_end
+
     def __lt__(self, other: Self) -> bool:
         if self.start != other.start:
             return self.start < other.start
-        self_end = self.end or self.start
-        other_end = other.end or other.start
+        self_end = self.end or TextLocation(
+            self.start.message_ordinal, self.start.chunk_ordinal + 1
+        )
+        other_end = other.end or TextLocation(
+            other.start.message_ordinal, other.start.chunk_ordinal + 1
+        )
         return self_end < other_end
 
     def __gt__(self, other: Self) -> bool:
@@ -209,10 +224,13 @@ class TextRange:
         return not other.__lt__(self)
 
     def __contains__(self, other: Self) -> bool:
-        otherend = other.end or other.start
-        selfend = self.end or self.start
-        # TODO: In TS, isInTextRange requires other.end < self.end
-        return self.start <= other.start and otherend <= selfend
+        other_end = other.end or TextLocation(
+            other.start.message_ordinal, other.start.chunk_ordinal + 1
+        )
+        self_end = self.end or TextLocation(
+            self.start.message_ordinal, self.start.chunk_ordinal + 1
+        )
+        return self.start <= other.start and other_end <= self_end
 
     def serialize(self) -> TextRangeData:
         if self.end is None:
@@ -758,16 +776,14 @@ class IndexingResults:
 # --------
 
 
-class IReadonlyCollection[T, TOrdinal](Iterable[T], Protocol):
-    def __len__(self) -> int: ...
+class IReadonlyCollection[T, TOrdinal](AsyncIterable[T], Protocol):
+    async def size(self) -> int: ...
 
-    @overload
-    def __getitem__(self, arg: TOrdinal) -> T: ...
-    @overload
-    def __getitem__(self, arg: slice) -> list[T]: ...
-    @overload
-    def __getitem__(self, arg: list[TOrdinal]) -> list[T]: ...
-    def __getitem__(self, arg: Any) -> Any: ...
+    async def get_item(self, arg: TOrdinal) -> T: ...
+
+    async def get_slice(self, start: int, stop: int) -> list[T]: ...
+
+    async def get_multiple(self, arg: list[TOrdinal]) -> list[T]: ...
 
 
 class ICollection[T, TOrdinal](IReadonlyCollection[T, TOrdinal], Protocol):
@@ -776,13 +792,13 @@ class ICollection[T, TOrdinal](IReadonlyCollection[T, TOrdinal], Protocol):
     @property
     def is_persistent(self) -> bool: ...
 
-    def append(self, item: T) -> None: ...
+    async def append(self, item: T) -> None: ...
 
-    def extend(self, items: Iterable[T]) -> None:
+    async def extend(self, items: Iterable[T]) -> None:
         """Append multiple items to the collection."""
         # The default implementation just calls append for each item.
         for item in items:
-            self.append(item)
+            await self.append(item)
 
 
 class IMessageCollection[TMessage: IMessage](
@@ -796,13 +812,13 @@ class ISemanticRefCollection(ICollection[SemanticRef, SemanticRefOrdinal], Proto
 
 
 # This is an ABC, not a Protocol, because some classes have serialize()/deserialize()
-# but with the wrong signature (using dicts instead of strings).
+# but with the wrong signature (using different types).
 class JsonSerializer[T](ABC):
     @abstractmethod
-    def serialize(self, value: T) -> str: ...
+    def serialize(self, value: T) -> dict[str, Any] | list[Any]: ...
 
     @abstractmethod
-    def deserialize(self, data: str) -> T: ...
+    def deserialize(self, data: dict[str, Any] | list[Any]) -> T: ...
 
 
 class IStorageProvider(Protocol):

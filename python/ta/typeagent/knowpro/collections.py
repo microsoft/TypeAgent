@@ -10,6 +10,8 @@ import sys
 from typing import Set, cast
 
 from .interfaces import (
+    IMessage,
+    IMessageCollection,
     ISemanticRefCollection,
     Knowledge,
     KnowledgeType,
@@ -296,15 +298,17 @@ class SemanticRefAccumulator(MatchAccumulator[SemanticRefOrdinal]):
                     )
             self.search_term_matches.add(search_term.text)
 
-    def get_semantic_refs(
+    async def get_semantic_refs(
         self,
         semantic_refs: ISemanticRefCollection,
         predicate: Callable[[SemanticRef], bool],
-    ) -> Iterable[SemanticRef]:
+    ) -> list[SemanticRef]:
+        result = []
         for match in self:
-            semantic_ref = semantic_refs[match.value]
+            semantic_ref = await semantic_refs.get_item(match.value)
             if predicate is None or predicate(semantic_ref):
-                yield semantic_ref
+                result.append(semantic_ref)
+        return result
 
     def get_matches_of_type[T: Knowledge](
         self,
@@ -317,13 +321,13 @@ class SemanticRefAccumulator(MatchAccumulator[SemanticRefOrdinal]):
             if predicate is None or predicate(cast(T, semantic_ref.knowledge)):
                 yield match
 
-    def group_matches_by_type(
+    async def group_matches_by_type(
         self,
         semantic_refs: ISemanticRefCollection,
     ) -> dict[KnowledgeType, "SemanticRefAccumulator"]:
         groups: dict[KnowledgeType, SemanticRefAccumulator] = {}
         for match in self:
-            semantic_ref = semantic_refs[match.value]
+            semantic_ref = await semantic_refs.get_item(match.value)
             group = groups.get(semantic_ref.knowledge_type)
             if group is None:
                 group = SemanticRefAccumulator()
@@ -332,14 +336,16 @@ class SemanticRefAccumulator(MatchAccumulator[SemanticRefOrdinal]):
             group.set_match(match)
         return groups
 
-    def get_matches_in_scope(
+    async def get_matches_in_scope(
         self,
         semantic_refs: ISemanticRefCollection,
         ranges_in_scope: "TextRangesInScope",
     ) -> "SemanticRefAccumulator":
         accumulator = SemanticRefAccumulator(self.search_term_matches)
         for match in self:
-            if ranges_in_scope.is_range_in_scope(semantic_refs[match.value].range):
+            if ranges_in_scope.is_range_in_scope(
+                (await semantic_refs.get_item(match.value)).range
+            ):
                 accumulator.set_match(match)
         return accumulator
 
@@ -405,12 +411,17 @@ class MessageAccumulator(MatchAccumulator[MessageOrdinal]):
         message_ordinal_start = semantic_ref.range.start.message_ordinal
         if semantic_ref.range.end is not None:
             message_ordinal_end = semantic_ref.range.end.message_ordinal
-            for message_ordinal in range(message_ordinal_start, message_ordinal_end):
+            for message_ordinal in range(
+                message_ordinal_start, message_ordinal_end + 1
+            ):
                 self.add(message_ordinal, score)
         else:
             self.add(message_ordinal_start, score)
 
-    # TODO: add_range, add_scored_matches
+    def add_scored_matches(self, scored_ordinals: list[ScoredMessageOrdinal]) -> None:
+        """Add scored message ordinals to the accumulator."""
+        for scored_ordinal in scored_ordinals:
+            self.add(scored_ordinal.message_ordinal, scored_ordinal.score)
 
     def intersect(
         self,
@@ -432,8 +443,29 @@ class MessageAccumulator(MatchAccumulator[MessageOrdinal]):
         sorted_matches = self.get_sorted_by_score()
         return [ScoredMessageOrdinal(m.value, m.score) for m in sorted_matches]
 
-    # TODO: select_messages_in_budget
-    # TODO: from_scored_ordinals
+    async def select_messages_in_budget(
+        self, messages: IMessageCollection, max_chars_in_budget: int
+    ) -> None:
+        """Select messages that fit within the character budget."""
+        scored_matches = self.get_sorted_by_score()
+        ranked_ordinals = [m.value for m in scored_matches]
+        message_count_in_budget = await get_count_of_messages_in_char_budget(
+            messages, ranked_ordinals, max_chars_in_budget
+        )
+        self.clear_matches()
+        if message_count_in_budget > 0:
+            scored_matches = scored_matches[:message_count_in_budget]
+            self.set_matches(scored_matches)
+
+    @staticmethod
+    def from_scored_ordinals(
+        ordinals: list[ScoredMessageOrdinal] | None,
+    ) -> "MessageAccumulator":
+        """Create a MessageAccumulator from scored ordinals."""
+        accumulator = MessageAccumulator()
+        if ordinals and len(ordinals) > 0:
+            accumulator.add_scored_matches(ordinals)
+        return accumulator
 
 
 # TODO: intersectScoredMessageOrdinals
@@ -698,3 +730,29 @@ def add_to_set[T](
 ) -> None:
     """Add values to a set."""
     set.update(values)
+
+
+def get_message_char_count(message: IMessage) -> int:
+    """Get the character count of a message."""
+    total = 0
+    for chunk in message.text_chunks:
+        total += len(chunk)
+    return total
+
+
+async def get_count_of_messages_in_char_budget(
+    messages: IMessageCollection,
+    message_ordinals: Iterable[MessageOrdinal],
+    max_chars_in_budget: int,
+) -> int:
+    """Get the count of messages that fit within the character budget."""
+    i = 0
+    total_char_count = 0
+    for message_ordinal in message_ordinals:
+        message = await messages.get_item(message_ordinal)
+        message_char_count = get_message_char_count(message)
+        if message_char_count + total_char_count > max_chars_in_budget:
+            break
+        total_char_count += message_char_count
+        i += 1
+    return i

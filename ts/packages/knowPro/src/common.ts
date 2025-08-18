@@ -46,11 +46,7 @@ export function compareTextLocation(x: TextLocation, y: TextLocation): number {
     if (cmp !== 0) {
         return cmp;
     }
-    cmp = (x.chunkOrdinal ?? 0) - (y.chunkOrdinal ?? 0);
-    if (cmp !== 0) {
-        return cmp;
-    }
-    return (x.charOrdinal ?? 0) - (y.charOrdinal ?? 0);
+    return (x.chunkOrdinal ?? 0) - (y.chunkOrdinal ?? 0);
 }
 
 export function compareTextRange(x: TextRange, y: TextRange) {

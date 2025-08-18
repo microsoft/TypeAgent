@@ -50,7 +50,7 @@ export interface IMessage extends IKnowledgeSource {
     /**
      * (Optional) tags associated with the message
      */
-    tags: string[] | MessageTag[];
+    tags: MessageTag[];
     /**
      * (Future) Information about the deletion of the message.
      */
@@ -251,11 +251,6 @@ export interface TextLocation {
      * [Optional] The ordinal index of the chunk within the message.
      */
     chunkOrdinal?: number;
-
-    /**
-     * [Optional] The ordinal index of the character within the chunk.
-     */
-    charOrdinal?: number;
 }
 
 /**
@@ -745,6 +740,7 @@ export interface IReadonlyCollection<T, TOrdinal = number> extends Iterable<T> {
     get(ordinal: TOrdinal): T;
     getMultiple(ordinals: TOrdinal[]): T[];
     getSlice(start: TOrdinal, end: TOrdinal): T[];
+    getAll(): T[];
 }
 
 /**

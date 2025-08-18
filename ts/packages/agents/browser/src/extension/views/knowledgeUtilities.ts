@@ -22,6 +22,7 @@ import {
     SourceReference,
     EntityMatch,
 } from "./extensionServiceBase";
+import type { ProgressCallback } from "../interfaces/websiteImport.types";
 
 // ===================================================================
 // INTERFACES AND TYPES
@@ -190,6 +191,7 @@ export class NotificationManager {
 // ===================================================================
 
 export class ChromeExtensionService extends ExtensionServiceBase {
+    private importProgressCallbacks: Map<string, ProgressCallback> = new Map();
     // Override getCurrentTab with Chrome-specific implementation
     protected async getCurrentTabImpl(): Promise<chrome.tabs.Tab | null> {
         try {
@@ -449,6 +451,26 @@ export class ChromeExtensionService extends ExtensionServiceBase {
         });
     }
 
+    protected onImportProgressImpl(
+        importId: string,
+        callback: ProgressCallback,
+    ): void {
+        this.importProgressCallbacks.set(importId, callback);
+
+        const messageListener = (message: any) => {
+            if (
+                message.type === "importProgress" &&
+                message.importId === importId
+            ) {
+                callback(message.progress);
+            }
+        };
+
+        chrome.runtime.onMessage.addListener(messageListener);
+
+        (callback as any)._messageListener = messageListener;
+    }
+
     // Implement abstract sendMessage method
     protected async sendMessage<T>(message: any): Promise<T> {
         if (typeof chrome !== "undefined" && chrome.runtime) {
@@ -472,6 +494,7 @@ export class ChromeExtensionService extends ExtensionServiceBase {
 // ===================================================================
 
 export class ElectronExtensionService extends ExtensionServiceBase {
+    private importProgressCallbacks: Map<string, ProgressCallback> = new Map();
     // Override getAnalyticsData to add success wrapper
     async getAnalyticsData(options?: {
         timeRange?: string;
@@ -755,6 +778,29 @@ export class ElectronExtensionService extends ExtensionServiceBase {
         }
     }
 
+    protected onImportProgressImpl(
+        importId: string,
+        callback: ProgressCallback,
+    ): void {
+        this.importProgressCallbacks.set(importId, callback);
+
+        const progressHandler = (progress: any) => {
+            if (progress.importId === importId) {
+                callback(progress.progress);
+            }
+        };
+
+        if ((window as any).electronAPI?.registerImportProgressCallback) {
+            (window as any).electronAPI.registerImportProgressCallback(
+                importId,
+                progressHandler,
+            );
+        }
+
+        (callback as any)._progressHandler = progressHandler;
+        (callback as any)._importId = importId;
+    }
+
     // Implement abstract sendMessage method with message transformation
     protected async sendMessage<T>(message: any): Promise<T> {
         if (typeof window !== "undefined" && (window as any).electronAPI) {
@@ -784,7 +830,11 @@ export class ElectronExtensionService extends ExtensionServiceBase {
         const { type, ...params } = chromeMessage;
 
         // Handle special cases where message structure differs
-        if (type === "searchWebMemories" && chromeMessage.parameters) {
+        if (
+            (type === "searchWebMemories" ||
+                type === "importWebsiteDataWithProgress") &&
+            chromeMessage.parameters
+        ) {
             return {
                 method: type,
                 params: chromeMessage.parameters,

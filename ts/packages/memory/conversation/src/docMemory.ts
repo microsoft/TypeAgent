@@ -12,6 +12,8 @@ import {
 } from "./memory.js";
 import { TypeChatLanguageModel } from "typechat";
 import { fileURLToPath } from "url";
+import { importDocMemoryFromTextFile } from "./docImport.js";
+import { ChatModel } from "aiclient";
 
 export class DocPartMeta extends MessageMetadata {
     constructor(public sourceUrl?: string | undefined) {
@@ -20,14 +22,17 @@ export class DocPartMeta extends MessageMetadata {
 }
 
 /**
- * A part of a document.
- * Use tags to annotate headings, etc.
+ * A document contains document parts
+ * A DocPart is a {@link Message} that can be added to a {@link DocMemory}
  */
 export class DocPart extends Message<DocPartMeta> {
+    /**
+     * See {@link Message} for parameter/property descriptions
+     */
     constructor(
         textChunks: string | string[] = [],
         metadata?: DocPartMeta | undefined,
-        tags?: string[] | kp.MessageTag[] | undefined,
+        tags?: kp.MessageTag[] | undefined,
         timestamp?: string | undefined,
         knowledge?: kpLib.conversation.KnowledgeResponse | undefined,
         deletionInfo: kp.DeletionInfo | undefined = undefined,
@@ -38,6 +43,13 @@ export class DocPart extends Message<DocPartMeta> {
     }
 }
 
+/**
+ * The state of indexing a document.
+ * Captured state that allows the document to be indexed incrementally.
+ * Can also capture state the allows indexing to resume in case of failure.
+ *
+ * This object should typically be opaque to the caller, but is useful for displaying status etc.
+ */
 export interface DocIndexingState {
     lastMessageOrdinal: number;
     lastSemanticRefOrdinal: number;
@@ -46,15 +58,38 @@ export interface DocIndexingState {
 
 export interface DocMemorySettings extends MemorySettings {}
 
-export function createTextMemorySettings(
+export function createDocMemorySettings(
     embeddingCacheSize = 64,
     getPersistentCache?: () => kpLib.TextEmbeddingCache | undefined,
-) {
-    return {
-        ...createMemorySettings(embeddingCacheSize, getPersistentCache),
-    };
+    languageModel?: ChatModel,
+): DocMemorySettings {
+    const settings: DocMemorySettings = createMemorySettings(
+        embeddingCacheSize,
+        getPersistentCache,
+        languageModel,
+    );
+    settings.useScopedSearch = true;
+    return settings;
 }
 
+/**
+ * A DocMemory is a collection of {@link DocPart}.
+ * You can search document memories and generate answers using:
+ * - using natural language queries
+ * - Query expressions
+ *
+ * Indexing:
+ * You must call {@link buildIndex} to enable query operations.
+ * You call {@link writeToFile} to persist the memory and any indexes created by buildIndex.
+ * Alternatively, you can incrementally and and index a new DocPart by calling {@link addDocPartToIndex}
+ *
+ * Doc memories are mutable.
+ *
+ * You can import text files like .vtt, .html, .md etc as DocMemories using the {@link importDocMemoryFromTextFile} function
+ *
+ * @see Memory base class for APIs
+ * @see DocPart
+ */
 export class DocMemory
     extends Memory<DocMemorySettings, DocPart>
     implements kp.IConversation
@@ -71,7 +106,7 @@ export class DocMemory
         settings?: DocMemorySettings,
         tags?: string[],
     ) {
-        settings ??= createTextMemorySettings();
+        settings ??= createDocMemorySettings();
         if (!settings.embeddingModel.getPersistentCache) {
             settings.embeddingModel.getPersistentCache = () =>
                 this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex;
@@ -100,6 +135,11 @@ export class DocMemory
         return this;
     }
 
+    /**
+     * Build a new index for this document memory. The index uses all available document parts
+     * @param {kp.IndexingEventHandlers} eventHandler
+     * @returns
+     */
     public async buildIndex(
         eventHandler?: kp.IndexingEventHandlers,
     ): Promise<kp.IndexingResults> {
@@ -117,6 +157,13 @@ export class DocMemory
         }
     }
 
+    /**
+     * Index any new document parts added to the memory.
+     * You can also use this method to resume indexing in case of failure.
+     * @param {kp.IndexingEventHandlers} eventHandler
+     * @returns {IndexingState} How much progress was made during indexing. Sometimes, network or LLM errors
+     * will cause indexing to pause and return indexing state.
+     */
     public async addToIndex(
         eventHandler?: kp.IndexingEventHandlers,
     ): Promise<kp.IndexingResults> {
@@ -141,13 +188,20 @@ export class DocMemory
         }
     }
 
-    public async addItemToIndex(
-        item: DocPart,
+    /**
+     * Add a new DocPart this memory and update the index.
+     * Use for incrementally adding to this document
+     * @param docPart
+     * @param {kp.IndexingEventHandlers} eventHandler
+     * @returns
+     */
+    public async addDocPartToIndex(
+        docPart: DocPart,
         eventHandler?: kp.IndexingEventHandlers,
     ): Promise<kp.IndexingResults> {
         this.beginIndexing();
         try {
-            this.messages.append(item);
+            this.messages.append(docPart);
             const messageOrdinal = this.messages.length - 1;
 
             const result = await kp.addToConversationIndex(
@@ -164,6 +218,13 @@ export class DocMemory
         }
     }
 
+    /**
+     * If a document part changed, will dynamically update the index to reflect the new document part
+     * @param messageOrdinal
+     * @param updatedItem
+     * @param eventHandler
+     * @returns
+     */
     public async updateItemInIndex(
         messageOrdinal: number,
         updatedItem: DocPart,
@@ -239,6 +300,10 @@ export class DocMemory
         this.indexingState.lastIndexed = new Date();
     }
 
+    /**
+     * Serialize the memory into a transferable JSON blob
+     * @returns
+     */
     public async serialize(): Promise<DocMemoryData> {
         const data: DocMemoryData = {
             nameTag: this.nameTag,
@@ -254,6 +319,10 @@ export class DocMemory
         return data;
     }
 
+    /**
+     * Deserialize memory from a JSON blob
+     * @param docMemoryData
+     */
     public async deserialize(docMemoryData: DocMemoryData): Promise<void> {
         this.nameTag = docMemoryData.nameTag;
         const docParts = docMemoryData.messages.map((m) => {
@@ -302,6 +371,12 @@ export class DocMemory
         );
     }
 
+    /**
+     * Write this Document memory and its indexes to files.
+     * Uses the 2 file format for knowpro: a JSON data file and an embeddings file
+     * @param dirPath Directory to write memory files
+     * @param baseFileName Base filename to use for memory files
+     */
     public async writeToFile(
         dirPath: string,
         baseFileName: string,
@@ -310,6 +385,14 @@ export class DocMemory
         await kp.writeConversationDataToFile(data, dirPath, baseFileName);
     }
 
+    /**
+     * Read this memory from files.
+     * The files must have been written using {@link writeToFile}
+     * @param dirPath Directory that contains memory files
+     * @param baseFileName Base filename for memory files
+     * @param settings
+     * @returns
+     */
     public static async readFromFile(
         dirPath: string,
         baseFileName: string,
@@ -326,6 +409,28 @@ export class DocMemory
             docMemory.deserialize(data);
         }
         return docMemory;
+    }
+
+    /**
+     * Import a text file as a document memory
+     * Supported formats:
+     *   .vtt
+     *   .md
+     *   .html/htm
+     *   .txt
+     * @param docFilePath
+     * @param maxCharsPerChunk
+     * @param docName
+     * @param settings
+     * @returns
+     */
+    public async importFromTextFile(
+        docFilePath: string,
+        maxCharsPerChunk: number,
+        docName?: string,
+        settings?: DocMemorySettings,
+    ) {
+        return importDocMemoryFromTextFile(docFilePath, maxCharsPerChunk);
     }
 }
 

@@ -504,7 +504,7 @@ export class WebsiteCollection
         website: WebsiteDocPart,
         eventHandler?: IndexingEventHandlers,
     ): Promise<IndexingResults> {
-        const result = await super.addItemToIndex(website, eventHandler);
+        const result = await super.addDocPartToIndex(website, eventHandler);
 
         if (result && !this.hasErrors(result)) {
             const messageOrdinal = this.messages.length - 1;

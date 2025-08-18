@@ -13,9 +13,27 @@ import { ElectronPDFInterceptor } from "./pdfInterceptor";
 
 const debugWebAgentProxy = registerDebug("typeagent:webAgent:proxy");
 
+// Import progress callback registry
+const importProgressCallbacks = new Map<string, (progress: any) => void>();
+
 ipcRenderer.on("received-from-browser-ipc", async (_, data) => {
     if (data.error) {
         console.error(data.error);
+        return;
+    }
+
+    // Handle import progress messages
+    if (data.method === "importProgress") {
+        if (data.params && data.params.importId) {
+            const callback = importProgressCallbacks.get(data.params.importId);
+            if (callback) {
+                callback({
+                    type: "importProgress",
+                    importId: data.params.importId,
+                    progress: data.params.progress,
+                });
+            }
+        }
         return;
     }
 
@@ -262,6 +280,32 @@ contextBridge.exposeInMainWorld("electronAPI", {
     // Direct WebSocket connection check
     checkWebSocketConnection: async () => {
         return ipcRenderer.invoke("check-websocket-connection");
+    },
+
+    // Import progress API
+    onImportProgress: (callback: (event: any) => void) => {
+        // Store callback with a unique key (since we can't directly get importId here)
+        // We'll use a global callback that filters by importId in the ElectronExtensionService
+        const wrappedCallback = (progress: any) => {
+            callback(progress);
+        };
+
+        // For Electron, we'll register a global progress listener
+        // The ElectronExtensionService will filter by importId
+        (window as any)._electronProgressCallback = wrappedCallback;
+    },
+
+    // Register progress callback for specific import
+    registerImportProgressCallback: (
+        importId: string,
+        callback: (progress: any) => void,
+    ) => {
+        importProgressCallbacks.set(importId, callback);
+    },
+
+    // Unregister progress callback for specific import
+    unregisterImportProgressCallback: (importId: string) => {
+        importProgressCallbacks.delete(importId);
     },
 });
 

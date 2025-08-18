@@ -70,6 +70,8 @@ jobs:
         working-directory: ts
         run: |
           pnpm run build:shell
+        env:
+          DEBUG_DEMB: true
       - name: Electron Builder Cache
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         uses: actions/cache@v4

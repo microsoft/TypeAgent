@@ -81,7 +81,7 @@ export async function createKnowproDocMemoryCommands(
             context.printer.writeError(`${namedArgs.filePath} not found`);
             return;
         }
-        context.docMemory = await cm.importTextFile(
+        context.docMemory = await cm.importDocMemoryFromTextFile(
             namedArgs.filePath,
             namedArgs.maxCharsPerChunk,
             undefined,
@@ -238,10 +238,15 @@ export async function createKnowproDocMemoryCommands(
     }
 
     function createDocMemorySettings(useScoped: boolean) {
-        const settings = kpContext.createMemorySettings();
-        if (useScoped !== undefined && useScoped === true) {
-            settings.useScopedSearch = true;
+        const settings = cm.createDocMemorySettings(
+            64,
+            undefined,
+            kpContext.knowledgeModel,
+        );
+        if (useScoped !== undefined) {
+            settings.useScopedSearch = useScoped;
         }
+
         return settings;
     }
     return;

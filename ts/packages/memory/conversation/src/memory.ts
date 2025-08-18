@@ -62,8 +62,18 @@ export function createMemorySettings(
     return memorySettings;
 }
 
+/**
+ * Settings for how memory index file are stored
+ */
 export type IndexFileSettings = {
+    /**
+     * Directory that contains memory files
+     */
     dirPath: string;
+    /**
+     * Base filename for memory files
+     * Specific filenames used to persist memory use this as a prefix
+     */
     baseFileName: string;
 };
 
@@ -126,24 +136,31 @@ export class MessageMetadata
 
 /**
  * A Message in a Memory {@link Memory}
+ * Message implements {@link kp.IMessage}
  */
 export class Message<TMeta extends MessageMetadata = MessageMetadata>
     implements kp.IMessage
 {
+    /**
+     * Text chunk associated with this messages
+     */
     public textChunks: string[];
 
     constructor(
+        /**
+         * {@link MessageMetadata}
+         */
         public metadata: TMeta,
-        messageBody: string | string[],
-        public tags: string[] | kp.MessageTag[] = [],
+        textChunks: string | string[],
+        public tags: kp.MessageTag[] = [],
         public timestamp: string | undefined = undefined,
         public knowledge: kpLib.KnowledgeResponse | undefined = undefined,
         public deletionInfo: kp.DeletionInfo | undefined = undefined,
     ) {
-        if (Array.isArray(messageBody)) {
-            this.textChunks = messageBody;
+        if (Array.isArray(textChunks)) {
+            this.textChunks = textChunks;
         } else {
-            this.textChunks = [messageBody];
+            this.textChunks = [textChunks];
         }
     }
 
@@ -359,6 +376,9 @@ export abstract class Memory<
 
     /***
      * Run a natural language query against this memory.
+     * Natural language is translated to knowpro {@link kp.SearchSelectExpr | search expressions}
+     * These expressions are used to search memory, which returns knowledge and messages relevant to the query.
+     * Knowledge and messages are scored for relevance.
      * @param {string} searchText - The natural language query text.
      * @param {kp.LanguageSearchOptions} [options] - Optional search options.
      * @param {kp.LanguageSearchDebugContext} [debugContext] - Optional debug context.
@@ -419,7 +439,7 @@ export abstract class Memory<
      * @param type (Optional) entity type to match
      * @param facetName (Optional) facet name to match
      * @param facetValue (Optional) facet value  to match
-     * @param {kp.WhenFilter} when
+     * @param {kp.WhenFilter} when (Optional) Scoping filter
      * @param {kp.SearchOptions} options
      * @returns
      */
@@ -472,11 +492,17 @@ export abstract class Memory<
     }
 
     /**
-     * Get an answer from a natural language question.
+     * Get an answer from a natural language question. The returned result object will indicate success or failure.  
+     * If the returned result is a success:
+     * - A single question can be turned into multiple search queries, although most single phrase questions are a single query.
+     * - The result is a tuple of (a) Raw search results (b) The natural language answer generated from the search results.
+     * @see kp.AnswerResponse. 
+     * - If the question was answered, the response {@link kp.AnswerType} will be "Answered". Else "NoAnswer" and a reason is provided in {@link kp.AnswerResponse.whyNoAnswer}
+     
      * @param {string} question - The natural language question.
      * @param {kp.LanguageSearchOptions} [searchOptions] - Optional search options.
      * @param progress - Optional progress callback.
-     * @returns {Promise<Result<[kp.ConversationSearchResult, kp.AnswerResponse][]>>} - Search Results and the answers generated for them.
+     * @returns {Promise<Result<[kp.ConversationSearchResult, kp.AnswerResponse][]>>} Tuple: [Raw Search Results, Answers generated using Search Results].
      */
     public async getAnswerFromLanguage(
         question: string,
@@ -615,4 +641,20 @@ export abstract class Memory<
     private get useScoped(): boolean {
         return this.settings.useScopedSearch ?? false;
     }
+}
+
+/**
+ * Create settings for text memory.
+ * @param embeddingCacheSize Default size of the embedding cache.
+ * @param getPersistentCache Function to retrieve the persistent cache.
+ * @returns Memory settings object.
+ */
+
+export function createTextMemorySettings(
+    embeddingCacheSize = 64,
+    getPersistentCache?: () => TextEmbeddingCache | undefined,
+) {
+    return {
+        ...createMemorySettings(embeddingCacheSize, getPersistentCache),
+    };
 }

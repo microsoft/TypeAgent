@@ -54,7 +54,7 @@ export class EmailMessage extends Message<EmailMeta> {
     constructor(
         metadata: EmailMeta,
         emailBody: string | string[],
-        tags: string[] | kp.MessageTag[] = [],
+        tags: kp.MessageTag[] = [],
         knowledge?: kpLib.KnowledgeResponse | undefined,
         deletionInfo?: kp.DeletionInfo | undefined,
         isNew: boolean = true,
@@ -85,6 +85,14 @@ export function importEmailMessage(email: email.Email): EmailMessage {
     return new EmailMessage(meta, email.body);
 }
 
+/**
+ * Load an email message from a file. Parses the file suitably according
+ * to the file extension.
+ * .eml: Parses the .eml message as a MIME file
+ * .json: Parses the JSON file as an object of type {@link email.Email}
+ * @param filePath
+ * @returns
+ */
 export async function loadEmailMessageFromFile(
     filePath: string,
 ): Promise<EmailMessage | undefined> {

@@ -3,7 +3,10 @@
 
 import { email } from "knowledge-processor";
 import * as kp from "knowpro";
+import * as tl from "test-lib";
+import { conversation as kpLib } from "knowledge-processor";
 import { EmailMessage } from "../src/emailMessage.js";
+import { Message } from "../src/memory.js";
 
 export function verifyNoIndexingErrors(results: kp.IndexingResults) {
     verifyNoTextIndexingError(results.semanticRefs);
@@ -109,4 +112,62 @@ export function verifyEmail(e1: email.Email) {
 export function verifyString(value?: string) {
     expect(value).toBeDefined();
     expect(value!.length).toBeGreaterThan(0);
+}
+
+export function verifyMessages(
+    messages: kp.IMessageCollection | Message[],
+    expectedMessageCount?: number,
+    expectedTagCount?: number,
+): void {
+    expect(messages.length).toBeGreaterThan(0);
+    if (expectedMessageCount !== undefined) {
+        expect(messages.length).toEqual(expectedMessageCount);
+    }
+    for (const message of messages) {
+        expect(message).toBeDefined();
+        verifyMessageTags(message);
+        verifyMessageKnowledge(message);
+    }
+    if (expectedTagCount !== undefined) {
+        expect(getTagCount(messages)).toEqual(expectedTagCount);
+    }
+}
+
+export function verifyMessageKnowledge(message: kp.IMessage) {
+    const knowledge = message.getKnowledge();
+    if (knowledge !== undefined) {
+        tl.verifyArray(knowledge.entities, true, verifyEntity);
+    }
+}
+
+export function verifyMessageTags(message: kp.IMessage) {
+    if (message.tags !== undefined && message.tags.length > 0) {
+        for (const tag of message.tags) {
+            if (typeof tag === "string") {
+                tl.verifyString(tag);
+            } else {
+                verifyEntity(tag);
+            }
+        }
+    }
+}
+
+export function verifyEntity(entity: kpLib.ConcreteEntity) {
+    expect(entity).toBeDefined();
+    tl.verifyString(entity.name);
+    tl.verifyStringArray(entity.type, true);
+    if (entity.facets) {
+        tl.verifyArray(entity.facets, true, (facet) => {
+            tl.verifyString(facet.name);
+            expect(facet.value).toBeDefined();
+        });
+    }
+}
+
+function getTagCount(messages: kp.IMessageCollection | Message[]): number {
+    let counter = 0;
+    for (const message of messages) {
+        counter += message.tags.length;
+    }
+    return counter;
 }
