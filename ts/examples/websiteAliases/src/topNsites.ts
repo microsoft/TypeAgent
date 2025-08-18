@@ -31,7 +31,7 @@ type extractedDomains = {
 export class topNDomainsExtractor {
     // manually downloadable from: https://radar.cloudflare.com/domains
     private downloadUrl: string = "https://radar.cloudflare.com/charts/LargerTopDomainsTable/attachment?id=1257&top=";
-    private topN: number = 1000;
+    private topN: number = 5000;
     private topNFile: string = `examples/websiteAliases/top${this.topN}.csv`;
     private outputFile: string = "examples/websiteAliases/phrases_to_sites.json";
     //private keywordsToSites: Record<string, string[]> = {};
