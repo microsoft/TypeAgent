@@ -22,7 +22,9 @@ def semantic_ref_index() -> TermToSemanticRefIndex:
 
 
 @pytest.mark.asyncio
-async def test_semantic_ref_index_add_and_lookup(semantic_ref_index: TermToSemanticRefIndex):
+async def test_semantic_ref_index_add_and_lookup(
+    semantic_ref_index: TermToSemanticRefIndex,
+):
     """Test adding and looking up terms in the TermToSemanticRefIndex."""
     await semantic_ref_index.add_term("example", 1)
     await semantic_ref_index.add_term("example", 2)
@@ -44,7 +46,9 @@ async def test_semantic_ref_index_add_and_lookup(semantic_ref_index: TermToSeman
 
 
 @pytest.mark.asyncio
-async def test_term_to_semantic_ref_index_remove_term(semantic_ref_index: TermToSemanticRefIndex):
+async def test_term_to_semantic_ref_index_remove_term(
+    semantic_ref_index: TermToSemanticRefIndex,
+):
     """Test removing terms from the TermToSemanticRefIndex."""
     await semantic_ref_index.add_term("example", 1)
     await semantic_ref_index.add_term("example", 2)
