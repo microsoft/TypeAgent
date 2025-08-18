@@ -43,6 +43,7 @@ import { Result } from "typechat";
 import { conversation as knowLib } from "knowledge-processor";
 import { createKnowproKnowledgeCommands } from "./knowproKnowledge.js";
 import { createDiagnosticCommands } from "./knowproDiagnostics.js";
+import { createKnowproAzureCommands } from "./knowproAzure.js";
 
 export async function runKnowproMemory(): Promise<void> {
     const storePath = "/data/testChat";
@@ -111,7 +112,7 @@ export async function createKnowproCommands(
     await createKnowproTestCommands(context, commands);
     await createKnowproDocMemoryCommands(context, commands);
     await createKnowproKnowledgeCommands(context, commands);
-
+    await createKnowproAzureCommands(context, commands);
     // Diagnostic commands
     await createDiagnosticCommands(context, commands);
     /*

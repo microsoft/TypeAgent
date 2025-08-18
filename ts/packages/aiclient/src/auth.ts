@@ -71,3 +71,7 @@ export function createAzureTokenProvider(
         return accessToken.expiresOnTimestamp <= now;
     }
 }
+
+export function createDefaultCredential(): DefaultAzureCredential {
+    return new DefaultAzureCredential();
+}
