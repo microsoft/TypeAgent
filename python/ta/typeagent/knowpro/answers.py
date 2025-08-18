@@ -170,8 +170,8 @@ async def make_context[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
             options and options.messages_top_k,
         )
 
-    for ktype, knowledge in search_result.knowledge_matches.items():
-        match ktype:
+    for knowledge_type, knowledge in search_result.knowledge_matches.items():
+        match knowledge_type:
             case "entity":
                 context.entities = await get_relevant_entities_for_answer(
                     conversation,

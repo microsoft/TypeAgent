@@ -195,7 +195,7 @@ async def lookup_term(
     term: Term,
     semantic_refs: ISemanticRefCollection,
     ranges_in_scope: TextRangesInScope | None = None,
-    ktype: KnowledgeType | None = None,
+    knowledge_type: KnowledgeType | None = None,
 ) -> list[ScoredSemanticRefOrdinal] | None:
     """Look up a term in the semantic reference index, optionally filtering by ranges in scope."""
     if ranges_in_scope is not None:
@@ -204,7 +204,7 @@ async def lookup_term(
             semantic_ref_index,
             term,
             semantic_refs,
-            lambda sr, _: (not ktype or sr.knowledge_type == ktype)
+            lambda sr, _: (not knowledge_type or sr.knowledge_type == knowledge_type)
             and ranges_in_scope.is_range_in_scope(sr.range),
         )
     return await semantic_ref_index.lookup_term(term.text)
@@ -283,12 +283,12 @@ class QueryEvalContext[TMessage: IMessage, TIndex: ITermToSemanticRefIndex]:
 
 
 async def lookup_knowledge_type(
-    semantic_refs: ISemanticRefCollection, ktype: KnowledgeType
+    semantic_refs: ISemanticRefCollection, knowledge_type: KnowledgeType
 ) -> list[ScoredSemanticRefOrdinal]:
     return [
         ScoredSemanticRefOrdinal(sr.semantic_ref_ordinal, 1.0)
         async for sr in semantic_refs
-        if sr.knowledge_type == ktype
+        if sr.knowledge_type == knowledge_type
     ]
 
 
