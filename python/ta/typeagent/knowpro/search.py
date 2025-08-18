@@ -558,7 +558,7 @@ class QueryCompiler:
         scored_ref: ScoredSemanticRefOrdinal,
         boost_weight: float,
     ) -> ScoredSemanticRefOrdinal:
-        if sr.knowledge_type == "entity" and match_entity_name_or_type(
+        if sr.knowledge.knowledge_type == "entity" and match_entity_name_or_type(
             search_term, cast(ConcreteEntity, sr.knowledge)
         ):
             return ScoredSemanticRefOrdinal(

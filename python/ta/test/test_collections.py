@@ -146,13 +146,13 @@ async def test_semantic_ref_accumulator_group_matches_by_type():
         SemanticRef(
             0,
             range=TextRange(TextLocation(0)),
-            knowledge_type="entity",
+            knowledge_type=ConcreteEntity("ref1", ["ref"]).knowledge_type,
             knowledge=ConcreteEntity("ref1", ["ref"]),
         ),
         SemanticRef(
             1,
             range=TextRange(TextLocation(2)),
-            knowledge_type="action",
+            knowledge_type=Action(["go"], "past").knowledge_type,
             knowledge=Action(["go"], "past"),
         ),
     ]
@@ -339,13 +339,13 @@ async def test_semantic_ref_accumulator_get_semantic_refs():
         SemanticRef(
             0,
             range=TextRange(TextLocation(0)),
-            knowledge_type="entity",
+            knowledge_type=ConcreteEntity("ref1", ["ref"]).knowledge_type,
             knowledge=ConcreteEntity("ref1", ["ref"]),
         ),
         SemanticRef(
             1,
             range=TextRange(TextLocation(2)),
-            knowledge_type="action",
+            knowledge_type=Action(["go"], "past").knowledge_type,
             knowledge=Action(["go"], "past"),
         ),
     ]
@@ -353,11 +353,11 @@ async def test_semantic_ref_accumulator_get_semantic_refs():
     semantic_refs = SemanticRefCollection(refs)
 
     # Predicate to filter only "entity" knowledge type
-    predicate = lambda ref: ref.knowledge_type == "entity"
+    predicate = lambda ref: ref.knowledge.knowledge_type == "entity"
     filtered_refs = await accumulator.get_semantic_refs(semantic_refs, predicate)
 
     assert len(filtered_refs) == 1
-    assert filtered_refs[0].knowledge_type == "entity"
+    assert filtered_refs[0].knowledge.knowledge_type == "entity"
 
 
 @pytest.mark.asyncio
@@ -371,13 +371,13 @@ async def test_semantic_ref_accumulator_get_matches_in_scope():
         SemanticRef(
             0,
             range=TextRange(TextLocation(0), TextLocation(10)),
-            knowledge_type="entity",
+            knowledge_type=ConcreteEntity("ref1", ["ref"]).knowledge_type,
             knowledge=ConcreteEntity("ref1", ["ref"]),
         ),
         SemanticRef(
             1,
             range=TextRange(TextLocation(20), TextLocation(30)),
-            knowledge_type="action",
+            knowledge_type=Action(["go"], "past").knowledge_type,
             knowledge=Action(["go"], "past"),
         ),
     ]

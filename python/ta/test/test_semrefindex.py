@@ -112,7 +112,7 @@ async def test_add_entity_to_index(semantic_ref_index: TermToSemanticRefIndex):
     await add_entity_to_index(entity, semantic_refs, semantic_ref_index, 0)
 
     assert await semantic_refs.size() == 1
-    assert (await semantic_refs.get_item(0)).knowledge_type == "entity"
+    assert (await semantic_refs.get_item(0)).knowledge.knowledge_type == "entity"
     assert (
         cast(ConcreteEntity, (await semantic_refs.get_item(0)).knowledge).name
         == "ExampleEntity"
@@ -139,7 +139,7 @@ async def test_add_topic_to_index(semantic_ref_index: TermToSemanticRefIndex):
     await add_topic_to_index(topic, semantic_refs, semantic_ref_index, 0)
 
     assert await semantic_refs.size() == 1
-    assert (await semantic_refs.get_item(0)).knowledge_type == "topic"
+    assert (await semantic_refs.get_item(0)).knowledge.knowledge_type == "topic"
     assert (
         cast(Topic, (await semantic_refs.get_item(0)).knowledge).text == "ExampleTopic"
     )
@@ -165,7 +165,7 @@ async def test_add_action_to_index(semantic_ref_index: TermToSemanticRefIndex):
     await add_action_to_index(action, semantic_refs, semantic_ref_index, 0)
 
     assert await semantic_refs.size() == 1
-    assert (await semantic_refs.get_item(0)).knowledge_type == "action"
+    assert (await semantic_refs.get_item(0)).knowledge.knowledge_type == "action"
     assert cast(Action, (await semantic_refs.get_item(0)).knowledge).verbs == [
         "run",
         "jump",

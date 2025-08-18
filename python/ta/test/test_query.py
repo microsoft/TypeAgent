@@ -722,23 +722,34 @@ async def test_lookup_knowledge_type():
         TextLocation,
         Topic,
     )
+    from typeagent.knowpro.kplib import ConcreteEntity
     from typeagent.knowpro.collections import SemanticRefCollection
 
-    # Create valid TextRange and Topic objects
+    # Create valid TextRange and knowledge objects
     rng = TextRange(TextLocation(0, 0), TextLocation(0, 1))
     topic1 = Topic("foo")
+    entity1 = ConcreteEntity("test_entity", ["type1"])
     topic2 = Topic("bar")
 
-    # Use only valid knowledge_type values: 'entity', 'action', 'topic', 'tag'
+    # Use consistent knowledge_type and knowledge objects
     refs = [
         SemanticRef(
-            semantic_ref_ordinal=0, range=rng, knowledge_type="topic", knowledge=topic1
+            semantic_ref_ordinal=0,
+            range=rng,
+            knowledge_type=topic1.knowledge_type,
+            knowledge=topic1,
         ),
         SemanticRef(
-            semantic_ref_ordinal=1, range=rng, knowledge_type="entity", knowledge=topic2
+            semantic_ref_ordinal=1,
+            range=rng,
+            knowledge_type=entity1.knowledge_type,
+            knowledge=entity1,
         ),
         SemanticRef(
-            semantic_ref_ordinal=2, range=rng, knowledge_type="topic", knowledge=topic2
+            semantic_ref_ordinal=2,
+            range=rng,
+            knowledge_type=topic2.knowledge_type,
+            knowledge=topic2,
         ),
     ]
     collection = SemanticRefCollection(refs)

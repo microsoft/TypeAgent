@@ -184,33 +184,36 @@ async def test_is_known_property(property_index):
 async def test_build_property_index(needs_auth):
     """Test the build_property_index function with a concrete conversation."""
     # Create a sample conversation with semantic references
+    entity1 = ConcreteEntity(
+        name="Entity1",
+        type=["type1", "type2"],
+        facets=[Facet(name="color", value="blue")],
+    )
+    action1 = Action(
+        verbs=["run", "jump"],
+        verb_tense="present",
+        subject_entity_name="Subject1",
+        object_entity_name="Object1",
+        indirect_object_entity_name="IndirectObject1",
+    )
+    tag1 = Tag(text="Tag1")
     semantic_refs = [
         SemanticRef(
             semantic_ref_ordinal=0,
-            knowledge_type="entity",
-            knowledge=ConcreteEntity(
-                name="Entity1",
-                type=["type1", "type2"],
-                facets=[Facet(name="color", value="blue")],
-            ),
+            knowledge_type=entity1.knowledge_type,
+            knowledge=entity1,
             range=TextRange(start=TextLocation(0), end=TextLocation(10)),
         ),
         SemanticRef(
             semantic_ref_ordinal=1,
-            knowledge_type="action",
-            knowledge=Action(
-                verbs=["run", "jump"],
-                verb_tense="present",
-                subject_entity_name="Subject1",
-                object_entity_name="Object1",
-                indirect_object_entity_name="IndirectObject1",
-            ),
+            knowledge_type=action1.knowledge_type,
+            knowledge=action1,
             range=TextRange(start=TextLocation(10), end=TextLocation(20)),
         ),
         SemanticRef(
             semantic_ref_ordinal=2,
-            knowledge_type="tag",
-            knowledge=Tag(text="Tag1"),
+            knowledge_type=tag1.knowledge_type,
+            knowledge=tag1,
             range=TextRange(start=TextLocation(20), end=TextLocation(30)),
         ),
     ]
@@ -334,16 +337,17 @@ class FakeConversation[
 @pytest.mark.asyncio
 async def test_add_to_property_index(needs_auth, property_index):
     """Test adding semantic references to the property index."""
+    entity = ConcreteEntity(
+        name="ExampleEntity",
+        type=["object"],
+        facets=[Facet(name="color", value="blue")],
+    )
     semantic_refs = [
         SemanticRef(
             semantic_ref_ordinal=0,
             range=TextRange(start=TextLocation(0), end=None),
-            knowledge_type="entity",
-            knowledge=ConcreteEntity(
-                name="ExampleEntity",
-                type=["object"],
-                facets=[Facet(name="color", value="blue")],
-            ),
+            knowledge_type=entity.knowledge_type,
+            knowledge=entity,
         )
     ]
     conversation = FakeConversation(semantic_refs)
@@ -365,18 +369,20 @@ async def test_lookup_property_in_property_index(property_index):
     await property_index.add_property("name", "value1", 0)
     await property_index.add_property("name", "value2", 1)
 
+    entity0 = ConcreteEntity("name0", ["type"])
+    entity1 = ConcreteEntity("name1", ["type"])
     semantic_refs = [
         SemanticRef(
             semantic_ref_ordinal=0,
             range=TextRange(start=TextLocation(0), end=TextLocation(10)),
-            knowledge_type="entity",
-            knowledge=ConcreteEntity("name0", ["type"]),
+            knowledge_type=entity0.knowledge_type,
+            knowledge=entity0,
         ),
         SemanticRef(
             semantic_ref_ordinal=1,
             range=TextRange(start=TextLocation(20), end=TextLocation(30)),
-            knowledge_type="entity",
-            knowledge=ConcreteEntity("name1", ["type"]),
+            knowledge_type=entity1.knowledge_type,
+            knowledge=entity1,
         ),
     ]
     ranges_in_scope = TextRangesInScope(

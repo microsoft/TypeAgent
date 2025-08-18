@@ -204,7 +204,9 @@ async def lookup_term(
             semantic_ref_index,
             term,
             semantic_refs,
-            lambda sr, _: (not knowledge_type or sr.knowledge_type == knowledge_type)
+            lambda sr, _: (
+                not knowledge_type or sr.knowledge.knowledge_type == knowledge_type
+            )
             and ranges_in_scope.is_range_in_scope(sr.range),
         )
     return await semantic_ref_index.lookup_term(term.text)
@@ -288,7 +290,7 @@ async def lookup_knowledge_type(
     return [
         ScoredSemanticRefOrdinal(sr.semantic_ref_ordinal, 1.0)
         async for sr in semantic_refs
-        if sr.knowledge_type == knowledge_type
+        if sr.knowledge.knowledge_type == knowledge_type
     ]
 
 
@@ -1106,7 +1108,7 @@ class KnowledgeTypePredicate(IQuerySemanticRefPredicate):
     knowledge_type: KnowledgeType
 
     async def eval(self, context: QueryEvalContext, semantic_ref: SemanticRef) -> bool:
-        return semantic_ref.knowledge_type == self.knowledge_type
+        return semantic_ref.knowledge.knowledge_type == self.knowledge_type
 
 
 # TODO: Implement proper ThreadSelector functionality

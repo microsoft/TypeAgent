@@ -76,7 +76,7 @@ async def main(filename_prefix: str):
         sref = await pod.semantic_refs.get_item(ord)
         assert sref.semantic_ref_ordinal == ord
         print(f"\n{ord}: Term {term!r} has knowledge", end=" ")
-        print(f"of type {sref.knowledge_type!r} at {sref.range}:")
+        print(f"of type {sref.knowledge.knowledge_type!r} at {sref.range}:")
         print(" ", sref.knowledge)
         # Now dig up the messages
         start_msg_ord = sref.range.start.message_ordinal

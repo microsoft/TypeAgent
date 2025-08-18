@@ -329,7 +329,7 @@ def test_semantic_ref_serialization():
     semantic_ref = SemanticRef(
         semantic_ref_ordinal=42,
         range=range_obj,
-        knowledge_type=knowledge_type,
+        knowledge_type=knowledge.knowledge_type,
         knowledge=knowledge,
     )
 
@@ -340,7 +340,9 @@ def test_semantic_ref_serialization():
     # Assertions
     assert semantic_ref.semantic_ref_ordinal == deserialized.semantic_ref_ordinal
     assert semantic_ref.range == deserialized.range
-    assert semantic_ref.knowledge_type == deserialized.knowledge_type
+    assert (
+        semantic_ref.knowledge.knowledge_type == deserialized.knowledge.knowledge_type
+    )
     assert isinstance(deserialized.knowledge, ConcreteEntity)
     assert deserialized.knowledge.name == knowledge.name
     assert deserialized.knowledge.type == knowledge.type

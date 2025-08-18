@@ -454,7 +454,7 @@ async def get_scored_semantic_refs_from_ordinals_iter(
         semantic_ref = await semantic_refs.get_item(
             semantic_ref_match.semantic_ref_ordinal
         )
-        if semantic_ref.knowledge_type == knowledge_type:
+        if semantic_ref.knowledge.knowledge_type == knowledge_type:
             result.append(
                 Scored(
                     item=semantic_ref,

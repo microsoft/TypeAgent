@@ -43,7 +43,7 @@ def make_dummy_semantic_ref(ordinal: int = 0) -> SemanticRef:
     return SemanticRef(  # type: ignore  # pydantic dataclass
         semantic_ref_ordinal=ordinal,  # type: ignore  # pydantic dataclass
         range=text_range,  # type: ignore  # pydantic dataclass
-        knowledge_type="topic",  # type: ignore  # pydantic dataclass
+        knowledge_type=topic.knowledge_type,  # type: ignore  # pydantic dataclass
         knowledge=topic,  # type: ignore  # pydantic dataclass
     )
 

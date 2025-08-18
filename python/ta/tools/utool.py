@@ -648,7 +648,7 @@ def summarize_knowledge(sem_ref: SemanticRef) -> str:
     knowledge = sem_ref.knowledge
     if knowledge is None:
         return f"{sem_ref.semantic_ref_ordinal}: <No knowledge>"
-    
+
     if isinstance(knowledge, kplib.ConcreteEntity):
         entity = knowledge
         res = [f"{entity.name} [{', '.join(entity.type)}]"]
