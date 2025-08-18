@@ -11,6 +11,7 @@ from datetime import (
 from typing import (
     Any,
     Callable,
+    ClassVar,
     Literal,
     NotRequired,
     Protocol,
@@ -128,11 +129,13 @@ type KnowledgeType = Literal["entity", "action", "topic", "tag"]
 
 @dataclass
 class Topic:
+    knowledge_type: ClassVar[Literal["topic"]] = "topic"
     text: str
 
 
 @dataclass
 class Tag:
+    knowledge_type: ClassVar[Literal["tag"]] = "tag"
     text: str
 
 
