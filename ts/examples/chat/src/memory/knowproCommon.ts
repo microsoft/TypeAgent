@@ -9,6 +9,7 @@ import { MemoryConsoleWriter } from "../memoryWriter.js";
 import { addFileNameSuffixToPath } from "../common.js";
 import path from "path";
 import { getFileName } from "typeagent";
+import { TypeChatJsonTranslator } from "typechat";
 
 /**
  * Appends the given messages and their pre-extracted associated knowledge to the conversation index
@@ -164,11 +165,24 @@ export async function getLangSearchResult(
     return searchResults;
 }
 
+export function setKnowledgeTranslator(
+    settings: kp.ConversationSettings,
+    translator: TypeChatJsonTranslator<knowLib.conversation.KnowledgeResponse>,
+) {
+    const extractor = settings.semanticRefIndexSettings.knowledgeExtractor;
+    if (extractor) {
+        extractor.translator = translator;
+    }
+}
+
 export function setKnowledgeExtractorV2(settings: kp.ConversationSettings) {
     const extractor = settings.semanticRefIndexSettings.knowledgeExtractor;
     if (extractor) {
+        const prevTranslator = extractor.translator;
         extractor.translator = kp.createKnowledgeTranslator2(
             extractor.translator!.model,
         );
+        return prevTranslator;
     }
+    return undefined;
 }

@@ -20,6 +20,8 @@ import {
     createIndexingEventHandler,
     loadEmailMemory,
     memoryNameToIndexPath,
+    setKnowledgeExtractorV2,
+    setKnowledgeTranslator,
 } from "./knowproCommon.js";
 
 export type KnowProEmailContext = {
@@ -53,6 +55,7 @@ export async function createKnowproEmailCommands(
             },
             options: {
                 updateIndex: argBool("Automatically update index", true),
+                v2: argBool("Use v2 knowledge extraction", false),
             },
         };
     }
@@ -87,15 +90,31 @@ export async function createKnowproEmailCommands(
             progress,
             emailsToAdd.length,
         );
-        const result = await emailMemory.addMessages(
-            emailsToAdd,
-            namedArgs.updateIndex,
-            eventHandler,
-        );
-        progress.complete();
-        if (!result.success) {
-            context.printer.writeError(result.message);
-            return;
+        let prevTranslator;
+        if (namedArgs.v2) {
+            context.printer.writeLine("Using v2 knowledge extractor");
+            prevTranslator = setKnowledgeExtractorV2(
+                emailMemory.settings.conversationSettings,
+            );
+        }
+        try {
+            const result = await emailMemory.addMessages(
+                emailsToAdd,
+                namedArgs.updateIndex,
+                eventHandler,
+            );
+            progress.complete();
+            if (!result.success) {
+                context.printer.writeError(result.message);
+                return;
+            }
+        } finally {
+            if (prevTranslator) {
+                setKnowledgeTranslator(
+                    emailMemory.settings.conversationSettings,
+                    prevTranslator,
+                );
+            }
         }
     }
 
