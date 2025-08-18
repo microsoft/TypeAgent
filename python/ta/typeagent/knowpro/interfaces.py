@@ -293,13 +293,14 @@ class SemanticRef:
     def deserialize(data: SemanticRefData) -> "SemanticRef":
         from . import serialization
 
+        knowledge = serialization.deserialize_knowledge(
+            data["knowledgeType"], data["knowledge"]
+        )
         return SemanticRef(
             semantic_ref_ordinal=data["semanticRefOrdinal"],
             range=TextRange.deserialize(data["range"]),
-            knowledge_type=data["knowledgeType"],
-            knowledge=serialization.deserialize_knowledge(
-                data["knowledgeType"], data["knowledge"]
-            ),
+            knowledge_type=knowledge.knowledge_type,
+            knowledge=knowledge,
         )
 
 
