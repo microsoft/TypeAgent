@@ -32,7 +32,8 @@
       "runtimeArgs": ["--sourcemap"],
       "env": {
         "REMOTE_DEBUGGING_PORT": "9222"
-      }
+      },
+      "outputCapture": "std"
     },
     {
       "name": "Player Service",
