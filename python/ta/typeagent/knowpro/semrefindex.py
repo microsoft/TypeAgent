@@ -74,7 +74,7 @@ async def add_batch_to_semantic_ref_index[
     knowledge_extractor: convknowledge.KnowledgeExtractor,
     terms_added: set[str] | None = None,
 ) -> None:
-    begin_indexing(conversation)
+    await begin_indexing(conversation)
 
     messages = conversation.messages
 
@@ -638,7 +638,7 @@ async def add_to_semantic_ref_index[
     terms_added: list[str] | None = None,
 ) -> None:
     """Add semantic references to the conversation's semantic reference index."""
-    begin_indexing(conversation)
+    await begin_indexing(conversation)
 
     # Only create knowledge extractor if auto extraction is enabled
     knowledge_extractor = None
@@ -661,21 +661,61 @@ async def add_to_semantic_ref_index[
     #     )
 
 
-def begin_indexing[
+async def begin_indexing[
     TMessage: IMessage, TTermToSemanticRefIndex: ITermToSemanticRefIndex
 ](
     conversation: IConversation[TMessage, TTermToSemanticRefIndex],
 ) -> None:
     # TODO: This function creates indexes/collections directly, bypassing the storage provider.
-    # In the future, this should be updated to use the storage provider pattern.
-    # For now, we maintain backward compatibility with direct creation.
+    # We try to use the storage provider if available through conversation settings.
 
     if conversation.semantic_ref_index is None:
-        conversation.semantic_ref_index = ConversationIndex()  # type: ignore  # TODO: Why doesn't pyright like this?
-    if conversation.semantic_refs is None:
-        from .collections import MemorySemanticRefCollection
+        # Try to get storage provider from conversation settings if available
+        if hasattr(conversation, "settings"):
+            try:
+                # Type ignore since we checked hasattr above
+                settings = getattr(conversation, "settings", None)  # type: ignore
+                if settings is not None:
+                    storage_provider = await settings.get_storage_provider()
+                    # Cast to concrete type - this is safe for current implementations
+                    from typing import cast
 
-        conversation.semantic_refs = MemorySemanticRefCollection()
+                    conversation.semantic_ref_index = cast(
+                        TTermToSemanticRefIndex,
+                        await storage_provider.get_conversation_index(),
+                    )
+                else:
+                    raise AttributeError("settings is None")
+            except Exception:
+                # Fallback to direct creation if storage provider fails
+                conversation.semantic_ref_index = ConversationIndex()  # type: ignore  # TODO: Why doesn't pyright like this?
+        else:
+            # Fallback to direct creation if no settings available
+            conversation.semantic_ref_index = ConversationIndex()  # type: ignore  # TODO: Why doesn't pyright like this?
+
+    if conversation.semantic_refs is None:
+        # Similar pattern for semantic refs collection
+        if hasattr(conversation, "settings"):
+            try:
+                # Type ignore since we checked hasattr above
+                settings = getattr(conversation, "settings", None)  # type: ignore
+                if settings is not None:
+                    storage_provider = await settings.get_storage_provider()
+                    conversation.semantic_refs = (
+                        await storage_provider.create_semantic_ref_collection()
+                    )
+                else:
+                    raise AttributeError("settings is None")
+            except Exception:
+                # Fallback to direct creation if storage provider fails
+                from .collections import MemorySemanticRefCollection
+
+                conversation.semantic_refs = MemorySemanticRefCollection()
+        else:
+            # Fallback to direct creation if no settings available
+            from .collections import MemorySemanticRefCollection
+
+            conversation.semantic_refs = MemorySemanticRefCollection()
 
 
 def verify_has_semantic_ref_index(conversation: IConversation) -> None:

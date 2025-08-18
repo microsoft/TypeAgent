@@ -87,6 +87,8 @@ async def build_secondary_indexes[
         conversation.secondary_indexes = await ConversationSecondaryIndexes.create(
             storage_provider, conversation_settings.related_term_index_settings
         )
+    else:
+        storage_provider = await conversation_settings.get_storage_provider()
     await build_transient_secondary_indexes(conversation, conversation_settings)
     await build_related_terms_index(
         conversation, conversation_settings.related_term_index_settings
@@ -94,7 +96,7 @@ async def build_secondary_indexes[
     if conversation.secondary_indexes is not None:
         await build_message_index(
             conversation,
-            conversation_settings.message_text_index_settings,
+            storage_provider,
         )
 
 

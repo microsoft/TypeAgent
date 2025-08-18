@@ -10,12 +10,9 @@ from .collections import TermSet
 from .common import is_search_term_wildcard
 from .interfaces import (
     IConversation,
-    IMessage,
-    IStorageProvider,
     ITermToRelatedTerms,
     ITermToRelatedTermsFuzzy,
     ITermToRelatedTermsIndex,
-    ITermToSemanticRefIndex,
     SearchTerm,
     Term,
     TermToRelatedTermsData,

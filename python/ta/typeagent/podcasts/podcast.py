@@ -167,9 +167,7 @@ class Podcast(
         default_factory=SemanticRefCollection
     )
     settings: ConversationSettings | None = field(default=None)
-    semantic_ref_index: semrefindex.ConversationIndex = field(
-        default_factory=semrefindex.ConversationIndex
-    )
+    semantic_ref_index: semrefindex.ConversationIndex | None = field(default=None)
 
     secondary_indexes: IConversationSecondaryIndexes[PodcastMessage] | None = field(
         init=False, default=None
@@ -199,11 +197,6 @@ class Podcast(
                 semantic_refs if semantic_refs is not None else SemanticRefCollection()
             ),
             settings=settings,
-            semantic_ref_index=(
-                semantic_ref_index
-                if semantic_ref_index is not None
-                else semrefindex.ConversationIndex()
-            ),
         )
 
         # Initialize async components
@@ -212,6 +205,18 @@ class Podcast(
             instance.settings is not None
         ), "Settings must be provided through create() method"
         storage_provider = await instance.settings.get_storage_provider()
+
+        # Create semantic ref index using the storage provider
+        if semantic_ref_index is not None:
+            instance.semantic_ref_index = semantic_ref_index
+        else:
+            # Get index from storage provider and cast to concrete type
+            index_from_provider = await storage_provider.get_conversation_index()
+            # For now, we assume the storage provider returns ConversationIndex
+            # TODO: Update when we have proper interface-based serialization
+            instance.semantic_ref_index = cast(
+                semrefindex.ConversationIndex, index_from_provider
+            )
         # Create secondary indexes using the factory method
         instance.secondary_indexes = await secindex.ConversationSecondaryIndexes.create(
             storage_provider, instance.settings.related_term_index_settings
@@ -311,6 +316,8 @@ class Podcast(
 
         semantic_index_data = podcast_data.get("semanticIndexData")
         if semantic_index_data is not None:
+            # Direct construction is correct here during deserialization
+            # We're reconstructing a previously created index from saved data
             self.semantic_ref_index = semrefindex.ConversationIndex(  # type: ignore  # TODO
                 semantic_index_data
             )

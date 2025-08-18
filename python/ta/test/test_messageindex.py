@@ -194,34 +194,24 @@ async def test_build_message_index(needs_auth: None):
     class FakeConversation(IConversation):
         """Concrete implementation of IConversation for testing."""
 
-        def __init__(self, messages):
+        def __init__(self, messages, storage_provider):
             self.name_tag = "test_conversation"
             self.tags = []
             self.semantic_refs = None
             self.semantic_ref_index = None
             # Convert plain list to MessageCollection for proper async iteration
             self.messages = MessageCollection(messages)
-            # Create storage provider with test settings
+            # Store the provided storage provider
+            self.secondary_indexes = ConversationSecondaryIndexes(
+                storage_provider, storage_provider._related_terms_settings
+            )
+            # Store settings with storage provider for access via conversation.settings.storage_provider
             from typeagent.aitools.embeddings import (
                 AsyncEmbeddingModel,
                 TEST_MODEL_NAME,
             )
-            from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
-            from typeagent.knowpro.messageindex import MessageTextIndexSettings
-            from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
 
             test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
-            embedding_settings = TextEmbeddingIndexSettings(test_model)
-            message_text_settings = MessageTextIndexSettings(embedding_settings)
-            related_terms_settings = RelatedTermIndexSettings(embedding_settings)
-
-            storage_provider = MemoryStorageProvider(
-                message_text_settings, related_terms_settings
-            )
-            self.secondary_indexes = ConversationSecondaryIndexes(
-                storage_provider, related_terms_settings
-            )
-            # Store settings with storage provider for access via conversation.settings.storage_provider
             self.settings = ConversationSettings(
                 test_model, storage_provider=storage_provider
             )
@@ -231,16 +221,27 @@ async def test_build_message_index(needs_auth: None):
         FakeMessage(["chunk1", "chunk2"]),
         FakeMessage(["chunk3"]),
     ]
-    conversation = FakeConversation(messages)
 
-    # Build the message index
+    # Create storage provider asynchronously
     from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
     from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
+    from typeagent.knowpro.messageindex import MessageTextIndexSettings
+    from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
 
     test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
     embedding_settings = TextEmbeddingIndexSettings(test_model)
-    settings = MessageTextIndexSettings(embedding_settings)
-    await build_message_index(conversation, settings)
+    message_text_settings = MessageTextIndexSettings(embedding_settings)
+    related_terms_settings = RelatedTermIndexSettings(embedding_settings)
+
+    storage_provider = await MemoryStorageProvider.create(
+        message_text_settings, related_terms_settings
+    )
+    conversation = FakeConversation(messages, storage_provider)
+
+    # Build the message index
+    # Pass the storage provider instead of settings
+    storage_provider = await conversation.settings.get_storage_provider()
+    await build_message_index(conversation, storage_provider)
 
     # TODO: The final assert triggers; fix this
     # assert conversation.secondary_indexes is not None
