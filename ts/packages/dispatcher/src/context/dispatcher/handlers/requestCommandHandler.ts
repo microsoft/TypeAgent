@@ -9,7 +9,7 @@ import {
     FullAction,
     ProcessRequestActionResult,
     ExplanationOptions,
-    equalNormalizedParamObject,
+    equalNormalizedObject,
     toFullActions,
 } from "agent-cache";
 
@@ -131,7 +131,7 @@ async function canTranslateWithoutContext(
             }
 
             if (
-                !equalNormalizedParamObject(
+                !equalNormalizedObject(
                     newAction.parameters,
                     oldAction.parameters,
                 )
