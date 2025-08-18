@@ -85,7 +85,7 @@ export class topNDomainsExtractor {
         // go through each line, get the domain from the 2nd column and then generate
         // the keyword/phrases for that domain
         const batch: Promise<void>[] = [];
-        const batchSize = 4;
+        const batchSize = 5;
         const pageSize = 5;
         const batchCount = Math.ceil(lines.length / (batchSize * pageSize));                
         const domains: string[][] = new Array<string[]>(batchCount);    
@@ -211,7 +211,7 @@ export class topNDomainsExtractor {
                 console.error(chalk.red(`Error checking page availability ${url}: ${error?.message}`));                 
                 
                 // name not found
-                if (error.cause.code === "ENOTFOUND") {
+                if (error.cause.code === "ENOTFOUND" || error.cause.code === "UND_ERR_CONNECT_TIMEOUT") {
                     break;
                 }
 
@@ -244,7 +244,7 @@ export class topNDomainsExtractor {
                 
 
                 // name not found
-                if (error.cause.code === "ENOTFOUND") {
+                if (error.cause.code === "ENOTFOUND" || error.cause.code === "UND_ERR_CONNECT_TIMEOUT") {
                     break;
                 }
 
@@ -320,7 +320,7 @@ export class topNDomainsExtractor {
         pageMarkdown: string,
     ): Promise<Result<domains>> {
         // Create Model instance
-        let chatModel = this.createModel(true);
+        let chatModel = this.createModel(false);
 
         // Create Chat History
         let maxContextLength = 8196;
@@ -333,6 +333,7 @@ export class topNDomainsExtractor {
             "domains",
             `
 There is a system that uses the command "Open" to open URLs in the browser.  You are helping me generate terms that I can cache such that when the user says "open apple" it goes to "https://apple.com".  You generate alternate terms/keywords/phrases/descriptions a user could use to invoke the same site. Avoid using statements that could actually refer to sub pages like (open ipad page). since those are technically different URLs.
+Leave off "open" from the beginning of each phrase.
 
 For example: apple.com could be:
 
