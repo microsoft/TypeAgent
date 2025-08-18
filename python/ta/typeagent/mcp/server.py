@@ -10,6 +10,7 @@ from mcp.server.fastmcp import FastMCP
 import typechat
 
 from typeagent.aitools import embeddings, utils
+from typeagent.aitools.embeddings import AsyncEmbeddingModel
 from typeagent.knowpro import answers, importing, convknowledge, query, searchlang
 from typeagent.knowpro.answer_response_schema import AnswerResponse
 from typeagent.knowpro.search_query_schema import SearchQuery
@@ -34,7 +35,6 @@ class ProcessingContext:
 
 async def make_context() -> ProcessingContext:
     utils.load_dotenv()
-    from typeagent.aitools.embeddings import AsyncEmbeddingModel
 
     model = AsyncEmbeddingModel()
     settings = importing.ConversationSettings(model)

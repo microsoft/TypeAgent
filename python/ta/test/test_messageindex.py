@@ -10,9 +10,10 @@ from typeagent.knowpro.secindex import (
 from typeagent.knowpro.kplib import KnowledgeResponse
 from typeagent.knowpro.messageindex import (
     MessageTextIndex,
+    MessageTextIndexSettings,
     build_message_index,
 )
-from typeagent.knowpro.importing import MessageTextIndexSettings, ConversationSettings
+from typeagent.knowpro.importing import ConversationSettings
 
 from typeagent.knowpro.interfaces import (
     IConversation,
@@ -208,10 +209,8 @@ async def test_build_message_index(needs_auth: None):
                 TEST_MODEL_NAME,
             )
             from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
-            from typeagent.knowpro.importing import (
-                MessageTextIndexSettings,
-                RelatedTermIndexSettings,
-            )
+            from typeagent.knowpro.messageindex import MessageTextIndexSettings
+            from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
 
             test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
             embedding_settings = TextEmbeddingIndexSettings(test_model)

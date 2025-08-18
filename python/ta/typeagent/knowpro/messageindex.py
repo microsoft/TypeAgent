@@ -2,10 +2,11 @@
 # Licensed under the MIT License.
 
 from collections.abc import AsyncIterable, Iterable
+from dataclasses import dataclass
 from typing import Callable
 
 from ..aitools.embeddings import NormalizedEmbedding
-from .importing import MessageTextIndexSettings
+from ..aitools.vectorbase import TextEmbeddingIndexSettings
 from .interfaces import (
     IConversation,
     IMessage,
@@ -18,6 +19,14 @@ from .interfaces import (
     TextLocation,
 )
 from .textlocindex import ScoredTextLocation, TextToTextLocationIndex
+
+
+@dataclass
+class MessageTextIndexSettings:
+    embedding_index_settings: TextEmbeddingIndexSettings
+
+    def __init__(self, embedding_index_settings: TextEmbeddingIndexSettings):
+        self.embedding_index_settings = embedding_index_settings
 
 
 async def build_message_index[

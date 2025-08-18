@@ -53,10 +53,8 @@ async def test_indexes_work_independently(needs_auth):
     # Create two separate storage providers with test settings
     from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
     from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
-    from typeagent.knowpro.importing import (
-        MessageTextIndexSettings,
-        RelatedTermIndexSettings,
-    )
+    from typeagent.knowpro.messageindex import MessageTextIndexSettings
+    from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
 
     test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
     embedding_settings = TextEmbeddingIndexSettings(test_model)
@@ -85,10 +83,8 @@ async def test_indexes_available_after_create(needs_auth):
     # Create storage provider with test settings
     from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
     from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
-    from typeagent.knowpro.importing import (
-        MessageTextIndexSettings,
-        RelatedTermIndexSettings,
-    )
+    from typeagent.knowpro.messageindex import MessageTextIndexSettings
+    from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
 
     test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
     embedding_settings = TextEmbeddingIndexSettings(test_model)
@@ -111,10 +107,8 @@ async def test_storage_provider_collections_still_work(needs_auth):
     # Create storage provider with test settings
     from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
     from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
-    from typeagent.knowpro.importing import (
-        MessageTextIndexSettings,
-        RelatedTermIndexSettings,
-    )
+    from typeagent.knowpro.messageindex import MessageTextIndexSettings
+    from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
 
     test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
     embedding_settings = TextEmbeddingIndexSettings(test_model)

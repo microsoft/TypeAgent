@@ -181,7 +181,6 @@ class VectorBase:
 
 async def main():
     import time
-    from . import auth
 
     epoch = time.time()
 

@@ -9,10 +9,8 @@ import pytest_asyncio
 from typeagent.aitools import utils
 from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
 from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
-from typeagent.knowpro.importing import (
-    MessageTextIndexSettings,
-    RelatedTermIndexSettings,
-)
+from typeagent.knowpro.messageindex import MessageTextIndexSettings
+from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
 from typeagent.knowpro.storage import MemoryStorageProvider
 
 

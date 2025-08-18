@@ -5,7 +5,9 @@ from typing import cast
 import pytest
 
 from fixtures import storage, needs_auth, embedding_model  # Import the storage fixture
-from typeagent.knowpro.importing import RelatedTermIndexSettings, ConversationSettings
+from typeagent.knowpro.importing import ConversationSettings
+from typeagent.knowpro.messageindex import MessageTextIndexSettings
+from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
 from typeagent.knowpro.interfaces import (
     DeletionInfo,
     IConversation,
@@ -83,10 +85,8 @@ class SimpleConversation(IConversation):
                 TEST_MODEL_NAME,
             )
             from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
-            from typeagent.knowpro.importing import (
-                MessageTextIndexSettings,
-                RelatedTermIndexSettings,
-            )
+            from typeagent.knowpro.messageindex import MessageTextIndexSettings
+            from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
             from typeagent.knowpro.storage import MemoryStorageProvider
 
             test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)

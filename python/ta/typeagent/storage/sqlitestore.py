@@ -234,7 +234,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         from ..aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
         from ..aitools.vectorbase import TextEmbeddingIndexSettings
         from ..knowpro.messageindex import MessageTextIndexSettings
-        from ..knowpro.importing import RelatedTermIndexSettings
+        from ..knowpro.reltermsindex import RelatedTermIndexSettings
 
         # Create test model and embedding settings for storage
         test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
@@ -318,10 +318,8 @@ async def get_storage_provider(
         # Create MemoryStorageProvider with test-friendly settings
         from ..aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
         from ..aitools.vectorbase import TextEmbeddingIndexSettings
-        from ..knowpro.importing import (
-            MessageTextIndexSettings,
-            RelatedTermIndexSettings,
-        )
+        from ..knowpro.messageindex import MessageTextIndexSettings
+        from ..knowpro.reltermsindex import RelatedTermIndexSettings
 
         test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
         embedding_settings = TextEmbeddingIndexSettings(test_model)

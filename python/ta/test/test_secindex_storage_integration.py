@@ -11,7 +11,7 @@ async def test_secondary_indexes_use_storage_provider(storage, needs_auth):
     """Test that ConversationSecondaryIndexes gets indexes from storage provider."""
     from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
     from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
-    from typeagent.knowpro.importing import RelatedTermIndexSettings
+    from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
 
     storage_provider = storage
 

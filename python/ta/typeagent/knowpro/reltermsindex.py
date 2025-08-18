@@ -1,13 +1,13 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+from dataclasses import dataclass
 from typing import Callable, Protocol
 
 from ..aitools.vectorbase import ScoredInt, TextEmbeddingIndexSettings, VectorBase
 
 from .collections import TermSet
 from .common import is_search_term_wildcard
-from .importing import ConversationSettings, RelatedTermIndexSettings
 from .interfaces import (
     IConversation,
     IMessage,
@@ -25,6 +25,14 @@ from .interfaces import (
     TextEmbeddingIndexData,
 )
 from .query import CompiledSearchTerm, CompiledTermGroup
+
+
+@dataclass
+class RelatedTermIndexSettings:
+    embedding_index_settings: TextEmbeddingIndexSettings
+
+    def __init__(self, embedding_index_settings: TextEmbeddingIndexSettings):
+        self.embedding_index_settings = embedding_index_settings
 
 
 class TermToRelatedTermsMap(ITermToRelatedTerms):
@@ -88,15 +96,13 @@ class TermToRelatedTermsMap(ITermToRelatedTerms):
 
 async def build_related_terms_index(
     conversation: IConversation,
-    settings: ConversationSettings,
+    settings: RelatedTermIndexSettings,
 ) -> ListIndexingResult:
     csr = conversation.semantic_ref_index
     csi = conversation.secondary_indexes
     if csr is not None and csi is not None:
         if csi.term_to_related_terms_index is None:
-            csi.term_to_related_terms_index = RelatedTermsIndex(
-                settings.related_term_index_settings
-            )
+            csi.term_to_related_terms_index = RelatedTermsIndex(settings)
         fuzzy_index = csi.term_to_related_terms_index.fuzzy_index
         all_terms = await csr.get_terms()
         if fuzzy_index and all_terms:

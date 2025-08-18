@@ -16,7 +16,8 @@ from .collections import (
 )
 from .convindex import ConversationIndex
 from .convthreads import ConversationThreads
-from .importing import MessageTextIndexSettings, RelatedTermIndexSettings
+from .messageindex import MessageTextIndexSettings
+from .reltermsindex import RelatedTermIndexSettings
 from .interfaces import (
     IConversationThreads,
     IMessage,

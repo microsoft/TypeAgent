@@ -29,6 +29,7 @@ from ..knowpro.interfaces import (
 )
 from ..knowpro.messageindex import MessageTextIndex
 from ..knowpro.reltermsindex import TermToRelatedTermsMap
+from ..storage.sqlitestore import get_storage_provider
 from ..knowpro import serialization
 from ..knowpro.collections import (
     MemoryMessageCollection as MessageCollection,
@@ -345,7 +346,6 @@ class Podcast(
             assert (
                 secondary_indexes.message_index is not None
             ), "Message index should be initialized"
-            from ..knowpro.messageindex import MessageTextIndex
 
             if isinstance(secondary_indexes.message_index, MessageTextIndex):
                 index_size = await secondary_indexes.message_index.size()
@@ -368,7 +368,6 @@ class Podcast(
         )
         if not data:
             return None
-        from ..storage.sqlitestore import get_storage_provider
 
         provider = await get_storage_provider(dbname)
         msgs = await provider.create_message_collection(PodcastMessage)

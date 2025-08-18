@@ -10,24 +10,6 @@ from .convknowledge import KnowledgeExtractor
 from .interfaces import IStorageProvider
 
 
-# TODO: RelatedTermIndexSettings belongs in reltermsindex.py.
-@dataclass
-class RelatedTermIndexSettings:
-    embedding_index_settings: TextEmbeddingIndexSettings
-
-    def __init__(self, embedding_index_settings: TextEmbeddingIndexSettings):
-        self.embedding_index_settings = embedding_index_settings
-
-
-# TODO: MessageTextIndexSettings belongs in messageindex.py.
-@dataclass
-class MessageTextIndexSettings:
-    embedding_index_settings: TextEmbeddingIndexSettings
-
-    def __init__(self, embedding_index_settings: TextEmbeddingIndexSettings):
-        self.embedding_index_settings = embedding_index_settings
-
-
 @dataclass
 class SemanticRefIndexSettings:
     batch_size: int
@@ -35,19 +17,18 @@ class SemanticRefIndexSettings:
     knowledge_extractor: KnowledgeExtractor | None = None
 
 
-@dataclass
 class ConversationSettings:
-    embedding_model: AsyncEmbeddingModel
-    related_term_index_settings: RelatedTermIndexSettings
-    thread_settings: TextEmbeddingIndexSettings
-    message_text_index_settings: MessageTextIndexSettings
-    semantic_ref_index_settings: SemanticRefIndexSettings
+    """Settings for conversation processing and indexing."""
 
     def __init__(
         self,
         model: AsyncEmbeddingModel,
         storage_provider: IStorageProvider | None = None,
     ):
+        # Import here to avoid circular imports
+        from .messageindex import MessageTextIndexSettings
+        from .reltermsindex import RelatedTermIndexSettings
+
         # All settings share the same model, so they share the embedding cache.
         self.embedding_model = model
         min_score = 0.85

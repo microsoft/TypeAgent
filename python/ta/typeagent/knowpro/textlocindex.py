@@ -5,10 +5,9 @@ from dataclasses import dataclass
 from typing import Any, Callable, Literal, Protocol
 
 from ..aitools.embeddings import NormalizedEmbedding
-from ..aitools.vectorbase import VectorBase
+from ..aitools.vectorbase import VectorBase, TextEmbeddingIndexSettings
 
 from .fuzzyindex import ScoredInt, EmbeddingIndex
-from .importing import TextEmbeddingIndexSettings
 import asyncio
 from typing import Sequence
 from .interfaces import (

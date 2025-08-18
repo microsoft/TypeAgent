@@ -1,9 +1,10 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+from typing import TYPE_CHECKING
+
 from ..aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
 from ..aitools.vectorbase import TextEmbeddingIndexSettings
-from .importing import ConversationSettings, RelatedTermIndexSettings
 from .interfaces import (
     IConversation,
     IConversationSecondaryIndexes,
@@ -16,8 +17,11 @@ from .interfaces import (
 )
 from .messageindex import build_message_index
 from .propindex import PropertyIndex, build_property_index
-from .reltermsindex import RelatedTermsIndex, build_related_terms_index
+from .reltermsindex import RelatedTermsIndex, RelatedTermIndexSettings, build_related_terms_index
 from .timestampindex import TimestampToTextRangeIndex, build_timestamp_index
+
+if TYPE_CHECKING:
+    from .importing import ConversationSettings
 
 
 class ConversationSecondaryIndexes(IConversationSecondaryIndexes):
@@ -74,7 +78,7 @@ async def build_secondary_indexes[
     TTermToSemanticRefIndex: ITermToSemanticRefIndex,
 ](
     conversation: IConversation[TMessage, TTermToSemanticRefIndex],
-    conversation_settings: ConversationSettings,
+    conversation_settings: "ConversationSettings",
 ) -> SecondaryIndexingResults:
     if conversation.secondary_indexes is None:
         storage_provider = await conversation_settings.get_storage_provider()
@@ -85,7 +89,7 @@ async def build_secondary_indexes[
         conversation, conversation_settings
     )
     result.related_terms = await build_related_terms_index(
-        conversation, conversation_settings
+        conversation, conversation_settings.related_term_index_settings
     )
     if result.related_terms is not None and not result.related_terms.error:
         res = await build_message_index(
@@ -103,7 +107,7 @@ async def build_transient_secondary_indexes[
     TMessage: IMessage, TTermToSemanticRefIndex: ITermToSemanticRefIndex
 ](
     conversation: IConversation[TMessage, TTermToSemanticRefIndex],
-    conversation_settings: ConversationSettings | None = None,
+    conversation_settings: "ConversationSettings | None" = None,
 ) -> SecondaryIndexingResults:
     if conversation.secondary_indexes is None:
         # Try to get storage provider from conversation.settings first, then from parameter
