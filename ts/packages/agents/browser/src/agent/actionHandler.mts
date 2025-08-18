@@ -793,7 +793,7 @@ async function resolveWebPage(
                 promises.push(
                     resolveURLWithHistory(context, site).then((historyUrls) => {
                         if (historyUrls) {
-                            const msg = `Found ${historyUrls.length} in browser history.`;
+                            const msg = `Found ${historyUrls.length} in browser history.\n`;
                             debug(msg);
                             io?.appendDisplay(
                                 getMessage(msg, "status"),
@@ -860,7 +860,7 @@ async function resolveWebPage(
                             bingWithGrounding.apiSettingsFromEnv(),
                         )
                         .then((search_urls) => {
-                            const msg = `Found ${search_urls?.length} urls using Bing With Grounding (search).`;
+                            const msg = `Found ${search_urls?.length} urls using Bing With Grounding (search).\n`;
                             debug(msg);
                             io?.appendDisplay(
                                 getMessage(msg, "status"),
@@ -914,7 +914,7 @@ async function resolveWebPage(
 
             const msg = `Found ${urls.length} possible urls for '${site}'`;
             debug(msg);
-            io?.appendDisplay(getMessage(msg, "info"));
+            io?.appendDisplay(getMessage(msg, "status"), "temporary");
 
             if (urls.length > 0) {
                 return [...new Set(urls)];
