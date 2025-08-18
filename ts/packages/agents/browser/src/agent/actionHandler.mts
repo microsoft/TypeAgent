@@ -86,8 +86,8 @@ import { ShoppingActions } from "./commerce/schema/userActions.mjs";
 import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
 import { BrowserControl } from "../common/browserControl.mjs";
-import { openai, TextEmbeddingModel, wikipedia } from "aiclient";
-import { urlResolver, bingWithGrounding } from "azure-ai-foundry";
+import { openai, TextEmbeddingModel } from "aiclient";
+import { urlResolver } from "azure-ai-foundry";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 import { deleteCachedSchema } from "./crossword/cachedSchema.mjs";
 import { getCrosswordCommandHandlerTable } from "./crossword/commandHandler.mjs";
@@ -773,14 +773,12 @@ async function resolveWebPage(
 
             // anything below here is considered "SLOW"
 
-            // Search for the URL based on heuristics (history, wikipedia, web-search)
+            // Search for the URL in browser history, and then fallback on web search
             // if we get singular matches we assume those are correct and we just return it.
             // if we get more than one result then we'll return all of them and let the user decide
             // which URL they want via clarification
-            const urls: string[] = [];
-            const promises: Promise<any>[] = [];
 
-            // try to resolve URL using website visit history first
+            // try to resolve URL using browser history
             if (context.agentContext.resolverSettings.historyResolver) {
                 const startTime = Date.now();
                 io?.appendDisplay(
@@ -790,135 +788,28 @@ async function resolveWebPage(
                     ),
                     "temporary",
                 );
-                promises.push(
-                    resolveURLWithHistory(context, site).then((historyUrls) => {
-                        if (historyUrls) {
-                            const msg = `Found ${historyUrls.length} in browser history.\n`;
-                            debug(msg);
-                            io?.appendDisplay(
-                                getMessage(msg, "status"),
-                                "temporary",
-                            );
+                const historyUrls = await resolveURLWithHistory(context, site);
+                
+                if (historyUrls && historyUrls.length > 0) {
+                    const msg = `Found ${historyUrls.length} in browser history.\n`;
+                    debug(msg);
+                    io?.appendDisplay(
+                        getMessage(msg, "status"),
+                        "temporary",
+                    );
 
-                            urls.push(...historyUrls!);
-                        }
+                    debug(
+                        `History resolution duration: ${Date.now() - startTime}`,
+                    );
 
-                        debug(
-                            `History resolution duration: ${Date.now() - startTime}`,
-                        );
-                    }),
-                );
-            }
-
-            // try to resolve URL by using the Wikipedia API
-            if (context.agentContext.resolverSettings.wikipediaResolver) {
-                const startTime = Date.now();
-                io?.appendDisplay(
-                    getMessage(
-                        `Resolving URL using Wikipedia for: '${site}'\n`,
-                        "status",
-                    ),
-                    "temporary",
-                );
-                promises.push(
-                    urlResolver
-                        .resolveURLWithWikipedia(
-                            site,
-                            wikipedia.apiSettingsFromEnv(),
-                        )
-                        .then((wikiPediaUrls) => {
-                            const msg = `Found ${wikiPediaUrls.length} urls from Wikipedia.`;
-                            debug(msg);
-                            io?.appendDisplay(
-                                getMessage(msg, "status"),
-                                "temporary",
-                            );
-
-                            urls.push(...wikiPediaUrls);
-
-                            debug(
-                                `Wikipedia resolution duration: ${Date.now() - startTime}`,
-                            );
-                        }),
-                );
-            }
-
-            // try to resolve URL using LLM + internet search
-            if (context.agentContext.resolverSettings.searchResolver) {
-                const startTime = Date.now();
-                io?.appendDisplay(
-                    getMessage(
-                        `Resolving URL using web search for: '${site}'\n`,
-                        "status",
-                    ),
-                    "temporary",
-                );
-                promises.push(
-                    urlResolver
-                        .resolveURLWithSearch(
-                            site,
-                            bingWithGrounding.apiSettingsFromEnv(),
-                        )
-                        .then((search_urls) => {
-                            const msg = `Found ${search_urls?.length} urls using Bing With Grounding (search).\n`;
-                            debug(msg);
-                            io?.appendDisplay(
-                                getMessage(msg, "status"),
-                                "temporary",
-                            );
-
-                            if (search_urls) {
-                                urls.push(...search_urls);
-                            }
-
-                            debug(
-                                `Search (Bing with Grounding) resolution duration: ${Date.now() - startTime}`,
-                            );
-                        }),
-                );
-            }
-
-            // wait for all promises to resolve
-            await Promise.all(promises);
-
-            // Smart deduplication: remove URLs that are the same except for trailing slashes or www prefix
-            function normalizeUrl(url: string): string {
-                try {
-                    let u = new URL(url);
-                    // Remove trailing slash
-                    let pathname = u.pathname.replace(/\/+$/, "");
-                    // Remove www. prefix for comparison
-                    let hostname = u.hostname.replace(/^www\./, "");
-                    // Lowercase protocol and hostname
-                    //return `${u.protocol}//${hostname}${pathname}${u.search}${u.hash}`;
-                    // ignore the protocol
-                    return `${hostname}${pathname}${u.search}${u.hash}`;
-                } catch {
-                    // If not a valid URL, fallback to original
-                    return url.replace(/\/+$/, "").replace(/^www\./, "");
+                    return historyUrls;
                 }
             }
 
-            // Remove duplicates by normalized form, and keep the first occurrence
-            const seen = new Set<string>();
-            const dedupedUrls: string[] = [];
-            for (const url of urls) {
-                const norm = normalizeUrl(url);
-                if (!seen.has(norm)) {
-                    seen.add(norm);
-                    dedupedUrls.push(url);
-                }
-            }
-            urls.length = 0; //clear out urls
-            urls.push(...dedupedUrls); // add deduped
+            // default to search
+            // TODO: use preferred search provider
+            return ["https://www.bing.com/search?q=" + encodeURIComponent(site)];
 
-            const msg = `Found ${urls.length} possible urls for '${site}'`;
-            debug(msg);
-            io?.appendDisplay(getMessage(msg, "status"), "temporary");
-
-            if (urls.length > 0) {
-                return [...new Set(urls)];
-            }
         }
     }
 
@@ -2291,26 +2182,6 @@ export const handlers: CommandHandlerTable = {
                         );
                     },
                 },
-                search: {
-                    description: "Toggle search resolver",
-                    run: async (
-                        context: ActionContext<BrowserActionContext>,
-                    ) => {
-                        const agentContext =
-                            context.sessionContext.agentContext;
-                        agentContext.resolverSettings.searchResolver =
-                            !agentContext.resolverSettings.searchResolver;
-                        displaySuccess(
-                            `Search resolver is now ${
-                                agentContext.resolverSettings.searchResolver
-                                    ? "enabled"
-                                    : "disabled"
-                            }`,
-                            context,
-                        );
-                        saveSettings(context.sessionContext);
-                    },
-                },
                 keyword: {
                     description: "Toggle keyword resolver",
                     run: async (
@@ -2323,26 +2194,6 @@ export const handlers: CommandHandlerTable = {
                         displaySuccess(
                             `Keyword resolver is now ${
                                 agentContext.resolverSettings.keywordResolver
-                                    ? "enabled"
-                                    : "disabled"
-                            }`,
-                            context,
-                        );
-                        saveSettings(context.sessionContext);
-                    },
-                },
-                wikipedia: {
-                    description: "Toggle Wikipedia resolver",
-                    run: async (
-                        context: ActionContext<BrowserActionContext>,
-                    ) => {
-                        const agentContext =
-                            context.sessionContext.agentContext;
-                        agentContext.resolverSettings.wikipediaResolver =
-                            !agentContext.resolverSettings.wikipediaResolver;
-                        displaySuccess(
-                            `Wikipedia resolver is now ${
-                                agentContext.resolverSettings.wikipediaResolver
                                     ? "enabled"
                                     : "disabled"
                             }`,
