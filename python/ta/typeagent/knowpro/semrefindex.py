@@ -59,13 +59,6 @@ type KnowledgeValidator = Callable[
 ]
 
 
-def _default_knowledge_validator(
-    knowledg_Type: KnowledgeType,
-    knowledge: Knowledge,
-) -> bool:
-    return True
-
-
 async def add_batch_to_semantic_ref_index[
     TMessage: IMessage, TTermToSemanticRefIndex: ITermToSemanticRefIndex
 ](
@@ -509,20 +502,18 @@ async def add_metadata_to_index[TMessage: IMessage](
     semantic_ref_index: ITermToSemanticRefIndex,
     knowledge_validator: KnowledgeValidator | None = None,
 ) -> None:
-    if knowledge_validator is None:
-        knowledge_validator = _default_knowledge_validator
     i = 0
     async for msg in messages:
         knowledge_response = msg.get_knowledge()
         for entity in knowledge_response.entities:
-            if knowledge_validator("entity", entity):
+            if knowledge_validator is None or knowledge_validator("entity", entity):
                 await add_entity_to_index(entity, semantic_refs, semantic_ref_index, i)
         for action in knowledge_response.actions:
-            if knowledge_validator("action", action):
+            if knowledge_validator is None or knowledge_validator("action", action):
                 await add_action_to_index(action, semantic_refs, semantic_ref_index, i)
         for topic_response in knowledge_response.topics:
             topic = Topic(text=topic_response)
-            if knowledge_validator("topic", topic):
+            if knowledge_validator is None or knowledge_validator("topic", topic):
                 await add_topic_to_index(topic, semantic_refs, semantic_ref_index, i)
         i += 1
 
