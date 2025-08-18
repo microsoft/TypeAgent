@@ -664,7 +664,7 @@ async function resolveEntity(
         try {
             const resolveStarted = Date.now();
 
-            const urls = await resolveWebPage(context, name);
+            const urls = await resolveWebPage(context, name, undefined, true);
             const duration = Date.now() - resolveStarted;
 
             debug(`URL Resolution Duration: ${duration}`);
@@ -699,6 +699,7 @@ async function resolveWebPage(
     context: SessionContext<BrowserActionContext>,
     site: string,
     io?: ActionIO,
+    fastResolution?: boolean  // flag that indicates whether to use fast resolution only
 ): Promise<string[]> {
     debug(`Resolving site '${site}'`);
 
@@ -756,21 +757,21 @@ async function resolveWebPage(
             }
 
             // try to resolve URL string using known keyword matching
-            if (context.agentContext.resolverSettings.keywordResolver) {
-                const cachehitUrl = await urlResolver.resolveURLByKeyword(site);
-                if (cachehitUrl) {
-                    debug(`Resolved URL from cache: ${cachehitUrl}`);
+            if (context.agentContext.resolverSettings.keywordResolver || fastResolution) {
+                const cachehitUrls = urlResolver.resolveURLByKeyword(site);
+                if (cachehitUrls && cachehitUrls.length > 0) {
+                    debug(`Resolved URLs from cache: ${cachehitUrls}`);
 
-                    if (
-                        cachehitUrl.indexOf("https://") !== 0 &&
-                        cachehitUrl.indexOf("http://") !== 0
-                    ) {
-                        return [`https://${cachehitUrl}`];
-                    } else {
-                        return [cachehitUrl];
-                    }
+                    return cachehitUrls;
+                }
+
+                // nothing else found, just return
+                if (fastResolution) {
+                    return [];
                 }
             }
+
+            // anything below here is considered "SLOW"
 
             // Search for the URL based on heuristics (history, wikipedia, web-search)
             // if we get singular matches we assume those are correct and we just return it.
@@ -792,7 +793,7 @@ async function resolveWebPage(
                 promises.push(
                     resolveURLWithHistory(context, site).then((historyUrls) => {
                         if (historyUrls) {
-                            const msg = `Found ${historyUrls.length} in browser history.`;
+                            const msg = `Found ${historyUrls.length} in browser history.\n`;
                             debug(msg);
                             io?.appendDisplay(
                                 getMessage(msg, "status"),
@@ -859,7 +860,7 @@ async function resolveWebPage(
                             bingWithGrounding.apiSettingsFromEnv(),
                         )
                         .then((search_urls) => {
-                            const msg = `Found ${search_urls?.length} urls using Bing With Grounding (search).`;
+                            const msg = `Found ${search_urls?.length} urls using Bing With Grounding (search).\n`;
                             debug(msg);
                             io?.appendDisplay(
                                 getMessage(msg, "status"),
@@ -913,7 +914,7 @@ async function resolveWebPage(
 
             const msg = `Found ${urls.length} possible urls for '${site}'`;
             debug(msg);
-            io?.appendDisplay(getMessage(msg, "info"));
+            io?.appendDisplay(getMessage(msg, "status"), "temporary");
 
             if (urls.length > 0) {
                 return [...new Set(urls)];
