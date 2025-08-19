@@ -8,7 +8,7 @@ This module provides utility functions for creating storage providers
 without circular import issues.
 """
 
-from typeagent.knowpro import interfaces
+from ..knowpro.interfaces import IStorageProvider
 from ..knowpro.messageindex import MessageTextIndexSettings
 from ..knowpro.reltermsindex import RelatedTermIndexSettings
 
@@ -17,7 +17,7 @@ async def create_storage_provider(
     message_text_settings: MessageTextIndexSettings,
     related_terms_settings: RelatedTermIndexSettings,
     dbname: str | None = None,
-) -> interfaces.IStorageProvider:
+) -> IStorageProvider:
     """
     Create a storage provider - MemoryStorageProvider if dbname is None,
     SqliteStorageProvider otherwise.
