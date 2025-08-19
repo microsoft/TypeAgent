@@ -402,6 +402,7 @@ export async function handleMessage(
                     message.showNotification !== false,
                     {
                         mode: message.mode,
+                        extractedKnowledge: message.extractedKnowledge,
                     },
                 );
                 return { success };
@@ -1190,31 +1191,46 @@ async function indexPageContent(
         quality?: "fast" | "balanced" | "deep";
         textOnly?: boolean;
         mode?: "basic" | "content" | "actions" | "full";
+        extractedKnowledge?: any;
     } = {},
 ): Promise<boolean> {
     try {
-        const htmlFragments = await getTabHTMLFragments(
-            tab,
-            false,
-            false,
-            true, // extract text
-            false, // useTimestampIds
-            true, // filterToReadingView - use reading view for indexing
-            true, // keepMetaTags - preserve metadata for indexing context
-        );
+        let htmlFragments = null;
+        let extractKnowledge = true;
+
+        if (options.extractedKnowledge) {
+            extractKnowledge = false;
+        } else {
+            htmlFragments = await getTabHTMLFragments(
+                tab,
+                false,
+                false,
+                true, // extract text
+                false, // useTimestampIds
+                true, // filterToReadingView - use reading view for indexing
+                true, // keepMetaTags - preserve metadata for indexing context
+            );
+        }
+
+        const parameters: any = {
+            url: tab.url,
+            title: tab.title,
+            extractKnowledge: extractKnowledge,
+            timestamp: new Date().toISOString(),
+            quality: options.quality || "balanced",
+            textOnly: options.textOnly || false,
+            mode: options.mode || "content",
+        };
+
+        if (options.extractedKnowledge) {
+            parameters.extractedKnowledge = options.extractedKnowledge;
+        } else {
+            parameters.htmlFragments = htmlFragments;
+        }
 
         await sendActionToAgent({
             actionName: "indexWebPageContent",
-            parameters: {
-                url: tab.url,
-                title: tab.title,
-                htmlFragments: htmlFragments,
-                extractKnowledge: true,
-                timestamp: new Date().toISOString(),
-                quality: options.quality || "balanced",
-                textOnly: options.textOnly || false,
-                mode: options.mode || "content",
-            },
+            parameters: parameters,
         });
 
         if (showNotification) {
