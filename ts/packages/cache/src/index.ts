@@ -39,7 +39,7 @@ export {
     normalizeParamValue,
     normalizeParamString,
     equalNormalizedParamValue,
-    equalNormalizedParamObject,
+    equalNormalizedObject,
     toJsonActions,
     fromJsonActions,
     getFullActionName,
