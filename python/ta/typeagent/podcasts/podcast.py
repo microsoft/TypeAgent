@@ -28,7 +28,7 @@ from ..knowpro.interfaces import (
 )
 from ..knowpro.messageindex import MessageTextIndex
 from ..knowpro.reltermsindex import TermToRelatedTermsMap
-from ..storage.sqlitestore import get_storage_provider
+from ..storage.utils import get_storage_provider
 from ..knowpro import serialization
 from ..knowpro.collections import (
     MemoryMessageCollection as MessageCollection,

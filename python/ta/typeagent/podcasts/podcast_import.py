@@ -6,7 +6,7 @@ import re
 
 from ..knowpro.importing import ConversationSettings
 from ..knowpro.interfaces import Datetime
-from ..storage.sqlitestore import get_storage_provider
+from ..storage.utils import get_storage_provider
 from .podcast import Podcast, PodcastMessage, PodcastMessageMeta
 
 

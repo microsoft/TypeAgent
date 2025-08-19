@@ -1,30 +1,91 @@
-# Storage Provider Index Centralization - Implementation Status & Next Steps
+# Storage Provider Design & Testing
 
 ## Overview
 
-This specification tracks the implementation of centralizing index creation and management within the storage provider interface. This centralization is **essential preparation** for the SQLite storage implementation.
+This document describes the current storage provider architecture and outlines next steps for unified testing across storage implementations.
 
-## Current Implementation Status (Updated August 17, 2025)
+## Current Architecture
 
-### ✅ COMPLETED WORK:
+The storage system follows a clean layered design:
 
-1. **Storage Provider Interface Extended** - All 6 index types have getter methods in `IStorageProvider`
-2. **MemoryStorageProvider Implementation** - All index getters implemented with proper initialization
-3. **ConversationSecondaryIndexes Integration** - Now uses storage provider internally while maintaining existing API
-4. **Core Testing** - Basic storage index tests and integration tests created
-5. **Backward Compatibility** - All existing index building functions work unchanged
+```
+Index Building Functions (timestampindex.py, propindex.py, etc.)
+         ↓ (use conversation.secondary_indexes - this is the intended pattern)
+ConversationSecondaryIndexes (secindex.py)
+         ↓ (internally gets indexes from storage provider)
+Storage Provider (storage.py, sqlitestore.py)
+         ↓ (manages actual index instances)
+Index Implementations (ConversationIndex, PropertyIndex, etc.)
+```
 
-### ⚠️ PARTIALLY COMPLETED:
+## What's Implemented ✅
 
-1. **Test Coverage** - Core functionality tested, but some edge cases may need additional validation
+- **Storage Provider Interface**: `IStorageProvider` with `get_*_index()` methods for all 6 index types
+- **Memory Implementation**: `MemoryStorageProvider` fully implements all index getters
+- **SQLite Implementation**: `SqliteStorageProvider` implements all index getters  
+- **Integration Layer**: `ConversationSecondaryIndexes` uses storage provider internally
+- **Correct Pattern**: Index building functions use `conversation.secondary_indexes` (intended, not deprecated)
+- **Tests**: Basic storage index tests exist for memory provider
 
-### ❌ TODO (Priority Order):
+## Index Types
 
-1. **Multi-conversation support** (MEDIUM) - Currently only single conversation supported, add when multiple conversations needed
-2. **Complete test coverage** (LOW) - Ensure all patterns work end-to-end
-3. **Documentation updates** (LOW) - Update any remaining docs that reference old patterns
+1. **ConversationIndex** - Term → SemanticRef mappings
+2. **PropertyIndex** - Property name → SemanticRef mappings  
+3. **TimestampToTextRangeIndex** - Timestamp → TextRange mappings
+4. **MessageTextIndex** - Message text → MessageOrdinal mappings (embeddings)
+5. **RelatedTermsIndex** - Term → Related terms mappings (aliases + embeddings)
+6. **ConversationThreads** - Thread description → Thread mappings
 
-**Note**: The index building functions (`timestampindex.py`, `propindex.py`, etc.) correctly continue to use the `conversation.secondary_indexes` pattern. The storage provider integration happens within `ConversationSecondaryIndexes` itself, which is the intended design. Lazy index creation via `get_*_index()` methods is sufficient - no explicit lifecycle management needed.
+## Next Steps
+
+### ✅ COMPLETED: Unified Storage Provider Testing
+
+**Implementation**: Created comprehensive parameterized testing framework in `test_storage_providers_unified.py` that runs all storage provider functionality with both Memory and SQLite implementations.
+
+**Coverage includes:**
+- **Index Creation**: All 6 index types created correctly across both providers
+- **Message Collections**: CRUD operations work identically  
+- **SemanticRef Collections**: CRUD operations work identically (with provider-specific ID handling)
+- **Index Interfaces**: All index types expose correct interfaces and handle empty lookups properly
+- **Cross-Provider Validation**: Direct comparison tests ensure both providers return equivalent results
+
+**Testing Pattern Used:**
+```python
+@pytest_asyncio.fixture(params=["memory", "sqlite"])
+async def storage_provider_type(request, embedding_model, temp_db_path):
+    # Returns both provider types, tests run twice - once per provider
+```
+
+**Results**: 19 parameterized tests, all passing. Both storage implementations maintain behavioral parity.
+
+### ✅ COMPLETED: Circular Import Resolution
+
+**Issue**: Circular imports between `sqlitestore.py` and `podcast.py` modules via `get_storage_provider` function.
+
+**Solution**: Moved `get_storage_provider` to new `typeagent/storage/utils.py` module.
+
+**Files Updated:**
+- `typeagent/storage/utils.py` - New module with `get_storage_provider`
+- `typeagent/podcasts/podcast.py` - Updated import
+- `typeagent/podcasts/podcast_import.py` - Updated import
+
+### Current Architecture Status
+
+The storage system is now fully implemented and tested:
+
+1. **Stable APIs**: Both `MemoryStorageProvider` and `SqliteStorageProvider` implement identical interfaces
+2. **Behavioral Parity**: Comprehensive test suite ensures both providers work equivalently  
+3. **Correct Usage Pattern**: `conversation.secondary_indexes` remains the intended pattern (not deprecated)
+4. **Index Building Functions**: Continue to work unchanged across both storage providers
+5. **Future-Ready**: Architecture supports additional storage providers with minimal changes
+
+## Development Environment
+
+- **Testing**: `make test` - run all tests  
+- **Type checking**: `make check` - type-check all files
+- **Formatting**: `make format` - reformat with black
+- **Environment**: Activate `.venv`, use `make clean venv` if needed
+- **Unified Testing**: `python -m pytest test/test_storage_providers_unified.py` - test both storage providers
 
 ## Architectural Clarification
 

@@ -309,25 +309,3 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
             self._conversation_threads is not None
         ), "Use SqliteStorageProvider.create() to create an initialized instance"
         return self._conversation_threads
-
-
-async def get_storage_provider(
-    dbname: str | None = None,
-) -> interfaces.IStorageProvider:
-    if dbname is None:
-        # Create MemoryStorageProvider with test-friendly settings
-        from ..aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
-        from ..aitools.vectorbase import TextEmbeddingIndexSettings
-        from ..knowpro.messageindex import MessageTextIndexSettings
-        from ..knowpro.reltermsindex import RelatedTermIndexSettings
-
-        test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
-        embedding_settings = TextEmbeddingIndexSettings(test_model)
-        message_text_settings = MessageTextIndexSettings(embedding_settings)
-        related_terms_settings = RelatedTermIndexSettings(embedding_settings)
-
-        return await MemoryStorageProvider.create(
-            message_text_settings, related_terms_settings
-        )
-    else:
-        return await SqliteStorageProvider.create(dbname)
