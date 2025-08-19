@@ -121,8 +121,14 @@ export function createInlineBrowserControl(
                 "Closing the inline browser window is not supported.",
             );
         },
-        async search() {
-            throw new Error("Search is not supported in inline browser.");
+        async search(query: string) {
+            // TODO: use configured search provider
+            await shellWindow.openInlineBrowser(
+                new URL(
+                    "https://www.bing.com/search?q=" +
+                        encodeURIComponent(query),
+                ),
+            );
         },
         async readPage() {
             throw new Error("Reading page is not supported in inline browser.");

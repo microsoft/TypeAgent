@@ -472,23 +472,40 @@ export async function resolveURLWithWikipedia(
 /**
  * The keyword to site map is a JSON file that maps keywords to sites.
  */
-export let keyWordsToSites: Record<string, string | undefined> | undefined;
+export let keyWordsToSites: Record<string, string[] | undefined> | undefined;
 
 /**
  * Resolves a URL by keyword using the URL resolver agent.
  * @param keyword The keyword to resolve.
  * @returns The resolved URL or undefined if not found.
  */
-export async function resolveURLByKeyword(
+export function resolveURLByKeyword(
     keyword: string,
-): Promise<string | undefined | null> {
+): string[] | undefined | null {
     if (!keyWordsToSites) {
-        keyWordsToSites = JSON.parse(
+        const phrasesToSites = JSON.parse(
             readFileSync(
-                "../../examples/websiteAliases/resolvedKeywords.json",
+                "../../examples/websiteAliases/phrases_to_sites.json",
                 "utf-8",
             ),
         );
+        keyWordsToSites = phrasesToSites.phrases;
+    }
+
+    // prepend https:// to any URLs that don't already have a protocol specified
+    if (keyWordsToSites![keyword] && Array.isArray(keyWordsToSites![keyword])) {
+        for (let i = 0; i < keyWordsToSites![keyword]!.length; i++) {
+            if (!/^https?:\/\//i.test(keyWordsToSites![keyword]![i])) {
+                keyWordsToSites![keyword]![i] =
+                    `https://${keyWordsToSites![keyword]![i]}`;
+            }
+        }
+        for (let i = 0; i < keyWordsToSites![keyword]!.length; i++) {
+            if (!/^https?:\/\//i.test(keyWordsToSites![keyword]![i])) {
+                keyWordsToSites![keyword]![i] =
+                    `https://${keyWordsToSites![keyword]![i]}`;
+            }
+        }
     }
 
     return keyWordsToSites![keyword] ?? null;

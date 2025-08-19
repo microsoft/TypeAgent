@@ -32,7 +32,8 @@
       "runtimeArgs": ["--sourcemap"],
       "env": {
         "REMOTE_DEBUGGING_PORT": "9222"
-      }
+      },
+      "outputCapture": "std"
     },
     {
       "name": "Player Service",
@@ -408,6 +409,7 @@
       "request": "launch",
       "skipFiles": ["<node_internals>/**"],
       "program": "${workspaceFolder}/examples/websiteAliases/src/main.ts",
+      "args": [],
       "console": "externalTerminal",
       "outFiles": ["${workspaceFolder}/**/*.js"]
     },       
