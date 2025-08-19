@@ -366,13 +366,11 @@ class Podcast(
         filename_prefix: str,
         settings: ConversationSettings,
         dbname: str | None = None,
-    ) -> "Podcast | None":
+    ) -> "Podcast":
         embedding_size = settings.embedding_model.embedding_size
         data = serialization.read_conversation_data_from_file(
             filename_prefix, embedding_size
         )
-        if not data:
-            return None
 
         provider = await create_storage_provider(
             settings.message_text_index_settings,
