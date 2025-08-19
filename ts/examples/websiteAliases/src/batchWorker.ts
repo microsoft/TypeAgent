@@ -9,25 +9,29 @@ import { createTypeChat, loadSchema } from "typeagent";
 import { ChatModelWithStreaming, CompletionSettings, openai } from "aiclient";
 
 async function processDomains(domains: string[]) {
-
     // check to see if each domain is available and if it is not, remove it from the domains to process
-    const availableDomains = await Promise.all(domains.map(async (domain) => {
-        const isAvailable = await isPageAvailable(domain);
+    const availableDomains = await Promise.all(
+        domains.map(async (domain) => {
+            const isAvailable = await isPageAvailable(domain);
 
-        if (!isAvailable) {
-            console.warn(chalk.yellow(`Skipping domain: ${domain}`));
-        }
+            if (!isAvailable) {
+                console.warn(chalk.yellow(`Skipping domain: ${domain}`));
+            }
 
-        return isAvailable ? domain : null;
-    }));
+            return isAvailable ? domain : null;
+        }),
+    );
 
-    const filteredDomains = availableDomains.filter((domain) => domain !== null);
+    const filteredDomains = availableDomains.filter(
+        (domain) => domain !== null,
+    );
 
-    console.log(chalk.blue(`Processing domains: ${filteredDomains.join(", ")}`));
+    console.log(
+        chalk.blue(`Processing domains: ${filteredDomains.join(", ")}`),
+    );
     try {
         const response = await getTypeChatResponse(filteredDomains.join("\n"));
         if (response.success) {
-
             parentPort?.postMessage({
                 success: true,
                 domains: response.data.domains,

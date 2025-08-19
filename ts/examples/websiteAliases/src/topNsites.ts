@@ -221,11 +221,14 @@ export class topNDomainsExtractor {
                     });
                 });
 
-                // add the promise 
+                // add the promise
                 batchPromises.push(batchPromise);
 
                 // wait for all of the promises to complete once the batch size is full, then continue
-                if (batchPromises.length >= batchSize || i >= lines.length - 1) {
+                if (
+                    batchPromises.length >= batchSize ||
+                    i >= lines.length - 1
+                ) {
                     await Promise.all(batchPromises);
 
                     // reset the batch promises
@@ -294,14 +297,16 @@ export class topNDomainsExtractor {
             });
 
             // record domain stats
-            this.processed.domains[element.domain] = { accessible: true};
+            this.processed.domains[element.domain] = { accessible: true };
             this.processed.domains[element.domain].phrase_count =
                 element.aliases.length;
             this.processed.domains[element.domain].phrases = element.aliases;
         });
 
         // domains that were in the batch but were not processed were not accessible so we should mark that here
-        const availableDomains: string[] = data.domains.map((domain) => domain.domain);
+        const availableDomains: string[] = data.domains.map(
+            (domain) => domain.domain,
+        );
         const unavailableDomains: string[] = batchDomains.filter((domain) => {
             return !availableDomains.includes(domain);
         });
