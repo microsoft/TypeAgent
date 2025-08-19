@@ -5,6 +5,7 @@ from typing import cast
 import pytest
 
 from fixtures import storage, needs_auth, embedding_model  # Import the storage fixture
+from typeagent.aitools.embeddings import TEST_MODEL_NAME
 from typeagent.knowpro.importing import ConversationSettings
 from typeagent.knowpro.messageindex import MessageTextIndexSettings
 from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
@@ -119,7 +120,7 @@ def test_conversation_secondary_indexes_initialization(storage, needs_auth):
     from typeagent.aitools.embeddings import AsyncEmbeddingModel
     from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
 
-    test_model = AsyncEmbeddingModel(model_name="test")
+    test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
     embedding_settings = TextEmbeddingIndexSettings(test_model)
     settings = RelatedTermIndexSettings(embedding_settings)
     indexes = ConversationSecondaryIndexes(storage_provider, settings)
