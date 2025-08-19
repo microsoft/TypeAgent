@@ -99,8 +99,8 @@ export class topNDomainsExtractor {
         const fileContent = readFileSync(this.topNFile, "utf-8");
         const lines = fileContent.split("\n").slice(1);
 
-        const batchSize = 1;
-        const pageSize = 1;
+        const batchSize = 10;
+        const pageSize = 5;
         const batchCount = Math.ceil(lines.length / (batchSize * pageSize));
         const domains: string[][] = new Array<string[]>(batchCount);
         let pageNumber = 0;
