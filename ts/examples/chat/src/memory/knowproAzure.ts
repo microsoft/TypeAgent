@@ -37,7 +37,7 @@ export function createAzureSearchClient(
 }
 
 type AzureMemoryContext = {
-    memory: AzureSearchMemory;
+    memory?: AzureSearchMemory | undefined;
     printer: KnowProPrinter;
 };
 
@@ -46,16 +46,24 @@ export async function createKnowproAzureCommands(
     commands: Record<string, CommandHandler>,
 ) {
     const context: AzureMemoryContext = {
-        memory: new AzureSearchMemory("default"),
         printer: kpContext.printer,
     };
     commands.azSearch = search;
 
     async function search(args: string[]) {
-        const results = await context.memory.searchClient.search(
+        const memory = ensureMemory();
+        const results = await memory.searchClient.search(
             "book + 'Great Gatsby'",
         );
         context.printer.writeJson(results);
     }
+
+    function ensureMemory(): AzureSearchMemory {
+        if (!context.memory) {
+            context.memory = new AzureSearchMemory("default");
+        }
+        return context.memory;
+    }
+
     return commands;
 }
