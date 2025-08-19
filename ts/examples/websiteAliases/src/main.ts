@@ -28,12 +28,15 @@ if (process.argv.includes("--moz")) {
     // go get top NNN sites from CloudFlare
     console.log("Top N sites extractor selected.");
 
-    const topN = parseInt(process.argv[process.argv.indexOf("--topN") + 1], 100);
+    const topN = parseInt(
+        process.argv[process.argv.indexOf("--topN") + 1],
+        100,
+    );
     const topNExtractor = new topNDomainsExtractor(topN);
 
     if (process.argv.includes("--summary")) {
         await topNExtractor.summarize();
     } else {
-        await topNExtractor.extract(process.argv.includes("--clear"));
+        await topNExtractor.index(process.argv.includes("--clear"));
     }
 }

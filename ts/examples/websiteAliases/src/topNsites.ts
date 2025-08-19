@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { openai, CompletionSettings, ChatModelWithStreaming } from "aiclient";
 import chalk from "chalk";
 import {
     existsSync,
@@ -11,8 +10,9 @@ import {
     statSync,
 } from "fs";
 import { domains } from "./generateOpenCommandPhrasesSchema.js";
-import { createTypeChat, loadSchema } from "typeagent";
-import { Result } from "typechat";
+import { Worker } from "worker_threads";
+import path from "path";
+import { fileURLToPath } from "url";
 
 type extractedDomains = {
     dateIndexed: number;
@@ -38,7 +38,7 @@ export class topNDomainsExtractor {
     // manually downloadable from: https://radar.cloudflare.com/domains
     private downloadUrl: string =
         "https://radar.cloudflare.com/charts/LargerTopDomainsTable/attachment?id=1257&top=";
-    private topN: number = 10000;
+    private topN: number = 50000;
     private topNFile: string = `examples/websiteAliases/top${this.topN}.csv`;
     private outputFile: string =
         "examples/websiteAliases/phrases_to_sites.json";
@@ -74,9 +74,9 @@ export class topNDomainsExtractor {
     /**
      * Downloads the topN sites from CloudFlare, then systematically attepmpts to resolve a keyword for each site.
      */
-    public async extract(clear: boolean = false): Promise<void> {
+    public async index(clear: boolean = false): Promise<void> {
         // get the top domains
-        this.downloadTopNDomains();
+        await this.downloadTopNDomains();
 
         try {
             // start over from scratch?
@@ -99,14 +99,7 @@ export class topNDomainsExtractor {
         const fileContent = readFileSync(this.topNFile, "utf-8");
         const lines = fileContent.split("\n").slice(1);
 
-        // TODO: go to the web page and see if it's something we even want to index
-        // TODO: use category
-        // TODO: handle when there is no category in the file
-
-        // go through each line, get the domain from the 2nd column and then generate
-        // the keyword/phrases for that domain
-        const batch: Promise<void>[] = [];
-        const batchSize = 5;
+        const batchSize = 1;
         const pageSize = 5;
         const batchCount = Math.ceil(lines.length / (batchSize * pageSize));
         const domains: string[][] = new Array<string[]>(batchCount);
@@ -132,8 +125,6 @@ export class topNDomainsExtractor {
             }
 
             // can we even get to this domain?
-            // For CDNs, there's nothing hosted at the root domain and for those
-            // we just skip them and don't try to index them cause they just pollute the cache
             let isValid: boolean | undefined =
                 await this.isPageAvailable(domain);
             this.processed.domains[domain] = {
@@ -161,46 +152,152 @@ export class topNDomainsExtractor {
                     `Processing page ${page}: ${chalk.blueBright(domains[page])}`,
                 );
 
-                batch.push(
-                    this.generateOpenPhrasesForDomains(domains[page]).catch(
-                        (err) => {
-                            console.error(
-                                chalk.red(
-                                    `Error processing domains ${domains[page]}: ${err.message}`,
-                                ),
+                // Spawn a worker for the batch
+                const batchDomains = domains[page];
+                const batchSourceFile = path.join(
+                    path.dirname(fileURLToPath(import.meta.url)),
+                    "./batchWorker.js",
+                );
+                const worker = new Worker(batchSourceFile, {
+                    workerData: {
+                        domains: batchDomains,
+                    },
+                });
+
+                const batchPromise = new Promise<void>((resolve) => {
+                    worker.on("message", async (msg) => {
+                        if (msg.success) {
+                            console.log(
+                                chalk.grey(`Batch processed: ${batchDomains}`),
                             );
-                        },
+
+                            // merge the results into the index
+                            this.mergeResults(msg);
+
+                            resolve();
+                        } else {
+                            console.error(
+                                chalk.red(`Batch failed: ${msg.error}`),
+                            );
+                            // Retry each domain individually
+                            for (const domain of batchDomains) {
+                                const singleWorker = new Worker(
+                                    "./batchWorker.js",
+                                    {
+                                        workerData: {
+                                            domains: [domain],
+                                        },
+                                    },
+                                );
+                                await new Promise<void>((res) => {
+                                    singleWorker.on("message", (singleMsg) => {
+                                        if (singleMsg.success) {
+                                            console.log(
+                                                chalk.green(
+                                                    `Domain processed: ${domain}`,
+                                                ),
+                                            );
+
+                                            // merge the results into the index
+                                            this.mergeResults(msg);
+                                        } else {
+                                            console.error(
+                                                chalk.red(
+                                                    `Domain failed: ${domain} - ${singleMsg.error}`,
+                                                ),
+                                            );
+                                            // Optionally mark as failed in processed
+                                            this.processed.domains[
+                                                domain
+                                            ].accessible = false;
+                                            this.processed.domains[
+                                                domain
+                                            ].phrase_count = 0;
+                                            this.processed.domains[
+                                                domain
+                                            ].phrases = [];
+                                        }
+                                        res();
+                                    });
+                                });
+                            }
+                            resolve();
+                        }
+                    });
+                    worker.on("error", (err) => {
+                        console.error(
+                            chalk.red(`Worker error: ${err.message}`),
+                        );
+                        resolve();
+                    });
+                });
+
+                await batchPromise;
+
+                batchNumber++;
+                // periodically save the output file so we don't have to start from scratch if we restart
+                writeFileSync(
+                    this.outputFile,
+                    JSON.stringify(this.processed, null, 2),
+                );
+                console.log(
+                    chalk.green(
+                        `Saved progress to ${this.outputFile} (${statSync(this.outputFile).size} bytes)`,
                     ),
                 );
-
-                if (batch.length >= batchSize) {
-                    const batchNum = batchNumber++;
-                    await Promise.all(batch).then(() => {
-                        console.log(
-                            chalk.grey(
-                                `Processed batch ${batchNum} of ${batchCount}.`,
-                            ),
-                        );
-                    });
-
-                    batch.length = 0; // reset the batch
-
-                    // periodically save the output file so we don't have to start from scratch if we restart
-                    writeFileSync(
-                        this.outputFile,
-                        JSON.stringify(this.processed, null, 2),
-                    );
-                    console.log(
-                        chalk.green(
-                            `Saved progress to ${this.outputFile} (${statSync(this.outputFile).size} bytes)`,
-                        ),
-                    );
-                }
             }
         }
 
         // save the output file
         writeFileSync(this.outputFile, JSON.stringify(this.processed, null, 2));
+    }
+
+    /**
+     * Merges the results from the domain processing into the main index.
+     * @param data - The domain data
+     */
+    private mergeResults(data: domains | undefined) {
+        if (!data) {
+            return;
+        }
+
+        data.domains.forEach((element) => {
+            console.log(
+                chalk.green(
+                    `Generated ${element.aliases.length} phrases for ${element.domain}:`,
+                ),
+            );
+
+            // merge the aliases with existing keywords
+            element.aliases.forEach((alias) => {
+                if (alias.toLowerCase().startsWith("open ")) {
+                    alias = alias.slice(5);
+                }
+
+                // record the phrase redirection entry
+                if (this.processed.phrases[alias] === undefined) {
+                    this.processed.phrases[alias] = [element.domain];
+                } else {
+                    this.processed.phrases[alias] = [
+                        ...new Set([
+                            ...this.processed.phrases[alias],
+                            element.domain,
+                        ]),
+                    ];
+
+                    console.log(
+                        chalk.yellow(
+                            `\t${alias} now maps to ${this.processed.phrases[alias].length} sites.`,
+                        ),
+                    );
+                }
+            });
+
+            // record domain stats
+            this.processed.domains[element.domain].phrase_count =
+                element.aliases.length;
+            this.processed.domains[element.domain].phrases = element.aliases;
+        });
     }
 
     // /**
@@ -340,141 +437,6 @@ export class topNDomainsExtractor {
         // save this file locally
         const data = await response.text();
         writeFileSync(this.topNFile, data);
-    }
-
-    /**
-     * Generate open command phrases for a given domain.
-     * @param domain - The domain to generate open phrases for (i.e. open Adidas, open three stripe brand, etc.)
-     */
-    private async generateOpenPhrasesForDomains(
-        domains: string[],
-    ): Promise<void> {
-        const response = await this.getTypeChatResponse(domains.join("\n"));
-        if (response.success) {
-            response.data.domains.forEach((element) => {
-                console.log(
-                    chalk.green(
-                        `Generated ${element.aliases.length} phrases for ${element.domain}:`,
-                    ),
-                );
-
-                // merge the aliases with existing keywords
-                element.aliases.forEach((alias) => {
-                    if (alias.toLowerCase().startsWith("open ")) {
-                        alias = alias.slice(5);
-                    }
-
-                    // record the phrase redirection entry
-                    if (this.processed.phrases[alias] === undefined) {
-                        this.processed.phrases[alias] = [element.domain];
-                    } else {
-                        this.processed.phrases[alias] = [
-                            ...new Set([
-                                ...this.processed.phrases[alias],
-                                element.domain,
-                            ]),
-                        ];
-
-                        console.log(
-                            chalk.yellow(
-                                `\t${alias} now maps to ${this.processed.phrases[alias].length} sites.`,
-                            ),
-                        );
-                    }
-                });
-
-                // record domain stats
-                this.processed.domains[element.domain].phrase_count =
-                    element.aliases.length;
-                this.processed.domains[element.domain].phrases =
-                    element.aliases;
-            });
-        } else {
-            console.error(
-                chalk.red(
-                    `Failed to generate phrases for ${domains}: ${response.message}`,
-                ),
-            );
-        }
-
-        return;
-    }
-
-    private async getTypeChatResponse(
-        pageMarkdown: string,
-    ): Promise<Result<domains>> {
-        // Create Model instance
-        let chatModel = this.createModel(false);
-
-        // Create Chat History
-        let maxContextLength = 8196;
-        let maxWindowLength = 30;
-
-        // create TypeChat object
-        const chat = createTypeChat<domains>(
-            chatModel,
-            loadSchema(
-                ["generateOpenCommandPhrasesSchema.ts"],
-                import.meta.url,
-            ),
-            "domains",
-            `
-There is a system that uses the command "Open" to open URLs in the browser.  You are helping me generate terms that I can cache such that when the user says "open apple" it goes to "https://apple.com".  You generate alternate terms/keywords/phrases/descriptions a user could use to invoke the same site. Avoid using statements that could actually refer to sub pages like (open ipad page). since those are technically different URLs.
-Leave off "open" from the beginning of each phrase.
-
-For example: apple.com could be:
-
-- open apple
-- open iphone maker
-- open ipad maker
-            `,
-            [],
-            maxContextLength,
-            maxWindowLength,
-        );
-
-        // make the request
-        const chatResponse = await chat.translate(pageMarkdown);
-
-        return chatResponse;
-    }
-
-    private createModel(fastModel: boolean = true): ChatModelWithStreaming {
-        let apiSettings: openai.ApiSettings | undefined;
-        if (!apiSettings) {
-            if (fastModel) {
-                apiSettings = openai.localOpenAIApiSettingsFromEnv(
-                    openai.ModelType.Chat,
-                    undefined,
-                    openai.GPT_5_NANO,
-                    ["websiteAliases"],
-                );
-            } else {
-                apiSettings = openai.localOpenAIApiSettingsFromEnv(
-                    openai.ModelType.Chat,
-                    undefined,
-                    openai.GPT_5,
-                    ["websiteAliases"],
-                );
-            }
-        }
-
-        let completionSettings: CompletionSettings = {
-            temperature: 1.0,
-            // Max response tokens
-            max_tokens: 1000,
-            // createChatModel will remove it if the model doesn't support it
-            response_format: { type: "json_object" },
-        };
-
-        const chatModel = openai.createChatModel(
-            apiSettings,
-            completionSettings,
-            undefined,
-            ["websiteAliases"],
-        );
-
-        return chatModel;
     }
 
     /**

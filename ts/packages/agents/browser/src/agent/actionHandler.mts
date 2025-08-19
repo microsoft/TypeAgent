@@ -662,7 +662,6 @@ async function resolveEntity(
 ): Promise<ResolveEntityResult | undefined> {
     if (type === "WebPage") {
         try {
-
             const resolveStarted = Date.now();
 
             const urls = await resolveWebPage(context, name, undefined, true);
