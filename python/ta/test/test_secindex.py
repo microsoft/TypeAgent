@@ -1,7 +1,6 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from typing import cast
 import pytest
 
 from fixtures import storage, needs_auth, embedding_model  # Import the storage fixture
@@ -13,24 +12,17 @@ from typeagent.knowpro.interfaces import (
     DeletionInfo,
     IConversation,
     IMessage,
-    IStorageProvider,
-    TextLocation,
 )
 from typeagent.knowpro import kplib
-from typeagent.knowpro.propindex import PropertyIndex
-from typeagent.knowpro.reltermsindex import RelatedTermsIndex
-from typeagent.knowpro.storage import MemoryStorageProvider
 from typeagent.knowpro.secindex import (
     ConversationSecondaryIndexes,
     build_secondary_indexes,
     build_transient_secondary_indexes,
 )
-from typeagent.knowpro.storage import MemoryStorageProvider
 from typeagent.knowpro.collections import (
     MemoryMessageCollection as MessageCollection,
     SemanticRefCollection,
 )
-from typeagent.knowpro.timestampindex import TimestampToTextRangeIndex
 
 from fixtures import needs_auth  # type: ignore  # Yes it is used!
 

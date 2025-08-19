@@ -75,8 +75,15 @@ async def memory_storage(embedding_model):
 @pytest_asyncio.fixture
 async def sqlite_storage(temp_db_path, embedding_model):
     """Create a SqliteStorageProvider for testing."""
+    # Create settings for the provider
+    embedding_settings = TextEmbeddingIndexSettings(embedding_model)
+    message_text_settings = MessageTextIndexSettings(embedding_settings)
+    related_terms_settings = RelatedTermIndexSettings(embedding_settings)
+
     # Use the create class method which properly initializes the indexes
-    provider = await SqliteStorageProvider.create(temp_db_path)
+    provider = await SqliteStorageProvider.create(
+        message_text_settings, related_terms_settings, temp_db_path
+    )
     yield provider
     await provider.close()
 
@@ -95,7 +102,9 @@ async def storage_provider_type(request, embedding_model, temp_db_path):
         )
         yield provider, request.param
     elif request.param == "sqlite":
-        provider = await SqliteStorageProvider.create(temp_db_path)
+        provider = await SqliteStorageProvider.create(
+            message_text_settings, related_terms_settings, temp_db_path
+        )
         yield provider, request.param
         await provider.close()
     else:

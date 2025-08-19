@@ -277,7 +277,9 @@ async def test_cross_provider_message_collection_equivalence(
         related_terms_settings=related_terms_settings,
     )
 
-    sqlite_provider = await SqliteStorageProvider.create(temp_db_path)
+    sqlite_provider = await SqliteStorageProvider.create(
+        message_text_settings, related_terms_settings, temp_db_path
+    )
 
     try:
         # Create collections in both

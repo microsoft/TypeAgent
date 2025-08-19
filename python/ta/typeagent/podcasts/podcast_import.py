@@ -69,7 +69,11 @@ async def import_podcast(
 
     assign_message_listeners(msgs, participants)
 
-    provider = await get_storage_provider(dbname)
+    provider = await get_storage_provider(
+        settings.message_text_index_settings,
+        settings.related_term_index_settings,
+        dbname,
+    )
     msg_coll = await provider.create_message_collection(PodcastMessage)
     semref_coll = await provider.create_semantic_ref_collection()
     if await msg_coll.size() or await semref_coll.size():

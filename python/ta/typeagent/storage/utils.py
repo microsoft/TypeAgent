@@ -9,9 +9,13 @@ without circular import issues.
 """
 
 from typeagent.knowpro import interfaces
+from ..knowpro.messageindex import MessageTextIndexSettings
+from ..knowpro.reltermsindex import RelatedTermIndexSettings
 
 
 async def get_storage_provider(
+    message_text_settings: MessageTextIndexSettings,
+    related_terms_settings: RelatedTermIndexSettings,
     dbname: str | None = None,
 ) -> interfaces.IStorageProvider:
     """
@@ -19,17 +23,7 @@ async def get_storage_provider(
     SqliteStorageProvider otherwise.
     """
     if dbname is None:
-        # Create MemoryStorageProvider with real embedding model
-        from ..aitools.embeddings import AsyncEmbeddingModel
-        from ..aitools.vectorbase import TextEmbeddingIndexSettings
-        from ..knowpro.messageindex import MessageTextIndexSettings
-        from ..knowpro.reltermsindex import RelatedTermIndexSettings
         from ..knowpro.storage import MemoryStorageProvider
-
-        embedding_model = AsyncEmbeddingModel()  # Uses default real model
-        embedding_settings = TextEmbeddingIndexSettings(embedding_model)
-        message_text_settings = MessageTextIndexSettings(embedding_settings)
-        related_terms_settings = RelatedTermIndexSettings(embedding_settings)
 
         return await MemoryStorageProvider.create(
             message_text_settings, related_terms_settings
@@ -37,4 +31,6 @@ async def get_storage_provider(
     else:
         from .sqlitestore import SqliteStorageProvider
 
-        return await SqliteStorageProvider.create(dbname)
+        return await SqliteStorageProvider.create(
+            message_text_settings, related_terms_settings, dbname
+        )

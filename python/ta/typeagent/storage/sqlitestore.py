@@ -12,7 +12,7 @@ from ..knowpro import serialization
 from ..knowpro.semrefindex import TermToSemanticRefIndex
 from ..knowpro.propindex import PropertyIndex
 from ..knowpro.timestampindex import TimestampToTextRangeIndex
-from ..knowpro.messageindex import MessageTextIndex
+from ..knowpro.messageindex import MessageTextIndex, MessageTextIndexSettings
 from ..knowpro.reltermsindex import RelatedTermsIndex, RelatedTermIndexSettings
 from ..knowpro.convthreads import ConversationThreads
 
@@ -223,28 +223,25 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         self._conversation_threads: ConversationThreads | None = None
 
     @classmethod
-    async def create(cls, db_path: str) -> "SqliteStorageProvider[TMessage]":
+    async def create(
+        cls,
+        message_text_settings: MessageTextIndexSettings,
+        related_terms_settings: RelatedTermIndexSettings,
+        db_path: str,
+    ) -> "SqliteStorageProvider[TMessage]":
         """Create and initialize a SqliteStorageProvider with all indexes."""
         instance = cls(db_path)
         # Initialize all indexes to ensure they exist in memory
         instance._conversation_index = TermToSemanticRefIndex()
         instance._property_index = PropertyIndex()
         instance._timestamp_index = TimestampToTextRangeIndex()
-        # Use real embedding model for storage
-        from ..aitools.embeddings import AsyncEmbeddingModel
-        from ..aitools.vectorbase import TextEmbeddingIndexSettings
-        from ..knowpro.messageindex import MessageTextIndexSettings
-        from ..knowpro.reltermsindex import RelatedTermIndexSettings
 
-        # Create real embedding model and settings for storage
-        embedding_model = AsyncEmbeddingModel()  # Uses default real model
-        embedding_settings = TextEmbeddingIndexSettings(embedding_model)
-
-        message_settings = MessageTextIndexSettings(embedding_settings)
-        instance._message_text_index = MessageTextIndex(message_settings)
-        related_settings = RelatedTermIndexSettings(embedding_settings)
-        instance._related_terms_index = RelatedTermsIndex(related_settings)
-        instance._conversation_threads = ConversationThreads(embedding_settings)
+        # Use the provided settings instead of creating new ones
+        instance._message_text_index = MessageTextIndex(message_text_settings)
+        instance._related_terms_index = RelatedTermsIndex(related_terms_settings)
+        instance._conversation_threads = ConversationThreads(
+            related_terms_settings.embedding_index_settings
+        )
         return instance
 
     async def close(self) -> None:
