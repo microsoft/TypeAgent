@@ -105,6 +105,7 @@ export class topNDomainsExtractor {
         const domains: string[][] = new Array<string[]>(batchCount);
         let pageNumber = 0;
         let batchNumber = 0;
+        const batchPromises: Promise<void>[] = [];
         console.log(
             `${lines.length} domains. Processing in ${batchCount} batches of ${batchSize} domains each.`,
         );
@@ -121,18 +122,6 @@ export class topNDomainsExtractor {
             // skip empty domains or domains that are already processed
             if (!domain || this.processed.domains[domain] !== undefined) {
                 console.warn(chalk.yellowBright(`Skipping domain: ${domain}`));
-                continue;
-            }
-
-            // can we even get to this domain?
-            let isValid: boolean | undefined =
-                await this.isPageAvailable(domain);
-            this.processed.domains[domain] = {
-                accessible: isValid ? isValid : false,
-            };
-
-            if (!isValid) {
-                console.warn(chalk.yellow(`Skipping domain: ${domain}`));
                 continue;
             }
 
@@ -172,7 +161,7 @@ export class topNDomainsExtractor {
                             );
 
                             // merge the results into the index
-                            this.mergeResults(msg);
+                            this.mergeResults(msg, batchDomains);
 
                             resolve();
                         } else {
@@ -199,7 +188,7 @@ export class topNDomainsExtractor {
                                             );
 
                                             // merge the results into the index
-                                            this.mergeResults(msg);
+                                            this.mergeResults(msg, [domain]);
                                         } else {
                                             console.error(
                                                 chalk.red(
@@ -232,19 +221,29 @@ export class topNDomainsExtractor {
                     });
                 });
 
-                await batchPromise;
+                // add the promise 
+                batchPromises.push(batchPromise);
 
-                batchNumber++;
-                // periodically save the output file so we don't have to start from scratch if we restart
-                writeFileSync(
-                    this.outputFile,
-                    JSON.stringify(this.processed, null, 2),
-                );
-                console.log(
-                    chalk.green(
-                        `Saved progress to ${this.outputFile} (${statSync(this.outputFile).size} bytes)`,
-                    ),
-                );
+                // wait for all of the promises to complete once the batch size is full, then continue
+                if (batchPromises.length >= batchSize || i >= lines.length - 1) {
+                    await Promise.all(batchPromises);
+
+                    // reset the batch promises
+                    batchPromises.length = 0;
+
+                    batchNumber++;
+
+                    // periodically save the output file so we don't have to start from scratch if we restart
+                    writeFileSync(
+                        this.outputFile,
+                        JSON.stringify(this.processed, null, 2),
+                    );
+                    console.log(
+                        chalk.green(
+                            `Saved progress to ${this.outputFile} (${statSync(this.outputFile).size} bytes)`,
+                        ),
+                    );
+                }
             }
         }
 
@@ -254,9 +253,10 @@ export class topNDomainsExtractor {
 
     /**
      * Merges the results from the domain processing into the main index.
-     * @param data - The domain data
+     * @param data - The processed domains
+     * @param batchDomains - The domains processed in this batch
      */
-    private mergeResults(data: domains | undefined) {
+    private mergeResults(data: domains | undefined, batchDomains: string[]) {
         if (!data) {
             return;
         }
@@ -294,9 +294,20 @@ export class topNDomainsExtractor {
             });
 
             // record domain stats
+            this.processed.domains[element.domain] = { accessible: true};
             this.processed.domains[element.domain].phrase_count =
                 element.aliases.length;
             this.processed.domains[element.domain].phrases = element.aliases;
+        });
+
+        // domains that were in the batch but were not processed were not accessible so we should mark that here
+        const availableDomains: string[] = data.domains.map((domain) => domain.domain);
+        const unavailableDomains: string[] = batchDomains.filter((domain) => {
+            return !availableDomains.includes(domain);
+        });
+
+        unavailableDomains.forEach((domain: string) => {
+            this.processed.domains[domain] = { accessible: false };
         });
     }
 
@@ -327,94 +338,6 @@ export class topNDomainsExtractor {
 
     //     return false;
     // }
-
-    /**
-     * Checks if a page is available by making a request.
-     * @param url - The URL to check
-     * @returns True if there was a semi-valid response from the server, false otherwise
-     */
-    private async isPageAvailable(url: string): Promise<boolean> {
-        let retryCount = 0;
-        const MAX_RETRIES = 3;
-
-        // HTTPS
-        do {
-            try {
-                const httpsResponse = await fetch(`https://${url}`);
-                const httpsStatus = httpsResponse.status;
-
-                if (httpsResponse.ok || httpsStatus === 400) {
-                    return true;
-                }
-
-                const httpsText = await httpsResponse.text();
-                console.log(
-                    `HTTPS ${chalk.red(httpsStatus)}\n${chalk.red(httpsText.substring(0, 20))}`,
-                );
-
-                break;
-            } catch (error: any) {
-                console.error(
-                    chalk.red(
-                        `Error checking page availability ${url}: ${error?.message}`,
-                    ),
-                );
-
-                // name not found
-                if (
-                    error.cause.code === "ENOTFOUND" ||
-                    error.cause.code === "UND_ERR_CONNECT_TIMEOUT"
-                ) {
-                    break;
-                }
-
-                await new Promise((resolve) => setTimeout(resolve, 500));
-            } finally {
-                retryCount++;
-            }
-        } while (retryCount < MAX_RETRIES);
-
-        retryCount = 0;
-
-        // fallback to HTTP
-        do {
-            try {
-                const httpResponse = await fetch(`http://${url}`);
-                const status = httpResponse.status;
-
-                if (httpResponse.ok || status === 400) {
-                    return true;
-                }
-
-                const r = await httpResponse.text();
-                console.log(
-                    `HTTP ${chalk.red(status)}\n${chalk.red(r.substring(0, 20))}`,
-                );
-
-                break;
-            } catch (error: any) {
-                console.error(
-                    chalk.red(
-                        `Error checking page availability ${url}: ${error?.message}`,
-                    ),
-                );
-
-                // name not found
-                if (
-                    error.cause.code === "ENOTFOUND" ||
-                    error.cause.code === "UND_ERR_CONNECT_TIMEOUT"
-                ) {
-                    break;
-                }
-
-                await new Promise((resolve) => setTimeout(resolve, 500));
-            } finally {
-                retryCount++;
-            }
-        } while (retryCount < MAX_RETRIES);
-
-        return false;
-    }
 
     /**
      * Downloads the topN domains from CloudFlare
