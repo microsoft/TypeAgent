@@ -3,7 +3,7 @@ import pytest
 
 from fixtures import needs_auth, storage, embedding_model  # type: ignore  # It's used!
 from typeagent.knowpro.secindex import ConversationSecondaryIndexes
-from typeagent.storage.memorystorage import MemoryStorageProvider
+from typeagent.storage.memorystore import MemoryStorageProvider
 
 
 @pytest.mark.asyncio

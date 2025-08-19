@@ -6,7 +6,7 @@ import sqlite3
 import typing
 from typing import Any, AsyncIterator
 
-from .memorystorage import MemoryStorageProvider
+from .memorystore import MemoryStorageProvider
 from ..knowpro import interfaces
 from ..knowpro import serialization
 from ..knowpro.semrefindex import TermToSemanticRefIndex

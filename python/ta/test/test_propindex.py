@@ -34,7 +34,7 @@ from typeagent.knowpro.propindex import (
     is_known_property,
 )
 from typeagent.knowpro.secindex import ConversationSecondaryIndexes
-from typeagent.storage.memorystorage import MemoryStorageProvider
+from typeagent.storage.memorystore import MemoryStorageProvider
 from typeagent.knowpro.collections import (
     MemoryMessageCollection,
     MemorySemanticRefCollection,

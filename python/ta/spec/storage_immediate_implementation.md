@@ -13,7 +13,7 @@ Index Building Functions (timestampindex.py, propindex.py, etc.)
          ↓ (use conversation.secondary_indexes - this is the intended pattern)
 ConversationSecondaryIndexes (secindex.py)
          ↓ (internally gets indexes from storage provider)
-Storage Provider (storage.py, sqlitestore.py)
+Storage Provider (memorystore.py, sqlitestore.py)
          ↓ (manages actual index instances)
 Index Implementations (ConversationIndex, PropertyIndex, etc.)
 ```
@@ -96,7 +96,7 @@ Index Building Functions (timestampindex.py, propindex.py, etc.)
          ↓ (use conversation.secondary_indexes)
 ConversationSecondaryIndexes (secindex.py)
          ↓ (internally gets indexes from storage provider)
-Storage Provider (storage.py)
+Storage Provider (memorystore.py)
          ↓ (manages actual index instances)
 Index Implementations (ConversationIndex, PropertyIndex, etc.)
 ```
@@ -214,7 +214,7 @@ class IStorageProvider[TMessage: IMessage](Protocol):
     # ) -> None: ...
 ```### 1.2 Update MemoryStorageProvider ✅ DONE
 
-~~Modify `storage.py` to implement index management:~~ **COMPLETED**
+~~Modify `memorystore.py` to implement index management:~~ **COMPLETED**
 
 The `MemoryStorageProvider` has been successfully implemented with:
 - All 6 index getter methods implemented
@@ -222,7 +222,7 @@ The `MemoryStorageProvider` has been successfully implemented with:
 - Index isolation per conversation (though currently single conversation)
 
 ```python
-# ✅ IMPLEMENTED in storage.py
+# ✅ IMPLEMENTED in memorystore.py
 class MemoryStorageProvider[TMessage: IMessage](IStorageProvider[TMessage]):
     async def get_conversation_index(self) -> ITermToSemanticRefIndex:
         return self._conversation_index
@@ -279,7 +279,7 @@ class MemoryStorageProvider[TMessage: IMessage](IStorageProvider[TMessage]):
 
 ### 1.2 Update MemoryStorageProvider
 
-Modify `storage.py` to implement index management:
+Modify `memorystore.py` to implement index management:
 
 ```python
 class MemoryStorageProvider[TMessage: IMessage](IStorageProvider[TMessage]):
@@ -470,7 +470,7 @@ The migration has maintained backward compatibility:
 ```python
 # In test/test_storage_indexes.py
 import pytest
-from typeagent.storage.memorystorage import MemoryStorageProvider
+from typeagent.storage.memorystore import MemoryStorageProvider
 from typeagent.knowpro.interfaces import (
     ITermToSemanticRefIndex, IPropertyToSemanticRefIndex,
     ITimestampToTextRangeIndex, IMessageTextIndex,
