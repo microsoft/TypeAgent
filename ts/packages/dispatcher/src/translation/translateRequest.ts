@@ -32,6 +32,7 @@ import {
 import { UnknownAction } from "../context/dispatcher/schema/dispatcherActionSchema.js";
 import {
     DispatcherActivityName,
+    DispatcherEmoji,
     DispatcherName,
     isUnknownAction,
 } from "../context/dispatcher/dispatcherUtils.js";
@@ -45,7 +46,6 @@ import {
     createPendingRequestAction,
     PendingRequestAction,
 } from "./pendingRequest.js";
-import { unicodeChar } from "../command/command.js";
 import registerDebug from "debug";
 import { confirmTranslation } from "./confirmTranslation.js";
 import { ActionConfig } from "./actionConfig.js";
@@ -924,7 +924,7 @@ export async function translateRequest(
     const elapsedMs = performance.now() - startTime;
     const { requestAction, replacedAction } = await confirmTranslation(
         elapsedMs,
-        unicodeChar.robotFace,
+        DispatcherEmoji,
         translated,
         context,
     );
