@@ -210,12 +210,22 @@ export abstract class ExtensionServiceBase {
         });
     }
 
-    async indexPageContent(url: string, mode: string): Promise<any> {
-        return this.sendMessage({
+    async indexPageContent(
+        url: string,
+        mode: string,
+        extractedKnowledge?: any,
+    ): Promise<any> {
+        const message: any = {
             type: "indexPageContentDirect",
             url,
             mode,
-        });
+        };
+
+        if (extractedKnowledge) {
+            message.extractedKnowledge = extractedKnowledge;
+        }
+
+        return this.sendMessage(message);
     }
 
     async extractPageKnowledge(

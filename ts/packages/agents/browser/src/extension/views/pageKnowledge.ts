@@ -107,6 +107,7 @@ class KnowledgePanel {
     private currentUrl: string = "";
     private isConnected: boolean = false;
     private knowledgeData: KnowledgeData | null = null;
+    private extractedKnowledgeData: KnowledgeData | null = null;
     private extractionSettings: ExtractionSettings;
     private aiModelAvailable: boolean = false;
     private connectionStatusCallback?: (connected: boolean) => void;
@@ -137,6 +138,12 @@ class KnowledgePanel {
             .getElementById("extractKnowledge")!
             .addEventListener("click", () => {
                 this.extractKnowledge();
+            });
+
+        document
+            .getElementById("saveKnowledge")!
+            .addEventListener("click", () => {
+                this.saveExtractedKnowledge();
             });
 
         document.getElementById("indexPage")!.addEventListener("click", () => {
@@ -330,12 +337,16 @@ class KnowledgePanel {
         const button = document.getElementById(
             "extractKnowledge",
         ) as HTMLButtonElement;
+        const saveButton = document.getElementById(
+            "saveKnowledge",
+        ) as HTMLButtonElement;
         const originalContent = button.innerHTML;
 
         // Show extracting state with progress indicator
         button.innerHTML =
             '<i class="bi bi-hourglass-split spinner-grow spinner-grow-sm me-2"></i>Extracting...';
         button.disabled = true;
+        saveButton.disabled = true;
         button.classList.add("btn-warning");
         button.classList.remove("btn-primary");
 
@@ -369,6 +380,7 @@ class KnowledgePanel {
             const processingTime = Date.now() - startTime;
 
             this.knowledgeData = response.knowledge;
+            this.extractedKnowledgeData = response.knowledge;
             if (this.knowledgeData) {
                 // Check for insufficient content case
                 const isInsufficientContent = this.checkInsufficientContent(
@@ -403,7 +415,8 @@ class KnowledgePanel {
                 button.classList.add("btn-success");
 
                 await this.renderKnowledgeResults(this.knowledgeData);
-                this.showExtractionInfo();
+
+                this.enableSaveButton();
 
                 // Show detailed success notification
                 const entityCount = this.knowledgeData.entities?.length || 0;
@@ -570,6 +583,130 @@ class KnowledgePanel {
         }
     }
 
+    private enableSaveButton() {
+        const saveButton = document.getElementById(
+            "saveKnowledge",
+        ) as HTMLButtonElement;
+        saveButton.disabled = false;
+        saveButton.classList.remove("btn-outline-secondary");
+        saveButton.classList.add("btn-outline-success");
+        saveButton.title = "Save extracted knowledge to index";
+
+        saveButton.classList.add("pulse-animation");
+        setTimeout(() => {
+            saveButton.classList.remove("pulse-animation");
+        }, 2000);
+    }
+
+    private disableSaveButton() {
+        const saveButton = document.getElementById(
+            "saveKnowledge",
+        ) as HTMLButtonElement;
+        saveButton.disabled = true;
+        saveButton.classList.remove("btn-outline-success", "btn-success");
+        saveButton.classList.add("btn-outline-secondary");
+        saveButton.title = "Extract knowledge first";
+    }
+
+    private async saveExtractedKnowledge() {
+        if (!this.extractedKnowledgeData) {
+            notificationManager.showWarning("Please extract knowledge first");
+            return;
+        }
+
+        const saveButton = document.getElementById(
+            "saveKnowledge",
+        ) as HTMLButtonElement;
+        const originalContent = saveButton.innerHTML;
+
+        saveButton.innerHTML =
+            '<i class="bi bi-hourglass-split spinner-grow spinner-grow-sm"></i>';
+        saveButton.disabled = true;
+        saveButton.classList.add("btn-warning");
+        saveButton.classList.remove("btn-outline-success");
+
+        try {
+            const startTime = Date.now();
+
+            const response = await extensionService.indexPageContent(
+                this.currentUrl,
+                this.extractionSettings.mode,
+                this.extractedKnowledgeData,
+            );
+
+            const processingTime = Date.now() - startTime;
+
+            saveButton.innerHTML = '<i class="bi bi-check-circle"></i>';
+            saveButton.classList.remove("btn-warning");
+            saveButton.classList.add("btn-success");
+
+            let actualEntityCount = await this.waitForIndexCompletion();
+
+            notificationManager.showEnhancedNotification(
+                "success",
+                "Knowledge Saved Successfully!",
+                `Saved ${actualEntityCount} entities to your knowledge index in ${Math.round(processingTime / 1000)}s`,
+                "bi-database-check",
+            );
+
+            await this.refreshPageStatusAfterIndexing();
+
+            this.extractedKnowledgeData = null;
+
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+
+            this.disableSaveButton();
+            saveButton.innerHTML = originalContent;
+        } catch (error) {
+            console.error("Error saving knowledge:", error);
+
+            saveButton.innerHTML = '<i class="bi bi-exclamation-triangle"></i>';
+            saveButton.classList.remove("btn-warning");
+            saveButton.classList.add("btn-danger");
+
+            notificationManager.showEnhancedNotification(
+                "danger",
+                "Save Failed",
+                (error as Error).message || "Failed to save knowledge to index",
+                "bi-exclamation-triangle",
+            );
+
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+
+            saveButton.innerHTML = originalContent;
+            saveButton.disabled = false;
+            saveButton.classList.remove("btn-warning", "btn-danger");
+            saveButton.classList.add("btn-outline-success");
+        }
+    }
+
+    private async waitForIndexCompletion(): Promise<number> {
+        let actualEntityCount = 0;
+        let attempts = 0;
+        const maxAttempts = 10;
+
+        while (attempts < maxAttempts) {
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            try {
+                const status = await extensionService.getPageIndexStatus(
+                    this.currentUrl,
+                );
+                if (status.isIndexed && status.entityCount !== undefined) {
+                    actualEntityCount = status.entityCount;
+                    break;
+                }
+            } catch (error) {
+                console.warn(
+                    "Error checking index status during entity count polling:",
+                    error,
+                );
+            }
+            attempts++;
+        }
+
+        return actualEntityCount;
+    }
+
     private async submitQuery() {
         const queryInput = document.getElementById(
             "knowledgeQuery",
@@ -713,17 +850,12 @@ class KnowledgePanel {
         const knowledgeSection = document.getElementById("knowledgeSection")!;
         knowledgeSection.className = "";
         knowledgeSection.innerHTML = `
-            ${this.hasContentMetrics(knowledge) ? this.renderContentMetricsCard() : ""}
             ${this.hasRelatedContent(knowledge) ? this.renderRelatedContentCard() : ""}
             ${this.renderEntitiesCard()}
             ${this.renderRelationshipsCard()}
             ${this.renderTopicsCard()}
             ${knowledge.detectedActions && knowledge.detectedActions.length > 0 ? this.renderUserActionsCard() : ""}
         `;
-
-        if (this.hasContentMetrics(knowledge)) {
-            this.renderContentMetrics(knowledge.contentMetrics);
-        }
 
         if (this.hasRelatedContent(knowledge)) {
             this.renderRelatedContent(knowledge);
@@ -786,7 +918,7 @@ class KnowledgePanel {
             container.innerHTML = `
                 <div class="text-muted text-center">
                     <i class="bi bi-info-circle"></i>
-                    No entity actions identified
+                    No relationships identified
                 </div>
             `;
             return;
@@ -814,7 +946,7 @@ class KnowledgePanel {
             container.innerHTML = `
                 <div class="text-muted text-center">
                     <i class="bi bi-info-circle"></i>
-                    No key topics identified
+                    No topics identified
                 </div>
             `;
             return;
@@ -962,74 +1094,6 @@ class KnowledgePanel {
         }
     }
 
-    // Enhanced knowledge extraction status display with advanced integration
-    private showExtractionInfo() {
-        if (!this.knowledgeData) return;
-
-        const infoDiv = document.createElement("div");
-        infoDiv.className = "alert alert-info mt-2";
-
-        // Calculate knowledge quality metrics
-        const qualityMetrics = this.calculateKnowledgeQuality(
-            this.knowledgeData,
-        );
-
-        let content = `<small>
-            <i class="bi bi-cpu me-1"></i>
-            <strong>Enhanced Extraction</strong> using <strong>${this.extractionSettings.mode}</strong> mode
-            <div class="mt-2">
-                <div class="d-flex align-items-center justify-content-between">
-                    <span>Knowledge Quality:</span>
-                    <div class="d-flex align-items-center">
-                        <div class="progress me-2" style="width: 100px; height: 6px;">
-                            <div class="progress-bar bg-${qualityMetrics.color}" 
-                                 style="width: ${qualityMetrics.score}%" 
-                                 title="Overall quality: ${qualityMetrics.score}%">
-                            </div>
-                        </div>
-                        <span class="badge bg-${qualityMetrics.color}">${qualityMetrics.label}</span>
-                    </div>
-                </div>
-                <div class="row mt-2 g-2">
-                    <div class="col-4 text-center">
-                        <div class="fw-semibold text-${qualityMetrics.entities.color}">${this.knowledgeData.entities?.length || 0}</div>
-                        <small class="text-muted">Entities</small>
-                    </div>
-                    <div class="col-4 text-center">
-                        <div class="fw-semibold text-${qualityMetrics.relationships.color}">${this.knowledgeData.relationships?.length || 0}</div>
-                        <small class="text-muted">Relations</small>
-                    </div>
-                    <div class="col-4 text-center">
-                        <div class="fw-semibold text-${qualityMetrics.topics.color}">${this.knowledgeData.keyTopics?.length || 0}</div>
-                        <small class="text-muted">Topics</small>
-                    </div>
-                </div>
-            </div>`;
-
-        // Show enhanced capabilities if detected
-        if (
-            this.knowledgeData.detectedActions &&
-            this.knowledgeData.detectedActions.length > 0
-        ) {
-            content += `
-                <div class="mt-2 p-2 bg-light rounded">
-                    <small class="text-success">
-                        <i class="bi bi-lightning-fill me-1"></i>
-                        <strong>Action Detection:</strong> ${this.knowledgeData.detectedActions.length} interactive elements identified
-                    </small>
-                </div>`;
-        }
-
-        content += "</small>";
-        infoDiv.innerHTML = content;
-
-        const knowledgeSection = document.getElementById("knowledgeSection")!;
-        const firstCard = knowledgeSection.querySelector(".knowledge-card");
-        if (firstCard) {
-            knowledgeSection.insertBefore(infoDiv, firstCard);
-        }
-    }
-
     private async checkConnectionStatus() {
         try {
             const response = await extensionService.checkConnection();
@@ -1085,6 +1149,9 @@ class KnowledgePanel {
     private async onTabChange() {
         await this.loadCurrentPageInfo();
         await this.loadFreshKnowledge();
+
+        this.extractedKnowledgeData = null;
+        this.disableSaveButton();
     }
 
     private async loadFreshKnowledge() {
@@ -1095,8 +1162,10 @@ class KnowledgePanel {
 
             if (indexStatus.isIndexed) {
                 await this.loadIndexedKnowledge();
+                this.disableSaveButton();
             } else {
                 this.showNotIndexedState();
+                this.disableSaveButton();
             }
         } catch (error) {
             console.error("Error loading fresh knowledge:", error);
@@ -1148,7 +1217,6 @@ class KnowledgePanel {
                 this.knowledgeData = response.knowledge;
                 if (this.knowledgeData) {
                     await this.renderKnowledgeResults(this.knowledgeData);
-                    this.showIndexedKnowledgeIndicator();
                 }
             } else {
                 this.showNotIndexedState();
@@ -1156,29 +1224,6 @@ class KnowledgePanel {
         } catch (error) {
             console.error("Error loading indexed knowledge:", error);
             this.showConnectionError();
-        }
-    }
-
-    private showIndexedKnowledgeIndicator() {
-        const knowledgeSection = document.getElementById("knowledgeSection")!;
-        const firstCard = knowledgeSection.querySelector(".knowledge-card");
-
-        if (firstCard) {
-            const indicatorDiv = document.createElement("div");
-            indicatorDiv.className = "alert alert-info mt-2";
-            indicatorDiv.innerHTML = `
-                <small>
-                    <i class="bi bi-database-check me-1"></i>
-                    <strong>Indexed Knowledge</strong> - This information was retrieved from your knowledge index
-                    <div class="mt-1">
-                        <span class="badge bg-success">
-                            <i class="bi bi-check-circle me-1"></i>Available Offline
-                        </span>
-                    </div>
-                </small>
-            `;
-
-            knowledgeSection.insertBefore(indicatorDiv, firstCard);
         }
     }
 
@@ -1208,11 +1253,11 @@ class KnowledgePanel {
             "relationshipsContainer",
             TemplateHelpers.createEmptyState(
                 "bi bi-info-circle",
-                "No entity actions found yet",
+                "No relationships found yet",
             ),
         );
         return TemplateHelpers.createCard(
-            "Entity Actions",
+            "Relationships",
             content,
             "bi bi-diagram-3",
             "relationshipsCount",
@@ -1227,11 +1272,7 @@ class KnowledgePanel {
                 "No topics identified yet",
             ),
         );
-        return TemplateHelpers.createCard(
-            "Key Topics",
-            content,
-            "bi bi-bookmark",
-        );
+        return TemplateHelpers.createCard("Topics", content, "bi bi-bookmark");
     }
 
     // Template utility functions for knowledge panel
@@ -1252,22 +1293,6 @@ class KnowledgePanel {
                 <div id="pageStatus" class="ms-2">${status}</div>
             </div>
         `;
-    }
-
-    // Content Metrics Card component with enhanced visualization
-    private renderContentMetricsCard(): string {
-        const content = this.createContainer(
-            "contentMetricsContainer",
-            TemplateHelpers.createEmptyState(
-                "bi bi-info-circle",
-                "No content metrics available",
-            ),
-        );
-        return TemplateHelpers.createCard(
-            "Content Analysis",
-            content,
-            "bi bi-bar-chart-line",
-        );
     }
 
     // Related Content Card component
@@ -1300,73 +1325,6 @@ class KnowledgePanel {
             "bi bi-lightning",
             "actionsCount",
         );
-    }
-
-    // Render enhanced content metrics with visual indicators
-    private renderContentMetrics(metrics: any) {
-        const container = document.getElementById("contentMetricsContainer")!;
-
-        // Calculate derived metrics
-        const readingTimeCategory = this.getReadingTimeCategory(
-            metrics.readingTime,
-        );
-        const wordCountCategory = this.getWordCountCategory(metrics.wordCount);
-
-        container.innerHTML = `
-            <!-- Reading Time Section -->
-            <div class="metric-section mb-4">
-                <div class="d-flex align-items-center justify-content-between mb-2">
-                    <h6 class="mb-0 text-primary">
-                        <i class="bi bi-clock me-2"></i>Reading Time
-                    </h6>
-                    <span class="badge bg-${readingTimeCategory.color}">${readingTimeCategory.label}</span>
-                </div>
-                <div class="metric-visual-container">
-                    <div class="d-flex align-items-center mb-2">
-                        <div class="reading-time-display me-3">
-                            <span class="h4 mb-0 text-primary">${metrics.readingTime}</span>
-                            <small class="text-muted ms-1">min</small>
-                        </div>
-                        <div class="flex-grow-1">
-                            <div class="progress" style="height: 8px;">
-                                <div class="progress-bar bg-${readingTimeCategory.color}" 
-                                     style="width: ${Math.min(metrics.readingTime * 10, 100)}%"
-                                     title="${metrics.readingTime} minutes">
-                                </div>
-                            </div>
-                            <small class="text-muted">${readingTimeCategory.description}</small>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Word Count Section -->
-            <div class="metric-section mb-4">
-                <div class="d-flex align-items-center justify-content-between mb-2">
-                    <h6 class="mb-0 text-info">
-                        <i class="bi bi-file-text me-2"></i>Content Volume
-                    </h6>
-                    <span class="badge bg-${wordCountCategory.color}">${wordCountCategory.label}</span>
-                </div>
-                <div class="metric-visual-container">
-                    <div class="row text-center mb-2">
-                        <div class="col-6">
-                            <div class="metric-card p-2 bg-light rounded">
-                                <div class="h5 mb-0 text-info">${metrics.wordCount.toLocaleString()}</div>
-                                <small class="text-muted">Words</small>
-                            </div>
-                        </div>
-                        <div class="col-6">
-                            <div class="metric-card p-2 bg-light rounded">
-                                <div class="h5 mb-0 text-info">${Math.round(metrics.wordCount / Math.max(metrics.readingTime, 1))}</div>
-                                <small class="text-muted">WPM</small>
-                            </div>
-                        </div>
-                    </div>
-                    <small class="text-muted">${wordCountCategory.description}</small>
-                </div>
-            </div>
-        `;
     }
 
     // Render detected actions
