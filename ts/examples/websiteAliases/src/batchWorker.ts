@@ -26,21 +26,28 @@ async function processDomains(domains: string[]) {
         (domain) => domain !== null,
     );
 
-    console.log(
-        chalk.blue(`Processing domains: ${filteredDomains.join(", ")}`),
-    );
-    try {
-        const response = await getTypeChatResponse(filteredDomains.join("\n"));
-        if (response.success) {
-            parentPort?.postMessage({
-                success: true,
-                domains: response.data.domains,
-            });
-        } else {
-            parentPort?.postMessage({ success: false });
+    if (filteredDomains.length > 0) {
+        console.log(
+            chalk.blue(`Processing domains: ${filteredDomains.join(", ")}`),
+        );
+        try {
+            const response = await getTypeChatResponse(filteredDomains.join("\n"));
+            if (response.success) {
+                parentPort?.postMessage({
+                    success: true,
+                    domains: response.data.domains,
+                });
+            } else {
+                parentPort?.postMessage({ success: false });
+            }
+        } catch (err: any) {
+            parentPort?.postMessage({ success: false, error: err.message });
         }
-    } catch (err: any) {
-        parentPort?.postMessage({ success: false, error: err.message });
+    } else {
+       console.log(
+            chalk.cyan(`NO DOMAINS FOR PROCESSING!`),
+        );
+        parentPort?.postMessage({ success: true, domains: [] });
     }
 }
 
