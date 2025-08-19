@@ -30,9 +30,7 @@ export async function createKnowproAzureCommands(
 
     async function search(args: string[]) {
         const memory = ensureMemory();
-        const results = await memory.index.searchClient.search(
-            "book + 'Great Gatsby'",
-        );
+        const results = await memory.index.searchClient.search("type:book");
         context.printer.writeJson(results);
     }
 
