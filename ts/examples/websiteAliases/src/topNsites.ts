@@ -145,7 +145,7 @@ export class topNDomainsExtractor {
                 const batchDomains = domains[page];
                 const batchSourceFile = path.join(
                     path.dirname(fileURLToPath(import.meta.url)),
-                    "./batchWorker.js",
+                    "./topN_BatchWorker.js",
                 );
                 const worker = new Worker(batchSourceFile, {
                     workerData: {
@@ -171,7 +171,7 @@ export class topNDomainsExtractor {
                             // Retry each domain individually
                             for (const domain of batchDomains) {
                                 const singleWorker = new Worker(
-                                    "./batchWorker.js",
+                                    "./topN_BatchWorker.js",
                                     {
                                         workerData: {
                                             domains: [domain],

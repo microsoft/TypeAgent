@@ -34,7 +34,6 @@ export type BrowserControlInvokeFunctions = {
 
     closeWindow(): Promise<void>;
 
-    // REVIEW: external browser only
     search(query?: string): Promise<void>;
     readPage(): Promise<void>;
     stopReadPage(): Promise<void>;
