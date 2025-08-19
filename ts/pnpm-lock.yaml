@@ -3030,6 +3030,12 @@ importers:
 
   packages/memory/storage:
     dependencies:
+      '@azure/search-documents':
+        specifier: 12.1.0
+        version: 12.1.0
+      aiclient:
+        specifier: workspace:*
+        version: link:../../aiclient
       better-sqlite3:
         specifier: 11.9.1
         version: 11.9.1
