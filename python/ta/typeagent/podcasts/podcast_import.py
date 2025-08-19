@@ -6,7 +6,7 @@ import re
 
 from ..knowpro.importing import ConversationSettings
 from ..knowpro.interfaces import Datetime
-from ..storage.utils import get_storage_provider
+from ..storage.utils import create_storage_provider
 from .podcast import Podcast, PodcastMessage, PodcastMessageMeta
 
 
@@ -69,7 +69,7 @@ async def import_podcast(
 
     assign_message_listeners(msgs, participants)
 
-    provider = await get_storage_provider(
+    provider = await create_storage_provider(
         settings.message_text_index_settings,
         settings.related_term_index_settings,
         dbname,

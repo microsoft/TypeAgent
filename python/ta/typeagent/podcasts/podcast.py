@@ -28,7 +28,7 @@ from ..knowpro.interfaces import (
 )
 from ..knowpro.messageindex import MessageTextIndex
 from ..knowpro.reltermsindex import TermToRelatedTermsMap
-from ..storage.utils import get_storage_provider
+from ..storage.utils import create_storage_provider
 from ..knowpro import serialization
 from ..knowpro.collections import (
     MemoryMessageCollection as MessageCollection,
@@ -374,7 +374,7 @@ class Podcast(
         if not data:
             return None
 
-        provider = await get_storage_provider(
+        provider = await create_storage_provider(
             settings.message_text_index_settings,
             settings.related_term_index_settings,
             dbname,

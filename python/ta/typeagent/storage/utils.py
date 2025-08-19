@@ -13,7 +13,7 @@ from ..knowpro.messageindex import MessageTextIndexSettings
 from ..knowpro.reltermsindex import RelatedTermIndexSettings
 
 
-async def get_storage_provider(
+async def create_storage_provider(
     message_text_settings: MessageTextIndexSettings,
     related_terms_settings: RelatedTermIndexSettings,
     dbname: str | None = None,
