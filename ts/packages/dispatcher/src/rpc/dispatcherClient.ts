@@ -50,8 +50,6 @@ export function createDispatcherRpcClient(channel: RpcChannel): Dispatcher {
         async close() {
             return rpc.invoke("close");
         },
-        getPrompt: remoteCallNotSupported,
-        getSettingSummary: remoteCallNotSupported,
-        getTranslatorNameToEmojiMap: remoteCallNotSupported,
+        getStatus: remoteCallNotSupported,
     };
 }

@@ -40,6 +40,7 @@ import {
 import { ActivityActions } from "./schema/activityActionSchema.js";
 import { ClarifyEntityAction } from "../../execute/pendingActions.js";
 import { MatchCommandHandler } from "./handlers/matchCommandHandler.js";
+import { DispatcherEmoji } from "./dispatcherUtils.js";
 
 const dispatcherHandlers: CommandHandlerTable = {
     description: "Type Agent Dispatcher Commands",
@@ -251,7 +252,7 @@ function clarifyEntityAction(
 }
 
 export const dispatcherManifest: AppAgentManifest = {
-    emojiChar: "🤖",
+    emojiChar: DispatcherEmoji,
     description: "Built-in agent to dispatch requests",
     schema: {
         description: "",

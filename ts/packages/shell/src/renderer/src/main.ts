@@ -289,9 +289,9 @@ function registerClient(
 
     const client: Client = {
         clientIO,
-        updateRegisterAgents(updatedAgents: Map<string, string>): void {
+        updateRegisterAgents(updatedAgents: [string, string][]): void {
             agents.clear();
-            for (const [key, value] of updatedAgents.entries()) {
+            for (const [key, value] of updatedAgents) {
                 agents.set(key, value);
             }
         },
