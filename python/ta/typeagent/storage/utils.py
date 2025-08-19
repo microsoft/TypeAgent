@@ -23,7 +23,7 @@ async def create_storage_provider(
     SqliteStorageProvider otherwise.
     """
     if dbname is None:
-        from ..knowpro.storage import MemoryStorageProvider
+        from .memorystorage import MemoryStorageProvider
 
         return await MemoryStorageProvider.create(
             message_text_settings, related_terms_settings

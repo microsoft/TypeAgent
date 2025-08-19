@@ -77,7 +77,7 @@ class SimpleConversation(IConversation):
             from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
             from typeagent.knowpro.messageindex import MessageTextIndexSettings
             from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
-            from typeagent.knowpro.storage import MemoryStorageProvider
+            from typeagent.storage.memorystorage import MemoryStorageProvider
 
             test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
             embedding_settings = TextEmbeddingIndexSettings(test_model)

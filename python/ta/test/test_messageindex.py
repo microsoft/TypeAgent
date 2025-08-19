@@ -26,7 +26,7 @@ from typeagent.knowpro.interfaces import (
     TextLocation,
     TextToTextLocationIndexData,
 )
-from typeagent.knowpro.storage import MemoryStorageProvider
+from typeagent.storage.memorystorage import MemoryStorageProvider
 from typeagent.knowpro.collections import MemoryMessageCollection as MessageCollection
 from typeagent.knowpro.textlocindex import TextToTextLocationIndex
 

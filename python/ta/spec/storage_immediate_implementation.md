@@ -470,7 +470,7 @@ The migration has maintained backward compatibility:
 ```python
 # In test/test_storage_indexes.py
 import pytest
-from typeagent.knowpro.storage import MemoryStorageProvider
+from typeagent.storage.memorystorage import MemoryStorageProvider
 from typeagent.knowpro.interfaces import (
     ITermToSemanticRefIndex, IPropertyToSemanticRefIndex,
     ITimestampToTextRangeIndex, IMessageTextIndex,

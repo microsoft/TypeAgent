@@ -152,12 +152,7 @@ class PodcastData(ConversationDataWithIndexes[PodcastMessageData]):
 
 
 @dataclass
-class Podcast(
-    IConversation[
-        PodcastMessage,
-        semrefindex.TermToSemanticRefIndex,
-    ]
-):
+class Podcast(IConversation[PodcastMessage, semrefindex.TermToSemanticRefIndex]):
     name_tag: str = ""
     messages: IMessageCollection[PodcastMessage] = field(
         default_factory=MessageCollection[PodcastMessage]

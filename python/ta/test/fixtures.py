@@ -12,7 +12,7 @@ from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
 from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
 from typeagent.knowpro.messageindex import MessageTextIndexSettings
 from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
-from typeagent.knowpro.storage import MemoryStorageProvider
+from typeagent.storage.memorystorage import MemoryStorageProvider
 from typeagent.storage.sqlitestore import SqliteStorageProvider
 
 

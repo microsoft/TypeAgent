@@ -1,24 +1,12 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from dataclasses import dataclass
-from typing import (
-    Any,
-    Iterable,
-    Iterator,
-    Callable,
-)
-
-from .collections import (
-    MemoryCollection,
-    MemoryMessageCollection,
-    MemorySemanticRefCollection,
-)
-from .semrefindex import TermToSemanticRefIndex
-from .convthreads import ConversationThreads
-from .messageindex import MessageTextIndexSettings
-from .reltermsindex import RelatedTermIndexSettings
-from .interfaces import (
+from ..knowpro.collections import MemoryMessageCollection, MemorySemanticRefCollection
+from ..knowpro.semrefindex import TermToSemanticRefIndex
+from ..knowpro.convthreads import ConversationThreads
+from ..knowpro.messageindex import MessageTextIndexSettings
+from ..knowpro.reltermsindex import RelatedTermIndexSettings
+from ..knowpro.interfaces import (
     IConversationThreads,
     IMessage,
     IMessageTextIndex,
@@ -28,14 +16,11 @@ from .interfaces import (
     ITermToSemanticRefIndex,
     ITimestampToTextRangeIndex,
     JsonSerializer,
-    MessageOrdinal,
-    SemanticRef,
-    SemanticRefOrdinal,
 )
-from .messageindex import MessageTextIndex
-from .propindex import PropertyIndex
-from .reltermsindex import RelatedTermsIndex
-from .timestampindex import TimestampToTextRangeIndex
+from ..knowpro.messageindex import MessageTextIndex
+from ..knowpro.propindex import PropertyIndex
+from ..knowpro.reltermsindex import RelatedTermsIndex
+from ..knowpro.timestampindex import TimestampToTextRangeIndex
 
 
 class MemoryStorageProvider[TMessage: IMessage](IStorageProvider[TMessage]):
@@ -112,58 +97,3 @@ class MemoryStorageProvider[TMessage: IMessage](IStorageProvider[TMessage]):
     async def close(self) -> None:
         """Close the storage provider."""
         pass
-
-
-# TODO: The rest of this file is not currently used.
-
-
-@dataclass
-class Batch[T]:
-    """A batch of items from a collection."""
-
-    start_at: int
-    value: list[T]
-
-
-async def get_batches_from_collection[T](
-    collection: MemoryCollection[T, int],
-    start_at_ordinal: int,
-    batch_size: int,
-) -> list[Batch[T]]:
-    """Generate batches of items from a collection."""
-    start_at = start_at_ordinal
-    result = []
-    while True:
-        batch = await collection.get_slice(start_at, start_at + batch_size)
-        if not batch:
-            break
-        result.append(Batch(start_at=start_at, value=batch))
-        start_at += batch_size
-    return result
-
-
-async def map_collection[T](
-    collection: MemoryCollection[T, int],
-    callback: Callable[[T, int], T],
-) -> list[T]:
-    """Map a callback function over a collection."""
-    results: list[T] = []
-    size = await collection.size()
-    for i in range(size):
-        item = await collection.get_item(i)
-        results.append(callback(item, i))
-    return results
-
-
-async def filter_collection[T](
-    collection: MemoryCollection[T, int],
-    predicate: Callable[[T, int], bool],
-) -> list[T]:
-    """Filter items in a collection based on a predicate."""
-    results: list[T] = []
-    size = await collection.size()
-    for i in range(size):
-        item = await collection.get_item(i)
-        if predicate(item, i):
-            results.append(item)
-    return results

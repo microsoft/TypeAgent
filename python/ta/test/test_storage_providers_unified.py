@@ -261,7 +261,7 @@ async def test_cross_provider_message_collection_equivalence(
     embedding_model, temp_db_path, needs_auth
 ):
     """Test that both providers handle message collections equivalently."""
-    from typeagent.knowpro.storage import MemoryStorageProvider
+    from typeagent.storage.memorystorage import MemoryStorageProvider
     from typeagent.storage.sqlitestore import SqliteStorageProvider
     from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
     from typeagent.knowpro.messageindex import MessageTextIndexSettings
