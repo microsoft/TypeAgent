@@ -230,15 +230,15 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         instance._conversation_index = TermToSemanticRefIndex()
         instance._property_index = PropertyIndex()
         instance._timestamp_index = TimestampToTextRangeIndex()
-        # Use default settings for these indexes
-        from ..aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
+        # Use real embedding model for storage
+        from ..aitools.embeddings import AsyncEmbeddingModel
         from ..aitools.vectorbase import TextEmbeddingIndexSettings
         from ..knowpro.messageindex import MessageTextIndexSettings
         from ..knowpro.reltermsindex import RelatedTermIndexSettings
 
-        # Create test model and embedding settings for storage
-        test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
-        embedding_settings = TextEmbeddingIndexSettings(test_model)
+        # Create real embedding model and settings for storage
+        embedding_model = AsyncEmbeddingModel()  # Uses default real model
+        embedding_settings = TextEmbeddingIndexSettings(embedding_model)
 
         message_settings = MessageTextIndexSettings(embedding_settings)
         instance._message_text_index = MessageTextIndex(message_settings)

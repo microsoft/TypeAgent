@@ -19,15 +19,15 @@ async def get_storage_provider(
     SqliteStorageProvider otherwise.
     """
     if dbname is None:
-        # Create MemoryStorageProvider with test-friendly settings
-        from ..aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
+        # Create MemoryStorageProvider with real embedding model
+        from ..aitools.embeddings import AsyncEmbeddingModel
         from ..aitools.vectorbase import TextEmbeddingIndexSettings
         from ..knowpro.messageindex import MessageTextIndexSettings
         from ..knowpro.reltermsindex import RelatedTermIndexSettings
         from ..knowpro.storage import MemoryStorageProvider
 
-        test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
-        embedding_settings = TextEmbeddingIndexSettings(test_model)
+        embedding_model = AsyncEmbeddingModel()  # Uses default real model
+        embedding_settings = TextEmbeddingIndexSettings(embedding_model)
         message_text_settings = MessageTextIndexSettings(embedding_settings)
         related_terms_settings = RelatedTermIndexSettings(embedding_settings)
 

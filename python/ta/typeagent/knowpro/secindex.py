@@ -3,7 +3,7 @@
 
 from typing import TYPE_CHECKING
 
-from ..aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
+from ..aitools.embeddings import AsyncEmbeddingModel
 from ..aitools.vectorbase import TextEmbeddingIndexSettings
 from .interfaces import (
     IConversation,
@@ -132,7 +132,7 @@ async def build_transient_secondary_indexes[
                 if conversation_settings is not None
                 else RelatedTermIndexSettings(
                     TextEmbeddingIndexSettings(
-                        AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
+                        AsyncEmbeddingModel()  # Uses default real model
                     )
                 )
             ),
