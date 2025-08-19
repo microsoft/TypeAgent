@@ -1,7 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CommandHandler } from "interactive-app";
+import {
+    arg,
+    CommandHandler,
+    CommandMetadata,
+    parseNamedArguments,
+} from "interactive-app";
 import { KnowproContext } from "./knowproMemory.js";
 import { KnowProPrinter } from "./knowproPrinter.js";
 import * as ms from "memory-storage";
@@ -27,11 +32,28 @@ export async function createKnowproAzureCommands(
         printer: kpContext.printer,
     };
     commands.azSearch = search;
+    commands.azEnsureIndex = ensureIndex;
 
     async function search(args: string[]) {
         const memory = ensureMemory();
         const results = await memory.index.searchClient.search("type:book");
         context.printer.writeJson(results);
+    }
+
+    function ensureIndexDef(): CommandMetadata {
+        return {
+            description: "Ensure memory index",
+            options: {
+                name: arg("Index name", "default"),
+            },
+        };
+    }
+    commands.azEnsureIndex.metadata = ensureIndexDef();
+    async function ensureIndex(args: string[]) {
+        const namedArgs = parseNamedArguments(args, ensureIndexDef());
+        const memory = await ensureMemory();
+        const schema = ms.azSearch.createKnowledgeSchema(namedArgs.name);
+        await memory.index.ensureIndex(schema);
     }
 
     function ensureMemory(): AzureSearchMemory {

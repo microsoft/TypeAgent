@@ -7,93 +7,74 @@ export function createKnowledgeSchema(indexName: string): azSearch.SearchIndex {
     return {
         name: indexName,
         fields: [
-            {
-                name: "semanticRefId",
-                type: "Edm.String",
-                key: true,
-                searchable: false,
-            },
-            { name: "messageId", type: "Edm.String", searchable: false }, // Reference to the original message
-            { name: "type", type: "Edm.String", searchable: true }, // Either "entity" or "action"
-            { name: "topic", type: "Edm.String", searchable: true }, // For correlated searches by topic
-            // Entity fields
-            { name: "entityName", type: "Edm.String", searchable: true },
-            {
-                name: "entityType",
-                type: "Collection(Edm.String)",
-                searchable: true,
-            },
-            {
-                name: "entityFacets",
-                type: "Collection(Edm.ComplexType)",
-                fields: [
-                    { name: "facetName", type: "Edm.String", searchable: true },
-                    {
-                        name: "facetValue",
-                        type: "Edm.String",
-                        searchable: true,
-                    }, // String facet value
-                    {
-                        name: "facetValueN",
-                        type: "Edm.Double",
-                        searchable: false,
-                    }, // Numeric facet value
-                ],
-            },
-            // Action fields
-            {
-                name: "verb",
-                type: "Collection(Edm.String)",
-                searchable: true,
-            },
-            {
-                name: "subject",
-                type: "Edm.String",
-                searchable: true,
-            },
-            {
-                name: "object",
-                type: "Edm.String",
-                searchable: true,
-            },
-            {
-                name: "indirectObject",
-                type: "Edm.String",
-                searchable: true,
-            },
-            {
-                name: "actionParams",
-                type: "Collection(Edm.ComplexType)",
-                fields: [
-                    { name: "paramName", type: "Edm.String", searchable: true },
-                    {
-                        name: "paramValue",
-                        type: "Edm.String",
-                        searchable: true,
-                    }, // String parameter value
-                    {
-                        name: "paramValueN",
-                        type: "Edm.Double",
-                        searchable: false,
-                    }, // Numeric parameter value
-                ],
-            },
-            {
-                name: "actionSubjectEntityFacetName",
-                type: "Edm.String",
-                searchable: true,
-            },
-            {
-                name: "actionSubjectEntityFacetValue",
-                type: "Edm.String",
-                searchable: true,
-            }, // String facet value
-            {
-                name: "actionSubjectEntityFacetValueN",
-                type: "Edm.Double",
-                searchable: false,
-            }, // Numeric facet value
+            ...standardFields(),
+            ...topicFields(),
+            ...entityFields(),
+            ...actionFields(),
         ],
-        // Optionally define scoring profiles, suggesters, etc.
     };
+}
+
+function standardFields(): azSearch.SearchField[] {
+    return [
+        {
+            name: "semanticRefId",
+            type: "Edm.String",
+            key: true,
+            searchable: false,
+            filterable: false,
+        },
+        {
+            name: "messageId",
+            type: "Edm.Int32",
+            searchable: false,
+            filterable: false,
+        },
+        createKField("kType", "Edm.String"),
+    ];
+}
+
+function entityFields(): azSearch.SearchField[] {
+    return [
+        createKField("name", "Edm.String"),
+        createKField("type", "Collection(Edm.String)"),
+        {
+            name: "facets",
+            type: "Collection(Edm.ComplexType)",
+            fields: [
+                createKField("facetName", "Edm.String"),
+                createKField("facetValue", "Edm.String"),
+            ],
+        },
+    ];
+}
+
+function actionFields(): azSearch.SearchField[] {
+    return [
+        createKField("verb", "Collection(Edm.String)"),
+        createKField("subject", "Edm.String"),
+        createKField("object", "Edm.String"),
+        createKField("indirectObject", "Edm.String"),
+    ];
+}
+
+function topicFields(): azSearch.SearchField[] {
+    return [createKField("topic", "Edm.String", true)];
+}
+
+function createKField(
+    name: string,
+    type: azSearch.SearchFieldDataType,
+    wordBreak: boolean = false,
+): azSearch.SearchField {
+    const field: azSearch.SearchField = {
+        name,
+        type,
+        searchable: true,
+        filterable: true,
+    };
+    if (!wordBreak) {
+        field.analyzerName = "keyword";
+    }
+    return field;
 }
