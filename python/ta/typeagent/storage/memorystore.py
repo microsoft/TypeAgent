@@ -26,7 +26,7 @@ from ..knowpro.timestampindex import TimestampToTextRangeIndex
 class MemoryStorageProvider[TMessage: IMessage](IStorageProvider[TMessage]):
     """A storage provider that operates in memory."""
 
-    # Declare indexes as not-None but uninitialized - initialize() must be called
+    # Declare indexes as not-None but uninitialized - create() must be called
     _conversation_index: TermToSemanticRefIndex
     _property_index: PropertyIndex
     _timestamp_index: TimestampToTextRangeIndex
@@ -39,10 +39,8 @@ class MemoryStorageProvider[TMessage: IMessage](IStorageProvider[TMessage]):
         message_text_settings: MessageTextIndexSettings,
         related_terms_settings: RelatedTermIndexSettings,
     ):
-        # Store settings privately - no defaults, caller must provide
         self._message_text_settings = message_text_settings
         self._related_terms_settings = related_terms_settings
-        # Indexes will be created in initialize()
 
     @classmethod
     async def create(
@@ -51,17 +49,15 @@ class MemoryStorageProvider[TMessage: IMessage](IStorageProvider[TMessage]):
         related_terms_settings: RelatedTermIndexSettings,
     ) -> "MemoryStorageProvider[TMessage]":
         """Create and initialize a MemoryStorageProvider with all indexes."""
-        instance = cls(message_text_settings, related_terms_settings)
-        # Initialize all indexes using the provided settings
-        instance._conversation_index = TermToSemanticRefIndex()
-        instance._property_index = PropertyIndex()
-        instance._timestamp_index = TimestampToTextRangeIndex()
-        instance._message_text_index = MessageTextIndex(message_text_settings)
-        instance._related_terms_index = RelatedTermsIndex(related_terms_settings)
-        # Use the same embedding settings for conversation threads
+        self = cls(message_text_settings, related_terms_settings)
+        self._conversation_index = TermToSemanticRefIndex()
+        self._property_index = PropertyIndex()
+        self._timestamp_index = TimestampToTextRangeIndex()
+        self._message_text_index = MessageTextIndex(message_text_settings)
+        self._related_terms_index = RelatedTermsIndex(related_terms_settings)
         thread_settings = message_text_settings.embedding_index_settings
-        instance._conversation_threads = ConversationThreads(thread_settings)
-        return instance
+        self._conversation_threads = ConversationThreads(thread_settings)
+        return self
 
     async def get_conversation_index(self) -> ITermToSemanticRefIndex:
         return self._conversation_index
