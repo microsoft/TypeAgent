@@ -6,6 +6,7 @@ import * as kp from "knowpro";
 import { conversation as kpLib } from "knowledge-processor";
 import { AzSearchIndex } from "./azSearchIndex.js";
 import { AzSearchSettings } from "./azSearchCommon.js";
+import { LuceneQueryCompiler } from "./azLucene.js";
 
 export interface SemanticRefDocBase {
     semanticRefOrdinal: string;
@@ -39,8 +40,31 @@ export interface ActionDoc extends SemanticRefDocBase {
 export type SemanticRefDoc = EntityDoc | TopicDoc | ActionDoc;
 
 export class AzSemanticRefIndex extends AzSearchIndex<SemanticRefDoc> {
+    private luceneCompiler: LuceneQueryCompiler;
+
     constructor(settings: AzSearchSettings) {
         super(settings);
+        this.luceneCompiler = new LuceneQueryCompiler(getFieldPaths());
+    }
+
+    public async search(
+        query: string | kp.SearchTermGroup,
+    ): Promise<
+        [queryText: string, matches: azSearch.SearchResult<SemanticRefDoc>[]]
+    > {
+        let queryText =
+            typeof query === "string"
+                ? query
+                : this.luceneCompiler.compileSearchTermGroup(query);
+        //orderby: "search.score() desc"
+        const searchResults = await this.searchClient.search(queryText, {
+            queryType: "full",
+        });
+        let results: azSearch.SearchResult<SemanticRefDoc>[] = [];
+        for await (const result of searchResults.results) {
+            results.push(result);
+        }
+        return [queryText, results];
     }
 
     public async ensure(): Promise<boolean> {
@@ -189,4 +213,14 @@ function createKField(
         field.analyzerName = "keyword";
     }
     return field;
+}
+
+function getFieldPaths(): Map<kp.PropertyNames, string> {
+    const fieldPaths = new Map<kp.PropertyNames, string>();
+    fieldPaths.set(kp.PropertyNames.EntityName, "name");
+    fieldPaths.set(kp.PropertyNames.EntityType, "type");
+    fieldPaths.set(kp.PropertyNames.FacetName, "facets/name");
+    fieldPaths.set(kp.PropertyNames.FacetValue, "facets/value");
+    fieldPaths.set(kp.PropertyNames.Topic, "topic");
+    return fieldPaths;
 }

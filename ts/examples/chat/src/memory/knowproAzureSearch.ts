@@ -1,10 +1,19 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CommandHandler, CommandMetadata } from "interactive-app";
+import {
+    arg,
+    argBool,
+    CommandHandler,
+    CommandMetadata,
+    parseNamedArguments,
+} from "interactive-app";
 import { KnowproContext } from "./knowproMemory.js";
 import { KnowProPrinter } from "./knowproPrinter.js";
 import * as ms from "memory-storage";
+import * as kp from "knowpro";
+import chalk from "chalk";
+import { propertyTermsFromNamedArgs } from "../common.js";
 
 type AzureMemoryContext = {
     memory?: ms.azSearch.AzSemanticRefIndex | undefined;
@@ -18,14 +27,41 @@ export async function createKnowproAzureCommands(
     const context: AzureMemoryContext = {
         printer: kpContext.printer,
     };
-    commands.azSearch = search;
+    commands.azSearch = azSearch;
     commands.azEnsureIndex = ensureIndex;
     commands.azIngest = ingestKnowledge;
 
-    async function search(args: string[]) {
+    function azSearchDef(): CommandMetadata {
+        return {
+            description: "Azure Search",
+            options: {
+                query: arg("Plain text or Lucene query syntax"),
+                andTerms: argBool("'And' all terms. Default is 'or", false),
+            },
+        };
+    }
+    commands.azSearch.metadata = azSearchDef();
+    async function azSearch(args: string[]) {
+        const commandDef = azSearchDef();
+        const namedArgs = parseNamedArguments(args, commandDef);
         const memory = ensureMemory();
-        const results = await memory.searchClient.search("type:book");
-        context.printer.writeJson(results);
+        let query: string = namedArgs.query;
+        let queryTerms: string | kp.SearchTermGroup;
+        if (query) {
+            queryTerms = query.replaceAll(/'/g, '"');
+        } else {
+            const termGroup = propertyTermsFromNamedArgs(namedArgs, commandDef);
+            queryTerms = namedArgs.andTerms
+                ? kp.createAndTermGroup(...termGroup)
+                : kp.createOrTermGroup(...termGroup);
+        }
+
+        const [queryText, results] = await memory.search(queryTerms);
+        context.printer.writeLineInColor(chalk.cyan, queryText);
+        context.printer.writeLine(`${results.length} matches`);
+        for (const result of results) {
+            context.printer.writeJson(result);
+        }
     }
 
     commands.azIngest.metadata =
