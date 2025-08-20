@@ -219,7 +219,7 @@ export class TST<TData extends BaseTSTData> {
             throw new Error("prefix is undefined");
         } else if (prefix.length === 0) {
             return this.data().sort((a, b) => {
-                return (b.sortIndex ?? 0) - (a.sortIndex ?? 0);
+                return (a.sortIndex ?? 0) - (b.sortIndex ?? 0);
             });
         }
         const keys: string[] = [];
@@ -233,7 +233,7 @@ export class TST<TData extends BaseTSTData> {
         }
         this.collect(x.middle, prefix, keys, data);
         return data.sort((a, b) => {
-            return (b.sortIndex ?? 0) - (a.sortIndex ?? 0);
+            return (a.sortIndex ?? 0) - (b.sortIndex ?? 0);
         });
     }
 

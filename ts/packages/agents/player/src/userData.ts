@@ -233,7 +233,7 @@ export function getUserDataCompletions(
                               b.timestamps[b.timestamps.length - 1],
                           ).getTime()
                         : 0;
-                return aTime - bTime;
+                return bTime - aTime;
             })
             .map((t) => t.name);
         completions.push(...trackNames);
@@ -254,7 +254,7 @@ export function getUserDataCompletions(
                               b.timestamps[b.timestamps.length - 1],
                           ).getTime()
                         : 0;
-                return aTime - bTime;
+                return bTime - aTime;
             })
             .map((a) => a.name);
         completions.push(...artistNames);
