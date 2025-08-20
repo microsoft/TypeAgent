@@ -166,15 +166,6 @@ function getExplainerOptions(
         return undefined;
     }
 
-    const cannotUseCacheReason = getCannotUseCacheReason(
-        context,
-        undefined,
-        requestAction.history,
-    );
-    if (cannotUseCacheReason !== undefined) {
-        // Already checked by the caller, double check here just to be sure.
-        return undefined;
-    }
     if (
         !context.session.getConfig().explainer.filter.multiple &&
         requestAction.actions.length > 1
@@ -226,14 +217,14 @@ function getExplainerOptions(
 }
 
 async function requestExplain(
-    requestAction: RequestAction,
     context: CommandHandlerContext,
-    fromCache: boolean,
-    fromUser: boolean,
-    cannotUseCacheReason?: string,
+    attachments: CachedImageWithDetails[] | undefined,
+    translationResult: InterpretResult,
 ) {
     // Make sure the current requestId is captured
     const requestId = context.requestId;
+
+    const { fromCache, fromUser, requestAction } = translationResult;
 
     const notifyExplained = (error?: string) => {
         context.clientIO.notify(
@@ -257,6 +248,11 @@ async function requestExplain(
         notifyExplained(error);
     };
 
+    const cannotUseCacheReason = getCannotUseCacheReason(
+        context,
+        attachments,
+        requestAction.history,
+    );
     if (cannotUseCacheReason !== undefined) {
         notifyExplained(`cannot not use cache (${cannotUseCacheReason})`);
     }
@@ -356,7 +352,6 @@ export class RequestCommandHandler implements CommandHandler {
                 interpretResult = await interpretRequest(
                     context,
                     request,
-
                     cachedAttachments,
                 );
             } catch (e: any) {
@@ -368,13 +363,7 @@ export class RequestCommandHandler implements CommandHandler {
                 throw e;
             }
 
-            const {
-                requestAction,
-                fromUser,
-                fromCache,
-                tokenUsage,
-                cannotUseCacheReason,
-            } = interpretResult;
+            const { requestAction, tokenUsage } = interpretResult;
 
             if (tokenUsage) {
                 const commandResult = getCommandResult(systemContext);
@@ -391,11 +380,9 @@ export class RequestCommandHandler implements CommandHandler {
             );
 
             await requestExplain(
-                requestAction,
                 systemContext,
-                fromCache,
-                fromUser,
-                cannotUseCacheReason,
+                cachedAttachments,
+                interpretResult,
             );
         } finally {
             profiler?.stop();

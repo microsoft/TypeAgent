@@ -49,12 +49,8 @@ import { ActionConfig } from "./actionConfig.js";
 import { DispatcherConfig } from "../context/session.js";
 import { openai as ai, CompleteUsageStatsCallback } from "aiclient";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
-import {
-    getActivityActiveSchemas,
-    getNonActivityActiveSchemas,
-} from "./matchRequest.js";
-import { ProfileMeasure } from "telemetry";
 import { getHistoryContext } from "./interpretRequest.js";
+
 const debugTranslate = registerDebug("typeagent:translate");
 const debugSemanticSearch = registerDebug("typeagent:translate:semantic");
 
@@ -721,103 +717,12 @@ async function translateRequestWithActiveSchemas(
           );
 }
 
-async function translateWithActivityContext(
-    request: string,
-    context: ActionContext<CommandHandlerContext>,
-    history: HistoryContext,
-    attachments: CachedImageWithDetails[] | undefined,
-    streamingActionIndex: number | undefined,
-    activeSchemaNames: string[],
-    usageCallback: (usage: ai.CompletionUsageStats) => void,
-): Promise<ExecutableAction | ExecutableAction[]> {
-    // Translate the request with only the activity schemas
-    const activityContext = history.activityContext!;
-    const activitySchemas = getActivityActiveSchemas(
-        activeSchemaNames,
-        activityContext,
-    );
-
-    debugTranslate(`Activity schemas: ${activitySchemas.join(",")}`);
-    const activityActions = await translateRequestWithActiveSchemas(
-        request,
-        context,
-        history,
-        attachments,
-        streamingActionIndex,
-        new Set(activitySchemas),
-        usageCallback,
-    );
-
-    if (activityContext.restricted) {
-        // Don't try non-activity schemas if restricted
-        return activityActions;
-    }
-
-    const hasUnknownAction = Array.isArray(activityActions)
-        ? activityActions.some((e) => isUnknownAction(e.action))
-        : isUnknownAction(activityActions.action);
-    if (!hasUnknownAction) {
-        // No more unknown action to translate
-        return activityActions;
-    }
-
-    // Translate the unknown requests with non-activity schemas
-    const nonActivitySchemas = new Set(
-        getNonActivityActiveSchemas(activeSchemaNames, activityContext),
-    );
-    debugTranslate(
-        `Non-activity schemas: ${Array.from(nonActivitySchemas).join(",")}`,
-    );
-    // Activity context should not be used for non-activity schemas
-    const historyWithNoActivity = {
-        ...history!,
-        activityContext: undefined, // Clear activity context for non-activity schemas
-    };
-
-    if (!Array.isArray(activityActions)) {
-        return translateRequestWithActiveSchemas(
-            request,
-            context,
-            historyWithNoActivity,
-            attachments,
-            streamingActionIndex,
-            nonActivitySchemas,
-            usageCallback,
-        );
-    }
-    const executableAction = [];
-    for (const action of activityActions) {
-        if (!isUnknownAction(action.action)) {
-            executableAction.push(action);
-        } else {
-            const newActions = await translateRequestWithActiveSchemas(
-                action.action.parameters.request,
-                context,
-                historyWithNoActivity,
-                attachments,
-                streamingActionIndex,
-                nonActivitySchemas,
-                usageCallback,
-            );
-            if (Array.isArray(newActions)) {
-                executableAction.push(...newActions);
-            } else {
-                executableAction.push(newActions);
-            }
-        }
-    }
-    return executableAction;
-}
-
 export type TranslationResult = {
     requestAction: RequestAction;
     elapsedMs: number;
-    tokenUsage?: ai.CompletionUsageStats;
 
     type: "translate" | "match";
-    replacedAction?: ExecutableAction[] | undefined;
     config: any;
-    metrics?: ProfileMeasure[] | undefined;
     allMatches?: any;
 };
 
@@ -829,6 +734,7 @@ export async function translateRequest(
     attachments?: CachedImageWithDetails[],
     streamingActionIndex?: number,
     activeSchemas?: string[],
+    usageCallback: (usage: ai.CompletionUsageStats) => void = () => {},
 ): Promise<TranslationResult> {
     const systemContext = context.sessionContext.agentContext;
     const config = systemContext.session.getConfig();
@@ -847,40 +753,15 @@ export async function translateRequest(
         activeSchemas ?? systemContext.agents.getActiveSchemas();
     debugTranslate(`Active schemas: ${activeSchemaNames.join(",")}`);
 
-    const tokenUsage: ai.CompletionUsageStats = {
-        completion_tokens: 0,
-        prompt_tokens: 0,
-        total_tokens: 0,
-    };
-
-    const usageCallback = (usage: ai.CompletionUsageStats) => {
-        tokenUsage.completion_tokens += usage.completion_tokens;
-        tokenUsage.prompt_tokens += usage.prompt_tokens;
-        tokenUsage.total_tokens += usage.total_tokens;
-    };
-
-    let executableAction: ExecutableAction | ExecutableAction[];
-    if (history?.activityContext !== undefined) {
-        executableAction = await translateWithActivityContext(
-            request,
-            context,
-            history,
-            attachments,
-            streamingActionIndex,
-            activeSchemaNames,
-            usageCallback,
-        );
-    } else {
-        executableAction = await translateRequestWithActiveSchemas(
-            request,
-            context,
-            history,
-            attachments,
-            streamingActionIndex,
-            new Set(activeSchemaNames),
-            usageCallback,
-        );
-    }
+    const executableAction = await translateRequestWithActiveSchemas(
+        request,
+        context,
+        history,
+        attachments,
+        streamingActionIndex,
+        new Set(activeSchemaNames),
+        usageCallback,
+    );
 
     const requestAction = RequestAction.create(
         request,
@@ -894,12 +775,7 @@ export async function translateRequest(
         type: "translate",
         requestAction,
         elapsedMs,
-        tokenUsage,
         config: systemContext.session.getConfig().translation,
-        metrics: systemContext.metricsManager?.getMeasures(
-            systemContext.requestId!,
-            ProfileNames.translate,
-        ),
     };
 }
 
