@@ -3042,6 +3042,9 @@ importers:
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
+      knowledge-processor:
+        specifier: workspace:*
+        version: link:../../knowledgeProcessor
       knowpro:
         specifier: workspace:*
         version: link:../../knowPro

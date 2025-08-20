@@ -3,4 +3,4 @@
 
 export * from "./azSearchCommon.js";
 export * from "./azSearchIndex.js";
-export * from "./azKnowledgeIndex.js";
+export * from "./azSemanticRefIndex.js";

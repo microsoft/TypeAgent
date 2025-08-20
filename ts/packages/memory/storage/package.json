@@ -35,6 +35,7 @@
     "aiclient": "workspace:*",
     "better-sqlite3": "11.9.1",
     "debug": "^4.4.0",
+    "knowledge-processor": "workspace:*",
     "knowpro": "workspace:*",
     "typeagent": "workspace:*"
   },
