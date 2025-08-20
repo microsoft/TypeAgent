@@ -90,6 +90,10 @@ export interface ConstructionStore {
 
     // Completion
     getPrefix(namespaceKeys?: string[]): string[];
+    getTransformsByPrefix(
+        namespaceKeys: string[],
+        prefix: string,
+    ): Array<{ namespace: string; paramName: string; key: string; value: any }>;
 }
 
 export class ConstructionStoreImpl implements ConstructionStore {
@@ -400,5 +404,54 @@ export class ConstructionStoreImpl implements ConstructionStore {
             throw new Error("Construction cache not initialized");
         }
         return this.cache.getPrefix(namespaceKeys);
+    }
+
+    public getTransformsByPrefix(
+        namespaceKeys: string[],
+        prefix: string,
+    ): Array<{
+        namespace: string;
+        paramName: string;
+        key: string;
+        value: any;
+    }> {
+        if (this.cache === undefined) {
+            throw new Error("Construction cache not initialized");
+        }
+
+        const results: Array<{
+            namespace: string;
+            paramName: string;
+            key: string;
+            value: any;
+        }> = [];
+        const transformNamespaces = this.cache.getTransformNamespaces();
+
+        for (const [namespace, transforms] of transformNamespaces.entries()) {
+            // Only check namespaces that match our namespace keys
+            if (!namespaceKeys.includes(namespace)) {
+                continue;
+            }
+
+            // For each parameter name in this namespace's transforms
+            const transformMap = (transforms as any).transforms; // Access private field
+            if (!transformMap) continue;
+
+            for (const [paramName, paramTransforms] of transformMap.entries()) {
+                const prefixResults = transforms.getByPrefix(paramName, prefix);
+                if (prefixResults) {
+                    for (const result of prefixResults) {
+                        results.push({
+                            namespace,
+                            paramName,
+                            key: result.key,
+                            value: result.value,
+                        });
+                    }
+                }
+            }
+        }
+
+        return results;
     }
 }

@@ -46,6 +46,10 @@ export class Transforms {
         Map<string, TransformRecord>
     >();
 
+    // paramName -> (prefix -> Set of full keys)
+    // This allows us to find compound keys by their prefix
+    private readonly prefixIndex = new Map<string, Map<string, Set<string>>>();
+
     public add(
         paramName: string,
         text: string,
@@ -57,6 +61,10 @@ export class Transforms {
             map = new Map();
             this.transforms.set(paramName, map);
         }
+
+        // Add to prefix index for compound keys
+        this.addToPrefixIndex(paramName, text);
+
         // Case insensitive/non-diacritic match
         // Use the count ot heuristic to prefer values original to user request
         // and not from a synonym or alternative suggested by GPT
@@ -72,10 +80,44 @@ export class Transforms {
             map = new Map();
             this.transforms.set(paramName, map);
         }
+
+        // Add to prefix index for compound keys
+        this.addToPrefixIndex(paramName, text);
+
         // Case insensitive/non-diacritic match
         this.addTransformRecord(map, normalizeParamString(text), {
             entityTypes,
         });
+    }
+
+    private addToPrefixIndex(paramName: string, text: string) {
+        const normalizedText = normalizeParamString(text);
+
+        // Check if this is a compound key (contains |)
+        if (normalizedText.includes("|")) {
+            let prefixMap = this.prefixIndex.get(paramName);
+            if (prefixMap === undefined) {
+                prefixMap = new Map();
+                this.prefixIndex.set(paramName, prefixMap);
+            }
+
+            // Split the compound key and index each prefix
+            const parts = normalizedText.split("|");
+            let currentPrefix = "";
+
+            for (let i = 0; i < parts.length; i++) {
+                currentPrefix =
+                    i === 0 ? parts[0] : currentPrefix + "|" + parts[i];
+
+                let keysForPrefix = prefixMap.get(currentPrefix);
+                if (keysForPrefix === undefined) {
+                    keysForPrefix = new Set();
+                    prefixMap.set(currentPrefix, keysForPrefix);
+                }
+
+                keysForPrefix.add(normalizedText);
+            }
+        }
     }
 
     private addTransformRecord(
@@ -194,6 +236,25 @@ export class Transforms {
                 this.transforms.set(paramName, new Map(textTransform));
             }
         });
+
+        // Merge prefix indices
+        for (const [paramName, prefixMap] of transforms.prefixIndex.entries()) {
+            let targetPrefixMap = this.prefixIndex.get(paramName);
+            if (targetPrefixMap === undefined) {
+                targetPrefixMap = new Map();
+                this.prefixIndex.set(paramName, targetPrefixMap);
+            }
+            for (const [prefix, keys] of prefixMap.entries()) {
+                let targetKeys = targetPrefixMap.get(prefix);
+                if (targetKeys === undefined) {
+                    targetKeys = new Set();
+                    targetPrefixMap.set(prefix, targetKeys);
+                }
+                for (const key of keys) {
+                    targetKeys.add(key);
+                }
+            }
+        }
     }
 
     public get(
@@ -221,6 +282,65 @@ export class Transforms {
             )?.name;
         }
         return record.value;
+    }
+
+    public getByPrefix(
+        paramName: string,
+        prefix: string,
+        history?: HistoryContext,
+    ): Array<{ key: string; value: ParamValueType | string[] }> | undefined {
+        const results: Array<{
+            key: string;
+            value: ParamValueType | string[];
+        }> = [];
+        const normalizedPrefix = normalizeParamString(prefix);
+
+        // First, check prefix index for compound keys
+        const prefixMap = this.prefixIndex.get(paramName);
+        if (prefixMap) {
+            const fullKeys = prefixMap.get(normalizedPrefix);
+            if (fullKeys) {
+                const transformMap = this.transforms.get(paramName);
+                if (transformMap) {
+                    for (const fullKey of fullKeys) {
+                        const record = transformMap.get(fullKey);
+                        if (record) {
+                            const value = isTransformEntityRecord(record)
+                                ? this.getEntityTypes(record, history)
+                                : record.value;
+                            if (value !== undefined) {
+                                results.push({ key: fullKey, value });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Also check for exact match (in case prefix is a complete key)
+        const exactMatch = this.get(paramName, prefix, history);
+        if (
+            exactMatch !== undefined &&
+            !results.some((r) => r.key === normalizedPrefix)
+        ) {
+            results.push({ key: normalizedPrefix, value: exactMatch });
+        }
+
+        return results.length > 0 ? results : undefined;
+    }
+
+    private getEntityTypes(
+        record: TransformEntityRecord,
+        history?: HistoryContext,
+    ): string[] | undefined {
+        // TODO: Better history matching heuristic. Currently it will just the first one in the list.
+        return history?.entities.find((entity) =>
+            record.entityTypes.every((entityType) =>
+                entity.type.includes(entityType),
+            ),
+        )?.name
+            ? record.entityTypes
+            : undefined;
     }
 
     public getConflicts(
@@ -297,6 +417,11 @@ export class Transforms {
                 transform.name,
                 new Map(transformRecords),
             );
+
+            // Rebuild prefix index for this parameter
+            for (const [text] of transformRecords) {
+                transforms.addToPrefixIndex(transform.name, text);
+            }
         }
         return transforms;
     }

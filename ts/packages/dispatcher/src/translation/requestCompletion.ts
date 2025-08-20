@@ -108,6 +108,17 @@ export async function requestCompletion(
 
     const propertyCompletions = new Map<string, CompletionGroup>();
     const requestText: string[] = [];
+
+    // Check for prefix-based transform completions
+    const prefixCompletions = await checkPrefixTransformCompletions(
+        requestPrefix,
+        context,
+        namespaceKeys,
+    );
+    if (prefixCompletions.length > 0) {
+        requestText.push(...prefixCompletions);
+    }
+
     for (const result of results) {
         const { construction, partialPartCount } = result;
         if (partialPartCount === undefined) {
@@ -202,6 +213,46 @@ async function collectActionCompletions(
                 needQuotes: false, // Request completions are partial, no quotes needed
             });
         }
+    }
+}
+
+async function checkPrefixTransformCompletions(
+    requestPrefix: string,
+    context: CommandHandlerContext,
+    namespaceKeys: string[],
+): Promise<string[]> {
+    debugCompletion(
+        `Checking prefix transform completions for: '${requestPrefix}'`,
+    );
+
+    if (!requestPrefix || requestPrefix.trim().length === 0) {
+        return [];
+    }
+
+    try {
+        const constructionStore = context.agentCache.constructionStore;
+        const transformResults = constructionStore.getTransformsByPrefix(
+            namespaceKeys,
+            requestPrefix.trim(),
+        );
+
+        const completions = new Set<string>();
+        for (const result of transformResults) {
+            // Convert compound keys like "open|webpage" to user-friendly completions like "open webpage"
+            const userFriendlyKey = result.key.replace(/\|/g, " ");
+            if (userFriendlyKey !== requestPrefix.trim()) {
+                completions.add(userFriendlyKey);
+            }
+        }
+
+        const completionArray = Array.from(completions);
+        debugCompletion(
+            `Found ${completionArray.length} prefix transform completions: ${completionArray.join(", ")}`,
+        );
+        return completionArray;
+    } catch (error) {
+        debugCompletion(`Error getting prefix transform completions: ${error}`);
+        return [];
     }
 }
 
