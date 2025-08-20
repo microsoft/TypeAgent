@@ -245,10 +245,11 @@ export class PartialCompletion {
                 this.space = result.space;
 
                 const completions = result.completions.flatMap((group) =>
-                    group.completions.map((choice) => {
+                    group.completions.map((choice, index) => {
                         return {
                             matchText: choice,
                             selectedText: choice,
+                            sortIndex: index,
                             needQuotes: group.needQuotes,
                         };
                     }),

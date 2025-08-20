@@ -6,7 +6,7 @@ import { TST } from "./prefixTree";
 export type SearchMenuItem = {
     matchText: string;
     emojiChar?: string;
-
+    sortIndex?: number;
     selectedText: string;
     needQuotes?: boolean; // default is true, and will add quote to the selectedText if it has spaces.
 };
