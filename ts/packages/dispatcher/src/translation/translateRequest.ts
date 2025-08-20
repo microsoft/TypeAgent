@@ -5,7 +5,7 @@ import {
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
-import { ActionContext } from "@typeagent/agent-sdk";
+import { ActionContext, ActivityContext } from "@typeagent/agent-sdk";
 import {
     createExecutableAction,
     ExecutableAction,
@@ -752,17 +752,10 @@ async function translateRequestWithActiveSchemas(
           );
 }
 
-async function translateWithActivityContext(
-    request: string,
-    context: ActionContext<CommandHandlerContext>,
-    history: HistoryContext,
-    attachments: CachedImageWithDetails[] | undefined,
-    streamingActionIndex: number | undefined,
+function getActivityActiveSchemas(
     activeSchemaNames: string[],
-    usageCallback: (usage: ai.CompletionUsageStats) => void,
-): Promise<ExecutableAction | ExecutableAction[]> {
-    // Translate the request with only the activity schemas
-    const activityContext = history.activityContext!;
+    activityContext: ActivityContext,
+) {
     const activitySchemas = activeSchemaNames.filter(
         (schemaName) =>
             getAppAgentName(schemaName) === activityContext.appAgentName,
@@ -775,6 +768,25 @@ async function translateWithActivityContext(
     }
     // Dispatcher schema (for unknown) is always active
     activitySchemas.push(DispatcherName, DispatcherActivityName);
+
+    return activitySchemas;
+}
+
+async function translateWithActivityContext(
+    request: string,
+    context: ActionContext<CommandHandlerContext>,
+    history: HistoryContext,
+    attachments: CachedImageWithDetails[] | undefined,
+    streamingActionIndex: number | undefined,
+    activeSchemaNames: string[],
+    usageCallback: (usage: ai.CompletionUsageStats) => void,
+): Promise<ExecutableAction | ExecutableAction[]> {
+    // Translate the request with only the activity schemas
+    const activityContext = history.activityContext!;
+    const activitySchemas = getActivityActiveSchemas(
+        activeSchemaNames,
+        activityContext,
+    );
 
     debugTranslate(`Activity schemas: ${activitySchemas.join(",")}`);
     const activityActions = await translateRequestWithActiveSchemas(

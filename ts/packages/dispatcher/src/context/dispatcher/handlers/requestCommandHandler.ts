@@ -37,6 +37,7 @@ import {
     ParsedCommandParams,
     SessionContext,
     CompletionGroup,
+    ActivityContext,
 } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { DispatcherName, isUnknownAction } from "../dispatcherUtils.js";
@@ -158,7 +159,21 @@ async function canTranslateWithoutContext(
     }
 }
 
+function getActivityCacheSpec(
+    context: CommandHandlerContext,
+    activityContext?: ActivityContext,
+) {
+    if (activityContext === undefined) {
+        return true; // shared cache.
+    }
+
+    const { appAgentName, activityName } = activityContext;
+    const actionConfig = context.agents.getActionConfig(appAgentName);
+    return actionConfig.cachedActivities?.[activityName] ?? false;
+}
+
 function getCannotUseCacheReason(
+    context: CommandHandlerContext,
     attachments?: string[],
     history?: HistoryContext,
 ) {
@@ -168,8 +183,13 @@ function getCannotUseCacheReason(
     if (history !== undefined) {
         if (history.additionalInstructions) {
             return "has additional instructions";
-        } else if (history.activityContext) {
-            return "has activity context";
+        }
+        const cacheSpec = getActivityCacheSpec(
+            context,
+            history.activityContext,
+        );
+        if (cacheSpec === false) {
+            return "has activity with cache disabled";
         }
     }
     return undefined;
@@ -184,10 +204,13 @@ function getExplainerOptions(
         return undefined;
     }
 
-    if (
-        getCannotUseCacheReason(undefined, requestAction.history) !== undefined
-    ) {
-        // Cannot use cache for this request
+    const cannotUseCacheReason = getCannotUseCacheReason(
+        context,
+        undefined,
+        requestAction.history,
+    );
+    if (cannotUseCacheReason !== undefined) {
+        // Already checked by the caller, double check here just to be sure.
         return undefined;
     }
     if (
@@ -364,6 +387,7 @@ export class RequestCommandHandler implements CommandHandler {
             const history = getHistoryContextForTranslation(systemContext);
 
             const cannotUseCacheReason = getCannotUseCacheReason(
+                systemContext,
                 attachments,
                 history,
             );
