@@ -20,6 +20,13 @@ export type { ShellUserSettings };
 
 import { debugShell } from "./debug.js";
 
+export type BrowserTabState = {
+    id: string;
+    url: string;
+    title: string;
+    isActive: boolean;
+};
+
 export type ShellWindowState = {
     x: number;
     y: number;
@@ -29,6 +36,8 @@ export type ShellWindowState = {
     zoomLevel: number;
     devTools: boolean;
     canvas?: string; // should the canvas be reopen upon start?
+    browserTabsJson?: string; // multi-tab browser state as JSON string
+    activeBrowserTabId?: string; // which tab is active
 };
 
 export type ShellSettings = {
@@ -46,6 +55,8 @@ export const defaultSettings: ShellSettings = {
         zoomLevel: 1,
         devTools: false,
         canvas: undefined,
+        browserTabsJson: undefined,
+        activeBrowserTabId: undefined,
     },
 
     user: defaultUserSettings,
