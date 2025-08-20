@@ -346,21 +346,6 @@ async function getPlayerActionCompletion(
             break;
     }
 
-    if (track) {
-        for (const track of userData.data.tracks.values()) {
-            result.push(track.name);
-        }
-    }
-    if (artist) {
-        for (const artist of userData.data.artists.values()) {
-            result.push(artist.name);
-        }
-    }
-    if (album) {
-        for (const album of userData.data.albums.values()) {
-            result.push(album.name);
-        }
-    }
     result.push(...getUserDataCompletions(userData.data, track, artist, album));
     return result;
 }
