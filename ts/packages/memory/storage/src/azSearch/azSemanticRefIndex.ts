@@ -70,10 +70,12 @@ export function entityToDoc(sr: kp.SemanticRef): EntityDoc {
         kType: "entity",
         semanticRefOrdinal: sr.semanticRefOrdinal.toString(),
         start: sr.range.start,
-        end: sr.range.end,
         name: entity.name,
         type: entity.type,
     };
+    if (sr.range.end) {
+        entityDoc.end = sr.range.end;
+    }
     if (entity.facets && entity.facets.length > 0) {
         entityDoc.facets = entity.facets.map((f) => {
             return { name: f.name, value: facetValueToString(f) };

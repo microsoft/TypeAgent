@@ -38,9 +38,12 @@ export async function createKnowproAzureCommands(
         }
 
         const memory = await ensureMemory();
-        const semanticRefs = conversation.semanticRefs!.getSlice(0, 10);
+        const semanticRefs = conversation.semanticRefs!;
         for (const sr of semanticRefs) {
-            await memory.addSemanticRef(sr);
+            if (sr.knowledgeType === "entity") {
+                context.printer.writeSemanticRef(sr);
+                await memory.addSemanticRef(sr);
+            }
         }
     }
 
