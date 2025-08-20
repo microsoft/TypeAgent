@@ -48,8 +48,8 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
         self, db: sqlite3.Connection, serializer: interfaces.JsonSerializer[TMessage]
     ):
         self.db = db
-        self._deserialize = serializer.deserialize
-        self._serialize = serializer.serialize
+        self._deserialize_message = serializer.deserialize
+        self._serialize_message = serializer.serialize
 
     @property
     def is_persistent(self) -> bool:
@@ -68,7 +68,7 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
         cursor.execute("SELECT msgdata FROM Messages")
         for row in cursor:
             json_data = json.loads(row[0])
-            yield self._deserialize(json_data)
+            yield self._deserialize_message(json_data)
             # Potentially add await asyncio.sleep(0) here to yield control
 
     async def get_item(self, arg: int) -> TMessage:
@@ -79,7 +79,7 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
         row = cursor.fetchone()
         if row:
             json_data = json.loads(row[0])
-            return self._deserialize(json_data)
+            return self._deserialize_message(json_data)
         raise IndexError("Message not found")
 
     async def get_slice(self, start: int, stop: int) -> list[TMessage]:
@@ -91,7 +91,7 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
             (start, stop),
         )
         rows = cursor.fetchall()
-        return [self._deserialize(json.loads(row[0])) for row in rows]
+        return [self._deserialize_message(json.loads(row[0])) for row in rows]
 
     async def get_multiple(self, arg: list[int]) -> list[TMessage]:
         results = []
@@ -101,7 +101,7 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
 
     async def append(self, item: TMessage) -> None:
         cursor = self.db.cursor()
-        json_obj = self._serialize(item)
+        json_obj = self._serialize_message(item)
         serialized_message = json.dumps(json_obj)
         cursor.execute(
             "INSERT INTO Messages (id, msgdata) VALUES (?, ?)",
@@ -113,7 +113,7 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
         cursor = self.db.cursor()
         current_size = await self.size()
         for ord, item in enumerate(items, current_size):
-            json_obj = self._serialize(item)
+            json_obj = self._serialize_message(item)
             serialized_message = json.dumps(json_obj)
             cursor.execute(
                 "INSERT INTO Messages (id, msgdata) VALUES (?, ?)",
@@ -257,10 +257,8 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
 
     async def get_message_collection(
         self,
-        serializer: interfaces.JsonSerializer[TMessage] | type[TMessage] | None = None,
+        serializer: interfaces.JsonSerializer[TMessage] | type[TMessage],
     ) -> SqliteMessageCollection[TMessage]:
-        if serializer is None:
-            raise ValueError("serializer must not be None")
         if not isinstance(serializer, interfaces.JsonSerializer):
             serializer = DefaultSerializer[TMessage](serializer)
         return SqliteMessageCollection[TMessage](self.get_db(), serializer)

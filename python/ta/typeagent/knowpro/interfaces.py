@@ -771,7 +771,7 @@ class IStorageProvider[TMessage: IMessage](Protocol):
 
     async def get_message_collection(
         self,
-        serializer: JsonSerializer[TMessage] | type[TMessage] | None = None,
+        serializer: JsonSerializer[TMessage] | type[TMessage],
     ) -> IMessageCollection[TMessage]: ...
 
     async def get_semantic_ref_collection(self) -> ISemanticRefCollection: ...
