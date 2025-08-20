@@ -3,6 +3,8 @@
 
 import pytest
 
+from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
+from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
 from typeagent.knowpro.collections import (
     MatchAccumulator,
     SemanticRefAccumulator,
@@ -11,14 +13,17 @@ from typeagent.knowpro.collections import (
     TextRangeCollection,
     TextRangesInScope,
 )
+from typeagent.knowpro.convsettings import ConversationSettings
 from typeagent.knowpro.interfaces import (
+    DateRange,
+    Datetime,
     IConversation,
     IMessage,
     IStorageProvider,
     ITermToSemanticRefIndex,
+    PropertySearchTerm,
     Term,
     SearchTerm,
-    PropertySearchTerm,
     SemanticRef,
     ScoredSemanticRefOrdinal,
     TextRange,
@@ -26,10 +31,13 @@ from typeagent.knowpro.interfaces import (
     Topic,
 )
 from typeagent.knowpro.kplib import KnowledgeResponse
+from typeagent.knowpro.messageindex import MessageTextIndexSettings
+from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
 from typeagent.storage.memorystore import MemoryStorageProvider
 from typeagent.knowpro.convsettings import ConversationSettings
 from typeagent.knowpro.query import (
     TextRangeSelector,
+    get_text_range_for_date_range,
     is_conversation_searchable,
     lookup_term_filtered,
     lookup_term,
@@ -133,11 +141,6 @@ class MockConversation(IConversation[MockMessage, MockTermIndex]):
 
         # Store settings with storage provider for access via conversation.settings.storage_provider
         # Create storage provider with test settings
-        from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
-        from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
-        from typeagent.knowpro.messageindex import MessageTextIndexSettings
-        from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
-
         test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
         embedding_settings = TextEmbeddingIndexSettings(test_model)
         message_text_settings = MessageTextIndexSettings(embedding_settings)
@@ -626,14 +629,6 @@ class TestSelectTopNExpr:
 
 @pytest.mark.asyncio
 async def test_get_text_range_for_date_range():
-    from typeagent.knowpro.query import get_text_range_for_date_range
-    from typeagent.knowpro.interfaces import (
-        TextLocation,
-        TextRange,
-        DateRange,
-        Datetime,
-    )
-
     # Should return None for empty input and any date range
     empty_conv = MockConversation()
     empty_conv.messages = MockMessageCollection()

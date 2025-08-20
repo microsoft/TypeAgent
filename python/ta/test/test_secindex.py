@@ -8,7 +8,8 @@ from fixtures import (
     needs_auth,
     embedding_model,
 )  # Import the storage fixture
-from typeagent.aitools.embeddings import TEST_MODEL_NAME
+from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
+from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
 from typeagent.knowpro.convsettings import ConversationSettings
 from typeagent.knowpro.messageindex import MessageTextIndexSettings
 from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
@@ -18,6 +19,7 @@ from typeagent.knowpro.interfaces import (
     IMessage,
 )
 from typeagent.knowpro import kplib
+from typeagent.storage.memorystore import MemoryStorageProvider
 from typeagent.knowpro.secindex import (
     ConversationSecondaryIndexes,
     build_secondary_indexes,
@@ -61,11 +63,6 @@ class SimpleConversation(IConversation):
             self._needs_async_init = True
         else:
             # Create test model for settings
-            from typeagent.aitools.embeddings import (
-                AsyncEmbeddingModel,
-                TEST_MODEL_NAME,
-            )
-
             test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
             self.settings = ConversationSettings(test_model, storage_provider)
             self._needs_async_init = False
@@ -74,15 +71,6 @@ class SimpleConversation(IConversation):
         """Ensure async initialization is complete."""
         if self._needs_async_init:
             # Create default storage provider using factory method
-            from typeagent.aitools.embeddings import (
-                AsyncEmbeddingModel,
-                TEST_MODEL_NAME,
-            )
-            from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
-            from typeagent.knowpro.messageindex import MessageTextIndexSettings
-            from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
-            from typeagent.storage.memorystore import MemoryStorageProvider
-
             test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
             embedding_settings = TextEmbeddingIndexSettings(test_model)
             message_text_settings = MessageTextIndexSettings(embedding_settings)
@@ -113,9 +101,6 @@ def test_conversation_secondary_indexes_initialization(memory_storage, needs_aut
     """Test initialization of ConversationSecondaryIndexes."""
     storage_provider = memory_storage
     # Create proper settings for testing
-    from typeagent.aitools.embeddings import AsyncEmbeddingModel
-    from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
-
     test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
     embedding_settings = TextEmbeddingIndexSettings(test_model)
     settings = RelatedTermIndexSettings(embedding_settings)

@@ -6,6 +6,8 @@ from __future__ import annotations
 from ..aitools.embeddings import AsyncEmbeddingModel
 from ..aitools.vectorbase import TextEmbeddingIndexSettings
 from .interfaces import IStorageProvider
+from .messageindex import MessageTextIndexSettings
+from .reltermsindex import RelatedTermIndexSettings
 
 
 class ConversationSettings:
@@ -16,9 +18,6 @@ class ConversationSettings:
         model: AsyncEmbeddingModel,
         storage_provider: IStorageProvider | None = None,
     ):
-        # Import here to avoid circular imports
-        from .messageindex import MessageTextIndexSettings
-        from .reltermsindex import RelatedTermIndexSettings
         from .semrefindex import SemanticRefIndexSettings
 
         # All settings share the same model, so they share the embedding cache.

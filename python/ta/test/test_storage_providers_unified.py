@@ -10,16 +10,24 @@ to ensure behavioral parity across implementations.
 
 import pytest
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from fixtures import needs_auth, storage_provider_type, embedding_model, temp_db_path
+from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
 from typeagent.knowpro.kplib import KnowledgeResponse
 from typeagent.knowpro.interfaces import (
+    DateRange,
+    Datetime,
     IMessage,
     SemanticRef,
     TextLocation,
     TextRange,
     Topic,
 )
+from typeagent.knowpro.messageindex import MessageTextIndexSettings
+from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
+from typeagent.storage.memorystore import MemoryStorageProvider
+from typeagent.storage.sqlitestore import SqliteStorageProvider
 
 
 # Test message for unified testing
@@ -196,9 +204,6 @@ async def test_timestamp_index_behavior_parity(storage_provider_type, needs_auth
     time_index = await storage_provider.get_timestamp_index()
 
     # Test empty lookup_range interface
-    from typeagent.knowpro.interfaces import DateRange, Datetime
-    from datetime import datetime
-
     start_time = Datetime.fromisoformat("2024-01-01T00:00:00")
     end_time = Datetime.fromisoformat("2024-01-02T00:00:00")
     date_range = DateRange(start=start_time, end=end_time)
@@ -254,12 +259,6 @@ async def test_cross_provider_message_collection_equivalence(
     embedding_model, temp_db_path, needs_auth
 ):
     """Test that both providers handle message collections equivalently."""
-    from typeagent.storage.memorystore import MemoryStorageProvider
-    from typeagent.storage.sqlitestore import SqliteStorageProvider
-    from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
-    from typeagent.knowpro.messageindex import MessageTextIndexSettings
-    from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
-
     # Create both providers with identical settings
     embedding_settings = TextEmbeddingIndexSettings(embedding_model)
     message_text_settings = MessageTextIndexSettings(embedding_settings)
