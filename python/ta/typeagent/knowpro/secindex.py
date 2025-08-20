@@ -23,7 +23,7 @@ from .reltermsindex import (
 from .timestampindex import TimestampToTextRangeIndex, build_timestamp_index
 
 if TYPE_CHECKING:
-    from .importing import ConversationSettings
+    from .convutils import ConversationSettings
 
 
 class ConversationSecondaryIndexes(IConversationSecondaryIndexes):

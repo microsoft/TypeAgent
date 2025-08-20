@@ -39,7 +39,7 @@ from typeagent.knowpro.collections import (
     MemoryMessageCollection,
     MemorySemanticRefCollection,
 )
-from typeagent.knowpro.importing import ConversationSettings
+from typeagent.knowpro.convutils import ConversationSettings
 
 from fixtures import needs_auth  # type: ignore  # Yes we use it!
 

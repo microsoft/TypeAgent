@@ -40,7 +40,7 @@ from typeagent.knowpro.interfaces import (
 )
 from typeagent.knowpro import answers, answer_response_schema
 from typeagent.knowpro import convknowledge
-from typeagent.knowpro import importing
+from typeagent.knowpro.convutils import ConversationSettings
 from typeagent.knowpro import kplib
 from typeagent.knowpro import query
 from typeagent.knowpro import search, search_query_schema, searchlang
@@ -147,7 +147,7 @@ async def main():
     if args.logfire:
         setup_logfire()
     model = embeddings.AsyncEmbeddingModel()
-    settings = importing.ConversationSettings(model)
+    settings = ConversationSettings(model)
     query_context = await load_podcast_index(args.podcast, settings, args.sqlite_db)
     ar_list, ar_index = load_index_file(args.qafile, "question", QuestionAnswerData)
     sr_list, sr_index = load_index_file(args.srfile, "searchText", SearchResultData)
@@ -567,7 +567,7 @@ def fill_in_debug_defaults(
 
 async def load_podcast_index(
     podcast_file_prefix: str,
-    settings: importing.ConversationSettings,
+    settings: ConversationSettings,
     dbname: str | None,
 ) -> query.QueryEvalContext:
     with utils.timelog(f"load podcast from {podcast_file_prefix!r}"):

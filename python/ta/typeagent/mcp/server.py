@@ -11,7 +11,8 @@ import typechat
 
 from typeagent.aitools import embeddings, utils
 from typeagent.aitools.embeddings import AsyncEmbeddingModel
-from typeagent.knowpro import answers, importing, convknowledge, query, searchlang
+from typeagent.knowpro import answers, convknowledge, query, searchlang
+from typeagent.knowpro.convutils import ConversationSettings
 from typeagent.knowpro.answer_response_schema import AnswerResponse
 from typeagent.knowpro.search_query_schema import SearchQuery
 from typeagent.podcasts import podcast
@@ -37,7 +38,7 @@ async def make_context() -> ProcessingContext:
     utils.load_dotenv()
 
     model = AsyncEmbeddingModel()
-    settings = importing.ConversationSettings(model)
+    settings = ConversationSettings(model)
     lang_search_options = searchlang.LanguageSearchOptions(
         compile_options=searchlang.LanguageQueryCompileOptions(
             exact_scope=False, verb_scope=True, term_filter=None, apply_scope=True
@@ -70,7 +71,7 @@ async def make_context() -> ProcessingContext:
 
 
 async def load_podcast_index(
-    podcast_file_prefix: str, settings: importing.ConversationSettings
+    podcast_file_prefix: str, settings: ConversationSettings
 ) -> query.QueryEvalContext:
     conversation = await podcast.Podcast.read_from_file(podcast_file_prefix, settings)
     assert (

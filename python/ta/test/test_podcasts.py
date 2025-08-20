@@ -8,7 +8,7 @@ import pytest
 from fixtures import needs_auth, temp_dir, embedding_model  # type: ignore  # Yes they are used!
 
 from typeagent.podcasts.podcast import Podcast
-from typeagent.knowpro import importing
+from typeagent.knowpro.convutils import ConversationSettings
 from typeagent.knowpro.interfaces import Datetime
 from typeagent.podcasts import podcast_import
 from typeagent.knowpro.serialization import DATA_FILE_SUFFIX, EMBEDDING_FILE_SUFFIX
@@ -17,7 +17,7 @@ from typeagent.knowpro.serialization import DATA_FILE_SUFFIX, EMBEDDING_FILE_SUF
 @pytest.mark.asyncio
 async def test_import_podcast(needs_auth, temp_dir, embedding_model):
     # Import the podcast
-    settings = importing.ConversationSettings(embedding_model)
+    settings = ConversationSettings(embedding_model)
     pod = await podcast_import.import_podcast(
         "testdata/FakePodcast.txt",
         settings,
@@ -45,7 +45,7 @@ async def test_import_podcast(needs_auth, temp_dir, embedding_model):
     assert os.path.exists(filename_prefix + EMBEDDING_FILE_SUFFIX)
 
     # Load and verify the podcast with a fresh settings object
-    settings2 = importing.ConversationSettings(embedding_model)
+    settings2 = ConversationSettings(embedding_model)
     pod2 = await Podcast.read_from_file(filename_prefix, settings2)
     assert pod2 is not None
 

@@ -27,7 +27,7 @@ from typeagent.knowpro.interfaces import (
 )
 from typeagent.knowpro.kplib import KnowledgeResponse
 from typeagent.storage.memorystore import MemoryStorageProvider
-from typeagent.knowpro.importing import ConversationSettings
+from typeagent.knowpro.convutils import ConversationSettings
 from typeagent.knowpro.query import (
     TextRangeSelector,
     is_conversation_searchable,

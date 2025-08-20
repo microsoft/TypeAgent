@@ -1,11 +1,16 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+from __future__ import annotations
+
 from collections.abc import AsyncIterable, Callable
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from typechat import Failure
 
-from . import convknowledge, importing, kplib, secindex
+from . import convknowledge, kplib, secindex
+from .convknowledge import KnowledgeExtractor
 from .interfaces import (
     # Interfaces.
     IConversation,
@@ -27,6 +32,16 @@ from .interfaces import (
 )
 from .knowledge import extract_knowledge_from_text_batch
 from .collections import MemorySemanticRefCollection
+
+if TYPE_CHECKING:
+    from .convutils import ConversationSettings
+
+
+@dataclass
+class SemanticRefIndexSettings:
+    batch_size: int
+    auto_extract_knowledge: bool
+    knowledge_extractor: KnowledgeExtractor | None = None
 
 
 def text_range_from_message_chunk(
@@ -591,7 +606,7 @@ class TermToSemanticRefIndex(ITermToSemanticRefIndex):
 
 async def build_conversation_index[TMessage: IMessage](
     conversation: IConversation[TMessage, TermToSemanticRefIndex],
-    conversation_settings: importing.ConversationSettings,
+    conversation_settings: ConversationSettings,
 ) -> None:
     await build_semantic_ref_index(
         conversation,
@@ -606,7 +621,7 @@ async def build_conversation_index[TMessage: IMessage](
 
 async def build_semantic_ref_index[TM: IMessage](
     conversation: IConversation[TM, TermToSemanticRefIndex],
-    settings: importing.SemanticRefIndexSettings,
+    settings: SemanticRefIndexSettings,
 ) -> None:
     await add_to_semantic_ref_index(conversation, settings, 0)
 
@@ -615,7 +630,7 @@ async def add_to_semantic_ref_index[
     TMessage: IMessage, TTermToSemanticRefIndex: ITermToSemanticRefIndex
 ](
     conversation: IConversation[TMessage, TTermToSemanticRefIndex],
-    settings: importing.SemanticRefIndexSettings,
+    settings: SemanticRefIndexSettings,
     message_ordinal_start_at: MessageOrdinal,
     terms_added: list[str] | None = None,
 ) -> None:

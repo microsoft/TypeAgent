@@ -4,7 +4,7 @@
 import os
 import re
 
-from ..knowpro.importing import ConversationSettings
+from ..knowpro.convutils import ConversationSettings
 from ..knowpro.interfaces import Datetime
 from ..storage.utils import create_storage_provider
 from .podcast import Podcast, PodcastMessage, PodcastMessageMeta
