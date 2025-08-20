@@ -3,6 +3,8 @@
 
 import pytest
 import numpy as np
+from pathlib import Path
+from typing import Any, cast
 
 from typeagent.knowpro.serialization import (
     serialize_object,
@@ -27,7 +29,7 @@ from typeagent.knowpro.kplib import Quantity, ConcreteEntity
 
 
 @pytest.fixture
-def sample_conversation_data():
+def sample_conversation_data() -> dict[str, Any]:
     """Fixture to provide sample conversation data."""
     return {
         "relatedTermsIndexData": {
@@ -114,10 +116,14 @@ def test_from_conversation_file_data(sample_conversation_data):
     assert conversation_data.get("relatedTermsIndexData") is not None
 
 
-def test_write_and_read_conversation_data(tmp_path, sample_conversation_data):
+def test_write_and_read_conversation_data(
+    tmp_path: Path, sample_conversation_data: dict[str, Any]
+):
     """Test writing and reading conversation data to and from files."""
     filename = tmp_path / "conversation"
-    write_conversation_data_to_file(sample_conversation_data, str(filename))
+    write_conversation_data_to_file(
+        cast(ConversationDataWithIndexes, sample_conversation_data), str(filename)
+    )
 
     # Read back the data
     read_data = read_conversation_data_from_file(str(filename), embedding_size=2)

@@ -73,7 +73,7 @@ class SimpleFakeConversation(IConversation):
 
 
 @pytest.fixture
-def property_index():
+def property_index() -> PropertyIndex:
     """Fixture to create a PropertyIndex instance."""
     return PropertyIndex()
 
@@ -328,7 +328,7 @@ class FakeConversation[
 
 
 @pytest.mark.asyncio
-async def test_add_to_property_index(needs_auth, property_index):
+async def test_add_to_property_index(needs_auth: None, property_index: PropertyIndex):
     """Test adding semantic references to the property index."""
     entity = ConcreteEntity(
         name="ExampleEntity",

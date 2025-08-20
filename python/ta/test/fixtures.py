@@ -47,7 +47,7 @@ def temp_db_path() -> Iterator[str]:
 
 
 @pytest_asyncio.fixture
-async def memory_storage(embedding_model) -> MemoryStorageProvider:
+async def memory_storage(embedding_model: AsyncEmbeddingModel) -> MemoryStorageProvider:
     """Create a MemoryStorageProvider for testing."""
     embedding_settings = TextEmbeddingIndexSettings(embedding_model)
     message_text_settings = MessageTextIndexSettings(embedding_settings)
@@ -61,7 +61,7 @@ async def memory_storage(embedding_model) -> MemoryStorageProvider:
 
 @pytest_asyncio.fixture
 async def sqlite_storage(
-    temp_db_path, embedding_model
+    temp_db_path: str, embedding_model: AsyncEmbeddingModel
 ) -> AsyncGenerator[SqliteStorageProvider, None]:
     """Create a SqliteStorageProvider for testing."""
     embedding_settings = TextEmbeddingIndexSettings(embedding_model)
@@ -77,7 +77,9 @@ async def sqlite_storage(
 
 @pytest_asyncio.fixture(params=["memory", "sqlite"])
 async def storage_provider_type(
-    request, embedding_model, temp_db_path
+    request: pytest.FixtureRequest,
+    embedding_model: AsyncEmbeddingModel,
+    temp_db_path: str,
 ) -> AsyncGenerator[tuple[IStorageProvider, str], None]:
     """Parameterized fixture that provides both memory and sqlite storage providers."""
     embedding_settings = TextEmbeddingIndexSettings(embedding_model)

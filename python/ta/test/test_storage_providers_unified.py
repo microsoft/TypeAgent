@@ -53,7 +53,9 @@ def make_test_semantic_ref(ordinal: int = 0) -> SemanticRef:
 
 
 @pytest.mark.asyncio
-async def test_all_index_creation(storage_provider_type, needs_auth):
+async def test_all_index_creation(
+    storage_provider_type: tuple[IStorageProvider, str], needs_auth: None
+):
     """Test that all 6 index types are created and accessible in both providers."""
     storage_provider, provider_type = storage_provider_type
 
@@ -84,7 +86,9 @@ async def test_all_index_creation(storage_provider_type, needs_auth):
 
 
 @pytest.mark.asyncio
-async def test_index_persistence(storage_provider_type, needs_auth):
+async def test_index_persistence(
+    storage_provider_type: tuple[IStorageProvider, str], needs_auth: None
+):
     """Test that same index instance is returned across calls in both providers."""
     storage_provider, provider_type = storage_provider_type
 
@@ -103,7 +107,9 @@ async def test_index_persistence(storage_provider_type, needs_auth):
 
 
 @pytest.mark.asyncio
-async def test_message_collection_basic_operations(storage_provider_type, needs_auth):
+async def test_message_collection_basic_operations(
+    storage_provider_type: tuple[IStorageProvider, str], needs_auth: None
+):
     """Test basic message collection operations work identically in both providers."""
     storage_provider, provider_type = storage_provider_type
 
@@ -199,7 +205,9 @@ async def test_conversation_index_behavior_parity(
 
 
 @pytest.mark.asyncio
-async def test_timestamp_index_behavior_parity(storage_provider_type, needs_auth):
+async def test_timestamp_index_behavior_parity(
+    storage_provider_type: tuple[IStorageProvider, str], needs_auth: None
+):
     """Test that timestamp index behaves identically in both providers."""
     storage_provider, provider_type = storage_provider_type
 
@@ -216,7 +224,9 @@ async def test_timestamp_index_behavior_parity(storage_provider_type, needs_auth
 
 
 @pytest.mark.asyncio
-async def test_message_text_index_interface_parity(storage_provider_type, needs_auth):
+async def test_message_text_index_interface_parity(
+    storage_provider_type: tuple[IStorageProvider, str], needs_auth: None
+):
     """Test that message text index interface works identically in both providers."""
     storage_provider, provider_type = storage_provider_type
 
@@ -229,7 +239,9 @@ async def test_message_text_index_interface_parity(storage_provider_type, needs_
 
 
 @pytest.mark.asyncio
-async def test_related_terms_index_interface_parity(storage_provider_type, needs_auth):
+async def test_related_terms_index_interface_parity(
+    storage_provider_type: tuple[IStorageProvider, str], needs_auth: None
+):
     """Test that related terms index interface works identically in both providers."""
     storage_provider, provider_type = storage_provider_type
 
@@ -245,7 +257,9 @@ async def test_related_terms_index_interface_parity(storage_provider_type, needs
 
 
 @pytest.mark.asyncio
-async def test_conversation_threads_interface_parity(storage_provider_type, needs_auth):
+async def test_conversation_threads_interface_parity(
+    storage_provider_type: tuple[IStorageProvider, str], needs_auth: None
+):
     """Test that conversation threads interface works identically in both providers."""
     storage_provider, provider_type = storage_provider_type
 

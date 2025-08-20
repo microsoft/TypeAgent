@@ -60,8 +60,8 @@ from typeagent.knowpro.query import (
 )
 from typeagent.knowpro.propindex import PropertyIndex
 from typeagent.knowpro.collections import (
-    MemoryMessageCollection as MessageCollection,
-    SemanticRefCollection,
+    MemoryMessageCollection,
+    MemorySemanticRefCollection,
 )
 
 from fixtures import needs_auth
@@ -88,7 +88,7 @@ class MockMessage(IMessage):
         raise RuntimeError
 
 
-class MockMessageCollection(MessageCollection[MockMessage]):
+class MockMessageCollection(MemoryMessageCollection[MockMessage]):
     pass
 
 
@@ -160,7 +160,7 @@ class MockConversation(IConversation[MockMessage, MockTermIndex]):
                     1, TextRange(TextLocation(1, 0), TextLocation(1, 10))
                 ),
             ]
-            self.semantic_refs = SemanticRefCollection(refs)
+            self.semantic_refs = MemorySemanticRefCollection(refs)
         else:
             self.semantic_refs = None  # type: ignore
 
@@ -179,17 +179,17 @@ class MockConversation(IConversation[MockMessage, MockTermIndex]):
 
 
 @pytest.fixture
-def searchable_conversation(needs_auth):
+def searchable_conversation(needs_auth: None) -> MockConversation:
     return MockConversation(has_refs=True, has_index=True)
 
 
 @pytest.fixture
-def non_searchable_conversation(needs_auth):
+def non_searchable_conversation(needs_auth: None) -> MockConversation:
     return MockConversation(has_refs=False, has_index=False)
 
 
 @pytest.fixture
-def eval_context(searchable_conversation) -> QueryEvalContext:
+def eval_context(searchable_conversation: MockConversation) -> QueryEvalContext:
     return QueryEvalContext(conversation=searchable_conversation)
 
 
@@ -217,7 +217,9 @@ class TestConversationSearchability:
 
 class TestTermLookup:
     @pytest.mark.asyncio
-    async def test_lookup_term_filtered(self, searchable_conversation):
+    async def test_lookup_term_filtered(
+        self, searchable_conversation: MockConversation
+    ):
         """Test lookup_term_filtered function."""
         term = Term("test")
 
@@ -238,7 +240,9 @@ class TestTermLookup:
         assert results[0].score == 0.9
 
     @pytest.mark.asyncio
-    async def test_lookup_term_filtered_no_results(self, searchable_conversation):
+    async def test_lookup_term_filtered_no_results(
+        self, searchable_conversation: MockConversation
+    ):
         """Test lookup_term_filtered with no matching results."""
         term = Term("nonexistent")
 
@@ -255,7 +259,7 @@ class TestTermLookup:
         assert results is None
 
     @pytest.mark.asyncio
-    async def test_lookup_term(self, searchable_conversation):
+    async def test_lookup_term(self, searchable_conversation: MockConversation):
         """Test lookup_term function with no scope."""
         term = Term("test")
 
@@ -271,7 +275,9 @@ class TestTermLookup:
         assert results[1].semantic_ref_ordinal == 1
 
     @pytest.mark.asyncio
-    async def test_lookup_term_with_scope(self, searchable_conversation):
+    async def test_lookup_term_with_scope(
+        self, searchable_conversation: MockConversation
+    ):
         """Test lookup_term function with a scope."""
         term = Term("test")
 
@@ -294,7 +300,7 @@ class TestTermLookup:
 
 
 class TestQueryEvalContext:
-    def test_initialization(self, searchable_conversation):
+    def test_initialization(self, searchable_conversation: MockConversation):
         """Test QueryEvalContext initialization."""
         context = QueryEvalContext(conversation=searchable_conversation)
 
@@ -305,7 +311,7 @@ class TestQueryEvalContext:
         assert isinstance(context.matched_property_terms, PropertyTermSet)
         assert isinstance(context.text_ranges_in_scope, TextRangesInScope)
 
-    def test_initialization_error(self, non_searchable_conversation):
+    def test_initialization_error(self, non_searchable_conversation: MockConversation):
         """Test QueryEvalContext initialization with non-searchable conversation."""
         with pytest.raises(ValueError):
             QueryEvalContext(conversation=non_searchable_conversation)
@@ -582,7 +588,7 @@ class TestBooleanExpressions:
         assert result.get_match(1) is not None  # Only ref 1 matches both expressions
 
     @pytest.mark.asyncio
-    async def test_match_terms_and_expr(self, eval_context):
+    async def test_match_terms_and_expr(self, eval_context: QueryEvalContext):
         """Test AND expression."""
         expr = MatchTermsAndExpr(term_expressions=[self.expr1, self.expr2])
 
@@ -593,7 +599,9 @@ class TestBooleanExpressions:
         assert result.get_match(1) is not None
 
     @pytest.mark.asyncio
-    async def test_match_terms_and_expr_no_matches(self, eval_context):
+    async def test_match_terms_and_expr_no_matches(
+        self, eval_context: QueryEvalContext
+    ):
         """Test AND expression with a non-matching term."""
         expr = MatchTermsAndExpr(term_expressions=[self.expr1, self.expr3])
 
@@ -604,7 +612,7 @@ class TestBooleanExpressions:
 
 class TestSelectTopNExpr:
     @pytest.mark.asyncio
-    async def test_eval(self, eval_context):
+    async def test_eval(self, eval_context: QueryEvalContext):
         """Test selecting top N matches."""
 
         # Create a mock source expression
@@ -715,7 +723,6 @@ async def test_lookup_knowledge_type():
         Topic,
     )
     from typeagent.knowpro.kplib import ConcreteEntity
-    from typeagent.knowpro.collections import SemanticRefCollection
 
     # Create valid TextRange and knowledge objects
     rng = TextRange(TextLocation(0, 0), TextLocation(0, 1))
@@ -741,7 +748,7 @@ async def test_lookup_knowledge_type():
             knowledge=topic2,
         ),
     ]
-    collection = SemanticRefCollection(refs)
+    collection = MemorySemanticRefCollection(refs)
     result = await lookup_knowledge_type(collection, "topic")
     assert isinstance(result, list)
     assert all(isinstance(r, ScoredSemanticRefOrdinal) for r in result)

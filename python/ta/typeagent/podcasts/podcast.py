@@ -31,8 +31,8 @@ from ..knowpro.reltermsindex import TermToRelatedTermsMap
 from ..storage.utils import create_storage_provider
 from ..knowpro import serialization
 from ..knowpro.collections import (
-    MemoryMessageCollection as MessageCollection,
-    SemanticRefCollection,
+    MemoryMessageCollection,
+    MemorySemanticRefCollection,
 )
 
 
@@ -159,7 +159,7 @@ class Podcast(IConversation[PodcastMessage, semrefindex.TermToSemanticRefIndex])
     semantic_refs: ISemanticRefCollection
     tags: list[str]
     semantic_ref_index: semrefindex.TermToSemanticRefIndex
-    secondary_indexes: IConversationSecondaryIndexes[PodcastMessage]
+    secondary_indexes: IConversationSecondaryIndexes[PodcastMessage] | None
 
     @classmethod
     async def create(
@@ -272,7 +272,7 @@ class Podcast(IConversation[PodcastMessage, semrefindex.TermToSemanticRefIndex])
         semantic_refs_data = podcast_data.get("semanticRefs")
         if semantic_refs_data is not None:
             if self.semantic_refs is None:
-                self.semantic_refs = SemanticRefCollection()
+                self.semantic_refs = MemorySemanticRefCollection()
             semrefs = [SemanticRef.deserialize(r) for r in semantic_refs_data]
             await self.semantic_refs.extend(semrefs)
 

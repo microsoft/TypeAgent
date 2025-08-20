@@ -520,7 +520,7 @@ class IConversation[
     messages: "IMessageCollection[TMessage]"
     semantic_refs: "ISemanticRefCollection"
     semantic_ref_index: TTermToSemanticRefIndex
-    secondary_indexes: IConversationSecondaryIndexes[TMessage]
+    secondary_indexes: IConversationSecondaryIndexes[TMessage] | None
 
 
 # -------------

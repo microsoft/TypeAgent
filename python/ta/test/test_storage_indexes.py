@@ -12,7 +12,9 @@ from typeagent.storage.memorystore import MemoryStorageProvider
 
 
 @pytest.mark.asyncio
-async def test_all_index_creation(memory_storage: MemoryStorageProvider, needs_auth):
+async def test_all_index_creation(
+    memory_storage: MemoryStorageProvider, needs_auth: None
+):
     """Test that all 6 index types are created and accessible."""
     # storage fixture already initializes indexes
 
@@ -37,7 +39,9 @@ async def test_all_index_creation(memory_storage: MemoryStorageProvider, needs_a
 
 
 @pytest.mark.asyncio
-async def test_index_persistence(memory_storage, needs_auth):
+async def test_index_persistence(
+    memory_storage: MemoryStorageProvider, needs_auth: None
+):
     """Test that same index instance is returned across calls."""
     # storage fixture already initializes indexes
 

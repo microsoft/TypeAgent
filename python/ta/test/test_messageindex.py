@@ -27,7 +27,9 @@ from typeagent.knowpro.interfaces import (
     TextToTextLocationIndexData,
 )
 from typeagent.storage.memorystore import MemoryStorageProvider
-from typeagent.knowpro.collections import MemoryMessageCollection as MessageCollection
+from typeagent.knowpro.collections import (
+    MemoryMessageCollection as MemoryMessageCollection,
+)
 from typeagent.knowpro.textlocindex import TextToTextLocationIndex
 
 from fixtures import needs_auth  # type: ignore  # It's used!
@@ -200,7 +202,7 @@ async def test_build_message_index(needs_auth: None):
             self.semantic_refs = None  # type: ignore
             self.semantic_ref_index = None
             # Convert plain list to MessageCollection for proper async iteration
-            self.messages = MessageCollection(messages)
+            self.messages = MemoryMessageCollection(messages)
             # Store the provided storage provider
             self.secondary_indexes = ConversationSecondaryIndexes(
                 storage_provider, related_terms_settings
