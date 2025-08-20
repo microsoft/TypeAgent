@@ -16,6 +16,33 @@ const debugWebAgentProxy = registerDebug("typeagent:webAgent:proxy");
 // Import progress callback registry
 const importProgressCallbacks = new Map<string, (progress: any) => void>();
 
+// Track the currently active tab ID from main process
+let currentActiveTabId: string | null = null;
+
+// Get tab context for automation routing
+function getTabContext(): string | null {
+    return (window as any)._tabId || null;
+}
+
+// Validate that this tab is the active tab for automation actions
+function isActiveTab(): boolean {
+    const tabId = getTabContext();
+    if (!tabId) {
+        return false;
+    }
+
+    if (currentActiveTabId === null) {
+        return true;
+    }
+
+    return tabId === currentActiveTabId;
+}
+
+// Listen for tab state updates from main process
+ipcRenderer.on("browser-tabs-updated", (_, tabsData) => {
+    currentActiveTabId = tabsData.activeTabId;
+});
+
 ipcRenderer.on("received-from-browser-ipc", async (_, data) => {
     if (data.error) {
         console.error(data.error);
@@ -41,6 +68,16 @@ ipcRenderer.on("received-from-browser-ipc", async (_, data) => {
         const [schema, actionName] = data.method?.split("/");
 
         if (schema === "browser") {
+            // Validate tab context for automation actions
+            const tabId = getTabContext();
+            if (tabId && !isActiveTab()) {
+                sendToBrowserAgent({
+                    id: data.id,
+                    error: `Action ${actionName} blocked: not active tab (${tabId})`,
+                });
+                return;
+            }
+
             const response = await runBrowserAction({
                 actionName: actionName,
                 parameters: data.params,

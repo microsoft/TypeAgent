@@ -19,11 +19,55 @@ import {
     resolveEntityTypeName,
 } from "../execute/pendingActions.js";
 import { WildcardMode } from "agent-cache";
+import {
+    getActivityActiveSchemas,
+    getActivityCacheSpec,
+    getActivityNamespaceSuffix,
+    getNonActivityActiveSchemas,
+} from "./matchRequest.js";
 
 const debugCompletion = registerDebug("typeagent:request:completion");
 const debugCompletionError = registerDebug(
     "typeagent:request:completion:error",
 );
+
+function getCompletionNamespaceKeys(context: CommandHandlerContext): string[] {
+    const cache = context.agentCache;
+    const activeSchemaNames = context.agents.getActiveSchemas();
+    const activityContext = context.activityContext;
+    if (activityContext === undefined) {
+        return cache.getNamespaceKeys(activeSchemaNames, undefined);
+    }
+
+    const cacheSpec = getActivityCacheSpec(context, activityContext);
+    if (cacheSpec === false) {
+        // activity cache is disable, only return non-activity completions.
+        return cache.getNamespaceKeys(
+            getNonActivityActiveSchemas(activeSchemaNames, activityContext),
+            undefined,
+        );
+    }
+    const namespaceSuffix = getActivityNamespaceSuffix(
+        context,
+        activityContext,
+    );
+
+    if (namespaceSuffix === undefined) {
+        return cache.getNamespaceKeys(activeSchemaNames, undefined);
+    }
+    return cache
+        .getNamespaceKeys(
+            getActivityActiveSchemas(activeSchemaNames, activityContext),
+            namespaceSuffix,
+        )
+        .concat(
+            cache.getNamespaceKeys(
+                getNonActivityActiveSchemas(activeSchemaNames, activityContext),
+                undefined,
+            ),
+        );
+}
+
 export async function requestCompletion(
     requestPrefix: string | undefined,
     context: CommandHandlerContext,
@@ -33,11 +77,10 @@ export async function requestCompletion(
         return [];
     }
 
-    debugCompletion(`Request completion for prefix '${requestPrefix}'`);
-    const config = context.session.getConfig();
-    const activeSchemaNames = context.agents.getActiveSchemas();
-    const namespaceKeys =
-        context.agentCache.getNamespaceKeys(activeSchemaNames);
+    debugCompletion(`Request completion for prefix: '${requestPrefix}'`);
+
+    const namespaceKeys = getCompletionNamespaceKeys(context);
+    debugCompletion(`Request completion namespace keys`, namespaceKeys);
     if (!requestPrefix) {
         const completions = constructionStore.getPrefix(namespaceKeys);
 
@@ -51,6 +94,8 @@ export async function requestCompletion(
               ]
             : [];
     }
+
+    const config = context.session.getConfig();
     const results = constructionStore.match(requestPrefix, {
         partial: true,
         wildcard: config.cache.matchWildcard,

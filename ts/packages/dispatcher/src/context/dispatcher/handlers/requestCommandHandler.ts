@@ -46,7 +46,11 @@ import {
     translateRequest,
     TranslationResult,
 } from "../../../translation/translateRequest.js";
-import { matchRequest } from "../../../translation/matchRequest.js";
+import {
+    getActivityCacheSpec,
+    getActivityNamespaceSuffix,
+    matchRequest,
+} from "../../../translation/matchRequest.js";
 import { addRequestToMemory, addResultToMemory } from "../../memory.js";
 import { requestCompletion } from "../../../translation/requestCompletion.js";
 const debugExplain = registerDebug("typeagent:explain");
@@ -159,6 +163,7 @@ async function canTranslateWithoutContext(
 }
 
 function getCannotUseCacheReason(
+    context: CommandHandlerContext,
     attachments?: string[],
     history?: HistoryContext,
 ) {
@@ -168,8 +173,13 @@ function getCannotUseCacheReason(
     if (history !== undefined) {
         if (history.additionalInstructions) {
             return "has additional instructions";
-        } else if (history.activityContext) {
-            return "has activity context";
+        }
+        const cacheSpec = getActivityCacheSpec(
+            context,
+            history.activityContext,
+        );
+        if (cacheSpec === false) {
+            return "has activity with cache disabled";
         }
     }
     return undefined;
@@ -184,10 +194,13 @@ function getExplainerOptions(
         return undefined;
     }
 
-    if (
-        getCannotUseCacheReason(undefined, requestAction.history) !== undefined
-    ) {
-        // Cannot use cache for this request
+    const cannotUseCacheReason = getCannotUseCacheReason(
+        context,
+        undefined,
+        requestAction.history,
+    );
+    if (cannotUseCacheReason !== undefined) {
+        // Already checked by the caller, double check here just to be sure.
         return undefined;
     }
     if (
@@ -223,6 +236,10 @@ function getExplainerOptions(
         context.session.getConfig().explainer.filter.reference;
 
     return {
+        namespaceSuffix: getActivityNamespaceSuffix(
+            context,
+            requestAction.history?.activityContext,
+        ),
         checkExplainable: translate
             ? (requestAction: RequestAction) =>
                   canTranslateWithoutContext(
@@ -364,6 +381,7 @@ export class RequestCommandHandler implements CommandHandler {
             const history = getHistoryContextForTranslation(systemContext);
 
             const cannotUseCacheReason = getCannotUseCacheReason(
+                systemContext,
                 attachments,
                 history,
             );

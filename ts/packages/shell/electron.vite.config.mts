@@ -30,6 +30,7 @@ export default defineConfig({
                 input: {
                     index: resolve(__dirname, "src/renderer/index.html"),
                     viewHost: resolve(__dirname, "src/renderer/viewHost.html"),
+                    newTab: resolve(__dirname, "src/renderer/newTab.html"),
                 },
             },
         },

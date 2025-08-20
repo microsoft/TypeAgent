@@ -18,6 +18,11 @@ export type IndexingServiceConfig = {
 
 export type IndexingServicesManifest = Record<string, IndexingServiceConfig>;
 
+// if "separate", each activity is cache separately, or if "shared", it will share the cache with as if no activity is active.
+// If true, default to "separate".
+// If false, cache is disabled.
+export type ActivityCacheSpec = "separate" | "shared" | boolean;
+
 //==============================================================================
 // Manifest
 //==============================================================================
@@ -28,6 +33,7 @@ export type AppAgentManifest = {
     localView?: boolean; // whether the agent serve a local view, default is false
     sharedLocalView?: string[]; // list of agents to share the local view with, default is none
     indexingServices?: IndexingServicesManifest;
+    cachedActivities?: Record<string, ActivityCacheSpec>; // Key is activity name, default (if not specified) is false
 } & ActionManifest;
 
 export type SchemaTypeNames = {
