@@ -3,7 +3,6 @@
 
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import registerDebug from "debug";
-import { getHistoryContextForTranslation } from "./translateRequest.js";
 import { ExecutableAction, getPropertyInfo } from "agent-cache";
 import { CompletionGroup, TypeAgentAction } from "@typeagent/agent-sdk";
 import { DeepPartialUndefined } from "common-utils";
@@ -25,6 +24,7 @@ import {
     getActivityNamespaceSuffix,
     getNonActivityActiveSchemas,
 } from "./matchRequest.js";
+import { getHistoryContext } from "./interpretRequest.js";
 
 const debugCompletion = registerDebug("typeagent:request:completion");
 const debugCompletionError = registerDebug(
@@ -101,7 +101,7 @@ export async function requestCompletion(
         wildcard: config.cache.matchWildcard,
         rejectReferences: config.explainer.filter.reference.list,
         namespaceKeys,
-        history: getHistoryContextForTranslation(context),
+        history: getHistoryContext(context),
     });
 
     debugCompletion(`Request completion construction match: ${results.length}`);
