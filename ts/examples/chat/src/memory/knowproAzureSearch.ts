@@ -3,6 +3,7 @@
 
 import {
     arg,
+    argBool,
     CommandHandler,
     CommandMetadata,
     parseNamedArguments,
@@ -10,6 +11,7 @@ import {
 import { KnowproContext } from "./knowproMemory.js";
 import { KnowProPrinter } from "./knowproPrinter.js";
 import * as ms from "memory-storage";
+import * as kp from "knowpro";
 import chalk from "chalk";
 import { propertyTermsFromNamedArgs } from "../common.js";
 
@@ -34,6 +36,7 @@ export async function createKnowproAzureCommands(
             description: "Azure Search",
             options: {
                 query: arg("Plain text or Lucene query syntax"),
+                andTerms: argBool("'And' all terms. Default is 'or", false),
             },
         };
     }
@@ -43,17 +46,21 @@ export async function createKnowproAzureCommands(
         const namedArgs = parseNamedArguments(args, commandDef);
         const memory = ensureMemory();
         let query: string = namedArgs.query;
+        let queryTerms: string | kp.SearchTermGroup;
         if (query) {
-            query = query.replaceAll(/'/g, '"');
-            context.printer.writeLineInColor(chalk.cyan, query);
-            const results = await memory.search(query);
-            context.printer.writeLine(`${results.length} matches`);
-            for (const result of results) {
-                context.printer.writeJson(result);
-            }
+            queryTerms = query.replaceAll(/'/g, '"');
         } else {
             const termGroup = propertyTermsFromNamedArgs(namedArgs, commandDef);
-            context.printer.writeJson(termGroup);
+            queryTerms = namedArgs.andTerms
+                ? kp.createAndTermGroup(...termGroup)
+                : kp.createOrTermGroup(...termGroup);
+        }
+
+        const [queryText, results] = await memory.search(queryTerms);
+        context.printer.writeLineInColor(chalk.cyan, queryText);
+        context.printer.writeLine(`${results.length} matches`);
+        for (const result of results) {
+            context.printer.writeJson(result);
         }
     }
 
