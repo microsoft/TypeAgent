@@ -223,11 +223,15 @@ export function getUserDataCompletions(
             .sort((a, b) => {
                 const aTime =
                     a.timestamps.length > 0
-                        ? new Date(a.timestamps[0]).getTime()
+                        ? new Date(
+                              a.timestamps[a.timestamps.length - 1],
+                          ).getTime()
                         : 0;
                 const bTime =
                     b.timestamps.length > 0
-                        ? new Date(b.timestamps[0]).getTime()
+                        ? new Date(
+                              b.timestamps[b.timestamps.length - 1],
+                          ).getTime()
                         : 0;
                 return aTime - bTime;
             })
@@ -251,6 +255,36 @@ export function getUserDataCompletions(
     return completions;
 }
 
+export function addFullTracks(
+    userData: SpotifyUserData,
+    tracks: SpotifyApi.TrackObjectFull[],
+) {
+    const ts = new Date(Date.now()).toISOString();
+    const trackArtists = [] as SpotifyApi.ArtistObjectSimplified[];
+    for (const track of tracks) {
+        trackArtists.push(...track.artists);
+    }
+    mergeUserDataKind(
+        userData.artists,
+        trackArtists.map((a) => ({
+            freq: 1,
+            timestamps: [ts],
+            id: a.id,
+            name: a.name,
+        })),
+    );
+    mergeUserDataKind(
+        userData.tracks,
+        tracks.map((t) => ({
+            id: t.id,
+            name: t.name,
+            freq: 1,
+            timestamps: [ts],
+            albumName: t.album?.name,
+            albumArtist: t.album?.artists[0]?.name,
+        })),
+    );
+}
 async function updateUserData(
     storage: Storage,
     service: SpotifyService,
@@ -367,6 +401,7 @@ async function updateUserData(
 
 export type UserData = {
     data: SpotifyUserData;
+    instanceStorage: Storage;
     timeoutId?: NodeJS.Timeout;
 };
 
@@ -377,7 +412,7 @@ export async function initializeUserData(
 ) {
     debugData("Loading saved user data");
     const data = await loadUserData(instanceStorage);
-    const result: UserData = { data };
+    const result: UserData = { data, instanceStorage };
     debugData(
         `Tracks: ${data.tracks.size}, Artists: ${data.artists.size}, Albums: ${data.albums.size}`,
     );

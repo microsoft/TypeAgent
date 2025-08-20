@@ -122,11 +122,8 @@ export class SearchMenu {
 
     public setChoices(choices: SearchMenuItem[]) {
         this.trie.init();
-        let sortIndex = 0;
         for (const choice of choices) {
-            choice.sortIndex = sortIndex;
             this.trie.insert(normalizeMatchText(choice.matchText), choice);
-            sortIndex++;
         }
     }
 

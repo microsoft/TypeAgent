@@ -52,6 +52,7 @@ import {
     saveUserData,
     addUserDataStrings,
     UserData,
+    addFullTracks,
 } from "./userData.js";
 
 import {
@@ -416,12 +417,18 @@ async function playTrackCollection(
     console.log(chalk.cyanBright("Playing..."));
     await printTrackNames(trackCollection, clientContext);
     const actionResult = await htmlTrackNames(trackCollection, "Playing");
+    // add track collection to userData
+    const userData = clientContext.userData;
     await play(
         clientContext.service,
         deviceId,
         uris,
         trackCollection.getContext(),
     );
+    if (userData) {
+        addFullTracks(userData.data, tracks);
+        await saveUserData(userData.instanceStorage, userData.data);
+    }
     return actionResult;
 }
 
