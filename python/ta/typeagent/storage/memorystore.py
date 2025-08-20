@@ -26,21 +26,15 @@ from ..knowpro.timestampindex import TimestampToTextRangeIndex
 class MemoryStorageProvider[TMessage: IMessage](IStorageProvider[TMessage]):
     """A storage provider that operates in memory."""
 
-    # Declare indexes as not-None but uninitialized - create() must be called
+    _message_collection: MemoryMessageCollection[TMessage]
+    _semantic_ref_collection: MemorySemanticRefCollection
+
     _conversation_index: TermToSemanticRefIndex
     _property_index: PropertyIndex
     _timestamp_index: TimestampToTextRangeIndex
     _message_text_index: MessageTextIndex
     _related_terms_index: RelatedTermsIndex
     _conversation_threads: ConversationThreads
-
-    def __init__(
-        self,
-        message_text_settings: MessageTextIndexSettings,
-        related_terms_settings: RelatedTermIndexSettings,
-    ):
-        self._message_text_settings = message_text_settings
-        self._related_terms_settings = related_terms_settings
 
     @classmethod
     async def create(
@@ -49,7 +43,11 @@ class MemoryStorageProvider[TMessage: IMessage](IStorageProvider[TMessage]):
         related_terms_settings: RelatedTermIndexSettings,
     ) -> "MemoryStorageProvider[TMessage]":
         """Create and initialize a MemoryStorageProvider with all indexes."""
-        self = cls(message_text_settings, related_terms_settings)
+        self = cls()
+
+        self._message_collection = MemoryMessageCollection[TMessage]()
+        self._semantic_ref_collection = MemorySemanticRefCollection()
+
         self._conversation_index = TermToSemanticRefIndex()
         self._property_index = PropertyIndex()
         self._timestamp_index = TimestampToTextRangeIndex()
@@ -57,6 +55,7 @@ class MemoryStorageProvider[TMessage: IMessage](IStorageProvider[TMessage]):
         self._related_terms_index = RelatedTermsIndex(related_terms_settings)
         thread_settings = message_text_settings.embedding_index_settings
         self._conversation_threads = ConversationThreads(thread_settings)
+
         return self
 
     async def get_conversation_index(self) -> ITermToSemanticRefIndex:
@@ -81,14 +80,12 @@ class MemoryStorageProvider[TMessage: IMessage](IStorageProvider[TMessage]):
         self,
         serializer: JsonSerializer[TMessage] | type[TMessage] | None = None,
     ) -> MemoryMessageCollection[TMessage]:
-        """Create a new message collection."""
         if isinstance(serializer, JsonSerializer):
             raise ValueError("MemoryStorageProvider does not use a serializer.")
-        return MemoryMessageCollection[TMessage]()
+        return self._message_collection
 
     async def get_semantic_ref_collection(self) -> MemorySemanticRefCollection:
-        """Create a new semantic reference collection."""
-        return MemorySemanticRefCollection()
+        return self._semantic_ref_collection
 
     async def close(self) -> None:
         """Close the storage provider."""
