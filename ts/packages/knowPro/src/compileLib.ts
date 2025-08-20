@@ -16,6 +16,7 @@ import {
     SearchTermGroupTypes,
 } from "./interfaces.js";
 import * as q from "./query.js";
+import { isPropertyTerm, isSearchGroupTerm } from "./searchLib.js";
 
 export type BooleanOp = "and" | "or" | "or_max";
 
@@ -60,12 +61,6 @@ export function createMatchMessagesBooleanExpr(
     return boolExpr;
 }
 
-export function isPropertyTerm(
-    term: SearchTerm | PropertySearchTerm | SearchTermGroup,
-): term is PropertySearchTerm {
-    return term.hasOwnProperty("propertyName");
-}
-
 export function isEntityPropertyTerm(term: PropertySearchTerm): boolean {
     if (typeof term.propertyName === "string") {
         switch (term.propertyName) {
@@ -93,12 +88,6 @@ export function isActionPropertyTerm(term: PropertySearchTerm): boolean {
     }
 
     return false;
-}
-
-export function isSearchGroupTerm(
-    term: SearchTerm | PropertySearchTerm | SearchTermGroup,
-): term is SearchTermGroup {
-    return term.hasOwnProperty("booleanOp");
 }
 
 export function validateSearchTermGroup(

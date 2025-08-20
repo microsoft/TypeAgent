@@ -257,6 +257,18 @@ export function createTagSearchTermGroup(
     return termGroup;
 }
 
+export function isPropertyTerm(
+    term: SearchTerm | PropertySearchTerm | SearchTermGroup,
+): term is PropertySearchTerm {
+    return term.hasOwnProperty("propertyName");
+}
+
+export function isSearchGroupTerm(
+    term: SearchTerm | PropertySearchTerm | SearchTermGroup,
+): term is SearchTermGroup {
+    return term.hasOwnProperty("booleanOp");
+}
+
 function splitTermValues(term: string, splitChar: string): string[] {
     let allTermStrings = kpLib.split(term, splitChar, {
         trim: true,

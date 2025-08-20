@@ -43,6 +43,18 @@ export class AzSemanticRefIndex extends AzSearchIndex<SemanticRefDoc> {
         super(settings);
     }
 
+    public async search(
+        query: string,
+    ): Promise<azSearch.SearchResult<SemanticRefDoc>[]> {
+        const searchResults = await this.searchClient.search(query, {
+            queryType: "full",
+        });
+        let results: azSearch.SearchResult<SemanticRefDoc>[] = [];
+        for await (const result of searchResults.results) {
+            results.push(result);
+        }
+        return results;
+    }
     public async ensure(): Promise<boolean> {
         return this.ensureIndex(createKnowledgeSchema(this.settings.indexName));
     }
@@ -97,6 +109,42 @@ function checkType(sr: kp.SemanticRef, expectedType: kp.KnowledgeType) {
         throw new Error(`sr.${sr.knowledgeType} !== ${expectedType}`);
     }
 }
+
+/**
+ * Recursively build OData filter string from SearchTermGroup
+ */
+export function compilePropertySearchTermAsFilter(
+    term: kp.PropertySearchTerm,
+): string {
+    // PropertySearchTerm
+    let propName =
+        typeof term.propertyName === "string"
+            ? term.propertyName
+            : term.propertyName.term.text;
+    let propValue = term.propertyValue.term.text;
+    return `${propName} eq '${propValue}'`;
+}
+
+/*
+export function compileTermGroupAsFilter(group: kp.SearchTermGroup): string {
+    const childFilters: string[] = [];
+    for (const term of group.terms) {
+        if (kp.isSearchGroupTerm(term)) {
+            childFilters.push(`(${compileTermGroupAsFilter(term)})`);
+        } else if (kp.isPropertyTerm(term)) {
+            childFilters.push(compilePropertySearchTermAsFilter(term));
+        } else {
+            // SearchTerm
+            childFilters.push(`entityType/any(t: t eq '${term.term.text}')`);
+        }
+    }
+    let op = "and";
+    if (group.booleanOp === "or" || group.booleanOp === "or_max") {
+        op = "or";
+    }
+    return childFilters.length > 0 ? childFilters.join(` ${op} `) : "";
+}
+*/
 
 export function createKnowledgeSchema(indexName: string): azSearch.SearchIndex {
     return {
