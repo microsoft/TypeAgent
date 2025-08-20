@@ -8,7 +8,7 @@ import textwrap
 import time
 
 from typeagent.aitools.embeddings import AsyncEmbeddingModel
-from typeagent.knowpro.convutils import ConversationSettings
+from typeagent.knowpro.convsettings import ConversationSettings
 from typeagent.knowpro.interfaces import ScoredSemanticRefOrdinal
 from typeagent.podcasts import podcast
 

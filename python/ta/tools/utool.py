@@ -40,7 +40,7 @@ from typeagent.knowpro.interfaces import (
 )
 from typeagent.knowpro import answers, answer_response_schema
 from typeagent.knowpro import convknowledge
-from typeagent.knowpro.convutils import ConversationSettings
+from typeagent.knowpro.convsettings import ConversationSettings
 from typeagent.knowpro import kplib
 from typeagent.knowpro import query
 from typeagent.knowpro import search, search_query_schema, searchlang

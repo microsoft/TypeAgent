@@ -5,12 +5,13 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterable, Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 from typechat import Failure
 
 from . import convknowledge, kplib, secindex
+from .collections import MemorySemanticRefCollection
 from .convknowledge import KnowledgeExtractor
+from .convsettings import ConversationSettings
 from .interfaces import (
     # Interfaces.
     IConversation,
@@ -31,10 +32,6 @@ from .interfaces import (
     Topic,
 )
 from .knowledge import extract_knowledge_from_text_batch
-from .collections import MemorySemanticRefCollection
-
-if TYPE_CHECKING:
-    from .convutils import ConversationSettings
 
 
 @dataclass

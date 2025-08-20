@@ -9,7 +9,7 @@ from fixtures import (
     embedding_model,
 )  # Import the storage fixture
 from typeagent.aitools.embeddings import TEST_MODEL_NAME
-from typeagent.knowpro.convutils import ConversationSettings
+from typeagent.knowpro.convsettings import ConversationSettings
 from typeagent.knowpro.messageindex import MessageTextIndexSettings
 from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
 from typeagent.knowpro.interfaces import (

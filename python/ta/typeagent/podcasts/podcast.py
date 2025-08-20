@@ -8,7 +8,7 @@ from typing import TypedDict, cast
 
 from ..knowpro import semrefindex, kplib, secindex
 from ..knowpro.convthreads import ConversationThreads
-from ..knowpro.convutils import ConversationSettings
+from ..knowpro.convsettings import ConversationSettings
 from ..knowpro.interfaces import (
     ConversationDataWithIndexes,
     Datetime,

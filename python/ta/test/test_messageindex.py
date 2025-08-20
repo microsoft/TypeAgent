@@ -13,7 +13,7 @@ from typeagent.knowpro.messageindex import (
     MessageTextIndexSettings,
     build_message_index,
 )
-from typeagent.knowpro.convutils import ConversationSettings
+from typeagent.knowpro.convsettings import ConversationSettings
 
 from typeagent.knowpro.interfaces import (
     IConversation,

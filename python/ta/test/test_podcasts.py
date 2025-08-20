@@ -8,7 +8,7 @@ import pytest
 from fixtures import needs_auth, temp_dir, embedding_model  # type: ignore  # Yes they are used!
 
 from typeagent.podcasts.podcast import Podcast
-from typeagent.knowpro.convutils import ConversationSettings
+from typeagent.knowpro.convsettings import ConversationSettings
 from typeagent.knowpro.interfaces import Datetime
 from typeagent.podcasts import podcast_import
 from typeagent.knowpro.serialization import DATA_FILE_SUFFIX, EMBEDDING_FILE_SUFFIX

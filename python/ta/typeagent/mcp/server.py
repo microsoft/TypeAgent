@@ -12,7 +12,7 @@ import typechat
 from typeagent.aitools import embeddings, utils
 from typeagent.aitools.embeddings import AsyncEmbeddingModel
 from typeagent.knowpro import answers, convknowledge, query, searchlang
-from typeagent.knowpro.convutils import ConversationSettings
+from typeagent.knowpro.convsettings import ConversationSettings
 from typeagent.knowpro.answer_response_schema import AnswerResponse
 from typeagent.knowpro.search_query_schema import SearchQuery
 from typeagent.podcasts import podcast
