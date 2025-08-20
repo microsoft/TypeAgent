@@ -4,6 +4,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
+from fixtures import FakeConversation, FakeMessage  # type: ignore
 from typeagent.knowpro.secindex import (
     ConversationSecondaryIndexes,
 )
@@ -178,46 +179,6 @@ def test_deserialize(message_text_index):
 async def test_build_message_index(needs_auth: None):
     """Test building a message index without using mocks."""
 
-    class FakeMessage(IMessage):
-        """Concrete implementation of IMessage for testing."""
-
-        def __init__(self, text_chunks: list[str]):
-            self.text_chunks = text_chunks
-            self.tags = []
-
-        def get_knowledge(self) -> KnowledgeResponse:
-            return KnowledgeResponse(
-                entities=[],
-                actions=[],
-                inverse_actions=[],
-                topics=[],
-            )
-
-    class FakeConversation(IConversation):
-        """Concrete implementation of IConversation for testing."""
-
-        def __init__(self, messages, storage_provider, related_terms_settings):
-            self.name_tag = "test_conversation"
-            self.tags = []
-            self.semantic_refs = None  # type: ignore
-            self.semantic_ref_index = None
-            # Convert plain list to MessageCollection for proper async iteration
-            self.messages = MemoryMessageCollection(messages)
-            # Store the provided storage provider
-            self.secondary_indexes = ConversationSecondaryIndexes(
-                storage_provider, related_terms_settings
-            )
-            # Store settings with storage provider for access via conversation.settings.storage_provider
-            from typeagent.aitools.embeddings import (
-                AsyncEmbeddingModel,
-                TEST_MODEL_NAME,
-            )
-
-            test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
-            self.settings = ConversationSettings(
-                test_model, storage_provider=storage_provider
-            )
-
     # Create test messages and conversation
     messages = [
         FakeMessage(["chunk1", "chunk2"]),
@@ -238,7 +199,9 @@ async def test_build_message_index(needs_auth: None):
     storage_provider = await MemoryStorageProvider.create(
         message_text_settings, related_terms_settings
     )
-    conversation = FakeConversation(messages, storage_provider, related_terms_settings)
+    conversation = FakeConversation(
+        messages=messages, storage_provider=storage_provider, has_secondary_indexes=True
+    )
 
     # Build the message index
     # Pass the storage provider instead of settings

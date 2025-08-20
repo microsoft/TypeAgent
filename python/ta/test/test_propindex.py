@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from fixtures import needs_auth  # type: ignore  # Yes it is used!
+from fixtures import needs_auth, FakeConversation, FakeMessage  # type: ignore  # Yes it is used!
 from typeagent.knowpro.collections import TextRangeCollection, TextRangesInScope
 from typeagent.knowpro.interfaces import (
     ICollection,
@@ -41,35 +41,7 @@ from typeagent.knowpro.collections import (
 )
 from typeagent.knowpro.convsettings import ConversationSettings
 
-from fixtures import needs_auth  # type: ignore  # Yes we use it!
-
-
-class SimpleFakeConversation(IConversation):
-    """Fake conversation for testing."""
-
-    def __init__(self, semantic_refs):
-        self.name_tag = "test"
-        self.tags = []
-        self.messages = MemoryMessageCollection()
-        self.semantic_refs = MemorySemanticRefCollection(semantic_refs)
-        self.semantic_ref_index = None
-        # Create storage provider with test settings
-        from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
-        from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
-        from typeagent.knowpro.messageindex import MessageTextIndexSettings
-        from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
-
-        test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
-        embedding_settings = TextEmbeddingIndexSettings(test_model)
-        message_text_settings = MessageTextIndexSettings(embedding_settings)
-        related_terms_settings = RelatedTermIndexSettings(embedding_settings)
-
-        storage_provider = MemoryStorageProvider()
-        self.secondary_indexes = ConversationSecondaryIndexes(
-            storage_provider, related_terms_settings
-        )
-        # Store settings with storage provider for access via conversation.settings.storage_provider
-        self.settings = ConversationSettings(test_model, storage_provider)
+from fixtures import needs_auth, FakeConversation, FakeMessage  # type: ignore  # Yes it is used!
 
 
 @pytest.fixture
@@ -213,7 +185,10 @@ async def test_build_property_index(needs_auth):
         ),
     ]
 
-    conversation = SimpleFakeConversation(semantic_refs)
+    conversation = FakeConversation(
+        semantic_refs=semantic_refs, has_secondary_indexes=True
+    )
+    await conversation.ensure_initialized()  # Ensure the secondary indexes are set up
 
     # Call the function
     await build_property_index(conversation)
@@ -233,100 +208,6 @@ async def test_build_property_index(needs_auth):
     assert await property_index.lookup_property("tag", "Tag1") is not None
 
 
-class FakeMessage(IMessage):
-    """Concrete implementation of IMessage for testing."""
-
-    def __init__(self, text_chunks: list[str]):
-        self.text_chunks = text_chunks
-        self.text_location = TextLocation(0, 0)
-        self.tags = []
-
-    def get_text(self):
-        return " ".join(self.text_chunks)
-
-    def get_text_location(self):
-        return self.text_location
-
-    def get_knowledge(self):
-        return KnowledgeResponse(
-            entities=[],
-            actions=[],
-            inverse_actions=[],
-            topics=[],
-        )
-
-
-class FakeBaseCollection[T, TOrdinal: int](ICollection[T, int]):
-    """Concrete implementation of IMessageCollection for testing."""
-
-    def __init__(self, items: list[T] | None = None):
-        self.items = items or []
-
-    def __len__(self) -> int:
-        return len(self.items)
-
-    def __iter__(self) -> Iterator[T]:
-        return iter(self.items)
-
-    def __getitem__(self, arg: Any) -> Any:
-        if isinstance(arg, int):
-            return self._get(arg)
-        if isinstance(arg, slice):
-            assert arg.step in (None, 1)
-            return self._get_slice(arg.start, arg.stop)
-        if isinstance(arg, list):
-            return self._get_multiple(arg)
-        raise TypeError(f"Invalid argument type for __getitem__: {type(arg)}")
-
-    def _get(self, ordinal: int) -> T:
-        return self.items[ordinal]
-
-    def _get_multiple(self, ordinals: list[int]) -> list[T]:
-        return [self.items[i] for i in ordinals]
-
-    @property
-    def is_persistent(self) -> bool:
-        return False
-
-    def _get_slice(self, start: int, end: int) -> list[T]:
-        return self.items[start:end]
-
-    async def append(self, item: T) -> None:
-        self.items.append(item)
-
-
-class FakeConversation[
-    TMessage: IMessage, TTermToSemanticRefIndex: ITermToSemanticRefIndex
-](IConversation[TMessage, TTermToSemanticRefIndex]):
-    """Concrete implementation of IConversation for testing."""
-
-    def __init__(self, semantic_refs: list[SemanticRef] | None = None):
-        self.name_tag = "test_conversation"
-        self.tags = []
-        self.semantic_refs = MemorySemanticRefCollection(semantic_refs or [])
-        self.semantic_ref_index = None  # type: ignore
-        self.messages: IMessageCollection[TMessage] = MemoryMessageCollection([FakeMessage(["Hello"])])  # type: ignore[assignment]
-        # Create storage provider with test settings
-        from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
-        from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
-        from typeagent.knowpro.messageindex import MessageTextIndexSettings
-        from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
-
-        test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
-        embedding_settings = TextEmbeddingIndexSettings(test_model)
-        message_text_settings = MessageTextIndexSettings(embedding_settings)
-        related_terms_settings = RelatedTermIndexSettings(embedding_settings)
-
-        self._storage_provider = MemoryStorageProvider()
-        self.secondary_indexes = ConversationSecondaryIndexes(
-            self._storage_provider, related_terms_settings
-        )
-
-    @property
-    def storage_provider(self) -> "IStorageProvider":
-        return self._storage_provider
-
-
 @pytest.mark.asyncio
 async def test_add_to_property_index(needs_auth: None, property_index: PropertyIndex):
     """Test adding semantic references to the property index."""
@@ -342,7 +223,10 @@ async def test_add_to_property_index(needs_auth: None, property_index: PropertyI
             knowledge=entity,
         )
     ]
-    conversation = FakeConversation(semantic_refs)
+    conversation = FakeConversation(
+        semantic_refs=semantic_refs, has_secondary_indexes=True
+    )
+    await conversation.ensure_initialized()  # Ensure the secondary indexes are set up
     await add_to_property_index(conversation, 0)
 
     assert conversation.secondary_indexes is not None
