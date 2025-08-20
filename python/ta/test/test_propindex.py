@@ -64,9 +64,7 @@ class SimpleFakeConversation(IConversation):
         message_text_settings = MessageTextIndexSettings(embedding_settings)
         related_terms_settings = RelatedTermIndexSettings(embedding_settings)
 
-        storage_provider = MemoryStorageProvider(
-            message_text_settings, related_terms_settings
-        )
+        storage_provider = MemoryStorageProvider()
         self.secondary_indexes = ConversationSecondaryIndexes(
             storage_provider, related_terms_settings
         )
@@ -319,9 +317,7 @@ class FakeConversation[
         message_text_settings = MessageTextIndexSettings(embedding_settings)
         related_terms_settings = RelatedTermIndexSettings(embedding_settings)
 
-        self._storage_provider = MemoryStorageProvider(
-            message_text_settings, related_terms_settings
-        )
+        self._storage_provider = MemoryStorageProvider()
         self.secondary_indexes = ConversationSecondaryIndexes(
             self._storage_provider, related_terms_settings
         )

@@ -143,9 +143,7 @@ class MockConversation(IConversation[MockMessage, MockTermIndex]):
         message_text_settings = MessageTextIndexSettings(embedding_settings)
         related_terms_settings = RelatedTermIndexSettings(embedding_settings)
 
-        storage_provider = MemoryStorageProvider(
-            message_text_settings, related_terms_settings
-        )
+        storage_provider = MemoryStorageProvider()
         self.settings = ConversationSettings(test_model, storage_provider)
 
         # Create semantic refs

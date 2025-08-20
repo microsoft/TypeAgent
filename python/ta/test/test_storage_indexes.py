@@ -115,7 +115,9 @@ async def test_storage_provider_collections_still_work(needs_auth):
     message_text_settings = MessageTextIndexSettings(embedding_settings)
     related_terms_settings = RelatedTermIndexSettings(embedding_settings)
 
-    storage = MemoryStorageProvider(message_text_settings, related_terms_settings)
+    storage = await MemoryStorageProvider.create(
+        message_text_settings, related_terms_settings
+    )
 
     # Test message collection creation
     msg_collection = await storage.get_message_collection()

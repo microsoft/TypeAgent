@@ -194,7 +194,7 @@ async def test_build_message_index(needs_auth: None):
     class FakeConversation(IConversation):
         """Concrete implementation of IConversation for testing."""
 
-        def __init__(self, messages, storage_provider):
+        def __init__(self, messages, storage_provider, related_terms_settings):
             self.name_tag = "test_conversation"
             self.tags = []
             self.semantic_refs = None
@@ -203,7 +203,7 @@ async def test_build_message_index(needs_auth: None):
             self.messages = MessageCollection(messages)
             # Store the provided storage provider
             self.secondary_indexes = ConversationSecondaryIndexes(
-                storage_provider, storage_provider._related_terms_settings
+                storage_provider, related_terms_settings
             )
             # Store settings with storage provider for access via conversation.settings.storage_provider
             from typeagent.aitools.embeddings import (
@@ -236,7 +236,7 @@ async def test_build_message_index(needs_auth: None):
     storage_provider = await MemoryStorageProvider.create(
         message_text_settings, related_terms_settings
     )
-    conversation = FakeConversation(messages, storage_provider)
+    conversation = FakeConversation(messages, storage_provider, related_terms_settings)
 
     # Build the message index
     # Pass the storage provider instead of settings
