@@ -2,7 +2,7 @@
 applyTo: '**/*.py'
 ---
 
-No sycophancy. Be terse.
+**No praise. Be terse.**
 
 # For Agent mode
 
@@ -12,10 +12,8 @@ Never run git commands that many any changes. (`git status` and `git diff` are f
 
 When the working directory is ~/TypeAgent/python/ta/:
 
-- You don't need permission for any of the tool calls listed below
 - Don't use '!' on the command line, it's some bash magic (even inside single quotes)
-- Activate `.venv`
-  - if this fails, run `make clean venv` and try again
+- Activate `.venv`: make venv; source .venv/bin/activate
 - To get API keys in ad-hoc code, run `typeagent.aitools.utils.load_dotenv()`
 - Use pytest to run tests in test/
 - Use pyright to check type annotations in tools/, test/, typeagent/
@@ -54,6 +52,9 @@ please follow these guidelines:
   - assume `pytest`; use `assert` statements
   - match the type annotations of the tested functions
   - read the code of the tested functions to understand their behavior
+  - When using fixtures:
+    - Fully type-annotate the fixture definitions (including return type)
+    - Fully type-annotate fixture usages
 
 * Don't put imports inside functions.
   Put them at the top of the file with the other imports.

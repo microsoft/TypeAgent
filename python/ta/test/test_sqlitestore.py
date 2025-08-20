@@ -58,7 +58,7 @@ def temp_db_path() -> Generator[str, None, None]:
 
 
 @pytest.mark.asyncio
-async def test_sqlite_storage_provider_message_collection(temp_db_path):
+async def test_sqlite_storage_provider_message_collection(temp_db_path: str):
     provider = SqliteStorageProvider(temp_db_path)
     collection = await provider.get_message_collection(DummyMessage)
     assert collection.is_persistent
@@ -91,7 +91,7 @@ async def test_sqlite_storage_provider_message_collection(temp_db_path):
 
 
 @pytest.mark.asyncio
-async def test_sqlite_storage_provider_semantic_ref_collection(temp_db_path):
+async def test_sqlite_storage_provider_semantic_ref_collection(temp_db_path: str):
     provider = SqliteStorageProvider(temp_db_path)
     collection = await provider.get_semantic_ref_collection()
     assert collection.is_persistent
@@ -120,7 +120,7 @@ def test_default_serializer_roundtrip():
 
 
 @pytest.mark.asyncio
-async def test_sqlite_message_collection_append_and_get(temp_db_path):
+async def test_sqlite_message_collection_append_and_get(temp_db_path: str):
     db = SqliteStorageProvider(temp_db_path).get_db()
     serializer = DefaultSerializer(DummyMessage)
     store = SqliteMessageCollection(db, serializer)
@@ -136,7 +136,7 @@ async def test_sqlite_message_collection_append_and_get(temp_db_path):
 
 
 @pytest.mark.asyncio
-async def test_sqlite_message_collection_iter(temp_db_path):
+async def test_sqlite_message_collection_iter(temp_db_path: str):
     db = SqliteStorageProvider(temp_db_path).get_db()
     serializer = DefaultSerializer(DummyMessage)
     store = SqliteMessageCollection(db, serializer)
@@ -147,7 +147,7 @@ async def test_sqlite_message_collection_iter(temp_db_path):
 
 
 @pytest.mark.asyncio
-async def test_sqlite_semantic_ref_collection_append_and_get(temp_db_path):
+async def test_sqlite_semantic_ref_collection_append_and_get(temp_db_path: str):
     db = SqliteStorageProvider(temp_db_path).get_db()
     collection = SqliteSemanticRefCollection(db)
     ref = make_dummy_semantic_ref(123)
@@ -162,7 +162,7 @@ async def test_sqlite_semantic_ref_collection_append_and_get(temp_db_path):
 
 
 @pytest.mark.asyncio
-async def test_sqlite_semantic_ref_collection_iter(temp_db_path):
+async def test_sqlite_semantic_ref_collection_iter(temp_db_path: str):
     db = SqliteStorageProvider(temp_db_path).get_db()
     collection = SqliteSemanticRefCollection(db)
     refs = [make_dummy_semantic_ref(i) for i in range(2)]

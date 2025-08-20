@@ -1,25 +1,16 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from collections.abc import Iterator
-from typing import Any
-
 import pytest
 
-from fixtures import needs_auth, FakeConversation, FakeMessage  # type: ignore  # Yes it is used!
 from typeagent.knowpro.collections import TextRangeCollection, TextRangesInScope
 from typeagent.knowpro.interfaces import (
-    ICollection,
-    IConversation,
-    IMessage,
-    IStorageProvider,
-    ITermToSemanticRefIndex,
     SemanticRef,
     Tag,
     TextLocation,
     TextRange,
 )
-from typeagent.knowpro.kplib import Facet, ConcreteEntity, Action, KnowledgeResponse
+from typeagent.knowpro.kplib import Facet, ConcreteEntity, Action
 from typeagent.knowpro.propindex import (
     PropertyIndex,
     PropertyNames,
@@ -33,15 +24,11 @@ from typeagent.knowpro.propindex import (
     split_property_term_text,
     is_known_property,
 )
-from typeagent.knowpro.secindex import ConversationSecondaryIndexes
-from typeagent.storage.memorystore import MemoryStorageProvider
 from typeagent.knowpro.collections import (
-    MemoryMessageCollection,
     MemorySemanticRefCollection,
 )
-from typeagent.knowpro.convsettings import ConversationSettings
 
-from fixtures import needs_auth, FakeConversation, FakeMessage  # type: ignore  # Yes it is used!
+from fixtures import needs_auth, FakeConversation
 
 
 @pytest.fixture
@@ -51,7 +38,7 @@ def property_index() -> PropertyIndex:
 
 
 @pytest.mark.asyncio
-async def test_add_facet(property_index):
+async def test_add_facet(property_index: PropertyIndex):
     """Test adding a facet to the property index."""
     facet = Facet(name="color", value="blue")
     await add_facet(facet, property_index, 1)
@@ -59,18 +46,20 @@ async def test_add_facet(property_index):
     result = await property_index.lookup_property(
         PropertyNames.FacetName.value, "color"
     )
+    assert result is not None
     assert len(result) == 1
     assert result[0].semantic_ref_ordinal == 1
 
     result = await property_index.lookup_property(
         PropertyNames.FacetValue.value, "blue"
     )
+    assert result is not None
     assert len(result) == 1
     assert result[0].semantic_ref_ordinal == 1
 
 
 @pytest.mark.asyncio
-async def test_add_entity_properties_to_index(property_index):
+async def test_add_entity_properties_to_index(property_index: PropertyIndex):
     """Test adding entity properties to the property index."""
     entity = ConcreteEntity(
         name="ExampleEntity",
@@ -82,24 +71,27 @@ async def test_add_entity_properties_to_index(property_index):
     result = await property_index.lookup_property(
         PropertyNames.EntityName.value, "ExampleEntity"
     )
+    assert result is not None
     assert len(result) == 1
     assert result[0].semantic_ref_ordinal == 1
 
     result = await property_index.lookup_property(
         PropertyNames.EntityType.value, "object"
     )
+    assert result is not None
     assert len(result) == 1
     assert result[0].semantic_ref_ordinal == 1
 
     result = await property_index.lookup_property(
         PropertyNames.FacetName.value, "color"
     )
+    assert result is not None
     assert len(result) == 1
     assert result[0].semantic_ref_ordinal == 1
 
 
 @pytest.mark.asyncio
-async def test_add_action_properties_to_index(property_index):
+async def test_add_action_properties_to_index(property_index: PropertyIndex):
     """Test adding action properties to the property index."""
     action = Action(
         verbs=["run", "jump"],
@@ -113,14 +105,17 @@ async def test_add_action_properties_to_index(property_index):
     await add_action_properties_to_index(action, property_index, 1)
 
     result = await property_index.lookup_property(PropertyNames.Verb.value, "run jump")
+    assert result is not None
     assert len(result) == 1
     assert result[0].semantic_ref_ordinal == 1
 
     result = await property_index.lookup_property(PropertyNames.Subject.value, "John")
+    assert result is not None
     assert len(result) == 1
     assert result[0].semantic_ref_ordinal == 1
 
     result = await property_index.lookup_property(PropertyNames.Object.value, "Ball")
+    assert result is not None
     assert len(result) == 1
     assert result[0].semantic_ref_ordinal == 1
 
@@ -136,7 +131,7 @@ def test_make_and_split_property_term_text():
 
 
 @pytest.mark.asyncio
-async def test_is_known_property(property_index):
+async def test_is_known_property(property_index: PropertyIndex):
     """Test checking if a property is known."""
     await property_index.add_property("name", "value", 1)
 
@@ -151,7 +146,7 @@ async def test_is_known_property(property_index):
 
 
 @pytest.mark.asyncio
-async def test_build_property_index(needs_auth):
+async def test_build_property_index(needs_auth: None):
     """Test the build_property_index function with a concrete conversation."""
     # Create a sample conversation with semantic references
     entity1 = ConcreteEntity(
@@ -240,8 +235,8 @@ async def test_add_to_property_index(needs_auth: None, property_index: PropertyI
 
 
 @pytest.mark.asyncio
-async def test_lookup_property_in_property_index(property_index):
-    """Test filtering properties based on ranges_in_scope."""
+async def test_lookup_property_in_property_index(property_index: PropertyIndex):
+    """Test looking up properties in the property index."""
     await property_index.add_property("name", "value1", 0)
     await property_index.add_property("name", "value2", 1)
 
@@ -285,7 +280,7 @@ async def test_lookup_property_in_property_index(property_index):
 
 
 @pytest.mark.asyncio
-async def test_property_index_clear(property_index):
+async def test_property_index_clear(property_index: PropertyIndex):
     """Test clearing all properties in the PropertyIndex."""
     await property_index.add_property("name", "value", 0)
     assert await property_index.size() > 0
@@ -295,7 +290,7 @@ async def test_property_index_clear(property_index):
 
 
 @pytest.mark.asyncio
-async def test_property_index_get_values(property_index):
+async def test_property_index_get_values(property_index: PropertyIndex):
     """Test retrieving all property values from the PropertyIndex."""
     await property_index.add_property("name", "value1", 0)
     await property_index.add_property("name", "value2", 1)
@@ -306,7 +301,7 @@ async def test_property_index_get_values(property_index):
     assert "value2" in values
 
 
-def test_property_index_prepare_term_text(property_index):
+def test_property_index_prepare_term_text(property_index: PropertyIndex):
     """Test preprocessing term text in PropertyIndex."""
     term_text = "Prop.Name@@Value"
     prepared_text = property_index._prepare_term_text(term_text)
@@ -314,7 +309,7 @@ def test_property_index_prepare_term_text(property_index):
 
 
 @pytest.mark.asyncio
-async def test_property_index_lookup_property_edge_cases(property_index):
+async def test_property_index_lookup_property_edge_cases(property_index: PropertyIndex):
     """Test edge cases for lookup_property in PropertyIndex."""
     # Case: Property does not exist
     result = await property_index.lookup_property("name", "nonexistent")

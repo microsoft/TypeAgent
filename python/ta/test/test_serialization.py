@@ -6,6 +6,7 @@ import numpy as np
 from pathlib import Path
 from typing import Any, cast
 
+from typeagent.aitools.embeddings import NormalizedEmbeddings
 from typeagent.knowpro.serialization import (
     serialize_object,
     deserialize_object,
@@ -28,8 +29,11 @@ from typeagent.knowpro.interfaces import (
 from typeagent.knowpro.kplib import Quantity, ConcreteEntity
 
 
+type SampleData = Any  # Anything more refined causes type errors
+
+
 @pytest.fixture
-def sample_conversation_data() -> dict[str, Any]:
+def sample_conversation_data() -> SampleData:
     """Fixture to provide sample conversation data."""
     return {
         "relatedTermsIndexData": {
@@ -83,7 +87,7 @@ def test_serialize_embeddings():
     assert np.array_equal(serialized, embeddings.flatten())
 
 
-def test_to_conversation_file_data(sample_conversation_data):
+def test_to_conversation_file_data(sample_conversation_data: SampleData):
     """Test the to_conversation_file_data function."""
     file_data = to_conversation_file_data(sample_conversation_data)
     assert "jsonData" in file_data
@@ -93,9 +97,8 @@ def test_to_conversation_file_data(sample_conversation_data):
     assert len(embeddings_list) == 2
 
 
-def test_from_conversation_file_data(sample_conversation_data):
+def test_from_conversation_file_data():
     """Test the from_conversation_file_data function."""
-    # Remove messageIndexData to ensure a single embeddings array
     sample_conversation_data = ConversationDataWithIndexes(
         nameTag="mock name",
         messages=[],
@@ -117,7 +120,7 @@ def test_from_conversation_file_data(sample_conversation_data):
 
 
 def test_write_and_read_conversation_data(
-    tmp_path: Path, sample_conversation_data: dict[str, Any]
+    tmp_path: Path, sample_conversation_data: SampleData
 ):
     """Test writing and reading conversation data to and from files."""
     filename = tmp_path / "conversation"
