@@ -12,12 +12,12 @@ from typeagent.storage.memorystore import MemoryStorageProvider
 
 
 @pytest.mark.asyncio
-async def test_all_index_creation(memory_storage, needs_auth):
+async def test_all_index_creation(memory_storage: MemoryStorageProvider, needs_auth):
     """Test that all 6 index types are created and accessible."""
     # storage fixture already initializes indexes
 
     # Test all index types are created and return objects
-    conv_index = await memory_storage.get_conversation_index()
+    conv_index = await memory_storage.get_semantic_ref_index()
     assert conv_index is not None
 
     prop_index = await memory_storage.get_property_index()
@@ -42,8 +42,8 @@ async def test_index_persistence(memory_storage, needs_auth):
     # storage fixture already initializes indexes
 
     # All index types should return same instance across calls
-    conv1 = await memory_storage.get_conversation_index()
-    conv2 = await memory_storage.get_conversation_index()
+    conv1 = await memory_storage.get_semantic_ref_index()
+    conv2 = await memory_storage.get_semantic_ref_index()
     assert conv1 is conv2
 
     prop1 = await memory_storage.get_property_index()
@@ -68,8 +68,8 @@ async def test_indexes_work_independently(needs_auth):
     )
 
     # Get indexes from both storage providers
-    index1 = await storage1.get_conversation_index()
-    index2 = await storage2.get_conversation_index()
+    index1 = await storage1.get_semantic_ref_index()
+    index2 = await storage2.get_semantic_ref_index()
 
     # Should be different instances
     assert index1 is not index2
@@ -91,7 +91,7 @@ async def test_indexes_available_after_create(needs_auth):
     )
 
     # Should work immediately after create
-    conv_index = await storage.get_conversation_index()
+    conv_index = await storage.get_semantic_ref_index()
     assert conv_index is not None
 
 

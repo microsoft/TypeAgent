@@ -267,7 +267,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         return SqliteSemanticRefCollection(self.get_db())
 
     # Index getter methods
-    async def get_conversation_index(self) -> interfaces.ITermToSemanticRefIndex:
+    async def get_semantic_ref_index(self) -> interfaces.ITermToSemanticRefIndex:
         assert (
             self._conversation_index is not None
         ), "Use SqliteStorageProvider.create() to create an initialized instance"

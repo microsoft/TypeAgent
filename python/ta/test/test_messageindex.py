@@ -197,7 +197,7 @@ async def test_build_message_index(needs_auth: None):
         def __init__(self, messages, storage_provider, related_terms_settings):
             self.name_tag = "test_conversation"
             self.tags = []
-            self.semantic_refs = None
+            self.semantic_refs = None  # type: ignore
             self.semantic_ref_index = None
             # Convert plain list to MessageCollection for proper async iteration
             self.messages = MessageCollection(messages)

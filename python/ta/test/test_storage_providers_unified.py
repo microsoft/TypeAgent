@@ -10,7 +10,6 @@ to ensure behavioral parity across implementations.
 
 import pytest
 from dataclasses import dataclass, field
-from datetime import datetime
 
 from fixtures import needs_auth, storage_provider_type, embedding_model, temp_db_path
 from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
@@ -19,6 +18,7 @@ from typeagent.knowpro.interfaces import (
     DateRange,
     Datetime,
     IMessage,
+    IStorageProvider,
     SemanticRef,
     TextLocation,
     TextRange,
@@ -58,7 +58,7 @@ async def test_all_index_creation(storage_provider_type, needs_auth):
     storage_provider, provider_type = storage_provider_type
 
     # Test all index types are created and return proper interface objects
-    conv_index = await storage_provider.get_conversation_index()
+    conv_index = await storage_provider.get_semantic_ref_index()
     assert conv_index is not None
     assert hasattr(conv_index, "lookup_term")  # Basic interface check
 
@@ -89,8 +89,8 @@ async def test_index_persistence(storage_provider_type, needs_auth):
     storage_provider, provider_type = storage_provider_type
 
     # All index types should return same instance across calls
-    conv1 = await storage_provider.get_conversation_index()
-    conv2 = await storage_provider.get_conversation_index()
+    conv1 = await storage_provider.get_semantic_ref_index()
+    conv2 = await storage_provider.get_semantic_ref_index()
     assert conv1 is conv2
 
     prop1 = await storage_provider.get_property_index()
@@ -181,11 +181,13 @@ async def test_semantic_ref_collection_basic_operations(
 
 
 @pytest.mark.asyncio
-async def test_conversation_index_behavior_parity(storage_provider_type, needs_auth):
+async def test_conversation_index_behavior_parity(
+    storage_provider_type: tuple[IStorageProvider, str], needs_auth
+):
     """Test that conversation index behaves identically in both providers."""
     storage_provider, provider_type = storage_provider_type
 
-    conv_index = await storage_provider.get_conversation_index()
+    conv_index = await storage_provider.get_semantic_ref_index()
 
     # Test empty state
     empty_results = await conv_index.lookup_term("nonexistent")

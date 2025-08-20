@@ -304,7 +304,7 @@ class FakeConversation[
         self.name_tag = "test_conversation"
         self.tags = []
         self.semantic_refs = MemorySemanticRefCollection(semantic_refs or [])
-        self.semantic_ref_index = None
+        self.semantic_ref_index = None  # type: ignore
         self.messages: IMessageCollection[TMessage] = MemoryMessageCollection([FakeMessage(["Hello"])])  # type: ignore[assignment]
         # Create storage provider with test settings
         from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME

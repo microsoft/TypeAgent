@@ -518,9 +518,9 @@ class IConversation[
     name_tag: str
     tags: list[str]
     messages: "IMessageCollection[TMessage]"
-    semantic_refs: "ISemanticRefCollection | None"
-    semantic_ref_index: TTermToSemanticRefIndex | None
-    secondary_indexes: IConversationSecondaryIndexes[TMessage] | None
+    semantic_refs: "ISemanticRefCollection"
+    semantic_ref_index: TTermToSemanticRefIndex
+    secondary_indexes: IConversationSecondaryIndexes[TMessage]
 
 
 # -------------
@@ -777,7 +777,7 @@ class IStorageProvider[TMessage: IMessage](Protocol):
     async def get_semantic_ref_collection(self) -> ISemanticRefCollection: ...
 
     # Index getters - ALL 6 index types for this conversation
-    async def get_conversation_index(self) -> ITermToSemanticRefIndex: ...
+    async def get_semantic_ref_index(self) -> ITermToSemanticRefIndex: ...
 
     async def get_property_index(self) -> IPropertyToSemanticRefIndex: ...
 

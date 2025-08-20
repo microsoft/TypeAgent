@@ -58,7 +58,7 @@ class MemoryStorageProvider[TMessage: IMessage](IStorageProvider[TMessage]):
 
         return self
 
-    async def get_conversation_index(self) -> ITermToSemanticRefIndex:
+    async def get_semantic_ref_index(self) -> ITermToSemanticRefIndex:
         return self._conversation_index
 
     async def get_property_index(self) -> IPropertyToSemanticRefIndex:

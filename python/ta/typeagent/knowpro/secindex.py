@@ -100,7 +100,7 @@ async def build_transient_secondary_indexes[
     TMessage: IMessage, TTermToSemanticRefIndex: ITermToSemanticRefIndex
 ](
     conversation: IConversation[TMessage, TTermToSemanticRefIndex],
-    conversation_settings: ConversationSettings | None = None,
+    conversation_settings: ConversationSettings,
 ) -> None:
     if conversation.secondary_indexes is None:
         # Try to get storage provider from conversation.settings first, then from parameter
@@ -126,11 +126,7 @@ async def build_transient_secondary_indexes[
             (
                 conversation_settings.related_term_index_settings
                 if conversation_settings is not None
-                else RelatedTermIndexSettings(
-                    TextEmbeddingIndexSettings(
-                        AsyncEmbeddingModel()  # Uses default real model
-                    )
-                )
+                else RelatedTermIndexSettings(TextEmbeddingIndexSettings())
             ),
         )
     await build_property_index(conversation)

@@ -55,7 +55,7 @@ class SimpleConversation(IConversation):
         self.messages = MessageCollection[SimpleMessage]()
         self.semantic_refs = SemanticRefCollection()
         self.semantic_ref_index = None
-        self.secondary_indexes = None
+        self.secondary_indexes = None  # type: ignore
         # Store settings with storage provider for access via conversation.settings.storage_provider
         if storage_provider is None:
             # Default storage provider will be created lazily in async context
@@ -142,7 +142,9 @@ async def test_build_transient_secondary_indexes(simple_conversation, needs_auth
     await simple_conversation.messages.append(SimpleMessage("Message 1"))
     await simple_conversation.messages.append(SimpleMessage("Message 2"))
 
-    await build_transient_secondary_indexes(simple_conversation)
+    await build_transient_secondary_indexes(
+        simple_conversation, simple_conversation.settings
+    )
 
     # Verify that the indexes were built by checking they exist
     assert simple_conversation.secondary_indexes is not None

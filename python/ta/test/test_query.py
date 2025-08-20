@@ -135,9 +135,9 @@ class MockConversation(IConversation[MockMessage, MockTermIndex]):
         self.tags = []
         messages = [MockMessage(0, "First message"), MockMessage(1, "Second message")]
         self.messages = MockMessageCollection(messages)
-        self.semantic_refs = None
-        self.semantic_ref_index = None
-        self.secondary_indexes = None
+        self.semantic_refs = None  # type: ignore
+        self.semantic_ref_index = None  # type: ignore
+        self.secondary_indexes = None  # type: ignore
 
         # Store settings with storage provider for access via conversation.settings.storage_provider
         # Create storage provider with test settings
@@ -162,7 +162,7 @@ class MockConversation(IConversation[MockMessage, MockTermIndex]):
             ]
             self.semantic_refs = SemanticRefCollection(refs)
         else:
-            self.semantic_refs = None
+            self.semantic_refs = None  # type: ignore
 
         # Create semantic ref index
         term_to_refs = {}
@@ -175,7 +175,7 @@ class MockConversation(IConversation[MockMessage, MockTermIndex]):
                     ScoredSemanticRefOrdinal(1, 0.7),
                 ],
             }
-        self.semantic_ref_index = MockTermIndex(term_to_refs) if has_index else None
+        self.semantic_ref_index = MockTermIndex(term_to_refs) if has_index else None  # type: ignore
 
 
 @pytest.fixture
