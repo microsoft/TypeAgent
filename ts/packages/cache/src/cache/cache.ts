@@ -66,6 +66,7 @@ export function getSchemaNamespaceKeys(
 export class AgentCache {
     private _constructionStore: ConstructionStoreImpl;
     private readonly explainWorkQueue: ExplainWorkQueue;
+    // Function to return whether the namespace key matches to the current schema file's hash.
     private readonly namespaceKeyFilter?: NamespaceKeyFilter;
     private readonly logger: Telemetry.Logger | undefined;
     public model?: string;
