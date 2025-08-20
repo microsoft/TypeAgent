@@ -4,6 +4,7 @@
 from dataclasses import dataclass, field
 import os
 import tempfile
+from typing import Generator
 
 import pytest
 
@@ -48,7 +49,7 @@ def make_dummy_semantic_ref(ordinal: int = 0) -> SemanticRef:
 
 
 @pytest.fixture
-def temp_db_path():
+def temp_db_path() -> Generator[str, None, None]:
     fd, path = tempfile.mkstemp(suffix=".sqlite")
     os.close(fd)
     yield path

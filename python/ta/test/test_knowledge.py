@@ -2,6 +2,7 @@
 # Licensed under the MIT License.
 
 import pytest
+from typing import Any
 
 from typechat import Result, Failure, Success
 
@@ -17,7 +18,7 @@ from fixtures import needs_auth  # type: ignore  # Used!
 
 
 @pytest.fixture
-def mock_knowledge_extractor():
+def mock_knowledge_extractor() -> Any:
     """Fixture to create a mock KnowledgeExtractor."""
 
     class MockKnowledgeExtractor:

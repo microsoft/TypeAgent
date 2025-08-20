@@ -4,26 +4,15 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from fixtures import FakeConversation, FakeMessage  # type: ignore
-from typeagent.knowpro.secindex import (
-    ConversationSecondaryIndexes,
-)
-from typeagent.knowpro.kplib import KnowledgeResponse
+from fixtures import FakeConversation, FakeMessage
 from typeagent.knowpro.messageindex import (
     MessageTextIndex,
     MessageTextIndexSettings,
     build_message_index,
 )
-from typeagent.knowpro.convsettings import ConversationSettings
 
 from typeagent.knowpro.interfaces import (
-    IConversation,
-    IMessage,
-    IStorageProvider,
-    ITermToSemanticRefIndex,
-    MessageOrdinal,
     MessageTextIndexData,
-    ScoredMessageOrdinal,
     TextLocation,
     TextToTextLocationIndexData,
 )
@@ -33,16 +22,15 @@ from typeagent.knowpro.collections import (
 )
 from typeagent.knowpro.textlocindex import TextToTextLocationIndex
 
-from fixtures import needs_auth  # type: ignore  # It's used!
+from fixtures import needs_auth
 
 
 @pytest.fixture
-def mock_text_location_index():
+def mock_text_location_index() -> MagicMock:
     """Fixture to mock the TextToTextLocationIndex."""
     mock_index = MagicMock(spec=TextToTextLocationIndex)
-    mock_index.size = AsyncMock(
-        return_value=0
-    )  # Empty index, so first message starts at ordinal 0
+    # Empty index, so first message starts at ordinal 0
+    mock_index.size = AsyncMock(return_value=0)
     mock_index.add_text_locations = AsyncMock(return_value=None)
     mock_index.lookup_text = AsyncMock(return_value=[])
     mock_index.lookup_text_in_subset = AsyncMock(return_value=[])
@@ -52,7 +40,7 @@ def mock_text_location_index():
 
 
 @pytest.fixture
-def message_text_index(mock_text_location_index):
+def message_text_index(mock_text_location_index: MagicMock) -> MessageTextIndex:
     """Fixture to create a MessageTextIndex instance with a mocked TextToTextLocationIndex."""
     from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
     from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
