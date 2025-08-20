@@ -5,7 +5,7 @@ import {
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
-import { ActionContext, ActivityContext } from "@typeagent/agent-sdk";
+import { ActionContext } from "@typeagent/agent-sdk";
 import {
     createExecutableAction,
     ExecutableAction,
@@ -23,7 +23,6 @@ import {
 } from "./multipleActionSchema.js";
 import {
     createTypeAgentTranslatorForSelectedActions,
-    getAppAgentName,
     isAdditionalActionLookupAction,
     loadAgentJsonTranslator,
     TranslatedAction,
@@ -52,6 +51,10 @@ import { ActionConfig } from "./actionConfig.js";
 import { DispatcherConfig } from "../context/session.js";
 import { openai as ai, CompleteUsageStatsCallback } from "aiclient";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
+import {
+    getActivityActiveSchemas,
+    getNonActivityActiveSchemas,
+} from "./matchRequest.js";
 const debugTranslate = registerDebug("typeagent:translate");
 const debugSemanticSearch = registerDebug("typeagent:translate:semantic");
 
@@ -752,26 +755,6 @@ async function translateRequestWithActiveSchemas(
           );
 }
 
-function getActivityActiveSchemas(
-    activeSchemaNames: string[],
-    activityContext: ActivityContext,
-) {
-    const activitySchemas = activeSchemaNames.filter(
-        (schemaName) =>
-            getAppAgentName(schemaName) === activityContext.appAgentName,
-    );
-
-    if (activitySchemas.length === 0) {
-        throw new Error(
-            `Activity context schema ${activityContext.appAgentName} not active`,
-        );
-    }
-    // Dispatcher schema (for unknown) is always active
-    activitySchemas.push(DispatcherName, DispatcherActivityName);
-
-    return activitySchemas;
-}
-
 async function translateWithActivityContext(
     request: string,
     context: ActionContext<CommandHandlerContext>,
@@ -814,10 +797,7 @@ async function translateWithActivityContext(
 
     // Translate the unknown requests with non-activity schemas
     const nonActivitySchemas = new Set(
-        activeSchemaNames.filter(
-            (schemaName) =>
-                getAppAgentName(schemaName) !== activityContext.appAgentName,
-        ),
+        getNonActivityActiveSchemas(activeSchemaNames, activityContext),
     );
     debugTranslate(
         `Non-activity schemas: ${Array.from(nonActivitySchemas).join(",")}`,

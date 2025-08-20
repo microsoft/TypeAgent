@@ -18,9 +18,10 @@ export type IndexingServiceConfig = {
 
 export type IndexingServicesManifest = Record<string, IndexingServiceConfig>;
 
+// if "separate", each activity is cache separately, or if "shared", it will share the cache with as if no activity is active.
+// If true, default to "separate".
 // If false, cache is disabled.
-// Otherwise, if "separate", each activity is cache separately, or if true, it will share the cache with as if no activity is active.
-export type ActivityCacheSpec = "separate" | boolean;
+export type ActivityCacheSpec = "separate" | "shared" | boolean;
 
 //==============================================================================
 // Manifest

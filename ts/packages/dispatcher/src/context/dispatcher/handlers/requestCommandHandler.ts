@@ -37,7 +37,6 @@ import {
     ParsedCommandParams,
     SessionContext,
     CompletionGroup,
-    ActivityContext,
 } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { DispatcherName, isUnknownAction } from "../dispatcherUtils.js";
@@ -47,7 +46,11 @@ import {
     translateRequest,
     TranslationResult,
 } from "../../../translation/translateRequest.js";
-import { matchRequest } from "../../../translation/matchRequest.js";
+import {
+    getActivityCacheSpec,
+    getActivityNamespaceSuffix,
+    matchRequest,
+} from "../../../translation/matchRequest.js";
 import { addRequestToMemory, addResultToMemory } from "../../memory.js";
 import { requestCompletion } from "../../../translation/requestCompletion.js";
 const debugExplain = registerDebug("typeagent:explain");
@@ -159,19 +162,6 @@ async function canTranslateWithoutContext(
     }
 }
 
-function getActivityCacheSpec(
-    context: CommandHandlerContext,
-    activityContext?: ActivityContext,
-) {
-    if (activityContext === undefined) {
-        return true; // shared cache.
-    }
-
-    const { appAgentName, activityName } = activityContext;
-    const actionConfig = context.agents.getActionConfig(appAgentName);
-    return actionConfig.cachedActivities?.[activityName] ?? false;
-}
-
 function getCannotUseCacheReason(
     context: CommandHandlerContext,
     attachments?: string[],
@@ -246,6 +236,10 @@ function getExplainerOptions(
         context.session.getConfig().explainer.filter.reference;
 
     return {
+        namespaceSuffix: getActivityNamespaceSuffix(
+            context,
+            requestAction.history?.activityContext,
+        ),
         checkExplainable: translate
             ? (requestAction: RequestAction) =>
                   canTranslateWithoutContext(
