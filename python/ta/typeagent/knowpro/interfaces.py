@@ -10,14 +10,12 @@ from datetime import (
 )
 from typing import (
     Any,
-    Callable,
     ClassVar,
     Literal,
     NotRequired,
     Protocol,
     Self,
     TypedDict,
-    overload,
 )
 
 from pydantic.dataclasses import dataclass

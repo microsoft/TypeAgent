@@ -2,11 +2,10 @@
 # Licensed under the MIT License.
 
 from abc import ABC, abstractmethod
-from ast import Not
-from collections.abc import Iterator
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from re import search
-from typing import Callable, Literal, Protocol, cast
+from typing import Literal, Protocol, cast
 
 from ..aitools.embeddings import NormalizedEmbedding
 

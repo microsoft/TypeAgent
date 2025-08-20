@@ -19,8 +19,8 @@
 
 
 import bisect
-from collections.abc import AsyncIterable, Iterable
-from typing import Any, Callable
+from collections.abc import AsyncIterable, Callable
+from typing import Any
 
 from . import semrefindex
 from .interfaces import (

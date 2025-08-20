@@ -4,9 +4,7 @@
 import json
 import sqlite3
 import typing
-from typing import Any, AsyncIterator
 
-from .memorystore import MemoryStorageProvider
 from ..knowpro import interfaces
 from ..knowpro import serialization
 from ..knowpro.semrefindex import TermToSemanticRefIndex
@@ -36,10 +34,10 @@ class DefaultSerializer[TMessage: interfaces.IMessage](interfaces.JsonSerializer
     def __init__(self, cls: type[TMessage]):
         self.cls = cls
 
-    def serialize(self, value: TMessage) -> dict[str, Any] | list[Any]:
+    def serialize(self, value: TMessage) -> dict[str, typing.Any] | list[typing.Any]:
         return serialization.serialize_object(value)
 
-    def deserialize(self, data: dict[str, Any] | list[Any]) -> TMessage:
+    def deserialize(self, data: dict[str, typing.Any] | list[typing.Any]) -> TMessage:
         return serialization.deserialize_object(self.cls, data)
 
 
@@ -128,10 +126,10 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
     def __init__(self, db: sqlite3.Connection):
         self.db = db
 
-    def _serialize(self, sem_ref: interfaces.SemanticRef) -> dict[str, Any]:
+    def _serialize(self, sem_ref: interfaces.SemanticRef) -> dict[str, typing.Any]:
         return sem_ref.serialize()  # type: ignore[return-value]
 
-    def _deserialize(self, data: dict[str, Any]) -> interfaces.SemanticRef:
+    def _deserialize(self, data: dict[str, typing.Any]) -> interfaces.SemanticRef:
         return interfaces.SemanticRef.deserialize(data)  # type: ignore[arg-type]
 
     @property

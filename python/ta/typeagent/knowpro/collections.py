@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 import heapq
 import math
 import sys
-from typing import Set, cast
+from typing import cast, Set  # Set is an alias for builtin set
 
 from .interfaces import (
     ICollection,

@@ -1,9 +1,9 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, TypeGuard, cast
-from xmlrpc.client import boolean
+from typing import TypeGuard, cast
 
 from .collections import MessageAccumulator, SemanticRefAccumulator
 from .interfaces import (

@@ -1,9 +1,10 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+from collections.abc import AsyncGenerator, Iterator
 import os
 import tempfile
-from typing import Iterator, assert_never, AsyncGenerator
+from typing import assert_never
 
 import pytest
 import pytest_asyncio

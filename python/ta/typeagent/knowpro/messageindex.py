@@ -1,9 +1,8 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from collections.abc import AsyncIterable, Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Callable
 
 from ..aitools.embeddings import NormalizedEmbedding
 from ..aitools.vectorbase import TextEmbeddingIndexSettings

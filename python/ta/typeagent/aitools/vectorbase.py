@@ -1,13 +1,11 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Callable
 
 import numpy as np
 
-from ..aitools import utils
 from .embeddings import AsyncEmbeddingModel, NormalizedEmbedding, NormalizedEmbeddings
 
 

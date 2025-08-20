@@ -1,8 +1,8 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from typing import Callable, Optional, TypedDict, List
-from dataclasses import dataclass
+from collections.abc import Callable
+
 import numpy as np
 
 from ..aitools.vectorbase import VectorBase, TextEmbeddingIndexSettings, ScoredInt

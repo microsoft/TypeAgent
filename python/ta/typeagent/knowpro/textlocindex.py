@@ -1,15 +1,14 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Literal, Protocol
+from typing import Protocol
 
 from ..aitools.embeddings import NormalizedEmbedding
-from ..aitools.vectorbase import VectorBase, TextEmbeddingIndexSettings
+from ..aitools.vectorbase import TextEmbeddingIndexSettings
 
 from .fuzzyindex import ScoredInt, EmbeddingIndex
-import asyncio
-from typing import Sequence
 from .interfaces import (
     TextToTextLocationIndexData,
     TextLocation,
