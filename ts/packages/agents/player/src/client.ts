@@ -464,7 +464,7 @@ async function playTrackAction(
         action.parameters.artists,
         action.entities?.trackName,
         action.entities?.artists,
-        3,
+        1,
     );
 
     if (equivalentNames(action.parameters.trackName, tracks[0].name)) {

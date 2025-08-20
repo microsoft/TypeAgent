@@ -233,16 +233,30 @@ export function getUserDataCompletions(
                               b.timestamps[b.timestamps.length - 1],
                           ).getTime()
                         : 0;
-                return aTime - bTime;
+                return bTime - aTime;
             })
             .map((t) => t.name);
         completions.push(...trackNames);
     }
     if (artist) {
-        // for now just return names no sorting
-        const artistNames = Array.from(userData.artists.values()).map(
-            (a) => a.name,
-        );
+        // return names of artists, sorted by timestamp
+        const artistNames = Array.from(userData.artists.values())
+            .sort((a, b) => {
+                const aTime =
+                    a.timestamps.length > 0
+                        ? new Date(
+                              a.timestamps[a.timestamps.length - 1],
+                          ).getTime()
+                        : 0;
+                const bTime =
+                    b.timestamps.length > 0
+                        ? new Date(
+                              b.timestamps[b.timestamps.length - 1],
+                          ).getTime()
+                        : 0;
+                return bTime - aTime;
+            })
+            .map((a) => a.name);
         completions.push(...artistNames);
     }
     if (album) {
