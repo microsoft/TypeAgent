@@ -265,17 +265,29 @@ async function initializeDispatcher(
             },
             openLocalView: (port: number) => {
                 debugShell(`Opening local view on port ${port}`);
-                return shellWindow.openInlineBrowser(
+                shellWindow.createBrowserTab(
                     new URL(`http://localhost:${port}/`),
+                    { background: false },
                 );
+                return Promise.resolve();
             },
             closeLocalView: (port: number) => {
-                const current = shellWindow.inlineBrowserUrl;
+                const targetUrl = `http://localhost:${port}/`;
                 debugShell(
-                    `Closing local view on port ${port}, current url: ${current}`,
+                    `Closing local view on port ${port}, target url: ${targetUrl}`,
                 );
-                if (current === `http://localhost:${port}/`) {
-                    shellWindow.closeInlineBrowser();
+
+                // Find and close the tab with the matching URL
+                const allTabs = shellWindow.getAllBrowserTabs();
+                const matchingTab = allTabs.find(
+                    (tab) => tab.url === targetUrl,
+                );
+
+                if (matchingTab) {
+                    shellWindow.closeBrowserTab(matchingTab.id);
+                    debugShell(`Closed tab with URL: ${targetUrl}`);
+                } else {
+                    debugShell(`No tab found with URL: ${targetUrl}`);
                 }
             },
             exit: () => {

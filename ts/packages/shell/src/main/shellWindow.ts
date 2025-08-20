@@ -18,9 +18,14 @@ import {
     ShellUserSettings,
     ShellWindowState,
     ShellSettingManager,
+    BrowserTabState,
 } from "./shellSettings.js";
 import { isProd } from "./index.js";
 import { BrowserAgentIpc } from "./browserIpc.js";
+import {
+    BrowserViewManager,
+    BrowserViewContext,
+} from "./browserViewManager.js";
 
 import registerDebug from "debug";
 const debugShellWindow = registerDebug("typeagent:shell:window");
@@ -68,19 +73,23 @@ export class ShellWindow {
 
     public readonly mainWindow: BrowserWindow;
     public readonly chatView: WebContentsView;
-    private inlineWebContentView: WebContentsView | undefined;
-    private targetUrl: string | undefined;
     private inlineWidth: number;
     private readonly contentLoadP: Promise<void>[];
     private readonly handlers = new Map<string, (event: any) => void>();
     private readonly settings: ShellSettingManager;
     private closing: boolean = false;
 
+    // Multi-tab browser support
+    private readonly browserViewManager: BrowserViewManager;
+
     public get inlineBrowser(): WebContentsView {
-        if (this.inlineWebContentView === undefined) {
-            throw new Error("Inline browser is not open");
+        // Always use multi-tab browser
+        const activeBrowserView =
+            this.browserViewManager.getActiveBrowserView();
+        if (!activeBrowserView) {
+            throw new Error("No browser tab is open");
         }
-        return this.inlineWebContentView;
+        return activeBrowserView.webContentsView;
     }
     constructor(shellSettings: ShellSettings, instanceDir: string) {
         if (ShellWindow.instance !== undefined) {
@@ -96,6 +105,18 @@ export class ShellWindow {
         setupDevicePermissions(mainWindow);
         this.setupWebContents(mainWindow.webContents);
 
+        // Initialize browser view manager
+        this.browserViewManager = new BrowserViewManager(mainWindow);
+
+        // Set up event callbacks for browser view manager
+        this.browserViewManager.setTabUpdateCallback(() => {
+            this.sendTabsUpdate();
+        });
+
+        this.browserViewManager.setNavigationUpdateCallback(() => {
+            this.sendNavigationUpdate();
+        });
+
         const resizeHandlerCleanup = setupResizeHandler(mainWindow, () =>
             this.updateContentSize(),
         );
@@ -106,7 +127,8 @@ export class ShellWindow {
             mainWindow.hide();
             // Remove the handler to avoid update the content size on close
             resizeHandlerCleanup();
-            this.closeInlineBrowser(false);
+            // Close all browser tabs on window close
+            this.browserViewManager.closeAllTabs();
         });
 
         mainWindow.on("closed", () => {
@@ -122,6 +144,61 @@ export class ShellWindow {
 
         this.installHandler("dom ready", () => {
             this.ready();
+        });
+
+        // Browser tab management IPC handlers
+        ipcMain.on("browser-new-tab", () => {
+            this.createBrowserTab(new URL("about:blank"), {
+                background: false,
+            });
+            this.sendTabsUpdate();
+        });
+
+        ipcMain.on("browser-close-tab", (_, tabId: string) => {
+            const success = this.closeBrowserTab(tabId);
+            if (success) {
+                this.sendTabsUpdate();
+
+                // Update layout if no tabs left
+                if (!this.hasBrowserTabs()) {
+                    // No more browser tabs - shrink the window back to chat-only size
+                    const mainWindow = this.mainWindow;
+                    const mainWindowSize = mainWindow.getBounds();
+                    const newWidth = mainWindowSize.width - this.inlineWidth;
+
+                    debugShellWindow(
+                        `Shrinking window after closing last browser tab: ${mainWindowSize.width} - ${this.inlineWidth} = ${newWidth}`,
+                    );
+
+                    mainWindow.setBounds({
+                        width: newWidth,
+                    });
+                    this.updateContentSize();
+                }
+            }
+        });
+
+        ipcMain.on("browser-switch-tab", (_, tabId: string) => {
+            const success = this.switchBrowserTab(tabId);
+            if (success) {
+                this.sendTabsUpdate();
+            }
+        });
+
+        ipcMain.on("browser-go-back", () => {
+            if (this.browserGoBack()) {
+                this.sendNavigationUpdate();
+            }
+        });
+
+        ipcMain.on("browser-go-forward", () => {
+            if (this.browserGoForward()) {
+                this.sendNavigationUpdate();
+            }
+        });
+
+        ipcMain.on("browser-reload", () => {
+            this.browserReload();
         });
 
         const contentLoadP: Promise<void>[] = [];
@@ -183,19 +260,43 @@ export class ShellWindow {
         mainWindow.webContents.zoomFactor = 1;
 
         const states = this.settings.window;
-        const user = this.settings.user;
         if (states.devTools) {
             this.chatView.webContents.openDevTools();
         }
 
-        // open the canvas if it was previously open
-        if (user.canvas) {
-            this.openInlineBrowser(new URL(user.canvas)).catch((e) => {
-                // Don't care if this failed.
-                debugShellWindowError(
-                    `Failed to open canvas URL ${user.canvas} on app start: ${e}`,
+        // Restore browser tabs if they were previously open
+        if (states.browserTabsJson) {
+            try {
+                const browserTabsState: BrowserTabState[] = JSON.parse(
+                    states.browserTabsJson,
                 );
-            });
+                debugShellWindow(
+                    `Restoring ${browserTabsState.length} browser tabs`,
+                );
+
+                // Restore each tab
+                for (const tabState of browserTabsState) {
+                    try {
+                        const tabId = this.createBrowserTab(
+                            new URL(tabState.url),
+                            {
+                                background: !tabState.isActive,
+                            },
+                        );
+                        debugShellWindow(
+                            `Restored tab: ${tabId} - ${tabState.title} (${tabState.url})`,
+                        );
+                    } catch (e) {
+                        debugShellWindowError(
+                            `Failed to restore tab ${tabState.title} (${tabState.url}): ${e}`,
+                        );
+                    }
+                }
+            } catch (e) {
+                debugShellWindowError(
+                    `Failed to parse browser tabs JSON: ${e}`,
+                );
+            }
         }
 
         globalShortcut.register("Alt+Right", () => {
@@ -220,11 +321,21 @@ export class ShellWindow {
         }
         this.handlers.clear();
 
+        // Clean up browser IPC handlers
+        ipcMain.removeAllListeners("browser-new-tab");
+        ipcMain.removeAllListeners("browser-close-tab");
+        ipcMain.removeAllListeners("browser-switch-tab");
+        ipcMain.removeAllListeners("browser-go-back");
+        ipcMain.removeAllListeners("browser-go-forward");
+        ipcMain.removeAllListeners("browser-reload");
+
         globalShortcut.unregister("Alt+Right");
     }
 
     public sendMessageToInlineWebContent(message: WebSocketMessageV2) {
-        this.inlineWebContentView?.webContents.send(
+        const activeBrowserView =
+            this.browserViewManager.getActiveBrowserView();
+        activeBrowserView?.webContentsView.webContents.send(
             "received-from-browser-ipc",
             message,
         );
@@ -259,14 +370,36 @@ export class ShellWindow {
         const position = this.mainWindow.getPosition();
         const size = this.mainWindow.getSize();
 
+        // Get browser tabs state for saving
+        const browserTabs = this.browserViewManager.getAllBrowserTabs();
+        const activeBrowserView =
+            this.browserViewManager.getActiveBrowserView();
+
+        const browserTabsState: BrowserTabState[] | undefined =
+            browserTabs.length > 0
+                ? browserTabs.map((tab) => ({
+                      id: tab.id,
+                      url: tab.url,
+                      title: tab.title,
+                      isActive: tab.isActive,
+                  }))
+                : undefined;
+
+        const browserTabsJson = browserTabsState
+            ? JSON.stringify(browserTabsState)
+            : undefined;
+
         return {
             x: position[0],
             y: position[1],
-            width: size[0] - (this.inlineWebContentView ? this.inlineWidth : 0),
+            width: size[0] - (browserTabsJson ? this.inlineWidth : 0),
             height: size[1],
             inlineWidth: this.inlineWidth,
             zoomLevel: this.chatView.webContents.zoomFactor,
             devTools: this.chatView.webContents.isDevToolsOpened(),
+            canvas: this.browserViewManager.getActiveBrowserView()?.url, // Save active tab URL
+            browserTabsJson: browserTabsJson,
+            activeBrowserTabId: activeBrowserView?.id,
         };
     }
 
@@ -285,7 +418,13 @@ export class ShellWindow {
 
         const { width, height } = bounds;
         let chatWidth = width;
-        if (this.inlineWebContentView) {
+
+        // Check if we have browser tabs
+        const hasBrowserContent = this.browserViewManager.hasBrowserTabs();
+
+        if (hasBrowserContent) {
+            // If no explicit chat width provided, calculate it from the total width and saved inline width
+            // chatWidth = newChatWidth ?? (width - this.inlineWidth);
             chatWidth = newChatWidth ?? this.chatView.getBounds().width;
             if (chatWidth < 0) {
                 chatWidth = 0;
@@ -294,21 +433,13 @@ export class ShellWindow {
             }
             const inlineWidth = width - chatWidth;
             this.inlineWidth = inlineWidth;
-            const inlineBounds = {
-                x: chatWidth + 4,
-                y: 0,
-                width: inlineWidth,
-                height: height,
-            };
-            debugShellWindow(
-                `Inline browser bounds: ${JSON.stringify(inlineBounds)}`,
-            );
-            this.inlineWebContentView.setBounds({
-                x: chatWidth + 4,
-                y: 0,
-                width: inlineWidth,
-                height: height,
-            });
+
+            // Update browser view manager for multi-tab layout
+            this.browserViewManager.updateActiveBrowserViewBounds();
+        } else {
+            // No browser content - chat should fill the entire width
+            chatWidth = width;
+            // Don't update inlineWidth when no browser content, keep the saved value for future use
         }
 
         const chatViewBounds = {
@@ -322,7 +453,7 @@ export class ShellWindow {
         this.chatView.setBounds(chatViewBounds);
 
         // Set the divider position
-        const dividerLeft = this.inlineWebContentView ? chatWidth : -1;
+        const dividerLeft = hasBrowserContent ? chatWidth : -1;
         debugShellWindow(`Divider left: ${dividerLeft}`);
         this.mainWindow.webContents.send("set-divider-left", dividerLeft);
     }
@@ -335,8 +466,193 @@ export class ShellWindow {
         this.chatView.webContents.send("show-dialog", dialogName);
     }
 
-    public get inlineBrowserUrl(): string | undefined {
-        return this.targetUrl;
+    // ================================================================
+    // Multi-Tab Browser Support
+    // ================================================================
+
+    /**
+     * Resolve custom typeagent-browser protocol URLs
+     */
+    private resolveCustomProtocolUrl(targetUrl: URL): URL {
+        const browserExtensionUrls = (global as any).browserExtensionUrls;
+        if (browserExtensionUrls) {
+            // Map custom protocol to actual extension URL
+            const libraryName = targetUrl.pathname;
+
+            if (libraryName && browserExtensionUrls[libraryName]) {
+                const resolvedUrl = new URL(browserExtensionUrls[libraryName]);
+                debugShellWindow(
+                    `Resolved custom protocol URL: ${targetUrl.toString()} -> ${resolvedUrl.toString()}`,
+                );
+                return resolvedUrl;
+            } else {
+                throw new Error(`Unknown library page: ${libraryName}`);
+            }
+        } else {
+            throw new Error(
+                "Browser extension not loaded - library pages unavailable",
+            );
+        }
+    }
+
+    /**
+     * Create a new browser tab
+     */
+    public createBrowserTab(
+        url: URL,
+        options?: { background?: boolean },
+    ): string {
+        // Handle custom typeagent-browser protocol
+        let resolvedUrl = url;
+        if (url.protocol === "typeagent-browser:") {
+            resolvedUrl = this.resolveCustomProtocolUrl(url);
+        }
+
+        const tabId = this.browserViewManager.createBrowserTab({
+            url: resolvedUrl.toString(),
+            background: options?.background,
+        });
+
+        // Update layout when first tab is created
+        if (this.browserViewManager.getAllBrowserTabs().length === 1) {
+            // This is the first browser tab - expand the window to accommodate browser section
+            const mainWindow = this.mainWindow;
+            const mainWindowSize = mainWindow.getBounds();
+            const newWidth = mainWindowSize.width + this.inlineWidth;
+
+            debugShellWindow(
+                `Expanding window for first browser tab: ${mainWindowSize.width} + ${this.inlineWidth} = ${newWidth}`,
+            );
+
+            mainWindow.setBounds({
+                width: newWidth,
+            });
+            this.updateContentSize();
+        }
+
+        // Send update to renderer
+        this.sendTabsUpdate();
+
+        return tabId;
+    }
+
+    /**
+     * Switch to a specific browser tab
+     */
+    public switchBrowserTab(tabId: string): boolean {
+        const success = this.browserViewManager.setActiveBrowserView(tabId);
+        if (success) {
+            this.updateContentSize();
+        }
+        return success;
+    }
+
+    /**
+     * Close a browser tab
+     */
+    public closeBrowserTab(tabId: string): boolean {
+        const success = this.browserViewManager.closeBrowserTab(tabId);
+        if (success) {
+            this.updateContentSize();
+        }
+        return success;
+    }
+
+    /**
+     * Get the active browser view
+     */
+    public getActiveBrowserView(): BrowserViewContext | null {
+        return this.browserViewManager.getActiveBrowserView();
+    }
+
+    /**
+     * Get all browser tabs
+     */
+    public getAllBrowserTabs(): BrowserViewContext[] {
+        return this.browserViewManager.getAllBrowserTabs();
+    }
+
+    /**
+     * Check if browser tabs are open
+     */
+    public hasBrowserTabs(): boolean {
+        return this.browserViewManager.hasBrowserTabs();
+    }
+
+    /**
+     * Get browser navigation state
+     */
+    public getBrowserNavigationState(): {
+        canGoBack: boolean;
+        canGoForward: boolean;
+    } {
+        // Always use multi-tab browser
+        return this.browserViewManager.getNavigationState();
+    }
+
+    /**
+     * Navigate browser back
+     */
+    public browserGoBack(): boolean {
+        // Always use multi-tab browser
+        return this.browserViewManager.goBack();
+    }
+
+    /**
+     * Navigate browser forward
+     */
+    public browserGoForward(): boolean {
+        // Always use multi-tab browser
+        return this.browserViewManager.goForward();
+    }
+
+    /**
+     * Reload active browser tab
+     */
+    public browserReload(): boolean {
+        // Always use multi-tab browser
+        return this.browserViewManager.reload();
+    }
+
+    /**
+     * Send tab updates to renderer
+     */
+    private sendTabsUpdate(): void {
+        const tabs = this.getAllBrowserTabs().map((tab) => ({
+            id: tab.id,
+            title: tab.title,
+            url: tab.url,
+            favicon: tab.favicon,
+            isActive: tab.isActive,
+        }));
+
+        const activeTab = this.getActiveBrowserView();
+        const tabsData = {
+            tabs,
+            activeTabId: activeTab?.id || null,
+            navigationState: this.getBrowserNavigationState(),
+        };
+
+        this.mainWindow.webContents.send("browser-tabs-updated", tabsData);
+
+        // Also send to all browser tab WebContents for tab validation
+        this.browserViewManager.getAllBrowserTabs().forEach((tab) => {
+            tab.webContentsView.webContents.send(
+                "browser-tabs-updated",
+                tabsData,
+            );
+        });
+    }
+
+    /**
+     * Send navigation state update to renderer
+     */
+    private sendNavigationUpdate(): void {
+        const navigationState = this.getBrowserNavigationState();
+        this.mainWindow.webContents.send(
+            "browser-navigation-updated",
+            navigationState,
+        );
     }
 
     // ================================================================
@@ -361,7 +677,8 @@ export class ShellWindow {
             debugShellWindow(`Opening PDF viewer for: ${pdfUrl}`);
 
             const viewerUrl = await this.constructPDFViewerUrl(pdfUrl);
-            return this.openInlineBrowser(new URL(viewerUrl));
+            this.createBrowserTab(new URL(viewerUrl), { background: false });
+            return Promise.resolve();
         } catch (error) {
             debugShellWindowError("Error opening PDF viewer:", error);
             throw error;
@@ -413,76 +730,6 @@ export class ShellWindow {
         }
     }
 
-    // ================================================================
-    // Inline browser
-    // ================================================================
-
-    public async openInlineBrowser(targetUrl: URL) {
-        // Check for custom typeagent-browser protocol
-        if (targetUrl.protocol === "typeagent-browser:") {
-            const browserExtensionUrls = (global as any).browserExtensionUrls;
-            if (browserExtensionUrls) {
-                // Map custom protocol to actual extension URL
-                const libraryName = targetUrl.pathname;
-
-                if (libraryName && browserExtensionUrls[libraryName]) {
-                    targetUrl = new URL(browserExtensionUrls[libraryName]);
-                    debugShellWindow(
-                        `Resolved custom protocol URL: ${targetUrl.toString()}`,
-                    );
-                } else {
-                    throw new Error(`Unknown library page: ${libraryName}`);
-                }
-            } else {
-                throw new Error(
-                    "Browser extension not loaded - library pages unavailable",
-                );
-            }
-        }
-        const mainWindow = this.mainWindow;
-        const mainWindowSize = mainWindow.getBounds();
-        let newWindow: boolean = false;
-        let inlineWebContentView = this.inlineWebContentView;
-        if (!inlineWebContentView) {
-            newWindow = true;
-
-            inlineWebContentView = new WebContentsView({
-                webPreferences: {
-                    preload: path.join(__dirname, "../preload-cjs/webview.cjs"),
-                    sandbox: false,
-                    zoomFactor: this.chatView.webContents.zoomFactor,
-                },
-            });
-
-            this.setupWebContents(inlineWebContentView.webContents);
-
-            mainWindow.contentView.addChildView(inlineWebContentView);
-            this.inlineWebContentView = inlineWebContentView;
-
-            mainWindow.setBounds({
-                width: mainWindowSize.width + this.inlineWidth,
-            });
-            this.updateContentSize();
-        }
-
-        const targetUrlString = targetUrl.toString();
-        // only open the requested canvas if it isn't already opened
-        if (this.targetUrl !== targetUrlString || newWindow) {
-            this.targetUrl = targetUrlString;
-            // indicate in the settings which canvas is open
-            this.setUserSettingValue("canvas", targetUrlString);
-
-            if (
-                this.dispatcherReadyPromiseResolvers !== undefined &&
-                targetUrlString.startsWith("http://localhost")
-            ) {
-                await this.dispatcherReadyPromiseResolvers.promise;
-            }
-
-            return inlineWebContentView.webContents.loadURL(targetUrlString);
-        }
-    }
-
     private dispatcherReadyPromiseResolvers:
         | PromiseWithResolvers<void>
         | undefined = Promise.withResolvers<void>();
@@ -498,31 +745,6 @@ export class ShellWindow {
 
         // Give focus to the chat view once initialization is done.
         this.chatView.webContents.focus();
-    }
-
-    public closeInlineBrowser(save: boolean = true) {
-        const inlineWebContentView = this.inlineWebContentView;
-        if (inlineWebContentView === undefined) {
-            return false;
-        }
-        const browserBounds = inlineWebContentView.getBounds();
-        inlineWebContentView.webContents.close();
-        this.mainWindow.contentView.removeChildView(inlineWebContentView);
-        this.inlineWebContentView = undefined;
-
-        const mainWindowSize = this.mainWindow.getBounds();
-        this.mainWindow.setBounds({
-            width: mainWindowSize.width - browserBounds.width,
-        });
-
-        this.updateContentSize();
-
-        // clear the canvas settings
-        if (save) {
-            this.targetUrl = undefined;
-            this.setUserSettingValue("canvas", undefined);
-        }
-        return true;
     }
 
     // ================================================================

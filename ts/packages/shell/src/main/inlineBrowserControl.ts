@@ -10,13 +10,25 @@ import { ipcMain } from "electron";
 export function createInlineBrowserControl(
     shellWindow: ShellWindow,
 ): BrowserControl {
+    // Helper function to get the active browser WebContents for automation
+    function getActiveBrowserWebContents() {
+        // Always use multi-tab browser
+        const activeBrowserView = shellWindow.getActiveBrowserView();
+        if (!activeBrowserView) {
+            throw new Error("No active browser tab available");
+        }
+        return activeBrowserView.webContentsView.webContents;
+    }
     const contentScriptRpcChannel = createGenericChannel((message) => {
-        shellWindow.inlineBrowser.webContents.send(
-            "inline-browser-rpc-call",
-            message,
-        );
+        try {
+            const webContents = getActiveBrowserWebContents();
+            webContents.send("inline-browser-rpc-call", message);
+        } catch (error) {
+            console.warn("Failed to send RPC message to browser:", error);
+        }
     });
-    // REVIEW: How to handle multiple inline browser.
+
+    // Handle RPC replies from browser views
     ipcMain.on("inline-browser-rpc-reply", (_, message) => {
         contentScriptRpcChannel.message(message);
     });
@@ -25,35 +37,42 @@ export function createInlineBrowserControl(
         contentScriptRpcChannel.channel,
     );
     return {
-        async openWebPage(url: string) {
-            return shellWindow.openInlineBrowser(new URL(url));
+        async openWebPage(url: string, options?: { newTab?: boolean }) {
+            // Always use multi-tab approach
+            shellWindow.createBrowserTab(new URL(url), {
+                background: options?.newTab === true ? true : false,
+            });
+            return Promise.resolve();
         },
         async closeWebPage() {
-            if (!shellWindow.closeInlineBrowser()) {
-                throw new Error("No inline browser is currently open.");
+            // Always use multi-tab browser
+            const activeBrowserView = shellWindow.getActiveBrowserView();
+            if (!activeBrowserView) {
+                throw new Error("No browser tab is currently open.");
+            }
+
+            if (!shellWindow.closeBrowserTab(activeBrowserView.id)) {
+                throw new Error("Failed to close active browser tab.");
             }
         },
         async goForward() {
-            const navigateHistory =
-                shellWindow.inlineBrowser.webContents.navigationHistory;
-            if (!navigateHistory.canGoForward()) {
+            if (!shellWindow.browserGoForward()) {
                 throw new Error("Cannot go forward in history");
             }
-            navigateHistory.goForward();
         },
         async goBack() {
-            const navigateHistory =
-                shellWindow.inlineBrowser.webContents.navigationHistory;
-            if (!navigateHistory.canGoBack()) {
+            if (!shellWindow.browserGoBack()) {
                 throw new Error("Cannot go back in history");
             }
-            navigateHistory.goBack();
         },
         async reload() {
-            shellWindow.inlineBrowser.webContents.reload();
+            if (!shellWindow.browserReload()) {
+                throw new Error("No active browser to reload");
+            }
         },
         async getPageUrl() {
-            return shellWindow.inlineBrowser.webContents.getURL();
+            const webContents = getActiveBrowserWebContents();
+            return webContents.getURL();
         },
         setAgentStatus(isBusy: boolean, message: string) {
             console.log(`${message} (isBusy: ${isBusy})`);
@@ -71,7 +90,7 @@ export function createInlineBrowserControl(
                     actionName: "zoomIn",
                 });
             }
-            const webContents = shellWindow.inlineBrowser.webContents;
+            const webContents = getActiveBrowserWebContents();
             webContents.setZoomFactor(webContents.getZoomFactor() + 0.1);
         },
         async zoomOut() {
@@ -81,38 +100,62 @@ export function createInlineBrowserControl(
                     actionName: "zoomOut",
                 });
             }
-            const webContents = shellWindow.inlineBrowser.webContents;
+            const webContents = getActiveBrowserWebContents();
             webContents.setZoomFactor(webContents.getZoomFactor() - 0.1);
         },
         async zoomReset() {
-            const webContents = shellWindow.inlineBrowser.webContents;
+            const webContents = getActiveBrowserWebContents();
             webContents.setZoomFactor(1.0);
         },
         async followLinkByPosition(position: number, openInNewTab?: boolean) {
-            if (openInNewTab) {
-                // TODO: Support opening in new browser view.
-                throw new Error(
-                    "New tab opening is not supported in inline browser.",
-                );
-            }
             const url =
                 await contentScriptControl.getPageLinksByPosition(position);
             if (url) {
-                await shellWindow.openInlineBrowser(new URL(url));
+                if (openInNewTab) {
+                    // Create new tab for the URL
+                    shellWindow.createBrowserTab(new URL(url), {
+                        background: false,
+                    });
+                } else {
+                    // Navigate current tab or create new tab if none exists
+                    const activeBrowserView =
+                        shellWindow.getActiveBrowserView();
+                    if (activeBrowserView) {
+                        activeBrowserView.webContentsView.webContents.loadURL(
+                            url,
+                        );
+                    } else {
+                        shellWindow.createBrowserTab(new URL(url), {
+                            background: false,
+                        });
+                    }
+                }
             }
             return url;
         },
         async followLinkByText(keywords: string, openInNewTab?: boolean) {
-            if (openInNewTab) {
-                // TODO: Support opening in new browser view.
-                throw new Error(
-                    "New tab opening is not supported in inline browser.",
-                );
-            }
             const url =
                 await contentScriptControl.getPageLinksByQuery(keywords);
             if (url) {
-                await shellWindow.openInlineBrowser(new URL(url));
+                if (openInNewTab) {
+                    // Create new tab for the URL
+                    shellWindow.createBrowserTab(new URL(url), {
+                        background: false,
+                    });
+                } else {
+                    // Navigate current tab or create new tab if none exists
+                    const activeBrowserView =
+                        shellWindow.getActiveBrowserView();
+                    if (activeBrowserView) {
+                        activeBrowserView.webContentsView.webContents.loadURL(
+                            url,
+                        );
+                    } else {
+                        shellWindow.createBrowserTab(new URL(url), {
+                            background: false,
+                        });
+                    }
+                }
             }
             return url;
         },
@@ -123,12 +166,12 @@ export function createInlineBrowserControl(
         },
         async search(query: string) {
             // TODO: use configured search provider
-            await shellWindow.openInlineBrowser(
-                new URL(
-                    "https://www.bing.com/search?q=" +
-                        encodeURIComponent(query),
-                ),
+            const searchUrl = new URL(
+                "https://www.bing.com/search?q=" + encodeURIComponent(query),
             );
+
+            // Always use tabs
+            shellWindow.createBrowserTab(searchUrl, { background: false });
         },
         async readPage() {
             throw new Error("Reading page is not supported in inline browser.");
@@ -139,8 +182,8 @@ export function createInlineBrowserControl(
             );
         },
         async captureScreenshot() {
-            const image =
-                await shellWindow.inlineBrowser.webContents.capturePage();
+            const webContents = getActiveBrowserWebContents();
+            const image = await webContents.capturePage();
             return `data:image/png;base64,${image.toPNG().toString("base64")}`;
         },
     };
