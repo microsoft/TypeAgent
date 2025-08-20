@@ -769,12 +769,14 @@ class JsonSerializer[T](ABC):
 
 
 class IStorageProvider[TMessage: IMessage](Protocol):
-    async def create_message_collection(
+    """API spec for storage providers -- maybe in-memory or persistent."""
+
+    async def get_message_collection(
         self,
         serializer: JsonSerializer[TMessage] | type[TMessage] | None = None,
     ) -> IMessageCollection[TMessage]: ...
 
-    async def create_semantic_ref_collection(self) -> ISemanticRefCollection: ...
+    async def get_semantic_ref_collection(self) -> ISemanticRefCollection: ...
 
     # Index getters - ALL 6 index types for this conversation
     async def get_conversation_index(self) -> ITermToSemanticRefIndex: ...

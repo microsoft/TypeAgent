@@ -9,19 +9,12 @@ to ensure behavioral parity across implementations.
 """
 
 import pytest
-import pytest_asyncio
 from dataclasses import dataclass, field
 
-from fixtures import needs_auth, storage_provider_type, embedding_model, temp_db_path  # type: ignore
+from fixtures import needs_auth, storage_provider_type, embedding_model, temp_db_path
 from typeagent.knowpro.kplib import KnowledgeResponse
 from typeagent.knowpro.interfaces import (
     IMessage,
-    ITermToSemanticRefIndex,
-    IPropertyToSemanticRefIndex,
-    ITimestampToTextRangeIndex,
-    IMessageTextIndex,
-    ITermToRelatedTermsIndex,
-    IConversationThreads,
     SemanticRef,
     TextLocation,
     TextRange,
@@ -107,7 +100,7 @@ async def test_message_collection_basic_operations(storage_provider_type, needs_
     storage_provider, provider_type = storage_provider_type
 
     # Create message collection
-    collection = await storage_provider.create_message_collection(DummyTestMessage)
+    collection = await storage_provider.get_message_collection(DummyTestMessage)
 
     # Test initial state
     assert await collection.size() == 0
@@ -147,7 +140,7 @@ async def test_semantic_ref_collection_basic_operations(
     storage_provider, provider_type = storage_provider_type
 
     # Create semantic ref collection
-    collection = await storage_provider.create_semantic_ref_collection()
+    collection = await storage_provider.get_semantic_ref_collection()
 
     # Test initial state
     assert await collection.size() == 0
@@ -283,10 +276,10 @@ async def test_cross_provider_message_collection_equivalence(
 
     try:
         # Create collections in both
-        memory_collection = await memory_provider.create_message_collection(
+        memory_collection = await memory_provider.get_message_collection(
             DummyTestMessage
         )
-        sqlite_collection = await sqlite_provider.create_message_collection(
+        sqlite_collection = await sqlite_provider.get_message_collection(
             DummyTestMessage
         )
 

@@ -257,7 +257,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
             self.db.commit()
         return self.db
 
-    async def create_message_collection(
+    async def get_message_collection(
         self,
         serializer: interfaces.JsonSerializer[TMessage] | type[TMessage] | None = None,
     ) -> SqliteMessageCollection[TMessage]:
@@ -267,7 +267,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
             serializer = DefaultSerializer[TMessage](serializer)
         return SqliteMessageCollection[TMessage](self.get_db(), serializer)
 
-    async def create_semantic_ref_collection(self) -> interfaces.ISemanticRefCollection:
+    async def get_semantic_ref_collection(self) -> interfaces.ISemanticRefCollection:
         return SqliteSemanticRefCollection(self.get_db())
 
     # Index getter methods

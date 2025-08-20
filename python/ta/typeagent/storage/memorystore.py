@@ -77,7 +77,7 @@ class MemoryStorageProvider[TMessage: IMessage](IStorageProvider[TMessage]):
     async def get_conversation_threads(self) -> IConversationThreads:
         return self._conversation_threads
 
-    async def create_message_collection(
+    async def get_message_collection(
         self,
         serializer: JsonSerializer[TMessage] | type[TMessage] | None = None,
     ) -> MemoryMessageCollection[TMessage]:
@@ -86,7 +86,7 @@ class MemoryStorageProvider[TMessage: IMessage](IStorageProvider[TMessage]):
             raise ValueError("MemoryStorageProvider does not use a serializer.")
         return MemoryMessageCollection[TMessage]()
 
-    async def create_semantic_ref_collection(self) -> MemorySemanticRefCollection:
+    async def get_semantic_ref_collection(self) -> MemorySemanticRefCollection:
         """Create a new semantic reference collection."""
         return MemorySemanticRefCollection()
 

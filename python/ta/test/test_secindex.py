@@ -3,7 +3,11 @@
 
 import pytest
 
-from fixtures import storage, needs_auth, embedding_model  # Import the storage fixture
+from fixtures import (
+    memory_storage,
+    needs_auth,
+    embedding_model,
+)  # Import the storage fixture
 from typeagent.aitools.embeddings import TEST_MODEL_NAME
 from typeagent.knowpro.importing import ConversationSettings
 from typeagent.knowpro.messageindex import MessageTextIndexSettings
@@ -105,9 +109,9 @@ def conversation_settings(needs_auth):
     return ConversationSettings(model)
 
 
-def test_conversation_secondary_indexes_initialization(storage, needs_auth):
+def test_conversation_secondary_indexes_initialization(memory_storage, needs_auth):
     """Test initialization of ConversationSecondaryIndexes."""
-    storage_provider = storage
+    storage_provider = memory_storage
     # Create proper settings for testing
     from typeagent.aitools.embeddings import AsyncEmbeddingModel
     from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings

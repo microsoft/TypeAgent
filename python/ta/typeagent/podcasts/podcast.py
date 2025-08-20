@@ -372,8 +372,8 @@ class Podcast(IConversation[PodcastMessage, semrefindex.TermToSemanticRefIndex])
             settings.related_term_index_settings,
             dbname,
         )
-        msgs = await provider.create_message_collection(PodcastMessage)
-        semrefs = await provider.create_semantic_ref_collection()
+        msgs = await provider.get_message_collection(PodcastMessage)
+        semrefs = await provider.get_semantic_ref_collection()
         if await msgs.size() or await semrefs.size():
             raise RuntimeError(
                 f"Database {dbname!r} already has messages or semantic refs."

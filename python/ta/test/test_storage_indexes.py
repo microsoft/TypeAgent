@@ -3,47 +3,47 @@
 
 import pytest
 
-from fixtures import needs_auth, storage, embedding_model  # type: ignore  # It's used!
+from fixtures import needs_auth, memory_storage, embedding_model  # type: ignore  # It's used!
 from typeagent.storage.memorystore import MemoryStorageProvider
 
 
 @pytest.mark.asyncio
-async def test_all_index_creation(storage, needs_auth):
+async def test_all_index_creation(memory_storage, needs_auth):
     """Test that all 6 index types are created and accessible."""
     # storage fixture already initializes indexes
 
     # Test all index types are created and return objects
-    conv_index = await storage.get_conversation_index()
+    conv_index = await memory_storage.get_conversation_index()
     assert conv_index is not None
 
-    prop_index = await storage.get_property_index()
+    prop_index = await memory_storage.get_property_index()
     assert prop_index is not None
 
-    time_index = await storage.get_timestamp_index()
+    time_index = await memory_storage.get_timestamp_index()
     assert time_index is not None
 
-    msg_index = await storage.get_message_text_index()
+    msg_index = await memory_storage.get_message_text_index()
     assert msg_index is not None
 
-    rel_index = await storage.get_related_terms_index()
+    rel_index = await memory_storage.get_related_terms_index()
     assert rel_index is not None
 
-    threads = await storage.get_conversation_threads()
+    threads = await memory_storage.get_conversation_threads()
     assert threads is not None
 
 
 @pytest.mark.asyncio
-async def test_index_persistence(storage, needs_auth):
+async def test_index_persistence(memory_storage, needs_auth):
     """Test that same index instance is returned across calls."""
     # storage fixture already initializes indexes
 
     # All index types should return same instance across calls
-    conv1 = await storage.get_conversation_index()
-    conv2 = await storage.get_conversation_index()
+    conv1 = await memory_storage.get_conversation_index()
+    conv2 = await memory_storage.get_conversation_index()
     assert conv1 is conv2
 
-    prop1 = await storage.get_property_index()
-    prop2 = await storage.get_property_index()
+    prop1 = await memory_storage.get_property_index()
+    prop2 = await memory_storage.get_property_index()
     assert prop1 is prop2
 
 
@@ -118,11 +118,11 @@ async def test_storage_provider_collections_still_work(needs_auth):
     storage = MemoryStorageProvider(message_text_settings, related_terms_settings)
 
     # Test message collection creation
-    msg_collection = await storage.create_message_collection()
+    msg_collection = await storage.get_message_collection()
     assert msg_collection is not None
     assert await msg_collection.size() == 0
 
     # Test semantic ref collection creation
-    ref_collection = await storage.create_semantic_ref_collection()
+    ref_collection = await storage.get_semantic_ref_collection()
     assert ref_collection is not None
     assert await ref_collection.size() == 0
