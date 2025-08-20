@@ -879,7 +879,6 @@ export async function translateRequest(
         );
     }
 
-    // Start with the last translator used
     const startTime = performance.now();
     const activeSchemaNames = systemContext.agents.getActiveSchemas();
     debugTranslate(`Active schemas: ${activeSchemaNames.join(",")}`);

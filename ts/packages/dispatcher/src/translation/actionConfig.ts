@@ -5,6 +5,7 @@ import {
     ActionManifest,
     AppAgentManifest,
     SchemaManifest,
+    ActivityCacheSpec,
 } from "@typeagent/agent-sdk";
 import registerDebug from "debug";
 const debugConfig = registerDebug("typeagent:dispatcher:schema:config");
@@ -12,6 +13,9 @@ const debugConfig = registerDebug("typeagent:dispatcher:schema:config");
 // A flatten AppAgentManifest
 export type ActionConfig = {
     emojiChar: string;
+
+    // Key is activity name. Default (if not specified) is not cached during activity.
+    cachedActivities: Record<string, ActivityCacheSpec> | undefined;
 
     schemaDefaultEnabled: boolean;
     actionDefaultEnabled: boolean;
@@ -24,6 +28,7 @@ function collectActionConfigs(
     manifest: ActionManifest,
     schemaName: string,
     emojiChar: string,
+    cachedActivities: Record<string, ActivityCacheSpec> | undefined,
     transient: boolean,
     schemaDefaultEnabled: boolean,
     actionDefaultEnabled: boolean,
@@ -43,6 +48,7 @@ function collectActionConfigs(
         actionConfigs[schemaName] = {
             schemaName,
             emojiChar,
+            cachedActivities,
             ...manifest.schema,
             transient,
             schemaDefaultEnabled,
@@ -61,6 +67,7 @@ function collectActionConfigs(
                 subManifest,
                 `${schemaName}.${subName}`,
                 emojiChar,
+                cachedActivities, // propagate cachedActivities
                 transient, // propagate default transient
                 schemaDefaultEnabled, // propagate default schemaDefaultEnabled
                 actionDefaultEnabled, // propagate default actionDefaultEnabled
@@ -90,6 +97,7 @@ export function convertToActionConfig(
         config,
         name,
         emojiChar,
+        config.cachedActivities,
         false, // transient default to false if not specified
         true, // translationDefaultEnable default to true if not specified
         true, // actionDefaultEnabled default to true if not specified
