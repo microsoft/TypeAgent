@@ -244,16 +244,31 @@ export class PartialCompletion {
                 this.current = partial;
                 this.space = result.space;
 
-                const completions = result.completions.flatMap((group) =>
-                    group.completions.map((choice, index) => {
+                const completions = result.completions.flatMap((group) => {
+                    // temporarily assign emoji char here
+                    const musicalScore = "🎼";
+                    if (group.name.includes("artist")) {
+                        group.emojiChar = musicalScore;
+                    } else if (group.name.includes("musician")) {
+                        group.emojiChar = musicalScore;
+                    } else if (group.name.includes("album")) {
+                        const album = "💿";
+                        group.emojiChar = album;
+                    } else if (group.name.includes("track")) {
+                        const track = "🎶";
+                        group.emojiChar = track;
+                    }
+                    return group.completions.map((choice, index) => {
                         return {
                             matchText: choice,
                             selectedText: choice,
                             sortIndex: index,
                             needQuotes: group.needQuotes,
+                            emojiChar: group.emojiChar,
                         };
-                    }),
-                );
+                    });
+                });
+
                 if (completions.length === 0) {
                     debug(
                         `Partial completion skipped: No current completions for '${partial}'`,
