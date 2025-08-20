@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
 # Test that ConversationSecondaryIndexes now uses storage provider properly
 import pytest
 
