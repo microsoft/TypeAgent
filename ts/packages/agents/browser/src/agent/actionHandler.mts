@@ -27,7 +27,6 @@ import {
     displaySuccess,
     getMessage,
 } from "@typeagent/agent-sdk/helpers/display";
-import { Crossword } from "./crossword/schema/pageSchema.mjs";
 import {
     getBoardSchema,
     handleCrosswordAction,
@@ -35,7 +34,7 @@ import {
 
 import { BrowserConnector } from "./browserConnector.mjs";
 import { handleCommerceAction } from "./commerce/actionHandler.mjs";
-import { TabTitleIndex, createTabTitleIndex } from "./tabTitleIndex.mjs";
+import { createTabTitleIndex } from "./tabTitleIndex.mjs";
 import { ChildProcess, fork } from "child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -65,7 +64,6 @@ import {
 import {
     loadAllowDynamicAgentDomains,
     processWebAgentMessage,
-    WebAgentChannels,
 } from "./webTypeAgent.mjs";
 import { isWebAgentMessage } from "../common/webAgentMessageTypes.mjs";
 import { handleSchemaDiscoveryAction } from "./discovery/actionHandler.mjs";
@@ -86,12 +84,14 @@ import { ShoppingActions } from "./commerce/schema/userActions.mjs";
 import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
 import { BrowserControl } from "../common/browserControl.mjs";
-import { openai, TextEmbeddingModel } from "aiclient";
+import { openai } from "aiclient";
 import { urlResolver } from "azure-ai-foundry";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 import { deleteCachedSchema } from "./crossword/cachedSchema.mjs";
 import { getCrosswordCommandHandlerTable } from "./crossword/commandHandler.mjs";
-import { MacroStore } from "./storage/index.mjs";
+import { SearchProviderCommandHandlerTable } from "./searchProvider/searchProviderCommandHandlers.mjs"
+import { defaultSearchProviders } from "./searchProvider/searchProvider.mjs";
+import { BrowserActionContext, getActionBrowserControl, saveSettings } from "./browserActions.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
 const debugWebSocket = registerDebug("typeagent:browser:ws");
@@ -105,33 +105,6 @@ export function instantiate(): AppAgent {
         ...getCommandInterface(handlers),
     };
 }
-
-export type BrowserActionContext = {
-    clientBrowserControl?: BrowserControl | undefined;
-    externalBrowserControl?: BrowserControl | undefined;
-    useExternalBrowserControl: boolean;
-    webSocket?: WebSocket | undefined;
-    webAgentChannels?: WebAgentChannels | undefined;
-    crosswordCachedSchemas?: Map<string, Crossword> | undefined;
-    crossWordState?: Crossword | undefined;
-    browserConnector?: BrowserConnector | undefined;
-    browserProcess?: ChildProcess | undefined;
-    tabTitleIndex?: TabTitleIndex | undefined;
-    allowDynamicAgentDomains?: string[];
-    websiteCollection?: website.WebsiteCollection | undefined;
-    fuzzyMatchingModel?: TextEmbeddingModel | undefined;
-    index: website.IndexData | undefined;
-    viewProcess?: ChildProcess | undefined;
-    localHostPort: number;
-    macrosStore?: MacroStore | undefined; // Add MacroStore instance
-    currentWebSearchResults?: Map<string, any[]> | undefined; // Store search results for follow-up actions
-    resolverSettings: {
-        searchResolver?: boolean | undefined;
-        keywordResolver?: boolean | undefined;
-        wikipediaResolver?: boolean | undefined;
-        historyResolver?: boolean | undefined;
-    };
-};
 
 export interface urlResolutionAction {
     originalRequest: string;
@@ -165,6 +138,8 @@ async function initializeBrowserContext(
             wikipediaResolver: true,
             historyResolver: false,
         },
+        searchProviders: defaultSearchProviders,
+        activeSearchProvider: defaultSearchProviders[0],
     };
 }
 
@@ -259,7 +234,7 @@ async function updateBrowserContext(
             });
         }
 
-        // rehydrate resolver settings
+        // rehydrate cached settings
         const sessionDir: string | undefined =
             await getSessionFolderPath(context);
         const contents: string = await readFileSync(
@@ -269,14 +244,20 @@ async function updateBrowserContext(
 
         if (contents.length > 0) {
             const config = JSON.parse(contents);
+
+            // resolver settings
             context.agentContext.resolverSettings.searchResolver =
-                config.searchResolver;
+                config.resolverSettings.searchResolver;
             context.agentContext.resolverSettings.keywordResolver =
-                config.keywordResolver;
+                config.resolverSettings.keywordResolver;
             context.agentContext.resolverSettings.wikipediaResolver =
-                config.wikipediaResolver;
+                config.resolverSettings.wikipediaResolver;
             context.agentContext.resolverSettings.historyResolver =
-                config.historyResolver;
+                config.resolverSettings.historyResolver;
+
+            // search provider settings
+            context.agentContext.searchProviders = config.searchProviders || defaultSearchProviders;
+            context.agentContext.activeSearchProvider = config.activeSearchProvider || context.agentContext.searchProviders[0];
         }
     } else {
         const webSocket = context.agentContext.webSocket;
@@ -648,13 +629,6 @@ async function getSessionFolderPath(
     return sessionDir;
 }
 
-async function saveSettings(context: SessionContext<BrowserActionContext>) {
-    await context.sessionStorage?.write(
-        "settings.json",
-        JSON.stringify(context.agentContext.resolverSettings),
-    );
-}
-
 async function resolveEntity(
     type: string,
     name: string,
@@ -816,29 +790,6 @@ async function resolveWebPage(
 
     // can't get a URL
     throw new Error(`Unable to find a URL for: '${site}'`);
-}
-
-export function getActionBrowserControl(
-    actionContext: ActionContext<BrowserActionContext>,
-) {
-    return getBrowserControl(actionContext.sessionContext.agentContext);
-}
-export function getSessionBrowserControl(
-    sessionContext: SessionContext<BrowserActionContext>,
-) {
-    return getBrowserControl(sessionContext.agentContext);
-}
-
-export function getBrowserControl(agentContext: BrowserActionContext) {
-    const browserControl = agentContext.useExternalBrowserControl
-        ? agentContext.externalBrowserControl
-        : agentContext.clientBrowserControl;
-    if (!browserControl) {
-        throw new Error(
-            `${agentContext.externalBrowserControl ? "External" : "Client"} browser control is not available.`,
-        );
-    }
-    return browserControl;
 }
 
 async function openWebPage(
@@ -2225,5 +2176,6 @@ export const handlers: CommandHandlerTable = {
                 },
             },
         },
+        search: new SearchProviderCommandHandlerTable(),
     },
 };
