@@ -49,33 +49,6 @@ from typeagent.knowpro import serialization
 from typeagent.podcasts import podcast
 
 
-### Logfire setup ###
-
-
-def setup_logfire():
-    import logfire
-
-    def scrubbing_callback(m: logfire.ScrubMatch):
-        # if m.path == ('attributes', 'http.request.header.authorization'):
-        #     return m.value
-
-        # if m.path == ('attributes', 'http.request.header.api-key'):
-        #     return m.value
-
-        if (
-            m.path == ("attributes", "http.request.body.text", "messages", 0, "content")
-            and m.pattern_match.group(0) == "secret"
-        ):
-            return m.value
-
-        # if m.path == ('attributes', 'http.response.header.azureml-model-session'):
-        #     return m.value
-
-    logfire.configure(scrubbing=logfire.ScrubbingOptions(callback=scrubbing_callback))
-    logfire.instrument_pydantic_ai()
-    logfire.instrument_httpx(capture_all=True)
-
-
 ### Classes ###
 
 
@@ -145,6 +118,8 @@ async def main():
     args = parser.parse_args()
     fill_in_debug_defaults(parser, args)
     if args.logfire:
+        from typeagent.aitools.utils import setup_logfire
+
         setup_logfire()
     model = embeddings.AsyncEmbeddingModel()
     settings = ConversationSettings(model)
