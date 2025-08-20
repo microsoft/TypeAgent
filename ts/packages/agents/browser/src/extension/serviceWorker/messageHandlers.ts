@@ -303,7 +303,9 @@ export async function handleMessage(
                     return { error: "Failed to extract knowledge from page" };
                 }
             }
-            return { error: "No active tab found" };
+            return {
+                error: "No browser tabs are currently open. Please open a browser tab to continue.",
+            };
         }
 
         case "queryKnowledge": {
@@ -407,7 +409,10 @@ export async function handleMessage(
                 );
                 return { success };
             }
-            return { success: false, error: "No active tab found" };
+            return {
+                success: false,
+                error: "No browser tabs are currently open. Please open a browser tab to continue.",
+            };
         }
 
         case "autoIndexPage": {

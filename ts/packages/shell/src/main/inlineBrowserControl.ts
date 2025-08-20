@@ -12,20 +12,17 @@ export function createInlineBrowserControl(
 ): BrowserControl {
     // Helper function to get the active browser WebContents for automation
     function getActiveBrowserWebContents() {
-        // Always use multi-tab browser
         const activeBrowserView = shellWindow.getActiveBrowserView();
         if (!activeBrowserView) {
-            throw new Error("No active browser tab available");
+            throw new Error(
+                "No browser tabs are currently open. Please open a browser tab to continue.",
+            );
         }
         return activeBrowserView.webContentsView.webContents;
     }
     const contentScriptRpcChannel = createGenericChannel((message) => {
-        try {
-            const webContents = getActiveBrowserWebContents();
-            webContents.send("inline-browser-rpc-call", message);
-        } catch (error) {
-            console.warn("Failed to send RPC message to browser:", error);
-        }
+        const webContents = getActiveBrowserWebContents();
+        webContents.send("inline-browser-rpc-call", message);
     });
 
     // Handle RPC replies from browser views
@@ -48,7 +45,9 @@ export function createInlineBrowserControl(
             // Always use multi-tab browser
             const activeBrowserView = shellWindow.getActiveBrowserView();
             if (!activeBrowserView) {
-                throw new Error("No browser tab is currently open.");
+                throw new Error(
+                    "No browser tabs are currently open. Please open a browser tab to continue.",
+                );
             }
 
             if (!shellWindow.closeBrowserTab(activeBrowserView.id)) {
@@ -57,17 +56,23 @@ export function createInlineBrowserControl(
         },
         async goForward() {
             if (!shellWindow.browserGoForward()) {
-                throw new Error("Cannot go forward in history");
+                throw new Error(
+                    "Cannot go forward in browser history. No active browser tab or no forward history available.",
+                );
             }
         },
         async goBack() {
             if (!shellWindow.browserGoBack()) {
-                throw new Error("Cannot go back in history");
+                throw new Error(
+                    "Cannot go back in browser history. No active browser tab or no back history available.",
+                );
             }
         },
         async reload() {
             if (!shellWindow.browserReload()) {
-                throw new Error("No active browser to reload");
+                throw new Error(
+                    "Cannot reload page. No browser tabs are currently open.",
+                );
             }
         },
         async getPageUrl() {
