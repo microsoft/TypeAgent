@@ -53,20 +53,20 @@ function getFailedResult(message: string): ProcessRequestActionResult {
 // Construction namespace policy
 export function getSchemaNamespaceKeys(
     schemaNames: string[],
-    schemaInfoProvider?: SchemaInfoProvider,
+    activityName: string | undefined,
+    schemaInfoProvider: SchemaInfoProvider | undefined,
 ) {
     // Current namespace keys policy is just combining schema name its file hash
-    return schemaInfoProvider
-        ? schemaNames.map(
-              (name) =>
-                  `${name},${schemaInfoProvider.getActionSchemaFileHash(name)}`,
-          )
-        : schemaNames;
+    return schemaNames.map(
+        (name) =>
+            `${name},${schemaInfoProvider?.getActionSchemaFileHash(name) ?? ""},${activityName ?? ""}`,
+    );
 }
 
 export class AgentCache {
     private _constructionStore: ConstructionStoreImpl;
     private readonly explainWorkQueue: ExplainWorkQueue;
+    // Function to return whether the namespace key matches to the current schema file's hash.
     private readonly namespaceKeyFilter?: NamespaceKeyFilter;
     private readonly logger: Telemetry.Logger | undefined;
     public model?: string;
@@ -93,10 +93,9 @@ export class AgentCache {
         if (schemaInfoProvider) {
             this.namespaceKeyFilter = (namespaceKey) => {
                 const [schemaName, hash] = namespaceKey.split(",");
-                return (
-                    schemaInfoProvider.getActionSchemaFileHash(schemaName) ===
-                    hash
-                );
+                const fileHash =
+                    schemaInfoProvider.getActionSchemaFileHash(schemaName);
+                return fileHash === hash;
             };
         }
     }
@@ -105,8 +104,15 @@ export class AgentCache {
         return this._constructionStore;
     }
 
-    public getNamespaceKeys(schemaNames: string[]) {
-        return getSchemaNamespaceKeys(schemaNames, this.schemaInfoProvider);
+    public getNamespaceKeys(
+        schemaNames: string[],
+        namespaceSuffix: string | undefined,
+    ) {
+        return getSchemaNamespaceKeys(
+            schemaNames,
+            namespaceSuffix,
+            this.schemaInfoProvider,
+        );
     }
 
     public getInfo() {
@@ -145,6 +151,7 @@ export class AgentCache {
             const store = this._constructionStore;
             const namespaceKeys = this.getNamespaceKeys(
                 getTranslationNamesForActions(executableActions),
+                options?.namespaceSuffix,
             );
             // Make sure that we don't already have a construction that will match (but reject because of options)
             const matchResult = store.match(requestAction.request, {

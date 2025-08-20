@@ -67,6 +67,7 @@ function createConstructions(
         const requestAction = new RequestAction(
             entry.request,
             fromJsonActions(entry.action),
+            // REVIEW: imported construction doesn't support history or activities.
         );
 
         try {
@@ -81,6 +82,7 @@ function createConstructions(
             const explanation = entry.explanation;
             const namespaceKeys = getSchemaNamespaceKeys(
                 getTranslationNamesForActions(actions),
+                undefined, // REVIEW: imported construction doesn't support history or activities.
                 schemaInfoProvider,
             );
             const construction = createConstruction(

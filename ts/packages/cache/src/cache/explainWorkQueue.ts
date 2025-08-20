@@ -63,6 +63,7 @@ function checkExplainableValues(
 }
 
 export type ExplanationOptions = {
+    namespaceSuffix?: string | undefined; // suffix to add to namespace keys
     concurrent?: boolean; // whether to limit to run one at a time, require cache to be false
     valueInRequest?: boolean;
     noReferences?: boolean;

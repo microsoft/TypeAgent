@@ -18,6 +18,7 @@ export {
     ActivityContext,
     AppAgentInitSettings,
     ResolveEntityResult,
+    ActivityCacheSpec,
 } from "./agentInterface.js";
 
 export {

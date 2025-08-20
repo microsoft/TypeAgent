@@ -190,9 +190,11 @@ export class ActionSchemaFileCache {
         const { source, config, fullPath, format } =
             this.getSchemaSource(actionConfig);
 
-        const hash = config ? hashStrings(source, config) : hashStrings(source);
-        const cacheKey = `${format}|${actionConfig.schemaName}|${JSON.stringify(actionConfig.schemaType)}|${fullPath ?? ""}`;
-
+        const schemaTypeString = JSON.stringify(actionConfig.schemaType);
+        const hash = config
+            ? hashStrings(schemaTypeString, source, config)
+            : hashStrings(schemaTypeString, source);
+        const cacheKey = `${format}|${actionConfig.schemaName}|${schemaTypeString}|${fullPath ?? ""}`;
         const lastCached = this.prevSaved.get(cacheKey);
         if (lastCached !== undefined) {
             this.prevSaved.delete(cacheKey);
@@ -212,9 +214,6 @@ export class ActionSchemaFileCache {
             }
         }
 
-        const schemaConfig: SchemaConfig | undefined = config
-            ? JSON.parse(config)
-            : undefined;
         const parsed: ActionSchemaFile =
             format === "pas"
                 ? loadParsedActionSchema(
@@ -231,7 +230,7 @@ export class ActionSchemaFileCache {
                           actionConfig.schemaName,
                           actionConfig.schemaType,
                           fullPath,
-                          schemaConfig,
+                          config ? <SchemaConfig>JSON.parse(config) : undefined,
                           true,
                       ),
                   };

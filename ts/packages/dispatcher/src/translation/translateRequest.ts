@@ -23,7 +23,6 @@ import {
 } from "./multipleActionSchema.js";
 import {
     createTypeAgentTranslatorForSelectedActions,
-    getAppAgentName,
     isAdditionalActionLookupAction,
     loadAgentJsonTranslator,
     TranslatedAction,
@@ -52,6 +51,10 @@ import { ActionConfig } from "./actionConfig.js";
 import { DispatcherConfig } from "../context/session.js";
 import { openai as ai, CompleteUsageStatsCallback } from "aiclient";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
+import {
+    getActivityActiveSchemas,
+    getNonActivityActiveSchemas,
+} from "./matchRequest.js";
 const debugTranslate = registerDebug("typeagent:translate");
 const debugSemanticSearch = registerDebug("typeagent:translate:semantic");
 
@@ -763,18 +766,10 @@ async function translateWithActivityContext(
 ): Promise<ExecutableAction | ExecutableAction[]> {
     // Translate the request with only the activity schemas
     const activityContext = history.activityContext!;
-    const activitySchemas = activeSchemaNames.filter(
-        (schemaName) =>
-            getAppAgentName(schemaName) === activityContext.appAgentName,
+    const activitySchemas = getActivityActiveSchemas(
+        activeSchemaNames,
+        activityContext,
     );
-
-    if (activitySchemas.length === 0) {
-        throw new Error(
-            `Activity context schema ${activityContext.appAgentName} not active`,
-        );
-    }
-    // Dispatcher schema (for unknown) is always active
-    activitySchemas.push(DispatcherName, DispatcherActivityName);
 
     debugTranslate(`Activity schemas: ${activitySchemas.join(",")}`);
     const activityActions = await translateRequestWithActiveSchemas(
@@ -802,10 +797,7 @@ async function translateWithActivityContext(
 
     // Translate the unknown requests with non-activity schemas
     const nonActivitySchemas = new Set(
-        activeSchemaNames.filter(
-            (schemaName) =>
-                getAppAgentName(schemaName) !== activityContext.appAgentName,
-        ),
+        getNonActivityActiveSchemas(activeSchemaNames, activityContext),
     );
     debugTranslate(
         `Non-activity schemas: ${Array.from(nonActivitySchemas).join(",")}`,
@@ -879,7 +871,6 @@ export async function translateRequest(
         );
     }
 
-    // Start with the last translator used
     const startTime = performance.now();
     const activeSchemaNames = systemContext.agents.getActiveSchemas();
     debugTranslate(`Active schemas: ${activeSchemaNames.join(",")}`);
