@@ -31,7 +31,6 @@ import {
 import { UnknownAction } from "../context/dispatcher/schema/dispatcherActionSchema.js";
 import {
     DispatcherActivityName,
-    DispatcherEmoji,
     DispatcherName,
     isUnknownAction,
 } from "../context/dispatcher/dispatcherUtils.js";
@@ -46,7 +45,6 @@ import {
     PendingRequestAction,
 } from "./pendingRequest.js";
 import registerDebug from "debug";
-import { confirmTranslation } from "./confirmTranslation.js";
 import { ActionConfig } from "./actionConfig.js";
 import { DispatcherConfig } from "../context/session.js";
 import { openai as ai, CompleteUsageStatsCallback } from "aiclient";
@@ -55,6 +53,8 @@ import {
     getActivityActiveSchemas,
     getNonActivityActiveSchemas,
 } from "./matchRequest.js";
+import { ProfileMeasure } from "telemetry";
+import { getHistoryContext } from "./interpretRequest.js";
 const debugTranslate = registerDebug("typeagent:translate");
 const debugSemanticSearch = registerDebug("typeagent:translate:semantic");
 
@@ -669,40 +669,6 @@ async function finalizeMultipleActions(
     return actions;
 }
 
-export function getHistoryContextForTranslation(
-    context: CommandHandlerContext,
-) {
-    const config = context.session.getConfig();
-    return config.translation.history.enabled
-        ? getHistoryContext(context)
-        : undefined;
-}
-
-function getHistoryContext(context: CommandHandlerContext): HistoryContext {
-    const promptSections = context.chatHistory.getPromptSections();
-    if (promptSections.length !== 0) {
-        promptSections.unshift({
-            content:
-                "The following is a history of the conversation with the user that can be used to translate user requests",
-            role: "system",
-        });
-    }
-    const translateConfig = context.session.getConfig().translation;
-    const entities = context.chatHistory.getTopKEntities(
-        translateConfig.history.limit,
-    );
-    const additionalInstructions = translateConfig.promptConfig
-        .additionalInstructions
-        ? context.chatHistory.getCurrentInstructions()
-        : undefined;
-    return {
-        promptSections,
-        entities,
-        additionalInstructions,
-        activityContext: context.activityContext,
-    };
-}
-
 async function translateRequestWithActiveSchemas(
     request: string,
     context: ActionContext<CommandHandlerContext>,
@@ -846,18 +812,23 @@ async function translateWithActivityContext(
 export type TranslationResult = {
     requestAction: RequestAction;
     elapsedMs: number;
-    fromUser: boolean;
-    fromCache: boolean;
     tokenUsage?: ai.CompletionUsageStats;
+
+    type: "translate" | "match";
+    replacedAction?: ExecutableAction[] | undefined;
+    config: any;
+    metrics?: ProfileMeasure[] | undefined;
+    allMatches?: any;
 };
 
 // null means cancelled because of replacement parse error.
 export async function translateRequest(
-    request: string,
     context: ActionContext<CommandHandlerContext>,
+    request: string,
     history?: HistoryContext,
     attachments?: CachedImageWithDetails[],
     streamingActionIndex?: number,
+    activeSchemas?: string[],
 ): Promise<TranslationResult> {
     const systemContext = context.sessionContext.agentContext;
     const config = systemContext.session.getConfig();
@@ -872,7 +843,8 @@ export async function translateRequest(
     }
 
     const startTime = performance.now();
-    const activeSchemaNames = systemContext.agents.getActiveSchemas();
+    const activeSchemaNames =
+        activeSchemas ?? systemContext.agents.getActiveSchemas();
     debugTranslate(`Active schemas: ${activeSchemaNames.join(",")}`);
 
     const tokenUsage: ai.CompletionUsageStats = {
@@ -910,38 +882,24 @@ export async function translateRequest(
         );
     }
 
-    const translated = RequestAction.create(request, executableAction, history);
-
-    const elapsedMs = performance.now() - startTime;
-    const { requestAction, replacedAction } = await confirmTranslation(
-        elapsedMs,
-        DispatcherEmoji,
-        translated,
-        context,
+    const requestAction = RequestAction.create(
+        request,
+        executableAction,
+        history,
     );
 
-    if (!systemContext.batchMode) {
-        systemContext.logger?.logEvent("translation", {
-            elapsedMs,
-            schemaNames: activeSchemaNames,
-            request,
-            actions: requestAction.actions,
-            replacedAction,
-            developerMode: systemContext.developerMode,
-            history,
-            config: systemContext.session.getConfig().translation,
-            metrics: systemContext.metricsManager?.getMeasures(
-                systemContext.requestId!,
-                ProfileNames.translate,
-            ),
-        });
-    }
+    const elapsedMs = performance.now() - startTime;
+
     return {
+        type: "translate",
         requestAction,
         elapsedMs,
-        fromCache: false,
-        fromUser: replacedAction !== undefined,
         tokenUsage,
+        config: systemContext.session.getConfig().translation,
+        metrics: systemContext.metricsManager?.getMeasures(
+            systemContext.requestId!,
+            ProfileNames.translate,
+        ),
     };
 }
 
@@ -952,10 +910,10 @@ export function translatePendingRequestAction(
 ) {
     try {
         const systemContext = context.sessionContext.agentContext;
-        const history = getHistoryContextForTranslation(systemContext);
+        const history = getHistoryContext(systemContext);
         return translateRequest(
-            action.parameters.pendingRequest,
             context,
+            action.parameters.pendingRequest,
             history,
             undefined,
             actionIndex,

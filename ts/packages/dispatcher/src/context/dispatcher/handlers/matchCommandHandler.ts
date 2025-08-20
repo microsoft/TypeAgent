@@ -31,7 +31,7 @@ export class MatchCommandHandler implements CommandHandler {
         context: ActionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const matchResult = await matchRequest(params.args.request, context);
+        const matchResult = await matchRequest(context, params.args.request);
         if (matchResult) {
             const elapsedStr = getColorElapsedString(matchResult.elapsedMs);
 

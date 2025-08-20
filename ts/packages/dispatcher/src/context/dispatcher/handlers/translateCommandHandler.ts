@@ -29,8 +29,8 @@ export class TranslateCommandHandler implements CommandHandler {
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const translationResult = await translateRequest(
-            params.args.request,
             context,
+            params.args.request,
         );
 
         const elapsedStr = getColorElapsedString(translationResult.elapsedMs);

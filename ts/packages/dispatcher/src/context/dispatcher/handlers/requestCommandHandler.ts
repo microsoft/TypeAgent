@@ -5,7 +5,6 @@ import chalk from "chalk";
 import {
     RequestAction,
     printProcessRequestActionResult,
-    HistoryContext,
     FullAction,
     ProcessRequestActionResult,
     ExplanationOptions,
@@ -40,19 +39,15 @@ import {
 } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { DispatcherName, isUnknownAction } from "../dispatcherUtils.js";
-import {
-    getHistoryContextForTranslation,
-    getTranslatorForSchema,
-    translateRequest,
-    TranslationResult,
-} from "../../../translation/translateRequest.js";
-import {
-    getActivityCacheSpec,
-    getActivityNamespaceSuffix,
-    matchRequest,
-} from "../../../translation/matchRequest.js";
+import { getTranslatorForSchema } from "../../../translation/translateRequest.js";
+import { getActivityNamespaceSuffix } from "../../../translation/matchRequest.js";
 import { addRequestToMemory, addResultToMemory } from "../../memory.js";
 import { requestCompletion } from "../../../translation/requestCompletion.js";
+import {
+    getCannotUseCacheReason,
+    interpretRequest,
+    InterpretResult,
+} from "../../../translation/interpretRequest.js";
 const debugExplain = registerDebug("typeagent:explain");
 
 async function canTranslateWithoutContext(
@@ -160,29 +155,6 @@ async function canTranslateWithoutContext(
         });
         throw e;
     }
-}
-
-function getCannotUseCacheReason(
-    context: CommandHandlerContext,
-    attachments?: string[],
-    history?: HistoryContext,
-) {
-    if (attachments && attachments.length > 0) {
-        return "has attachments";
-    }
-    if (history !== undefined) {
-        if (history.additionalInstructions) {
-            return "has additional instructions";
-        }
-        const cacheSpec = getActivityCacheSpec(
-            context,
-            history.activityContext,
-        );
-        if (cacheSpec === false) {
-            return "has activity with cache disabled";
-        }
-    }
-    return undefined;
 }
 
 function getExplainerOptions(
@@ -378,31 +350,15 @@ export class RequestCommandHandler implements CommandHandler {
 
             // Translate to action
 
-            const history = getHistoryContextForTranslation(systemContext);
-
-            const cannotUseCacheReason = getCannotUseCacheReason(
-                systemContext,
-                attachments,
-                history,
-            );
-            const canUseCacheMatch = cannotUseCacheReason === undefined;
-
             addRequestToMemory(systemContext, request, cachedAttachments);
-            let translationResult: TranslationResult;
+            let interpretResult: InterpretResult;
             try {
-                const match = canUseCacheMatch
-                    ? await matchRequest(request, context, history)
-                    : undefined;
+                interpretResult = await interpretRequest(
+                    context,
+                    request,
 
-                translationResult =
-                    match ??
-                    (await translateRequest(
-                        request,
-                        context,
-                        history,
-                        cachedAttachments,
-                        0,
-                    ));
+                    cachedAttachments,
+                );
             } catch (e: any) {
                 addResultToMemory(
                     systemContext,
@@ -412,8 +368,13 @@ export class RequestCommandHandler implements CommandHandler {
                 throw e;
             }
 
-            const { requestAction, fromUser, fromCache, tokenUsage } =
-                translationResult;
+            const {
+                requestAction,
+                fromUser,
+                fromCache,
+                tokenUsage,
+                cannotUseCacheReason,
+            } = interpretResult;
 
             if (tokenUsage) {
                 const commandResult = getCommandResult(systemContext);
