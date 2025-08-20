@@ -98,10 +98,7 @@ export async function createWebSocket(autoReconnect: boolean = true) {
                     break;
 
                 case "setting-summary-changed":
-                    const agentsMap = new Map<string, string>(
-                        msgObj.data.registeredAgents,
-                    );
-                    client?.updateRegisterAgents(agentsMap);
+                    client?.updateRegisterAgents(msgObj.data.registeredAgents);
                     break;
                 /* TODO: Not implemented yet.
                 case "listen-event":

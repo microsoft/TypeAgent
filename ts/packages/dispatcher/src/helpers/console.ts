@@ -357,3 +357,7 @@ export async function processCommands<T>(
         );
     }
 }
+
+export function getConsolePrompt(text: string): string {
+    return `${text}> `;
+}

@@ -29,6 +29,7 @@ import { PlayerActions } from "./playerSchema.js";
 import registerDebug from "debug";
 import { resolveMusicDeviceEntity } from "../devices.js";
 import { getUserDevices } from "../endpoints.js";
+import { getUserDataCompletions } from "../userData.js";
 
 const debugSpotify = registerDebug("typeagent:spotify");
 
@@ -350,15 +351,16 @@ async function getPlayerActionCompletion(
             result.push(track.name);
         }
     }
-    if (album) {
-        for (const album of userData.data.albums.values()) {
-            result.push(album.name);
-        }
-    }
     if (artist) {
         for (const artist of userData.data.artists.values()) {
             result.push(artist.name);
         }
     }
+    if (album) {
+        for (const album of userData.data.albums.values()) {
+            result.push(album.name);
+        }
+    }
+    result.push(...getUserDataCompletions(userData.data, track, artist, album));
     return result;
 }

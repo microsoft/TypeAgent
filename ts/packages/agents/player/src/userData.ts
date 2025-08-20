@@ -210,6 +210,47 @@ export function addUserDataStrings(userData: SpotifyUserData) {
     return userData.nameMap;
 }
 
+export function getUserDataCompletions(
+    userData: SpotifyUserData,
+    track = true,
+    artist = false,
+    album = false,
+): string[] {
+    const completions: string[] = [];
+    if (track) {
+        // return names of tracks, sorted by timestamp
+        const trackNames = Array.from(userData.tracks.values())
+            .sort((a, b) => {
+                const aTime =
+                    a.timestamps.length > 0
+                        ? new Date(a.timestamps[0]).getTime()
+                        : 0;
+                const bTime =
+                    b.timestamps.length > 0
+                        ? new Date(b.timestamps[0]).getTime()
+                        : 0;
+                return aTime - bTime;
+            })
+            .map((t) => t.name);
+        completions.push(...trackNames);
+    }
+    if (artist) {
+        // for now just return names no sorting
+        const artistNames = Array.from(userData.artists.values()).map(
+            (a) => a.name,
+        );
+        completions.push(...artistNames);
+    }
+    if (album) {
+        // for now just return names no sorting
+        const albumNames = Array.from(userData.albums.values()).map(
+            (a) => a.name,
+        );
+        completions.push(...albumNames);
+    }
+    return completions;
+}
+
 async function updateUserData(
     storage: Storage,
     service: SpotifyService,

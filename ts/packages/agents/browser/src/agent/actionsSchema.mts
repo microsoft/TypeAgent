@@ -30,7 +30,7 @@ export type BrowserEntities = WebPage | WebSearchResult;
 export type OpenWebPage = {
     actionName: "openWebPage";
     parameters: {
-        // Name or description of the site to search for and open
+        // Name/Description/search terms of the site to open
         // Do NOT put URL here unless the user request specified the URL.
         site:
             | "paleobiodb"

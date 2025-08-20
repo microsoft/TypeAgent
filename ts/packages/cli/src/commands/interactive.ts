@@ -17,9 +17,11 @@ import {
 import inspector from "node:inspector";
 import { getChatModelNames } from "aiclient";
 import {
+    getConsolePrompt,
     processCommands,
     withConsoleClientIO,
 } from "agent-dispatcher/helpers/console";
+import { getStatusSummary } from "agent-dispatcher/helpers/status";
 
 const modelNames = await getChatModelNames();
 const instanceDir = getInstanceDir();
@@ -99,7 +101,12 @@ export default class Interactive extends Command {
                 }
 
                 await processCommands(
-                    () => dispatcher.getPrompt(),
+                    (dispatcher: Dispatcher) =>
+                        getConsolePrompt(
+                            getStatusSummary(dispatcher.getStatus(), {
+                                showPrimaryName: false,
+                            }),
+                        ),
                     (command: string, dispatcher: Dispatcher) =>
                         dispatcher.processCommand(command),
                     dispatcher,

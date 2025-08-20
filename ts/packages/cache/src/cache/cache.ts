@@ -5,6 +5,7 @@ import { DeepPartialUndefined } from "common-utils";
 import * as Telemetry from "telemetry";
 import { ExplanationData } from "../explanation/explanationData.js";
 import {
+    equalNormalizedObject,
     getFullActionName,
     getTranslationNamesForActions,
     RequestAction,
@@ -125,9 +126,9 @@ export class AgentCache {
         options?: ExplanationOptions,
     ): Promise<ProcessRequestActionResult> {
         try {
-            const actions = requestAction.actions;
+            const executableActions = requestAction.actions;
             if (cache) {
-                for (const action of actions) {
+                for (const action of executableActions) {
                     const cacheAction = doCacheAction(
                         action,
                         this.schemaInfoProvider,
@@ -138,6 +139,31 @@ export class AgentCache {
                             `Caching disabled in schema config for action '${getFullActionName(action)}'`,
                         );
                     }
+                }
+            }
+
+            const store = this._constructionStore;
+            const namespaceKeys = this.getNamespaceKeys(
+                getTranslationNamesForActions(executableActions),
+            );
+            // Make sure that we don't already have a construction that will match (but reject because of options)
+            const matchResult = store.match(requestAction.request, {
+                rejectReferences: false,
+                history: requestAction.history,
+                namespaceKeys,
+            });
+
+            const actions = executableActions.map((e) => e.action);
+            for (const match of matchResult) {
+                if (
+                    equalNormalizedObject(
+                        match.match.actions.map((e) => e.action),
+                        actions,
+                    )
+                ) {
+                    return getFailedResult(
+                        `Existing construction matches the request but rejected.`,
+                    );
                 }
             }
 
@@ -157,13 +183,12 @@ export class AgentCache {
             const { explanation, elapsedMs } = explanationResult;
             this.logger?.logEvent("explanation", {
                 request: requestAction.request,
-                actions,
+                actions: executableActions,
                 history: requestAction.history,
                 explanation,
                 elapsedMs,
             });
 
-            const store = this._constructionStore;
             const generateConstruction = cache && store.isEnabled();
             if (generateConstruction && explanation.success) {
                 const construction = explanation.construction;
@@ -172,9 +197,6 @@ export class AgentCache {
                 if (construction === undefined) {
                     message = `Explainer '${this.explainerName}' doesn't support constructions.`;
                 } else {
-                    const namespaceKeys = this.getNamespaceKeys(
-                        getTranslationNamesForActions(actions),
-                    );
                     const result = await store.addConstruction(
                         namespaceKeys,
                         construction,

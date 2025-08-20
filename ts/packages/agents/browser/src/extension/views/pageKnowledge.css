@@ -575,6 +575,39 @@ body {
   text-decoration: underline;
 }
 
+/* Save button animations */
+.pulse-animation {
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(40, 167, 69, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(40, 167, 69, 0);
+  }
+}
+
+/* Save button states */
+#saveKnowledge:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#saveKnowledge.btn-outline-success:not(:disabled) {
+  border-color: #28a745;
+  color: #28a745;
+}
+
+#saveKnowledge.btn-outline-success:not(:disabled):hover {
+  background-color: #28a745;
+  color: white;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .facet-item {

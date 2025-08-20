@@ -699,6 +699,9 @@ importers:
       '@azure/identity':
         specifier: ^4.10.0
         version: 4.10.0
+      aiclient:
+        specifier: workspace:*
+        version: link:../../packages/aiclient
       azure-ai-foundry:
         specifier: workspace:*
         version: link:../../packages/azure-ai-foundry

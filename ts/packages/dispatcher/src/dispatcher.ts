@@ -6,12 +6,7 @@ import {
     DynamicDisplay,
     TemplateSchema,
 } from "@typeagent/agent-sdk";
-import {
-    getPrompt,
-    getSettingSummary,
-    getTranslatorNameToEmojiMap,
-    processCommand,
-} from "./command/command.js";
+import { getDispatcherStatus, processCommand } from "./command/command.js";
 import {
     CommandCompletionResult,
     getCommandCompletion,
@@ -33,6 +28,20 @@ export type CommandResult = {
     actions?: FullAction[];
     metrics?: RequestMetrics;
     tokenUsage?: ai.CompletionUsageStats;
+};
+
+export type AppAgentStatus = {
+    emoji: string;
+    name: string;
+    lastUsed: boolean;
+    priority: boolean;
+    request: boolean;
+    active: boolean;
+};
+
+export type DispatcherStatus = {
+    agents: AppAgentStatus[];
+    details: string;
 };
 
 /**
@@ -88,10 +97,7 @@ export interface Dispatcher {
         prefix: string,
     ): Promise<CommandCompletionResult | undefined>;
 
-    // TODO: Review these APIs
-    getPrompt(): string;
-    getSettingSummary(): string;
-    getTranslatorNameToEmojiMap(): Map<string, string>;
+    getStatus(): DispatcherStatus;
 }
 
 async function getDynamicDisplay(
@@ -194,14 +200,8 @@ export async function createDispatcher(
         async close() {
             await closeCommandHandlerContext(context);
         },
-        getPrompt() {
-            return getPrompt(context);
-        },
-        getSettingSummary() {
-            return getSettingSummary(context);
-        },
-        getTranslatorNameToEmojiMap() {
-            return getTranslatorNameToEmojiMap(context);
+        getStatus() {
+            return getDispatcherStatus(context);
         },
     };
 }

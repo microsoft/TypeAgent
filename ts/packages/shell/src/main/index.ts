@@ -41,6 +41,8 @@ import { createGenericChannel } from "agent-rpc/channel";
 import net from "node:net";
 import { createClientIORpcClient } from "agent-dispatcher/rpc/clientio/client";
 import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
+import { getStatusSummary } from "agent-dispatcher/helpers/status";
+import { getConsolePrompt } from "agent-dispatcher/helpers/console";
 import { ShellWindow } from "./shellWindow.js";
 
 import { debugShell, debugShellError } from "./debug.js";
@@ -229,7 +231,7 @@ function initializeSpeech(chatView: WebContentsView) {
 async function initializeDispatcher(
     instanceDir: string,
     shellWindow: ShellWindow,
-    updateSummary: (dispatcher: Dispatcher) => void,
+    updateSummary: (dispatcher: Dispatcher) => string,
 ) {
     try {
         const clientIOChannel = createGenericChannel((message: any) => {
@@ -313,9 +315,14 @@ async function initializeDispatcher(
             if (typeof text !== "string" || typeof id !== "string") {
                 throw new Error("Invalid request");
             }
-            debugShell(newDispatcher.getPrompt(), text);
+
             // Update before processing the command in case there was change outside of command processing
-            updateSummary(dispatcher);
+            const summary = updateSummary(dispatcher);
+
+            if (debugShell.enabled) {
+                debugShell(getConsolePrompt(summary), text);
+            }
+
             const commandResult = await newDispatcher.processCommand(
                 text,
                 id,
@@ -374,7 +381,9 @@ async function initializeInstance(
     const { mainWindow, chatView } = shellWindow;
     let title: string = "";
     function updateTitle(dispatcher: Dispatcher) {
-        const newSettingSummary = dispatcher.getSettingSummary();
+        const status = dispatcher.getStatus();
+
+        const newSettingSummary = getStatusSummary(status);
         const zoomFactor = chatView.webContents.zoomFactor;
         const pendingUpdate = hasPendingUpdate() ? " [Pending Update]" : "";
         const zoomFactorTitle =
@@ -384,11 +393,13 @@ async function initializeInstance(
             title = newTitle;
             chatView.webContents.send(
                 "setting-summary-changed",
-                dispatcher.getTranslatorNameToEmojiMap(),
+                status.agents.map((agent) => [agent.name, agent.emoji]),
             );
 
             mainWindow.setTitle(newTitle);
         }
+
+        return newSettingSummary;
     }
 
     // Note: Make sure dom ready before using dispatcher.

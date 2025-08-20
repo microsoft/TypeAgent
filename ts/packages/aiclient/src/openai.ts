@@ -778,7 +778,16 @@ export type AzureChatModelName =
     | "GPT_4"
     | "GPT_35_TURBO"
     | "GPT_4_O"
-    | "GPT_4_O_MINI";
+    | "GPT_4_O_MINI"
+    | "GPT_5"
+    | "GPT_5_MINI"
+    | "GPT_5_NANO"
+    | "GPT_5_CHAT";
+
+export const GPT_5: AzureChatModelName = "GPT_5";
+export const GPT_5_NANO: AzureChatModelName = "GPT_5_NANO";
+export const GPT_5_MINI: AzureChatModelName = "GPT_5_MINI";
+export const GPT_5_CHAT: AzureChatModelName = "GPT_5_CHAT";
 
 /**
  * Create a client for the OpenAI embeddings service

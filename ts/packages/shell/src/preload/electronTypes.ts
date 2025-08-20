@@ -47,7 +47,7 @@ export interface ClientAPI {
 // Functions that are called from the main process to the renderer process.
 export interface Client {
     clientIO: ClientIO;
-    updateRegisterAgents(agents: Map<string, string>): void;
+    updateRegisterAgents(agents: [string, string][]): void;
     showInputText(message: string): Promise<void>;
     showDialog(key: string): void;
     updateSettings(settings: ShellUserSettings): void;
