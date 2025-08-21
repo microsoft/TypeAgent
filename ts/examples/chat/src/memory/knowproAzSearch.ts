@@ -20,6 +20,7 @@ import chalk from "chalk";
 import { parseFreeAndNamedArguments } from "../common.js";
 import { createSearchGroup, dateRangeFromNamedArgs } from "./knowproCommon.js";
 import { batchSemanticRefsByMessage } from "./knowproCommon.js";
+import { split } from "knowledge-processor";
 
 type AzureMemoryContext = {
     memory?: ms.azSearch.AzSemanticRefIndex | undefined;
@@ -48,6 +49,7 @@ export async function createKnowproAzureCommands(
                 andTerms: argBool("'And' all terms. Default is 'or", false),
                 startDate: arg("Starting at this ISO date"),
                 endDate: arg("Ending at this date ISO date"),
+                ordinalRange: arg("Ordinal range <start>:<end>"),
                 ktype: arg("Knowledge type: entity | topic | action | tag"),
             },
         };
@@ -108,10 +110,10 @@ export async function createKnowproAzureCommands(
         }
         const memory = ensureMemory();
         if (
-            !askYesNo(
+            !(await askYesNo(
                 io,
                 `Are you sure you want to ingest knowledge from ${conversation.nameTag} into ${memory.settings.indexName}?`,
-            )
+            ))
         ) {
             return;
         }
@@ -189,7 +191,31 @@ export async function createKnowproAzureCommands(
             when ??= {};
             when.dateRange = dateRange;
         }
+        if (namedArgs.ordinalRange) {
+            const range = stringToRange(namedArgs.ordinalRange);
+            if (range) {
+                when ??= {};
+                when.textRangesInScope = [range];
+            }
+        }
         return when;
+    }
+
+    function stringToRange(value: string): kp.TextRange | undefined {
+        const rangeValue = split(value, ":", {
+            trim: true,
+            removeEmpty: true,
+        });
+        if (rangeValue.length === 0) {
+            return undefined;
+        }
+        const textRange: kp.TextRange = {
+            start: { messageOrdinal: Number.parseInt(rangeValue[0]) },
+        };
+        if (rangeValue.length > 1) {
+            textRange.end = { messageOrdinal: Number.parseInt(rangeValue[1]) };
+        }
+        return textRange;
     }
 
     return commands;
