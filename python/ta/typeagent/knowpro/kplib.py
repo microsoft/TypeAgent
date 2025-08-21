@@ -9,8 +9,7 @@ Comments that should go into the schema are in docstrings and Doc() annotations.
 
 from pydantic.dataclasses import dataclass
 from pydantic import Field, AliasChoices
-from typing import Annotated, ClassVar, Literal
-from typing_extensions import Doc
+from typing import ClassVar, Literal
 
 
 @dataclass
@@ -28,7 +27,7 @@ type Value = str | float | bool | Quantity
 @dataclass
 class Facet:
     name: str
-    value: Annotated[Value, Doc("Very concise values.")]
+    value: Value = Field(description="Very concise values.")
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.name!r}, {self.value!r})"
@@ -40,33 +39,28 @@ class ConcreteEntity:
 
     knowledge_type: ClassVar[Literal["entity"]] = "entity"
 
-    name: Annotated[
-        str,
-        Doc(
+    name: str = Field(
+        description=(
             "The name of the entity or thing such as 'Bach', 'Great Gatsby', "
             + "'frog' or 'piano'."
         ),
-    ]
-    type: Annotated[
-        list[str],
-        Doc(
+    )
+    type: list[str] = Field(
+        description=(
             "The types of the entity such as 'speaker', 'person', 'artist', "
             + "'animal', 'object', 'instrument', 'school', 'room', 'museum', 'food' etc. "
             + "An entity can have multiple types; entity types should be single words."
         ),
-    ]
-    facets: (
-        Annotated[
-            list[Facet],
-            Doc(
-                "A specific, inherent, defining, or non-immediate facet of the entity "
-                + "such as 'blue', 'old', 'famous', 'sister', 'aunt_of', 'weight: 4 kg'. "
-                + "Trivial actions or state changes are not facets. "
-                + "Facets are concise 'properties'."
-            ),
-        ]
-        | None
-    ) = None
+    )
+    facets: list[Facet] | None = Field(
+        default=None,
+        description=(
+            "A specific, inherent, defining, or non-immediate facet of the entity "
+            + "such as 'blue', 'old', 'famous', 'sister', 'aunt_of', 'weight: 4 kg'. "
+            + "Trivial actions or state changes are not facets. "
+            + "Facets are concise 'properties'."
+        ),
+    )
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.name!r}, {self.type}, {self.facets})"
@@ -85,7 +79,7 @@ type VerbTense = Literal["past", "present", "future"]
 class Action:
     knowledge_type: ClassVar[Literal["action"]] = "action"
 
-    verbs: Annotated[list[str], Doc("Each verb is typically a word.")]
+    verbs: list[str] = Field(description="Each verb is typically a word.")
     verb_tense: VerbTense = Field(
         serialization_alias="verbTense",
         validation_alias=AliasChoices("verb_tense", "verbTense"),
@@ -108,19 +102,14 @@ class Action:
         ),
     )
     params: list[str | ActionParam] | None = None
-    subject_entity_facet: (
-        Annotated[
-            Facet,
-            Doc(
-                "If the action implies this additional facet or property of the subject entity, "
-                + "such as hobbies, activities, interests, personality."
-            ),
-        ]
-        | None
-    ) = Field(
+    subject_entity_facet: Facet | None = Field(
         default=None,
         serialization_alias="subjectEntityFacet",
         validation_alias=AliasChoices("subject_entity_facet", "subjectEntityFacet"),
+        description=(
+            "If the action implies this additional facet or property of the subject entity, "
+            + "such as hobbies, activities, interests, personality."
+        ),
     )
 
 
@@ -129,19 +118,17 @@ class KnowledgeResponse:
     """Detailed and comprehensive knowledge response."""
 
     entities: list[ConcreteEntity]
-    actions: Annotated[
-        list[Action],
-        Doc(
+    actions: list[Action] = Field(
+        description=(
             "The 'subject_entity_name' and 'object_entity_name' must correspond "
             + "to the 'name' of an entity listed in the 'entities' array."
         ),
-    ]
-    inverse_actions: Annotated[
-        list[Action],
-        Doc(
+    )
+    inverse_actions: list[Action] = Field(
+        description=(
             "Some actions can ALSO be expressed in a reverse way... "
             + "E.g. (A give to B) --> (B receive from A) and vice versa. "
             + "If so, also return the reverse form of the action, full filled out."
         ),
-    ]
-    topics: Annotated[list[str], Doc("Detailed, descriptive topics and keywords.")]
+    )
+    topics: list[str] = Field(description="Detailed, descriptive topics and keywords.")

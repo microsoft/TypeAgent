@@ -2,8 +2,9 @@
 # Licensed under the MIT License.
 
 from collections.abc import Callable
-from dataclasses import dataclass
-from typing import TypeGuard, cast
+from pydantic.dataclasses import dataclass
+from pydantic import Field, AliasChoices
+from typing import TypeGuard, cast, Annotated
 
 from .collections import MessageAccumulator, SemanticRefAccumulator
 from .interfaces import (
@@ -70,7 +71,13 @@ from .reltermsindex import resolve_related_terms
 
 @dataclass
 class SearchQueryExpr:
-    select_expressions: list[SearchSelectExpr]
+    select_expressions: Annotated[
+        list[SearchSelectExpr],
+        Field(
+            validation_alias=AliasChoices("select_expressions", "selectExpressions"),
+            serialization_alias="selectExpressions",
+        ),
+    ]
     raw_query: str | None = None
 
 

@@ -3,7 +3,6 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterable, Iterable, Sequence
-from dataclasses import field
 from datetime import (
     datetime as Datetime,  # For export.
     timedelta as Timedelta,  # For export.
@@ -528,7 +527,11 @@ class SearchTerm:
     """
 
     term: Term
-    related_terms: list[Term] | None = None
+    related_terms: list[Term] | None = Field(
+        validation_alias=AliasChoices("related_terms", "relatedTerms"),
+        serialization_alias="relatedTerms",
+        default=None,
+    )
 
 
 # Well-known knowledge properties.
@@ -563,16 +566,25 @@ class PropertySearchTerm:
     related terms secondary index, if one is available.
     """
 
-    property_name: KnowledgePropertyName | SearchTerm
-    property_value: SearchTerm
+    property_name: KnowledgePropertyName | SearchTerm = Field(
+        validation_alias=AliasChoices("property_name", "propertyName"),
+        serialization_alias="propertyName",
+    )
+    property_value: SearchTerm = Field(
+        validation_alias=AliasChoices("property_value", "propertyValue"),
+        serialization_alias="propertyValue",
+    )
 
 
 @dataclass
 class SearchTermGroup:
     """A group of search terms."""
 
-    boolean_op: Literal["and", "or", "or_max"]
-    terms: list["SearchTermGroupTypes"] = field(
+    boolean_op: Literal["and", "or", "or_max"] = Field(
+        validation_alias=AliasChoices("boolean_op", "booleanOp"),
+        serialization_alias="booleanOp",
+    )
+    terms: list["SearchTermGroupTypes"] = Field(
         default_factory=list["SearchTermGroupTypes"]
     )
 
@@ -609,7 +621,10 @@ class WhenFilter:
 class SearchSelectExpr:
     """An expression used to select structured contents of a conversation."""
 
-    search_term_group: SearchTermGroup  # Term group that matches information
+    search_term_group: SearchTermGroup = Field(
+        validation_alias=AliasChoices("search_term_group", "searchTermGroup"),
+        serialization_alias="searchTermGroup",
+    )  # Term group that matches information
     when: WhenFilter | None = None  # Filter that scopes what information to match
 
 
