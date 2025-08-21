@@ -2,7 +2,8 @@
 // Licensed under the MIT License.
 
 import { MessageAccumulator, TextRangeCollection } from "../collections.js";
-import { BooleanOp, isPropertyTerm } from "../compileLib.js";
+import { BooleanOp } from "../compileLib.js";
+import { isPropertyTerm } from "../searchLib.js";
 import {
     DataFrameCollection,
     DataFrameSearchTerm,

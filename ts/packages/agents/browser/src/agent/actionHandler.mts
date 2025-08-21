@@ -243,9 +243,7 @@ async function updateBrowserContext(
 
                 if (data.error) {
                     console.error(data.error);
-                    // TODO: Handle the case where no clients were found. Prompt the user
-                    //       to launch inline browser or run automation in the headless browser.
-                    return;
+                    throw new Error(data.error);
                 }
 
                 if (data.method) {
@@ -1049,6 +1047,7 @@ async function executeBrowserAction(
 
     context: ActionContext<BrowserActionContext>,
 ) {
+    // try {
     switch (action.schemaName) {
         case "browser":
             switch (action.actionName) {
@@ -1067,7 +1066,6 @@ async function executeBrowserAction(
                     await getActionBrowserControl(context).goBack();
                     return;
                 case "reloadPage":
-                    // REVIEW: do we need to clear page schema?
                     await getActionBrowserControl(context).reload();
                     return;
                 case "scrollUp":
