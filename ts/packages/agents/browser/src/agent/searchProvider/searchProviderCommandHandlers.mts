@@ -5,7 +5,7 @@ import { CommandHandler, CommandHandlerNoParams, CommandHandlerTable } from "@ty
 import { BrowserActionContext, saveSettings } from "../browserActions.mjs";
 import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 import { displayError, displayResult } from "@typeagent/agent-sdk/helpers/display";
-import { SearchProvider } from "./searchProvider.mjs";
+import { SearchProvider } from "../../common/browserControl.mjs";
 
 export class SearchProviderCommandHandlerTable implements CommandHandlerTable {
     public readonly description = "List search providers";

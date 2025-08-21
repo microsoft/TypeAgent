@@ -83,14 +83,13 @@ import { InstacartActions } from "./instacart/schema/userActions.mjs";
 import { ShoppingActions } from "./commerce/schema/userActions.mjs";
 import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
-import { BrowserControl } from "../common/browserControl.mjs";
+import { BrowserControl, defaultSearchProviders } from "../common/browserControl.mjs";
 import { openai } from "aiclient";
 import { urlResolver } from "azure-ai-foundry";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 import { deleteCachedSchema } from "./crossword/cachedSchema.mjs";
 import { getCrosswordCommandHandlerTable } from "./crossword/commandHandler.mjs";
-import { SearchProviderCommandHandlerTable } from "./searchProvider/searchProviderCommandHandlers.mjs"
-import { defaultSearchProviders } from "./searchProvider/searchProvider.mjs";
+import { SearchProviderCommandHandlerTable, SetCommandHandler } from "./searchProvider/searchProviderCommandHandlers.mjs"
 import { BrowserActionContext, getActionBrowserControl, saveSettings } from "./browserActions.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
@@ -781,9 +780,8 @@ async function resolveWebPage(
             }
 
             // default to search
-            // TODO: use preferred search provider
             return [
-                "https://www.bing.com/search?q=" + encodeURIComponent(site),
+                context.agentContext.activeSearchProvider.url.replace("%s", encodeURIComponent(site)),
             ];
         }
     }
@@ -989,6 +987,30 @@ async function searchWebMemoriesAction(
     }
 }
 
+async function changeSearchProvider(
+    context: ActionContext<BrowserActionContext>,
+    action: TypeAgentAction<any>,
+) {
+
+    if (context.sessionContext.agentContext.searchProviders.filter((sp) => sp.name.toLowerCase() === action.parameters.name.toLowerCase()).length > 0) {
+        const cmd = new SetCommandHandler();
+
+        const params: ParsedCommandParams<any> = {
+            args: { provider: `${action.parameters.name}` },
+            flags: {},
+            tokens: [],
+            lastCompletableParam: undefined,
+            lastParamImplicitQuotes: false,
+            nextArgs: [],
+        };
+
+        await cmd.run(context, params);
+        return createActionResult(`Search provider changed to ${action.parameters.name}`);
+    } else {
+        return createActionResult(`No search provider by the name '${action.parameters.name}' found.  Search provider is still '${context.sessionContext.agentContext.activeSearchProvider.name}'`);
+    }
+}
+
 async function executeBrowserAction(
     action:
         | TypeAgentAction<BrowserActions, "browser">
@@ -1039,6 +1061,7 @@ async function executeBrowserAction(
                 case "search":
                     await getActionBrowserControl(context).search(
                         action.parameters.query,
+                        context.sessionContext.agentContext.activeSearchProvider
                     );
                     return createActionResultFromTextDisplay(
                         `Opened new tab with query ${action.parameters.query}`,
@@ -1090,6 +1113,8 @@ async function executeBrowserAction(
                     );
                 case "openSearchResult":
                     return openSearchResult(context, action);
+                case "changeSearchProvider":
+                    return changeSearchProvider(context, action);
                 default:
                     // Should never happen.
                     throw new Error(

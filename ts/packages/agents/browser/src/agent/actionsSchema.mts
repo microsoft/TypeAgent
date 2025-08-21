@@ -20,7 +20,8 @@ export type BrowserActions =
     | ReloadPage
     | GetWebsiteStats
     | SearchWebMemories
-    | OpenSearchResult;
+    | OpenSearchResult
+    | ChangeSearchProvider;
 
 export type WebPage = string;
 export type WebSearchResult = string;
@@ -183,3 +184,12 @@ export type OpenSearchResult = {
         openInNewTab?: boolean;
     };
 };
+
+// change the default search provider
+export type ChangeSearchProvider = {
+    actionName: "changeSearchProvider";
+    parameters: {
+        // The name of the search provider to switch to
+        name: string;
+    }
+}

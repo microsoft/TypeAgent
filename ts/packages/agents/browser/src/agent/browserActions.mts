@@ -2,8 +2,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { BrowserControl } from "../common/browserControl.mjs";
-import { SearchProvider } from "./searchProvider/searchProvider.mjs";
+import { BrowserControl, SearchProvider } from "../common/browserControl.mjs";
 import { Crossword } from "./crossword/schema/pageSchema.mjs";
 import { ChildProcess } from "child_process";
 import { TabTitleIndex } from "./tabTitleIndex.mjs";

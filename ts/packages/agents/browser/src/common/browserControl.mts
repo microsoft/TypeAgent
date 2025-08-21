@@ -35,7 +35,7 @@ export type BrowserControlInvokeFunctions = {
     closeWindow(): Promise<void>;
 
     // REVIEW: external browser only
-    search(query?: string): Promise<void>;
+    search(query?: string, searchProvider?: SearchProvider): Promise<void>;
     readPage(): Promise<void>;
     stopReadPage(): Promise<void>;
     captureScreenshot(): Promise<string>;
@@ -47,3 +47,28 @@ export type BrowserControlCallFunctions = {
 
 export type BrowserControl = BrowserControlInvokeFunctions &
     BrowserControlCallFunctions;
+
+    export type SearchProvider = {
+    name: string;
+    url: string;
+};
+
+export const defaultSearchProviders: SearchProvider[] = [
+    {
+        name: "Bing",
+        url: "https://www.bing.com/?q=%s",
+    },
+    {
+        name: "Google",
+        url: "https://www.google.com/search?q=%s",
+    },
+    {
+        name: "Yahoo",
+        url: "https://search.yahoo.com/search?p=%s",
+    },
+    {
+        name: "DuckDuckGo",
+        url: "https://duckduckgo.com/?q=%s",
+    }
+];
+
