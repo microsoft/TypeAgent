@@ -5,7 +5,6 @@ import chalk from "chalk";
 import {
     RequestAction,
     printProcessRequestActionResult,
-    HistoryContext,
     FullAction,
     ProcessRequestActionResult,
     ExplanationOptions,
@@ -40,19 +39,15 @@ import {
 } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { DispatcherName, isUnknownAction } from "../dispatcherUtils.js";
-import {
-    getHistoryContextForTranslation,
-    getTranslatorForSchema,
-    translateRequest,
-    TranslationResult,
-} from "../../../translation/translateRequest.js";
-import {
-    getActivityCacheSpec,
-    getActivityNamespaceSuffix,
-    matchRequest,
-} from "../../../translation/matchRequest.js";
+import { getTranslatorForSchema } from "../../../translation/translateRequest.js";
+import { getActivityNamespaceSuffix } from "../../../translation/matchRequest.js";
 import { addRequestToMemory, addResultToMemory } from "../../memory.js";
 import { requestCompletion } from "../../../translation/requestCompletion.js";
+import {
+    getCannotUseCacheReason,
+    interpretRequest,
+    InterpretResult,
+} from "../../../translation/interpretRequest.js";
 const debugExplain = registerDebug("typeagent:explain");
 
 async function canTranslateWithoutContext(
@@ -162,29 +157,6 @@ async function canTranslateWithoutContext(
     }
 }
 
-function getCannotUseCacheReason(
-    context: CommandHandlerContext,
-    attachments?: string[],
-    history?: HistoryContext,
-) {
-    if (attachments && attachments.length > 0) {
-        return "has attachments";
-    }
-    if (history !== undefined) {
-        if (history.additionalInstructions) {
-            return "has additional instructions";
-        }
-        const cacheSpec = getActivityCacheSpec(
-            context,
-            history.activityContext,
-        );
-        if (cacheSpec === false) {
-            return "has activity with cache disabled";
-        }
-    }
-    return undefined;
-}
-
 function getExplainerOptions(
     requestAction: RequestAction,
     context: CommandHandlerContext,
@@ -194,15 +166,6 @@ function getExplainerOptions(
         return undefined;
     }
 
-    const cannotUseCacheReason = getCannotUseCacheReason(
-        context,
-        undefined,
-        requestAction.history,
-    );
-    if (cannotUseCacheReason !== undefined) {
-        // Already checked by the caller, double check here just to be sure.
-        return undefined;
-    }
     if (
         !context.session.getConfig().explainer.filter.multiple &&
         requestAction.actions.length > 1
@@ -254,14 +217,14 @@ function getExplainerOptions(
 }
 
 async function requestExplain(
-    requestAction: RequestAction,
     context: CommandHandlerContext,
-    fromCache: boolean,
-    fromUser: boolean,
-    cannotUseCacheReason?: string,
+    attachments: CachedImageWithDetails[] | undefined,
+    translationResult: InterpretResult,
 ) {
     // Make sure the current requestId is captured
     const requestId = context.requestId;
+
+    const { fromCache, fromUser, requestAction } = translationResult;
 
     const notifyExplained = (error?: string) => {
         context.clientIO.notify(
@@ -285,6 +248,11 @@ async function requestExplain(
         notifyExplained(error);
     };
 
+    const cannotUseCacheReason = getCannotUseCacheReason(
+        context,
+        attachments,
+        requestAction.history,
+    );
     if (cannotUseCacheReason !== undefined) {
         notifyExplained(`cannot not use cache (${cannotUseCacheReason})`);
     }
@@ -378,31 +346,14 @@ export class RequestCommandHandler implements CommandHandler {
 
             // Translate to action
 
-            const history = getHistoryContextForTranslation(systemContext);
-
-            const cannotUseCacheReason = getCannotUseCacheReason(
-                systemContext,
-                attachments,
-                history,
-            );
-            const canUseCacheMatch = cannotUseCacheReason === undefined;
-
             addRequestToMemory(systemContext, request, cachedAttachments);
-            let translationResult: TranslationResult;
+            let interpretResult: InterpretResult;
             try {
-                const match = canUseCacheMatch
-                    ? await matchRequest(request, context, history)
-                    : undefined;
-
-                translationResult =
-                    match ??
-                    (await translateRequest(
-                        request,
-                        context,
-                        history,
-                        cachedAttachments,
-                        0,
-                    ));
+                interpretResult = await interpretRequest(
+                    context,
+                    request,
+                    cachedAttachments,
+                );
             } catch (e: any) {
                 addResultToMemory(
                     systemContext,
@@ -412,8 +363,7 @@ export class RequestCommandHandler implements CommandHandler {
                 throw e;
             }
 
-            const { requestAction, fromUser, fromCache, tokenUsage } =
-                translationResult;
+            const { requestAction, tokenUsage } = interpretResult;
 
             if (tokenUsage) {
                 const commandResult = getCommandResult(systemContext);
@@ -430,11 +380,9 @@ export class RequestCommandHandler implements CommandHandler {
             );
 
             await requestExplain(
-                requestAction,
                 systemContext,
-                fromCache,
-                fromUser,
-                cannotUseCacheReason,
+                cachedAttachments,
+                interpretResult,
             );
         } finally {
             profiler?.stop();

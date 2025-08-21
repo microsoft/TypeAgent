@@ -17,6 +17,7 @@ import {
     createOrMaxTermGroup,
     createTopicSearchTermGroup,
     createEntitySearchTermGroup,
+    isPropertyTerm,
 } from "../src/searchLib.js";
 import {
     emptyConversation,
@@ -37,7 +38,7 @@ import {
     verifySemanticRefResult,
 } from "./verify.js";
 import { hasTestKeys, describeIf } from "test-lib";
-import { isPropertyTerm, validateSearchTermGroup } from "../src/compileLib.js";
+import { validateSearchTermGroup } from "../src/compileLib.js";
 import { PropertyNames } from "../src/propertyIndex.js";
 
 /**

@@ -30,6 +30,7 @@ export class BrowserViewManager {
     private mainWindow: BrowserWindow;
     private onTabUpdateCallback?: () => void;
     private onNavigationUpdateCallback?: () => void;
+    private onPageLoadCompleteCallback?: (tabId: string) => void;
 
     constructor(mainWindow: BrowserWindow) {
         this.mainWindow = mainWindow;
@@ -48,6 +49,13 @@ export class BrowserViewManager {
      */
     setNavigationUpdateCallback(callback: () => void): void {
         this.onNavigationUpdateCallback = callback;
+    }
+
+    /**
+     * Set callback for page load completion
+     */
+    setPageLoadCompleteCallback(callback: (tabId: string) => void): void {
+        this.onPageLoadCompleteCallback = callback;
     }
 
     /**
@@ -138,6 +146,7 @@ export class BrowserViewManager {
             this.updateTabUrl(tabId, webContents.getURL());
             this.notifyNavigationUpdate();
             this.notifyTabUpdate();
+            this.notifyPageLoadComplete(tabId);
         });
 
         webContents.on("did-start-loading", () => {
@@ -457,6 +466,15 @@ export class BrowserViewManager {
     private notifyNavigationUpdate(): void {
         if (this.onNavigationUpdateCallback) {
             this.onNavigationUpdateCallback();
+        }
+    }
+
+    /**
+     * Notify parent about page load completion
+     */
+    private notifyPageLoadComplete(tabId: string): void {
+        if (this.onPageLoadCompleteCallback) {
+            this.onPageLoadCompleteCallback(tabId);
         }
     }
 }

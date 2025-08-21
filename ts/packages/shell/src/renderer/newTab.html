@@ -77,13 +77,25 @@
     </div>
     <script>
       function navigate() {
-        const url = document.getElementById("urlInput").value;
+        const url = document.getElementById("urlInput").value.trim();
         if (url) {
           let fullUrl = url;
           if (!url.startsWith("http://") && !url.startsWith("https://")) {
             fullUrl = "https://" + url;
           }
-          window.location.href = fullUrl;
+          try {
+            const parsedUrl = new URL(fullUrl);
+            if (
+              parsedUrl.protocol === "http:" ||
+              parsedUrl.protocol === "https:"
+            ) {
+              window.location.href = parsedUrl.href;
+            } else {
+              alert("Only HTTP and HTTPS protocols are allowed.");
+            }
+          } catch (e) {
+            alert("Invalid URL.");
+          }
         }
       }
 

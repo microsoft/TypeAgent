@@ -19,7 +19,9 @@ import { ContentScriptRpc } from "../../common/contentScriptRpc/types.mjs";
 async function ensureActiveTab() {
     const targetTab = await getActiveTab();
     if (!targetTab || targetTab.id === undefined) {
-        throw new Error("No active tab found.");
+        throw new Error(
+            "No browser tabs are currently open. Please open a browser tab to continue.",
+        );
     }
     return targetTab;
 }

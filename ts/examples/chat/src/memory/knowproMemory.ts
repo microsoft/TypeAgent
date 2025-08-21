@@ -21,7 +21,7 @@ import {
 import {
     argToDate,
     parseFreeAndNamedArguments,
-    keyValuesFromNamedArgs,
+    createSearchGroup,
 } from "../common.js";
 import {
     collections,
@@ -43,7 +43,7 @@ import { Result } from "typechat";
 import { conversation as knowLib } from "knowledge-processor";
 import { createKnowproKnowledgeCommands } from "./knowproKnowledge.js";
 import { createDiagnosticCommands } from "./knowproDiagnostics.js";
-import { createKnowproAzureCommands } from "./knowproAzure.js";
+import { createKnowproAzureCommands } from "./knowproAzureSearch.js";
 
 export async function runKnowproMemory(): Promise<void> {
     const storePath = "/data/testChat";
@@ -211,7 +211,7 @@ export async function createKnowproCommands(
             return;
         }
         const commandDef = searchTermsDef();
-        // First, check if the caller optionally supplied a ==query parameter...
+        // First, check if the caller optionally supplied a query parameter...
         // If so, this word-breaks it. Else the parameters are just supplied as ordinary
         // command line params
         const [queryTerms, _] = getTermsFromQuery(args, commandDef);
@@ -856,28 +856,6 @@ export async function createKnowproCommands(
         } else {
             context.printer.writeError(answerResult.message);
         }
-    }
-
-    function createSearchGroup(
-        termArgs: string[],
-        namedArgs: NamedArgs,
-        commandDef: CommandMetadata,
-        op: "and" | "or" | "or_max",
-    ): kp.SearchTermGroup {
-        const searchTerms = kp.createSearchTerms(termArgs);
-        const propertyTerms = propertyTermsFromNamedArgs(namedArgs, commandDef);
-        return {
-            booleanOp: op,
-            terms: [...searchTerms, ...propertyTerms],
-        };
-    }
-
-    function propertyTermsFromNamedArgs(
-        namedArgs: NamedArgs,
-        commandDef: CommandMetadata,
-    ): kp.PropertySearchTerm[] {
-        const keyValues = keyValuesFromNamedArgs(namedArgs, commandDef);
-        return kp.createPropertySearchTerms(keyValues);
     }
 
     function whenFilterFromNamedArgs(

@@ -117,6 +117,15 @@ export class ShellWindow {
             this.sendNavigationUpdate();
         });
 
+        this.browserViewManager.setPageLoadCompleteCallback((tabId: string) => {
+            // Only restore focus if this is the active tab
+            const activeTab = this.browserViewManager.getActiveBrowserView();
+            if (activeTab && activeTab.id === tabId) {
+                this.chatView.webContents.focus();
+                this.chatView.webContents.send("focus-chat-input");
+            }
+        });
+
         const resizeHandlerCleanup = setupResizeHandler(mainWindow, () =>
             this.updateContentSize(),
         );
@@ -152,6 +161,10 @@ export class ShellWindow {
                 background: false,
             });
             this.sendTabsUpdate();
+
+            // Restore focus to chat after creating new tab
+            this.chatView.webContents.focus();
+            this.chatView.webContents.send("focus-chat-input");
         });
 
         ipcMain.on("browser-close-tab", (_, tabId: string) => {
@@ -175,6 +188,10 @@ export class ShellWindow {
                     });
                     this.updateContentSize();
                 }
+
+                // Restore focus to chat after closing tab
+                this.chatView.webContents.focus();
+                this.chatView.webContents.send("focus-chat-input");
             }
         });
 
@@ -302,6 +319,17 @@ export class ShellWindow {
         globalShortcut.register("Alt+Right", () => {
             this.chatView.webContents.send("send-demo-event", "Alt+Right");
         });
+
+        // Register Ctrl+L / Cmd+L and Ctrl+E / Cmd+E to focus chat input
+        globalShortcut.register("CommandOrControl+L", () => {
+            this.chatView.webContents.focus();
+            this.chatView.webContents.send("focus-chat-input");
+        });
+
+        globalShortcut.register("CommandOrControl+E", () => {
+            this.chatView.webContents.focus();
+            this.chatView.webContents.send("focus-chat-input");
+        });
     }
 
     private setupWebContents(webContents: WebContents) {
@@ -330,6 +358,8 @@ export class ShellWindow {
         ipcMain.removeAllListeners("browser-reload");
 
         globalShortcut.unregister("Alt+Right");
+        globalShortcut.unregister("CommandOrControl+L");
+        globalShortcut.unregister("CommandOrControl+E");
     }
 
     public sendMessageToInlineWebContent(message: WebSocketMessageV2) {
@@ -533,6 +563,17 @@ export class ShellWindow {
         // Send update to renderer
         this.sendTabsUpdate();
 
+        // Restore focus to chat after tab operations
+        if (!options?.background) {
+            // Small delay to let browser view settle
+            setTimeout(() => {
+                if (!this.chatView.webContents.isDestroyed()) {
+                    this.chatView.webContents.focus();
+                    this.chatView.webContents.send("focus-chat-input");
+                }
+            }, 50);
+        }
+
         return tabId;
     }
 
@@ -554,6 +595,10 @@ export class ShellWindow {
         const success = this.browserViewManager.closeBrowserTab(tabId);
         if (success) {
             this.updateContentSize();
+
+            // Restore focus to chat after closing tab
+            this.chatView.webContents.focus();
+            this.chatView.webContents.send("focus-chat-input");
         }
         return success;
     }

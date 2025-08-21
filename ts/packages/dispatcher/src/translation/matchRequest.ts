@@ -7,8 +7,6 @@ import { ActionContext, ActivityContext } from "@typeagent/agent-sdk";
 import { TranslationResult } from "./translateRequest.js";
 
 import registerDebug from "debug";
-import { unicodeChar } from "../command/command.js";
-import { confirmTranslation } from "./confirmTranslation.js";
 import { getAppAgentName } from "./agentTranslators.js";
 import { canResolvePropertyEntity } from "../execute/pendingActions.js";
 import {
@@ -164,9 +162,10 @@ export function getActivityNamespaceSuffix(
 }
 
 export async function matchRequest(
-    request: string,
     context: ActionContext<CommandHandlerContext>,
+    request: string,
     history?: HistoryContext,
+    activeSchemas?: string[],
 ): Promise<TranslationResult | undefined> {
     const systemContext = context.sessionContext.agentContext;
     const constructionStore = systemContext.agentCache.constructionStore;
@@ -178,19 +177,22 @@ export async function matchRequest(
     const activityContext = history?.activityContext;
     const activeSchemaNames = activityContext
         ? getActivityActiveSchemas(
-              systemContext.agents.getActiveSchemas(),
+              activeSchemas ?? systemContext.agents.getActiveSchemas(),
               activityContext,
           )
-        : systemContext.agents.getActiveSchemas();
+        : (activeSchemas ?? systemContext.agents.getActiveSchemas());
 
     const namespaceSuffix = getActivityNamespaceSuffix(
         systemContext,
         activityContext,
     );
-    const matches = constructionStore.match(request, {
+    const matchConfig = {
         wildcard: config.cache.matchWildcard,
         entityWildcard: config.cache.matchEntityWildcard,
         rejectReferences: config.explainer.filter.reference.list,
+    };
+    const matches = constructionStore.match(request, {
+        ...matchConfig,
         namespaceKeys: systemContext.agentCache.getNamespaceKeys(
             activeSchemaNames,
             namespaceSuffix,
@@ -204,34 +206,18 @@ export async function matchRequest(
     if (match === undefined) {
         return undefined;
     }
-    const { requestAction, replacedAction } = await confirmTranslation(
-        elapsedMs,
-        unicodeChar.constructionSign,
-        match.match,
-        context,
-    );
 
-    if (!systemContext.batchMode) {
-        systemContext.logger?.logEvent("match", {
-            elapsedMs,
-            request,
-            actions: requestAction.actions,
-            replacedAction,
-            developerMode: systemContext.developerMode,
-            translators: activeSchemaNames,
-            explainerName: systemContext.agentCache.explainerName,
-            matchWildcard: config.cache.matchWildcard,
-            allMatches: matches.map((m) => {
-                const { construction: _, match, ...rest } = m;
-                return { action: match.actions, ...rest };
-            }),
-            history,
-        });
-    }
     return {
-        requestAction,
+        type: "match",
+        requestAction: match.match,
         elapsedMs,
-        fromUser: replacedAction !== undefined,
-        fromCache: true,
+        config: {
+            ...matchConfig,
+            explainerName: systemContext.agentCache.explainerName,
+        },
+        allMatches: matches.map((m) => {
+            const { construction: _, match, ...rest } = m;
+            return { action: match.actions, ...rest };
+        }),
     };
 }

@@ -24,7 +24,7 @@ import {
     matchPropertySearchTermToEntity,
     matchSearchTermToEntity,
 } from "../src/query.js";
-import { isPropertyTerm, isSearchGroupTerm } from "../src/compileLib.js";
+import { isPropertyTerm, isSearchGroupTerm } from "../src/searchLib.js";
 import { AnswerResponse } from "../src/answerResponseSchema.js";
 
 export function expectHasEntities(
