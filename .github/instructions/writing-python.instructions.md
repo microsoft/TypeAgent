@@ -23,6 +23,15 @@ When the working directory is ~/TypeAgent/python/ta/:
 - Use `make test` to run all tests
 - Use `make check test` to run `make check` and if it passes also run `make test`
 
+## Package Management with uv
+
+- Use `uv add <package>` to add new dependencies
+- Use `uv add <package> --upgrade` to upgrade existing packages
+- **Important**: uv automatically updates `pyproject.toml` when adding/upgrading packages
+- **Do NOT** manually edit `pyproject.toml` dependency versions after running uv commands
+- uv maintains consistency between `pyproject.toml`, `uv.lock`, and installed packages
+- Trust uv's automatic version resolution and file management
+
 **IMPORTANT! YOU ARE NOT DONE UNTIL `make check test format` PASSES**
 
 # Code generation
