@@ -89,15 +89,26 @@ export class AzSearchQueryCompiler {
         return searchExpr;
     }
 
-    private compileSearchTerm(term: kp.SearchTerm): string {
-        return queryPhraseMatchExpr(term.term);
+    private compileSearchTerm(searchTerm: kp.SearchTerm): string {
+        let searchExpr = queryPhraseExpr(searchTerm.term);
+        if (
+            searchTerm.relatedTerms === undefined ||
+            searchTerm.relatedTerms.length === 0
+        ) {
+            return searchExpr;
+        }
+        let searchExprGroup: string[] = [searchExpr];
+        for (const relatedTerm of searchTerm.relatedTerms) {
+            searchExprGroup.push(queryPhraseExpr(relatedTerm));
+        }
+        return queryMultiBoolExpr("OR", searchExprGroup);
     }
 
     private compilePropertyMatch(
         propertyName: kp.PropertyNames,
         value: kp.Term,
     ) {
-        return queryFieldMatchExpr(this.getFieldPath(propertyName), value.text);
+        return queryFieldMatchExpr(this.getFieldPath(propertyName), value);
     }
 
     private compileDateRange(dateRange: kp.DateRange): string {
@@ -141,13 +152,23 @@ function queryMultiBoolExpr(op: QueryBoolOp, expr: string[]): string {
           : "";
 }
 
-function queryFieldMatchExpr(field: string, value: string): string {
-    return `${field}:"${value}"`;
+function queryFieldMatchExpr(field: string, value: kp.Term): string {
+    return `${field}:${queryPhraseExpr(value)}`;
 }
 
-function queryPhraseMatchExpr(term: kp.Term): string {
-    return `"${term.text}"`;
+function queryPhraseExpr(term: kp.Term): string {
+    return term.weight && term.weight !== 1.0
+        ? `"${term.text}"^${term.weight}`
+        : `"${term.text}"`;
 }
+
+/*
+function queryTermExpr(term: kp.Term): string {
+    return term.weight && term.weight !== 1.0
+        ? `${term.text}^${term.weight}`
+        : term.text;
+}
+*/
 
 // Filter syntax
 
