@@ -9,7 +9,7 @@ from pydantic.alias_generators import to_camel
 
 
 def CamelCaseField(
-    description: str,
+    description: str | None = None,
     *,
     default: Any = MISSING,
     default_factory: Any = MISSING,
@@ -32,7 +32,7 @@ def CamelCaseField(
     class CamelCaseFieldDescriptor:
         def __init__(
             self,
-            description: str,
+            description: str | None = None,
             default: Any = MISSING,
             default_factory: Any = MISSING,
         ):

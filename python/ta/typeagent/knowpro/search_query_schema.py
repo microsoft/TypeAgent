@@ -4,6 +4,7 @@
 # TODO: Move this file into knowpro.
 
 from pydantic.dataclasses import dataclass
+from pydantic import Field
 from typing import Annotated, Literal
 from typing_extensions import Doc
 
@@ -145,14 +146,19 @@ class SearchFilter:
 
 @dataclass
 class SearchExpr:
-    rewritten_query: str = CamelCaseField("The rewritten search query")
-    filters: list[SearchFilter] = CamelCaseField(
-        "List of search filters", default_factory=list
+    rewritten_query: Annotated[str, Doc("The rewritten search query")] = (
+        CamelCaseField()
+    )
+    filters: Annotated[list[SearchFilter], Doc("List of search filters")] = Field(
+        default_factory=list
     )
 
 
 @dataclass
 class SearchQuery:
-    search_expressions: list[SearchExpr] = CamelCaseField(
-        "One expression for each search required by user request. Each SearchExpr runs independently, so make them standalone by resolving references like 'it', 'that', 'them' etc."
-    )
+    search_expressions: Annotated[
+        list[SearchExpr],
+        Doc(
+            "One expression for each search required by user request. Each SearchExpr runs independently, so make them standalone by resolving references like 'it', 'that', 'them' etc."
+        ),
+    ]
