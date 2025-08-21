@@ -7,7 +7,6 @@ import {
     argNum,
     CommandHandler,
     CommandMetadata,
-    parseNamedArguments,
     ProgressBar,
 } from "interactive-app";
 import { KnowproContext } from "./knowproMemory.js";
@@ -15,7 +14,7 @@ import { KnowProPrinter } from "./knowproPrinter.js";
 import * as ms from "memory-storage";
 import * as kp from "knowpro";
 import chalk from "chalk";
-import { propertyTermsFromNamedArgs } from "../common.js";
+import { createSearchGroup, parseFreeAndNamedArguments } from "../common.js";
 import { batchSemanticRefsByMessage } from "./knowproCommon.js";
 
 type AzureMemoryContext = {
@@ -36,9 +35,12 @@ export async function createKnowproAzureCommands(
 
     function azSearchDef(): CommandMetadata {
         return {
-            description: "Azure Search",
+            description:
+                "Search Azure semantic-ref-index by manually providing terms as arguments",
             options: {
-                query: arg("Plain text or Lucene query syntax"),
+                query: arg(
+                    "Plain text or Lucene query syntax. Phrase matches: use single quotes instead of double quotes",
+                ),
                 andTerms: argBool("'And' all terms. Default is 'or", false),
             },
         };
@@ -46,17 +48,26 @@ export async function createKnowproAzureCommands(
     commands.azSearch.metadata = azSearchDef();
     async function azSearch(args: string[]) {
         const commandDef = azSearchDef();
-        const namedArgs = parseNamedArguments(args, commandDef);
+        let [termArgs, namedArgs] = parseFreeAndNamedArguments(
+            args,
+            commandDef,
+        );
         const memory = ensureMemory();
         let query: string = namedArgs.query;
         let queryTerms: string | kp.SearchTermGroup;
         if (query) {
+            // User provided a raw lucene query.. but with single quotes
+            //
             queryTerms = query.replaceAll(/'/g, '"');
         } else {
-            const termGroup = propertyTermsFromNamedArgs(namedArgs, commandDef);
-            queryTerms = namedArgs.andTerms
-                ? kp.createAndTermGroup(...termGroup)
-                : kp.createOrTermGroup(...termGroup);
+            queryTerms = createSearchGroup(
+                termArgs,
+                namedArgs,
+                commandDef,
+                namedArgs.andTerms && namedArgs.andTerms === true
+                    ? "and"
+                    : "or",
+            );
         }
 
         const [queryText, results] = await memory.search(queryTerms);
