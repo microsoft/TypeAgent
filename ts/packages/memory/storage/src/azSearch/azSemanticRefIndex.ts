@@ -28,7 +28,7 @@ export type EntityFacet = {
 };
 
 export type TopicDoc = {
-    topic: string;
+    topic?: string | undefined;
 };
 
 export type ActionDoc = {
@@ -76,7 +76,7 @@ export class AzSemanticRefIndex extends AzSearchIndex<SemanticRefDoc> {
     public async addSemanticRefs(
         sRefs: kp.SemanticRef | kp.SemanticRef[],
         timestamp?: string,
-    ): Promise<void> {
+    ): Promise<azSearch.IndexingResult[]> {
         let docs: SemanticRefDoc[];
         if (Array.isArray(sRefs)) {
             docs = sRefs.map((sr) => semanticRefToDoc(sr, timestamp));
@@ -84,8 +84,10 @@ export class AzSemanticRefIndex extends AzSearchIndex<SemanticRefDoc> {
             docs = [semanticRefToDoc(sRefs, timestamp)];
         }
         if (docs.length > 0) {
-            await this.searchClient.uploadDocuments(docs);
+            const result = await this.searchClient.uploadDocuments(docs);
+            return result.results;
         }
+        return [];
     }
 }
 
@@ -99,7 +101,6 @@ export function semanticRefToDoc(
         default:
             throw new Error("Not supported");
         case "entity":
-        case "sTag":
             doc = entityToDoc(sr.knowledge as kpLib.ConcreteEntity);
             break;
         case "topic":
@@ -107,6 +108,9 @@ export function semanticRefToDoc(
             break;
         case "action":
             doc = actionToDoc(sr.knowledge as kpLib.Action);
+            break;
+        case "sTag":
+            doc = entityToDoc(sr.knowledge as kp.StructuredTag);
             break;
     }
     return {
@@ -122,7 +126,7 @@ export function semanticRefToHeader(
     const range = kp.normalizeTextRange(sr.range);
     let header: SemanticRefHeader = {
         kType: sr.knowledgeType,
-        semanticRefOrdinal: sr.semanticRefOrdinal.toString(),
+        semanticRefOrdinal: semanticRefOrdinalToKey(sr.semanticRefOrdinal),
         start: range.start,
         end: range.end,
     };
@@ -131,6 +135,16 @@ export function semanticRefToHeader(
     }
     return header;
 }
+
+function semanticRefOrdinalToKey(ordinal: kp.SemanticRefOrdinal): string {
+    return ordinal.toString();
+}
+
+/*
+function keyToSemanticRefOrdinal(key: string): kp.SemanticRefOrdinal {
+    return Number.parseInt(key);
+}
+*/
 
 export function entityToDoc(entity: kpLib.ConcreteEntity): EntityDoc {
     const entityDoc: EntityDoc = {

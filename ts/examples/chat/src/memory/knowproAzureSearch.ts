@@ -84,7 +84,6 @@ export async function createKnowproAzureCommands(
         }
 
         //const namedArgs = parseNamedArguments(args, ingestKnowledgeDef());
-        const memory = await ensureMemory();
         const semanticRefs = conversation.semanticRefs!;
         const messages = conversation.messages;
         const progress = new ProgressBar(context.printer, messages.length);
@@ -93,7 +92,7 @@ export async function createKnowproAzureCommands(
         )) {
             progress.advance();
             const message = messages.get(messageOrdinal);
-            await memory.addSemanticRefs(batch, message.timestamp);
+            await addSemanticRefs(batch, message.timestamp);
         }
         progress.complete();
     }
@@ -120,5 +119,29 @@ export async function createKnowproAzureCommands(
         return context.memory;
     }
 
+    async function addSemanticRefs(
+        semanticRefs: kp.SemanticRef[],
+        timestamp?: string,
+    ) {
+        const memory = ensureMemory();
+        const indexingResults = await memory.addSemanticRefs(
+            semanticRefs,
+            timestamp,
+        );
+        for (const result of indexingResults) {
+            switch (result.statusCode) {
+                default:
+                    let errorMessage =
+                        result.errorMessage ?? result.statusCode.toString();
+                    context.printer.writeError(
+                        `FAILED: ordinal: ${result.key} [${errorMessage}]`,
+                    );
+                    break;
+                case 200:
+                case 201:
+                    break;
+            }
+        }
+    }
     return commands;
 }
