@@ -22,7 +22,8 @@
       .header {
         position: absolute;
         top: 0;
-        left: 400px; /* Start at divider position */
+        /* Start at divider position */
+        left: 400px;
         right: 0;
         height: 40px;
         background: #f5f5f5;
@@ -30,7 +31,8 @@
         display: flex;
         align-items: center;
         z-index: 1000;
-        visibility: hidden; /* Hidden by default, shown when browser is open */
+        /* Hidden by default, shown when browser is open */
+        visibility: hidden;
       }
 
       .header.visible {
@@ -163,7 +165,8 @@
 
       .divider {
         position: absolute;
-        top: 0; /* Full height always */
+        /* Full height always */
+        top: 0;
         bottom: 0;
         left: 400px;
         width: 5px;
@@ -269,20 +272,26 @@
           <button class="tab-close"><i class="fas fa-times"></i></button>
         `;
 
+        const closeButton = tabElement.querySelector(".tab-close");
         // Tab click handler
         tabElement.addEventListener("click", (e) => {
-          if (!e.target.classList.contains("tab-close")) {
+          if (e.target !== closeButton) {
             switchTab(tab.id);
           }
         });
 
         // Tab close handler
-        tabElement
-          .querySelector(".tab-close")
-          .addEventListener("click", (e) => {
+        tabElement.addEventListener("auxclick", (e) => {
+          if (e.button === 1) {
+            // Middle click
             e.stopPropagation();
             closeTab(tab.id);
-          });
+          }
+        });
+        closeButton.addEventListener("click", (e) => {
+          e.stopPropagation();
+          closeTab(tab.id);
+        });
 
         return tabElement;
       }

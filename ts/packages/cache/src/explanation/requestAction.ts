@@ -194,9 +194,11 @@ function executableActionsToString(actions: ExecutableAction[]): string {
 }
 
 function fromJsonAction(actionJSON: JSONAction) {
-    const { schemaName, actionName } = parseFullActionNameParts(
-        actionJSON.fullActionName,
-    );
+    const { schemaName, actionName } =
+        actionJSON.fullActionName !== undefined
+            ? parseFullActionNameParts(actionJSON.fullActionName)
+            : { schemaName: undefined as any, actionName: undefined as any };
+
     return createExecutableAction(
         schemaName,
         actionName,
