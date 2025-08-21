@@ -90,16 +90,11 @@ class ScoredSemanticRefOrdinal:
         return f"{self.__class__.__name__}({self.semantic_ref_ordinal}, {self.score})"
 
     def serialize(self) -> "ScoredSemanticRefOrdinalData":
-        return ScoredSemanticRefOrdinalData(
-            semanticRefOrdinal=self.semantic_ref_ordinal, score=self.score
-        )
+        return self.__pydantic_serializer__.to_python(self, by_alias=True)  # type: ignore
 
     @staticmethod
     def deserialize(data: "ScoredSemanticRefOrdinalData") -> "ScoredSemanticRefOrdinal":
-        return ScoredSemanticRefOrdinal(
-            semantic_ref_ordinal=data["semanticRefOrdinal"],
-            score=data["score"],
-        )
+        return ScoredSemanticRefOrdinal.__pydantic_validator__.validate_python(data)  # type: ignore
 
 
 @dataclass
@@ -170,17 +165,11 @@ class TextLocation:
         )
 
     def serialize(self) -> TextLocationData:
-        kwds = dict(messageOrdinal=self.message_ordinal)
-        if self.chunk_ordinal != 0:
-            kwds["chunkOrdinal"] = self.chunk_ordinal
-        return TextLocationData(**kwds)
+        return self.__pydantic_serializer__.to_python(self, by_alias=True)  # type: ignore
 
     @staticmethod
     def deserialize(data: TextLocationData) -> "TextLocation":
-        return TextLocation(
-            message_ordinal=data["messageOrdinal"],
-            chunk_ordinal=data.get("chunkOrdinal", 0),
-        )
+        return TextLocation.__pydantic_validator__.validate_python(data)  # type: ignore
 
 
 class TextRangeData(TypedDict):
@@ -349,10 +338,7 @@ class Term:
             return f"{self.__class__.__name__}({self.text!r}, {self.weight:.4g})"
 
     def serialize(self) -> "TermData":
-        if self.weight is None:
-            return TermData(text=self.text)
-        else:
-            return TermData(text=self.text, weight=self.weight)
+        return self.__pydantic_serializer__.to_python(self, by_alias=True, exclude_none=True)  # type: ignore
 
 
 # Allows for faster retrieval of name, value properties
