@@ -36,7 +36,7 @@ export class searchResultsPhraseGenerator {
     // manually downloadable from: https://radar.cloudflare.com/domains
     private downloadUrl: string =
         "https://radar.cloudflare.com/charts/LargerTopDomainsTable/attachment?id=1257&top=";
-    private topN: number = 5000;
+    private topN: number = 50000;
     private topNFile: string = `examples/websiteAliases/top${this.topN}.csv`;
     private outputFile: string = "examples/websiteAliases/openPhrasesCache.json";
     private processed: cachedUrls = {
