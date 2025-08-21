@@ -3,7 +3,10 @@
 
 import { createGenericChannel } from "agent-rpc/channel";
 import { ShellWindow } from "./shellWindow.js";
-import type { BrowserControl } from "browser-typeagent/agent/types";
+import type {
+    BrowserControl,
+    SearchProvider,
+} from "browser-typeagent/agent/types";
 import { createContentScriptRpcClient } from "browser-typeagent/contentScriptRpc/client";
 import { ipcMain } from "electron";
 
@@ -169,10 +172,15 @@ export function createInlineBrowserControl(
                 "Closing the inline browser window is not supported.",
             );
         },
-        async search(query: string) {
-            // TODO: use configured search provider
+        async search(query: string, searchProvider: SearchProvider) {
             const searchUrl = new URL(
-                "https://www.bing.com/search?q=" + encodeURIComponent(query),
+                searchProvider
+                    ? searchProvider.url.replace(
+                          "%s",
+                          encodeURIComponent(query),
+                      )
+                    : "https://www.bing.com/search?q=" +
+                      encodeURIComponent(query),
             );
 
             // Always use tabs

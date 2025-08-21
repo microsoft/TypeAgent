@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { SessionContext } from "@typeagent/agent-sdk";
-import { BrowserActionContext } from "./actionHandler.mjs";
+import { BrowserActionContext } from "./browserActions.mjs";
 import { createContentService } from "./contentService.mjs";
 import { BrowserContentExtractor } from "./browserContentExtractor.mjs";
 import { DirectFolderProcessor } from "./htmlProcessor.mjs";
