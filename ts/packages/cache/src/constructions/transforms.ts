@@ -57,7 +57,6 @@ export class Transforms {
             map = new Map();
             this.transforms.set(paramName, map);
         }
-
         // Case insensitive/non-diacritic match
         // Use the count ot heuristic to prefer values original to user request
         // and not from a synonym or alternative suggested by GPT
@@ -73,7 +72,6 @@ export class Transforms {
             map = new Map();
             this.transforms.set(paramName, map);
         }
-
         // Case insensitive/non-diacritic match
         this.addTransformRecord(map, normalizeParamString(text), {
             entityTypes,
@@ -224,7 +222,6 @@ export class Transforms {
         }
         return record.value;
     }
-
 
     public getConflicts(
         paramName: string,
