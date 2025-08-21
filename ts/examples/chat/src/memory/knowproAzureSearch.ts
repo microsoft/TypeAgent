@@ -5,8 +5,10 @@ import {
     arg,
     argBool,
     argNum,
+    askYesNo,
     CommandHandler,
     CommandMetadata,
+    InteractiveIo,
     ProgressBar,
 } from "interactive-app";
 import { KnowproContext } from "./knowproMemory.js";
@@ -15,7 +17,7 @@ import * as ms from "memory-storage";
 import * as kp from "knowpro";
 import chalk from "chalk";
 import { parseFreeAndNamedArguments } from "../common.js";
-import { createSearchGroup } from "./knowproCommon.js";
+import { createSearchGroup, dateRangeFromNamedArgs } from "./knowproCommon.js";
 import { batchSemanticRefsByMessage } from "./knowproCommon.js";
 
 type AzureMemoryContext = {
@@ -43,6 +45,8 @@ export async function createKnowproAzureCommands(
                     "Plain text or Lucene query syntax. Phrase matches: use single quotes instead of double quotes",
                 ),
                 andTerms: argBool("'And' all terms. Default is 'or", false),
+                startDate: arg("Starting at this ISO date"),
+                endDate: arg("Ending at this date ISO date"),
             },
         };
     }
@@ -70,11 +74,17 @@ export async function createKnowproAzureCommands(
                     : "or",
             );
         }
-
-        const [azQuery, results] = await memory.search(queryTerms);
+        const dateRange = dateRangeFromNamedArgs(namedArgs);
+        const [azQuery, results] = await memory.search(
+            queryTerms,
+            dateRange ? { dateRange } : undefined,
+        );
         context.printer.writeLineInColor(chalk.cyan, azQuery.searchQuery);
         if (azQuery.filter) {
-            context.printer.writeLineInColor(chalk.cyan, azQuery.filter);
+            context.printer.writeLineInColor(
+                chalk.cyan,
+                `$filter: ${azQuery.filter}`,
+            );
         }
         context.printer.writeLine(`${results.length} matches`);
         for (const result of results) {
@@ -91,13 +101,21 @@ export async function createKnowproAzureCommands(
         };
     }
     commands.azIngest.metadata = ingestKnowledgeDef();
-    async function ingestKnowledge(args: string[]) {
+    async function ingestKnowledge(args: string[], io: InteractiveIo) {
         const conversation = kpContext.conversation;
         if (!conversation) {
             context.printer.writeError("No loaded conversation");
             return;
         }
-
+        const memory = ensureMemory();
+        if (
+            !askYesNo(
+                io,
+                `Are you sure you want to ingest knowledge from ${conversation.nameTag} into ${memory.settings.indexName}?`,
+            )
+        ) {
+            return;
+        }
         //const namedArgs = parseNamedArguments(args, ingestKnowledgeDef());
         const semanticRefs = conversation.semanticRefs!;
         const messages = conversation.messages;

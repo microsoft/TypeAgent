@@ -270,3 +270,17 @@ export function whenFilterFromNamedArgs(
     }
     return filter;
 }
+
+export function dateRangeFromNamedArgs(
+    namedArgs: NamedArgs,
+): kp.DateRange | undefined {
+    let startDate = argToDate(namedArgs.startDate);
+    let endDate = argToDate(namedArgs.endDate);
+    if (startDate) {
+        return {
+            start: startDate,
+            end: endDate,
+        };
+    }
+    return undefined;
+}

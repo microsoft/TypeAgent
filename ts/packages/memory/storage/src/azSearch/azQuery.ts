@@ -160,5 +160,8 @@ function filterCompareExpr(
     field: string,
     value: any,
 ): string {
+    if (typeof value === "string") {
+        return `${field} ${op} '${value}'`;
+    }
     return `${field} ${op} ${value}`;
 }
