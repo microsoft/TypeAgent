@@ -41,7 +41,7 @@
   },
   "dependencies": {
     "@oclif/core": "^4.2.10",
-    "@oclif/plugin-help": "^5",
+    "@oclif/plugin-help": "^6",
     "fs-extra": "^11.3.0",
     "puppeteer": "^23.8.0",
     "ts-node": "^10.9.1",
