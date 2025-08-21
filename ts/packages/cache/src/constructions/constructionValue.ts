@@ -184,7 +184,7 @@ export function createActionProps(
 
     if (actionProps === undefined) {
         if (partial) {
-            return { fullActionName: "unknown.unknown" };
+            return { fullActionName: undefined }; // Return undefined for partial matches
         }
         throw new Error(
             "Internal error: No values provided for action properties",
