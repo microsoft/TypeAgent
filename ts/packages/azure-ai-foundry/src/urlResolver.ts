@@ -485,7 +485,7 @@ export function resolveURLByKeyword(
     if (!keyWordsToSites) {
         const phrasesToSites = JSON.parse(
             readFileSync(
-                "../../examples/websiteAliases/phrases_to_sites.json",
+                "../../examples/websiteAliases/openPhrasesCache.json",
                 "utf-8",
             ),
         );

@@ -28,12 +28,6 @@ type extractedDomains = {
     };
 };
 
-// type crawlPages = {
-//     pages: number;
-//     pageSize: number;
-//     blocks: number;
-// }
-
 export class topNDomainsExtractor {
     // manually downloadable from: https://radar.cloudflare.com/domains
     private downloadUrl: string =
@@ -42,7 +36,6 @@ export class topNDomainsExtractor {
     private topNFile: string = `examples/websiteAliases/top${this.topN}.csv`;
     private outputFile: string =
         "examples/websiteAliases/phrases_to_sites.json";
-    //private keywordsToSites: Record<string, string[]> = {};
     private processed: extractedDomains = {
         dateIndexed: Date.now(),
         domains: {},

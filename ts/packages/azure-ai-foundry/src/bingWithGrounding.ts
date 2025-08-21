@@ -11,6 +11,7 @@ export type ApiSettings = {
     validatorAgentId?: string;
     httpEndpointLogicAppConnectionId?: string;
     aliasKeywordExtractorAgentId?: string;
+    openPhraseGeneratorAgentId?: string;
 };
 
 /**
@@ -24,6 +25,7 @@ export enum EnvVars {
     AZURE_FOUNDRY_AGENT_ID_VALIDATOR = "AZURE_FOUNDRY_AGENT_ID_VALIDATOR",
     LOGIC_APP_CONNECTION_ID_GET_HTTP_ENDPOINT = "LOGIC_APP_CONNECTION_ID_GET_HTTP_ENDPOINT",
     AZURE_FOUNDRY_AGENT_ID_ALIAS_KEYWORD_EXTRACTOR = "AZURE_FOUNDRY_AGENT_ID_ALIAS_KEYWORD_EXTRACTOR",
+    AZURE_FOUNDRY_AGENT_ID_OPEN_PHRASE_GENERATOR = "AZURE_FOUNDRY_AGENT_ID_OPEN_PHRASE_GENERATOR",
 }
 
 /**
@@ -58,5 +60,9 @@ export function apiSettingsFromEnv(
             env,
             EnvVars.AZURE_FOUNDRY_AGENT_ID_ALIAS_KEYWORD_EXTRACTOR,
         ),
+        openPhraseGeneratorAgentId: getEnvSetting(
+            env,
+            EnvVars.AZURE_FOUNDRY_AGENT_ID_OPEN_PHRASE_GENERATOR,
+        )
     };
 }
