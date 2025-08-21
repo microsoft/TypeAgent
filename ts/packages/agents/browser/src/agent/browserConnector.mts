@@ -44,7 +44,7 @@ export class BrowserConnector {
                 } catch {
                     console.log("Unable to contact browser backend.");
                     reject(
-                        "Unable to contact browser backend (from connector).",
+                        "Unable to connect to browser extension. Please ensure the TypeAgent browser extension is installed and active.",
                     );
                 }
             } else {
