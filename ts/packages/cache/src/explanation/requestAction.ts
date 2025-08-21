@@ -194,34 +194,25 @@ function executableActionsToString(actions: ExecutableAction[]): string {
 }
 
 function fromJsonAction(actionJSON: JSONAction) {
-    // Handle undefined fullActionName for partial matches
-    if (!actionJSON.fullActionName) {
-        // For partial matches, create an action with undefined schema/action
-        const action: TypeAgentAction<any> = {
-            schemaName: undefined as any, // Will be undefined for partial matches
-            actionName: undefined as any,  // Will be undefined for partial matches
-        };
-        if (actionJSON.parameters !== undefined) {
-            action.parameters = actionJSON.parameters;
-        }
-        const executableAction: ExecutableAction = {
-            action,
-        };
-        if (actionJSON.resultEntityId !== undefined) {
-            executableAction.resultEntityId = actionJSON.resultEntityId;
-        }
-        return executableAction;
-    }
+    const { schemaName, actionName } =
+        actionJSON.fullActionName !== undefined
+            ? parseFullActionNameParts(actionJSON.fullActionName)
+            : { schemaName: undefined as any, actionName: undefined as any };
     
-    const { schemaName, actionName } = parseFullActionNameParts(
-        actionJSON.fullActionName,
-    );
-    return createExecutableAction(
+    const action: TypeAgentAction<any> = {
         schemaName,
         actionName,
-        actionJSON.parameters,
-        actionJSON.resultEntityId,
-    );
+    };
+    if (actionJSON.parameters !== undefined) {
+        action.parameters = actionJSON.parameters;
+    }
+    const executableAction: ExecutableAction = {
+        action,
+    };
+    if (actionJSON.resultEntityId !== undefined) {
+        executableAction.resultEntityId = actionJSON.resultEntityId;
+    }
+    return executableAction;
 }
 
 export function fromJsonActions(
