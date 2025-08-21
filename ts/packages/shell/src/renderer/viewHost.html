@@ -3,348 +3,356 @@
  Licensed under the MIT License. -->
 
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title></title>
-    <link
-      rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
-    />
-    <style>
-      body {
-        margin: 0;
-        overflow: hidden;
-        font-family:
-          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      }
 
-      .header {
-        position: absolute;
-        top: 0;
-        left: 400px; /* Start at divider position */
-        right: 0;
-        height: 40px;
-        background: #f5f5f5;
-        border-bottom: 1px solid #ddd;
-        display: flex;
-        align-items: center;
-        z-index: 1000;
-        visibility: hidden; /* Hidden by default, shown when browser is open */
-      }
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title></title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family:
+        -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
 
-      .header.visible {
-        visibility: visible;
-      }
+    .header {
+      position: absolute;
+      top: 0;
+      /* Start at divider position */
+      left: 400px;
+      right: 0;
+      height: 40px;
+      background: #f5f5f5;
+      border-bottom: 1px solid #ddd;
+      display: flex;
+      align-items: center;
+      z-index: 1000;
+      /* Hidden by default, shown when browser is open */
+      visibility: hidden;
+    }
 
-      .browser-nav {
-        display: flex;
-        align-items: center;
-        padding: 0 8px;
-        gap: 4px;
-      }
+    .header.visible {
+      visibility: visible;
+    }
 
-      .nav-button {
-        width: 24px;
-        height: 24px;
-        border: none;
-        background: transparent;
-        border-radius: 3px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 12px;
-      }
+    .browser-nav {
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      gap: 4px;
+    }
 
-      .nav-button i {
-        font-size: 11px;
-      }
+    .nav-button {
+      width: 24px;
+      height: 24px;
+      border: none;
+      background: transparent;
+      border-radius: 3px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+    }
 
-      .nav-button:hover {
-        background: #e0e0e0;
-      }
+    .nav-button i {
+      font-size: 11px;
+    }
 
-      .nav-button:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
+    .nav-button:hover {
+      background: #e0e0e0;
+    }
 
-      .nav-button:disabled:hover {
-        background: transparent;
-      }
+    .nav-button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
 
-      .tab-bar {
-        flex: 1;
-        display: flex;
-        align-items: center;
-        overflow: hidden;
-        padding: 0 4px;
-      }
+    .nav-button:disabled:hover {
+      background: transparent;
+    }
 
-      .tab {
-        min-width: 120px;
-        max-width: 200px;
-        height: 32px;
-        background: #fff;
-        border: 1px solid #ccc;
-        border-radius: 6px 6px 0 0;
-        margin-right: 2px;
-        display: flex;
-        align-items: center;
-        padding: 0 8px;
-        cursor: pointer;
-        font-size: 12px;
-        overflow: hidden;
-        user-select: none;
-        -webkit-user-select: none;
-      }
+    .tab-bar {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      overflow: hidden;
+      padding: 0 4px;
+    }
 
-      .tab.active {
-        background: #fff;
-        border-bottom-color: #fff;
-        z-index: 1;
-      }
+    .tab {
+      min-width: 120px;
+      max-width: 200px;
+      height: 32px;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 6px 6px 0 0;
+      margin-right: 2px;
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      cursor: pointer;
+      font-size: 12px;
+      overflow: hidden;
+      user-select: none;
+      -webkit-user-select: none;
+    }
 
-      .tab:not(.active) {
-        background: #f0f0f0;
-      }
+    .tab.active {
+      background: #fff;
+      border-bottom-color: #fff;
+      z-index: 1;
+    }
 
-      .tab-favicon {
-        width: 16px;
-        height: 16px;
-        margin-right: 6px;
-        flex-shrink: 0;
-      }
+    .tab:not(.active) {
+      background: #f0f0f0;
+    }
 
-      .tab-title {
-        flex: 1;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
+    .tab-favicon {
+      width: 16px;
+      height: 16px;
+      margin-right: 6px;
+      flex-shrink: 0;
+    }
 
-      .tab-close {
-        width: 16px;
-        height: 16px;
-        margin-left: 4px;
-        background: transparent;
-        border: none;
-        border-radius: 2px;
-        cursor: pointer;
-        font-size: 8px;
-        flex-shrink: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
+    .tab-title {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
 
-      .tab-close:hover {
-        background: #e0e0e0;
-      }
+    .tab-close {
+      width: 16px;
+      height: 16px;
+      margin-left: 4px;
+      background: transparent;
+      border: none;
+      border-radius: 2px;
+      cursor: pointer;
+      font-size: 8px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
 
-      .add-tab-button {
-        width: 28px;
-        height: 28px;
-        background: transparent;
-        border: 1px solid #ccc;
-        border-radius: 4px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 12px;
-        margin-right: 8px;
-      }
+    .tab-close:hover {
+      background: #e0e0e0;
+    }
 
-      .add-tab-button:hover {
-        background: #f0f0f0;
-      }
+    .add-tab-button {
+      width: 28px;
+      height: 28px;
+      background: transparent;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      margin-right: 8px;
+    }
 
-      .divider {
-        position: absolute;
-        top: 0; /* Full height always */
-        bottom: 0;
-        left: 400px;
-        width: 5px;
-        cursor: ew-resize;
-        background-color: #ddd;
-      }
-    </style>
-  </head>
+    .add-tab-button:hover {
+      background: #f0f0f0;
+    }
 
-  <body>
-    <!-- Header for browser navigation and tabs -->
-    <div class="header" id="header">
-      <!-- Browser navigation controls -->
-      <div class="browser-nav">
-        <button class="nav-button" id="back-btn" title="Back" disabled>
-          <i class="fas fa-arrow-left"></i>
-        </button>
-        <button class="nav-button" id="forward-btn" title="Forward" disabled>
-          <i class="fas fa-arrow-right"></i>
-        </button>
-        <button class="nav-button" id="reload-btn" title="Reload">
-          <i class="fas fa-sync-alt"></i>
-        </button>
-      </div>
+    .divider {
+      position: absolute;
+      /* Full height always */
+      top: 0;
+      bottom: 0;
+      left: 400px;
+      width: 5px;
+      cursor: ew-resize;
+      background-color: #ddd;
+    }
+  </style>
+</head>
 
-      <!-- Tab bar -->
-      <div class="tab-bar" id="tab-bar">
-        <!-- Tabs will be dynamically added here -->
-      </div>
-
-      <!-- Add tab button -->
-      <button class="add-tab-button" id="add-tab-btn" title="New Tab">
-        <i class="fas fa-plus"></i>
+<body>
+  <!-- Header for browser navigation and tabs -->
+  <div class="header" id="header">
+    <!-- Browser navigation controls -->
+    <div class="browser-nav">
+      <button class="nav-button" id="back-btn" title="Back" disabled>
+        <i class="fas fa-arrow-left"></i>
+      </button>
+      <button class="nav-button" id="forward-btn" title="Forward" disabled>
+        <i class="fas fa-arrow-right"></i>
+      </button>
+      <button class="nav-button" id="reload-btn" title="Reload">
+        <i class="fas fa-sync-alt"></i>
       </button>
     </div>
 
-    <div class="divider" id="divider"></div>
-    <script>
-      const ipcRenderer = window.electron.ipcRenderer;
+    <!-- Tab bar -->
+    <div class="tab-bar" id="tab-bar">
+      <!-- Tabs will be dynamically added here -->
+    </div>
 
-      // DOM elements
-      const header = document.getElementById("header");
-      const divider = document.getElementById("divider");
-      const tabBar = document.getElementById("tab-bar");
-      const backBtn = document.getElementById("back-btn");
-      const forwardBtn = document.getElementById("forward-btn");
-      const reloadBtn = document.getElementById("reload-btn");
-      const addTabBtn = document.getElementById("add-tab-btn");
+    <!-- Add tab button -->
+    <button class="add-tab-button" id="add-tab-btn" title="New Tab">
+      <i class="fas fa-plus"></i>
+    </button>
+  </div>
 
-      // State
-      let isDragging = false;
-      let tabs = [];
-      let activeTabId = null;
+  <div class="divider" id="divider"></div>
+  <script>
+    const ipcRenderer = window.electron.ipcRenderer;
 
-      // Divider functionality
-      divider.addEventListener("mousedown", () => {
-        isDragging = true;
-      });
+    // DOM elements
+    const header = document.getElementById("header");
+    const divider = document.getElementById("divider");
+    const tabBar = document.getElementById("tab-bar");
+    const backBtn = document.getElementById("back-btn");
+    const forwardBtn = document.getElementById("forward-btn");
+    const reloadBtn = document.getElementById("reload-btn");
+    const addTabBtn = document.getElementById("add-tab-btn");
 
-      window.addEventListener("mousemove", (e) => {
-        if (!isDragging) return;
-        const newX = e.clientX;
-        divider.style.left = `${newX}px`;
-        header.style.left = `${newX + 5}px`; // Position header just after divider
-        ipcRenderer.send("views-resized-by-user", newX);
-      });
+    // State
+    let isDragging = false;
+    let tabs = [];
+    let activeTabId = null;
 
-      window.addEventListener("mouseup", () => {
-        isDragging = false;
-      });
+    // Divider functionality
+    divider.addEventListener("mousedown", () => {
+      isDragging = true;
+    });
 
-      // Handle browser navigation
-      backBtn.addEventListener("click", () => {
-        ipcRenderer.send("browser-go-back");
-      });
+    window.addEventListener("mousemove", (e) => {
+      if (!isDragging) return;
+      const newX = e.clientX;
+      divider.style.left = `${newX}px`;
+      header.style.left = `${newX + 5}px`; // Position header just after divider
+      ipcRenderer.send("views-resized-by-user", newX);
+    });
 
-      forwardBtn.addEventListener("click", () => {
-        ipcRenderer.send("browser-go-forward");
-      });
+    window.addEventListener("mouseup", () => {
+      isDragging = false;
+    });
 
-      reloadBtn.addEventListener("click", () => {
-        ipcRenderer.send("browser-reload");
-      });
+    // Handle browser navigation
+    backBtn.addEventListener("click", () => {
+      ipcRenderer.send("browser-go-back");
+    });
 
-      addTabBtn.addEventListener("click", () => {
-        ipcRenderer.send("browser-new-tab");
-      });
+    forwardBtn.addEventListener("click", () => {
+      ipcRenderer.send("browser-go-forward");
+    });
 
-      // Tab management functions
-      function createTabElement(tab) {
-        const tabElement = document.createElement("div");
-        tabElement.className = `tab ${tab.id === activeTabId ? "active" : ""}`;
-        tabElement.dataset.tabId = tab.id;
+    reloadBtn.addEventListener("click", () => {
+      ipcRenderer.send("browser-reload");
+    });
 
-        // Create favicon element with fallback
-        const faviconSrc =
-          tab.favicon ||
-          `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#ccc"/></svg>')}`;
+    addTabBtn.addEventListener("click", () => {
+      ipcRenderer.send("browser-new-tab");
+    });
 
-        tabElement.innerHTML = `
+    // Tab management functions
+    function createTabElement(tab) {
+      const tabElement = document.createElement("div");
+      tabElement.className = `tab ${tab.id === activeTabId ? "active" : ""}`;
+      tabElement.dataset.tabId = tab.id;
+
+      // Create favicon element with fallback
+      const faviconSrc =
+        tab.favicon ||
+        `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#ccc"/></svg>')}`;
+
+      tabElement.innerHTML = `
           <img class="tab-favicon" src="${faviconSrc}" alt="" onerror="this.src='data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#ccc"/></svg>')}'">
           <span class="tab-title">${tab.title || "New Tab"}</span>
           <button class="tab-close"><i class="fas fa-times"></i></button>
         `;
 
-        // Tab click handler
-        tabElement.addEventListener("click", (e) => {
-          if (!e.target.classList.contains("tab-close")) {
-            switchTab(tab.id);
-          }
-        });
-
-        // Tab close handler
-        tabElement
-          .querySelector(".tab-close")
-          .addEventListener("click", (e) => {
-            e.stopPropagation();
-            closeTab(tab.id);
-          });
-
-        return tabElement;
-      }
-
-      function updateTabBar() {
-        tabBar.innerHTML = "";
-        tabs.forEach((tab) => {
-          tabBar.appendChild(createTabElement(tab));
-        });
-      }
-
-      function switchTab(tabId) {
-        activeTabId = tabId;
-        updateTabBar();
-        ipcRenderer.send("browser-switch-tab", tabId);
-      }
-
-      function closeTab(tabId) {
-        ipcRenderer.send("browser-close-tab", tabId);
-      }
-
-      function updateHeaderVisibility() {
-        const hasBrowserContent = tabs.length > 0;
-        header.classList.toggle("visible", hasBrowserContent);
-      }
-
-      function updateNavigationState(navigationState) {
-        backBtn.disabled = !navigationState.canGoBack;
-        forwardBtn.disabled = !navigationState.canGoForward;
-      }
-
-      // IPC handlers
-      ipcRenderer.on("set-divider-left", (_, newX) => {
-        if (newX < 0) {
-          divider.style.visibility = "hidden";
-          header.classList.remove("visible");
-        } else {
-          divider.style.left = `${newX}px`;
-          header.style.left = `${newX + 5}px`; // Position header just after divider
-          divider.style.visibility = "visible";
-          if (tabs.length > 0) {
-            header.classList.add("visible");
-          }
+      const closeButton = tabElement.querySelector(".tab-close");
+      // Tab click handler
+      tabElement.addEventListener("click", (e) => {
+        if (e.target !== closeButton) {
+          switchTab(tab.id);
         }
       });
 
-      // Tab management IPC handlers
-      ipcRenderer.on("browser-tabs-updated", (_, tabsData) => {
-        tabs = tabsData.tabs;
-        activeTabId = tabsData.activeTabId;
-        updateTabBar();
-        updateHeaderVisibility();
-
-        // Update navigation state if we have an active tab
-        if (tabsData.navigationState) {
-          updateNavigationState(tabsData.navigationState);
+      // Tab close handler
+      tabElement.addEventListener("auxclick", (e) => {
+        if (e.button === 1) {
+          // Middle click
+          e.stopPropagation();
+          closeTab(tab.id);
         }
       });
-
-      ipcRenderer.on("browser-navigation-updated", (_, navigationState) => {
-        updateNavigationState(navigationState);
+      closeButton.addEventListener("click", (e) => {
+        e.stopPropagation();
+        closeTab(tab.id);
       });
-    </script>
-  </body>
+
+      return tabElement;
+    }
+
+    function updateTabBar() {
+      tabBar.innerHTML = "";
+      tabs.forEach((tab) => {
+        tabBar.appendChild(createTabElement(tab));
+      });
+    }
+
+    function switchTab(tabId) {
+      activeTabId = tabId;
+      updateTabBar();
+      ipcRenderer.send("browser-switch-tab", tabId);
+    }
+
+    function closeTab(tabId) {
+      ipcRenderer.send("browser-close-tab", tabId);
+    }
+
+    function updateHeaderVisibility() {
+      const hasBrowserContent = tabs.length > 0;
+      header.classList.toggle("visible", hasBrowserContent);
+    }
+
+    function updateNavigationState(navigationState) {
+      backBtn.disabled = !navigationState.canGoBack;
+      forwardBtn.disabled = !navigationState.canGoForward;
+    }
+
+    // IPC handlers
+    ipcRenderer.on("set-divider-left", (_, newX) => {
+      if (newX < 0) {
+        divider.style.visibility = "hidden";
+        header.classList.remove("visible");
+      } else {
+        divider.style.left = `${newX}px`;
+        header.style.left = `${newX + 5}px`; // Position header just after divider
+        divider.style.visibility = "visible";
+        if (tabs.length > 0) {
+          header.classList.add("visible");
+        }
+      }
+    });
+
+    // Tab management IPC handlers
+    ipcRenderer.on("browser-tabs-updated", (_, tabsData) => {
+      tabs = tabsData.tabs;
+      activeTabId = tabsData.activeTabId;
+      updateTabBar();
+      updateHeaderVisibility();
+
+      // Update navigation state if we have an active tab
+      if (tabsData.navigationState) {
+        updateNavigationState(tabsData.navigationState);
+      }
+    });
+
+    ipcRenderer.on("browser-navigation-updated", (_, navigationState) => {
+      updateNavigationState(navigationState);
+    });
+  </script>
+</body>
+
 </html>
