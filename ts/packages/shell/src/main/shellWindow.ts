@@ -274,7 +274,7 @@ export class ShellWindow {
         const mainWindow = this.mainWindow;
         mainWindow.show();
         // Main window shouldn't zoom, otherwise the divider position won't be correct.  Setting it here just to make sure.
-        mainWindow.webContents.zoomFactor = 1;
+        this.setZoomLevel(1, mainWindow.webContents);
 
         const states = this.settings.window;
         if (states.devTools) {
@@ -543,6 +543,12 @@ export class ShellWindow {
             background: options?.background,
         });
 
+        // setup zoom handlers for the new browser tab
+        this.setupZoomHandlers(
+            this.browserViewManager.getBrowserTab(tabId)?.webContentsView
+                ?.webContents,
+        );
+
         // Update layout when first tab is created
         if (this.browserViewManager.getAllBrowserTabs().length === 1) {
             // This is the first browser tab - expand the window to accommodate browser section
@@ -795,7 +801,9 @@ export class ShellWindow {
     // ================================================================
     // Zoom Handler
     // ================================================================
-    private setupZoomHandlers(webContents: WebContents) {
+    private setupZoomHandlers(webContents: WebContents | undefined) {
+        if (!webContents) return;
+
         webContents.on("before-input-event", (_event, input) => {
             if (
                 (isMac ? input.meta : input.control) &&
@@ -806,11 +814,11 @@ export class ShellWindow {
                     input.key === "+" ||
                     input.key === "="
                 ) {
-                    this.zoomIn();
+                    this.zoomIn(webContents);
                 } else if (input.key === "-" || input.key === "NumpadMinus") {
-                    this.zoomOut();
+                    this.zoomOut(webContents);
                 } else if (input.key === "0") {
-                    this.setZoomLevel(1);
+                    this.setZoomLevel(1, webContents);
                 }
             }
         });
@@ -818,37 +826,43 @@ export class ShellWindow {
         // Register mouse wheel as well.
         webContents.on("zoom-changed", (_event, zoomDirection) => {
             if (zoomDirection === "in") {
-                this.zoomIn();
+                this.zoomIn(webContents);
             } else {
-                this.zoomOut();
+                this.zoomOut(webContents);
             }
         });
     }
 
-    private zoomIn() {
-        this.setZoomLevel(this.chatView.webContents.zoomFactor + 0.1);
+    private zoomIn(webContents: WebContents) {
+        this.setZoomLevel(webContents.zoomFactor + 0.1, webContents);
     }
 
-    private zoomOut() {
-        this.setZoomLevel(this.chatView.webContents.zoomFactor - 0.1);
+    private zoomOut(webContents: WebContents) {
+        this.setZoomLevel(webContents.zoomFactor - 0.1, webContents);
     }
 
-    public setZoomLevel(zoomFactor: number) {
+    /**
+     * Sets the zoom level for the active window/tab.
+     * @param zoomFactor - The zoom factor to set for the active window/tab
+     */
+    public setZoomLevel(zoomFactor: number, webContents: WebContents) {
+        // limit zoom factor to reasonable numbers
         if (zoomFactor < 0.1) {
             zoomFactor = 0.1;
         } else if (zoomFactor > 10) {
             zoomFactor = 10;
         }
 
-        for (const view of this.mainWindow.contentView.children) {
-            if (view instanceof WebContentsView) {
-                view.webContents.zoomFactor = zoomFactor;
-            }
-        }
+        webContents.zoomFactor = zoomFactor;
 
-        this.updateZoomInTitle(zoomFactor);
+        // only update the zoom in the title for the zoom factor of the main (chat) window
+        this.updateZoomInTitle(this.chatView.webContents.zoomFactor);
     }
 
+    /**
+     * Updates the window title to include the current zoom level.
+     * @param zoomFactor - The zoom factor to show in the title
+     */
     private updateZoomInTitle(zoomFactor: number) {
         const prevTitle = this.mainWindow.getTitle();
         const prevZoomIndex = prevTitle.indexOf(" Zoom: ");
