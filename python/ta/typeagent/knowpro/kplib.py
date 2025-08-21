@@ -9,7 +9,8 @@ Comments that should go into the schema are in docstrings and Doc() annotations.
 
 from pydantic.dataclasses import dataclass
 from pydantic import Field, AliasChoices
-from typing import ClassVar, Literal
+from typing import Annotated, ClassVar, Literal
+from typing_extensions import Doc
 
 from .field_helpers import CamelCaseField
 
@@ -29,7 +30,7 @@ type Value = str | float | bool | Quantity
 @dataclass
 class Facet:
     name: str
-    value: Value = Field(description="Very concise values.")
+    value: Annotated[Value, Doc("Very concise values.")]
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.name!r}, {self.value!r})"
@@ -41,28 +42,30 @@ class ConcreteEntity:
 
     knowledge_type: ClassVar[Literal["entity"]] = "entity"
 
-    name: str = Field(
-        description=(
+    name: Annotated[
+        str,
+        Doc(
             "The name of the entity or thing such as 'Bach', 'Great Gatsby', "
-            + "'frog' or 'piano'."
+            "'frog' or 'piano'."
         ),
-    )
-    type: list[str] = Field(
-        description=(
+    ]
+    type: Annotated[
+        list[str],
+        Doc(
             "The types of the entity such as 'speaker', 'person', 'artist', "
-            + "'animal', 'object', 'instrument', 'school', 'room', 'museum', 'food' etc. "
-            + "An entity can have multiple types; entity types should be single words."
+            "'animal', 'object', 'instrument', 'school', 'room', 'museum', 'food' etc. "
+            "An entity can have multiple types; entity types should be single words."
         ),
-    )
-    facets: list[Facet] | None = Field(
-        default=None,
-        description=(
+    ]
+    facets: Annotated[
+        list[Facet] | None,
+        Doc(
             "A specific, inherent, defining, or non-immediate facet of the entity "
-            + "such as 'blue', 'old', 'famous', 'sister', 'aunt_of', 'weight: 4 kg'. "
-            + "Trivial actions or state changes are not facets. "
-            + "Facets are concise 'properties'."
+            "such as 'blue', 'old', 'famous', 'sister', 'aunt_of', 'weight: 4 kg'. "
+            "Trivial actions or state changes are not facets. "
+            "Facets are concise 'properties'."
         ),
-    )
+    ] = None
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.name!r}, {self.type}, {self.facets})"
@@ -81,7 +84,7 @@ type VerbTense = Literal["past", "present", "future"]
 class Action:
     knowledge_type: ClassVar[Literal["action"]] = "action"
 
-    verbs: list[str] = Field(description="Each verb is typically a word.")
+    verbs: Annotated[list[str], Doc("Each verb is typically a word.")]
     verb_tense: VerbTense = CamelCaseField("The tense of the verb")
     subject_entity_name: str | Literal["none"] = CamelCaseField(
         "The name of the subject entity", default="none"
@@ -104,17 +107,19 @@ class KnowledgeResponse:
     """Detailed and comprehensive knowledge response."""
 
     entities: list[ConcreteEntity]
-    actions: list[Action] = Field(
-        description=(
+    actions: Annotated[
+        list[Action],
+        Doc(
             "The 'subject_entity_name' and 'object_entity_name' must correspond "
-            + "to the 'name' of an entity listed in the 'entities' array."
+            "to the 'name' of an entity listed in the 'entities' array."
         ),
-    )
-    inverse_actions: list[Action] = Field(
-        description=(
+    ]
+    inverse_actions: Annotated[
+        list[Action],
+        Doc(
             "Some actions can ALSO be expressed in a reverse way... "
-            + "E.g. (A give to B) --> (B receive from A) and vice versa. "
-            + "If so, also return the reverse form of the action, full filled out."
+            "E.g. (A give to B) --> (B receive from A) and vice versa. "
+            "If so, also return the reverse form of the action, full filled out."
         ),
-    )
-    topics: list[str] = Field(description="Detailed, descriptive topics and keywords.")
+    ]
+    topics: Annotated[list[str], Doc("Detailed, descriptive topics and keywords.")]
