@@ -16,6 +16,7 @@ export class SearchProviderCommandHandlerTable implements CommandHandlerTable {
         show: new ShowCommandHandler(),
         add: new AddCommandHandler(),
         remove: new RemoveCommandHandler(),
+        import: new ImportCommandHandler(),
     }
 }
 
@@ -171,5 +172,20 @@ export class RemoveCommandHandler implements CommandHandler {
         } else {
             displayError(`Search provider '${params.args.provider}' not found.`, context);
         }
+    }
+}
+
+export class ImportCommandHandler implements CommandHandler {
+    public readonly description = "Imports the search providers from the specified browser";
+    public readonly parameters = {
+        args: {
+            browser: {
+                description: "The name of the browser to import search providers from: [Edge | Chrome]."
+            },
+        },
+    } as const;
+    public async run(context: ActionContext<BrowserActionContext>, params: ParsedCommandParams<typeof this.parameters>,): Promise<void> {
+        // TODO: implement import from chrome/edge
+        displayError(`This feature is NOT implemented yet!`, context);
     }
 }
