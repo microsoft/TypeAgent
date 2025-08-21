@@ -110,10 +110,10 @@ export async function createKnowproAzureCommands(
         }
         const memory = ensureMemory();
         if (
-            !askYesNo(
+            !(await askYesNo(
                 io,
                 `Are you sure you want to ingest knowledge from ${conversation.nameTag} into ${memory.settings.indexName}?`,
-            )
+            ))
         ) {
             return;
         }
