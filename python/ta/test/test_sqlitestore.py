@@ -1,12 +1,13 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from dataclasses import dataclass, field
+from dataclasses import field
 import os
 import tempfile
 from typing import Generator
 
 import pytest
+from pydantic.dataclasses import dataclass
 
 from typeagent.knowpro.kplib import KnowledgeResponse
 from typeagent.knowpro.interfaces import (
@@ -37,14 +38,14 @@ class DummyMessage(IMessage):
 
 def make_dummy_semantic_ref(ordinal: int = 0) -> SemanticRef:
     # Minimal valid Topic for knowledge
-    topic = Topic(text="dummy_topic")  # type: ignore  # pydantic dataclass
+    topic = Topic(text="dummy_topic")
     # Minimal valid TextLocation and TextRange for range
-    location = TextLocation(message_ordinal=0)  # type: ignore  # pydantic dataclass
-    text_range = TextRange(start=location)  # type: ignore  # pydantic dataclass
-    return SemanticRef(  # type: ignore  # pydantic dataclass
-        semantic_ref_ordinal=ordinal,  # type: ignore  # pydantic dataclass
-        range=text_range,  # type: ignore  # pydantic dataclass
-        knowledge=topic,  # type: ignore  # pydantic dataclass
+    location = TextLocation(message_ordinal=0)
+    text_range = TextRange(start=location)
+    return SemanticRef(
+        semantic_ref_ordinal=ordinal,
+        range=text_range,
+        knowledge=topic,
     )
 
 

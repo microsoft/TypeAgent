@@ -9,7 +9,8 @@ to ensure behavioral parity across implementations.
 """
 
 import pytest
-from dataclasses import dataclass, field
+from dataclasses import field
+from pydantic.dataclasses import dataclass
 
 from fixtures import needs_auth, storage_provider_type, embedding_model, temp_db_path
 from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
@@ -42,10 +43,10 @@ class DummyTestMessage(IMessage):
 
 def make_test_semantic_ref(ordinal: int = 0) -> SemanticRef:
     """Create a minimal valid SemanticRef for testing."""
-    topic = Topic(text=f"test_topic_{ordinal}")  # type: ignore
-    location = TextLocation(message_ordinal=0)  # type: ignore
-    text_range = TextRange(start=location)  # type: ignore
-    return SemanticRef(  # type: ignore
+    topic = Topic(text=f"test_topic_{ordinal}")
+    location = TextLocation(message_ordinal=0)
+    text_range = TextRange(start=location)
+    return SemanticRef(
         semantic_ref_ordinal=ordinal,
         range=text_range,
         knowledge=topic,

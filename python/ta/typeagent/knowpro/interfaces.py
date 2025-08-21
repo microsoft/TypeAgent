@@ -19,6 +19,7 @@ from typing import (
 )
 
 from pydantic.dataclasses import dataclass
+from pydantic import Field, AliasChoices
 
 from ..aitools.embeddings import NormalizedEmbeddings
 from . import kplib
@@ -79,8 +80,11 @@ type SemanticRefOrdinal = int
 
 @dataclass
 class ScoredSemanticRefOrdinal:
-    semantic_ref_ordinal: SemanticRefOrdinal
-    score: float
+    semantic_ref_ordinal: SemanticRefOrdinal = Field(
+        serialization_alias="semanticRefOrdinal",
+        validation_alias=AliasChoices("semantic_ref_ordinal", "semanticRefOrdinal"),
+    )
+    score: float = Field()
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.semantic_ref_ordinal}, {self.score})"
@@ -148,10 +152,17 @@ class TextLocationData(TypedDict):
 @dataclass(order=True)
 class TextLocation:
     # The ordinal of the message.
-    message_ordinal: MessageOrdinal
+    message_ordinal: MessageOrdinal = Field(
+        serialization_alias="messageOrdinal",
+        validation_alias=AliasChoices("message_ordinal", "messageOrdinal"),
+    )
     # The ordinal of the chunk.
     # In the end of a TextRange, 1 + ordinal of the last chunk in the range.
-    chunk_ordinal: int = 0
+    chunk_ordinal: int = Field(
+        default=0,
+        serialization_alias="chunkOrdinal",
+        validation_alias=AliasChoices("chunk_ordinal", "chunkOrdinal"),
+    )
 
     def __repr__(self) -> str:
         return (
@@ -166,7 +177,10 @@ class TextLocation:
 
     @staticmethod
     def deserialize(data: TextLocationData) -> "TextLocation":
-        return TextLocation(data["messageOrdinal"], data.get("chunkOrdinal", 0))
+        return TextLocation(
+            message_ordinal=data["messageOrdinal"],
+            chunk_ordinal=data.get("chunkOrdinal", 0),
+        )
 
 
 class TextRangeData(TypedDict):
@@ -269,9 +283,12 @@ class SemanticRefData(TypedDict):
 
 @dataclass
 class SemanticRef:
-    semantic_ref_ordinal: SemanticRefOrdinal
-    range: TextRange
-    knowledge: Knowledge
+    semantic_ref_ordinal: SemanticRefOrdinal = Field(
+        serialization_alias="semanticRefOrdinal",
+        validation_alias=AliasChoices("semantic_ref_ordinal", "semanticRefOrdinal"),
+    )
+    range: TextRange = Field()
+    knowledge: Knowledge = Field()
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.semantic_ref_ordinal}, {self.range}, {self.knowledge.knowledge_type!r}, {self.knowledge})"

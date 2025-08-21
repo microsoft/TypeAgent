@@ -8,6 +8,7 @@ Comments that should go into the schema are in docstrings and Doc() annotations.
 """
 
 from pydantic.dataclasses import dataclass
+from pydantic import Field, AliasChoices
 from typing import Annotated, ClassVar, Literal
 from typing_extensions import Doc
 
@@ -85,10 +86,27 @@ class Action:
     knowledge_type: ClassVar[Literal["action"]] = "action"
 
     verbs: Annotated[list[str], Doc("Each verb is typically a word.")]
-    verb_tense: VerbTense
-    subject_entity_name: str | Literal["none"] = "none"
-    object_entity_name: str | Literal["none"] = "none"
-    indirect_object_entity_name: str | Literal["none"] = "none"
+    verb_tense: VerbTense = Field(
+        serialization_alias="verbTense",
+        validation_alias=AliasChoices("verb_tense", "verbTense"),
+    )
+    subject_entity_name: str | Literal["none"] = Field(
+        default="none",
+        serialization_alias="subjectEntityName",
+        validation_alias=AliasChoices("subject_entity_name", "subjectEntityName"),
+    )
+    object_entity_name: str | Literal["none"] = Field(
+        default="none",
+        serialization_alias="objectEntityName",
+        validation_alias=AliasChoices("object_entity_name", "objectEntityName"),
+    )
+    indirect_object_entity_name: str | Literal["none"] = Field(
+        default="none",
+        serialization_alias="indirectObjectEntityName",
+        validation_alias=AliasChoices(
+            "indirect_object_entity_name", "indirectObjectEntityName"
+        ),
+    )
     params: list[str | ActionParam] | None = None
     subject_entity_facet: (
         Annotated[
@@ -99,7 +117,11 @@ class Action:
             ),
         ]
         | None
-    ) = None
+    ) = Field(
+        default=None,
+        serialization_alias="subjectEntityFacet",
+        validation_alias=AliasChoices("subject_entity_facet", "subjectEntityFacet"),
+    )
 
 
 @dataclass
