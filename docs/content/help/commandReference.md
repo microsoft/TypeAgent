@@ -37,6 +37,35 @@ Usage: `@browser resolver wikipedia`
 ## @browser resolver history - Toggle history resolver
 Usage: `@browser resolver history` 
 
+## @browser search list - Lists browser agent search providers
+Usage: `@browser search list` 
+
+## @browser search set - Sets the active search provider
+Usage: `@browser search set <provider>`
+Arguments:
+  &lt;provider&gt; - The name of the search provider to set as active. (type: string)
+
+## @browser search show - Shows the details of the selected search provider
+Usage: `@browser search show <provider>`
+Arguments:
+  &lt;provider&gt; - The name of the search provider to show details for. (type: string)
+
+## @browser search add - Adds a new search provider
+Usage: `@browser search add <provider> <url>`
+Arguments:
+  &lt;provider&gt; - The name of the search provider to add. (type: string)
+  &lt;url&gt; - The URL of the search provider to add. '%s' will be replaced with the search parameter. (type: string)
+
+## @browser search remove - Removes the selected search provider
+Usage: `@browser search remove <provider>`
+Arguments:
+  &lt;provider&gt; - The name of the search provider to remove. (type: string)
+
+## @browser search import - Imports the search providers from the specified browser
+Usage: `@browser search import <browser>`
+Arguments:
+  &lt;browser&gt; - The name of the browser to import search providers from: [Edge | Chrome]. (type: string)
+
 ## @calendar login - Log into MS Graph to access calendar  
 Usage: `@calendar login`  
 
