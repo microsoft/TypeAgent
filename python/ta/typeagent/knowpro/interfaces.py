@@ -747,22 +747,12 @@ class ISemanticRefCollection(ICollection[SemanticRef, SemanticRefOrdinal], Proto
     """A collection of SemanticRefs."""
 
 
-# This is an ABC, not a Protocol, because some classes have serialize()/deserialize()
-# but with the wrong signature (using different types).
-class JsonSerializer[T](ABC):
-    @abstractmethod
-    def serialize(self, value: T) -> dict[str, Any] | list[Any]: ...
-
-    @abstractmethod
-    def deserialize(self, data: dict[str, Any] | list[Any]) -> T: ...
-
-
 class IStorageProvider[TMessage: IMessage](Protocol):
     """API spec for storage providers -- maybe in-memory or persistent."""
 
     async def get_message_collection(
         self,
-        serializer: JsonSerializer[TMessage] | type[TMessage],
+        message_type: type[TMessage],
     ) -> IMessageCollection[TMessage]: ...
 
     async def get_semantic_ref_collection(self) -> ISemanticRefCollection: ...

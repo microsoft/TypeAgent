@@ -22,7 +22,6 @@ from typeagent.storage.sqlitestore import (
     SqliteStorageProvider,
     SqliteMessageCollection,
     SqliteSemanticRefCollection,
-    DefaultSerializer,
 )
 
 
@@ -110,21 +109,10 @@ async def test_sqlite_storage_provider_semantic_ref_collection(temp_db_path: str
     assert collection_list[0].semantic_ref_ordinal == 0
 
 
-def test_default_serializer_roundtrip():
-    serializer = DefaultSerializer(DummyMessage)
-    msg = DummyMessage(["test"])
-    json_obj = serializer.serialize(msg)
-    assert isinstance(json_obj, dict)  # Should return a JSON object, not a string
-    msg2 = serializer.deserialize(json_obj)
-    assert isinstance(msg2, DummyMessage)
-    assert msg2.text_chunks == ["test"]
-
-
 @pytest.mark.asyncio
 async def test_sqlite_message_collection_append_and_get(temp_db_path: str):
     db = SqliteStorageProvider(temp_db_path).get_db()
-    serializer = DefaultSerializer(DummyMessage)
-    store = SqliteMessageCollection(db, serializer)
+    store = SqliteMessageCollection(db, DummyMessage)
     msg = DummyMessage(["foo"])
     await store.append(msg)
     assert await store.size() == 1
@@ -139,8 +127,7 @@ async def test_sqlite_message_collection_append_and_get(temp_db_path: str):
 @pytest.mark.asyncio
 async def test_sqlite_message_collection_iter(temp_db_path: str):
     db = SqliteStorageProvider(temp_db_path).get_db()
-    serializer = DefaultSerializer(DummyMessage)
-    store = SqliteMessageCollection(db, serializer)
+    store = SqliteMessageCollection(db, DummyMessage)
     msgs = [DummyMessage([f"msg{i}"]) for i in range(3)]
     for m in msgs:
         await store.append(m)
