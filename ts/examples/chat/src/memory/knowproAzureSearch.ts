@@ -70,8 +70,11 @@ export async function createKnowproAzureCommands(
             );
         }
 
-        const [queryText, results] = await memory.search(queryTerms);
-        context.printer.writeLineInColor(chalk.cyan, queryText);
+        const [azQuery, results] = await memory.search(queryTerms);
+        context.printer.writeLineInColor(chalk.cyan, azQuery.searchQuery);
+        if (azQuery.filter) {
+            context.printer.writeLineInColor(chalk.cyan, azQuery.filter);
+        }
         context.printer.writeLine(`${results.length} matches`);
         for (const result of results) {
             context.printer.writeJson(result);
