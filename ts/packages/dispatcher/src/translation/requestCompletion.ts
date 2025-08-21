@@ -108,7 +108,6 @@ export async function requestCompletion(
 
     const propertyCompletions = new Map<string, CompletionGroup>();
     const requestText: string[] = [];
-
     for (const result of results) {
         const { construction, partialPartCount } = result;
         if (partialPartCount === undefined) {
@@ -205,7 +204,6 @@ async function collectActionCompletions(
         }
     }
 }
-
 
 export async function getActionParamCompletion(
     systemContext: CommandHandlerContext,
