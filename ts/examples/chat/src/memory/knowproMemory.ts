@@ -175,7 +175,8 @@ export async function createKnowproCommands(
         const meta: CommandMetadata = {
             description:
                 description ??
-                "Search current knowPro conversation by manually providing terms as arguments",
+                "Search current knowPro conversation by manually providing terms as arguments\n" +
+                    "Use named arguments to search for specific properties and facets\n",
             options: {
                 maxToDisplay: argNum(
                     "Maximum matches to display",

@@ -186,3 +186,21 @@ export function setKnowledgeExtractorV2(settings: kp.ConversationSettings) {
     }
     return undefined;
 }
+
+export function* batchSemanticRefsByMessage(
+    semanticRefs: kp.ISemanticRefCollection,
+): IterableIterator<[kp.MessageOrdinal, kp.SemanticRef[]]> {
+    let srs: kp.SemanticRef[] = [];
+    let prevOrdinal: kp.MessageOrdinal = -1;
+    for (const sr of semanticRefs) {
+        if (sr.range.start.messageOrdinal !== prevOrdinal && srs.length > 0) {
+            yield [prevOrdinal, srs];
+            srs = [];
+        }
+        srs.push(sr);
+        prevOrdinal = sr.range.start.messageOrdinal;
+    }
+    if (srs.length > 0) {
+        yield [prevOrdinal, srs];
+    }
+}
