@@ -46,7 +46,9 @@ export class AzSemanticRefIndex extends AzSearchIndex<SemanticRefDoc> {
 
     constructor(settings: AzSearchSettings) {
         super(settings);
-        this.luceneCompiler = new LuceneQueryCompiler(getFieldPaths());
+        this.luceneCompiler = new LuceneQueryCompiler(
+            createPropertyNameToFieldPathMap(),
+        );
     }
 
     public async search(
@@ -275,7 +277,14 @@ function createKField(
     return field;
 }
 
-function getFieldPaths(): Map<kp.PropertyNames, string> {
+/**
+ * Return a mapping from knowPro {@link kp.PropertyNames} to fields in the Azure Search index
+ * @returns
+ */
+export function createPropertyNameToFieldPathMap(): Map<
+    kp.PropertyNames,
+    string
+> {
     const fieldPaths = new Map<kp.PropertyNames, string>();
     fieldPaths.set(kp.PropertyNames.EntityName, "name");
     fieldPaths.set(kp.PropertyNames.EntityType, "type");
