@@ -48,7 +48,7 @@ export type BrowserControlCallFunctions = {
 export type BrowserControl = BrowserControlInvokeFunctions &
     BrowserControlCallFunctions;
 
-    export type SearchProvider = {
+export type SearchProvider = {
     name: string;
     url: string;
 };
@@ -69,6 +69,5 @@ export const defaultSearchProviders: SearchProvider[] = [
     {
         name: "DuckDuckGo",
         url: "https://duckduckgo.com/?q=%s",
-    }
+    },
 ];
-

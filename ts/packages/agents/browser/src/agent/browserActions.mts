@@ -1,4 +1,3 @@
-
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
@@ -55,10 +54,12 @@ export function getBrowserControl(agentContext: BrowserActionContext) {
     return browserControl;
 }
 
-export async function saveSettings(context: SessionContext<BrowserActionContext>) {
+export async function saveSettings(
+    context: SessionContext<BrowserActionContext>,
+) {
     await context.sessionStorage?.write(
         "settings.json",
-        JSON.stringify({ 
+        JSON.stringify({
             resolverSettings: context.agentContext.resolverSettings,
             searchProviders: context.agentContext.searchProviders,
             activeSearchProvider: context.agentContext.activeSearchProvider,

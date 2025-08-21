@@ -83,14 +83,24 @@ import { InstacartActions } from "./instacart/schema/userActions.mjs";
 import { ShoppingActions } from "./commerce/schema/userActions.mjs";
 import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
-import { BrowserControl, defaultSearchProviders } from "../common/browserControl.mjs";
+import {
+    BrowserControl,
+    defaultSearchProviders,
+} from "../common/browserControl.mjs";
 import { openai } from "aiclient";
 import { urlResolver } from "azure-ai-foundry";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 import { deleteCachedSchema } from "./crossword/cachedSchema.mjs";
 import { getCrosswordCommandHandlerTable } from "./crossword/commandHandler.mjs";
-import { SearchProviderCommandHandlerTable, SetCommandHandler } from "./searchProvider/searchProviderCommandHandlers.mjs"
-import { BrowserActionContext, getActionBrowserControl, saveSettings } from "./browserActions.mjs";
+import {
+    SearchProviderCommandHandlerTable,
+    SetCommandHandler,
+} from "./searchProvider/searchProviderCommandHandlers.mjs";
+import {
+    BrowserActionContext,
+    getActionBrowserControl,
+    saveSettings,
+} from "./browserActions.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
 const debugWebSocket = registerDebug("typeagent:browser:ws");
@@ -255,8 +265,11 @@ async function updateBrowserContext(
                 config.resolverSettings.historyResolver;
 
             // search provider settings
-            context.agentContext.searchProviders = config.searchProviders || defaultSearchProviders;
-            context.agentContext.activeSearchProvider = config.activeSearchProvider || context.agentContext.searchProviders[0];
+            context.agentContext.searchProviders =
+                config.searchProviders || defaultSearchProviders;
+            context.agentContext.activeSearchProvider =
+                config.activeSearchProvider ||
+                context.agentContext.searchProviders[0];
         }
     } else {
         const webSocket = context.agentContext.webSocket;
@@ -781,7 +794,10 @@ async function resolveWebPage(
 
             // default to search
             return [
-                context.agentContext.activeSearchProvider.url.replace("%s", encodeURIComponent(site)),
+                context.agentContext.activeSearchProvider.url.replace(
+                    "%s",
+                    encodeURIComponent(site),
+                ),
             ];
         }
     }
@@ -991,8 +1007,12 @@ async function changeSearchProvider(
     context: ActionContext<BrowserActionContext>,
     action: TypeAgentAction<any>,
 ) {
-
-    if (context.sessionContext.agentContext.searchProviders.filter((sp) => sp.name.toLowerCase() === action.parameters.name.toLowerCase()).length > 0) {
+    if (
+        context.sessionContext.agentContext.searchProviders.filter(
+            (sp) =>
+                sp.name.toLowerCase() === action.parameters.name.toLowerCase(),
+        ).length > 0
+    ) {
         const cmd = new SetCommandHandler();
 
         const params: ParsedCommandParams<any> = {
@@ -1005,9 +1025,13 @@ async function changeSearchProvider(
         };
 
         await cmd.run(context, params);
-        return createActionResult(`Search provider changed to ${action.parameters.name}`);
+        return createActionResult(
+            `Search provider changed to ${action.parameters.name}`,
+        );
     } else {
-        return createActionResult(`No search provider by the name '${action.parameters.name}' found.  Search provider is still '${context.sessionContext.agentContext.activeSearchProvider.name}'`);
+        return createActionResult(
+            `No search provider by the name '${action.parameters.name}' found.  Search provider is still '${context.sessionContext.agentContext.activeSearchProvider.name}'`,
+        );
     }
 }
 
@@ -1061,7 +1085,8 @@ async function executeBrowserAction(
                 case "search":
                     await getActionBrowserControl(context).search(
                         action.parameters.query,
-                        context.sessionContext.agentContext.activeSearchProvider
+                        context.sessionContext.agentContext
+                            .activeSearchProvider,
                     );
                     return createActionResultFromTextDisplay(
                         `Opened new tab with query ${action.parameters.query}`,

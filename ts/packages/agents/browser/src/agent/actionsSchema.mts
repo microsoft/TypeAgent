@@ -191,5 +191,5 @@ export type ChangeSearchProvider = {
     parameters: {
         // The name of the search provider to switch to
         name: string;
-    }
-}
+    };
+};
