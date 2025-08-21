@@ -6,7 +6,7 @@ import * as kp from "knowpro";
 import { conversation as kpLib } from "knowledge-processor";
 import { AzSearchIndex } from "./azSearchIndex.js";
 import { AzSearchSettings } from "./azSearchCommon.js";
-import { LuceneQueryCompiler } from "./azLucene.js";
+import { AzSearchCompilerSettings, AzSearchQueryCompiler } from "./azQuery.js";
 
 export interface SemanticRefHeader {
     semanticRefOrdinal: string;
@@ -41,34 +41,49 @@ export type ActionDoc = {
 export type KnowledgeDoc = EntityDoc | TopicDoc | ActionDoc;
 export type SemanticRefDoc = SemanticRefHeader & KnowledgeDoc;
 
+export type AzSemanticRefQuery = {
+    searchQuery: string;
+    filter?: string | undefined;
+};
+
 export class AzSemanticRefIndex extends AzSearchIndex<SemanticRefDoc> {
-    private luceneCompiler: LuceneQueryCompiler;
+    public queryCompiler: AzSearchQueryCompiler;
 
     constructor(settings: AzSearchSettings) {
         super(settings);
-        this.luceneCompiler = new LuceneQueryCompiler(
-            createPropertyNameToFieldPathMap(),
-        );
+        this.queryCompiler = new AzSearchQueryCompiler(createCompilerOptions());
     }
 
     public async search(
         query: string | kp.SearchTermGroup,
+        when?: kp.WhenFilter,
     ): Promise<
-        [queryText: string, matches: azSearch.SearchResult<SemanticRefDoc>[]]
+        [
+            query: AzSemanticRefQuery,
+            matches: azSearch.SearchResult<SemanticRefDoc>[],
+        ]
     > {
-        let queryText =
+        let searchQuery =
             typeof query === "string"
                 ? query
-                : this.luceneCompiler.compileSearchTermGroup(query);
+                : this.queryCompiler.compileSearchTermGroup(query);
+        let filter = when ? this.queryCompiler.compileWhen(when) : undefined;
         //orderby: "search.score() desc"
-        const searchResults = await this.searchClient.search(queryText, {
+        const searchOptions: azSearch.SearchOptions<SemanticRefDoc> = {
             queryType: "full",
-        });
+        };
+        if (filter) {
+            searchOptions.filter = filter;
+        }
+        const searchResults = await this.searchClient.search(
+            searchQuery,
+            searchOptions,
+        );
         let results: azSearch.SearchResult<SemanticRefDoc>[] = [];
         for await (const result of searchResults.results) {
             results.push(result);
         }
-        return [queryText, results];
+        return [{ searchQuery, filter }, results];
     }
 
     public async ensure(): Promise<boolean> {
@@ -277,14 +292,21 @@ function createKField(
     return field;
 }
 
+function createCompilerOptions(): AzSearchCompilerSettings {
+    return {
+        // True for knowPro compat
+        phraseMatch: true,
+        propertyFields: createPropertyNameToFieldPathMap(),
+        timestampField: "timestamp",
+        kTypeField: "kType",
+    };
+}
+
 /**
  * Return a mapping from knowPro {@link kp.PropertyNames} to fields in the Azure Search index
  * @returns
  */
-export function createPropertyNameToFieldPathMap(): Map<
-    kp.PropertyNames,
-    string
-> {
+function createPropertyNameToFieldPathMap(): Map<kp.PropertyNames, string> {
     const fieldPaths = new Map<kp.PropertyNames, string>();
     fieldPaths.set(kp.PropertyNames.EntityName, "name");
     fieldPaths.set(kp.PropertyNames.EntityType, "type");

@@ -11,10 +11,10 @@ export function getAzureSearchEndpoint(): string {
     return getEnvSetting(process.env, EnvVars.AZURE_SEARCH_ENDPOINT);
 }
 
-export type AzSearchSettings = {
+export interface AzSearchSettings {
     endpoint: string;
     indexName: string;
-};
+}
 
 export function createAzSearchSettings(indexName: string): AzSearchSettings {
     return {
