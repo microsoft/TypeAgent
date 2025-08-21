@@ -10,6 +10,7 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 from pydantic import Field, AliasChoices
 
 from ..knowpro import semrefindex, kplib, secindex
+from ..knowpro.field_helpers import CamelCaseField
 from ..knowpro.convthreads import ConversationThreads
 from ..knowpro.convsettings import ConversationSettings
 from ..knowpro.interfaces import (
@@ -111,12 +112,13 @@ class PodcastMessageData(TypedDict):
 
 @pydantic_dataclass
 class PodcastMessage(IMessage):
-    text_chunks: list[str] = Field(
-        serialization_alias="textChunks",
-        validation_alias=AliasChoices("text_chunks", "textChunks"),
+    text_chunks: list[str] = CamelCaseField("The text chunks of the podcast message")
+    metadata: PodcastMessageMeta = CamelCaseField(
+        "Metadata associated with the podcast message"
     )
-    metadata: PodcastMessageMeta = Field()
-    tags: list[str] = Field(default_factory=list)
+    tags: list[str] = CamelCaseField(
+        "Tags associated with the message", default_factory=list
+    )
     timestamp: str | None = None
 
     def get_knowledge(self) -> kplib.KnowledgeResponse:

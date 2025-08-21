@@ -11,6 +11,8 @@ from pydantic.dataclasses import dataclass
 from pydantic import Field, AliasChoices
 from typing import ClassVar, Literal
 
+from .field_helpers import CamelCaseField
+
 
 @dataclass
 class Quantity:
@@ -80,36 +82,20 @@ class Action:
     knowledge_type: ClassVar[Literal["action"]] = "action"
 
     verbs: list[str] = Field(description="Each verb is typically a word.")
-    verb_tense: VerbTense = Field(
-        serialization_alias="verbTense",
-        validation_alias=AliasChoices("verb_tense", "verbTense"),
+    verb_tense: VerbTense = CamelCaseField("The tense of the verb")
+    subject_entity_name: str | Literal["none"] = CamelCaseField(
+        "The name of the subject entity", default="none"
     )
-    subject_entity_name: str | Literal["none"] = Field(
-        default="none",
-        serialization_alias="subjectEntityName",
-        validation_alias=AliasChoices("subject_entity_name", "subjectEntityName"),
+    object_entity_name: str | Literal["none"] = CamelCaseField(
+        "The name of the object entity", default="none"
     )
-    object_entity_name: str | Literal["none"] = Field(
-        default="none",
-        serialization_alias="objectEntityName",
-        validation_alias=AliasChoices("object_entity_name", "objectEntityName"),
-    )
-    indirect_object_entity_name: str | Literal["none"] = Field(
-        default="none",
-        serialization_alias="indirectObjectEntityName",
-        validation_alias=AliasChoices(
-            "indirect_object_entity_name", "indirectObjectEntityName"
-        ),
+    indirect_object_entity_name: str | Literal["none"] = CamelCaseField(
+        "The name of the indirect object entity", default="none"
     )
     params: list[str | ActionParam] | None = None
-    subject_entity_facet: Facet | None = Field(
+    subject_entity_facet: Facet | None = CamelCaseField(
+        "If the action implies this additional facet or property of the subject entity, such as hobbies, activities, interests, personality",
         default=None,
-        serialization_alias="subjectEntityFacet",
-        validation_alias=AliasChoices("subject_entity_facet", "subjectEntityFacet"),
-        description=(
-            "If the action implies this additional facet or property of the subject entity, "
-            + "such as hobbies, activities, interests, personality."
-        ),
     )
 
 

@@ -7,6 +7,7 @@ from pydantic import Field, AliasChoices
 from typing import TypeGuard, cast, Annotated
 
 from .collections import MessageAccumulator, SemanticRefAccumulator
+from .field_helpers import CamelCaseField
 from .interfaces import (
     IConversation,
     IConversationSecondaryIndexes,
@@ -71,13 +72,9 @@ from .reltermsindex import resolve_related_terms
 
 @dataclass
 class SearchQueryExpr:
-    select_expressions: Annotated[
-        list[SearchSelectExpr],
-        Field(
-            validation_alias=AliasChoices("select_expressions", "selectExpressions"),
-            serialization_alias="selectExpressions",
-        ),
-    ]
+    select_expressions: list[SearchSelectExpr] = CamelCaseField(
+        "List of selection expressions for the search"
+    )
     raw_query: str | None = None
 
 

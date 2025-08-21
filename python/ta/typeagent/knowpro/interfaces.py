@@ -22,6 +22,7 @@ from pydantic import Field, AliasChoices
 
 from ..aitools.embeddings import NormalizedEmbeddings
 from . import kplib
+from .field_helpers import CamelCaseField
 
 
 class IKnowledgeSource(Protocol):
@@ -79,11 +80,10 @@ type SemanticRefOrdinal = int
 
 @dataclass
 class ScoredSemanticRefOrdinal:
-    semantic_ref_ordinal: SemanticRefOrdinal = Field(
-        serialization_alias="semanticRefOrdinal",
-        validation_alias=AliasChoices("semantic_ref_ordinal", "semanticRefOrdinal"),
+    semantic_ref_ordinal: SemanticRefOrdinal = CamelCaseField(
+        "The ordinal of the semantic reference"
     )
-    score: float = Field()
+    score: float = CamelCaseField("The relevance score")
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.semantic_ref_ordinal}, {self.score})"
@@ -146,16 +146,12 @@ class TextLocationData(TypedDict):
 @dataclass(order=True)
 class TextLocation:
     # The ordinal of the message.
-    message_ordinal: MessageOrdinal = Field(
-        serialization_alias="messageOrdinal",
-        validation_alias=AliasChoices("message_ordinal", "messageOrdinal"),
-    )
+    message_ordinal: MessageOrdinal = CamelCaseField("The ordinal of the message")
     # The ordinal of the chunk.
     # In the end of a TextRange, 1 + ordinal of the last chunk in the range.
-    chunk_ordinal: int = Field(
+    chunk_ordinal: int = CamelCaseField(
+        "The ordinal of the chunk; in the end of a TextRange, 1 + ordinal of the last chunk in the range",
         default=0,
-        serialization_alias="chunkOrdinal",
-        validation_alias=AliasChoices("chunk_ordinal", "chunkOrdinal"),
     )
 
     def __repr__(self) -> str:
@@ -259,12 +255,13 @@ class SemanticRefData(TypedDict):
 
 @dataclass
 class SemanticRef:
-    semantic_ref_ordinal: SemanticRefOrdinal = Field(
-        serialization_alias="semanticRefOrdinal",
-        validation_alias=AliasChoices("semantic_ref_ordinal", "semanticRefOrdinal"),
+    semantic_ref_ordinal: SemanticRefOrdinal = CamelCaseField(
+        "The ordinal of the semantic reference"
     )
-    range: TextRange = Field()
-    knowledge: Knowledge = Field()
+    range: TextRange = CamelCaseField("The text range of the semantic reference")
+    knowledge: Knowledge = CamelCaseField(
+        "The knowledge associated with this semantic reference"
+    )
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.semantic_ref_ordinal}, {self.range}, {self.knowledge.knowledge_type!r}, {self.knowledge})"
@@ -527,9 +524,8 @@ class SearchTerm:
     """
 
     term: Term
-    related_terms: list[Term] | None = Field(
-        validation_alias=AliasChoices("related_terms", "relatedTerms"),
-        serialization_alias="relatedTerms",
+    related_terms: list[Term] | None = CamelCaseField(
+        "Additional terms related to the term. These can be supplied from synonym tables and so on",
         default=None,
     )
 
@@ -566,26 +562,21 @@ class PropertySearchTerm:
     related terms secondary index, if one is available.
     """
 
-    property_name: KnowledgePropertyName | SearchTerm = Field(
-        validation_alias=AliasChoices("property_name", "propertyName"),
-        serialization_alias="propertyName",
+    property_name: KnowledgePropertyName | SearchTerm = CamelCaseField(
+        "The property name to search for"
     )
-    property_value: SearchTerm = Field(
-        validation_alias=AliasChoices("property_value", "propertyValue"),
-        serialization_alias="propertyValue",
-    )
+    property_value: SearchTerm = CamelCaseField("The property value to search for")
 
 
 @dataclass
 class SearchTermGroup:
     """A group of search terms."""
 
-    boolean_op: Literal["and", "or", "or_max"] = Field(
-        validation_alias=AliasChoices("boolean_op", "booleanOp"),
-        serialization_alias="booleanOp",
+    boolean_op: Literal["and", "or", "or_max"] = CamelCaseField(
+        "The boolean operation to apply to the terms"
     )
-    terms: list["SearchTermGroupTypes"] = Field(
-        default_factory=list["SearchTermGroupTypes"]
+    terms: list["SearchTermGroupTypes"] = CamelCaseField(
+        "The list of search terms in this group", default_factory=list
     )
 
 
@@ -621,9 +612,8 @@ class WhenFilter:
 class SearchSelectExpr:
     """An expression used to select structured contents of a conversation."""
 
-    search_term_group: SearchTermGroup = Field(
-        validation_alias=AliasChoices("search_term_group", "searchTermGroup"),
-        serialization_alias="searchTermGroup",
+    search_term_group: SearchTermGroup = CamelCaseField(
+        "Term group that matches information"
     )  # Term group that matches information
     when: WhenFilter | None = None  # Filter that scopes what information to match
 
