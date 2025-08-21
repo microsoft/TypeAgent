@@ -14,7 +14,8 @@ import { KnowProPrinter } from "./knowproPrinter.js";
 import * as ms from "memory-storage";
 import * as kp from "knowpro";
 import chalk from "chalk";
-import { createSearchGroup, parseFreeAndNamedArguments } from "../common.js";
+import { parseFreeAndNamedArguments } from "../common.js";
+import { createSearchGroup } from "./knowproCommon.js";
 import { batchSemanticRefsByMessage } from "./knowproCommon.js";
 
 type AzureMemoryContext = {

@@ -28,7 +28,6 @@ import { KnowledgeProcessorWriter } from "./knowledgeProc/knowledgeProcessorWrit
 import path from "path";
 import fs from "fs";
 import * as knowLib from "knowledge-processor";
-import * as kp from "knowpro";
 
 /**
  * Models used by example code
@@ -450,26 +449,4 @@ export function isJsonEqual(x: any | undefined, y: any | undefined): boolean {
         return jx === jy;
     }
     return false;
-}
-
-export function createSearchGroup(
-    termArgs: string[],
-    namedArgs: NamedArgs,
-    commandDef: CommandMetadata,
-    op: "and" | "or" | "or_max",
-): kp.SearchTermGroup {
-    const searchTerms = kp.createSearchTerms(termArgs);
-    const propertyTerms = propertyTermsFromNamedArgs(namedArgs, commandDef);
-    return {
-        booleanOp: op,
-        terms: [...searchTerms, ...propertyTerms],
-    };
-}
-
-export function propertyTermsFromNamedArgs(
-    namedArgs: NamedArgs,
-    commandDef: CommandMetadata,
-): kp.PropertySearchTerm[] {
-    const keyValues = keyValuesFromNamedArgs(namedArgs, commandDef);
-    return kp.createPropertySearchTerms(keyValues);
 }
