@@ -1047,180 +1047,175 @@ async function executeBrowserAction(
 
     context: ActionContext<BrowserActionContext>,
 ) {
-    try {
-        switch (action.schemaName) {
-            case "browser":
-                switch (action.actionName) {
-                    case "openWebPage":
-                        return openWebPage(context, action);
-                    case "closeWebPage":
-                        return closeWebPage(context);
-                    case "getWebsiteStats":
-                        return getWebsiteStats(context, action);
-                    case "searchWebMemories":
-                        return searchWebMemoriesAction(context, action);
-                    case "goForward":
-                        await getActionBrowserControl(context).goForward();
-                        return;
-                    case "goBack":
-                        await getActionBrowserControl(context).goBack();
-                        return;
-                    case "reloadPage":
-                        await getActionBrowserControl(context).reload();
-                        return;
-                    case "scrollUp":
-                        await getActionBrowserControl(context).scrollUp();
-                        return;
-                    case "scrollDown":
-                        await getActionBrowserControl(context).scrollDown();
-                        return;
-                    case "zoomIn":
-                        await getActionBrowserControl(context).zoomIn();
-                        return;
-                    case "zoomOut":
-                        await getActionBrowserControl(context).zoomOut();
-                        return;
-                    case "zoomReset":
-                        await getActionBrowserControl(context).zoomReset();
-                        return;
-                    case "search":
-                        await getActionBrowserControl(context).search(
-                            action.parameters.query,
-                        );
-                        return createActionResultFromTextDisplay(
-                            `Opened new tab with query ${action.parameters.query}`,
-                        );
-                    case "readPage":
-                        await getActionBrowserControl(context).readPage();
-                        return;
-                    case "stopReadPage":
-                        await getActionBrowserControl(context).stopReadPage();
-                        return;
-                    case "captureScreenshot":
-                        const dataUrl =
-                            await getActionBrowserControl(
-                                context,
-                            ).captureScreenshot();
-                        return createActionResultFromHtmlDisplay(
-                            `<img src="${dataUrl}" alt="Screenshot" width="100%" />`,
-                        );
-                    case "followLinkByText": {
-                        const control = getActionBrowserControl(context);
-                        const { keywords, openInNewTab } = action.parameters;
-                        const url = await control.followLinkByText(
-                            keywords,
-                            openInNewTab,
-                        );
-                        if (!url) {
-                            throw new Error(`No link found for '${keywords}'`);
-                        }
-
-                        return createActionResultFromMarkdownDisplay(
-                            `Navigated to link for [${keywords}](${url})`,
-                            `Navigated to link for '${keywords}'`,
-                        );
+    // try {
+    switch (action.schemaName) {
+        case "browser":
+            switch (action.actionName) {
+                case "openWebPage":
+                    return openWebPage(context, action);
+                case "closeWebPage":
+                    return closeWebPage(context);
+                case "getWebsiteStats":
+                    return getWebsiteStats(context, action);
+                case "searchWebMemories":
+                    return searchWebMemoriesAction(context, action);
+                case "goForward":
+                    await getActionBrowserControl(context).goForward();
+                    return;
+                case "goBack":
+                    await getActionBrowserControl(context).goBack();
+                    return;
+                case "reloadPage":
+                    await getActionBrowserControl(context).reload();
+                    return;
+                case "scrollUp":
+                    await getActionBrowserControl(context).scrollUp();
+                    return;
+                case "scrollDown":
+                    await getActionBrowserControl(context).scrollDown();
+                    return;
+                case "zoomIn":
+                    await getActionBrowserControl(context).zoomIn();
+                    return;
+                case "zoomOut":
+                    await getActionBrowserControl(context).zoomOut();
+                    return;
+                case "zoomReset":
+                    await getActionBrowserControl(context).zoomReset();
+                    return;
+                case "search":
+                    await getActionBrowserControl(context).search(
+                        action.parameters.query,
+                    );
+                    return createActionResultFromTextDisplay(
+                        `Opened new tab with query ${action.parameters.query}`,
+                    );
+                case "readPage":
+                    await getActionBrowserControl(context).readPage();
+                    return;
+                case "stopReadPage":
+                    await getActionBrowserControl(context).stopReadPage();
+                    return;
+                case "captureScreenshot":
+                    const dataUrl =
+                        await getActionBrowserControl(
+                            context,
+                        ).captureScreenshot();
+                    return createActionResultFromHtmlDisplay(
+                        `<img src="${dataUrl}" alt="Screenshot" width="100%" />`,
+                    );
+                case "followLinkByText": {
+                    const control = getActionBrowserControl(context);
+                    const { keywords, openInNewTab } = action.parameters;
+                    const url = await control.followLinkByText(
+                        keywords,
+                        openInNewTab,
+                    );
+                    if (!url) {
+                        throw new Error(`No link found for '${keywords}'`);
                     }
-                    case "followLinkByPosition":
-                        const control = getActionBrowserControl(context);
-                        const url = await control.followLinkByPosition(
-                            action.parameters.position,
-                            action.parameters.openInNewTab,
-                        );
-                        if (!url) {
-                            throw new Error(
-                                `No link found at position ${action.parameters.position}`,
-                            );
-                        }
-                        return createActionResultFromMarkdownDisplay(
-                            `Navigated to [link](${url}) at position ${action.parameters.position}`,
-                            `Navigated to link at position ${action.parameters.position}`,
-                        );
-                    case "openSearchResult":
-                        return openSearchResult(context, action);
-                    default:
-                        // Should never happen.
+
+                    return createActionResultFromMarkdownDisplay(
+                        `Navigated to link for [${keywords}](${url})`,
+                        `Navigated to link for '${keywords}'`,
+                    );
+                }
+                case "followLinkByPosition":
+                    const control = getActionBrowserControl(context);
+                    const url = await control.followLinkByPosition(
+                        action.parameters.position,
+                        action.parameters.openInNewTab,
+                    );
+                    if (!url) {
                         throw new Error(
-                            `Internal error: unknown browser action: ${(action as any).actionName}`,
+                            `No link found at position ${action.parameters.position}`,
                         );
-                }
-            case "browser.external":
-                switch (action.actionName) {
-                    case "closeWindow": {
-                        const control = getActionBrowserControl(context);
-                        await control.closeWindow();
-                        return;
                     }
-                }
-                break;
-        }
-        const webSocketEndpoint = context.sessionContext.agentContext.webSocket;
-        const connector = context.sessionContext.agentContext.browserConnector;
-        if (webSocketEndpoint) {
-            try {
-                context.actionIO.setDisplay("Running remote action.");
-
-                let schemaName = "browser";
-                if (action.schemaName === "browser.crossword") {
-                    const crosswordResult = await handleCrosswordAction(
-                        action,
-                        context.sessionContext,
+                    return createActionResultFromMarkdownDisplay(
+                        `Navigated to [link](${url}) at position ${action.parameters.position}`,
+                        `Navigated to link at position ${action.parameters.position}`,
                     );
-                    return createActionResult(crosswordResult);
-                } else if (action.schemaName === "browser.commerce") {
-                    const commerceResult = await handleCommerceAction(
-                        action,
-                        context,
+                case "openSearchResult":
+                    return openSearchResult(context, action);
+                default:
+                    // Should never happen.
+                    throw new Error(
+                        `Internal error: unknown browser action: ${(action as any).actionName}`,
                     );
-                    if (commerceResult !== undefined) {
-                        if (commerceResult instanceof String) {
-                            return createActionResult(
-                                commerceResult as unknown as string,
-                            );
-                        } else {
-                            return commerceResult as ActionResult;
-                        }
-                    }
-                } else if (action.schemaName === "browser.instacart") {
-                    const instacartResult = await handleInstacartAction(
-                        action,
-                        context.sessionContext,
-                    );
-
-                    return createActionResult(
-                        instacartResult.displayText,
-                        undefined,
-                        instacartResult.entities,
-                    );
-
-                    // return createActionResult(instacartResult);
-                } else if (action.schemaName === "browser.actionDiscovery") {
-                    const discoveryResult = await handleSchemaDiscoveryAction(
-                        action,
-                        context.sessionContext,
-                    );
-
-                    return createActionResult(discoveryResult.displayText);
-                }
-
-                await connector?.sendActionToBrowser(action, schemaName);
-            } catch (ex: any) {
-                if (ex instanceof Error) {
-                    console.error(ex);
-                } else {
-                    console.error(JSON.stringify(ex));
-                }
-
-                throw new Error("Unable to contact browser backend.");
             }
-        } else {
-            throw new Error("No websocket connection.");
-        }
-        return undefined;
-    } catch (error) {
-        return createActionResultFromTextDisplay(
-            error instanceof Error ? error.message : String(error),
-        );
+        case "browser.external":
+            switch (action.actionName) {
+                case "closeWindow": {
+                    const control = getActionBrowserControl(context);
+                    await control.closeWindow();
+                    return;
+                }
+            }
+            break;
     }
+    const webSocketEndpoint = context.sessionContext.agentContext.webSocket;
+    const connector = context.sessionContext.agentContext.browserConnector;
+    if (webSocketEndpoint) {
+        try {
+            context.actionIO.setDisplay("Running remote action.");
+
+            let schemaName = "browser";
+            if (action.schemaName === "browser.crossword") {
+                const crosswordResult = await handleCrosswordAction(
+                    action,
+                    context.sessionContext,
+                );
+                return createActionResult(crosswordResult);
+            } else if (action.schemaName === "browser.commerce") {
+                const commerceResult = await handleCommerceAction(
+                    action,
+                    context,
+                );
+                if (commerceResult !== undefined) {
+                    if (commerceResult instanceof String) {
+                        return createActionResult(
+                            commerceResult as unknown as string,
+                        );
+                    } else {
+                        return commerceResult as ActionResult;
+                    }
+                }
+            } else if (action.schemaName === "browser.instacart") {
+                const instacartResult = await handleInstacartAction(
+                    action,
+                    context.sessionContext,
+                );
+
+                return createActionResult(
+                    instacartResult.displayText,
+                    undefined,
+                    instacartResult.entities,
+                );
+
+                // return createActionResult(instacartResult);
+            } else if (action.schemaName === "browser.actionDiscovery") {
+                const discoveryResult = await handleSchemaDiscoveryAction(
+                    action,
+                    context.sessionContext,
+                );
+
+                return createActionResult(discoveryResult.displayText);
+            }
+
+            await connector?.sendActionToBrowser(action, schemaName);
+        } catch (ex: any) {
+            if (ex instanceof Error) {
+                console.error(ex);
+            } else {
+                console.error(JSON.stringify(ex));
+            }
+
+            throw new Error("Unable to contact browser backend.");
+        }
+    } else {
+        throw new Error("No websocket connection.");
+    }
+    return undefined;
 }
 
 async function handleTabIndexActions(
