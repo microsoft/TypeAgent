@@ -198,7 +198,7 @@ function fromJsonAction(actionJSON: JSONAction) {
         actionJSON.fullActionName !== undefined
             ? parseFullActionNameParts(actionJSON.fullActionName)
             : { schemaName: undefined as any, actionName: undefined as any };
-    
+
     return createExecutableAction(
         schemaName,
         actionName,
