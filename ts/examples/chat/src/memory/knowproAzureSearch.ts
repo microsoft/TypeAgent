@@ -4,9 +4,11 @@
 import {
     arg,
     argBool,
+    argNum,
     CommandHandler,
     CommandMetadata,
     parseNamedArguments,
+    ProgressBar,
 } from "interactive-app";
 import { KnowproContext } from "./knowproMemory.js";
 import { KnowProPrinter } from "./knowproPrinter.js";
@@ -14,6 +16,7 @@ import * as ms from "memory-storage";
 import * as kp from "knowpro";
 import chalk from "chalk";
 import { propertyTermsFromNamedArgs } from "../common.js";
+import { batchSemanticRefsByMessage } from "./knowproCommon.js";
 
 type AzureMemoryContext = {
     memory?: ms.azSearch.AzSemanticRefIndex | undefined;
@@ -64,8 +67,15 @@ export async function createKnowproAzureCommands(
         }
     }
 
-    commands.azIngest.metadata =
-        "Ingest knowledge from currently loaded conversation";
+    function ingestKnowledgeDef(): CommandMetadata {
+        return {
+            description: "Ingest knowledge from currently loaded conversation",
+            options: {
+                batchSize: argNum("Batch size", 16),
+            },
+        };
+    }
+    commands.azIngest.metadata = ingestKnowledgeDef();
     async function ingestKnowledge(args: string[]) {
         const conversation = kpContext.conversation;
         if (!conversation) {
@@ -73,14 +83,19 @@ export async function createKnowproAzureCommands(
             return;
         }
 
+        //const namedArgs = parseNamedArguments(args, ingestKnowledgeDef());
         const memory = await ensureMemory();
         const semanticRefs = conversation.semanticRefs!;
-        for (const sr of semanticRefs) {
-            if (sr.knowledgeType === "entity") {
-                context.printer.writeSemanticRef(sr);
-                await memory.addSemanticRef(sr);
-            }
+        const messages = conversation.messages;
+        const progress = new ProgressBar(context.printer, messages.length);
+        for (const [messageOrdinal, batch] of batchSemanticRefsByMessage(
+            semanticRefs,
+        )) {
+            progress.advance();
+            const message = messages.get(messageOrdinal);
+            await memory.addSemanticRefs(batch, message.timestamp);
         }
+        progress.complete();
     }
 
     function ensureIndexDef(): CommandMetadata {
@@ -94,10 +109,12 @@ export async function createKnowproAzureCommands(
         await memory.ensure();
     }
 
-    function ensureMemory(): ms.azSearch.AzSemanticRefIndex {
+    function ensureMemory(
+        indexName = "semantic-ref-index",
+    ): ms.azSearch.AzSemanticRefIndex {
         if (!context.memory) {
             context.memory = new ms.azSearch.AzSemanticRefIndex(
-                ms.azSearch.createAzSearchSettings("knowledge"),
+                ms.azSearch.createAzSearchSettings(indexName),
             );
         }
         return context.memory;
