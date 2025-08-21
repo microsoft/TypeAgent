@@ -11,6 +11,10 @@ export type AzSearchCompilerSettings = {
     /** Mapping of knowPro {@link kp.PropertyNames} to paths in the Azure Search schema.*/
     propertyFields: Map<kp.PropertyNames, string>;
     timestampField: string;
+    /**
+     * Field that stores {@link kp.KnowledgeType}
+     */
+    kTypeField: string;
 };
 
 /**
@@ -43,11 +47,22 @@ export class AzSearchQueryCompiler {
     }
 
     public compileWhen(filter: kp.WhenFilter): string | undefined {
-        if (filter.dateRange) {
-            return this.compileDateRange(filter.dateRange);
+        let filterExpr: string[] = [];
+        if (filter.knowledgeType) {
+            filterExpr.push(
+                filterCompareExpr(
+                    "eq",
+                    this.settings.kTypeField,
+                    filter.knowledgeType,
+                ),
+            );
         }
-
-        return undefined;
+        if (filter.dateRange) {
+            filterExpr.push(this.compileDateRange(filter.dateRange));
+        }
+        return filterExpr.length > 0
+            ? filterMultiBoolExpr("and", filterExpr)
+            : undefined;
     }
 
     private compilePropertySearchTerm(term: kp.PropertySearchTerm): string {
@@ -136,7 +151,7 @@ function queryPhraseMatchExpr(term: kp.Term): string {
 
 // Filter syntax
 
-type FilterComparisonOp = "lt" | "le" | "gt" | "ge";
+type FilterComparisonOp = "eq" | "lt" | "le" | "gt" | "ge";
 type FilterBoolOp = "and" | "or";
 
 function filterRangeInclusiveExpr(
@@ -153,6 +168,14 @@ function filterRangeInclusiveExpr(
 
 function filterBoolExpr(op: FilterBoolOp, lh: string, rh: string): string {
     return `(${lh} ${op} ${rh})`;
+}
+
+function filterMultiBoolExpr(op: FilterBoolOp, expr: string[]): string {
+    return expr.length > 1
+        ? `(${expr.join(` ${op} `)})`
+        : expr.length === 1
+          ? expr[0]
+          : "";
 }
 
 function filterCompareExpr(

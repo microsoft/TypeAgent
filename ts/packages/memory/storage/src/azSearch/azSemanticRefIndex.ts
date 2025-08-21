@@ -298,6 +298,7 @@ function createCompilerOptions(): AzSearchCompilerSettings {
         phraseMatch: true,
         propertyFields: createPropertyNameToFieldPathMap(),
         timestampField: "timestamp",
+        kTypeField: "kType",
     };
 }
 

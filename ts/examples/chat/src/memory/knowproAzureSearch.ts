@@ -9,6 +9,7 @@ import {
     CommandHandler,
     CommandMetadata,
     InteractiveIo,
+    NamedArgs,
     ProgressBar,
 } from "interactive-app";
 import { KnowproContext } from "./knowproMemory.js";
@@ -47,6 +48,7 @@ export async function createKnowproAzureCommands(
                 andTerms: argBool("'And' all terms. Default is 'or", false),
                 startDate: arg("Starting at this ISO date"),
                 endDate: arg("Ending at this date ISO date"),
+                ktype: arg("Knowledge type: entity | topic | action | tag"),
             },
         };
     }
@@ -74,11 +76,8 @@ export async function createKnowproAzureCommands(
                     : "or",
             );
         }
-        const dateRange = dateRangeFromNamedArgs(namedArgs);
-        const [azQuery, results] = await memory.search(
-            queryTerms,
-            dateRange ? { dateRange } : undefined,
-        );
+        const whenFilter = whenFilterFromNamedArgs(namedArgs);
+        const [azQuery, results] = await memory.search(queryTerms, whenFilter);
         context.printer.writeLineInColor(chalk.cyan, azQuery.searchQuery);
         if (azQuery.filter) {
             context.printer.writeLineInColor(
@@ -176,5 +175,22 @@ export async function createKnowproAzureCommands(
             }
         }
     }
+
+    function whenFilterFromNamedArgs(
+        namedArgs: NamedArgs,
+    ): kp.WhenFilter | undefined {
+        let when: kp.WhenFilter | undefined;
+        const dateRange = dateRangeFromNamedArgs(namedArgs);
+        if (namedArgs.ktype) {
+            when ??= {};
+            when.knowledgeType = namedArgs.ktype;
+        }
+        if (dateRange) {
+            when ??= {};
+            when.dateRange = dateRange;
+        }
+        return when;
+    }
+
     return commands;
 }
