@@ -243,6 +243,18 @@ async function checkPrefixTransformCompletions(
             if (userFriendlyKey !== requestPrefix.trim()) {
                 completions.add(userFriendlyKey);
             }
+            
+            // Special handling for browser.openWebPage patterns like "open|bbc|webpage"
+            if (result.paramName === "fullActionName" && 
+                result.value === "browser.openWebPage" &&
+                result.key.includes("|webpage")) {
+                const parts = result.key.split("|");
+                if (parts.length === 3 && parts[0] === "open" && parts[2] === "webpage") {
+                    // Add the full completion "open bbc webpage"
+                    const fullCompletion = `open ${parts[1]} webpage`;
+                    completions.add(fullCompletion);
+                }
+            }
         }
 
         const completionArray = Array.from(completions);

@@ -437,7 +437,7 @@ export class ConstructionStoreImpl implements ConstructionStore {
             const transformMap = (transforms as any).transforms; // Access private field
             if (!transformMap) continue;
 
-            for (const [paramName, paramTransforms] of transformMap.entries()) {
+            for (const [paramName] of transformMap.entries()) {
                 const prefixResults = transforms.getByPrefix(paramName, prefix);
                 if (prefixResults) {
                     for (const result of prefixResults) {

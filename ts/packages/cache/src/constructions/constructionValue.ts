@@ -194,19 +194,17 @@ export function createActionProps(
     if (Array.isArray(actionProps)) {
         actionProps.forEach((actionProp) => {
             if (actionProp.fullActionName === undefined) {
-                if (partial) {
-                    actionProp.fullActionName = "unknown.unknown";
-                } else {
+                if (!partial) {
                     throw new Error("Internal error: fullActionName missing");
                 }
+                // Leave undefined for partial matches
             }
         });
     } else if (actionProps.fullActionName === undefined) {
-        if (partial) {
-            actionProps.fullActionName = "unknown.unknown";
-        } else {
+        if (!partial) {
             throw new Error("Internal error: fullActionName missing");
         }
+        // Leave undefined for partial matches
     }
 
     return actionProps;
