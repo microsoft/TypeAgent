@@ -544,7 +544,10 @@ export class ShellWindow {
         });
 
         // setup zoom handlers for the new browser tab
-        this.setupZoomHandlers(this.browserViewManager.getBrowserTab(tabId)?.webContentsView?.webContents);
+        this.setupZoomHandlers(
+            this.browserViewManager.getBrowserTab(tabId)?.webContentsView
+                ?.webContents,
+        );
 
         // Update layout when first tab is created
         if (this.browserViewManager.getAllBrowserTabs().length === 1) {
@@ -799,7 +802,6 @@ export class ShellWindow {
     // Zoom Handler
     // ================================================================
     private setupZoomHandlers(webContents: WebContents | undefined) {
-
         if (!webContents) return;
 
         webContents.on("before-input-event", (_event, input) => {
