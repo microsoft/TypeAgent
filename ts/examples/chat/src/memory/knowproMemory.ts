@@ -34,7 +34,7 @@ import { Result } from "typechat";
 import { conversation as knowLib } from "knowledge-processor";
 import { createKnowproKnowledgeCommands } from "./knowproKnowledge.js";
 import { createDiagnosticCommands } from "./knowproDiagnostics.js";
-import { createKnowproAzureCommands } from "./knowproAzureSearch.js";
+import { createKnowproAzureCommands } from "./knowproAzSearch.js";
 
 export async function runKnowproMemory(): Promise<void> {
     const storePath = "/data/testChat";
@@ -166,8 +166,7 @@ export async function createKnowproCommands(
         const meta: CommandMetadata = {
             description:
                 description ??
-                "Search current knowPro conversation by manually providing terms as arguments\n" +
-                    "Use named arguments to search for specific properties and facets\n",
+                "Search current knowPro conversation by manually providing terms as arguments",
             options: {
                 maxToDisplay: argNum(
                     "Maximum matches to display",
