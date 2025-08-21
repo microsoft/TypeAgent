@@ -1,10 +1,13 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import json
 import os
 from typing import TypedDict, cast
+
+from pydantic.dataclasses import dataclass as pydantic_dataclass
+from pydantic import Field, AliasChoices
 
 from ..knowpro import semrefindex, kplib, secindex
 from ..knowpro.convthreads import ConversationThreads
@@ -36,12 +39,12 @@ from ..knowpro.collections import (
 )
 
 
-@dataclass
+@pydantic_dataclass
 class PodcastMessageMeta(IKnowledgeSource, IMessageMetadata):
     """Metadata class (!= metaclass) for podcast messages."""
 
     speaker: str | None = None
-    listeners: list[str] = field(default_factory=list)
+    listeners: list[str] = Field(default_factory=list)
 
     @property
     def source(self) -> str | None:  # type: ignore[reportIncompatibleVariableOverride]
@@ -106,11 +109,14 @@ class PodcastMessageData(TypedDict):
     timestamp: str | None
 
 
-@dataclass
+@pydantic_dataclass
 class PodcastMessage(IMessage):
-    text_chunks: list[str]
-    metadata: PodcastMessageMeta
-    tags: list[str] = field(default_factory=list[str])
+    text_chunks: list[str] = Field(
+        serialization_alias="textChunks",
+        validation_alias=AliasChoices("text_chunks", "textChunks"),
+    )
+    metadata: PodcastMessageMeta = Field()
+    tags: list[str] = Field(default_factory=list)
     timestamp: str | None = None
 
     def get_knowledge(self) -> kplib.KnowledgeResponse:
@@ -123,28 +129,11 @@ class PodcastMessage(IMessage):
         self.text_chunks[0] += content
 
     def serialize(self) -> PodcastMessageData:
-        return PodcastMessageData(
-            metadata=PodcastMessageMetaData(
-                speaker=self.metadata.speaker,
-                listeners=self.metadata.listeners,
-            ),
-            textChunks=self.text_chunks,
-            tags=self.tags,
-            timestamp=self.timestamp,
-        )
+        return self.__pydantic_serializer__.to_python(self, by_alias=True)  # type: ignore
 
     @staticmethod
     def deserialize(message_data: PodcastMessageData) -> "PodcastMessage":
-        metadata_data = message_data["metadata"]
-        return PodcastMessage(
-            text_chunks=message_data["textChunks"],
-            metadata=PodcastMessageMeta(
-                speaker=metadata_data.get("speaker"),
-                listeners=metadata_data.get("listeners"),
-            ),
-            tags=message_data["tags"],
-            timestamp=message_data["timestamp"],
-        )
+        return PodcastMessage.__pydantic_validator__.validate_python(message_data)  # type: ignore
 
 
 class PodcastData(ConversationDataWithIndexes[PodcastMessageData]):

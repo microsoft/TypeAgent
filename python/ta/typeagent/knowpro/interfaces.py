@@ -239,23 +239,11 @@ class TextRange:
         return self.start <= other.start and other_end <= self_end
 
     def serialize(self) -> TextRangeData:
-        if self.end is None:
-            return TextRangeData(start=self.start.serialize())
-        else:
-            return TextRangeData(
-                start=self.start.serialize(),
-                end=self.end.serialize(),
-            )
+        return self.__pydantic_serializer__.to_python(self, by_alias=True, exclude_none=True)  # type: ignore
 
     @staticmethod
     def deserialize(data: TextRangeData) -> "TextRange":
-        start = TextLocation.deserialize(data["start"])
-        end_data = data.get("end")
-        if end_data is None:
-            return TextRange(start)
-        else:
-            end = TextLocation.deserialize(end_data)
-            return TextRange(start, end)
+        return TextRange.__pydantic_validator__.validate_python(data)  # type: ignore
 
 
 # TODO: Implement serializing KnowledgeData (or import from kplib).
@@ -432,16 +420,11 @@ class Thread:
     ranges: Sequence[TextRange]
 
     def serialize(self) -> ThreadData:
-        return ThreadData(
-            description=self.description,
-            ranges=[range.serialize() for range in self.ranges],
-        )
+        return self.__pydantic_serializer__.to_python(self, by_alias=True)  # type: ignore
 
     @staticmethod
     def deserialize(data: ThreadData) -> "Thread":
-        description = data["description"]
-        ranges = [TextRange.deserialize(range_data) for range_data in data["ranges"]]
-        return Thread(description, ranges)
+        return Thread.__pydantic_validator__.validate_python(data)  # type: ignore
 
 
 type ThreadOrdinal = int
