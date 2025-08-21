@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { AppAgentManifest, SessionContext } from "@typeagent/agent-sdk";
-import { BrowserActionContext, getBrowserControl } from "../actionHandler.mjs";
+import { BrowserActionContext, getBrowserControl } from "../browserActions.mjs";
 import { BrowserConnector } from "../browserConnector.mjs";
 import { createDiscoveryPageTranslator } from "./translator.mjs";
 import {

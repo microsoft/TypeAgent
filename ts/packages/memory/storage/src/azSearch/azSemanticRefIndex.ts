@@ -8,14 +8,15 @@ import { AzSearchIndex } from "./azSearchIndex.js";
 import { AzSearchSettings } from "./azSearchCommon.js";
 import { LuceneQueryCompiler } from "./azLucene.js";
 
-export interface SemanticRefDocBase {
+export interface SemanticRefHeader {
     semanticRefOrdinal: string;
     start: kp.TextLocation;
     end?: kp.TextLocation | undefined;
     kType: kp.KnowledgeType;
+    timestamp?: string | undefined;
 }
 
-export interface EntityDoc extends SemanticRefDocBase {
+export interface EntityDoc {
     name: string;
     type: string[];
     facets?: EntityFacet[] | undefined;
@@ -26,25 +27,28 @@ export type EntityFacet = {
     value: string;
 };
 
-export interface TopicDoc extends SemanticRefDocBase {
-    topic: string;
-}
+export type TopicDoc = {
+    topic?: string | undefined;
+};
 
-export interface ActionDoc extends SemanticRefDocBase {
+export type ActionDoc = {
     verbs: string[];
     subject?: string | undefined;
     object?: string | undefined;
     indirectObject?: string | undefined;
-}
+};
 
-export type SemanticRefDoc = EntityDoc | TopicDoc | ActionDoc;
+export type KnowledgeDoc = EntityDoc | TopicDoc | ActionDoc;
+export type SemanticRefDoc = SemanticRefHeader & KnowledgeDoc;
 
 export class AzSemanticRefIndex extends AzSearchIndex<SemanticRefDoc> {
     private luceneCompiler: LuceneQueryCompiler;
 
     constructor(settings: AzSearchSettings) {
         super(settings);
-        this.luceneCompiler = new LuceneQueryCompiler(getFieldPaths());
+        this.luceneCompiler = new LuceneQueryCompiler(
+            createPropertyNameToFieldPathMap(),
+        );
     }
 
     public async search(
@@ -71,35 +75,84 @@ export class AzSemanticRefIndex extends AzSearchIndex<SemanticRefDoc> {
         return this.ensureIndex(createKnowledgeSchema(this.settings.indexName));
     }
 
-    public async addSemanticRef(sr: kp.SemanticRef): Promise<void> {
-        let doc: SemanticRefDoc | undefined;
-        switch (sr.knowledgeType) {
-            default:
-                break;
-            case "entity":
-                doc = entityToDoc(sr);
-                break;
+    public async addSemanticRefs(
+        sRefs: kp.SemanticRef | kp.SemanticRef[],
+        timestamp?: string,
+    ): Promise<azSearch.IndexingResult[]> {
+        let docs: SemanticRefDoc[];
+        if (Array.isArray(sRefs)) {
+            docs = sRefs.map((sr) => semanticRefToDoc(sr, timestamp));
+        } else {
+            docs = [semanticRefToDoc(sRefs, timestamp)];
         }
-        if (!doc) {
-            return;
+        if (docs.length > 0) {
+            const result = await this.searchClient.uploadDocuments(docs);
+            return result.results;
         }
-        await this.searchClient.uploadDocuments([doc]);
+        return [];
     }
 }
 
-export function entityToDoc(sr: kp.SemanticRef): EntityDoc {
-    checkType(sr, "entity");
-    const entity = sr.knowledge as kpLib.ConcreteEntity;
+export function semanticRefToDoc(
+    sr: kp.SemanticRef,
+    timestamp?: string,
+): SemanticRefDoc {
+    const header = semanticRefToHeader(sr, timestamp);
+    let doc: KnowledgeDoc | undefined;
+    switch (sr.knowledgeType) {
+        default:
+            throw new Error("Not supported");
+        case "entity":
+            doc = entityToDoc(sr.knowledge as kpLib.ConcreteEntity);
+            break;
+        case "topic":
+            doc = topicToDoc(sr.knowledge as kp.Topic);
+            break;
+        case "action":
+            doc = actionToDoc(sr.knowledge as kpLib.Action);
+            break;
+        case "sTag":
+            doc = entityToDoc(sr.knowledge as kp.StructuredTag);
+            break;
+    }
+    return {
+        ...header,
+        ...doc,
+    };
+}
+
+export function semanticRefToHeader(
+    sr: kp.SemanticRef,
+    timestamp?: string,
+): SemanticRefHeader {
+    const range = kp.normalizeTextRange(sr.range);
+    let header: SemanticRefHeader = {
+        kType: sr.knowledgeType,
+        semanticRefOrdinal: semanticRefOrdinalToKey(sr.semanticRefOrdinal),
+        start: range.start,
+        end: range.end,
+    };
+    if (timestamp) {
+        header.timestamp = timestamp;
+    }
+    return header;
+}
+
+function semanticRefOrdinalToKey(ordinal: kp.SemanticRefOrdinal): string {
+    return ordinal.toString();
+}
+
+/*
+function keyToSemanticRefOrdinal(key: string): kp.SemanticRefOrdinal {
+    return Number.parseInt(key);
+}
+*/
+
+export function entityToDoc(entity: kpLib.ConcreteEntity): EntityDoc {
     const entityDoc: EntityDoc = {
-        kType: "entity",
-        semanticRefOrdinal: sr.semanticRefOrdinal.toString(),
-        start: sr.range.start,
         name: entity.name,
         type: entity.type,
     };
-    if (sr.range.end) {
-        entityDoc.end = sr.range.end;
-    }
     if (entity.facets && entity.facets.length > 0) {
         entityDoc.facets = entity.facets.map((f) => {
             return { name: f.name, value: facetValueToString(f) };
@@ -108,18 +161,26 @@ export function entityToDoc(sr: kp.SemanticRef): EntityDoc {
     return entityDoc;
 }
 
+export function topicToDoc(sr: kp.Topic): TopicDoc {
+    return {
+        topic: sr.text,
+    };
+}
+
+export function actionToDoc(sr: kpLib.Action): ActionDoc {
+    return {
+        verbs: sr.verbs,
+        subject: sr.subjectEntityName,
+        object: sr.objectEntityName,
+    };
+}
+
 function facetValueToString(facet: kpLib.Facet): string {
     const value = facet.value;
     if (typeof value === "object") {
         return `${value.amount} ${value.units}`;
     }
     return value.toString();
-}
-
-function checkType(sr: kp.SemanticRef, expectedType: kp.KnowledgeType) {
-    if (sr.knowledgeType !== expectedType) {
-        throw new Error(`sr.${sr.knowledgeType} !== ${expectedType}`);
-    }
 }
 
 export function createKnowledgeSchema(indexName: string): azSearch.SearchIndex {
@@ -150,6 +211,7 @@ function standardFields(): azSearch.SearchField[] {
         },
         { name: "end", type: "Edm.ComplexType", fields: locationFields() },
         createKField("kType", "Edm.String"),
+        createKField("timestamp", "Edm.String"),
     ];
 }
 
@@ -170,7 +232,7 @@ function entityFields(): azSearch.SearchField[] {
 
 function actionFields(): azSearch.SearchField[] {
     return [
-        createKField("verb", "Collection(Edm.String)"),
+        createKField("verbs", "Collection(Edm.String)"),
         createKField("subject", "Edm.String"),
         createKField("object", "Edm.String"),
         createKField("indirectObject", "Edm.String"),
@@ -201,7 +263,7 @@ function locationFields(): azSearch.SearchField[] {
 function createKField(
     name: string,
     type: azSearch.SearchFieldDataType,
-    wordBreak: boolean = false,
+    wordBreak: boolean = true,
 ): azSearch.SearchField {
     const field: azSearch.SearchField = {
         name,
@@ -215,7 +277,14 @@ function createKField(
     return field;
 }
 
-function getFieldPaths(): Map<kp.PropertyNames, string> {
+/**
+ * Return a mapping from knowPro {@link kp.PropertyNames} to fields in the Azure Search index
+ * @returns
+ */
+export function createPropertyNameToFieldPathMap(): Map<
+    kp.PropertyNames,
+    string
+> {
     const fieldPaths = new Map<kp.PropertyNames, string>();
     fieldPaths.set(kp.PropertyNames.EntityName, "name");
     fieldPaths.set(kp.PropertyNames.EntityType, "type");

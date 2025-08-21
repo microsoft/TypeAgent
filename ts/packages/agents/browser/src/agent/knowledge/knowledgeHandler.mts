@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { SessionContext } from "@typeagent/agent-sdk";
-import { BrowserActionContext } from "../actionHandler.mjs";
+import { BrowserActionContext } from "../browserActions.mjs";
 import { searchWebMemories } from "../searchWebMemories.mjs";
 import * as website from "website-memory";
 import {

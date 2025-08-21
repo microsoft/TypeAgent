@@ -17,7 +17,7 @@ import { setupAuthoringActions } from "./authoringUtilities.mjs";
 import {
     BrowserActionContext,
     getSessionBrowserControl,
-} from "../actionHandler.mjs";
+} from "../browserActions.mjs";
 import { UserIntent as StoredUserIntent } from "../storage/types.mjs";
 import registerDebug from "debug";
 

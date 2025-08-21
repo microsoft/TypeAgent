@@ -7,7 +7,7 @@
     "outDir": "../../dist/agent",
     "types": ["node"]
   },
-  "include": ["./**/*"],
+  "include": ["./**/*", "../common/searchProvider.mts"],
   "exclude": ["./backup/**/*"],
   "references": [{ "path": "../common" }]
 }

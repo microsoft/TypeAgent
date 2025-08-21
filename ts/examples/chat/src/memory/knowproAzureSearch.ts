@@ -4,16 +4,18 @@
 import {
     arg,
     argBool,
+    argNum,
     CommandHandler,
     CommandMetadata,
-    parseNamedArguments,
+    ProgressBar,
 } from "interactive-app";
 import { KnowproContext } from "./knowproMemory.js";
 import { KnowProPrinter } from "./knowproPrinter.js";
 import * as ms from "memory-storage";
 import * as kp from "knowpro";
 import chalk from "chalk";
-import { propertyTermsFromNamedArgs } from "../common.js";
+import { createSearchGroup, parseFreeAndNamedArguments } from "../common.js";
+import { batchSemanticRefsByMessage } from "./knowproCommon.js";
 
 type AzureMemoryContext = {
     memory?: ms.azSearch.AzSemanticRefIndex | undefined;
@@ -33,9 +35,12 @@ export async function createKnowproAzureCommands(
 
     function azSearchDef(): CommandMetadata {
         return {
-            description: "Azure Search",
+            description:
+                "Search Azure semantic-ref-index by manually providing terms as arguments",
             options: {
-                query: arg("Plain text or Lucene query syntax"),
+                query: arg(
+                    "Plain text or Lucene query syntax. Phrase matches: use single quotes instead of double quotes",
+                ),
                 andTerms: argBool("'And' all terms. Default is 'or", false),
             },
         };
@@ -43,17 +48,26 @@ export async function createKnowproAzureCommands(
     commands.azSearch.metadata = azSearchDef();
     async function azSearch(args: string[]) {
         const commandDef = azSearchDef();
-        const namedArgs = parseNamedArguments(args, commandDef);
+        let [termArgs, namedArgs] = parseFreeAndNamedArguments(
+            args,
+            commandDef,
+        );
         const memory = ensureMemory();
         let query: string = namedArgs.query;
         let queryTerms: string | kp.SearchTermGroup;
         if (query) {
+            // User provided a raw lucene query.. but with single quotes
+            //
             queryTerms = query.replaceAll(/'/g, '"');
         } else {
-            const termGroup = propertyTermsFromNamedArgs(namedArgs, commandDef);
-            queryTerms = namedArgs.andTerms
-                ? kp.createAndTermGroup(...termGroup)
-                : kp.createOrTermGroup(...termGroup);
+            queryTerms = createSearchGroup(
+                termArgs,
+                namedArgs,
+                commandDef,
+                namedArgs.andTerms && namedArgs.andTerms === true
+                    ? "and"
+                    : "or",
+            );
         }
 
         const [queryText, results] = await memory.search(queryTerms);
@@ -64,8 +78,15 @@ export async function createKnowproAzureCommands(
         }
     }
 
-    commands.azIngest.metadata =
-        "Ingest knowledge from currently loaded conversation";
+    function ingestKnowledgeDef(): CommandMetadata {
+        return {
+            description: "Ingest knowledge from currently loaded conversation",
+            options: {
+                batchSize: argNum("Batch size", 16),
+            },
+        };
+    }
+    commands.azIngest.metadata = ingestKnowledgeDef();
     async function ingestKnowledge(args: string[]) {
         const conversation = kpContext.conversation;
         if (!conversation) {
@@ -73,14 +94,18 @@ export async function createKnowproAzureCommands(
             return;
         }
 
-        const memory = await ensureMemory();
+        //const namedArgs = parseNamedArguments(args, ingestKnowledgeDef());
         const semanticRefs = conversation.semanticRefs!;
-        for (const sr of semanticRefs) {
-            if (sr.knowledgeType === "entity") {
-                context.printer.writeSemanticRef(sr);
-                await memory.addSemanticRef(sr);
-            }
+        const messages = conversation.messages;
+        const progress = new ProgressBar(context.printer, messages.length);
+        for (const [messageOrdinal, batch] of batchSemanticRefsByMessage(
+            semanticRefs,
+        )) {
+            progress.advance();
+            const message = messages.get(messageOrdinal);
+            await addSemanticRefs(batch, message.timestamp);
         }
+        progress.complete();
     }
 
     function ensureIndexDef(): CommandMetadata {
@@ -94,14 +119,40 @@ export async function createKnowproAzureCommands(
         await memory.ensure();
     }
 
-    function ensureMemory(): ms.azSearch.AzSemanticRefIndex {
+    function ensureMemory(
+        indexName = "semantic-ref-index",
+    ): ms.azSearch.AzSemanticRefIndex {
         if (!context.memory) {
             context.memory = new ms.azSearch.AzSemanticRefIndex(
-                ms.azSearch.createAzSearchSettings("knowledge"),
+                ms.azSearch.createAzSearchSettings(indexName),
             );
         }
         return context.memory;
     }
 
+    async function addSemanticRefs(
+        semanticRefs: kp.SemanticRef[],
+        timestamp?: string,
+    ) {
+        const memory = ensureMemory();
+        const indexingResults = await memory.addSemanticRefs(
+            semanticRefs,
+            timestamp,
+        );
+        for (const result of indexingResults) {
+            switch (result.statusCode) {
+                default:
+                    let errorMessage =
+                        result.errorMessage ?? result.statusCode.toString();
+                    context.printer.writeError(
+                        `FAILED: ordinal: ${result.key} [${errorMessage}]`,
+                    );
+                    break;
+                case 200:
+                case 201:
+                    break;
+            }
+        }
+    }
     return commands;
 }

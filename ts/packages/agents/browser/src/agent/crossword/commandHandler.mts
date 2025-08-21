@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
-import { BrowserActionContext } from "../actionHandler.mjs";
+import { BrowserActionContext } from "../browserActions.mjs";
 import { getBoardSchema } from "./actionHandler.mjs";
 import { CommandHandlerTable } from "@typeagent/agent-sdk/helpers/command";
 import { clearCachedSchemas, deleteCachedSchema } from "./cachedSchema.mjs";

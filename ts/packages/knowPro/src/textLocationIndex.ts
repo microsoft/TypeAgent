@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ListIndexingResult, TextLocation } from "./interfaces.js";
+import { ListIndexingResult, TextLocation, TextRange } from "./interfaces.js";
 import { IndexingEventHandlers } from "./interfaces.js";
 import {
     addTextBatchToEmbeddingIndex,
@@ -233,4 +233,18 @@ function createMessageIndexingEventHandler(
               },
           }
         : eventHandler;
+}
+
+export function normalizeTextRange(range: TextRange): TextRange {
+    let range_n: TextRange = { ...range };
+    if (range_n.start.chunkOrdinal === undefined) {
+        range_n.start.chunkOrdinal = 0;
+    }
+    if (range_n.end === undefined) {
+        range_n.end = { ...range.start };
+    }
+    if (range_n.end.chunkOrdinal === undefined) {
+        range_n.end.chunkOrdinal = range_n.start.chunkOrdinal + 1;
+    }
+    return range_n;
 }
