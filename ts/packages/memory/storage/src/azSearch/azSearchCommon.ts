@@ -79,3 +79,9 @@ export function createVectorField(
 export function embeddingToVector(embedding: NormalizedEmbedding): number[] {
     return Array.from<number>(embedding);
 }
+
+export function sortResultsAscending<T extends object>(
+    results: azSearch.SearchResult<T>[],
+) {
+    return results.sort((x, y) => x.score - y.score);
+}

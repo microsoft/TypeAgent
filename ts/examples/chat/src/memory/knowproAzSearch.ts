@@ -89,17 +89,10 @@ export async function createKnowproAzureCommands(
             queryTerms,
             whenFilter,
         );
-        context.printer.writeLineInColor(chalk.cyan, azQuery.searchQuery);
-        if (azQuery.filter) {
-            context.printer.writeLineInColor(
-                chalk.cyan,
-                `$filter: ${azQuery.filter}`,
-            );
-        }
+        printQuery(azQuery);
         context.printer.writeLine(`${results.length} matches`);
-        for (const result of results) {
-            context.printer.writeJson(result);
-        }
+        context.printer.writeJsonList(results, true, true);
+        printQuery(azQuery);
     }
 
     function ingestKnowledgeDef(): CommandMetadata {
@@ -180,9 +173,7 @@ export async function createKnowproAzureCommands(
             namedArgs.maxMatches,
         );
         context.printer.writeLine(`${results.length} matches`);
-        for (const result of results) {
-            context.printer.writeJson(result);
-        }
+        context.printer.writeJsonList(results, false, true);
     }
 
     function ingestTermEmbeddingsDef(): CommandMetadata {
@@ -368,5 +359,16 @@ export async function createKnowproAzureCommands(
         }
         return conversation;
     }
+
+    function printQuery(azQuery: ms.azSearch.AzSemanticRefQuery): void {
+        context.printer.writeLineInColor(chalk.cyan, azQuery.searchQuery);
+        if (azQuery.filter) {
+            context.printer.writeLineInColor(
+                chalk.cyan,
+                `$filter: ${azQuery.filter}`,
+            );
+        }
+    }
+
     return commands;
 }
