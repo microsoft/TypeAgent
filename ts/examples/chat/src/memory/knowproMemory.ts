@@ -18,18 +18,9 @@ import {
     runConsole,
     StopWatch,
 } from "interactive-app";
-import {
-    argToDate,
-    parseFreeAndNamedArguments,
-    keyValuesFromNamedArgs,
-} from "../common.js";
-import {
-    collections,
-    dateTime,
-    ensureDir,
-    isFilePath,
-    readJsonFile,
-} from "typeagent";
+import { parseFreeAndNamedArguments } from "../common.js";
+import { createSearchGroup, whenFilterFromNamedArgs } from "./knowproCommon.js";
+import { collections, ensureDir, isFilePath, readJsonFile } from "typeagent";
 import chalk from "chalk";
 import { KnowProPrinter } from "./knowproPrinter.js";
 import { createKnowproDataFrameCommands } from "./knowproDataFrame.js";
@@ -43,7 +34,7 @@ import { Result } from "typechat";
 import { conversation as knowLib } from "knowledge-processor";
 import { createKnowproKnowledgeCommands } from "./knowproKnowledge.js";
 import { createDiagnosticCommands } from "./knowproDiagnostics.js";
-import { createKnowproAzureCommands } from "./knowproAzure.js";
+import { createKnowproAzureCommands } from "./knowproAzSearch.js";
 
 export async function runKnowproMemory(): Promise<void> {
     const storePath = "/data/testChat";
@@ -211,7 +202,7 @@ export async function createKnowproCommands(
             return;
         }
         const commandDef = searchTermsDef();
-        // First, check if the caller optionally supplied a ==query parameter...
+        // First, check if the caller optionally supplied a query parameter...
         // If so, this word-breaks it. Else the parameters are just supplied as ordinary
         // command line params
         const [queryTerms, _] = getTermsFromQuery(args, commandDef);
@@ -237,7 +228,7 @@ export async function createKnowproCommands(
                         ? "and"
                         : "or",
                 ),
-                when: whenFilterFromNamedArgs(namedArgs, commandDef),
+                when: whenFilterFromNamedArgs(conversation, namedArgs),
             };
             context.printer.writeSelectExpr(selectExpr);
             const timer = new StopWatch();
@@ -425,7 +416,7 @@ export async function createKnowproCommands(
                     ? "and"
                     : "or",
             ),
-            when: whenFilterFromNamedArgs(namedArgs, commandDef),
+            when: whenFilterFromNamedArgs(conversation, namedArgs),
         };
         const matches = await kp.searchConversation(
             conversation,
@@ -856,72 +847,6 @@ export async function createKnowproCommands(
         } else {
             context.printer.writeError(answerResult.message);
         }
-    }
-
-    function createSearchGroup(
-        termArgs: string[],
-        namedArgs: NamedArgs,
-        commandDef: CommandMetadata,
-        op: "and" | "or" | "or_max",
-    ): kp.SearchTermGroup {
-        const searchTerms = kp.createSearchTerms(termArgs);
-        const propertyTerms = propertyTermsFromNamedArgs(namedArgs, commandDef);
-        return {
-            booleanOp: op,
-            terms: [...searchTerms, ...propertyTerms],
-        };
-    }
-
-    function propertyTermsFromNamedArgs(
-        namedArgs: NamedArgs,
-        commandDef: CommandMetadata,
-    ): kp.PropertySearchTerm[] {
-        const keyValues = keyValuesFromNamedArgs(namedArgs, commandDef);
-        return kp.createPropertySearchTerms(keyValues);
-    }
-
-    function whenFilterFromNamedArgs(
-        namedArgs: NamedArgs,
-        commandDef: CommandMetadata,
-    ): kp.WhenFilter {
-        let filter: kp.WhenFilter = {
-            knowledgeType: namedArgs.ktype,
-        };
-        const conversation: kp.IConversation | undefined = context.conversation;
-        if (!conversation) {
-            throw new Error("No conversation loaded");
-        }
-        const dateRange = kp.getTimeRangeForConversation(conversation!);
-        if (dateRange) {
-            let startDate: Date | undefined;
-            let endDate: Date | undefined;
-            // Did they provide an explicit date range?
-            if (namedArgs.startDate || namedArgs.endDate) {
-                startDate = argToDate(namedArgs.startDate) ?? dateRange.start;
-                endDate = argToDate(namedArgs.endDate) ?? dateRange.end;
-            } else {
-                // They may have provided a relative date range
-                if (namedArgs.startMinute >= 0) {
-                    startDate = dateTime.addMinutesToDate(
-                        dateRange.start,
-                        namedArgs.startMinute,
-                    );
-                }
-                if (namedArgs.endMinute > 0) {
-                    endDate = dateTime.addMinutesToDate(
-                        dateRange.start,
-                        namedArgs.endMinute,
-                    );
-                }
-            }
-            if (startDate) {
-                filter.dateRange = {
-                    start: startDate,
-                    end: endDate,
-                };
-            }
-        }
-        return filter;
     }
 
     function ensureConversationLoaded(): kp.IConversation | undefined {

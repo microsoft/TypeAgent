@@ -27,7 +27,6 @@ import {
     displaySuccess,
     getMessage,
 } from "@typeagent/agent-sdk/helpers/display";
-import { Crossword } from "./crossword/schema/pageSchema.mjs";
 import {
     getBoardSchema,
     handleCrosswordAction,
@@ -35,7 +34,7 @@ import {
 
 import { BrowserConnector } from "./browserConnector.mjs";
 import { handleCommerceAction } from "./commerce/actionHandler.mjs";
-import { TabTitleIndex, createTabTitleIndex } from "./tabTitleIndex.mjs";
+import { createTabTitleIndex } from "./tabTitleIndex.mjs";
 import { ChildProcess, fork } from "child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -65,7 +64,6 @@ import {
 import {
     loadAllowDynamicAgentDomains,
     processWebAgentMessage,
-    WebAgentChannels,
 } from "./webTypeAgent.mjs";
 import { isWebAgentMessage } from "../common/webAgentMessageTypes.mjs";
 import { handleSchemaDiscoveryAction } from "./discovery/actionHandler.mjs";
@@ -85,13 +83,24 @@ import { InstacartActions } from "./instacart/schema/userActions.mjs";
 import { ShoppingActions } from "./commerce/schema/userActions.mjs";
 import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
-import { BrowserControl } from "../common/browserControl.mjs";
-import { openai, TextEmbeddingModel } from "aiclient";
+import {
+    BrowserControl,
+    defaultSearchProviders,
+} from "../common/browserControl.mjs";
+import { openai } from "aiclient";
 import { urlResolver } from "azure-ai-foundry";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 import { deleteCachedSchema } from "./crossword/cachedSchema.mjs";
 import { getCrosswordCommandHandlerTable } from "./crossword/commandHandler.mjs";
-import { MacroStore } from "./storage/index.mjs";
+import {
+    SearchProviderCommandHandlerTable,
+    SetCommandHandler,
+} from "./searchProvider/searchProviderCommandHandlers.mjs";
+import {
+    BrowserActionContext,
+    getActionBrowserControl,
+    saveSettings,
+} from "./browserActions.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
 const debugWebSocket = registerDebug("typeagent:browser:ws");
@@ -105,33 +114,6 @@ export function instantiate(): AppAgent {
         ...getCommandInterface(handlers),
     };
 }
-
-export type BrowserActionContext = {
-    clientBrowserControl?: BrowserControl | undefined;
-    externalBrowserControl?: BrowserControl | undefined;
-    useExternalBrowserControl: boolean;
-    webSocket?: WebSocket | undefined;
-    webAgentChannels?: WebAgentChannels | undefined;
-    crosswordCachedSchemas?: Map<string, Crossword> | undefined;
-    crossWordState?: Crossword | undefined;
-    browserConnector?: BrowserConnector | undefined;
-    browserProcess?: ChildProcess | undefined;
-    tabTitleIndex?: TabTitleIndex | undefined;
-    allowDynamicAgentDomains?: string[];
-    websiteCollection?: website.WebsiteCollection | undefined;
-    fuzzyMatchingModel?: TextEmbeddingModel | undefined;
-    index: website.IndexData | undefined;
-    viewProcess?: ChildProcess | undefined;
-    localHostPort: number;
-    macrosStore?: MacroStore | undefined; // Add MacroStore instance
-    currentWebSearchResults?: Map<string, any[]> | undefined; // Store search results for follow-up actions
-    resolverSettings: {
-        searchResolver?: boolean | undefined;
-        keywordResolver?: boolean | undefined;
-        wikipediaResolver?: boolean | undefined;
-        historyResolver?: boolean | undefined;
-    };
-};
 
 export interface urlResolutionAction {
     originalRequest: string;
@@ -165,6 +147,8 @@ async function initializeBrowserContext(
             wikipediaResolver: true,
             historyResolver: false,
         },
+        searchProviders: defaultSearchProviders,
+        activeSearchProvider: defaultSearchProviders[0],
     };
 }
 
@@ -243,9 +227,7 @@ async function updateBrowserContext(
 
                 if (data.error) {
                     console.error(data.error);
-                    // TODO: Handle the case where no clients were found. Prompt the user
-                    //       to launch inline browser or run automation in the headless browser.
-                    return;
+                    throw new Error(data.error);
                 }
 
                 if (data.method) {
@@ -259,7 +241,7 @@ async function updateBrowserContext(
             });
         }
 
-        // rehydrate resolver settings
+        // rehydrate cached settings
         const sessionDir: string | undefined =
             await getSessionFolderPath(context);
         const contents: string = await readFileSync(
@@ -269,14 +251,23 @@ async function updateBrowserContext(
 
         if (contents.length > 0) {
             const config = JSON.parse(contents);
+
+            // resolver settings
             context.agentContext.resolverSettings.searchResolver =
-                config.searchResolver;
+                config.resolverSettings.searchResolver;
             context.agentContext.resolverSettings.keywordResolver =
-                config.keywordResolver;
+                config.resolverSettings.keywordResolver;
             context.agentContext.resolverSettings.wikipediaResolver =
-                config.wikipediaResolver;
+                config.resolverSettings.wikipediaResolver;
             context.agentContext.resolverSettings.historyResolver =
-                config.historyResolver;
+                config.resolverSettings.historyResolver;
+
+            // search provider settings
+            context.agentContext.searchProviders =
+                config.searchProviders || defaultSearchProviders;
+            context.agentContext.activeSearchProvider =
+                config.activeSearchProvider ||
+                context.agentContext.searchProviders[0];
         }
     } else {
         const webSocket = context.agentContext.webSocket;
@@ -648,13 +639,6 @@ async function getSessionFolderPath(
     return sessionDir;
 }
 
-async function saveSettings(context: SessionContext<BrowserActionContext>) {
-    await context.sessionStorage?.write(
-        "settings.json",
-        JSON.stringify(context.agentContext.resolverSettings),
-    );
-}
-
 async function resolveEntity(
     type: string,
     name: string,
@@ -807,38 +791,17 @@ async function resolveWebPage(
             }
 
             // default to search
-            // TODO: use preferred search provider
             return [
-                "https://www.bing.com/search?q=" + encodeURIComponent(site),
+                context.agentContext.activeSearchProvider.url.replace(
+                    "%s",
+                    encodeURIComponent(site),
+                ),
             ];
         }
     }
 
     // can't get a URL
     throw new Error(`Unable to find a URL for: '${site}'`);
-}
-
-export function getActionBrowserControl(
-    actionContext: ActionContext<BrowserActionContext>,
-) {
-    return getBrowserControl(actionContext.sessionContext.agentContext);
-}
-export function getSessionBrowserControl(
-    sessionContext: SessionContext<BrowserActionContext>,
-) {
-    return getBrowserControl(sessionContext.agentContext);
-}
-
-export function getBrowserControl(agentContext: BrowserActionContext) {
-    const browserControl = agentContext.useExternalBrowserControl
-        ? agentContext.externalBrowserControl
-        : agentContext.clientBrowserControl;
-    if (!browserControl) {
-        throw new Error(
-            `${agentContext.externalBrowserControl ? "External" : "Client"} browser control is not available.`,
-        );
-    }
-    return browserControl;
 }
 
 async function openWebPage(
@@ -1038,6 +1001,38 @@ async function searchWebMemoriesAction(
     }
 }
 
+async function changeSearchProvider(
+    context: ActionContext<BrowserActionContext>,
+    action: TypeAgentAction<any>,
+) {
+    if (
+        context.sessionContext.agentContext.searchProviders.filter(
+            (sp) =>
+                sp.name.toLowerCase() === action.parameters.name.toLowerCase(),
+        ).length > 0
+    ) {
+        const cmd = new SetCommandHandler();
+
+        const params: ParsedCommandParams<any> = {
+            args: { provider: `${action.parameters.name}` },
+            flags: {},
+            tokens: [],
+            lastCompletableParam: undefined,
+            lastParamImplicitQuotes: false,
+            nextArgs: [],
+        };
+
+        await cmd.run(context, params);
+        return createActionResult(
+            `Search provider changed to ${action.parameters.name}`,
+        );
+    } else {
+        return createActionResult(
+            `No search provider by the name '${action.parameters.name}' found.  Search provider is still '${context.sessionContext.agentContext.activeSearchProvider.name}'`,
+        );
+    }
+}
+
 async function executeBrowserAction(
     action:
         | TypeAgentAction<BrowserActions, "browser">
@@ -1049,6 +1044,7 @@ async function executeBrowserAction(
 
     context: ActionContext<BrowserActionContext>,
 ) {
+    // try {
     switch (action.schemaName) {
         case "browser":
             switch (action.actionName) {
@@ -1067,7 +1063,6 @@ async function executeBrowserAction(
                     await getActionBrowserControl(context).goBack();
                     return;
                 case "reloadPage":
-                    // REVIEW: do we need to clear page schema?
                     await getActionBrowserControl(context).reload();
                     return;
                 case "scrollUp":
@@ -1088,6 +1083,8 @@ async function executeBrowserAction(
                 case "search":
                     await getActionBrowserControl(context).search(
                         action.parameters.query,
+                        context.sessionContext.agentContext
+                            .activeSearchProvider,
                     );
                     return createActionResultFromTextDisplay(
                         `Opened new tab with query ${action.parameters.query}`,
@@ -1139,6 +1136,8 @@ async function executeBrowserAction(
                     );
                 case "openSearchResult":
                     return openSearchResult(context, action);
+                case "changeSearchProvider":
+                    return changeSearchProvider(context, action);
                 default:
                     // Should never happen.
                     throw new Error(
@@ -2225,5 +2224,6 @@ export const handlers: CommandHandlerTable = {
                 },
             },
         },
+        search: new SearchProviderCommandHandlerTable(),
     },
 };

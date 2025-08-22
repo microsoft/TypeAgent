@@ -4,7 +4,7 @@
 import { SessionContext, Storage } from "@typeagent/agent-sdk";
 import registerDebug from "debug";
 import { Crossword } from "./schema/pageSchema.mjs";
-import { BrowserActionContext } from "../actionHandler.mjs";
+import { BrowserActionContext } from "../browserActions.mjs";
 const debugError = registerDebug("typeagent:browser:crossword:schema:error");
 const cacheSchemaFile = `crosswordSchema.json`;
 
