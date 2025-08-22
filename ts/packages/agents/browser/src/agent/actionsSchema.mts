@@ -4,6 +4,7 @@
 export type BrowserActions =
     | OpenWebPage
     | CloseWebPage
+    | SwitchTabs
     | GoBack
     | GoForward
     | ScrollDown
@@ -45,6 +46,19 @@ export type OpenWebPage = {
             | "knowledgeLibrary"
             | "macrosLibrary"
             | WebPage;
+        // Enum indicating if the page to open in the new tab or the current tab.
+        // Default value is "current"
+        tab: "new" | "current" | "existing";
+    };
+};
+
+// Switch to a different tab
+export type SwitchTabs = {
+    actionName: "switchTabs";
+    parameters: {
+        tabDescription: string;
+        // The numerical index referred to by the descripton if applicable.  (i.e. first = 1, second = 2, etc.)
+        tabIndex?: number;
     };
 };
 

@@ -68,6 +68,7 @@
     "jose": "^5.9.6",
     "markdown-it": "^14.1.0",
     "microsoft-cognitiveservices-speech-sdk": "^1.38.0",
+    "typeagent": "workspace:*",
     "typechat": "^0.1.1",
     "ws": "^8.17.1"
   },

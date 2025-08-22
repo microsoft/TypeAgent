@@ -155,7 +155,7 @@ export function getActivityNamespaceSuffix(
     const cacheSpec = getActivityCacheSpec(context, activityContext);
     if (cacheSpec === false) {
         throw new Error(
-            "Cannon match request during activity with cache disabled",
+            "Cannot match request during activity with cache disabled",
         );
     }
     return cacheSpec !== "shared" ? activityContext!.activityName : undefined;

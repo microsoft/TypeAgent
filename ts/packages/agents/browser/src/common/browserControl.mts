@@ -5,9 +5,10 @@ export type BrowserControlInvokeFunctions = {
     /**
      * open a new browser view with the specified URL.
      * @param url The URL to open in the browser.
+     * @param newTab Whether to open the URL in a new tab.
      * @return A promise that resolves when the browser window is opened.
      */
-    openWebPage(url: string): Promise<void>;
+    openWebPage(url: string, options?: { newTab?: boolean }): Promise<void>;
     /**
      * close the browser view.
      */
@@ -31,11 +32,11 @@ export type BrowserControlInvokeFunctions = {
         position: number,
         openInNewTab?: boolean,
     ): Promise<string | undefined>;
-
     closeWindow(): Promise<void>;
+    search(query?: string, searchProvider?: SearchProvider): Promise<void>;
+    switchTabs(tabDescription: string, tabIndex?: number): Promise<boolean>;
 
     // REVIEW: external browser only
-    search(query?: string, searchProvider?: SearchProvider): Promise<void>;
     readPage(): Promise<void>;
     stopReadPage(): Promise<void>;
     captureScreenshot(): Promise<string>;
