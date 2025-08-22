@@ -46,7 +46,7 @@ class EntityTerm:
             "'*' means match any entity name."
         ),
     ]
-    is_name_pronoun: bool | None = None
+    is_name_pronoun: bool
     type: Annotated[
         list[str] | None,
         Doc(
@@ -73,15 +73,27 @@ class VerbsTerm:
 
 @dataclass
 class ActionTerm:
-    action_verbs: Annotated[
-        VerbsTerm | None, Doc("Action verbs describing the interaction.")
-    ] = None
     actor_entities: Annotated[
         list[EntityTerm] | Literal["*"],
         Doc(
             "The origin of the action or information, typically the entity performing the action."
         ),
-    ] = "*"
+    ]
+    is_informational: Annotated[
+        bool,
+        Doc(
+            "Is the intent of the phrase translated to this ActionTerm "
+            "to actually get information about specific entities?\n"
+            "Examples:\n"
+            "True: if asking for specific information about an entity, "
+            "such as 'What is Mia's phone number?' or 'Where did Jane study?\n"
+            "False: if involves actions and interactions between entities, "
+            "such as 'What phone number did Mia mention in her note to Jane?'"
+        ),
+    ]
+    action_verbs: Annotated[
+        VerbsTerm | None, Doc("Action verbs describing the interaction.")
+    ] = None
     target_entities: Annotated[
         list[EntityTerm] | None,
         Doc(
@@ -100,18 +112,6 @@ class ActionTerm:
             "'Bach' would be the additional entity."
         ),
     ] = None
-    is_informational: Annotated[
-        bool,
-        Doc(
-            "Is the intent of the phrase translated to this ActionTerm "
-            "to actually get information about specific entities?\n"
-            "Examples:\n"
-            "True: if asking for specific information about an entity, "
-            "such as 'What is Mia's phone number?' or 'Where did Jane study?\n"
-            "False: if involves actions and interactions between entities, "
-            "such as 'What phone number did Mia mention in her note to Jane?'"
-        ),
-    ] = False
 
 
 @dataclass
