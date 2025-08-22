@@ -827,7 +827,9 @@ async function openWebPage(
             context,
         );
     }
-    await browserControl.openWebPage(url, { newTab: action.parameters.tab === "new" });
+    await browserControl.openWebPage(url, {
+        newTab: action.parameters.tab === "new",
+    });
     const result = createActionResult("Web page opened successfully.");
 
     result.activityContext = {
@@ -858,17 +860,26 @@ async function switchTabs(
 ) {
     const browserControl = getActionBrowserControl(context);
 
-    displayStatus(`Switching to tab: ${action.parameters.tabDescription}.`, context);
+    displayStatus(
+        `Switching to tab: ${action.parameters.tabDescription}.`,
+        context,
+    );
     let result: ActionResult | undefined = undefined;
-    if (await browserControl.switchTabs(action.parameters.tabDescription, action.parameters.tabIndex)) {
+    if (
+        await browserControl.switchTabs(
+            action.parameters.tabDescription,
+            action.parameters.tabIndex,
+        )
+    ) {
         result = createActionResult("Switched tabs successfully.");
     } else {
-        result = createActionResultFromError(`Unable to find a tab corresponding to '${action.parameters.tabDescription}'`)
+        result = createActionResultFromError(
+            `Unable to find a tab corresponding to '${action.parameters.tabDescription}'`,
+        );
     }
-    
+
     return result;
 }
-
 
 async function openSearchResult(
     context: ActionContext<BrowserActionContext>,
@@ -934,7 +945,9 @@ async function openSearchResult(
 
     displayStatus(`Opening search result: ${selectedResult.title}`, context);
 
-    await browserControl.openWebPage(targetUrl, { newTab: openInNewTab ? openInNewTab : false });
+    await browserControl.openWebPage(targetUrl, {
+        newTab: openInNewTab ? openInNewTab : false,
+    });
 
     return createActionResultFromMarkdownDisplay(
         `Opened search result: [${selectedResult.title}](${targetUrl})`,

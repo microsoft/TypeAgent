@@ -45,7 +45,7 @@ export function createInlineBrowserControl(
     );
     return {
         async openWebPage(url: string, options?: { newTab?: boolean }) {
-            const activeTab = shellWindow.getActiveBrowserView()
+            const activeTab = shellWindow.getActiveBrowserView();
             if (options?.newTab || !activeTab) {
                 shellWindow.createBrowserTab(new URL(url), {
                     background: options?.newTab === true ? false : true,
@@ -68,8 +68,10 @@ export function createInlineBrowserControl(
                 throw new Error("Failed to close active browser tab.");
             }
         },
-        async switchTabs(tabDescription: string, tabIndex?: number): Promise<boolean> {
-
+        async switchTabs(
+            tabDescription: string,
+            tabIndex?: number,
+        ): Promise<boolean> {
             const tabs = shellWindow.getAllBrowserTabs();
 
             if (tabs.length <= 1) {
@@ -93,23 +95,51 @@ export function createInlineBrowserControl(
             const titleEmbedding: NormalizedEmbedding[] = [];
             const urlEmbedding: NormalizedEmbedding[] = [];
             const embeddingModel = openai.createEmbeddingModel();
-            const queryEmbedding = await generateEmbedding(embeddingModel, tabDescription);
-        
+            const queryEmbedding = await generateEmbedding(
+                embeddingModel,
+                tabDescription,
+            );
+
             for (let i = 0; i < tabs.length; i++) {
                 const tab = tabs[i];
                 ids.push(tab.id.toString());
-                titleEmbedding.push(await generateEmbedding(embeddingModel, tab.webContentsView.webContents.getTitle()));
-                urlEmbedding.push(await generateEmbedding(embeddingModel, tab.webContentsView.webContents.getURL()));
+                titleEmbedding.push(
+                    await generateEmbedding(
+                        embeddingModel,
+                        tab.webContentsView.webContents.getTitle(),
+                    ),
+                );
+                urlEmbedding.push(
+                    await generateEmbedding(
+                        embeddingModel,
+                        tab.webContentsView.webContents.getURL(),
+                    ),
+                );
             }
 
-            const topNTitle = indexesOfNearest(titleEmbedding, queryEmbedding, 1, SimilarityType.Dot);
-            const topNUrl = indexesOfNearest(urlEmbedding, queryEmbedding, 1, SimilarityType.Dot);
+            const topNTitle = indexesOfNearest(
+                titleEmbedding,
+                queryEmbedding,
+                1,
+                SimilarityType.Dot,
+            );
+            const topNUrl = indexesOfNearest(
+                urlEmbedding,
+                queryEmbedding,
+                1,
+                SimilarityType.Dot,
+            );
 
-            const idx = topNTitle[0].score > topNUrl[0].score ? topNTitle[0].item : topNUrl[0].item;
+            const idx =
+                topNTitle[0].score > topNUrl[0].score
+                    ? topNTitle[0].item
+                    : topNUrl[0].item;
             const maxScore = Math.max(topNTitle[0].score, topNUrl[0].score);
 
             if (maxScore < score_threshold) {
-                throw new Error(`No matching tabs found for '${tabDescription}'.`);
+                throw new Error(
+                    `No matching tabs found for '${tabDescription}'.`,
+                );
             }
 
             return await shellWindow.switchBrowserTab(ids[idx]);

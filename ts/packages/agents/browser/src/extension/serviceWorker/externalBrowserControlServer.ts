@@ -132,12 +132,17 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             const targetTab = await ensureActiveTab();
             await chrome.tabs.remove(targetTab.id!);
         },
-        switchTabs: async (tabDescription: string, tabIndex?: number): Promise<boolean> => {
-            console.log(`Tab switch requested: '${tabDescription}', index: ${tabIndex}`);
+        switchTabs: async (
+            tabDescription: string,
+            tabIndex?: number,
+        ): Promise<boolean> => {
+            console.log(
+                `Tab switch requested: '${tabDescription}', index: ${tabIndex}`,
+            );
 
             // 08.22.2025 - robgruen - This code will not work as is since the imports
             // for the embedding model are supported by the vite compiler since that pulls
-            // in dependencies that aren't supported.  For now we will only support this in 
+            // in dependencies that aren't supported.  For now we will only support this in
             // the inline browser experience.
             // const ids: string[] = [];
             // const score_threshold = 0.85;
@@ -146,7 +151,6 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             //  const embeddingModel = openai.createEmbeddingModel();
             // const queryEmbedding = await generateEmbedding(embeddingModel, tabDescription);
 
-            
             // const tabData: any[] = [];
             // chrome.tabs.query({}, function(tabs) {
             //     tabs.forEach((tab) => {
@@ -175,7 +179,7 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             // if (maxScore < score_threshold) {
             //     throw new Error(`No matching tabs found for '${tabDescription}'.`);
             // }
-            
+
             // await chrome.tabs.update(tabData[idx].id!, { active: true });
             return false;
         },

@@ -59,8 +59,8 @@ export type SwitchTabs = {
         tabDescription: string;
         // The numerical index referred to by the descripton if applicable.  (i.e. first = 1, second = 2, etc.)
         tabIndex?: number;
-    }
-}
+    };
+};
 
 // Close the current web site view
 export type CloseWebPage = {
