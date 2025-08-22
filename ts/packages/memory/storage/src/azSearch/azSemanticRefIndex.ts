@@ -32,7 +32,7 @@ export type TopicDoc = {
 };
 
 export type ActionDoc = {
-    verbs: string[];
+    verbs?: string[];
     subject?: string | undefined;
     object?: string | undefined;
     indirectObject?: string | undefined;
@@ -294,5 +294,9 @@ function createPropertyNameToFieldPathMap(): Map<kp.PropertyNames, string> {
     fieldPaths.set(kp.PropertyNames.FacetName, "facets/name");
     fieldPaths.set(kp.PropertyNames.FacetValue, "facets/value");
     fieldPaths.set(kp.PropertyNames.Topic, "topic");
+    fieldPaths.set(kp.PropertyNames.Verb, "verb");
+    fieldPaths.set(kp.PropertyNames.Subject, "subject");
+    fieldPaths.set(kp.PropertyNames.Object, "object");
+    fieldPaths.set(kp.PropertyNames.IndirectObject, "indirectObject");
     return fieldPaths;
 }

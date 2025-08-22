@@ -2,68 +2,77 @@
 // Licensed under the MIT License.
 
 import * as azSearch from "@azure/search-documents";
+import { createSearchField, createVectorField } from "./azSearchCommon.js";
 import {
-    AzSearchSettings,
-    createAzSearchSettings,
-    createSearchField,
-    createVectorField,
-} from "./azSearchCommon.js";
-import { AzSearchIndex } from "./azSearchIndex.js";
+    AzVectorIndex,
+    AzVectorSearchSettings,
+    createVectorQuery,
+    SimilarityAlgorithm,
+} from "./azSearchIndex.js";
+import { NormalizedEmbedding } from "typeagent";
 
-export type SimilarityAlgorithm = "dotProduct" | "cosine";
-
-export interface AzVectorSearchSettings extends AzSearchSettings {
-    dimensions: number;
-    similarity: SimilarityAlgorithm;
+export interface TermDoc {
+    termId: string;
+    term: string;
+    embedding?: number[];
 }
 
-export function createAzVectorSearchSettings(
-    indexName: string,
-    dimensions: number,
-): AzVectorSearchSettings {
-    return {
-        ...createAzSearchSettings(indexName),
-        dimensions,
-        similarity: "dotProduct",
-    };
-}
-
-export class AzVectorIndex extends AzSearchIndex<VectorDoc> {
+export class AzTermsVectorIndex extends AzVectorIndex<TermDoc> {
     constructor(settings: AzVectorSearchSettings) {
         super(
             settings,
-            createVectorSchema(
+            createTermIndexSchema(
                 settings.indexName,
                 settings.dimensions,
                 settings.similarity,
             ),
         );
     }
+
+    public async getNearest(
+        embedding: NormalizedEmbedding,
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<string[]> {
+        const vectorQuery = createVectorQuery<TermDoc>(embedding, maxMatches);
+        const searchResults = await this.searchVector(vectorQuery, ["term"]);
+        let results: string[] = [];
+        for await (const result of searchResults.results) {
+            results.push(result.document.term);
+        }
+        return results;
+    }
+
+    public async addTerms(
+        terms: TermDoc[],
+    ): Promise<azSearch.IndexingResult[]> {
+        if (terms.length === 0) {
+            return [];
+        }
+        const result = await this.searchClient.uploadDocuments(terms);
+        return result.results;
+    }
 }
 
-export interface VectorDoc {
-    vectorText: string;
-    vector?: number[];
-}
-
-export function createVectorSchema(
+export function createTermIndexSchema(
     indexName: string,
     vectorDimensions: number,
     similarity: SimilarityAlgorithm,
 ): azSearch.SearchIndex {
-    const textField = createSearchField(
-        "vectorText",
+    const termId = createSearchField(
+        "termId",
         "Edm.String",
         false, // No word breaking
     ) as azSearch.SimpleField;
-    textField.key = true; // Must be unique
+    termId.key = true; // Must be unique
 
     const searchProfile = "nn";
     const vectorIndex: azSearch.SearchIndex = {
         name: indexName,
         fields: [
-            textField,
-            createVectorField("vector", vectorDimensions, searchProfile),
+            termId,
+            createSearchField("term", "Edm.String", true),
+            createVectorField("embedding", vectorDimensions, searchProfile),
         ],
     };
     // https://learn.microsoft.com/en-us/azure/search/vector-search-how-to-create-index?tabs=config-2024-07-01%2Crest-2024-07-01%2Cpush%2Cportal-check-index#add-a-vector-search-configuration

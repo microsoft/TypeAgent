@@ -1,8 +1,7 @@
 # Azure Search
 
-**Early sample code** that explores with how to implement a backing store for [KnowPro](../../knowPro/README.md) using Azure Search.
-
-This code is in active development with _frequent changes_ as the APIs evolve.
+**Early sample code** that experiments with how to implement a backing store for [KnowPro](../../knowPro/README.md) using Azure Search.
+This code is in active development with _frequent changes_.
 
 ## Trademarks
 

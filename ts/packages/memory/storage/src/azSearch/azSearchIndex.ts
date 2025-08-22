@@ -4,9 +4,12 @@
 import * as azSearch from "@azure/search-documents";
 import {
     AzSearchSettings,
+    createAzSearchSettings,
     createAzureSearchClient,
     createAzureSearchIndexClient,
+    embeddingToVector,
 } from "./azSearchCommon.js";
+import { NormalizedEmbedding } from "typeagent";
 
 export class AzSearchIndex<T extends object> {
     public searchClient: azSearch.SearchClient<T>;
@@ -53,4 +56,57 @@ export class AzSearchIndexManager {
             }
         }
     }
+}
+
+export type SimilarityAlgorithm = "dotProduct" | "cosine";
+
+export interface AzVectorSearchSettings extends AzSearchSettings {
+    dimensions: number;
+    similarity: SimilarityAlgorithm;
+}
+
+export function createAzVectorSearchSettings(
+    indexName: string,
+    dimensions: number,
+): AzVectorSearchSettings {
+    return {
+        ...createAzSearchSettings(indexName),
+        dimensions,
+        similarity: "dotProduct",
+    };
+}
+
+export class AzVectorIndex<T extends object> extends AzSearchIndex<T> {
+    constructor(
+        settings: AzVectorSearchSettings,
+        schema: azSearch.SearchIndex,
+    ) {
+        super(settings, schema);
+    }
+
+    public searchVector(
+        query: azSearch.VectorizedQuery<T>,
+        selectFields: azSearch.SelectArray<azSearch.SelectFields<T>>,
+    ) {
+        const searchOptions: azSearch.SearchOptions<T> = {
+            select: selectFields,
+            vectorSearchOptions: { queries: [query] },
+        };
+        return this.searchClient.search("", searchOptions);
+    }
+}
+
+export function createVectorQuery<T extends object>(
+    embedding: NormalizedEmbedding,
+    maxMatches?: number,
+) {
+    const vectorQuery: azSearch.VectorizedQuery<T> = {
+        kind: "vector",
+        vector: embeddingToVector(embedding),
+        exhaustive: true,
+    };
+    if (maxMatches !== undefined && maxMatches > 0) {
+        vectorQuery.kNearestNeighborsCount = maxMatches;
+    }
+    return vectorQuery;
 }

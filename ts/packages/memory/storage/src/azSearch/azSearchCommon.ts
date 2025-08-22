@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 import * as azSearch from "@azure/search-documents";
 import { createDefaultCredential, getEnvSetting } from "aiclient";
+import { NormalizedEmbedding } from "typeagent";
 
 export enum EnvVars {
     AZURE_SEARCH_ENDPOINT = "AZURE_SEARCH_ENDPOINT",
@@ -73,4 +74,8 @@ export function createVectorField(
         vectorSearchDimensions: dimensions,
         vectorSearchProfileName: profile,
     };
+}
+
+export function embeddingToVector(embedding: NormalizedEmbedding): number[] {
+    return Array.from<number>(embedding);
 }
