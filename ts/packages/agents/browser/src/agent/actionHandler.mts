@@ -1168,6 +1168,9 @@ async function executeBrowserAction(
                     return openSearchResult(context, action);
                 case "changeSearchProvider":
                     return changeSearchProvider(context, action);
+                case "lookupAndAnswerInternet":
+                    throw new Error("Not impelemented!");
+                    //return lookupAndAnswerInternet(context, action);
                 default:
                     // Should never happen.
                     throw new Error(
