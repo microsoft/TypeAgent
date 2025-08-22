@@ -41,3 +41,34 @@ export function createAzureSearchIndexClient<T extends object>(
         createDefaultCredential(),
     );
 }
+
+export function createSearchField(
+    name: string,
+    type: azSearch.SearchFieldDataType,
+    wordBreak: boolean = true,
+): azSearch.SearchField {
+    const field: azSearch.SearchField = {
+        name,
+        type,
+        searchable: true,
+        filterable: true,
+    };
+    if (wordBreak !== undefined && !wordBreak) {
+        field.analyzerName = "keyword";
+    }
+    return field;
+}
+
+export function createVectorField(
+    name: string,
+    dimensions: number,
+): azSearch.SimpleField {
+    return {
+        name,
+        type: "Collection(Edm.Single)",
+        searchable: true,
+        filterable: false,
+        stored: true,
+        vectorSearchDimensions: dimensions,
+    };
+}

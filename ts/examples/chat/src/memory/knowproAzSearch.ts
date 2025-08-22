@@ -23,7 +23,8 @@ import { batchSemanticRefsByMessage } from "./knowproCommon.js";
 import { split } from "knowledge-processor";
 
 type AzureMemoryContext = {
-    memory?: ms.azSearch.AzSemanticRefIndex | undefined;
+    semanticRefIndex?: ms.azSearch.AzSemanticRefIndex | undefined;
+    relatedTermIndex?: ms.azSearch.AzVectorIndex | undefined;
     printer: KnowProPrinter;
 };
 
@@ -35,7 +36,8 @@ export async function createKnowproAzureCommands(
         printer: kpContext.printer,
     };
     commands.azSearch = azSearch;
-    commands.azEnsureIndex = ensureIndex;
+    commands.azEnsureSemanticIndex = ensureSemanticRefIndex;
+    commands.azEnsureRelatedIndex = ensureVectorIndex;
     commands.azIngest = ingestKnowledge;
 
     function azSearchDef(): CommandMetadata {
@@ -61,7 +63,7 @@ export async function createKnowproAzureCommands(
             args,
             commandDef,
         );
-        const memory = ensureMemory();
+        const semanticRefIndex = getSemanticRefIndex();
         let query: string = namedArgs.query;
         let queryTerms: string | kp.SearchTermGroup;
         if (query) {
@@ -79,7 +81,10 @@ export async function createKnowproAzureCommands(
             );
         }
         const whenFilter = whenFilterFromNamedArgs(namedArgs);
-        const [azQuery, results] = await memory.search(queryTerms, whenFilter);
+        const [azQuery, results] = await semanticRefIndex.search(
+            queryTerms,
+            whenFilter,
+        );
         context.printer.writeLineInColor(chalk.cyan, azQuery.searchQuery);
         if (azQuery.filter) {
             context.printer.writeLineInColor(
@@ -108,7 +113,7 @@ export async function createKnowproAzureCommands(
             context.printer.writeError("No loaded conversation");
             return;
         }
-        const memory = ensureMemory();
+        const memory = getSemanticRefIndex();
         if (
             !(await askYesNo(
                 io,
@@ -133,32 +138,62 @@ export async function createKnowproAzureCommands(
 
     function ensureIndexDef(): CommandMetadata {
         return {
-            description: "Ensure memory index",
+            description:
+                "Ensure semantic ref index is created on Azure. Ingestion is separate",
         };
     }
-    commands.azEnsureIndex.metadata = ensureIndexDef();
-    async function ensureIndex(args: string[]) {
-        const memory = await ensureMemory();
-        await memory.ensure();
+    commands.azEnsureSemanticIndex.metadata = ensureIndexDef();
+    async function ensureSemanticRefIndex(args: string[]) {
+        const searchIndex = getSemanticRefIndex();
+        const success = await searchIndex.ensureExists();
+        if (!success) {
+            context.printer.writeError("searchIndex.ensureExists failed");
+        }
     }
 
-    function ensureMemory(
+    function ensureVectorIndexDef(): CommandMetadata {
+        return {
+            description:
+                "Ensure related term index created on Azure. Ingestion is separate",
+        };
+    }
+    commands.azEnsureRelatedIndex.metadata = ensureVectorIndexDef();
+    async function ensureVectorIndex(args: string[]) {
+        const relatedTermsIndex = getRelatedTermsIndex();
+        const success = await relatedTermsIndex.ensureExists();
+        if (!success) {
+            context.printer.writeError("vectorIndex.ensureExists failed");
+        }
+    }
+
+    function getSemanticRefIndex(
         indexName = "semantic-ref-index",
     ): ms.azSearch.AzSemanticRefIndex {
-        if (!context.memory) {
-            context.memory = new ms.azSearch.AzSemanticRefIndex(
+        if (!context.semanticRefIndex) {
+            context.semanticRefIndex = new ms.azSearch.AzSemanticRefIndex(
                 ms.azSearch.createAzSearchSettings(indexName),
             );
         }
-        return context.memory;
+        return context.semanticRefIndex;
+    }
+
+    function getRelatedTermsIndex(
+        indexName = "related-terms-index",
+    ): ms.azSearch.AzVectorIndex {
+        if (!context.relatedTermIndex) {
+            context.relatedTermIndex = new ms.azSearch.AzVectorIndex(
+                ms.azSearch.createAzVectorSearchSettings(indexName, 1536),
+            );
+        }
+        return context.relatedTermIndex;
     }
 
     async function addSemanticRefs(
         semanticRefs: kp.SemanticRef[],
         timestamp?: string,
     ) {
-        const memory = ensureMemory();
-        const indexingResults = await memory.addSemanticRefs(
+        const searchIndex = getSemanticRefIndex();
+        const indexingResults = await searchIndex.addSemanticRefs(
             semanticRefs,
             timestamp,
         );

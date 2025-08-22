@@ -5,7 +5,7 @@ import * as azSearch from "@azure/search-documents";
 import * as kp from "knowpro";
 import { conversation as kpLib } from "knowledge-processor";
 import { AzSearchIndex } from "./azSearchIndex.js";
-import { AzSearchSettings } from "./azSearchCommon.js";
+import { AzSearchSettings, createSearchField } from "./azSearchCommon.js";
 import { AzSearchCompilerSettings, AzSearchQueryCompiler } from "./azQuery.js";
 
 export interface SemanticRefHeader {
@@ -50,7 +50,7 @@ export class AzSemanticRefIndex extends AzSearchIndex<SemanticRefDoc> {
     public queryCompiler: AzSearchQueryCompiler;
 
     constructor(settings: AzSearchSettings) {
-        super(settings);
+        super(settings, createKnowledgeSchema(settings.indexName));
         this.queryCompiler = new AzSearchQueryCompiler(createCompilerOptions());
     }
 
@@ -84,10 +84,6 @@ export class AzSemanticRefIndex extends AzSearchIndex<SemanticRefDoc> {
             results.push(result);
         }
         return [{ searchQuery, filter }, results];
-    }
-
-    public async ensure(): Promise<boolean> {
-        return this.ensureIndex(createKnowledgeSchema(this.settings.indexName));
     }
 
     public async addSemanticRefs(
@@ -225,21 +221,21 @@ function standardFields(): azSearch.SearchField[] {
             fields: locationFields(),
         },
         { name: "end", type: "Edm.ComplexType", fields: locationFields() },
-        createKField("kType", "Edm.String"),
-        createKField("timestamp", "Edm.String"),
+        createSearchField("kType", "Edm.String"),
+        createSearchField("timestamp", "Edm.String"),
     ];
 }
 
 function entityFields(): azSearch.SearchField[] {
     return [
-        createKField("name", "Edm.String"),
-        createKField("type", "Collection(Edm.String)"),
+        createSearchField("name", "Edm.String"),
+        createSearchField("type", "Collection(Edm.String)"),
         {
             name: "facets",
             type: "Collection(Edm.ComplexType)",
             fields: [
-                createKField("name", "Edm.String"),
-                createKField("value", "Edm.String"),
+                createSearchField("name", "Edm.String"),
+                createSearchField("value", "Edm.String"),
             ],
         },
     ];
@@ -247,15 +243,15 @@ function entityFields(): azSearch.SearchField[] {
 
 function actionFields(): azSearch.SearchField[] {
     return [
-        createKField("verbs", "Collection(Edm.String)"),
-        createKField("subject", "Edm.String"),
-        createKField("object", "Edm.String"),
-        createKField("indirectObject", "Edm.String"),
+        createSearchField("verbs", "Collection(Edm.String)"),
+        createSearchField("subject", "Edm.String"),
+        createSearchField("object", "Edm.String"),
+        createSearchField("indirectObject", "Edm.String"),
     ];
 }
 
 function topicFields(): azSearch.SearchField[] {
-    return [createKField("topic", "Edm.String", true)];
+    return [createSearchField("topic", "Edm.String", true)];
 }
 
 function locationFields(): azSearch.SearchField[] {
@@ -273,23 +269,6 @@ function locationFields(): azSearch.SearchField[] {
             filterable: true,
         },
     ];
-}
-
-function createKField(
-    name: string,
-    type: azSearch.SearchFieldDataType,
-    wordBreak: boolean = true,
-): azSearch.SearchField {
-    const field: azSearch.SearchField = {
-        name,
-        type,
-        searchable: true,
-        filterable: true,
-    };
-    if (!wordBreak) {
-        field.analyzerName = "keyword";
-    }
-    return field;
 }
 
 function createCompilerOptions(): AzSearchCompilerSettings {

@@ -11,13 +11,16 @@ import {
 export class AzSearchIndex<T extends object> {
     public searchClient: azSearch.SearchClient<T>;
 
-    constructor(public settings: AzSearchSettings) {
+    constructor(
+        public settings: AzSearchSettings,
+        public schema: azSearch.SearchIndex,
+    ) {
         this.searchClient = createAzureSearchClient(settings);
     }
 
-    public async ensureIndex(schema: azSearch.SearchIndex): Promise<boolean> {
+    public async ensureExists(): Promise<boolean> {
         const indexClient = createAzureSearchIndexClient(this.settings);
-        const index = await indexClient.createOrUpdateIndex(schema);
+        const index = await indexClient.createOrUpdateIndex(this.schema);
         return index !== undefined;
     }
 }
