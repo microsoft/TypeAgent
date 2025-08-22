@@ -417,18 +417,12 @@ async function playTrackCollection(
     console.log(chalk.cyanBright("Playing..."));
     await printTrackNames(trackCollection, clientContext);
     const actionResult = await htmlTrackNames(trackCollection, "Playing");
-    // add track collection to userData
-    const userData = clientContext.userData;
     await play(
         clientContext.service,
         deviceId,
         uris,
         trackCollection.getContext(),
     );
-    if (userData) {
-        addFullTracks(userData.data, tracks);
-        await saveUserData(userData.instanceStorage, userData.data);
-    }
     return actionResult;
 }
 
@@ -464,11 +458,16 @@ async function playTrackAction(
         action.parameters.artists,
         action.entities?.trackName,
         action.entities?.artists,
-        1,
+        3,
     );
 
     if (equivalentNames(action.parameters.trackName, tracks[0].name)) {
         tracks.splice(1);
+        const userData = clientContext.userData;
+        if (userData) {
+            addFullTracks(userData.data, tracks);
+            await saveUserData(userData.instanceStorage, userData.data);
+        }
     }
     const collection = new TrackCollection(tracks);
     return playTrackCollection(collection, clientContext);
