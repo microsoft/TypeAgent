@@ -10,6 +10,7 @@ import {
     CommandMetadata,
     InteractiveIo,
     NamedArgs,
+    parseNamedArguments,
     ProgressBar,
 } from "interactive-app";
 import { KnowproContext } from "./knowproMemory.js";
@@ -21,9 +22,11 @@ import { parseFreeAndNamedArguments } from "../common.js";
 import { createSearchGroup, dateRangeFromNamedArgs } from "./knowproCommon.js";
 import { batchSemanticRefsByMessage } from "./knowproCommon.js";
 import { split } from "knowledge-processor";
+import { collections, generateEmbedding } from "typeagent";
 
 type AzureMemoryContext = {
-    memory?: ms.azSearch.AzSemanticRefIndex | undefined;
+    semanticRefIndex?: ms.azSearch.AzSemanticRefIndex | undefined;
+    termIndex?: ms.azSearch.AzTermsVectorIndex | undefined;
     printer: KnowProPrinter;
 };
 
@@ -35,8 +38,11 @@ export async function createKnowproAzureCommands(
         printer: kpContext.printer,
     };
     commands.azSearch = azSearch;
-    commands.azEnsureIndex = ensureIndex;
-    commands.azIngest = ingestKnowledge;
+    commands.azTerms = azTerms;
+    commands.azSemanticIndexEnsure = ensureSemanticRefIndex;
+    commands.azSemanticIndexIngest = ingestKnowledge;
+    commands.azTermIndexEnsure = ensureTermIndex;
+    commands.azTermIndexIngest = ingestTermEmbeddings;
 
     function azSearchDef(): CommandMetadata {
         return {
@@ -61,7 +67,7 @@ export async function createKnowproAzureCommands(
             args,
             commandDef,
         );
-        const memory = ensureMemory();
+        const semanticRefIndex = getSemanticRefIndex();
         let query: string = namedArgs.query;
         let queryTerms: string | kp.SearchTermGroup;
         if (query) {
@@ -79,18 +85,14 @@ export async function createKnowproAzureCommands(
             );
         }
         const whenFilter = whenFilterFromNamedArgs(namedArgs);
-        const [azQuery, results] = await memory.search(queryTerms, whenFilter);
-        context.printer.writeLineInColor(chalk.cyan, azQuery.searchQuery);
-        if (azQuery.filter) {
-            context.printer.writeLineInColor(
-                chalk.cyan,
-                `$filter: ${azQuery.filter}`,
-            );
-        }
+        const [azQuery, results] = await semanticRefIndex.search(
+            queryTerms,
+            whenFilter,
+        );
+        printQuery(azQuery);
         context.printer.writeLine(`${results.length} matches`);
-        for (const result of results) {
-            context.printer.writeJson(result);
-        }
+        context.printer.writeJsonList(results, true, true);
+        printQuery(azQuery);
     }
 
     function ingestKnowledgeDef(): CommandMetadata {
@@ -101,20 +103,14 @@ export async function createKnowproAzureCommands(
             },
         };
     }
-    commands.azIngest.metadata = ingestKnowledgeDef();
+    commands.azSemanticIndexIngest.metadata = ingestKnowledgeDef();
     async function ingestKnowledge(args: string[], io: InteractiveIo) {
-        const conversation = kpContext.conversation;
+        const semanticRefIndex = getSemanticRefIndex();
+        const conversation = await getConversationForIngest(
+            io,
+            semanticRefIndex,
+        );
         if (!conversation) {
-            context.printer.writeError("No loaded conversation");
-            return;
-        }
-        const memory = ensureMemory();
-        if (
-            !(await askYesNo(
-                io,
-                `Are you sure you want to ingest knowledge from ${conversation.nameTag} into ${memory.settings.indexName}?`,
-            ))
-        ) {
             return;
         }
         //const namedArgs = parseNamedArguments(args, ingestKnowledgeDef());
@@ -131,37 +127,162 @@ export async function createKnowproAzureCommands(
         progress.complete();
     }
 
-    function ensureIndexDef(): CommandMetadata {
+    function semanticIndexEnsureDef(): CommandMetadata {
         return {
-            description: "Ensure memory index",
+            description:
+                "Ensure semantic ref index is created on Azure. Ingestion is separate",
         };
     }
-    commands.azEnsureIndex.metadata = ensureIndexDef();
-    async function ensureIndex(args: string[]) {
-        const memory = await ensureMemory();
-        await memory.ensure();
+    commands.azSemanticIndexEnsure.metadata = semanticIndexEnsureDef();
+    async function ensureSemanticRefIndex(args: string[]) {
+        const searchIndex = getSemanticRefIndex();
+        const success = await searchIndex.ensureExists();
+        if (success) {
+            context.printer.writeLine("Success");
+        } else {
+            context.printer.writeError("searchIndex.ensureExists failed");
+        }
     }
 
-    function ensureMemory(
+    // -----------------
+    //
+    // Term embeddings
+    //
+    //------------------
+
+    function azTermsDef(): CommandMetadata {
+        return {
+            description: "Search Azure term-index for nearest related terms",
+            options: {
+                term: arg("Plain text term"),
+                maxMatches: argNum("Max number of matches", 25),
+            },
+        };
+    }
+    commands.azTerms.metadata = azTermsDef();
+    async function azTerms(args: string[]) {
+        const namedArgs = parseNamedArguments(args, azTermsDef());
+        const termIndex = getTermsIndex();
+        let term: string = namedArgs.term;
+        const embedding = await generateEmbedding(
+            kpContext.similarityModel,
+            term,
+        );
+        const results = await termIndex.getNearest(
+            embedding,
+            namedArgs.maxMatches,
+        );
+        context.printer.writeLine(`${results.length} matches`);
+        context.printer.writeJsonList(results, false, true);
+    }
+
+    function ingestTermEmbeddingsDef(): CommandMetadata {
+        return {
+            description:
+                "Ingest related terms from currently loaded conversation",
+            options: {
+                batchSize: argNum("Batch size", 16),
+            },
+        };
+    }
+    commands.azTermIndexIngest.metadata = ingestTermEmbeddingsDef();
+    async function ingestTermEmbeddings(args: string[], io: InteractiveIo) {
+        const azTermsIndex = getTermsIndex();
+        const conversation = await getConversationForIngest(io, azTermsIndex);
+        if (!conversation) {
+            return;
+        }
+        const relatedTermsIndex =
+            conversation.secondaryIndexes?.termToRelatedTermsIndex?.fuzzyIndex;
+        if (
+            !relatedTermsIndex ||
+            !(relatedTermsIndex instanceof kp.TermEmbeddingIndex)
+        ) {
+            context.printer.writeError("No terms embedding index");
+            return;
+        }
+        const namedArgs = parseNamedArguments(args, ingestTermEmbeddingsDef());
+        const batchSize: number = namedArgs.batchSize;
+        let termData = relatedTermsIndex.serialize();
+        const progress = new ProgressBar(
+            context.printer,
+            Math.ceil(termData.textItems.length / batchSize),
+        );
+        for (const textBatch of collections.slices(
+            termData.textItems,
+            batchSize,
+        )) {
+            let termBatch: ms.azSearch.TermDoc[] = [];
+            for (let i = 0; i < textBatch.value.length; ++i) {
+                termBatch.push({
+                    termId: (i + textBatch.startAt).toString(),
+                    term: textBatch.value[i],
+                    embedding: ms.azSearch.embeddingToVector(
+                        termData.embeddings[i + textBatch.startAt],
+                    ),
+                });
+            }
+            const indexingResults = await azTermsIndex.addTerms(termBatch);
+            printIndexResults(indexingResults);
+            progress.advance();
+        }
+        progress.complete();
+    }
+
+    function termIndexEnsureDef(): CommandMetadata {
+        return {
+            description:
+                "Ensure related term index created on Azure. Ingestion is separate",
+        };
+    }
+    commands.azTermIndexEnsure.metadata = termIndexEnsureDef();
+    async function ensureTermIndex(args: string[]) {
+        const relatedTermsIndex = getTermsIndex();
+        const success = await relatedTermsIndex.ensureExists();
+        if (success) {
+            context.printer.writeLine("Success");
+        } else {
+            context.printer.writeError("searchIndex.ensureExists failed");
+        }
+    }
+
+    // -----------------------
+
+    function getSemanticRefIndex(
         indexName = "semantic-ref-index",
     ): ms.azSearch.AzSemanticRefIndex {
-        if (!context.memory) {
-            context.memory = new ms.azSearch.AzSemanticRefIndex(
+        if (!context.semanticRefIndex) {
+            context.semanticRefIndex = new ms.azSearch.AzSemanticRefIndex(
                 ms.azSearch.createAzSearchSettings(indexName),
             );
         }
-        return context.memory;
+        return context.semanticRefIndex;
+    }
+
+    function getTermsIndex(
+        indexName = "terms-index",
+    ): ms.azSearch.AzTermsVectorIndex {
+        if (!context.termIndex) {
+            context.termIndex = new ms.azSearch.AzTermsVectorIndex(
+                ms.azSearch.createAzVectorSearchSettings(indexName, 1536),
+            );
+        }
+        return context.termIndex;
     }
 
     async function addSemanticRefs(
         semanticRefs: kp.SemanticRef[],
         timestamp?: string,
     ) {
-        const memory = ensureMemory();
-        const indexingResults = await memory.addSemanticRefs(
+        const searchIndex = getSemanticRefIndex();
+        const indexingResults = await searchIndex.addSemanticRefs(
             semanticRefs,
             timestamp,
         );
+        printIndexResults(indexingResults);
+    }
+
+    function printIndexResults(indexingResults: any[]) {
         for (const result of indexingResults) {
             switch (result.statusCode) {
                 default:
@@ -177,7 +298,6 @@ export async function createKnowproAzureCommands(
             }
         }
     }
-
     function whenFilterFromNamedArgs(
         namedArgs: NamedArgs,
     ): kp.WhenFilter | undefined {
@@ -216,6 +336,38 @@ export async function createKnowproAzureCommands(
             textRange.end = { messageOrdinal: Number.parseInt(rangeValue[1]) };
         }
         return textRange;
+    }
+
+    async function getConversationForIngest(
+        io: InteractiveIo,
+        searchIndex:
+            | ms.azSearch.AzSemanticRefIndex
+            | ms.azSearch.AzTermsVectorIndex,
+    ): Promise<kp.IConversation | undefined> {
+        const conversation = kpContext.conversation;
+        if (!conversation) {
+            context.printer.writeError("No loaded conversation");
+            return undefined;
+        }
+        if (
+            !(await askYesNo(
+                io,
+                `Are you sure you want to ingest term embeddings from ${conversation.nameTag} into ${searchIndex.settings.indexName}?`,
+            ))
+        ) {
+            return undefined;
+        }
+        return conversation;
+    }
+
+    function printQuery(azQuery: ms.azSearch.AzSemanticRefQuery): void {
+        context.printer.writeLineInColor(chalk.cyan, azQuery.searchQuery);
+        if (azQuery.filter) {
+            context.printer.writeLineInColor(
+                chalk.cyan,
+                `$filter: ${azQuery.filter}`,
+            );
+        }
     }
 
     return commands;
