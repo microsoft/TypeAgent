@@ -97,6 +97,7 @@ export class AzVectorIndex<T extends object> extends AzSearchIndex<T> {
 }
 
 export function createVectorQuery<T extends object>(
+    fields: azSearch.SearchFieldArray<T>,
     embedding: NormalizedEmbedding,
     maxMatches?: number,
 ) {
@@ -104,6 +105,7 @@ export function createVectorQuery<T extends object>(
         kind: "vector",
         vector: embeddingToVector(embedding),
         exhaustive: true,
+        fields,
     };
     if (maxMatches !== undefined && maxMatches > 0) {
         vectorQuery.kNearestNeighborsCount = maxMatches;

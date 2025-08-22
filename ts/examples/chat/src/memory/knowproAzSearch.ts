@@ -22,7 +22,7 @@ import { parseFreeAndNamedArguments } from "../common.js";
 import { createSearchGroup, dateRangeFromNamedArgs } from "./knowproCommon.js";
 import { batchSemanticRefsByMessage } from "./knowproCommon.js";
 import { split } from "knowledge-processor";
-import { collections } from "typeagent";
+import { collections, generateEmbedding } from "typeagent";
 
 type AzureMemoryContext = {
     semanticRefIndex?: ms.azSearch.AzSemanticRefIndex | undefined;
@@ -38,6 +38,7 @@ export async function createKnowproAzureCommands(
         printer: kpContext.printer,
     };
     commands.azSearch = azSearch;
+    commands.azTerms = azTerms;
     commands.azSemanticIndexEnsure = ensureSemanticRefIndex;
     commands.azSemanticIndexIngest = ingestKnowledge;
     commands.azTermIndexEnsure = ensureTermIndex;
@@ -150,6 +151,37 @@ export async function createKnowproAzureCommands(
         }
     }
 
+    // -----------------
+    //
+    // Term embeddings
+    //
+    //------------------
+
+    function azTermsDef(): CommandMetadata {
+        return {
+            description: "Search Azure term-index for nearest related terms",
+            options: {
+                term: arg("Plain text term"),
+                maxMatches: argNum("Max number of matches", 25),
+            },
+        };
+    }
+    commands.azTerms.metadata = azTermsDef();
+    async function azTerms(args: string[]) {
+        const namedArgs = parseNamedArguments(args, azTermsDef());
+        const termIndex = getTermsIndex();
+        let term: string = namedArgs.term;
+        const embedding = await generateEmbedding(
+            kpContext.similarityModel,
+            term,
+        );
+        const matches = await termIndex.getNearest(
+            embedding,
+            namedArgs.maxMatches,
+        );
+        context.printer.writeList(matches, { type: "ol" });
+    }
+
     function ingestTermEmbeddingsDef(): CommandMetadata {
         return {
             description:
@@ -219,6 +251,8 @@ export async function createKnowproAzureCommands(
             context.printer.writeError("searchIndex.ensureExists failed");
         }
     }
+
+    // -----------------------
 
     function getSemanticRefIndex(
         indexName = "semantic-ref-index",

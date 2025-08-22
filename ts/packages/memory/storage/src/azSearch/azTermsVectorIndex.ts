@@ -34,8 +34,15 @@ export class AzTermsVectorIndex extends AzVectorIndex<TermDoc> {
         maxMatches?: number,
         minScore?: number,
     ): Promise<string[]> {
-        const vectorQuery = createVectorQuery<TermDoc>(embedding, maxMatches);
-        const searchResults = await this.searchVector(vectorQuery, ["term"]);
+        const vectorQuery = createVectorQuery<TermDoc>(
+            ["embedding"],
+            embedding,
+            maxMatches,
+        );
+        const searchResults = await this.searchVector(vectorQuery, [
+            "termId",
+            "term",
+        ]);
         let results: string[] = [];
         for await (const result of searchResults.results) {
             results.push(result.document.term);
