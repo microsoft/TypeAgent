@@ -9,6 +9,13 @@ import type {
 } from "browser-typeagent/agent/types";
 import { createContentScriptRpcClient } from "browser-typeagent/contentScriptRpc/client";
 import { ipcMain } from "electron";
+import { openai } from "aiclient";
+import {
+    indexesOfNearest,
+    NormalizedEmbedding,
+    SimilarityType,
+    generateEmbedding,
+} from "typeagent";
 
 export function createInlineBrowserControl(
     shellWindow: ShellWindow,
@@ -38,10 +45,14 @@ export function createInlineBrowserControl(
     );
     return {
         async openWebPage(url: string, options?: { newTab?: boolean }) {
-            // Always use multi-tab approach
-            shellWindow.createBrowserTab(new URL(url), {
-                background: options?.newTab === true ? true : false,
-            });
+            const activeTab = shellWindow.getActiveBrowserView();
+            if (options?.newTab || !activeTab) {
+                shellWindow.createBrowserTab(new URL(url), {
+                    background: options?.newTab === true ? false : true,
+                });
+            } else {
+                activeTab.webContentsView.webContents.loadURL(url);
+            }
             return Promise.resolve();
         },
         async closeWebPage() {
@@ -56,6 +67,82 @@ export function createInlineBrowserControl(
             if (!shellWindow.closeBrowserTab(activeBrowserView.id)) {
                 throw new Error("Failed to close active browser tab.");
             }
+        },
+        async switchTabs(
+            tabDescription: string,
+            tabIndex?: number,
+        ): Promise<boolean> {
+            const tabs = shellWindow.getAllBrowserTabs();
+
+            if (tabs.length <= 1) {
+                throw new Error("No other tabs to switch to!");
+            }
+
+            // if an index is specified prefer it over the description
+            if (tabIndex) {
+                if (tabIndex - 1 < tabs.length && tabIndex - 1 >= 0) {
+                    const targetTab = tabs[tabIndex - 1];
+                    shellWindow.switchBrowserTab(targetTab.id);
+                    return true;
+                } else {
+                    throw new Error(`There is no tab with index ${tabIndex}.`);
+                }
+            }
+
+            // try to get tab by description
+            const ids: string[] = [];
+            const score_threshold = 0.85;
+            const titleEmbedding: NormalizedEmbedding[] = [];
+            const urlEmbedding: NormalizedEmbedding[] = [];
+            const embeddingModel = openai.createEmbeddingModel();
+            const queryEmbedding = await generateEmbedding(
+                embeddingModel,
+                tabDescription,
+            );
+
+            for (let i = 0; i < tabs.length; i++) {
+                const tab = tabs[i];
+                ids.push(tab.id.toString());
+                titleEmbedding.push(
+                    await generateEmbedding(
+                        embeddingModel,
+                        tab.webContentsView.webContents.getTitle(),
+                    ),
+                );
+                urlEmbedding.push(
+                    await generateEmbedding(
+                        embeddingModel,
+                        tab.webContentsView.webContents.getURL(),
+                    ),
+                );
+            }
+
+            const topNTitle = indexesOfNearest(
+                titleEmbedding,
+                queryEmbedding,
+                1,
+                SimilarityType.Dot,
+            );
+            const topNUrl = indexesOfNearest(
+                urlEmbedding,
+                queryEmbedding,
+                1,
+                SimilarityType.Dot,
+            );
+
+            const idx =
+                topNTitle[0].score > topNUrl[0].score
+                    ? topNTitle[0].item
+                    : topNUrl[0].item;
+            const maxScore = Math.max(topNTitle[0].score, topNUrl[0].score);
+
+            if (maxScore < score_threshold) {
+                throw new Error(
+                    `No matching tabs found for '${tabDescription}'.`,
+                );
+            }
+
+            return await shellWindow.switchBrowserTab(ids[idx]);
         },
         async goForward() {
             if (!shellWindow.browserGoForward()) {

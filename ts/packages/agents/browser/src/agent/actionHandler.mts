@@ -17,6 +17,7 @@ import {
 } from "@typeagent/agent-sdk";
 import {
     createActionResult,
+    createActionResultFromError,
     createActionResultFromHtmlDisplay,
     createActionResultFromMarkdownDisplay,
     createActionResultFromTextDisplay,
@@ -71,6 +72,7 @@ import {
     BrowserActions,
     OpenWebPage,
     OpenSearchResult,
+    SwitchTabs,
 } from "./actionsSchema.mjs";
 import {
     resolveURLWithHistory,
@@ -825,7 +827,9 @@ async function openWebPage(
             context,
         );
     }
-    await browserControl.openWebPage(url);
+    await browserControl.openWebPage(url, {
+        newTab: action.parameters.tab === "new",
+    });
     const result = createActionResult("Web page opened successfully.");
 
     result.activityContext = {
@@ -847,6 +851,33 @@ async function closeWebPage(context: ActionContext<BrowserActionContext>) {
     await browserControl.closeWebPage();
     const result = createActionResult("Web page closed successfully.");
     result.activityContext = null; // clear the activity context.
+    return result;
+}
+
+async function switchTabs(
+    context: ActionContext<BrowserActionContext>,
+    action: TypeAgentAction<SwitchTabs>,
+) {
+    const browserControl = getActionBrowserControl(context);
+
+    displayStatus(
+        `Switching to tab: ${action.parameters.tabDescription}.`,
+        context,
+    );
+    let result: ActionResult | undefined = undefined;
+    if (
+        await browserControl.switchTabs(
+            action.parameters.tabDescription,
+            action.parameters.tabIndex,
+        )
+    ) {
+        result = createActionResult("Switched tabs successfully.");
+    } else {
+        result = createActionResultFromError(
+            `Unable to find a tab corresponding to '${action.parameters.tabDescription}'`,
+        );
+    }
+
     return result;
 }
 
@@ -914,12 +945,9 @@ async function openSearchResult(
 
     displayStatus(`Opening search result: ${selectedResult.title}`, context);
 
-    if (openInNewTab) {
-        // Open in new tab - need to implement this in browser control
-        await browserControl.openWebPage(targetUrl);
-    } else {
-        await browserControl.openWebPage(targetUrl);
-    }
+    await browserControl.openWebPage(targetUrl, {
+        newTab: openInNewTab ? openInNewTab : false,
+    });
 
     return createActionResultFromMarkdownDisplay(
         `Opened search result: [${selectedResult.title}](${targetUrl})`,
@@ -1052,6 +1080,8 @@ async function executeBrowserAction(
                     return openWebPage(context, action);
                 case "closeWebPage":
                     return closeWebPage(context);
+                case "switchTabs":
+                    return switchTabs(context, action);
                 case "getWebsiteStats":
                     return getWebsiteStats(context, action);
                 case "searchWebMemories":
@@ -1573,6 +1603,7 @@ class OpenWebPageHandler implements CommandHandler {
             schemaName: "browser",
             parameters: {
                 site: params.args.site,
+                tab: "current",
             },
         });
         if (result.error) {
