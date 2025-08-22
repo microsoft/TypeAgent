@@ -132,7 +132,8 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             const targetTab = await ensureActiveTab();
             await chrome.tabs.remove(targetTab.id!);
         },
-        switchTabs: async (tabDescription: string): Promise<boolean> => {
+        switchTabs: async (tabDescription: string, tabIndex?: number): Promise<boolean> => {
+            console.log(`Tab switch requested: '${tabDescription}', index: ${tabIndex}`);
 
             // 08.22.2025 - robgruen - This code will not work as is since the imports
             // for the embedding model are supported by the vite compiler since that pulls

@@ -68,7 +68,7 @@ export function createInlineBrowserControl(
                 throw new Error("Failed to close active browser tab.");
             }
         },
-        async switchTabs(tabDescription: string): Promise<boolean> {
+        async switchTabs(tabDescription: string, tabIndex?: number): Promise<boolean> {
 
             const tabs = shellWindow.getAllBrowserTabs();
 
@@ -76,6 +76,18 @@ export function createInlineBrowserControl(
                 throw new Error("No other tabs to switch to!");
             }
 
+            // if an index is specified prefer it over the description
+            if (tabIndex) {
+                if (tabIndex - 1 < tabs.length && tabIndex - 1 >= 0) {
+                    const targetTab = tabs[tabIndex - 1];
+                    shellWindow.switchBrowserTab(targetTab.id);
+                    return true;
+                } else {
+                    throw new Error(`There is no tab with index ${tabIndex}.`);
+                }
+            }
+
+            // try to get tab by description
             const ids: string[] = [];
             const score_threshold = 0.85;
             const titleEmbedding: NormalizedEmbedding[] = [];

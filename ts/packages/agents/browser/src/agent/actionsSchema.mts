@@ -57,6 +57,8 @@ export type SwitchTabs = {
     actionName: "switchTabs";
     parameters: {
         tabDescription: string;
+        // The numerical index referred to by the descripton if applicable.  (i.e. first = 1, second = 2, etc.)
+        tabIndex?: number;
     }
 }
 
