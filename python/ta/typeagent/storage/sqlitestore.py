@@ -28,6 +28,10 @@ CREATE TABLE IF NOT EXISTS Messages (
 );
 """
 
+type ShreddedMessage = tuple[
+    str | None, str | None, str | None, str | None, str | None, str | None
+]
+
 MESSAGES_INDEX_SCHEMA = """
 CREATE INDEX IF NOT EXISTS idx_messages_start_timestamp ON Messages(start_timestamp);
 """
@@ -72,7 +76,7 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
             yield message
             # Potentially add await asyncio.sleep(0) here to yield control
 
-    def _rehydrate_message_from_row(self, row: tuple) -> TMessage:
+    def _rehydrate_message_from_row(self, row: ShreddedMessage) -> TMessage:
         """Rehydrate a message from database row columns."""
         (
             chunks_json,
@@ -83,42 +87,39 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
             extra_json,
         ) = row
 
-        # Parse JSON fields
-        tags = json.loads(tags_json) if tags_json else []
-        metadata = json.loads(metadata_json) if metadata_json else {}
-        extra = json.loads(extra_json) if extra_json else {}
-        text_chunks = json.loads(chunks_json) if chunks_json else []
+        # Parse JSON fields and build a JSON object using camelCase.
+        message_data = json.loads(extra_json) if extra_json else {}
+        message_data["textChunks"] = json.loads(chunks_json) if chunks_json else []
+        message_data["timestamp"] = start_timestamp
+        message_data["tags"] = json.loads(tags_json) if tags_json else []
+        message_data["metadata"] = json.loads(metadata_json) if metadata_json else {}
 
-        # Build message object using camelCase (JSON format)
-        # The serialization.deserialize_object will convert to snake_case Python attributes
-        message_data = {
-            "textChunks": text_chunks,
-            "tags": tags,
-            "timestamp": start_timestamp,
-            "metadata": metadata,
-            **extra,  # Include any additional fields from extra JSON
-        }
-
+        # The serialization.deserialize_object will convert to snake_case Python attributes.
         return serialization.deserialize_object(self.message_type, message_data)
 
-    def _shred_message_to_columns(self, item: TMessage) -> tuple:
+    def _shred_message_to_columns(self, item: TMessage) -> ShreddedMessage:
         """Shred a message object into database columns."""
         # Serialize the message to JSON first (this uses camelCase)
-        json_obj = serialization.serialize_object(item)
+        message_data = serialization.serialize_object(item)
 
         # Extract shredded fields (JSON uses camelCase)
-        chunks = json.dumps(json_obj.get("textChunks", []))
+        chunks_json = json.dumps(message_data.pop("textChunks", []))
         chunk_uri = None  # For now, we're not using chunk URIs
-        start_timestamp = json_obj.get("timestamp")
-        tags = json.dumps(json_obj.get("tags", []))
-        metadata = json.dumps(json_obj.get("metadata", {}))
+        start_timestamp = message_data.pop("timestamp", None)
+        tags_json = json.dumps(message_data.pop("tags", []))
+        metadata_json = json.dumps(message_data.pop("metadata", {}))
 
-        # Put remaining fields in extra JSON
-        excluded_keys = {"textChunks", "timestamp", "tags", "metadata"}
-        extra_fields = {k: v for k, v in json_obj.items() if k not in excluded_keys}
-        extra = json.dumps(extra_fields) if extra_fields else None
+        # What's left in message_data becomes 'extra'.
+        extra_json = json.dumps(message_data) if message_data else None
 
-        return chunks, chunk_uri, start_timestamp, tags, metadata, extra
+        return (
+            chunks_json,
+            chunk_uri,
+            start_timestamp,
+            tags_json,
+            metadata_json,
+            extra_json,
+        )
 
     async def get_item(self, arg: int) -> TMessage:
         if not isinstance(arg, int):
@@ -158,9 +159,14 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
 
     async def append(self, item: TMessage) -> None:
         cursor = self.db.cursor()
-        chunks, chunk_uri, start_timestamp, tags, metadata, extra = (
-            self._shred_message_to_columns(item)
-        )
+        (
+            chunks_json,
+            chunk_uri,
+            start_timestamp,
+            tags_json,
+            metadata_json,
+            extra_json,
+        ) = self._shred_message_to_columns(item)
         # Use the current size as the ID to maintain 0-based indexing like the old implementation
         msg_id = await self.size()
         cursor.execute(
@@ -168,7 +174,15 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
             INSERT INTO Messages (msg_id, chunks, chunk_uri, start_timestamp, tags, metadata, extra)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-            (msg_id, chunks, chunk_uri, start_timestamp, tags, metadata, extra),
+            (
+                msg_id,
+                chunks_json,
+                chunk_uri,
+                start_timestamp,
+                tags_json,
+                metadata_json,
+                extra_json,
+            ),
         )
         self.db.commit()
 
@@ -176,15 +190,28 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
         cursor = self.db.cursor()
         current_size = await self.size()
         for msg_id, item in enumerate(items, current_size):
-            chunks, chunk_uri, start_timestamp, tags, metadata, extra = (
-                self._shred_message_to_columns(item)
-            )
+            (
+                chunks_json,
+                chunk_uri,
+                start_timestamp,
+                tags_json,
+                metadata_json,
+                extra_json,
+            ) = self._shred_message_to_columns(item)
             cursor.execute(
                 """
                 INSERT INTO Messages (msg_id, chunks, chunk_uri, start_timestamp, tags, metadata, extra)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-                (msg_id, chunks, chunk_uri, start_timestamp, tags, metadata, extra),
+                (
+                    msg_id,
+                    chunks_json,
+                    chunk_uri,
+                    start_timestamp,
+                    tags_json,
+                    metadata_json,
+                    extra_json,
+                ),
             )
         self.db.commit()
 
