@@ -161,4 +161,4 @@ class SearchQuery:
         Doc(
             "One expression for each search required by user request. Each SearchExpr runs independently, so make them standalone by resolving references like 'it', 'that', 'them' etc."
         ),
-    ]
+    ] = CamelCaseField()
