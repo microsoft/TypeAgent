@@ -38,10 +38,14 @@ CREATE INDEX IF NOT EXISTS idx_messages_start_timestamp ON Messages(start_timest
 
 SEMANTIC_REFS_SCHEMA = """
 CREATE TABLE IF NOT EXISTS SemanticRefs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    srdata TEXT NOT NULL
+    semref_id INTEGER PRIMARY KEY,
+    range_json JSON NOT NULL,          -- JSON of the TextRange object
+    knowledge_type TEXT NOT NULL,      -- Required to distinguish JSON types (entity, topic, etc.)
+    knowledge_json JSON NOT NULL       -- JSON of the Knowledge object
 );
 """
+
+type ShreddedSemanticRef = tuple[int, str, str, str]
 
 
 class SqliteMessageCollection[TMessage: interfaces.IMessage](
@@ -97,10 +101,10 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
         # The serialization.deserialize_object will convert to snake_case Python attributes.
         return serialization.deserialize_object(self.message_type, message_data)
 
-    def _serialize_message_to_row(self, item: TMessage) -> ShreddedMessage:
+    def _serialize_message_to_row(self, message: TMessage) -> ShreddedMessage:
         """Shred a message object into database columns."""
         # Serialize the message to JSON first (this uses camelCase)
-        message_data = serialization.serialize_object(item)
+        message_data = serialization.serialize_object(message)
 
         # Extract shredded fields (JSON uses camelCase)
         chunks_json = json.dumps(message_data.pop("textChunks", []))
@@ -220,11 +224,36 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
     def __init__(self, db: sqlite3.Connection):
         self.db = db
 
-    def _serialize(self, sem_ref: interfaces.SemanticRef) -> dict[str, typing.Any]:
-        return sem_ref.serialize()  # type: ignore[return-value]
+    def _deserialize_semantic_ref_from_row(
+        self, row: ShreddedSemanticRef
+    ) -> interfaces.SemanticRef:
+        """Deserialize a semantic ref from database row columns."""
+        semref_id, range_json, knowledge_type, knowledge_json = row
 
-    def _deserialize(self, data: dict[str, typing.Any]) -> interfaces.SemanticRef:
-        return interfaces.SemanticRef.deserialize(data)  # type: ignore[arg-type]
+        # Build semantic ref data using camelCase (JSON format)
+        semantic_ref_data = interfaces.SemanticRefData(
+            semanticRefOrdinal=semref_id,
+            range=json.loads(range_json),
+            knowledgeType=knowledge_type,  # type: ignore
+            knowledge=json.loads(knowledge_json),
+        )
+
+        return interfaces.SemanticRef.deserialize(semantic_ref_data)
+
+    def _serialize_semantic_ref_to_row(
+        self, semantic_ref: interfaces.SemanticRef
+    ) -> ShreddedSemanticRef:
+        """Serialize a semantic ref object into database columns."""
+        # Serialize the semantic ref to JSON first (this uses camelCase)
+        semantic_ref_data = semantic_ref.serialize()
+
+        # Extract shredded fields (JSON uses camelCase)
+        semref_id = semantic_ref_data["semanticRefOrdinal"]
+        range_json = json.dumps(semantic_ref_data["range"])
+        knowledge_type = semantic_ref_data["knowledgeType"]
+        knowledge_json = json.dumps(semantic_ref_data["knowledge"])
+
+        return (semref_id, range_json, knowledge_type, knowledge_json)
 
     @property
     def is_persistent(self) -> bool:
@@ -237,20 +266,29 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
 
     async def __aiter__(self) -> typing.AsyncIterator[interfaces.SemanticRef]:
         cursor = self.db.cursor()
-        cursor.execute("SELECT srdata FROM SemanticRefs")
+        cursor.execute(
+            """
+            SELECT semref_id, range_json, knowledge_type, knowledge_json 
+            FROM SemanticRefs ORDER BY semref_id
+        """
+        )
         for row in cursor:
-            json_obj = json.loads(row[0])
-            yield self._deserialize(json_obj)
+            yield self._deserialize_semantic_ref_from_row(row)
 
     async def get_item(self, arg: int) -> interfaces.SemanticRef:
         if not isinstance(arg, int):
             raise TypeError(f"Index must be an int, not {type(arg).__name__}")
         cursor = self.db.cursor()
-        cursor.execute("SELECT srdata FROM SemanticRefs WHERE id = ?", (arg,))
+        cursor.execute(
+            """
+            SELECT semref_id, range_json, knowledge_type, knowledge_json 
+            FROM SemanticRefs WHERE semref_id = ?
+        """,
+            (arg,),
+        )
         row = cursor.fetchone()
         if row:
-            json_obj = json.loads(row[0])
-            return self._deserialize(json_obj)
+            return self._deserialize_semantic_ref_from_row(row)
         raise IndexError("SemanticRef not found")
 
     async def get_slice(self, start: int, stop: int) -> list[interfaces.SemanticRef]:
@@ -258,10 +296,15 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
             return []
         cursor = self.db.cursor()
         cursor.execute(
-            "SELECT srdata FROM SemanticRefs WHERE id >= ? AND id < ?",
+            """
+            SELECT semref_id, range_json, knowledge_type, knowledge_json 
+            FROM SemanticRefs WHERE semref_id >= ? AND semref_id < ? 
+            ORDER BY semref_id
+        """,
             (start, stop),
         )
-        return [self._deserialize(json.loads(row[0])) for row in cursor.fetchall()]
+        rows = cursor.fetchall()
+        return [self._deserialize_semantic_ref_from_row(row) for row in rows]
 
     async def get_multiple(self, arg: list[int]) -> list[interfaces.SemanticRef]:
         # TODO: Do we really want to support this?
@@ -273,22 +316,30 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
 
     async def append(self, item: interfaces.SemanticRef) -> None:
         cursor = self.db.cursor()
-        json_obj = self._serialize(item)
-        serialized_message = json.dumps(json_obj)
+        semref_id, range_json, knowledge_type, knowledge_json = (
+            self._serialize_semantic_ref_to_row(item)
+        )
         cursor.execute(
-            "INSERT INTO SemanticRefs (id, srdata) VALUES (?, ?)",
-            (item.semantic_ref_ordinal, serialized_message),
+            """
+            INSERT INTO SemanticRefs (semref_id, range_json, knowledge_type, knowledge_json) 
+            VALUES (?, ?, ?, ?)
+        """,
+            (semref_id, range_json, knowledge_type, knowledge_json),
         )
         self.db.commit()
 
     async def extend(self, items: typing.Iterable[interfaces.SemanticRef]) -> None:
         cursor = self.db.cursor()
         for item in items:
-            json_obj = self._serialize(item)
-            serialized_message = json.dumps(json_obj)
+            semref_id, range_json, knowledge_type, knowledge_json = (
+                self._serialize_semantic_ref_to_row(item)
+            )
             cursor.execute(
-                "INSERT INTO SemanticRefs (id, srdata) VALUES (?, ?)",
-                (item.semantic_ref_ordinal, serialized_message),
+                """
+                INSERT INTO SemanticRefs (semref_id, range_json, knowledge_type, knowledge_json) 
+                VALUES (?, ?, ?, ?)
+            """,
+                (semref_id, range_json, knowledge_type, knowledge_json),
             )
         self.db.commit()
 
