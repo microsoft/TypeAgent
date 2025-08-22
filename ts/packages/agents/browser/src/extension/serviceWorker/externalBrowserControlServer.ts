@@ -15,8 +15,8 @@ import {
 import { showBadgeBusy, showBadgeHealthy } from "./ui";
 import { createContentScriptRpcClient } from "../../common/contentScriptRpc/client.mjs";
 import { ContentScriptRpc } from "../../common/contentScriptRpc/types.mjs";
-import { generateEmbedding, indexesOfNearest, NormalizedEmbedding, SimilarityType } from "typeagent";
-import { openai } from "aiclient";
+//import { generateEmbedding, indexesOfNearest, NormalizedEmbedding, SimilarityType } from "../../../../../typeagent/dist/indexNode";
+//import { openai } from "aiclient";
 
 async function ensureActiveTab() {
     const targetTab = await getActiveTab();
@@ -134,46 +134,49 @@ export function createExternalBrowserServer(channel: RpcChannel) {
         },
         switchTabs: async (tabDescription: string): Promise<boolean> => {
 
-            // TODO: determine which tab the description referrs to
-            const ids: string[] = [];
-            const score_threshold = 0.85;
-            const titleEmbedding: NormalizedEmbedding[] = [];
-            const urlEmbedding: NormalizedEmbedding[] = [];
-            const embeddingModel = openai.createEmbeddingModel();
-            const queryEmbedding = await generateEmbedding(embeddingModel, tabDescription);
+            // 08.22.2025 - robgruen - This code will not work as is since the imports
+            // for the embedding model are supported by the vite compiler since that pulls
+            // in dependencies that aren't supported.  For now we will only support this in 
+            // the inline browser experience.
+            // const ids: string[] = [];
+            // const score_threshold = 0.85;
+            // const titleEmbedding: NormalizedEmbedding[] = [];
+            // const urlEmbedding: NormalizedEmbedding[] = [];
+            //  const embeddingModel = openai.createEmbeddingModel();
+            // const queryEmbedding = await generateEmbedding(embeddingModel, tabDescription);
 
             
-            const tabData: any[] = [];
-            chrome.tabs.query({}, function(tabs) {
-                tabs.forEach((tab) => {
-                    console.log(`Tab ID: ${tab.id}, Title: ${tab.title}, URL: ${tab.url}`);
-                    tabData.push({
-                        id: tab.id,
-                        title: tab.title,
-                        url: tab.url
-                    });
-                });
-            });
+            // const tabData: any[] = [];
+            // chrome.tabs.query({}, function(tabs) {
+            //     tabs.forEach((tab) => {
+            //         console.log(`Tab ID: ${tab.id}, Title: ${tab.title}, URL: ${tab.url}`);
+            //         tabData.push({
+            //             id: tab.id,
+            //             title: tab.title,
+            //             url: tab.url
+            //         });
+            //     });
+            // });
 
-            for (let i = 0; i < tabData.length; i++) {
-                const tab = tabData[i];
-                ids.push(tab.id.toString());
-                titleEmbedding.push(await generateEmbedding(embeddingModel, tab.title));
-                urlEmbedding.push(await generateEmbedding(embeddingModel, tab.url));
-            }
+            // for (let i = 0; i < tabData.length; i++) {
+            //     const tab = tabData[i];
+            //     ids.push(tab.id.toString());
+            //     titleEmbedding.push(await generateEmbedding(embeddingModel, tab.title));
+            //     urlEmbedding.push(await generateEmbedding(embeddingModel, tab.url));
+            // }
 
-            const topNTitle = indexesOfNearest(titleEmbedding, queryEmbedding, 1, SimilarityType.Dot);
-            const topNUrl = indexesOfNearest(urlEmbedding, queryEmbedding, 1, SimilarityType.Dot);
+            // const topNTitle = indexesOfNearest(titleEmbedding, queryEmbedding, 1, SimilarityType.Dot);
+            // const topNUrl = indexesOfNearest(urlEmbedding, queryEmbedding, 1, SimilarityType.Dot);
 
-            const idx = topNTitle[0].score > topNUrl[0].score ? topNTitle[0].item : topNUrl[0].item;
-            const maxScore = Math.max(topNTitle[0].score, topNUrl[0].score);
+            // const idx = topNTitle[0].score > topNUrl[0].score ? topNTitle[0].item : topNUrl[0].item;
+            // const maxScore = Math.max(topNTitle[0].score, topNUrl[0].score);
 
-            if (maxScore < score_threshold) {
-                throw new Error(`No matching tabs found for '${tabDescription}'.`);
-            }
+            // if (maxScore < score_threshold) {
+            //     throw new Error(`No matching tabs found for '${tabDescription}'.`);
+            // }
             
-            await chrome.tabs.update(tabData[idx].id!, { active: true });
-            return true;
+            // await chrome.tabs.update(tabData[idx].id!, { active: true });
+            return false;
         },
         goForward: async () => {
             const targetTab = await ensureActiveTab();
