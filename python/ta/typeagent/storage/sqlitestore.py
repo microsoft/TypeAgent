@@ -17,9 +17,19 @@ from ..knowpro.convthreads import ConversationThreads
 
 MESSAGES_SCHEMA = """
 CREATE TABLE IF NOT EXISTS Messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    msgdata TEXT NOT NULL
+    msg_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    -- Messages can store chunks directly in JSON or reference external storage via URI
+    chunks JSON NULL,             -- JSON array of text chunks, or NULL if using chunk_uri
+    chunk_uri TEXT NULL,          -- URI for external chunk storage, or NULL if using chunks
+    start_timestamp TEXT NULL,    -- ISO format with Z timezone
+    tags JSON NULL,               -- JSON array of tags
+    metadata JSON NULL,           -- Message metadata (source, dest, etc.)
+    extra JSON NULL               -- Extra message fields that were serialized
 );
+"""
+
+MESSAGES_INDEX_SCHEMA = """
+CREATE INDEX IF NOT EXISTS idx_messages_start_timestamp ON Messages(start_timestamp);
 """
 
 SEMANTIC_REFS_SCHEMA = """
@@ -51,21 +61,79 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
 
     async def _async_iterator(self) -> typing.AsyncIterator[TMessage]:
         cursor = self.db.cursor()
-        cursor.execute("SELECT msgdata FROM Messages")
+        cursor.execute(
+            """
+            SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
+            FROM Messages ORDER BY msg_id
+            """
+        )
         for row in cursor:
-            json_data = json.loads(row[0])
-            yield serialization.deserialize_object(self.message_type, json_data)
+            message = self._rehydrate_message_from_row(row)
+            yield message
             # Potentially add await asyncio.sleep(0) here to yield control
+
+    def _rehydrate_message_from_row(self, row: tuple) -> TMessage:
+        """Rehydrate a message from database row columns."""
+        (
+            chunks_json,
+            chunk_uri,
+            start_timestamp,
+            tags_json,
+            metadata_json,
+            extra_json,
+        ) = row
+
+        # Parse JSON fields
+        tags = json.loads(tags_json) if tags_json else []
+        metadata = json.loads(metadata_json) if metadata_json else {}
+        extra = json.loads(extra_json) if extra_json else {}
+        text_chunks = json.loads(chunks_json) if chunks_json else []
+
+        # Build message object using camelCase (JSON format)
+        # The serialization.deserialize_object will convert to snake_case Python attributes
+        message_data = {
+            "textChunks": text_chunks,
+            "tags": tags,
+            "timestamp": start_timestamp,
+            "metadata": metadata,
+            **extra,  # Include any additional fields from extra JSON
+        }
+
+        return serialization.deserialize_object(self.message_type, message_data)
+
+    def _shred_message_to_columns(self, item: TMessage) -> tuple:
+        """Shred a message object into database columns."""
+        # Serialize the message to JSON first (this uses camelCase)
+        json_obj = serialization.serialize_object(item)
+
+        # Extract shredded fields (JSON uses camelCase)
+        chunks = json.dumps(json_obj.get("textChunks", []))
+        chunk_uri = None  # For now, we're not using chunk URIs
+        start_timestamp = json_obj.get("timestamp")
+        tags = json.dumps(json_obj.get("tags", []))
+        metadata = json.dumps(json_obj.get("metadata", {}))
+
+        # Put remaining fields in extra JSON
+        excluded_keys = {"textChunks", "timestamp", "tags", "metadata"}
+        extra_fields = {k: v for k, v in json_obj.items() if k not in excluded_keys}
+        extra = json.dumps(extra_fields) if extra_fields else None
+
+        return chunks, chunk_uri, start_timestamp, tags, metadata, extra
 
     async def get_item(self, arg: int) -> TMessage:
         if not isinstance(arg, int):
             raise TypeError(f"Index must be an int, not {type(arg).__name__}")
         cursor = self.db.cursor()
-        cursor.execute("SELECT msgdata FROM Messages WHERE id = ?", (arg,))
+        cursor.execute(
+            """
+            SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
+            FROM Messages WHERE msg_id = ?
+        """,
+            (arg,),
+        )
         row = cursor.fetchone()
         if row:
-            json_data = json.loads(row[0])
-            return serialization.deserialize_object(self.message_type, json_data)
+            return self._rehydrate_message_from_row(row)
         raise IndexError("Message not found")
 
     async def get_slice(self, start: int, stop: int) -> list[TMessage]:
@@ -73,14 +141,14 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
             return []
         cursor = self.db.cursor()
         cursor.execute(
-            "SELECT msgdata FROM Messages WHERE id >= ? AND id < ?",
+            """
+            SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
+            FROM Messages WHERE msg_id >= ? AND msg_id < ? ORDER BY msg_id
+        """,
             (start, stop),
         )
         rows = cursor.fetchall()
-        return [
-            serialization.deserialize_object(self.message_type, json.loads(row[0]))
-            for row in rows
-        ]
+        return [self._rehydrate_message_from_row(row) for row in rows]
 
     async def get_multiple(self, arg: list[int]) -> list[TMessage]:
         results = []
@@ -90,23 +158,33 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
 
     async def append(self, item: TMessage) -> None:
         cursor = self.db.cursor()
-        json_obj = serialization.serialize_object(item)
-        serialized_message = json.dumps(json_obj)
-        cursor.execute(
-            "INSERT INTO Messages (id, msgdata) VALUES (?, ?)",
-            (await self.size(), serialized_message),
+        chunks, chunk_uri, start_timestamp, tags, metadata, extra = (
+            self._shred_message_to_columns(item)
         )
+        # Use the current size as the ID to maintain 0-based indexing like the old implementation
+        msg_id = await self.size()
+        cursor.execute(
+            """
+            INSERT INTO Messages (msg_id, chunks, chunk_uri, start_timestamp, tags, metadata, extra)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+            (msg_id, chunks, chunk_uri, start_timestamp, tags, metadata, extra),
+        )
+        self.db.commit()
 
     async def extend(self, items: typing.Iterable[TMessage]) -> None:
-        self.db.commit()
         cursor = self.db.cursor()
         current_size = await self.size()
-        for ord, item in enumerate(items, current_size):
-            json_obj = serialization.serialize_object(item)
-            serialized_message = json.dumps(json_obj)
+        for msg_id, item in enumerate(items, current_size):
+            chunks, chunk_uri, start_timestamp, tags, metadata, extra = (
+                self._shred_message_to_columns(item)
+            )
             cursor.execute(
-                "INSERT INTO Messages (id, msgdata) VALUES (?, ?)",
-                (ord, serialized_message),
+                """
+                INSERT INTO Messages (msg_id, chunks, chunk_uri, start_timestamp, tags, metadata, extra)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+                (msg_id, chunks, chunk_uri, start_timestamp, tags, metadata, extra),
             )
         self.db.commit()
 
@@ -240,6 +318,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         if self.db is None:
             self.db = sqlite3.connect(self.db_path)
             self.db.execute(MESSAGES_SCHEMA)
+            self.db.execute(MESSAGES_INDEX_SCHEMA)
             self.db.execute(SEMANTIC_REFS_SCHEMA)
             self.db.commit()
         return self.db
