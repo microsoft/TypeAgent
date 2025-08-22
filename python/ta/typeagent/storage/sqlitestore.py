@@ -72,11 +72,11 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
             """
         )
         for row in cursor:
-            message = self._rehydrate_message_from_row(row)
+            message = self._deserialize_message_from_row(row)
             yield message
             # Potentially add await asyncio.sleep(0) here to yield control
 
-    def _rehydrate_message_from_row(self, row: ShreddedMessage) -> TMessage:
+    def _deserialize_message_from_row(self, row: ShreddedMessage) -> TMessage:
         """Rehydrate a message from database row columns."""
         (
             chunks_json,
@@ -97,7 +97,7 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
         # The serialization.deserialize_object will convert to snake_case Python attributes.
         return serialization.deserialize_object(self.message_type, message_data)
 
-    def _shred_message_to_columns(self, item: TMessage) -> ShreddedMessage:
+    def _serialize_message_to_row(self, item: TMessage) -> ShreddedMessage:
         """Shred a message object into database columns."""
         # Serialize the message to JSON first (this uses camelCase)
         message_data = serialization.serialize_object(item)
@@ -134,7 +134,7 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
         )
         row = cursor.fetchone()
         if row:
-            return self._rehydrate_message_from_row(row)
+            return self._deserialize_message_from_row(row)
         raise IndexError("Message not found")
 
     async def get_slice(self, start: int, stop: int) -> list[TMessage]:
@@ -149,7 +149,7 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
             (start, stop),
         )
         rows = cursor.fetchall()
-        return [self._rehydrate_message_from_row(row) for row in rows]
+        return [self._deserialize_message_from_row(row) for row in rows]
 
     async def get_multiple(self, arg: list[int]) -> list[TMessage]:
         results = []
@@ -166,7 +166,7 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
             tags_json,
             metadata_json,
             extra_json,
-        ) = self._shred_message_to_columns(item)
+        ) = self._serialize_message_to_row(item)
         # Use the current size as the ID to maintain 0-based indexing like the old implementation
         msg_id = await self.size()
         cursor.execute(
@@ -197,7 +197,7 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
                 tags_json,
                 metadata_json,
                 extra_json,
-            ) = self._shred_message_to_columns(item)
+            ) = self._serialize_message_to_row(item)
             cursor.execute(
                 """
                 INSERT INTO Messages (msg_id, chunks, chunk_uri, start_timestamp, tags, metadata, extra)
