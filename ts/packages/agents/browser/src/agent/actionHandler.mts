@@ -862,17 +862,6 @@ async function switchTabs(
     let result: ActionResult | undefined = undefined;
     if (await browserControl.switchTabs(action.parameters.tabDescription)) {
         result = createActionResult("Switched tabs successfully.");
-
-        result.activityContext = {
-            activityName: "switchingTabs",
-            description: "Switching to a different tab",
-            state: {
-                tab: action.parameters.tabDescription,
-            },
-            activityEndAction: {
-                actionName: "closeWebPage",
-            },
-        };
     } else {
         result = createActionResultFromError(`Unable to find a tab corresponding to '${action.parameters.tabDescription}'`)
     }
