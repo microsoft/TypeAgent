@@ -36,9 +36,9 @@ export async function createKnowproAzureCommands(
         printer: kpContext.printer,
     };
     commands.azSearch = azSearch;
-    commands.azEnsureSemanticIndex = ensureSemanticRefIndex;
-    commands.azEnsureRelatedIndex = ensureVectorIndex;
-    commands.azIngest = ingestKnowledge;
+    commands.azSemanticIndexEnsure = ensureSemanticRefIndex;
+    commands.azSemanticIndexIngest = ingestKnowledge;
+    commands.azTermIndexEnsure = ensureRelatedTermIndex;
 
     function azSearchDef(): CommandMetadata {
         return {
@@ -98,7 +98,7 @@ export async function createKnowproAzureCommands(
         }
     }
 
-    function ingestKnowledgeDef(): CommandMetadata {
+    function semanticIndexIngestDef(): CommandMetadata {
         return {
             description: "Ingest knowledge from currently loaded conversation",
             options: {
@@ -106,7 +106,7 @@ export async function createKnowproAzureCommands(
             },
         };
     }
-    commands.azIngest.metadata = ingestKnowledgeDef();
+    commands.azSemanticIndexIngest.metadata = semanticIndexIngestDef();
     async function ingestKnowledge(args: string[], io: InteractiveIo) {
         const conversation = kpContext.conversation;
         if (!conversation) {
@@ -136,33 +136,37 @@ export async function createKnowproAzureCommands(
         progress.complete();
     }
 
-    function ensureIndexDef(): CommandMetadata {
+    function semanticIndexEnsureDef(): CommandMetadata {
         return {
             description:
                 "Ensure semantic ref index is created on Azure. Ingestion is separate",
         };
     }
-    commands.azEnsureSemanticIndex.metadata = ensureIndexDef();
+    commands.azSemanticIndexEnsure.metadata = semanticIndexEnsureDef();
     async function ensureSemanticRefIndex(args: string[]) {
         const searchIndex = getSemanticRefIndex();
         const success = await searchIndex.ensureExists();
-        if (!success) {
+        if (success) {
+            context.printer.writeLine("Success");
+        } else {
             context.printer.writeError("searchIndex.ensureExists failed");
         }
     }
 
-    function ensureVectorIndexDef(): CommandMetadata {
+    function termIndexEnsureDef(): CommandMetadata {
         return {
             description:
                 "Ensure related term index created on Azure. Ingestion is separate",
         };
     }
-    commands.azEnsureRelatedIndex.metadata = ensureVectorIndexDef();
-    async function ensureVectorIndex(args: string[]) {
+    commands.azTermIndexEnsure.metadata = termIndexEnsureDef();
+    async function ensureRelatedTermIndex(args: string[]) {
         const relatedTermsIndex = getRelatedTermsIndex();
         const success = await relatedTermsIndex.ensureExists();
-        if (!success) {
-            context.printer.writeError("vectorIndex.ensureExists failed");
+        if (success) {
+            context.printer.writeLine("Success");
+        } else {
+            context.printer.writeError("searchIndex.ensureExists failed");
         }
     }
 

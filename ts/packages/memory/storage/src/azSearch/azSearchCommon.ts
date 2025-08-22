@@ -62,6 +62,7 @@ export function createSearchField(
 export function createVectorField(
     name: string,
     dimensions: number,
+    profile: string,
 ): azSearch.SimpleField {
     return {
         name,
@@ -70,5 +71,6 @@ export function createVectorField(
         filterable: false,
         stored: true,
         vectorSearchDimensions: dimensions,
+        vectorSearchProfileName: profile,
     };
 }

@@ -58,30 +58,41 @@ export function createVectorSchema(
     ) as azSearch.SimpleField;
     textField.key = true; // Must be unique
 
+    const searchProfile = "nn";
     const vectorIndex: azSearch.SearchIndex = {
         name: indexName,
-        fields: [textField, createVectorField("vector", vectorDimensions)],
+        fields: [
+            textField,
+            createVectorField("vector", vectorDimensions, searchProfile),
+        ],
     };
     // https://learn.microsoft.com/en-us/azure/search/vector-search-how-to-create-index?tabs=config-2024-07-01%2Crest-2024-07-01%2Cpush%2Cportal-check-index#add-a-vector-search-configuration
     vectorIndex.vectorSearch = {
         algorithms: [
             {
-                name: "eknn",
+                name: searchProfile,
                 kind: "exhaustiveKnn",
                 // Use a dot product because our vectors are normalized
                 parameters: { metric: similarity },
             },
             /*
             {
-             "name": "hnsw-1",
-             "kind": "hnsw",
-             "hnswParameters": {
-                 "m": 4,
-                 "efConstruction": 400,
-                 "efSearch": 500,
-                 "metric": "cosine"
-             }
-         },*/
+                name: "hnsw",
+                kind: "hnsw",
+                parameters: {
+                    m: 4,
+                    efConstruction: 400,
+                    efSearch: 500,
+                    metric: similarity,
+                },
+            },
+            */
+        ],
+        profiles: [
+            {
+                name: "nn",
+                algorithmConfigurationName: "nn", // Must be one of algorithms above
+            },
         ],
     };
     return vectorIndex;
