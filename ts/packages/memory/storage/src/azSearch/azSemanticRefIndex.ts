@@ -299,6 +299,8 @@ function createCompilerOptions(): AzSearchCompilerSettings {
         propertyFields: createPropertyNameToFieldPathMap(),
         timestampField: "timestamp",
         kTypeField: "kType",
+        rangeStartField: "start/messageOrdinal",
+        rangeEndField: "end/messageOrdinal",
     };
 }
 

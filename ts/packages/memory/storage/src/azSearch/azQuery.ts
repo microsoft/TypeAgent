@@ -15,6 +15,11 @@ export type AzSearchCompilerSettings = {
      * Field that stores {@link kp.KnowledgeType}
      */
     kTypeField: string;
+    /**
+     * Fields that store {@link kp.TextRange}
+     */
+    rangeStartField: string;
+    rangeEndField: string;
 };
 
 /**
@@ -47,9 +52,9 @@ export class AzSearchQueryCompiler {
     }
 
     public compileWhen(filter: kp.WhenFilter): string | undefined {
-        let filterExpr: string[] = [];
+        let filterExpressions: string[] = [];
         if (filter.knowledgeType) {
-            filterExpr.push(
+            filterExpressions.push(
                 filterCompareExpr(
                     "eq",
                     this.settings.kTypeField,
@@ -58,10 +63,16 @@ export class AzSearchQueryCompiler {
             );
         }
         if (filter.dateRange) {
-            filterExpr.push(this.compileDateRange(filter.dateRange));
+            filterExpressions.push(this.compileDateRange(filter.dateRange));
         }
-        return filterExpr.length > 0
-            ? filterMultiBoolExpr("and", filterExpr)
+        if (filter.textRangesInScope && filter.textRangesInScope.length > 0) {
+            const rangeExpressions = filter.textRangesInScope.map((tr) =>
+                this.compileTextRange(tr),
+            );
+            filterExpressions.push(filterMultiBoolExpr("or", rangeExpressions));
+        }
+        return filterExpressions.length > 0
+            ? filterMultiBoolExpr("and", filterExpressions)
             : undefined;
     }
 
@@ -89,23 +100,42 @@ export class AzSearchQueryCompiler {
         return searchExpr;
     }
 
-    private compileSearchTerm(term: kp.SearchTerm): string {
-        return queryPhraseMatchExpr(term.term);
+    private compileSearchTerm(searchTerm: kp.SearchTerm): string {
+        let searchExpr = queryPhraseExpr(searchTerm.term);
+        if (
+            searchTerm.relatedTerms === undefined ||
+            searchTerm.relatedTerms.length === 0
+        ) {
+            return searchExpr;
+        }
+        let searchExprGroup: string[] = [searchExpr];
+        for (const relatedTerm of searchTerm.relatedTerms) {
+            searchExprGroup.push(queryPhraseExpr(relatedTerm));
+        }
+        return queryMultiBoolExpr("OR", searchExprGroup);
     }
 
     private compilePropertyMatch(
         propertyName: kp.PropertyNames,
         value: kp.Term,
     ) {
-        return queryFieldMatchExpr(this.getFieldPath(propertyName), value.text);
+        return queryFieldMatchExpr(this.getFieldPath(propertyName), value);
     }
 
     private compileDateRange(dateRange: kp.DateRange): string {
         if (dateRange.end) {
-            return filterRangeInclusiveExpr(
-                this.settings.timestampField,
-                dateRange.start.toISOString(),
-                dateRange.end.toISOString(),
+            return filterBoolExpr(
+                "and",
+                filterCompareExpr(
+                    "ge",
+                    this.settings.timestampField,
+                    dateRange.start.toISOString(),
+                ),
+                filterCompareExpr(
+                    "le",
+                    this.settings.timestampField,
+                    dateRange.end.toISOString(),
+                ),
             );
         }
 
@@ -113,6 +143,31 @@ export class AzSearchQueryCompiler {
             "ge",
             this.settings.timestampField,
             dateRange.start.toISOString(),
+        );
+    }
+
+    private compileTextRange(textRange: kp.TextRange): string {
+        if (textRange.end) {
+            return filterBoolExpr(
+                "and",
+                filterCompareExpr(
+                    "ge",
+                    this.settings.rangeStartField,
+                    textRange.start.messageOrdinal,
+                ),
+                // Range end is exclusive
+                filterCompareExpr(
+                    "lt",
+                    this.settings.rangeEndField,
+                    textRange.end.messageOrdinal,
+                ),
+            );
+        }
+
+        return filterCompareExpr(
+            "eq",
+            this.settings.rangeStartField,
+            textRange.start.messageOrdinal,
         );
     }
 
@@ -141,30 +196,28 @@ function queryMultiBoolExpr(op: QueryBoolOp, expr: string[]): string {
           : "";
 }
 
-function queryFieldMatchExpr(field: string, value: string): string {
-    return `${field}:"${value}"`;
+function queryFieldMatchExpr(field: string, value: kp.Term): string {
+    return `${field}:${queryPhraseExpr(value)}`;
 }
 
-function queryPhraseMatchExpr(term: kp.Term): string {
-    return `"${term.text}"`;
+function queryPhraseExpr(term: kp.Term): string {
+    return term.weight && term.weight !== 1.0
+        ? `"${term.text}"^${term.weight}`
+        : `"${term.text}"`;
 }
+
+/*
+function queryTermExpr(term: kp.Term): string {
+    return term.weight && term.weight !== 1.0
+        ? `${term.text}^${term.weight}`
+        : term.text;
+}
+*/
 
 // Filter syntax
 
 type FilterComparisonOp = "eq" | "lt" | "le" | "gt" | "ge";
 type FilterBoolOp = "and" | "or";
-
-function filterRangeInclusiveExpr(
-    field: string,
-    valueStart: any,
-    valueEnd: any,
-): string {
-    return filterBoolExpr(
-        "and",
-        filterCompareExpr("ge", field, valueStart),
-        filterCompareExpr("le", field, valueEnd),
-    );
-}
 
 function filterBoolExpr(op: FilterBoolOp, lh: string, rh: string): string {
     return `(${lh} ${op} ${rh})`;
