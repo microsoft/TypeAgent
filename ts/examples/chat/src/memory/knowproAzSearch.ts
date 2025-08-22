@@ -175,11 +175,14 @@ export async function createKnowproAzureCommands(
             kpContext.similarityModel,
             term,
         );
-        const matches = await termIndex.getNearest(
+        const results = await termIndex.getNearest(
             embedding,
             namedArgs.maxMatches,
         );
-        context.printer.writeList(matches, { type: "ol" });
+        context.printer.writeLine(`${results.length} matches`);
+        for (const result of results) {
+            context.printer.writeJson(result);
+        }
     }
 
     function ingestTermEmbeddingsDef(): CommandMetadata {
@@ -346,7 +349,9 @@ export async function createKnowproAzureCommands(
 
     async function getConversationForIngest(
         io: InteractiveIo,
-        searchIndex: ms.azSearch.AzSearchIndex<any>,
+        searchIndex:
+            | ms.azSearch.AzSemanticRefIndex
+            | ms.azSearch.AzTermsVectorIndex,
     ): Promise<kp.IConversation | undefined> {
         const conversation = kpContext.conversation;
         if (!conversation) {

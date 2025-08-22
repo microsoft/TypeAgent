@@ -75,14 +75,7 @@ export class AzSemanticRefIndex extends AzSearchIndex<SemanticRefDoc> {
         if (filter) {
             searchOptions.filter = filter;
         }
-        const searchResults = await this.searchClient.search(
-            searchQuery,
-            searchOptions,
-        );
-        let results: azSearch.SearchResult<SemanticRefDoc>[] = [];
-        for await (const result of searchResults.results) {
-            results.push(result);
-        }
+        let results = await this.getSearchResults(searchQuery, searchOptions);
         return [{ searchQuery, filter }, results];
     }
 

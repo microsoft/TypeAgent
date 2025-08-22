@@ -26,6 +26,22 @@ export class AzSearchIndex<T extends object> {
         const index = await indexClient.createOrUpdateIndex(this.schema);
         return index !== undefined;
     }
+
+    protected async getSearchResults(
+        searchQuery: string,
+        searchOptions: azSearch.SearchOptions<T>,
+    ): Promise<azSearch.SearchResult<T>[]> {
+        const searchResults = await this.searchClient.search(
+            searchQuery,
+            searchOptions,
+        );
+        // Search returns a paging iterator. Collect all results
+        let results: azSearch.SearchResult<T>[] = [];
+        for await (const result of searchResults.results) {
+            results.push(result);
+        }
+        return results;
+    }
 }
 
 export class AzSearchIndexManager {
@@ -85,14 +101,16 @@ export class AzVectorIndex<T extends object> extends AzSearchIndex<T> {
     }
 
     public searchVector(
-        query: azSearch.VectorizedQuery<T>,
+        queries: azSearch.VectorizedQuery<T> | azSearch.VectorizedQuery<T>[],
         selectFields: azSearch.SelectArray<azSearch.SelectFields<T>>,
-    ) {
+    ): Promise<azSearch.SearchResult<T>[]> {
         const searchOptions: azSearch.SearchOptions<T> = {
             select: selectFields,
-            vectorSearchOptions: { queries: [query] },
+            vectorSearchOptions: {
+                queries: Array.isArray(queries) ? queries : [queries],
+            },
         };
-        return this.searchClient.search("", searchOptions);
+        return this.getSearchResults("", searchOptions);
     }
 }
 
