@@ -490,8 +490,6 @@ class IConversationSecondaryIndexes[TMessage: IMessage](Protocol):
     threads: IConversationThreads | None = None
     message_index: IMessageTextIndex[TMessage] | None = None
 
-    async def initialize(self) -> None: ...
-
 
 class IConversation[
     TMessage: IMessage,
