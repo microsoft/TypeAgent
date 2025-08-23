@@ -360,19 +360,22 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
     For now, indexes are stored in memory (not persisted to SQLite).
     """
 
-    def __init__(self, db_path: str, message_type: type[TMessage] | None = None):
+    db_path: str
+    message_type: type[TMessage]
+    db: sqlite3.Connection | None
+
+    _message_collection: SqliteMessageCollection[TMessage]
+    _semantic_ref_collection: SqliteSemanticRefCollection
+    _conversation_index: TermToSemanticRefIndex
+    _property_index: PropertyIndex
+    _timestamp_index: interfaces.ITimestampToTextRangeIndex
+    _message_text_index: interfaces.IMessageTextIndex[TMessage]
+    _related_terms_index: RelatedTermsIndex
+    _conversation_threads: ConversationThreads
+
+    def __init__(self, db_path: str, message_type: type[TMessage]):
         self.db_path = db_path
         self.message_type = message_type
-        self.db: sqlite3.Connection | None = None
-        # All collections and indexes cached as instance variables
-        # Note: _message_collection removed since message collections need message_type parameter
-        self._semantic_ref_collection: SqliteSemanticRefCollection | None = None
-        self._conversation_index: TermToSemanticRefIndex | None = None
-        self._property_index: PropertyIndex | None = None
-        self._timestamp_index: interfaces.ITimestampToTextRangeIndex | None = None
-        self._message_text_index: interfaces.IMessageTextIndex[TMessage] | None = None
-        self._related_terms_index: RelatedTermsIndex | None = None
-        self._conversation_threads: ConversationThreads | None = None
 
     @classmethod
     async def create(
@@ -383,94 +386,74 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         message_type: type[TMessage],
     ) -> "SqliteStorageProvider[TMessage]":
         """Create and initialize a SqliteStorageProvider with all indexes."""
-        instance = cls(db_path, message_type)
+        self = cls(db_path, message_type)
 
         # Initialize database connection first
-        db = instance.get_db()
+        self.db = self._create_db(self.db_path)
 
-        # Initialize collections once and cache them (except message collection which needs type parameter)
-        instance._semantic_ref_collection = SqliteSemanticRefCollection(db)
+        # Initialize collections
+        self._message_collection = SqliteMessageCollection(self.db, message_type)
+        self._semantic_ref_collection = SqliteSemanticRefCollection(self.db)
 
-        # Initialize all indexes to ensure they exist in memory
-        instance._conversation_index = TermToSemanticRefIndex()
-        instance._property_index = PropertyIndex()
-        # Use SQL-based timestamp index instead of in-memory one
-        instance._timestamp_index = SqliteTimestampToTextRangeIndex(instance.get_db)
-
-        # Use the provided settings instead of creating new ones
-        instance._message_text_index = MessageTextIndex(message_text_settings)
-        instance._related_terms_index = RelatedTermsIndex(related_terms_settings)
-        instance._conversation_threads = ConversationThreads(
+        # Initialize all indexes
+        self._conversation_index = TermToSemanticRefIndex()
+        self._property_index = PropertyIndex()
+        self._timestamp_index = SqliteTimestampToTextRangeIndex(self.db)
+        self._message_text_index = MessageTextIndex(message_text_settings)
+        self._related_terms_index = RelatedTermsIndex(related_terms_settings)
+        self._conversation_threads = ConversationThreads(
             related_terms_settings.embedding_index_settings
         )
-        return instance
+
+        return self
 
     async def close(self) -> None:
         if self.db is not None:
             self.db.close()
             self.db = None
 
-    def get_db(self) -> sqlite3.Connection:
-        if self.db is None:
-            self.db = sqlite3.connect(self.db_path)
-            self.db.execute(MESSAGES_SCHEMA)
-            self.db.execute(MESSAGES_INDEX_SCHEMA)
-            self.db.execute(SEMANTIC_REFS_SCHEMA)
-            self.db.commit()
-        return self.db
+    def _create_db(self, db_path: str) -> sqlite3.Connection:
+        db = sqlite3.connect(db_path)
+        db.execute(MESSAGES_SCHEMA)
+        db.execute(MESSAGES_INDEX_SCHEMA)
+        db.execute(SEMANTIC_REFS_SCHEMA)
+        db.commit()
+        return db
+
+    # Collection getter methods
 
     async def get_message_collection(self) -> SqliteMessageCollection[TMessage]:
-        return SqliteMessageCollection[TMessage](self.get_db(), self.message_type)
+        return self._message_collection
 
     async def get_semantic_ref_collection(self) -> interfaces.ISemanticRefCollection:
-        if self._semantic_ref_collection is None:
-            # Create collection on demand if not cached
-            self._semantic_ref_collection = SqliteSemanticRefCollection(self.get_db())
         return self._semantic_ref_collection
 
     # Index getter methods
+
     async def get_semantic_ref_index(self) -> interfaces.ITermToSemanticRefIndex:
-        assert (
-            self._conversation_index is not None
-        ), "Use SqliteStorageProvider.create() to create an initialized instance"
         return self._conversation_index
 
     async def get_property_index(self) -> interfaces.IPropertyToSemanticRefIndex:
-        assert (
-            self._property_index is not None
-        ), "Use SqliteStorageProvider.create() to create an initialized instance"
         return self._property_index
 
     async def get_timestamp_index(self) -> interfaces.ITimestampToTextRangeIndex:
-        assert (
-            self._timestamp_index is not None
-        ), "Use SqliteStorageProvider.create() to create an initialized instance"
         return self._timestamp_index
 
     async def get_message_text_index(self) -> interfaces.IMessageTextIndex[TMessage]:
-        assert (
-            self._message_text_index is not None
-        ), "Use SqliteStorageProvider.create() to create an initialized instance"
         return self._message_text_index
 
     async def get_related_terms_index(self) -> interfaces.ITermToRelatedTermsIndex:
-        assert (
-            self._related_terms_index is not None
-        ), "Use SqliteStorageProvider.create() to create an initialized instance"
         return self._related_terms_index
 
     async def get_conversation_threads(self) -> interfaces.IConversationThreads:
-        assert (
-            self._conversation_threads is not None
-        ), "Use SqliteStorageProvider.create() to create an initialized instance"
         return self._conversation_threads
 
 
 class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
     """SQL-based timestamp index that queries Messages table directly."""
 
-    def __init__(self, get_db_connection: typing.Callable[[], sqlite3.Connection]):
-        self.get_db_connection = get_db_connection
+    def __init__(self, db: sqlite3.Connection):
+        self.db = db
 
     def add_timestamp(
         self, message_ordinal: interfaces.MessageOrdinal, timestamp: str
@@ -488,13 +471,12 @@ class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
         except ValueError:
             return False
 
-        conn = self.get_db_connection()
-        cursor = conn.cursor()
+        cursor = self.db.cursor()
         cursor.execute(
             "UPDATE Messages SET start_timestamp = ? WHERE msg_id = ?",
             (normalized_timestamp, message_ordinal),
         )
-        conn.commit()
+        self.db.commit()
         return cursor.rowcount > 0
 
     def add_timestamps(
@@ -503,8 +485,7 @@ class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
         """Add multiple timestamps to Messages table."""
         from datetime import datetime
 
-        conn = self.get_db_connection()
-        cursor = conn.cursor()
+        cursor = self.db.cursor()
         # Normalize timestamps and filter out empty/invalid ones
         updates = []
         for message_ordinal, timestamp in message_timestamps:
@@ -519,7 +500,7 @@ class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
         cursor.executemany(
             "UPDATE Messages SET start_timestamp = ? WHERE msg_id = ?", updates
         )
-        conn.commit()
+        self.db.commit()
 
     def lookup_range(
         self, date_range: interfaces.DateRange
@@ -527,8 +508,7 @@ class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
         """Look up timestamped text ranges in the given date range."""
         start_timestamp = date_range.start.isoformat()
 
-        conn = self.get_db_connection()
-        cursor = conn.cursor()
+        cursor = self.db.cursor()
 
         if date_range.end is None:
             # Point query - find messages exactly at start time
