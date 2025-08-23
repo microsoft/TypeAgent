@@ -75,7 +75,7 @@ async def memory_storage(embedding_model: AsyncEmbeddingModel) -> MemoryStorageP
     message_text_settings = MessageTextIndexSettings(embedding_settings)
     related_terms_settings = RelatedTermIndexSettings(embedding_settings)
 
-    return await MemoryStorageProvider.create(
+    return MemoryStorageProvider(
         message_text_settings=message_text_settings,
         related_terms_settings=related_terms_settings,
     )
@@ -110,7 +110,7 @@ async def storage_provider_type(
 
     match request.param:
         case "memory":
-            provider = await MemoryStorageProvider.create(
+            provider = MemoryStorageProvider(
                 message_text_settings=message_text_settings,
                 related_terms_settings=related_terms_settings,
             )

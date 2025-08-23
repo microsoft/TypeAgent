@@ -1,8 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-"""
-Storage provider utilities.
+"""Storage provider utilities.
 
 This module provides utility functions for creating storage providers
 without circular import issues.
@@ -18,16 +17,14 @@ async def create_storage_provider(
     related_terms_settings: RelatedTermIndexSettings,
     dbname: str | None = None,
 ) -> IStorageProvider:
-    """
-    Create a storage provider - MemoryStorageProvider if dbname is None,
-    SqliteStorageProvider otherwise.
+    """Create a storage provider.
+
+    MemoryStorageProvider if dbname is None, SqliteStorageProvider otherwise.
     """
     if dbname is None:
         from .memorystore import MemoryStorageProvider
 
-        return await MemoryStorageProvider.create(
-            message_text_settings, related_terms_settings
-        )
+        return MemoryStorageProvider(message_text_settings, related_terms_settings)
     else:
         from .sqlitestore import SqliteStorageProvider
 
