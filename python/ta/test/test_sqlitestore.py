@@ -22,6 +22,7 @@ from typeagent.storage.sqlitestore import (
     SqliteStorageProvider,
     SqliteMessageCollection,
     SqliteSemanticRefCollection,
+    SqliteTimestampToTextRangeIndex,
 )
 
 
@@ -157,3 +158,70 @@ async def test_sqlite_semantic_ref_collection_iter(temp_db_path: str):
     for r in refs:
         await collection.append(r)
     assert [r.semantic_ref_ordinal async for r in collection] == [0, 1]
+
+
+@pytest.mark.asyncio
+async def test_sqlite_timestamp_index(temp_db_path: str):
+    """Test SqliteTimestampToTextRangeIndex functionality."""
+    from datetime import datetime
+    from typeagent.knowpro.interfaces import DateRange
+
+    # Set up database with some messages
+    storage_provider = SqliteStorageProvider(temp_db_path)
+    db = storage_provider.get_db()
+    message_collection = SqliteMessageCollection(db, DummyMessage)
+
+    # Add test messages
+    messages = [
+        DummyMessage(text_chunks=["Hello world"], tags=["test"]),
+        DummyMessage(text_chunks=["Goodbye world"], tags=["test"]),
+        DummyMessage(text_chunks=["Another message"], tags=["test"]),
+    ]
+
+    for msg in messages:
+        await message_collection.append(msg)
+
+    # Create timestamp index
+    timestamp_index = SqliteTimestampToTextRangeIndex(storage_provider.get_db)
+
+    # Test add_timestamp - use actual message ordinals from the database
+    test_timestamps = [
+        "2024-01-01T10:00:00Z",
+        "2024-01-01T11:00:00Z",
+        "2024-01-01T12:00:00Z",
+    ]
+
+    for i, timestamp in enumerate(test_timestamps):
+        result = timestamp_index.add_timestamp(i, timestamp)
+        print(f"add_timestamp({i}, {timestamp}) = {result}")
+        assert result is True
+
+    # Test add_timestamps (will overwrite some of the above)
+    more_timestamps = [(0, "2024-01-01T09:00:00Z"), (2, "2024-01-01T13:00:00Z")]
+    timestamp_index.add_timestamps(more_timestamps)
+
+    # Test lookup_range - point query
+    point_date = datetime.fromisoformat("2024-01-01T09:00:00+00:00")
+    point_range = DateRange(start=point_date, end=None)
+    results = timestamp_index.lookup_range(point_range)
+    assert len(results) == 1
+    assert results[0].timestamp == "2024-01-01T09:00:00+00:00"  # Normalized format
+    assert results[0].range.start.message_ordinal == 0  # Message ordinal 0
+
+    # Test lookup_range - range query
+    start_date = datetime.fromisoformat("2024-01-01T10:00:00Z")
+    end_date = datetime.fromisoformat("2024-01-01T12:00:00Z")
+    range_query = DateRange(start=start_date, end=end_date)
+    results = timestamp_index.lookup_range(range_query)
+
+    # Should find messages with timestamps: 11:00 (09:00 is before range, 12:00 is excluded, 13:00 is after)
+    assert len(results) == 1
+    assert results[0].timestamp == "2024-01-01T11:00:00+00:00"  # Normalized format
+    assert results[0].range.start.message_ordinal == 1
+
+    # Test empty range
+    empty_start = datetime.fromisoformat("2024-02-01T00:00:00Z")
+    empty_end = datetime.fromisoformat("2024-02-01T23:59:59Z")
+    empty_range = DateRange(start=empty_start, end=empty_end)
+    empty_results = timestamp_index.lookup_range(empty_range)
+    assert len(empty_results) == 0
