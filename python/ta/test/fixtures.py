@@ -78,22 +78,6 @@ async def memory_storage(embedding_model: AsyncEmbeddingModel) -> MemoryStorageP
     )
 
 
-@pytest_asyncio.fixture
-async def sqlite_storage(
-    temp_db_path: str, embedding_model: AsyncEmbeddingModel
-) -> AsyncGenerator[SqliteStorageProvider, None]:
-    """Create a SqliteStorageProvider for testing."""
-    embedding_settings = TextEmbeddingIndexSettings(embedding_model)
-    message_text_settings = MessageTextIndexSettings(embedding_settings)
-    related_terms_settings = RelatedTermIndexSettings(embedding_settings)
-
-    provider = await SqliteStorageProvider.create(
-        message_text_settings, related_terms_settings, temp_db_path
-    )
-    yield provider
-    await provider.close()
-
-
 # Unified fake message and conversation classes for testing
 
 
@@ -132,6 +116,22 @@ class FakeMessage(IMessage):
 
     def get_text_location(self) -> TextLocation:
         return self.text_location
+
+
+@pytest_asyncio.fixture
+async def sqlite_storage(
+    temp_db_path: str, embedding_model: AsyncEmbeddingModel
+) -> AsyncGenerator[SqliteStorageProvider[FakeMessage], None]:
+    """Create a SqliteStorageProvider for testing."""
+    embedding_settings = TextEmbeddingIndexSettings(embedding_model)
+    message_text_settings = MessageTextIndexSettings(embedding_settings)
+    related_terms_settings = RelatedTermIndexSettings(embedding_settings)
+
+    provider = await SqliteStorageProvider.create(
+        message_text_settings, related_terms_settings, temp_db_path, FakeMessage
+    )
+    yield provider
+    await provider.close()
 
 
 class FakeMessageCollection(MemoryMessageCollection[FakeMessage]):

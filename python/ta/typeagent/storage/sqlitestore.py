@@ -380,7 +380,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         message_text_settings: MessageTextIndexSettings,
         related_terms_settings: RelatedTermIndexSettings,
         db_path: str,
-        message_type: type[TMessage] | None = None,
+        message_type: type[TMessage],
     ) -> "SqliteStorageProvider[TMessage]":
         """Create and initialize a SqliteStorageProvider with all indexes."""
         instance = cls(db_path, message_type)

@@ -17,7 +17,7 @@ async def create_storage_provider[TMessage: IMessage](
     related_terms_settings: RelatedTermIndexSettings,
     dbname: str | None = None,
     message_type: type[TMessage] | None = None,
-) -> IStorageProvider:
+) -> IStorageProvider[TMessage]:
     """Create a storage provider.
 
     MemoryStorageProvider if dbname is None, SqliteStorageProvider otherwise.
@@ -29,6 +29,8 @@ async def create_storage_provider[TMessage: IMessage](
     else:
         from .sqlitestore import SqliteStorageProvider
 
+        if message_type is None:
+            raise ValueError("Message type must be specified for SQLite storage")
         return await SqliteStorageProvider.create(
             message_text_settings, related_terms_settings, dbname, message_type
         )
