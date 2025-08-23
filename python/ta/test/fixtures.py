@@ -12,7 +12,6 @@ import pytest_asyncio
 from typeagent.aitools import utils
 from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
 from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
-from typeagent.knowpro import kplib
 from typeagent.knowpro.collections import (
     MemoryMessageCollection,
     MemorySemanticRefCollection,
@@ -20,7 +19,6 @@ from typeagent.knowpro.collections import (
 from typeagent.knowpro.convsettings import ConversationSettings
 from typeagent.knowpro.interfaces import (
     DeletionInfo,
-    ICollection,
     IConversation,
     IConversationSecondaryIndexes,
     IMessage,
@@ -31,7 +29,6 @@ from typeagent.knowpro.interfaces import (
     SemanticRef,
     ScoredSemanticRefOrdinal,
     TextLocation,
-    TextRange,
 )
 from typeagent.knowpro.kplib import KnowledgeResponse
 from typeagent.knowpro.messageindex import MessageTextIndexSettings
@@ -95,34 +92,6 @@ async def sqlite_storage(
     )
     yield provider
     await provider.close()
-
-
-@pytest_asyncio.fixture(params=["memory", "sqlite"])
-async def storage_provider_type(
-    request: pytest.FixtureRequest,
-    embedding_model: AsyncEmbeddingModel,
-    temp_db_path: str,
-) -> AsyncGenerator[tuple[IStorageProvider, str], None]:
-    """Parameterized fixture that provides both memory and sqlite storage providers."""
-    embedding_settings = TextEmbeddingIndexSettings(embedding_model)
-    message_text_settings = MessageTextIndexSettings(embedding_settings)
-    related_terms_settings = RelatedTermIndexSettings(embedding_settings)
-
-    match request.param:
-        case "memory":
-            provider = MemoryStorageProvider(
-                message_text_settings=message_text_settings,
-                related_terms_settings=related_terms_settings,
-            )
-            yield provider, request.param
-        case "sqlite":
-            provider = await SqliteStorageProvider.create(
-                message_text_settings, related_terms_settings, temp_db_path
-            )
-            yield provider, request.param
-            await provider.close()
-        case _:
-            assert_never(request.param)
 
 
 # Unified fake message and conversation classes for testing

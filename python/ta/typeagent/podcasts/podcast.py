@@ -168,7 +168,7 @@ class Podcast(IConversation[PodcastMessage, semrefindex.TermToSemanticRefIndex])
         return cls(
             settings,
             name_tag or "",
-            messages or await storage_provider.get_message_collection(PodcastMessage),
+            messages or await storage_provider.get_message_collection(),
             semantic_refs or await storage_provider.get_semantic_ref_collection(),
             tags if tags is not None else [],
             semantic_ref_index or await storage_provider.get_semantic_ref_index(),  # type: ignore

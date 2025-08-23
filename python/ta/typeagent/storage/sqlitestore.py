@@ -419,19 +419,8 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
             self.db.commit()
         return self.db
 
-    async def get_message_collection(
-        self,
-        message_type: type[TMessage] | None = None,
-    ) -> SqliteMessageCollection[TMessage]:
-        if message_type:
-            if self.message_type:
-                if message_type is not self.message_type:
-                    raise ValueError("Inconsistent message_type provided")
-            else:
-                self.message_type = message_type
-        return SqliteMessageCollection[TMessage](
-            self.get_db(), message_type or self.message_type
-        )
+    async def get_message_collection(self) -> SqliteMessageCollection[TMessage]:
+        return SqliteMessageCollection[TMessage](self.get_db(), self.message_type)
 
     async def get_semantic_ref_collection(self) -> interfaces.ISemanticRefCollection:
         if self._semantic_ref_collection is None:

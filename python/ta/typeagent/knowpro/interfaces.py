@@ -748,10 +748,7 @@ class ISemanticRefCollection(ICollection[SemanticRef, SemanticRefOrdinal], Proto
 class IStorageProvider[TMessage: IMessage](Protocol):
     """API spec for storage providers -- maybe in-memory or persistent."""
 
-    async def get_message_collection(
-        self,
-        message_type: type[TMessage] | None = None,
-    ) -> IMessageCollection[TMessage]: ...
+    async def get_message_collection(self) -> IMessageCollection[TMessage]: ...
 
     async def get_semantic_ref_collection(self) -> ISemanticRefCollection: ...
 

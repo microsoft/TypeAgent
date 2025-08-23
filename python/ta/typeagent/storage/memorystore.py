@@ -71,10 +71,7 @@ class MemoryStorageProvider[TMessage: IMessage](IStorageProvider[TMessage]):
     async def get_conversation_threads(self) -> IConversationThreads:
         return self._conversation_threads
 
-    async def get_message_collection(
-        self,
-        message_type: type[TMessage] | None = None,
-    ) -> MemoryMessageCollection[TMessage]:
+    async def get_message_collection(self) -> MemoryMessageCollection[TMessage]:
         return self._message_collection
 
     async def get_semantic_ref_collection(self) -> MemorySemanticRefCollection:

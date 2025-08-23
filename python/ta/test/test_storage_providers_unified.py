@@ -8,11 +8,13 @@ These tests run against both MemoryStorageProvider and SqliteStorageProvider
 to ensure behavioral parity across implementations.
 """
 
+from typing import AsyncGenerator, assert_never
 import pytest
 from dataclasses import field
 from pydantic.dataclasses import dataclass
+import pytest_asyncio
 
-from fixtures import needs_auth, storage_provider_type, embedding_model, temp_db_path
+from typeagent.aitools.embeddings import AsyncEmbeddingModel
 from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
 from typeagent.knowpro.kplib import KnowledgeResponse
 from typeagent.knowpro.interfaces import (
@@ -30,6 +32,8 @@ from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
 from typeagent.storage.memorystore import MemoryStorageProvider
 from typeagent.storage.sqlitestore import SqliteStorageProvider
 
+from fixtures import needs_auth, embedding_model, temp_db_path
+
 
 # Test message for unified testing
 @dataclass
@@ -39,6 +43,37 @@ class DummyTestMessage(IMessage):
 
     def get_knowledge(self) -> KnowledgeResponse:
         raise NotImplementedError("Should not be called")
+
+
+@pytest_asyncio.fixture(params=["memory", "sqlite"])
+async def storage_provider_type(
+    request: pytest.FixtureRequest,
+    embedding_model: AsyncEmbeddingModel,
+    temp_db_path: str,
+) -> AsyncGenerator[tuple[IStorageProvider, str], None]:
+    """Parameterized fixture that provides both memory and sqlite storage providers."""
+    embedding_settings = TextEmbeddingIndexSettings(embedding_model)
+    message_text_settings = MessageTextIndexSettings(embedding_settings)
+    related_terms_settings = RelatedTermIndexSettings(embedding_settings)
+
+    match request.param:
+        case "memory":
+            provider = MemoryStorageProvider(
+                message_text_settings=message_text_settings,
+                related_terms_settings=related_terms_settings,
+            )
+            yield provider, request.param
+        case "sqlite":
+            provider = await SqliteStorageProvider.create(
+                message_text_settings,
+                related_terms_settings,
+                temp_db_path,
+                DummyTestMessage,
+            )
+            yield provider, request.param
+            await provider.close()
+        case _:
+            assert_never(request.param)
 
 
 def make_test_semantic_ref(ordinal: int = 0) -> SemanticRef:
@@ -115,7 +150,7 @@ async def test_message_collection_basic_operations(
     storage_provider, provider_type = storage_provider_type
 
     # Create message collection
-    collection = await storage_provider.get_message_collection(DummyTestMessage)
+    collection = await storage_provider.get_message_collection()
 
     # Test initial state
     assert await collection.size() == 0
