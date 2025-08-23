@@ -49,6 +49,8 @@ if (process.argv.includes("--pageContent")) {
 
     if (process.argv.includes("--summary")) {
         await searchResultsExtractor.summarize();
+    } else if (process.argv.includes("--compact")) {
+        await searchResultsExtractor.compact();
     } else {
         await searchResultsExtractor.index(process.argv.includes("--clear"));
     }    

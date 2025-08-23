@@ -32,6 +32,16 @@ type cachedUrls = {
     };
 };
 
+type cachedUrls_compact = {
+    domains: {
+        [key: string]: { 
+        }
+    }
+    phrases: {
+        [key: string]: number[];
+    };
+};
+
 export class searchResultsPhraseGenerator {
     // manually downloadable from: https://radar.cloudflare.com/domains
     private downloadUrl: string =
@@ -312,5 +322,107 @@ export class searchResultsPhraseGenerator {
         console.log(chalk.magenta(`Maximum phrase count: ${maxPhraseCount}`));
         console.log(chalk.blueBright(`Number of domains with max phrase count: ${urlsWithMaxPhraseCount.length}`));
         //console.log(chalk.blue(`Urls with max phrase count: ${urlsWithMaxPhraseCount.join(", ")}`));
+    }
+
+    /**
+     * Compact the output file
+     */
+    public compact() {
+
+        // do we have a compressable file?
+        if (!existsSync(this.outputFile)) {
+            console.error(`Output file ${this.outputFile} does not exist.`);
+            return;
+        }
+
+        // Load the data
+        console.log(chalk.blueBright("Loading uncompressed file."));
+        this.processed = JSON.parse(
+            readFileSync(this.outputFile, "utf-8"),
+        ) as cachedUrls;
+
+        console.log(chalk.dim("Processing..."));
+        const compressed: cachedUrls_compact = {
+            domains: this.processed.domains,
+            phrases: {},
+        };     
+
+        console.log(chalk.blueBright("Indexing Domains"));
+        const domainMap: Map<string, any> = new Map<string, any>();
+        for(const [domain] of Object.entries(this.processed.domains)) {
+            domainMap.set(domain, { });
+        }
+
+        // collapse URLs into domains
+        console.log(chalk.blueBright("Collapsing URLs into domains."));
+        const urlToIdMap: Map<string, number> = new Map<string, number>();
+        for (const [url, value] of Object.entries(this.processed.urls)) {
+            const domain = new URL(url).hostname;
+
+            // crate the domain entry for this URL if we need to
+            if (!domainMap.has(domain)) {
+                domainMap.set(domain, { });
+            }
+
+            // move the URL into the domain
+            urlToIdMap.set(url, urlToIdMap.size);
+
+            delete value.phrases;
+            delete value.title;
+
+            domainMap.get(domain).urls = {};
+            domainMap.get(domain).urls[url] = value;
+            domainMap.get(domain).urls[url].id = urlToIdMap.get(url);
+        }
+
+        compressed.domains = Object.fromEntries(domainMap);
+
+        console.log(chalk.greenBright("Processing URLs."));
+        Object.entries(this.processed.phrases).forEach(([phrase, urls]) => {
+            const urlIds: number[] = [];
+            urls.forEach((value: string) => {
+                urlIds.push(urlToIdMap.get(value)!);
+            });
+            compressed.phrases[phrase] = urlIds;
+        });
+
+        // console.log(chalk.yellowBright("Performing phrase compression"));
+        // const phraseTree: any = {};
+        // Object.entries(compressed.phrases).forEach(([phrase, urls]) => {
+        //     // make a heirarchical tree of phrases
+        //     const lPhrase = phrase.toLowerCase();
+        //     const parts = lPhrase.split(" ");
+        //     let currentLevel = phraseTree;
+
+        //     parts.forEach((part) => {
+        //         if (!currentLevel[part]) {
+        //             currentLevel[part] = {};
+        //         }
+        //         currentLevel = currentLevel[part];
+        //     });
+
+        //     currentLevel.urls = urls;
+        // });
+        // compressed.phrases = phraseTree;
+
+        const small: string[] = [];
+        Object.entries(this.processed.phrases).forEach(([phrase, urls]) => {
+            const ids: string[] = [];
+            urls.forEach((url) => {
+                ids.push(`${urlToIdMap.get(url)}`);
+            })
+            small.push(`${phrase}\t${ids.join("\t")}`);
+        });
+
+        writeFileSync(this.outputFile.replace(".json", ".compact.tsv"), small.join("\n"));
+
+
+        console.log(chalk.redBright("Writing compressed file."));
+        writeFileSync(
+            this.outputFile.replace(".json", ".compact.json"),
+            JSON.stringify(compressed, null, 2),
+        );
+
+
     }
 }
