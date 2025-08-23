@@ -193,6 +193,17 @@ function checkActionSchema(
         }
         actionDefinition.paramSpecs = paramSpecs;
     }
+
+    const paramCompletionEmojis =
+        schemaConfig?.paramCompletionEmojis?.[actionNameString];
+    if (paramCompletionEmojis) {
+        actionDefinition.paramCompletionEmojis = paramCompletionEmojis;
+    }
+    const entityCompletionEmojis =
+        schemaConfig?.entityCompletionEmojis?.[actionNameString];
+    if (entityCompletionEmojis) {
+        actionDefinition.entityCompletionEmojis = entityCompletionEmojis;
+    }
     return [actionNameString, actionDefinition];
 }
 

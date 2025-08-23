@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ActionParamSpecs } from "./schemaConfig.js";
+import { ActionParamSpecs, CompletionEmojis } from "./schemaConfig.js";
 
 export interface SchemaBase {
     type:
@@ -130,7 +130,11 @@ export interface ActionSchemaObject extends SchemaTypeObject {
 export type ActionSchemaTypeDefinition = (
     | SchemaTypeInterfaceDefinition<ActionSchemaObject>
     | SchemaTypeAliasDefinition<ActionSchemaObject>
-) & { paramSpecs?: ActionParamSpecs };
+) & {
+    paramSpecs?: ActionParamSpecs;
+    paramCompletionEmojis?: CompletionEmojis;
+    entityCompletionEmojis?: CompletionEmojis;
+};
 
 export type ActionSchemaEntryTypeDefinition =
     | ActionSchemaTypeDefinition
