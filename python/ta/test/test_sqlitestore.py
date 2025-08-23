@@ -60,8 +60,8 @@ def temp_db_path() -> Generator[str, None, None]:
 
 @pytest.mark.asyncio
 async def test_sqlite_storage_provider_message_collection(temp_db_path: str):
-    provider = SqliteStorageProvider(temp_db_path)
-    collection = await provider.get_message_collection(DummyMessage)
+    provider = SqliteStorageProvider(temp_db_path, DummyMessage)
+    collection = await provider.get_message_collection()
     assert collection.is_persistent
     assert await collection.size() == 0
 

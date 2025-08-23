@@ -750,7 +750,7 @@ class IStorageProvider[TMessage: IMessage](Protocol):
 
     async def get_message_collection(
         self,
-        message_type: type[TMessage],
+        message_type: type[TMessage] | None = None,
     ) -> IMessageCollection[TMessage]: ...
 
     async def get_semantic_ref_collection(self) -> ISemanticRefCollection: ...

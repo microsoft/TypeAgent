@@ -51,7 +51,9 @@ type ShreddedSemanticRef = tuple[int, str, str, str]
 class SqliteMessageCollection[TMessage: interfaces.IMessage](
     interfaces.IMessageCollection
 ):
-    def __init__(self, db: sqlite3.Connection, message_type: type[TMessage]):
+    def __init__(
+        self, db: sqlite3.Connection, message_type: type[TMessage] | None = None
+    ):
         self.db = db
         self.message_type = message_type
 
@@ -99,6 +101,10 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
         message_data["metadata"] = json.loads(metadata_json) if metadata_json else {}
 
         # The serialization.deserialize_object will convert to snake_case Python attributes.
+        if self.message_type is None:
+            raise ValueError(
+                "Deserialization requires message_type passed to either get_message_collection or SqliteMessageCollection"
+            )
         return serialization.deserialize_object(self.message_type, message_data)
 
     def _serialize_message_to_row(self, message: TMessage) -> ShreddedMessage:
@@ -354,8 +360,9 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
     For now, indexes are stored in memory (not persisted to SQLite).
     """
 
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str, message_type: type[TMessage] | None = None):
         self.db_path = db_path
+        self.message_type = message_type
         self.db: sqlite3.Connection | None = None
         # All collections and indexes cached as instance variables
         # Note: _message_collection removed since message collections need message_type parameter
@@ -373,9 +380,10 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         message_text_settings: MessageTextIndexSettings,
         related_terms_settings: RelatedTermIndexSettings,
         db_path: str,
+        message_type: type[TMessage] | None = None,
     ) -> "SqliteStorageProvider[TMessage]":
         """Create and initialize a SqliteStorageProvider with all indexes."""
-        instance = cls(db_path)
+        instance = cls(db_path, message_type)
 
         # Initialize database connection first
         db = instance.get_db()
@@ -413,9 +421,17 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
 
     async def get_message_collection(
         self,
-        message_type: type[TMessage],
+        message_type: type[TMessage] | None = None,
     ) -> SqliteMessageCollection[TMessage]:
-        return SqliteMessageCollection[TMessage](self.get_db(), message_type)
+        if message_type:
+            if self.message_type:
+                if message_type is not self.message_type:
+                    raise ValueError("Inconsistent message_type provided")
+            else:
+                self.message_type = message_type
+        return SqliteMessageCollection[TMessage](
+            self.get_db(), message_type or self.message_type
+        )
 
     async def get_semantic_ref_collection(self) -> interfaces.ISemanticRefCollection:
         if self._semantic_ref_collection is None:

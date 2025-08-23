@@ -331,8 +331,9 @@ class Podcast(IConversation[PodcastMessage, semrefindex.TermToSemanticRefIndex])
             settings.message_text_index_settings,
             settings.related_term_index_settings,
             dbname,
+            PodcastMessage,
         )
-        msgs = await provider.get_message_collection(PodcastMessage)
+        msgs = await provider.get_message_collection()
         semrefs = await provider.get_semantic_ref_collection()
         if await msgs.size() or await semrefs.size():
             raise RuntimeError(

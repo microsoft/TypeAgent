@@ -287,17 +287,13 @@ async def test_cross_provider_message_collection_equivalence(
     )
 
     sqlite_provider = await SqliteStorageProvider.create(
-        message_text_settings, related_terms_settings, temp_db_path
+        message_text_settings, related_terms_settings, temp_db_path, DummyTestMessage
     )
 
     try:
         # Create collections in both
-        memory_collection = await memory_provider.get_message_collection(
-            DummyTestMessage
-        )
-        sqlite_collection = await sqlite_provider.get_message_collection(
-            DummyTestMessage
-        )
+        memory_collection = await memory_provider.get_message_collection()
+        sqlite_collection = await sqlite_provider.get_message_collection()
 
         # Add identical data to both
         test_messages = [
