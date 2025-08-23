@@ -526,21 +526,22 @@ export class ShellWindow {
     }
 
     /**
-     * Create a new browser tab
+     * Create a new browser tab and navigate to the specified page
      */
-    public createBrowserTab(
+    public async createBrowserTab(
         url: URL,
-        options?: { background?: boolean },
-    ): string {
+        options?: { background?: boolean, waitForPageLoad?: boolean },
+    ): Promise<string> {
         // Handle custom typeagent-browser protocol
         let resolvedUrl = url;
         if (url.protocol === "typeagent-browser:") {
             resolvedUrl = this.resolveCustomProtocolUrl(url);
         }
 
-        const tabId = this.browserViewManager.createBrowserTab({
+        const tabId = await this.browserViewManager.createBrowserTab({
             url: resolvedUrl.toString(),
             background: options?.background,
+            waitForPageLoad: options?.waitForPageLoad,
         });
 
         // setup zoom handlers for the new browser tab

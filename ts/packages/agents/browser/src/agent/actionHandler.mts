@@ -103,6 +103,7 @@ import {
     getActionBrowserControl,
     saveSettings,
 } from "./browserActions.mjs";
+import { ChunkChatResponse, generateAnswer } from "typeagent";
 
 const debug = registerDebug("typeagent:browser:action");
 const debugWebSocket = registerDebug("typeagent:browser:ws");
@@ -1113,6 +1114,7 @@ async function executeBrowserAction(
                 case "search":
                     await getActionBrowserControl(context).search(
                         action.parameters.query,
+                        undefined,
                         context.sessionContext.agentContext
                             .activeSearchProvider,
                     );
@@ -1169,8 +1171,44 @@ async function executeBrowserAction(
                 case "changeSearchProvider":
                     return changeSearchProvider(context, action);
                 case "lookupAndAnswerInternet":
-                    throw new Error("Not impelemented!");
-                    //return lookupAndAnswerInternet(context, action);
+
+                    // TODO: beter answer handling, streaming answer, return entities from search result, etc.
+                    // run a search for the lookup, wait for the page to load
+                    displayStatus(`Searching the web for '${action.parameters.internetLookups.join(" ")}'`, context);
+
+                    await getActionBrowserControl(context).search(
+                        action.parameters.internetLookups.join(" "),
+                        action.parameters.sites,
+                        context.sessionContext.agentContext
+                            .activeSearchProvider,
+                        { waitForPageLoad: true }
+                    );                    
+
+                    // go get the page contents
+                    const content = await getActionBrowserControl(context).getPageContents();
+                    
+                    // now try to generate an answer from the page contents
+                    displayStatus(`Generating the answer for '${action.parameters.originalRequest}'`, context);
+                    const model = openai.createJsonChatModel("GPT_35_TURBO", ["InternetLookupAnswerGenerator"]); // TODO: GPT_5
+                    const answerResult = await generateAnswer(action.parameters.originalRequest, content, 4096, model, 1, (text: string, result: ChunkChatResponse) => {
+                        displayStatus(result.generatedText!, context);
+                    });
+
+                    if (answerResult.success) {
+                        const answer: ChunkChatResponse = answerResult.data as ChunkChatResponse;
+                        if (answer.answerStatus === "Answered" || answer.answerStatus === "PartiallyAnswered") {
+                            return createActionResultFromTextDisplay(
+                                `${answer.generatedText}`,
+                            );
+                            // TODO: answer entities....
+                        } else {
+                            return createActionResultFromTextDisplay(
+                                `No answer found for '${action.parameters.originalRequest}'.  Try navigating to a search result or trying another query.`,
+                            );
+                        }
+                    } else {
+                        return createActionResultFromError(`There was an error generating the answer: ${answerResult.message} `);
+                    }
                 default:
                     // Should never happen.
                     throw new Error(

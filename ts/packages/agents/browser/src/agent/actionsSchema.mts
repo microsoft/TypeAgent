@@ -218,7 +218,12 @@ export type ChangeSearchProvider = {
 // it is recommended to include the same entities as in the user request
 export type LookupAndAnswerInternet = {
     actionName: "lookupAndAnswerInternet";
-    internetLookups: string[];
-    // specific sites to look up in.
-    site?: string[];
+    parameters: {
+        // the original request of the user
+        originalRequest: string;
+        // the internet search terms to use
+        internetLookups: string[];
+        // specific sites to look up in.
+        sites?: string[];
+    }
 };

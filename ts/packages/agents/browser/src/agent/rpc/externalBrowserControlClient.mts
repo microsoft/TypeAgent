@@ -108,5 +108,8 @@ export function createExternalBrowserClient(
         captureScreenshot: async () => {
             return rpc.invoke("captureScreenshot");
         },
+        getPageContents: async () => {
+            return rpc.invoke("getPageContents");
+        }
     };
 }

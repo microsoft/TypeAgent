@@ -329,6 +329,22 @@ export function createExternalBrowserServer(channel: RpcChannel) {
                 quality: 100,
             });
         },
+        getPageContents: async (): Promise<string> => {
+            const targetTab = await getActiveTab();
+            const article = await chrome.tabs.sendMessage(targetTab?.id!, {
+                type: "read_page_content",
+            });
+
+            if (article.error) {
+                throw new Error(article.error);
+            }
+
+            if (article?.formattedText) {
+                return article.formattedText;
+            }
+
+            throw new Error("No formatted text found.");
+        }
     };
     const callFunctions: BrowserControlCallFunctions = {
         setAgentStatus: (isBusy: boolean, message: string) => {

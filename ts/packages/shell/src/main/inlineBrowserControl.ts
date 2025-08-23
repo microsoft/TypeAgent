@@ -259,7 +259,16 @@ export function createInlineBrowserControl(
                 "Closing the inline browser window is not supported.",
             );
         },
-        async search(query: string, searchProvider: SearchProvider) {
+        async search(query: string, sites: string[], searchProvider: SearchProvider, options: { waitForPageLoad?: boolean}) {
+
+            // append any site specific scoping
+            if (sites && sites.length > 0) {
+                sites.forEach((site) => {
+                    query += ` site:${site}`;
+                });
+            }
+
+            // craft the search URL
             const searchUrl = new URL(
                 searchProvider
                     ? searchProvider.url.replace(
@@ -271,7 +280,7 @@ export function createInlineBrowserControl(
             );
 
             // Always use tabs
-            shellWindow.createBrowserTab(searchUrl, { background: false });
+            await shellWindow.createBrowserTab(searchUrl, { background: false, waitForPageLoad: options.waitForPageLoad });
         },
         async readPage() {
             throw new Error("Reading page is not supported in inline browser.");
@@ -286,5 +295,9 @@ export function createInlineBrowserControl(
             const image = await webContents.capturePage();
             return `data:image/png;base64,${image.toPNG().toString("base64")}`;
         },
+        async getPageContents(): Promise<string> {
+            const webContents = getActiveBrowserWebContents();
+            return webContents.executeJavaScript("document.body.innerText");
+        }
     };
 }

@@ -21,6 +21,7 @@ export interface TabCreationOptions {
     url: string;
     background?: boolean;
     parentTabId?: string;
+    waitForPageLoad?: boolean;
 }
 
 export class BrowserViewManager {
@@ -61,7 +62,7 @@ export class BrowserViewManager {
     /**
      * Create a new browser tab
      */
-    createBrowserTab(options: TabCreationOptions): string {
+    async createBrowserTab(options: TabCreationOptions): Promise<string> {
         const tabId = `tab-${this.nextTabId++}`;
 
         debug(`Creating new browser tab: ${tabId} for URL: ${options.url}`);
@@ -98,7 +99,11 @@ export class BrowserViewManager {
                 path.join(__dirname, "../renderer/newTab.html"),
             );
         } else {
-            webContentsView.webContents.loadURL(options.url);
+            if (options.waitForPageLoad) {
+                await webContentsView.webContents.loadURL(options.url);
+            } else {
+                webContentsView.webContents.loadURL(options.url);
+            }
         }
 
         // If this is the first tab or not background, make it active
