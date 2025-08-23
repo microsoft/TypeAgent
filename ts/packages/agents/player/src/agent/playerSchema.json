@@ -40,5 +40,23 @@
     "getFavorites": {
       "count": "number"
     }
+  },
+  "paramCompletionEmojis": {
+    "playTrack": {
+      "trackName": "🎶",
+      "artists.*": "🎼"
+    },
+    "playAlbum": {
+      "albumName": "💿",
+      "artists.*": "🎼"
+    },
+    "playAlbumTrack": {
+      "albumName": "💿",
+      "trackName": "🎶",
+      "artists.*": "🎼"
+    },
+    "playArtist": {
+      "artist": "🎼"
+    }
   }
 }

@@ -245,19 +245,6 @@ export class PartialCompletion {
                 this.space = result.space;
 
                 const completions = result.completions.flatMap((group) => {
-                    // temporarily assign emoji char here
-                    const musicalScore = "🎼";
-                    if (group.name.includes("artist")) {
-                        group.emojiChar = musicalScore;
-                    } else if (group.name.includes("musician")) {
-                        group.emojiChar = musicalScore;
-                    } else if (group.name.includes("album")) {
-                        const album = "💿";
-                        group.emojiChar = album;
-                    } else if (group.name.includes("track")) {
-                        const track = "🎶";
-                        group.emojiChar = track;
-                    }
                     return group.completions.map((choice, index) => {
                         return {
                             matchText: choice,
