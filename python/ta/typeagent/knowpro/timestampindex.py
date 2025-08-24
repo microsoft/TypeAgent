@@ -120,20 +120,23 @@ def get_in_range[T, S: Any](
 
 async def build_timestamp_index(conversation: IConversation) -> None:
     if conversation.messages is not None and conversation.secondary_indexes is not None:
-        # Check if messages collection is not empty
+        # There's nothing to do if there are no messages
         if await conversation.messages.size() == 0:
             return
 
-        if conversation.secondary_indexes.timestamp_index is None:
-            conversation.secondary_indexes.timestamp_index = TimestampToTextRangeIndex()
+        # There's nothing to do for persistent collections; the timestamp index
+        # is created implicitly (as an index over the message collection)
+        if conversation.messages.is_persistent:
+            return
+
+        # Caller must have established the timestamp index
+        assert conversation.secondary_indexes.timestamp_index is not None
+
         await add_to_timestamp_index(
             conversation.secondary_indexes.timestamp_index,
             conversation.messages,
             0,
         )
-    # SQLite note: when backed by SQLite, explicit "building" should be unnecessary
-    # as timestamps are persisted incrementally with messages. This function remains
-    # a no-op for that provider while preserving the call graph during migration.
 
 
 async def add_to_timestamp_index(
