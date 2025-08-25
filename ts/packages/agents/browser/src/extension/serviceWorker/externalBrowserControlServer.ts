@@ -290,11 +290,14 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             }
         },
 
-        search: async (query?: string) => {
+        search: async (query?: string): Promise<URL> => {
             await chrome.search.query({
                 disposition: "NEW_TAB",
                 text: query,
             });
+
+            // todo return search provider URL
+            return new URL(`/?q=${query}`);
         },
         readPage: async () => {
             const targetTab = await getActiveTab();

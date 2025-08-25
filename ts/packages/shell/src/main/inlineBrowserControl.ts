@@ -259,7 +259,7 @@ export function createInlineBrowserControl(
                 "Closing the inline browser window is not supported.",
             );
         },
-        async search(query: string, sites: string[], searchProvider: SearchProvider, options: { waitForPageLoad?: boolean}) {
+        async search(query: string, sites: string[], searchProvider: SearchProvider, options: { waitForPageLoad?: boolean}): Promise<URL> {
 
             // append any site specific scoping
             if (sites && sites.length > 0) {
@@ -281,6 +281,8 @@ export function createInlineBrowserControl(
 
             // Always use tabs
             await shellWindow.createBrowserTab(searchUrl, { background: false, waitForPageLoad: options.waitForPageLoad });
+
+            return searchUrl;
         },
         async readPage() {
             throw new Error("Reading page is not supported in inline browser.");

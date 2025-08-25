@@ -33,7 +33,7 @@ export type BrowserControlInvokeFunctions = {
         openInNewTab?: boolean,
     ): Promise<string | undefined>;
     closeWindow(): Promise<void>;
-    search(query?: string, sites?: string[], searchProvider?: SearchProvider, options?: { waitForPageLoad?: boolean }): Promise<void>;
+    search(query?: string, sites?: string[], searchProvider?: SearchProvider, options?: { waitForPageLoad?: boolean }): Promise<URL>;
     switchTabs(tabDescription: string, tabIndex?: number): Promise<boolean>;
 
     // REVIEW: external browser only
