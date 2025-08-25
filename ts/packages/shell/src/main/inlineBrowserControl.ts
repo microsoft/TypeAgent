@@ -286,7 +286,7 @@ export function createInlineBrowserControl(
             // Always use tabs
             await shellWindow.createBrowserTab(searchUrl, {
                 background: false,
-                waitForPageLoad: options.waitForPageLoad,
+                waitForPageLoad: options?.waitForPageLoad,
             });
 
             return searchUrl;
