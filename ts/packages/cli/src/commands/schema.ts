@@ -6,7 +6,7 @@ import { composeTranslatorSchemas } from "common-utils";
 import {
     getAssistantSelectionSchemas,
     getFullSchemaText,
-    getActionSchema,
+    tryGetActionSchema,
     getAllActionConfigProvider,
 } from "agent-dispatcher/internal";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
@@ -65,7 +65,7 @@ export default class Schema extends Command {
         const { args, flags } = await this.parse(Schema);
         if (!flags.assistant) {
             if (args.actionName) {
-                const actionSchema = getActionSchema(
+                const actionSchema = tryGetActionSchema(
                     {
                         schemaName: args.schemaName,
                         actionName: args.actionName,

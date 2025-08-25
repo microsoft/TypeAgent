@@ -243,5 +243,10 @@ export async function getSystemTemplateCompletion(
     const action = data[actionIndex];
     const systemContext = context.agentContext;
 
-    return getActionParamCompletion(systemContext, action, split.join("."));
+    const paramCompletion = await getActionParamCompletion(
+        systemContext,
+        action,
+        split.join("."),
+    );
+    return paramCompletion?.completions;
 }
