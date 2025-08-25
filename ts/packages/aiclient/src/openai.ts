@@ -734,16 +734,19 @@ export function createChatModelDefault(tag: string): ChatModelWithStreaming {
  * Uses the type: json_object flag
  * @param endpoint
  * @param tags - Tags for tracking this model's usage
+ * @param completionSettings Completion settings for the model
  * @returns ChatModel
  */
 export function createJsonChatModel(
     endpoint?: string | ApiSettings,
     tags?: string[],
+    completionSettings?: CompletionSettings,
 ): ChatModelWithStreaming {
     return createChatModel(
         endpoint,
         {
             response_format: { type: "json_object" },
+            ...completionSettings
         },
         undefined,
         tags,

@@ -1200,8 +1200,10 @@ async function executeBrowserAction(
                         context,
                     );
                     const model = openai.createJsonChatModel("GPT_35_TURBO", [
-                        "InternetLookupAnswerGenerator",
-                    ]); // TODO: GPT_5_MINI/NANO?
+                            "InternetLookupAnswerGenerator",
+                        ],
+                        //{ temperature: 1 }  // GPT_5* requires a temperature of 1
+                    );
                     const answerResult = await generateAnswer(
                         action.parameters.originalRequest,
                         content,
