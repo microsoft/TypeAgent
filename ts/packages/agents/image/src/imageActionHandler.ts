@@ -15,10 +15,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/action";
 import { GeneratedImage, openai } from "aiclient";
 import { randomBytes, randomUUID } from "crypto";
-import {
-    CreateImageAction,
-    ImageAction,
-} from "./imageActionSchema.js";
+import { CreateImageAction, ImageAction } from "./imageActionSchema.js";
 
 export function instantiate(): AppAgent {
     return {

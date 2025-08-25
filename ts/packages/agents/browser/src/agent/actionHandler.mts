@@ -1176,11 +1176,11 @@ async function executeBrowserAction(
                 case "findImageAction": {
                     return openWebPage(context, {
                         schemaName: "browser",
-                        actionName: "openWebPage", 
+                        actionName: "openWebPage",
                         parameters: {
                             site: `https://www.bing.com/images/search?q=${action.parameters.searchTerm}`,
-                            tab: "new"
-                        }
+                            tab: "new",
+                        },
                     });
                 }
                 default:
@@ -1264,29 +1264,25 @@ async function executeBrowserAction(
     return undefined;
 }
 
-async function lookup(context: ActionContext<BrowserActionContext>,
-    action: LookupAndAnswerInternet) {
+async function lookup(
+    context: ActionContext<BrowserActionContext>,
+    action: LookupAndAnswerInternet,
+) {
     // run a search for the lookup, wait for the page to load
     displayStatus(
         `Searching the web for '${action.parameters.internetLookups.join(" ")}'`,
         context,
     );
 
-    const searchURL: URL = await getActionBrowserControl(
-        context,
-    ).search(
+    const searchURL: URL = await getActionBrowserControl(context).search(
         action.parameters.internetLookups.join(" "),
         action.parameters.sites,
-        context.sessionContext.agentContext
-            .activeSearchProvider,
+        context.sessionContext.agentContext.activeSearchProvider,
         { waitForPageLoad: true },
     );
 
     // go get the page contents
-    const content =
-        await getActionBrowserControl(
-            context,
-        ).getPageContents();
+    const content = await getActionBrowserControl(context).getPageContents();
 
     // now try to generate an answer from the page contents
     displayStatus(
@@ -1335,7 +1331,7 @@ async function lookup(context: ActionContext<BrowserActionContext>,
         return createActionResultFromError(
             `There was an error generating the answer: ${answerResult.message} `,
         );
-    }    
+    }
 }
 
 async function handleTabIndexActions(

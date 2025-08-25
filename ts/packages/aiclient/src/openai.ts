@@ -746,7 +746,7 @@ export function createJsonChatModel(
         endpoint,
         {
             response_format: { type: "json_object" },
-            ...completionSettings
+            ...completionSettings,
         },
         undefined,
         tags,
