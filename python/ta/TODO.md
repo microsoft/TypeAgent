@@ -1,5 +1,21 @@
 # TODO for the Python knowpro port
 
+## TODOs for fully implementing persistence through SQLite
+
+- Make TimestampIndex async
+- Make all the indexes other than timestamp SQLite-backed (one at a time)
+- Temporarily
+  - Write a function that populates the semantic ref index
+    given the semantic ref collection (or from a list of semantic refs)
+  - Write a function that populates related terms (aliases and fuzzy_index)
+- Eventually
+  - Write a function that does the following:
+    - Add a given list of messages to the end of the message collection
+    - Extracts knowledge for all
+    - Add to the semantic ref collection
+    - Add to the semantic ref index
+    - Update all the other indexes
+
 # From Meeting 8/12/2025 morning
 
 - Get rid of `__getitem__` in favor of get_item(), get_slice(), get_multiple() [**DONE**]
@@ -50,7 +66,7 @@
 
 ### Sqlite database schema details
 
-**THIS HAS BEEN SUPERCEDED BY THE FILES IN THE `spec/` FOLDER**
+**THIS HAS BEEN SUPERSEDED BY THE FILES IN THE `spec/` FOLDER**
 
 Note: `*` means a column with an index
 
