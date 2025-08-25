@@ -104,6 +104,7 @@ import {
     saveSettings,
 } from "./browserActions.mjs";
 import { ChunkChatResponse, generateAnswer } from "typeagent";
+import { ChunkChatResponse, generateAnswer } from "typeagent";
 
 const debug = registerDebug("typeagent:browser:action");
 const debugWebSocket = registerDebug("typeagent:browser:ws");
@@ -1200,10 +1201,8 @@ async function executeBrowserAction(
                         context,
                     );
                     const model = openai.createJsonChatModel("GPT_35_TURBO", [
-                            "InternetLookupAnswerGenerator",
-                        ],
-                        //{ temperature: 1 }  // GPT_5* requires a temperature of 1
-                    );
+                        "InternetLookupAnswerGenerator",
+                    ]); // TODO: GPT_5_MINI/NANO?
                     const answerResult = await generateAnswer(
                         action.parameters.originalRequest,
                         content,
