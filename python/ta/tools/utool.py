@@ -134,7 +134,6 @@ async def main():
         podcast.PodcastMessage,
     )
     query_context = await load_podcast_index(args.podcast, settings, args.sqlite_db)
-    await print_conversation_stats(query_context.conversation)
 
     ar_list, ar_index = load_index_file(args.qafile, "question", QuestionAnswerData)
     sr_list, sr_index = load_index_file(args.srfile, "searchText", SearchResultData)
@@ -617,15 +616,16 @@ async def load_podcast_index(
             print(f"Reusing existing conversation in {dbname!r} with {size} messages.")
             conversation = await podcast.Podcast.create(settings)
             await semrefindex.build_conversation_index(conversation, settings)
+            await print_conversation_stats(conversation)
             return query.QueryEvalContext(conversation)
 
     with utils.timelog(f"load podcast from {podcast_file_prefix!r}"):
         conversation = await podcast.Podcast.read_from_file(
             podcast_file_prefix, settings, dbname
         )
-    assert (
-        conversation is not None
-    ), f"Failed to load podcast from {podcast_file_prefix!r}"
+
+    await print_conversation_stats(conversation)
+
     return query.QueryEvalContext(conversation)
 
 

@@ -371,6 +371,8 @@ class ITermToRelatedTerms(Protocol):
 
     async def is_empty(self) -> bool: ...
 
+    def clear(self) -> None: ...  # TODO: Should be async
+
 
 class ITermToRelatedTermsFuzzy(Protocol):
     async def size(self) -> int: ...

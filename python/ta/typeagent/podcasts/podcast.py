@@ -355,7 +355,7 @@ class Podcast(IConversation[PodcastMessage, semrefindex.TermToSemanticRefIndex])
         term_to_related_terms_index = secondary_indexes.term_to_related_terms_index
         assert term_to_related_terms_index is not None
         aliases = term_to_related_terms_index.aliases
-        aliases.clear()  # type: ignore  # Same issue as above.
+        aliases.clear()
         name_to_alias_map = await self._collect_participant_aliases()
         for name in name_to_alias_map.keys():
             related_terms: list[Term] = [

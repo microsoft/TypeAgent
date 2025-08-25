@@ -77,7 +77,7 @@ class TermToRelatedTermsMap(ITermToRelatedTerms):
         return TermToRelatedTermsData(relatedTerms=related_terms)
 
     def deserialize(self, data: TermToRelatedTermsData | None) -> None:
-        self.clear()
+        self.map.clear()
         if data is None:
             return
         related_terms_data = data.get("relatedTerms")
@@ -101,6 +101,7 @@ async def build_related_terms_index[
     settings: RelatedTermIndexSettings,
 ) -> None:
     csr = conversation.semantic_ref_index
+    assert csr is not None
     csi = conversation.secondary_indexes
     if csr is not None and csi is not None:
         if csi.term_to_related_terms_index is None:

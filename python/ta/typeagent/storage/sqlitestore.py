@@ -168,38 +168,8 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
         return results
 
     async def append(self, item: TMessage) -> None:
-        cursor = self.db.cursor()
-        (
-            chunks_json,
-            chunk_uri,
-            start_timestamp,
-            tags_json,
-            metadata_json,
-            extra_json,
-        ) = self._serialize_message_to_row(item)
-        # Use the current size as the ID to maintain 0-based indexing like the old implementation
-        msg_id = await self.size()
-        cursor.execute(
-            """
-            INSERT INTO Messages (msg_id, chunks, chunk_uri, start_timestamp, tags, metadata, extra)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-            (
-                msg_id,
-                chunks_json,
-                chunk_uri,
-                start_timestamp,
-                tags_json,
-                metadata_json,
-                extra_json,
-            ),
-        )
-        self.db.commit()
-
-    async def extend(self, items: typing.Iterable[TMessage]) -> None:
-        cursor = self.db.cursor()
-        current_size = await self.size()
-        for msg_id, item in enumerate(items, current_size):
+        with self.db:
+            cursor = self.db.cursor()
             (
                 chunks_json,
                 chunk_uri,
@@ -208,6 +178,8 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
                 metadata_json,
                 extra_json,
             ) = self._serialize_message_to_row(item)
+            # Use the current size as the ID to maintain 0-based indexing like the old implementation
+            msg_id = await self.size()
             cursor.execute(
                 """
                 INSERT INTO Messages (msg_id, chunks, chunk_uri, start_timestamp, tags, metadata, extra)
@@ -223,7 +195,35 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
                     extra_json,
                 ),
             )
-        self.db.commit()
+
+    async def extend(self, items: typing.Iterable[TMessage]) -> None:
+        with self.db:
+            cursor = self.db.cursor()
+            current_size = await self.size()
+            for msg_id, item in enumerate(items, current_size):
+                (
+                    chunks_json,
+                    chunk_uri,
+                    start_timestamp,
+                    tags_json,
+                    metadata_json,
+                    extra_json,
+                ) = self._serialize_message_to_row(item)
+                cursor.execute(
+                    """
+                    INSERT INTO Messages (msg_id, chunks, chunk_uri, start_timestamp, tags, metadata, extra)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                    (
+                        msg_id,
+                        chunks_json,
+                        chunk_uri,
+                        start_timestamp,
+                        tags_json,
+                        metadata_json,
+                        extra_json,
+                    ),
+                )
 
 
 class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
@@ -321,22 +321,8 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
         return results
 
     async def append(self, item: interfaces.SemanticRef) -> None:
-        cursor = self.db.cursor()
-        semref_id, range_json, knowledge_type, knowledge_json = (
-            self._serialize_semantic_ref_to_row(item)
-        )
-        cursor.execute(
-            """
-            INSERT INTO SemanticRefs (semref_id, range_json, knowledge_type, knowledge_json) 
-            VALUES (?, ?, ?, ?)
-        """,
-            (semref_id, range_json, knowledge_type, knowledge_json),
-        )
-        self.db.commit()
-
-    async def extend(self, items: typing.Iterable[interfaces.SemanticRef]) -> None:
-        cursor = self.db.cursor()
-        for item in items:
+        with self.db:
+            cursor = self.db.cursor()
             semref_id, range_json, knowledge_type, knowledge_json = (
                 self._serialize_semantic_ref_to_row(item)
             )
@@ -347,7 +333,21 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
             """,
                 (semref_id, range_json, knowledge_type, knowledge_json),
             )
-        self.db.commit()
+
+    async def extend(self, items: typing.Iterable[interfaces.SemanticRef]) -> None:
+        with self.db:
+            cursor = self.db.cursor()
+            for item in items:
+                semref_id, range_json, knowledge_type, knowledge_json = (
+                    self._serialize_semantic_ref_to_row(item)
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO SemanticRefs (semref_id, range_json, knowledge_type, knowledge_json) 
+                    VALUES (?, ?, ?, ?)
+                """,
+                    (semref_id, range_json, knowledge_type, knowledge_json),
+                )
 
 
 class SqliteStorageProvider[TMessage: interfaces.IMessage](
@@ -414,10 +414,10 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
 
     def _create_db(self, db_path: str) -> sqlite3.Connection:
         db = sqlite3.connect(db_path)
-        db.execute(MESSAGES_SCHEMA)
-        db.execute(TIMESTAMP_INDEX_SCHEMA)
-        db.execute(SEMANTIC_REFS_SCHEMA)
-        db.commit()
+        with db:
+            db.execute(MESSAGES_SCHEMA)
+            db.execute(TIMESTAMP_INDEX_SCHEMA)
+            db.execute(SEMANTIC_REFS_SCHEMA)
         return db
 
     # Collection getter methods
@@ -479,12 +479,12 @@ class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
         except ValueError:
             return False
 
-        cursor = self.db.cursor()
-        cursor.execute(
-            "UPDATE Messages SET start_timestamp = ? WHERE msg_id = ?",
-            (normalized_timestamp, message_ordinal),
-        )
-        self.db.commit()
+        with self.db:
+            cursor = self.db.cursor()
+            cursor.execute(
+                "UPDATE Messages SET start_timestamp = ? WHERE msg_id = ?",
+                (normalized_timestamp, message_ordinal),
+            )
         return cursor.rowcount > 0
 
     def add_timestamps(
@@ -493,22 +493,22 @@ class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
         """Add multiple timestamps to Messages table."""
         from datetime import datetime
 
-        cursor = self.db.cursor()
-        # Normalize timestamps and filter out empty/invalid ones
-        updates = []
-        for message_ordinal, timestamp in message_timestamps:
-            if timestamp:
-                try:
-                    timestamp_datetime = datetime.fromisoformat(timestamp)
-                    normalized_timestamp = timestamp_datetime.isoformat()
-                    updates.append((normalized_timestamp, message_ordinal))
-                except ValueError:
-                    continue  # Skip invalid timestamps
+        with self.db:
+            cursor = self.db.cursor()
+            # Normalize timestamps and filter out empty/invalid ones
+            updates = []
+            for message_ordinal, timestamp in message_timestamps:
+                if timestamp:
+                    try:
+                        timestamp_datetime = datetime.fromisoformat(timestamp)
+                        normalized_timestamp = timestamp_datetime.isoformat()
+                        updates.append((normalized_timestamp, message_ordinal))
+                    except ValueError:
+                        continue  # Skip invalid timestamps
 
-        cursor.executemany(
-            "UPDATE Messages SET start_timestamp = ? WHERE msg_id = ?", updates
-        )
-        self.db.commit()
+            cursor.executemany(
+                "UPDATE Messages SET start_timestamp = ? WHERE msg_id = ?", updates
+            )
 
     def lookup_range(
         self, date_range: interfaces.DateRange
