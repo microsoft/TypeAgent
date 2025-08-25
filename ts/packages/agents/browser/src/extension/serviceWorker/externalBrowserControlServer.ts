@@ -290,11 +290,14 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             }
         },
 
-        search: async (query?: string) => {
+        search: async (query?: string): Promise<URL> => {
             await chrome.search.query({
                 disposition: "NEW_TAB",
                 text: query,
             });
+
+            // todo return search provider URL
+            return new URL(`/?q=${query}`);
         },
         readPage: async () => {
             const targetTab = await getActiveTab();
@@ -328,6 +331,22 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             return chrome.tabs.captureVisibleTab(targetTab.windowId, {
                 quality: 100,
             });
+        },
+        getPageContents: async (): Promise<string> => {
+            const targetTab = await getActiveTab();
+            const article = await chrome.tabs.sendMessage(targetTab?.id!, {
+                type: "read_page_content",
+            });
+
+            if (article.error) {
+                throw new Error(article.error);
+            }
+
+            if (article?.formattedText) {
+                return article.formattedText;
+            }
+
+            throw new Error("No formatted text found.");
         },
     };
     const callFunctions: BrowserControlCallFunctions = {

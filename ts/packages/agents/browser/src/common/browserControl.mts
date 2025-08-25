@@ -33,13 +33,19 @@ export type BrowserControlInvokeFunctions = {
         openInNewTab?: boolean,
     ): Promise<string | undefined>;
     closeWindow(): Promise<void>;
-    search(query?: string, searchProvider?: SearchProvider): Promise<void>;
+    search(
+        query?: string,
+        sites?: string[],
+        searchProvider?: SearchProvider,
+        options?: { waitForPageLoad?: boolean },
+    ): Promise<URL>;
     switchTabs(tabDescription: string, tabIndex?: number): Promise<boolean>;
 
     // REVIEW: external browser only
     readPage(): Promise<void>;
     stopReadPage(): Promise<void>;
     captureScreenshot(): Promise<string>;
+    getPageContents(): Promise<string>;
 };
 
 export type BrowserControlCallFunctions = {

@@ -49,20 +49,8 @@ type LookupConversation = {
     conversationLookupFilters: TermFilter[];
 };
 
-// look up for contemporary internet information including sports scores, news events, or current commerce offerings, use the lookups parameter to request a lookup of the information on the user's behalf; the assistant will generate a response based on the lookup results
-// Lookup *facts* you don't know or if your facts are out of date.
-// E.g. stock prices, time sensitive data, etc
-// the search strings to look up on the user's behalf should be specific enough to return the correct information
-// it is recommended to include the same entities as in the user request
-type LookupInternet = {
-    source: "internet";
-    internetLookups: string[];
-    // specific sites to look up in.
-    site?: string[];
-};
-
-// The user request is a question about previous conversations or general knowledge that can be found from the internet.
-// (e.g. "what did we say about the project last week?" or "what is the current price of Microsoft stock?")
+// The user request is a question about previous conversations.
+// (e.g. "what did we say about the project last week?")
 // The user expects only the answer, and not an action to be taken.
 export interface LookupAndAnswerAction {
     actionName: "lookupAndAnswer";
@@ -71,7 +59,7 @@ export interface LookupAndAnswerAction {
         originalRequest: string;
         // The question to get answer for.
         question: string;
-        lookup: LookupConversation | LookupInternet;
+        lookup: LookupConversation;
     };
 }
 
