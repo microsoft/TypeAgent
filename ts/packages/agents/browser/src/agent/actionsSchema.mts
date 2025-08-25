@@ -225,5 +225,5 @@ export type LookupAndAnswerInternet = {
         internetLookups: string[];
         // specific sites to look up in.
         sites?: string[];
-    }
+    };
 };

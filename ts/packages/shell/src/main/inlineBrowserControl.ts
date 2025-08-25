@@ -259,8 +259,12 @@ export function createInlineBrowserControl(
                 "Closing the inline browser window is not supported.",
             );
         },
-        async search(query: string, sites: string[], searchProvider: SearchProvider, options: { waitForPageLoad?: boolean}): Promise<URL> {
-
+        async search(
+            query: string,
+            sites: string[],
+            searchProvider: SearchProvider,
+            options: { waitForPageLoad?: boolean },
+        ): Promise<URL> {
             // append any site specific scoping
             if (sites && sites.length > 0) {
                 sites.forEach((site) => {
@@ -280,7 +284,10 @@ export function createInlineBrowserControl(
             );
 
             // Always use tabs
-            await shellWindow.createBrowserTab(searchUrl, { background: false, waitForPageLoad: options.waitForPageLoad });
+            await shellWindow.createBrowserTab(searchUrl, {
+                background: false,
+                waitForPageLoad: options.waitForPageLoad,
+            });
 
             return searchUrl;
         },
@@ -300,6 +307,6 @@ export function createInlineBrowserControl(
         async getPageContents(): Promise<string> {
             const webContents = getActiveBrowserWebContents();
             return webContents.executeJavaScript("document.body.innerText");
-        }
+        },
     };
 }

@@ -110,6 +110,6 @@ export function createExternalBrowserClient(
         },
         getPageContents: async () => {
             return rpc.invoke("getPageContents");
-        }
+        },
     };
 }

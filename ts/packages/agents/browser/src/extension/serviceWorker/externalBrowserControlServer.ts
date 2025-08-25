@@ -347,7 +347,7 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             }
 
             throw new Error("No formatted text found.");
-        }
+        },
     };
     const callFunctions: BrowserControlCallFunctions = {
         setAgentStatus: (isBusy: boolean, message: string) => {

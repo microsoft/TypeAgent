@@ -58,7 +58,7 @@ export function createActionResult(
 export function createActionResultFromTextDisplay(
     displayText: string,
     historyText?: string,
-    entities?: Entity[] | undefined
+    entities?: Entity[] | undefined,
 ): ActionResultSuccess {
     return {
         historyText,

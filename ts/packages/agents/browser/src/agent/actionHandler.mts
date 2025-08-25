@@ -1171,40 +1171,66 @@ async function executeBrowserAction(
                 case "changeSearchProvider":
                     return changeSearchProvider(context, action);
                 case "lookupAndAnswerInternet":
-
                     // TODO: beter answer handling, streaming answer, return entities from search result, etc.
                     // run a search for the lookup, wait for the page to load
-                    displayStatus(`Searching the web for '${action.parameters.internetLookups.join(" ")}'`, context);
+                    displayStatus(
+                        `Searching the web for '${action.parameters.internetLookups.join(" ")}'`,
+                        context,
+                    );
 
-                    const searchURL: URL = await getActionBrowserControl(context).search(
+                    const searchURL: URL = await getActionBrowserControl(
+                        context,
+                    ).search(
                         action.parameters.internetLookups.join(" "),
                         action.parameters.sites,
                         context.sessionContext.agentContext
                             .activeSearchProvider,
-                        { waitForPageLoad: true }
-                    );                    
+                        { waitForPageLoad: true },
+                    );
 
                     // go get the page contents
-                    const content = await getActionBrowserControl(context).getPageContents();
-                    
+                    const content =
+                        await getActionBrowserControl(
+                            context,
+                        ).getPageContents();
+
                     // now try to generate an answer from the page contents
-                    displayStatus(`Generating the answer for '${action.parameters.originalRequest}'`, context);
-                    const model = openai.createJsonChatModel("GPT_35_TURBO", ["InternetLookupAnswerGenerator"]); // TODO: GPT_5_MINI/NANO?
-                    const answerResult = await generateAnswer(action.parameters.originalRequest, content, 4096 * 4, model, 1, (text: string, result: ChunkChatResponse) => {
-                        displayStatus(result.generatedText!, context);
-                    });
+                    displayStatus(
+                        `Generating the answer for '${action.parameters.originalRequest}'`,
+                        context,
+                    );
+                    const model = openai.createJsonChatModel("GPT_35_TURBO", [
+                        "InternetLookupAnswerGenerator",
+                    ]); // TODO: GPT_5_MINI/NANO?
+                    const answerResult = await generateAnswer(
+                        action.parameters.originalRequest,
+                        content,
+                        4096 * 4,
+                        model,
+                        1,
+                        (text: string, result: ChunkChatResponse) => {
+                            displayStatus(result.generatedText!, context);
+                        },
+                    );
 
                     if (answerResult.success) {
-                        const answer: ChunkChatResponse = answerResult.data as ChunkChatResponse;
-                        if (answer.answerStatus === "Answered" || answer.answerStatus === "PartiallyAnswered") {
-
+                        const answer: ChunkChatResponse =
+                            answerResult.data as ChunkChatResponse;
+                        if (
+                            answer.answerStatus === "Answered" ||
+                            answer.answerStatus === "PartiallyAnswered"
+                        ) {
                             return createActionResult(
                                 `${answer.generatedText}`,
-                                { speak: true }, 
+                                { speak: true },
                                 [
                                     // the web page
-                                    { name: "WebPage", type: ["WebPage"], uniqueId: searchURL.toString() },
-                                ]
+                                    {
+                                        name: "WebPage",
+                                        type: ["WebPage"],
+                                        uniqueId: searchURL.toString(),
+                                    },
+                                ],
                             );
                         } else {
                             return createActionResultFromTextDisplay(
@@ -1212,7 +1238,9 @@ async function executeBrowserAction(
                             );
                         }
                     } else {
-                        return createActionResultFromError(`There was an error generating the answer: ${answerResult.message} `);
+                        return createActionResultFromError(
+                            `There was an error generating the answer: ${answerResult.message} `,
+                        );
                     }
                 default:
                     // Should never happen.

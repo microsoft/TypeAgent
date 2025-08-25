@@ -530,7 +530,7 @@ export class ShellWindow {
      */
     public async createBrowserTab(
         url: URL,
-        options?: { background?: boolean, waitForPageLoad?: boolean },
+        options?: { background?: boolean; waitForPageLoad?: boolean },
     ): Promise<string> {
         // Handle custom typeagent-browser protocol
         let resolvedUrl = url;
