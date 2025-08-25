@@ -11,9 +11,11 @@ from .collections import TermSet
 from .common import is_search_term_wildcard
 from .interfaces import (
     IConversation,
+    IMessage,
     ITermToRelatedTerms,
     ITermToRelatedTermsFuzzy,
     ITermToRelatedTermsIndex,
+    ITermToSemanticRefIndex,
     SearchTerm,
     Term,
     TermToRelatedTermsData,
@@ -91,8 +93,11 @@ class TermToRelatedTermsMap(ITermToRelatedTerms):
             self.add_related_term(term_text, related_terms)
 
 
-async def build_related_terms_index(
-    conversation: IConversation,
+async def build_related_terms_index[
+    TMessage: IMessage,
+    TTermToSemanticRefIndex: ITermToSemanticRefIndex,
+](
+    conversation: IConversation[TMessage, TTermToSemanticRefIndex],
     settings: RelatedTermIndexSettings,
 ) -> None:
     csr = conversation.semantic_ref_index
@@ -101,9 +106,10 @@ async def build_related_terms_index(
         if csi.term_to_related_terms_index is None:
             csi.term_to_related_terms_index = RelatedTermsIndex(settings)
         fuzzy_index = csi.term_to_related_terms_index.fuzzy_index
-        all_terms = await csr.get_terms()
-        if fuzzy_index and all_terms:
-            await fuzzy_index.add_terms(all_terms)
+        if fuzzy_index is not None:
+            all_terms = await csr.get_terms()
+            if all_terms:
+                await fuzzy_index.add_terms(all_terms)
 
 
 class RelatedTermsIndex(ITermToRelatedTermsIndex):
@@ -282,6 +288,9 @@ class TermEmbeddingIndex(ITermEmbeddingIndex):
         if data is not None:
             self._texts = data.get("textItems", [])
             self._vectorbase.deserialize(data.get("embeddings"))
+
+    async def size(self) -> int:
+        return len(self._vectorbase)
 
     async def add_terms(self, texts: list[str]) -> None:
         await self._vectorbase.add_keys(texts)

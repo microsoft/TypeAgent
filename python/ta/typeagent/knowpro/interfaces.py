@@ -373,6 +373,8 @@ class ITermToRelatedTerms(Protocol):
 
 
 class ITermToRelatedTermsFuzzy(Protocol):
+    async def size(self) -> int: ...
+
     async def add_terms(self, texts: list[str]) -> None: ...
 
     async def lookup_term(

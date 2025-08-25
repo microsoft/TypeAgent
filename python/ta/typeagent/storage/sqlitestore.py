@@ -32,7 +32,7 @@ type ShreddedMessage = tuple[
     str | None, str | None, str | None, str | None, str | None, str | None
 ]
 
-MESSAGES_INDEX_SCHEMA = """
+TIMESTAMP_INDEX_SCHEMA = """
 CREATE INDEX IF NOT EXISTS idx_messages_start_timestamp ON Messages(start_timestamp);
 """
 
@@ -415,7 +415,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
     def _create_db(self, db_path: str) -> sqlite3.Connection:
         db = sqlite3.connect(db_path)
         db.execute(MESSAGES_SCHEMA)
-        db.execute(MESSAGES_INDEX_SCHEMA)
+        db.execute(TIMESTAMP_INDEX_SCHEMA)
         db.execute(SEMANTIC_REFS_SCHEMA)
         db.commit()
         return db
@@ -449,11 +449,19 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         return self._conversation_threads
 
 
+# TODO: Make this async
 class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
     """SQL-based timestamp index that queries Messages table directly."""
 
     def __init__(self, db: sqlite3.Connection):
         self.db = db
+
+    def size(self):
+        cursor = self.db.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM Messages WHERE start_timestamp IS NOT NULL"
+        )
+        return cursor.fetchone()[0]
 
     def add_timestamp(
         self, message_ordinal: interfaces.MessageOrdinal, timestamp: str
