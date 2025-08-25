@@ -104,7 +104,6 @@ import {
     saveSettings,
 } from "./browserActions.mjs";
 import { ChunkChatResponse, generateAnswer } from "typeagent";
-import { ChunkChatResponse, generateAnswer } from "typeagent";
 
 const debug = registerDebug("typeagent:browser:action");
 const debugWebSocket = registerDebug("typeagent:browser:ws");
