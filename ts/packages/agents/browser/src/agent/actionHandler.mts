@@ -73,6 +73,7 @@ import {
     OpenWebPage,
     OpenSearchResult,
     ChangeTabs,
+    DisabledBrowserActions,
 } from "./actionsSchema.mjs";
 import {
     resolveURLWithHistory,
@@ -105,7 +106,7 @@ import {
 } from "./browserActions.mjs";
 import { ChunkChatResponse, generateAnswer } from "typeagent";
 import {
-    BrowserLookupActions,
+    LookupAndAnswerActions,
     LookupAndAnswerInternet,
 } from "./lookupAndAnswerSchema.mjs";
 
@@ -1068,13 +1069,13 @@ async function changeSearchProvider(
 
 async function executeBrowserAction(
     action:
-        | TypeAgentAction<BrowserActions, "browser">
+        | TypeAgentAction<BrowserActions | DisabledBrowserActions, "browser">
         | TypeAgentAction<ExternalBrowserActions, "browser.external">
         | TypeAgentAction<CrosswordActions, "browser.crossword">
         | TypeAgentAction<ShoppingActions, "browser.commerce">
         | TypeAgentAction<InstacartActions, "browser.instacart">
         | TypeAgentAction<SchemaDiscoveryActions, "browser.actionDiscovery">
-        | TypeAgentAction<BrowserLookupActions, "browser.lookupAndAnswer">,
+        | TypeAgentAction<LookupAndAnswerActions, "browser.lookupAndAnswer">,
 
     context: ActionContext<BrowserActionContext>,
 ) {
