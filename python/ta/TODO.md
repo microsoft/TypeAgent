@@ -5,13 +5,19 @@
 - Make all the indexes other than timestamp SQLite-backed (one at a time)
   - semantic ref index (done)
   - property index
-  - message text index
+  - message text index (done)
   - related terms index
   - (conversation threads index -- skip for now, we're getting rid of it eventually)
+
+- Rename remaining uses of conversation index (any spelling) to semantic ref index
+
+
 - Temporarily
   - Speed up _populate_indexes_from_data (it takes 7 seconds?!?!?!)
   - Add code to populate aliases (assume it's a podcast -- use metadata source/dest)
+
 - Eventually
+  - Make (de)serialize methods async since they execute SQL statements
   - Write a function that does the following:
     - Add a given list of messages to the end of the message collection
     - Extracts knowledge for all
@@ -23,11 +29,19 @@
     because we won't know the message ordinals/ids until they have been
     inserted, and ditto for the semantic refs.
     (Why do semantic refs contain their own ord/id anyway?)
+
 - Maybe
   - Flatten secondary indexes into Conversation (they are no longer optional)
   - Make the collection/index accessors in StorageProvider synchronous
     (the async work is all done in create())
   - Replace the storage accessors with readonly @property functions
+  - Refactor memory and sqlite indexes to share more code
+    (e.g. population and query logic)
+  - Store embeddings in message_index
+
+- Rework pyproject to separate build-time from runtime deps
+  - Make some runtime deps optional (e.g. logfire, mcp)
+  - Comment out pydantic-ai until we resume that work
 
 # From Meeting 8/12/2025 morning
 

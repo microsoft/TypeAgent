@@ -58,6 +58,11 @@ async def test_message_text_index_population_from_database():
         for message in test_messages:
             await msg_collection.append(message)
 
+        # Also add messages to the message text index explicitly
+        # This is what higher-level code (podcasts, knowledge extraction, etc.) does
+        msg_text_index = await storage1.get_message_text_index()
+        await msg_text_index.add_messages(test_messages)
+
         await storage1.close()
 
         # Reopen database and verify message text index
@@ -78,7 +83,10 @@ async def test_message_text_index_population_from_database():
 
         # Check message text index
         msg_text_index = await storage2.get_message_text_index()
-        assert isinstance(msg_text_index, MessageTextIndex)
+        # Check that it implements the interface correctly
+        from typeagent.knowpro.interfaces import IMessageTextIndex
+
+        assert isinstance(msg_text_index, IMessageTextIndex)
 
         # Check if index has entries (debug info)
         index_size = await msg_text_index.size()

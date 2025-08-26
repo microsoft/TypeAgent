@@ -15,6 +15,7 @@ from typing import (
     Protocol,
     Self,
     TypedDict,
+    runtime_checkable,
 )
 
 from pydantic.dataclasses import dataclass
@@ -457,6 +458,7 @@ class IConversationThreads(Protocol):
     def deserialize(self, data: "ConversationThreadData[ThreadDataItem]") -> None: ...
 
 
+@runtime_checkable
 class IMessageTextIndex[TMessage: IMessage](Protocol):
 
     async def add_messages(

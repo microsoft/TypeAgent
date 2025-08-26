@@ -57,7 +57,28 @@ SEMANTIC_REF_INDEX_TERM_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_semantic_ref_index_term ON SemanticRefIndex(term);
 """
 
+MESSAGE_TEXT_INDEX_SCHEMA = """
+CREATE TABLE IF NOT EXISTS MessageTextIndex (
+    text TEXT NOT NULL,
+    msg_id INTEGER NOT NULL,
+    chunk_ordinal INTEGER NOT NULL,
+    embedding BLOB NULL,           -- Serialized embedding vector
+
+    PRIMARY KEY (msg_id, chunk_ordinal),
+    FOREIGN KEY (msg_id) REFERENCES Messages(msg_id) ON DELETE CASCADE
+);
+"""
+
+MESSAGE_TEXT_INDEX_TEXT_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_message_text_index_text ON MessageTextIndex(text);
+"""
+
+MESSAGE_TEXT_INDEX_MESSAGE_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_message_text_index_message ON MessageTextIndex(msg_id, chunk_ordinal);
+"""
+
 type ShreddedSemanticRef = tuple[int, str, str, str]
+type ShreddedMessageText = tuple[int, str, int, int, bytes | None]
 
 
 class SqliteMessageCollection[TMessage: interfaces.IMessage](
@@ -605,6 +626,221 @@ class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
         return results
 
 
+class SqliteMessageTextIndex[TMessage: interfaces.IMessage](
+    interfaces.IMessageTextIndex[TMessage]
+):
+    """SQLite-backed implementation of message text index."""
+
+    def __init__(self, db: sqlite3.Connection, settings: MessageTextIndexSettings):
+        self.db = db
+        self.settings = settings
+        # Import here to avoid circular dependency
+        from ..knowpro.fuzzyindex import EmbeddingIndex
+
+        self._embedding_index = EmbeddingIndex(
+            settings=settings.embedding_index_settings
+        )
+
+    async def size(self) -> int:
+        cursor = self.db.cursor()
+        cursor.execute("SELECT COUNT(*) FROM MessageTextIndex")
+        return cursor.fetchone()[0]
+
+    async def is_empty(self) -> bool:
+        return await self.size() == 0
+
+    async def add_messages(
+        self,
+        messages: typing.Iterable[TMessage],
+    ) -> None:
+        """Add messages to the SQLite index."""
+        # Get starting message ordinal
+        start_message_ordinal = await self._get_next_message_ordinal()
+
+        # Collect all text chunks with their locations using list comprehension
+        all_chunks: list[tuple[str, interfaces.TextLocation]] = [
+            (
+                chunk,
+                interfaces.TextLocation(message_ordinal, chunk_ordinal),
+            )
+            for message_ordinal, message in enumerate(messages, start_message_ordinal)
+            for chunk_ordinal, chunk in enumerate(message.text_chunks)
+        ]
+
+        if not all_chunks:
+            return
+
+        # Add texts to embedding index to get embeddings
+        texts = [chunk for chunk, _ in all_chunks]
+        await self._embedding_index.add_texts(texts)
+
+        # Store in SQLite
+        with self.db:
+            cursor = self.db.cursor()
+            for i, (text, text_location) in enumerate(all_chunks):
+                # Get embedding from the in-memory index
+                embedding = self._embedding_index.get(i)
+                # Serialize embedding as bytes
+                import pickle
+
+                embedding_data = pickle.dumps(embedding)
+
+                cursor.execute(
+                    """
+                    INSERT INTO MessageTextIndex (text, msg_id, chunk_ordinal, embedding)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (
+                        text,
+                        text_location.message_ordinal,
+                        text_location.chunk_ordinal,
+                        embedding_data,
+                    ),
+                )
+
+    async def _get_next_message_ordinal(self) -> int:
+        """Get the next message ordinal from the Messages table."""
+        cursor = self.db.cursor()
+        cursor.execute("SELECT COUNT(*) FROM Messages")
+        return cursor.fetchone()[0]
+
+    async def lookup_messages(
+        self,
+        message_text: str,
+        max_matches: int | None = None,
+        threshold_score: float | None = None,
+    ) -> list[interfaces.ScoredMessageOrdinal]:
+        """Look up messages by text using embedding similarity."""
+        max_matches = max_matches or self.settings.embedding_index_settings.max_matches
+        threshold_score = (
+            threshold_score or self.settings.embedding_index_settings.min_score
+        )
+
+        # Generate embedding for search text
+        embedding = await self._embedding_index.get_embedding(message_text)
+
+        # Get similar embeddings from the in-memory index
+        matches = self._embedding_index.get_indexes_of_nearest(
+            embedding,
+            max_matches=max_matches,
+            min_score=threshold_score,
+        )
+
+        if not matches:
+            return []
+
+        # Get all text locations from SQLite in the same order as embedding index
+        cursor = self.db.cursor()
+        cursor.execute(
+            """
+            SELECT msg_id, chunk_ordinal FROM MessageTextIndex
+            ORDER BY msg_id, chunk_ordinal
+            """
+        )
+
+        all_text_locations = [
+            interfaces.TextLocation(msg_id, chunk_ordinal)
+            for msg_id, chunk_ordinal in cursor.fetchall()
+        ]
+
+        # Convert embedding matches to scored text locations
+        scored_text_locations = []
+        for match in matches:
+            if match.item < len(all_text_locations):
+                text_location = all_text_locations[match.item]
+                scored_text_locations.append(
+                    # Using same structure as TextToTextLocationIndex
+                    type(
+                        "ScoredTextLocation",
+                        (),
+                        {"text_location": text_location, "score": match.score},
+                    )()
+                )
+
+        return self._to_scored_message_ordinals(scored_text_locations)
+
+    async def lookup_messages_in_subset(
+        self,
+        message_text: str,
+        ordinals_to_search: list[interfaces.MessageOrdinal],
+        max_matches: int | None = None,
+        threshold_score: float | None = None,
+    ) -> list[interfaces.ScoredMessageOrdinal]:
+        """Look up messages in a subset by text using embedding similarity."""
+        # First get all possible matches
+        all_matches = await self.lookup_messages(message_text, None, threshold_score)
+
+        # Filter to only include the requested ordinals
+        ordinals_set = set(ordinals_to_search)
+        filtered_matches = [
+            match for match in all_matches if match.message_ordinal in ordinals_set
+        ]
+
+        # Apply max_matches limit
+        if max_matches is not None:
+            filtered_matches = filtered_matches[:max_matches]
+
+        return filtered_matches
+
+    def _to_scored_message_ordinals(
+        self, scored_locations: list
+    ) -> list[interfaces.ScoredMessageOrdinal]:
+        """Convert scored text locations to scored message ordinals."""
+        matches: dict[interfaces.MessageOrdinal, interfaces.ScoredMessageOrdinal] = {}
+
+        for sl in scored_locations:
+            value = sl.text_location.message_ordinal
+            score = sl.score
+            match = matches.get(value)
+            if match is None:
+                matches[value] = interfaces.ScoredMessageOrdinal(value, score)
+            else:
+                match.score = max(score, match.score)
+
+        return [
+            interfaces.ScoredMessageOrdinal(
+                match.message_ordinal,
+                match.score,
+            )
+            for match in sorted(
+                matches.values(), key=lambda match: match.score, reverse=True
+            )
+        ]
+
+    def serialize(self) -> interfaces.MessageTextIndexData:
+        """Serialize the index data."""
+        # Get all text locations from SQLite in the same order as embedding index
+        cursor = self.db.cursor()
+        cursor.execute(
+            "SELECT msg_id, chunk_ordinal FROM MessageTextIndex ORDER BY msg_id, chunk_ordinal"
+        )
+
+        text_locations = []
+        for msg_id, chunk_ordinal in cursor.fetchall():
+            text_location = interfaces.TextLocation(msg_id, chunk_ordinal)
+            text_locations.append(text_location.serialize())
+
+        # Create TextToTextLocationIndexData
+        text_location_index_data = interfaces.TextToTextLocationIndexData(
+            textLocations=text_locations,
+            embeddings=self._embedding_index.serialize(),
+        )
+
+        return interfaces.MessageTextIndexData(
+            indexData=text_location_index_data,
+        )
+
+    def deserialize(self, data: interfaces.MessageTextIndexData) -> None:
+        """Deserialize is not needed for SQLite-backed implementation."""
+        # The text data is already persisted in SQLite
+        # We only need to restore the in-memory embedding index
+        index_data = data.get("indexData")
+        if index_data is not None:
+            embeddings = index_data.get("embeddings")
+            if embeddings is not None:
+                self._embedding_index.deserialize(embeddings)
+
+
 class SqliteStorageProvider[TMessage: interfaces.IMessage](
     interfaces.IStorageProvider[TMessage]
 ):
@@ -655,7 +891,9 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         self._conversation_index = SqliteTermToSemanticRefIndex(self.db)
         self._property_index = PropertyIndex()
         self._timestamp_index = SqliteTimestampToTextRangeIndex(self.db)
-        self._message_text_index = MessageTextIndex(message_text_settings)
+        self._message_text_index = SqliteMessageTextIndex(
+            self.db, message_text_settings
+        )
         self._related_terms_index = RelatedTermsIndex(related_terms_settings)
         self._conversation_threads = ConversationThreads(
             related_terms_settings.embedding_index_settings
@@ -710,15 +948,8 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
             if message.timestamp:
                 await self._timestamp_index.add_timestamp(i, message.timestamp)
 
-        # Build message text index from messages
-        if msg_count > 0:
-            # Get all messages for batch processing
-            messages = []
-            for message in await self._message_collection.get_slice(0, msg_count):
-                messages.append(message)
-
-            # Add all messages to the message text index
-            await self._message_text_index.add_messages(messages)
+        # Message text index is SQLite-backed and doesn't need repopulation
+        # Higher-level code is responsible for explicitly calling add_messages when needed
 
         # Build related terms index from semantic ref index terms
         # Get all terms from the conversation index and add them to the fuzzy index
@@ -741,6 +972,9 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
             db.execute(SEMANTIC_REFS_SCHEMA)
             db.execute(SEMANTIC_REF_INDEX_SCHEMA)
             db.execute(SEMANTIC_REF_INDEX_TERM_INDEX)
+            db.execute(MESSAGE_TEXT_INDEX_SCHEMA)
+            db.execute(MESSAGE_TEXT_INDEX_TEXT_INDEX)
+            db.execute(MESSAGE_TEXT_INDEX_MESSAGE_INDEX)
         return db
 
     # Collection getter methods
