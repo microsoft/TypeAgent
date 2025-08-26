@@ -7,7 +7,7 @@ import typing
 
 from ..knowpro import interfaces
 from ..knowpro import serialization
-from ..knowpro.semrefindex import TermToSemanticRefIndex, text_range_from_message_chunk
+from ..knowpro.semrefindex import text_range_from_message_chunk
 from ..knowpro.propindex import PropertyIndex
 from ..knowpro.messageindex import MessageTextIndex, MessageTextIndexSettings
 from ..knowpro.reltermsindex import RelatedTermsIndex, RelatedTermIndexSettings
@@ -42,6 +42,19 @@ CREATE TABLE IF NOT EXISTS SemanticRefs (
     knowledge_type TEXT NOT NULL,      -- Required to distinguish JSON types (entity, topic, etc.)
     knowledge_json JSON NOT NULL       -- JSON of the Knowledge object
 );
+"""
+
+SEMANTIC_REF_INDEX_SCHEMA = """
+CREATE TABLE IF NOT EXISTS SemanticRefIndex (
+    term TEXT NOT NULL,             -- lowercased, not-unique/normalized
+    semref_id INTEGER NOT NULL,
+
+    FOREIGN KEY (semref_id) REFERENCES SemanticRefs(semref_id) ON DELETE CASCADE
+);
+"""
+
+SEMANTIC_REF_INDEX_TERM_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_semantic_ref_index_term ON SemanticRefIndex(term);
 """
 
 type ShreddedSemanticRef = tuple[int, str, str, str]
@@ -276,7 +289,7 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
         cursor = self.db.cursor()
         cursor.execute(
             """
-            SELECT semref_id, range_json, knowledge_type, knowledge_json 
+            SELECT semref_id, range_json, knowledge_type, knowledge_json
             FROM SemanticRefs ORDER BY semref_id
         """
         )
@@ -289,7 +302,7 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
         cursor = self.db.cursor()
         cursor.execute(
             """
-            SELECT semref_id, range_json, knowledge_type, knowledge_json 
+            SELECT semref_id, range_json, knowledge_type, knowledge_json
             FROM SemanticRefs WHERE semref_id = ?
         """,
             (arg,),
@@ -305,8 +318,8 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
         cursor = self.db.cursor()
         cursor.execute(
             """
-            SELECT semref_id, range_json, knowledge_type, knowledge_json 
-            FROM SemanticRefs WHERE semref_id >= ? AND semref_id < ? 
+            SELECT semref_id, range_json, knowledge_type, knowledge_json
+            FROM SemanticRefs WHERE semref_id >= ? AND semref_id < ?
             ORDER BY semref_id
         """,
             (start, stop),
@@ -330,7 +343,7 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
             )
             cursor.execute(
                 """
-                INSERT INTO SemanticRefs (semref_id, range_json, knowledge_type, knowledge_json) 
+                INSERT INTO SemanticRefs (semref_id, range_json, knowledge_type, knowledge_json)
                 VALUES (?, ?, ?, ?)
             """,
                 (semref_id, range_json, knowledge_type, knowledge_json),
@@ -345,11 +358,138 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
                 )
                 cursor.execute(
                     """
-                    INSERT INTO SemanticRefs (semref_id, range_json, knowledge_type, knowledge_json) 
+                    INSERT INTO SemanticRefs (semref_id, range_json, knowledge_type, knowledge_json)
                     VALUES (?, ?, ?, ?)
                 """,
                     (semref_id, range_json, knowledge_type, knowledge_json),
                 )
+
+
+class SqliteTermToSemanticRefIndex(interfaces.ITermToSemanticRefIndex):
+    """SQLite-backed implementation of term to semantic ref index."""
+
+    def __init__(self, db: sqlite3.Connection):
+        self.db = db
+
+    async def size(self) -> int:
+        cursor = self.db.cursor()
+        cursor.execute("SELECT COUNT(DISTINCT term) FROM SemanticRefIndex")
+        return cursor.fetchone()[0]
+
+    async def get_terms(self) -> list[str]:
+        cursor = self.db.cursor()
+        cursor.execute("SELECT DISTINCT term FROM SemanticRefIndex ORDER BY term")
+        return [row[0] for row in cursor.fetchall()]
+
+    async def add_term(
+        self,
+        term: str,
+        semantic_ref_ordinal: (
+            interfaces.SemanticRefOrdinal | interfaces.ScoredSemanticRefOrdinal
+        ),
+    ) -> str:
+        if not term:
+            return term
+
+        term = self._prepare_term(term)
+
+        # Extract semref_id from the ordinal
+        if isinstance(semantic_ref_ordinal, interfaces.ScoredSemanticRefOrdinal):
+            semref_id = semantic_ref_ordinal.semantic_ref_ordinal
+        else:
+            semref_id = semantic_ref_ordinal
+
+        with self.db:
+            cursor = self.db.cursor()
+            cursor.execute(
+                """
+                INSERT OR IGNORE INTO SemanticRefIndex (term, semref_id)
+                VALUES (?, ?)
+                """,
+                (term, semref_id),
+            )
+
+        return term
+
+    async def remove_term(
+        self, term: str, semantic_ref_ordinal: interfaces.SemanticRefOrdinal
+    ) -> None:
+        term = self._prepare_term(term)
+        with self.db:
+            cursor = self.db.cursor()
+            cursor.execute(
+                "DELETE FROM SemanticRefIndex WHERE term = ? AND semref_id = ?",
+                (term, semantic_ref_ordinal),
+            )
+
+    async def lookup_term(
+        self, term: str
+    ) -> list[interfaces.ScoredSemanticRefOrdinal] | None:
+        term = self._prepare_term(term)
+        cursor = self.db.cursor()
+        cursor.execute(
+            "SELECT semref_id FROM SemanticRefIndex WHERE term = ?",
+            (term,),
+        )
+
+        # Return as ScoredSemanticRefOrdinal with default score of 1.0
+        results = []
+        for row in cursor.fetchall():
+            semref_id = row[0]
+            results.append(interfaces.ScoredSemanticRefOrdinal(semref_id, 1.0))
+        return results
+
+    def serialize(self) -> interfaces.TermToSemanticRefIndexData:
+        """Serialize the index data for compatibility with in-memory version."""
+        cursor = self.db.cursor()
+        cursor.execute(
+            "SELECT term, semref_id FROM SemanticRefIndex ORDER BY term, semref_id"
+        )
+
+        # Group by term
+        term_to_semrefs: dict[str, list[interfaces.ScoredSemanticRefOrdinalData]] = {}
+        for term, semref_id in cursor.fetchall():
+            if term not in term_to_semrefs:
+                term_to_semrefs[term] = []
+            scored_ref = interfaces.ScoredSemanticRefOrdinal(semref_id, 1.0)
+            term_to_semrefs[term].append(scored_ref.serialize())
+
+        # Convert to the expected format
+        items = []
+        for term, semref_ordinals in term_to_semrefs.items():
+            items.append(
+                interfaces.TermToSemanticRefIndexItemData(
+                    term=term, semanticRefOrdinals=semref_ordinals
+                )
+            )
+
+        return interfaces.TermToSemanticRefIndexData(items=items)
+
+    def deserialize(self, data: interfaces.TermToSemanticRefIndexData) -> None:
+        """Deserialize index data by populating the SQLite table."""
+        # Clear existing data
+        with self.db:
+            cursor = self.db.cursor()
+            cursor.execute("DELETE FROM SemanticRefIndex")
+
+            # Add all the terms
+            for item in data["items"]:
+                if item and item["term"]:
+                    term = item["term"]
+                    for semref_ordinal_data in item["semanticRefOrdinals"]:
+                        if isinstance(semref_ordinal_data, dict):
+                            semref_id = semref_ordinal_data["semanticRefOrdinal"]
+                        else:
+                            # Fallback for direct integer
+                            semref_id = semref_ordinal_data
+                        cursor.execute(
+                            "INSERT OR IGNORE INTO SemanticRefIndex (term, semref_id) VALUES (?, ?)",
+                            (self._prepare_term(term), semref_id),
+                        )
+
+    def _prepare_term(self, term: str) -> str:
+        """Normalize term by converting to lowercase."""
+        return term.lower()
 
 
 class SqliteStorageProvider[TMessage: interfaces.IMessage](
@@ -359,7 +499,8 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
 
     NOTE: You can create only one message collection
     and one semantic ref collection per provider.
-    For now, indexes are stored in memory (not persisted to SQLite).
+    The semantic ref index is persisted to SQLite.
+    Other indexes are still stored in memory.
     """
 
     db_path: str
@@ -368,7 +509,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
 
     _message_collection: SqliteMessageCollection[TMessage]
     _semantic_ref_collection: SqliteSemanticRefCollection
-    _conversation_index: TermToSemanticRefIndex
+    _conversation_index: SqliteTermToSemanticRefIndex
     _property_index: PropertyIndex
     _timestamp_index: interfaces.ITimestampToTextRangeIndex
     _message_text_index: interfaces.IMessageTextIndex[TMessage]
@@ -398,7 +539,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         self._semantic_ref_collection = SqliteSemanticRefCollection(self.db)
 
         # Initialize all indexes
-        self._conversation_index = TermToSemanticRefIndex()
+        self._conversation_index = SqliteTermToSemanticRefIndex(self.db)
         self._property_index = PropertyIndex()
         self._timestamp_index = SqliteTimestampToTextRangeIndex(self.db)
         self._message_text_index = MessageTextIndex(message_text_settings)
@@ -417,14 +558,14 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
 
     async def _populate_indexes_from_data(self) -> None:
         """Populate in-memory indexes from persisted data."""
-        from ..knowpro.semrefindex import add_facet
         from ..knowpro import kplib
         from ..knowpro.propindex import (
             add_entity_properties_to_index,
             add_action_properties_to_index,
         )
 
-        # Build conversation index and property index from semantic refs
+        # Build property index from semantic refs
+        # Note: Semantic ref index is persistent in SQLite and guaranteed to be complete
         semref_size = await self._semantic_ref_collection.size()
         sem_refs = await self._semantic_ref_collection.get_slice(0, semref_size)
         for sem_ref in sem_refs:
@@ -432,71 +573,18 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
             ref_ordinal = sem_ref.semantic_ref_ordinal
 
             if isinstance(knowledge, kplib.ConcreteEntity):
-                # Add to conversation index
-                await self._conversation_index.add_term(knowledge.name, ref_ordinal)
-                for type_name in knowledge.type:
-                    await self._conversation_index.add_term(type_name, ref_ordinal)
-                if knowledge.facets:
-                    for facet in knowledge.facets:
-                        await add_facet(facet, ref_ordinal, self._conversation_index)
-
                 # Add to property index
                 await add_entity_properties_to_index(
                     knowledge, self._property_index, ref_ordinal
                 )
 
-            elif isinstance(knowledge, interfaces.Topic):
-                # Add to conversation index (topics not in property index per TypeScript)
-                await self._conversation_index.add_term(knowledge.text, ref_ordinal)
-
             elif isinstance(knowledge, kplib.Action):
-                # Add to conversation index
-                await self._conversation_index.add_term(
-                    " ".join(knowledge.verbs), ref_ordinal
-                )
-                if knowledge.subject_entity_name != "none":
-                    await self._conversation_index.add_term(
-                        knowledge.subject_entity_name, ref_ordinal
-                    )
-                if knowledge.object_entity_name != "none":
-                    await self._conversation_index.add_term(
-                        knowledge.object_entity_name, ref_ordinal
-                    )
-                if knowledge.indirect_object_entity_name != "none":
-                    await self._conversation_index.add_term(
-                        knowledge.indirect_object_entity_name, ref_ordinal
-                    )
-                if knowledge.params:
-                    for param in knowledge.params:
-                        if isinstance(param, str):
-                            await self._conversation_index.add_term(param, ref_ordinal)
-                        else:
-                            await self._conversation_index.add_term(
-                                param.name, ref_ordinal
-                            )
-                            if hasattr(param, "value") and isinstance(param.value, str):
-                                await self._conversation_index.add_term(
-                                    param.value, ref_ordinal
-                                )
-                if (
-                    hasattr(knowledge, "subject_entity_facet")
-                    and knowledge.subject_entity_facet
-                ):
-                    await add_facet(
-                        knowledge.subject_entity_facet,
-                        ref_ordinal,
-                        self._conversation_index,
-                    )
-
                 # Add to property index
                 await add_action_properties_to_index(
                     knowledge, self._property_index, ref_ordinal
                 )
 
             elif isinstance(knowledge, interfaces.Tag):
-                # Add to conversation index
-                await self._conversation_index.add_term(knowledge.text, ref_ordinal)
-
                 # Add to property index
                 await self._property_index.add_property(
                     "tag", knowledge.text, ref_ordinal
@@ -538,6 +626,8 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
             db.execute(MESSAGES_SCHEMA)
             db.execute(TIMESTAMP_INDEX_SCHEMA)
             db.execute(SEMANTIC_REFS_SCHEMA)
+            db.execute(SEMANTIC_REF_INDEX_SCHEMA)
+            db.execute(SEMANTIC_REF_INDEX_TERM_INDEX)
         return db
 
     # Collection getter methods

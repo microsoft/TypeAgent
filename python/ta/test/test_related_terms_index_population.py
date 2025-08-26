@@ -89,6 +89,18 @@ async def test_related_terms_index_population_from_database():
         for sem_ref in entity_refs:
             await sem_ref_collection.append(sem_ref)
 
+        # Manually populate the semantic ref index since the user guarantees it's complete externally
+        semantic_ref_index = await storage1.get_semantic_ref_index()
+
+        for sem_ref in entity_refs:
+            knowledge = sem_ref.knowledge
+            ref_ordinal = sem_ref.semantic_ref_ordinal
+
+            if isinstance(knowledge, kplib.ConcreteEntity):
+                await semantic_ref_index.add_term(knowledge.name, ref_ordinal)
+                for type_name in knowledge.type:
+                    await semantic_ref_index.add_term(type_name, ref_ordinal)
+
         await storage1.close()
 
         # Reopen database and verify related terms index
