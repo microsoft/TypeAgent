@@ -3,6 +3,11 @@
 ## TODOs for fully implementing persistence through SQLite
 
 - Make all the indexes other than timestamp SQLite-backed (one at a time)
+  - semantic ref index (done)
+  - property index
+  - message text index
+  - related terms index
+  - (conversation threads index -- skip for now, we're getting rid of it eventually)
 - Temporarily
   - Speed up _populate_indexes_from_data (it takes 7 seconds?!?!?!)
   - Add code to populate aliases (assume it's a podcast -- use metadata source/dest)
@@ -13,6 +18,11 @@
     - Add to the semantic ref collection
     - Add to the semantic ref index
     - Update all the other indexes
+  - Also a function that adds a list of messages *and* a list of corresponding
+    semantic refs, and then updates everything. This is somewhat complicated
+    because we won't know the message ordinals/ids until they have been
+    inserted, and ditto for the semantic refs.
+    (Why do semantic refs contain their own ord/id anyway?)
 
 # From Meeting 8/12/2025 morning
 
