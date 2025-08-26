@@ -575,10 +575,10 @@ class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
     def __init__(self, db: sqlite3.Connection):
         self.db = db
 
-    async def size(self):
+    async def size(self) -> int:
         return self._size()
 
-    def _size(self):
+    def _size(self) -> int:
         cursor = self.db.cursor()
         cursor.execute(
             "SELECT COUNT(*) FROM Messages WHERE start_timestamp IS NOT NULL"
@@ -617,7 +617,7 @@ class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
     async def add_timestamps(
         self, message_timestamps: list[tuple[interfaces.MessageOrdinal, str]]
     ) -> None:
-        return self._add_timestamps(message_timestamps)
+        self._add_timestamps(message_timestamps)
 
     def _add_timestamps(
         self, message_timestamps: list[tuple[interfaces.MessageOrdinal, str]]

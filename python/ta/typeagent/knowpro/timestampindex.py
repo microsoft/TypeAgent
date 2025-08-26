@@ -52,10 +52,10 @@ class TimestampToTextRangeIndex(ITimestampToTextRangeIndex):
     def _size(self) -> int:
         return len(self._ranges)
 
-    async def lookup_range(self, date_range: DateRange):
+    async def lookup_range(self, date_range: DateRange) -> list[TimestampedTextRange]:
         return self._lookup_range(date_range)
 
-    def _lookup_range(self, date_range: DateRange):
+    def _lookup_range(self, date_range: DateRange) -> list[TimestampedTextRange]:
         start_at = date_range.start.isoformat()
         stop_at = None if date_range.end is None else date_range.end.isoformat()
         return get_in_range(
@@ -83,7 +83,7 @@ class TimestampToTextRangeIndex(ITimestampToTextRangeIndex):
         self,
         message_timestamps: list[tuple[MessageOrdinal, str]],
     ) -> None:
-        return self._add_timestamps(message_timestamps)
+        self._add_timestamps(message_timestamps)
 
     def _add_timestamps(
         self,
