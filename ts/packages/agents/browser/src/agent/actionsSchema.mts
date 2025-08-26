@@ -68,6 +68,7 @@ export type CloseWebPage = {
     actionName: "closeWebPage";
 };
 
+// Explicit search action requested by the user
 export type Search = {
     actionName: "search";
     parameters: {
