@@ -409,7 +409,10 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         )
 
         # Populate indexes from existing data
-        if await self._message_collection.size() or await self._semantic_ref_collection.size():
+        if (
+            await self._message_collection.size()
+            or await self._semantic_ref_collection.size()
+        ):
             await self._populate_indexes_from_data()
 
         return self
@@ -506,6 +509,16 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
             message = await self._message_collection.get_item(i)
             if message.timestamp:
                 self._timestamp_index.add_timestamp(i, message.timestamp)
+
+        # Build message text index from messages
+        if msg_count > 0:
+            # Get all messages for batch processing
+            messages = []
+            for message in await self._message_collection.get_slice(0, msg_count):
+                messages.append(message)
+
+            # Add all messages to the message text index
+            await self._message_text_index.add_messages(messages)
 
     async def close(self) -> None:
         if self.db is not None:
