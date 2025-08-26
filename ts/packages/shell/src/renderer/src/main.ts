@@ -318,6 +318,9 @@ function registerClient(
 
             chatView.chatInput.recognizeOnce(token, useLocalWhisper);
         },
+        focusInput(): void {
+            chatView.chatInput.focus();
+        },
     };
 
     getClientAPI().registerClient(client);

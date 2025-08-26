@@ -53,6 +53,7 @@ export interface Client {
     updateSettings(settings: ShellUserSettings): void;
     fileSelected(fileName: string, fileContent: string): void;
     listen(token: SpeechToken | undefined, useLocalWhisper: boolean): void;
+    focusInput(): void;
 }
 
 export interface ElectronWindowFields {
