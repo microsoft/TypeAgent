@@ -5,13 +5,14 @@ import json
 import sqlite3
 import typing
 
-from ..knowpro import interfaces
-from ..knowpro import serialization
-from ..knowpro.semrefindex import text_range_from_message_chunk
-from ..knowpro.propindex import PropertyIndex
-from ..knowpro.messageindex import MessageTextIndex, MessageTextIndexSettings
-from ..knowpro.reltermsindex import RelatedTermsIndex, RelatedTermIndexSettings
 from ..knowpro.convthreads import ConversationThreads
+from ..knowpro import interfaces
+from ..knowpro.messageindex import MessageTextIndexSettings
+from ..knowpro.propindex import PropertyIndex
+from ..knowpro.reltermsindex import RelatedTermsIndex, RelatedTermIndexSettings
+from ..knowpro.semrefindex import text_range_from_message_chunk
+from ..knowpro.serialization import deserialize_object, serialize_object
+from ..knowpro.textlocindex import ScoredTextLocation
 
 
 MESSAGES_SCHEMA = """
@@ -138,12 +139,12 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
             raise ValueError(
                 "Deserialization requires message_type passed to either get_message_collection or SqliteMessageCollection"
             )
-        return serialization.deserialize_object(self.message_type, message_data)
+        return deserialize_object(self.message_type, message_data)
 
     def _serialize_message_to_row(self, message: TMessage) -> ShreddedMessage:
         """Shred a message object into database columns."""
         # Serialize the message to JSON first (this uses camelCase)
-        message_data = serialization.serialize_object(message)
+        message_data = serialize_object(message)
 
         # Extract shredded fields (JSON uses camelCase)
         chunks_json = json.dumps(message_data.pop("textChunks", []))
@@ -738,24 +739,20 @@ class SqliteMessageTextIndex[TMessage: interfaces.IMessage](
             """
         )
 
+        # TODO: Don't look up all text locations, only those relevant to the matches
         all_text_locations = [
             interfaces.TextLocation(msg_id, chunk_ordinal)
             for msg_id, chunk_ordinal in cursor.fetchall()
         ]
 
         # Convert embedding matches to scored text locations
-        scored_text_locations = []
-        for match in matches:
-            if match.item < len(all_text_locations):
-                text_location = all_text_locations[match.item]
-                scored_text_locations.append(
-                    # Using same structure as TextToTextLocationIndex
-                    type(
-                        "ScoredTextLocation",
-                        (),
-                        {"text_location": text_location, "score": match.score},
-                    )()
-                )
+        scored_text_locations = [
+            ScoredTextLocation(
+                text_location=all_text_locations[match.item], score=match.score
+            )
+            for match in matches
+            if match.item < len(all_text_locations)
+        ]
 
         return self._to_scored_message_ordinals(scored_text_locations)
 
@@ -783,7 +780,7 @@ class SqliteMessageTextIndex[TMessage: interfaces.IMessage](
         return filtered_matches
 
     def _to_scored_message_ordinals(
-        self, scored_locations: list
+        self, scored_locations: list[ScoredTextLocation]
     ) -> list[interfaces.ScoredMessageOrdinal]:
         """Convert scored text locations to scored message ordinals."""
         matches: dict[interfaces.MessageOrdinal, interfaces.ScoredMessageOrdinal] = {}
