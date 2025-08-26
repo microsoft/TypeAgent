@@ -57,7 +57,7 @@ export class UrlResolverCache {
 
     /**
      * Loads the cache file
-     * @param file - The path to the cache file to load
+     * @param dir - The path to the cache file to load
      */
     public load(dir?: string) {
 
@@ -72,7 +72,6 @@ export class UrlResolverCache {
         try {
             const domainsGz = path.join(this.cacheDir, `${this.domainFile}.gz`);
             const urlsGz = path.join(this.cacheDir, `${this.urlFile}.gz`);
-            const phrasesGz = path.join(this.cacheDir, `${this.phrasesFile}.gz`);
 
             if (existsSync(domainsGz)) {
                 const buf = readFileSync(domainsGz);
@@ -88,6 +87,30 @@ export class UrlResolverCache {
                 this.urls = JSON.parse(readFileSync(path.join(this.cacheDir, this.urlFile), "utf-8"));
             }
 
+            this.loadPhrases(dir);
+
+        } catch (err) {
+            throw new Error(`Failed to read compressed cache files: ${err instanceof Error ? err.message : String(err)}`);
+        }
+    }
+
+    /**
+     * Loads the phrases cache file only
+     * @param dir - The path to the cache file to load
+     */
+    public loadPhrases(dir?: string) {
+
+        if (dir) {
+            this.cacheDir = dir
+        }
+
+        if (!existsSync(this.cacheDir)) {
+            throw new Error(`The directory ${this.cacheDir} does not exist!`);
+        }
+
+        try {
+            const phrasesGz = path.join(this.cacheDir, `${this.phrasesFile}.gz`);
+
             if (existsSync(phrasesGz)) {
                 const buf = readFileSync(phrasesGz);
                 this.phrases = JSON.parse(zlib.gunzipSync(buf).toString("utf-8"));
@@ -97,7 +120,7 @@ export class UrlResolverCache {
         } catch (err) {
             throw new Error(`Failed to read compressed cache files: ${err instanceof Error ? err.message : String(err)}`);
         }
-    }
+    }    
 
     /**
      * Saves the uncompressed cache with all associated meta data.

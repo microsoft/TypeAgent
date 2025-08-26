@@ -20,11 +20,19 @@ import {
     wikipedia,
     wikipediaSchemas,
 } from "aiclient";
-import { readFileSync } from "fs";
 import { Result } from "typechat";
 import { encodeWikipediaTitle } from "../../aiclient/dist/wikipedia.js";
+import { UrlResolverCache } from "./urlResolverCache.js";
 
 const debug = registerDebug("typeagent:azure-ai-foundry:urlResolver");
+
+// lazily load url cache
+const urlCache: UrlResolverCache = new UrlResolverCache("../../examples/websiteAliases/cache");
+const urlCacheLoadPromise: Promise<void> = new Promise((resolve) => {
+    // simulate async loading
+    urlCache.loadPhrases();
+    resolve();
+});
 
 export interface urlResolutionAction {
     originalRequest: string;
@@ -479,36 +487,15 @@ export let keyWordsToSites: Record<string, string[] | undefined> | undefined;
  * @param keyword The keyword to resolve.
  * @returns The resolved URL or undefined if not found.
  */
-export function resolveURLByKeyword(
+export async function resolveURLByKeyword(
     keyword: string,
-): string[] | undefined | null {
-    if (!keyWordsToSites) {
-        const phrasesToSites = JSON.parse(
-            readFileSync(
-                "../../examples/websiteAliases/openPhrasesCache.json",
-                "utf-8",
-            ),
-        );
-        keyWordsToSites = phrasesToSites.phrases;
-    }
+): Promise<string[] | undefined | null> {
 
-    // prepend https:// to any URLs that don't already have a protocol specified
-    if (keyWordsToSites![keyword] && Array.isArray(keyWordsToSites![keyword])) {
-        for (let i = 0; i < keyWordsToSites![keyword]!.length; i++) {
-            if (!/^https?:\/\//i.test(keyWordsToSites![keyword]![i])) {
-                keyWordsToSites![keyword]![i] =
-                    `https://${keyWordsToSites![keyword]![i]}`;
-            }
-        }
-        for (let i = 0; i < keyWordsToSites![keyword]!.length; i++) {
-            if (!/^https?:\/\//i.test(keyWordsToSites![keyword]![i])) {
-                keyWordsToSites![keyword]![i] =
-                    `https://${keyWordsToSites![keyword]![i]}`;
-            }
-        }
-    }
+    // make sure we have loaded the cache
+    await Promise.resolve(urlCacheLoadPromise);
 
-    return keyWordsToSites![keyword] ?? null;
+    // get the cached item
+    return urlCache.phrases[keyword] ? urlCache.phrases[keyword] : null;
 }
 
 async function getTypeChatResponse(

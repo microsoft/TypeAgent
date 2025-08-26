@@ -761,7 +761,7 @@ async function resolveWebPage(
                 context.agentContext.resolverSettings.keywordResolver ||
                 fastResolution
             ) {
-                const cachehitUrls = urlResolver.resolveURLByKeyword(site);
+                const cachehitUrls = await urlResolver.resolveURLByKeyword(site);
                 if (cachehitUrls && cachehitUrls.length > 0) {
                     debug(`Resolved URLs from cache: ${cachehitUrls}`);
 

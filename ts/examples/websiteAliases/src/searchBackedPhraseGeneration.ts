@@ -271,7 +271,7 @@ export class searchResultsPhraseGenerator {
         let minPhraseCount = Number.MAX_SAFE_INTEGER;
         let maxPhraseCount = Number.MIN_SAFE_INTEGER;
         let urlsWithMaxPhraseCount: string[] = [];
-
+        
         for (const [url, info] of Object.entries(this.cache.urls)) {
             const ii: urlResolverCache.urlData = info as urlResolverCache.urlData;
             const phraseCount = ii.phrases?.length ?? 0;
@@ -298,6 +298,8 @@ export class searchResultsPhraseGenerator {
         console.log(chalk.magenta(`Maximum phrase count: ${maxPhraseCount}`));
         console.log(chalk.blueBright(`Number of domains with max phrase count: ${urlsWithMaxPhraseCount.length}`));
         //console.log(chalk.blue(`Urls with max phrase count: ${urlsWithMaxPhraseCount.join(", ")}`));
+        console.log(chalk.yellowBright(`${this.cache.urls.length} URLs INDEXED!`));
+
     }
 
     /**
