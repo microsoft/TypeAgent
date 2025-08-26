@@ -520,6 +520,14 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
             # Add all messages to the message text index
             await self._message_text_index.add_messages(messages)
 
+        # Build related terms index from semantic ref index terms
+        # Get all terms from the conversation index and add them to the fuzzy index
+        all_terms = await self._conversation_index.get_terms()
+        if all_terms:
+            fuzzy_index = self._related_terms_index.fuzzy_index
+            if fuzzy_index is not None:
+                await fuzzy_index.add_terms(all_terms)
+
     async def close(self) -> None:
         if self.db is not None:
             self.db.close()

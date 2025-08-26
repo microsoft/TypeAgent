@@ -20,12 +20,11 @@ import numpy as np
 
 
 class MockEmbeddingModel(AsyncEmbeddingModel):
-    @property
-    def dimension(self) -> int:
-        return 384
+    def __init__(self):
+        super().__init__(embedding_size=3, model_name="test")
 
     async def get_embeddings(self, keys: list[str]) -> np.ndarray:
-        result = np.random.rand(len(keys), 384).astype(np.float32)
+        result = np.random.rand(len(keys), 3).astype(np.float32)
         norms = np.linalg.norm(result, axis=1, keepdims=True)
         return result / norms
 
@@ -92,9 +91,15 @@ async def test_property_index_population_from_database():
         await storage1.close()
 
         # Reopen database and verify property index
+        # Use the same embedding settings to avoid dimension mismatch
+        embedding_model2 = MockEmbeddingModel()
+        embedding_settings2 = TextEmbeddingIndexSettings(embedding_model2)
+        message_text_settings2 = MessageTextIndexSettings(embedding_settings2)
+        related_terms_settings2 = RelatedTermIndexSettings(embedding_settings2)
+
         storage2 = await SqliteStorageProvider.create(
-            message_text_settings,
-            related_terms_settings,
+            message_text_settings2,
+            related_terms_settings2,
             temp_db_path,
             PodcastMessage,
         )
