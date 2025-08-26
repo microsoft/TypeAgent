@@ -409,7 +409,8 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         )
 
         # Populate indexes from existing data
-        await self._populate_indexes_from_data()
+        if await self._message_collection.size() or await self._semantic_ref_collection.size():
+            await self._populate_indexes_from_data()
 
         return self
 
