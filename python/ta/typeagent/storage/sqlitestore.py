@@ -9,7 +9,6 @@ from ..knowpro import interfaces
 from ..knowpro import serialization
 from ..knowpro.semrefindex import TermToSemanticRefIndex, text_range_from_message_chunk
 from ..knowpro.propindex import PropertyIndex
-from ..knowpro.timestampindex import TimestampToTextRangeIndex
 from ..knowpro.messageindex import MessageTextIndex, MessageTextIndexSettings
 from ..knowpro.reltermsindex import RelatedTermsIndex, RelatedTermIndexSettings
 from ..knowpro.convthreads import ConversationThreads
@@ -409,10 +408,9 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         )
 
         # Populate indexes from existing data
-        if (
-            await self._message_collection.size()
-            or await self._semantic_ref_collection.size()
-        ):
+        msg_size = await self._message_collection.size()
+        semref_size = await self._semantic_ref_collection.size()
+        if msg_size or semref_size:
             await self._populate_indexes_from_data()
 
         return self
@@ -424,11 +422,12 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         from ..knowpro.propindex import (
             add_entity_properties_to_index,
             add_action_properties_to_index,
-            add_facet as add_facet_to_property_index,
         )
 
         # Build conversation index and property index from semantic refs
-        async for sem_ref in self._semantic_ref_collection:
+        semref_size = await self._semantic_ref_collection.size()
+        sem_refs = await self._semantic_ref_collection.get_slice(0, semref_size)
+        for sem_ref in sem_refs:
             knowledge = sem_ref.knowledge
             ref_ordinal = sem_ref.semantic_ref_ordinal
 
