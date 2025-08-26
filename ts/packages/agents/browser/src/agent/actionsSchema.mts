@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+export type DisabledBrowserActions = Search | SearchWebMemories;
 export type BrowserActions =
     | OpenWebPage
     | CloseWebPage
@@ -11,7 +12,6 @@ export type BrowserActions =
     | ScrollUp
     | FollowLinkByText
     | FollowLinkByPosition
-    | Search
     | ReadPageContent
     | StopReadPageContent
     | ZoomIn
@@ -20,7 +20,6 @@ export type BrowserActions =
     | CaptureScreenshot
     | ReloadPage
     | GetWebsiteStats
-    | SearchWebMemories
     | OpenSearchResult
     | ChangeSearchProvider
     | SearchImageAction;

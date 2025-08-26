@@ -121,7 +121,11 @@ export function getActivityActiveSchemas(
         );
     }
     // Dispatcher schema (for unknown) is always active
-    activitySchemas.push(DispatcherName, DispatcherActivityName);
+    activitySchemas.push(
+        DispatcherName,
+        DispatcherActivityName,
+        "dispatcher.lookup",
+    );
 
     return activitySchemas;
 }
