@@ -417,25 +417,37 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         """Populate in-memory indexes from persisted data."""
         from ..knowpro.semrefindex import add_facet
         from ..knowpro import kplib
+        from ..knowpro.propindex import (
+            add_entity_properties_to_index,
+            add_action_properties_to_index,
+            add_facet as add_facet_to_property_index,
+        )
 
-        # Build conversation index from semantic refs
+        # Build conversation index and property index from semantic refs
         async for sem_ref in self._semantic_ref_collection:
             knowledge = sem_ref.knowledge
             ref_ordinal = sem_ref.semantic_ref_ordinal
 
             if isinstance(knowledge, kplib.ConcreteEntity):
-                # Add entity name
+                # Add to conversation index
                 await self._conversation_index.add_term(knowledge.name, ref_ordinal)
-                # Add each type as a separate term
                 for type_name in knowledge.type:
                     await self._conversation_index.add_term(type_name, ref_ordinal)
-                # Add every facet name as a separate term
                 if knowledge.facets:
                     for facet in knowledge.facets:
                         await add_facet(facet, ref_ordinal, self._conversation_index)
+
+                # Add to property index
+                await add_entity_properties_to_index(
+                    knowledge, self._property_index, ref_ordinal
+                )
+
             elif isinstance(knowledge, interfaces.Topic):
+                # Add to conversation index (topics not in property index per TypeScript)
                 await self._conversation_index.add_term(knowledge.text, ref_ordinal)
+
             elif isinstance(knowledge, kplib.Action):
+                # Add to conversation index
                 await self._conversation_index.add_term(
                     " ".join(knowledge.verbs), ref_ordinal
                 )
@@ -472,8 +484,20 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
                         ref_ordinal,
                         self._conversation_index,
                     )
+
+                # Add to property index
+                await add_action_properties_to_index(
+                    knowledge, self._property_index, ref_ordinal
+                )
+
             elif isinstance(knowledge, interfaces.Tag):
+                # Add to conversation index
                 await self._conversation_index.add_term(knowledge.text, ref_ordinal)
+
+                # Add to property index
+                await self._property_index.add_property(
+                    "tag", knowledge.text, ref_ordinal
+                )
 
         # Build timestamp index from messages
         msg_count = await self._message_collection.size()
