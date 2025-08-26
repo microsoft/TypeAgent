@@ -266,6 +266,9 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
         return True
 
     async def size(self) -> int:
+        return self._size()
+
+    def _size(self) -> int:
         cursor = self.db.cursor()
         cursor.execute("SELECT COUNT(*) FROM SemanticRefs")
         return cursor.fetchone()[0]
@@ -405,7 +408,79 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
             related_terms_settings.embedding_index_settings
         )
 
+        # Populate indexes from existing data
+        await self._populate_indexes_from_data()
+
         return self
+
+    async def _populate_indexes_from_data(self) -> None:
+        """Populate in-memory indexes from persisted data."""
+        from ..knowpro.semrefindex import add_facet
+        from ..knowpro import kplib
+
+        # Build conversation index from semantic refs
+        async for sem_ref in self._semantic_ref_collection:
+            knowledge = sem_ref.knowledge
+            ref_ordinal = sem_ref.semantic_ref_ordinal
+
+            if isinstance(knowledge, kplib.ConcreteEntity):
+                # Add entity name
+                await self._conversation_index.add_term(knowledge.name, ref_ordinal)
+                # Add each type as a separate term
+                for type_name in knowledge.type:
+                    await self._conversation_index.add_term(type_name, ref_ordinal)
+                # Add every facet name as a separate term
+                if knowledge.facets:
+                    for facet in knowledge.facets:
+                        await add_facet(facet, ref_ordinal, self._conversation_index)
+            elif isinstance(knowledge, interfaces.Topic):
+                await self._conversation_index.add_term(knowledge.text, ref_ordinal)
+            elif isinstance(knowledge, kplib.Action):
+                await self._conversation_index.add_term(
+                    " ".join(knowledge.verbs), ref_ordinal
+                )
+                if knowledge.subject_entity_name != "none":
+                    await self._conversation_index.add_term(
+                        knowledge.subject_entity_name, ref_ordinal
+                    )
+                if knowledge.object_entity_name != "none":
+                    await self._conversation_index.add_term(
+                        knowledge.object_entity_name, ref_ordinal
+                    )
+                if knowledge.indirect_object_entity_name != "none":
+                    await self._conversation_index.add_term(
+                        knowledge.indirect_object_entity_name, ref_ordinal
+                    )
+                if knowledge.params:
+                    for param in knowledge.params:
+                        if isinstance(param, str):
+                            await self._conversation_index.add_term(param, ref_ordinal)
+                        else:
+                            await self._conversation_index.add_term(
+                                param.name, ref_ordinal
+                            )
+                            if hasattr(param, "value") and isinstance(param.value, str):
+                                await self._conversation_index.add_term(
+                                    param.value, ref_ordinal
+                                )
+                if (
+                    hasattr(knowledge, "subject_entity_facet")
+                    and knowledge.subject_entity_facet
+                ):
+                    await add_facet(
+                        knowledge.subject_entity_facet,
+                        ref_ordinal,
+                        self._conversation_index,
+                    )
+            elif isinstance(knowledge, interfaces.Tag):
+                await self._conversation_index.add_term(knowledge.text, ref_ordinal)
+
+        # Build timestamp index from messages
+        msg_count = await self._message_collection.size()
+        for i in range(msg_count):
+            message = await self._message_collection.get_item(i)
+            if message.timestamp:
+                self._timestamp_index.add_timestamp(i, message.timestamp)
 
     async def close(self) -> None:
         if self.db is not None:

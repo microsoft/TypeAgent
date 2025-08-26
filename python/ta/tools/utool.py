@@ -615,7 +615,6 @@ async def load_podcast_index(
         if size > 0:
             print(f"Reusing existing conversation in {dbname!r} with {size} messages.")
             conversation = await podcast.Podcast.create(settings)
-            await semrefindex.build_conversation_index(conversation, settings)
             await print_conversation_stats(conversation)
             return query.QueryEvalContext(conversation)
 
