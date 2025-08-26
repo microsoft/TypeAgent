@@ -492,6 +492,119 @@ class SqliteTermToSemanticRefIndex(interfaces.ITermToSemanticRefIndex):
         return term.lower()
 
 
+class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
+    """SQL-based timestamp index that queries Messages table directly."""
+
+    def __init__(self, db: sqlite3.Connection):
+        self.db = db
+
+    async def size(self) -> int:
+        return self._size()
+
+    def _size(self) -> int:
+        cursor = self.db.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM Messages WHERE start_timestamp IS NOT NULL"
+        )
+        return cursor.fetchone()[0]
+
+    async def add_timestamp(
+        self, message_ordinal: interfaces.MessageOrdinal, timestamp: str
+    ) -> bool:
+        return self._add_timestamp(message_ordinal, timestamp)
+
+    def _add_timestamp(
+        self, message_ordinal: interfaces.MessageOrdinal, timestamp: str
+    ) -> bool:
+        """Add timestamp to Messages table start_timestamp column."""
+        if not timestamp:
+            return False
+
+        # Normalize timestamp format for consistency
+        from datetime import datetime
+
+        try:
+            timestamp_datetime = datetime.fromisoformat(timestamp)
+            normalized_timestamp = timestamp_datetime.isoformat()
+        except ValueError:
+            return False
+
+        with self.db:
+            cursor = self.db.cursor()
+            cursor.execute(
+                "UPDATE Messages SET start_timestamp = ? WHERE msg_id = ?",
+                (normalized_timestamp, message_ordinal),
+            )
+        return cursor.rowcount > 0
+
+    async def add_timestamps(
+        self, message_timestamps: list[tuple[interfaces.MessageOrdinal, str]]
+    ) -> None:
+        self._add_timestamps(message_timestamps)
+
+    def _add_timestamps(
+        self, message_timestamps: list[tuple[interfaces.MessageOrdinal, str]]
+    ) -> None:
+        """Add multiple timestamps to Messages table."""
+        from datetime import datetime
+
+        with self.db:
+            cursor = self.db.cursor()
+            # Normalize timestamps and filter out empty/invalid ones
+            updates = []
+            for message_ordinal, timestamp in message_timestamps:
+                if timestamp:
+                    try:
+                        timestamp_datetime = datetime.fromisoformat(timestamp)
+                        normalized_timestamp = timestamp_datetime.isoformat()
+                        updates.append((normalized_timestamp, message_ordinal))
+                    except ValueError:
+                        continue  # Skip invalid timestamps
+
+            cursor.executemany(
+                "UPDATE Messages SET start_timestamp = ? WHERE msg_id = ?", updates
+            )
+
+    async def lookup_range(
+        self, date_range: interfaces.DateRange
+    ) -> list[interfaces.TimestampedTextRange]:
+        return self._lookup_range(date_range)
+
+    def _lookup_range(
+        self, date_range: interfaces.DateRange
+    ) -> list[interfaces.TimestampedTextRange]:
+        """Look up timestamped text ranges in the given date range."""
+        start_timestamp = date_range.start.isoformat()
+
+        cursor = self.db.cursor()
+
+        if date_range.end is None:
+            # Point query - find messages exactly at start time
+            cursor.execute(
+                "SELECT msg_id, start_timestamp FROM Messages WHERE start_timestamp = ? ORDER BY start_timestamp",
+                (start_timestamp,),
+            )
+        else:
+            # Range query - start <= timestamp < end (end exclusive)
+            end_timestamp = date_range.end.isoformat()
+            cursor.execute(
+                "SELECT msg_id, start_timestamp FROM Messages "
+                "WHERE start_timestamp >= ? AND start_timestamp < ? "
+                "ORDER BY start_timestamp",
+                (start_timestamp, end_timestamp),
+            )
+
+        results = []
+        for msg_id, timestamp in cursor.fetchall():
+            message_ordinal = msg_id  # msg_id is 0-based like message_ordinal
+            text_range = text_range_from_message_chunk(message_ordinal)
+            results.append(
+                interfaces.TimestampedTextRange(timestamp=timestamp, range=text_range)
+            )
+
+        return results
+
+
 class SqliteStorageProvider[TMessage: interfaces.IMessage](
     interfaces.IStorageProvider[TMessage]
 ):
@@ -511,7 +624,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
     _semantic_ref_collection: SqliteSemanticRefCollection
     _conversation_index: SqliteTermToSemanticRefIndex
     _property_index: PropertyIndex
-    _timestamp_index: interfaces.ITimestampToTextRangeIndex
+    _timestamp_index: SqliteTimestampToTextRangeIndex
     _message_text_index: interfaces.IMessageTextIndex[TMessage]
     _related_terms_index: RelatedTermsIndex
     _conversation_threads: ConversationThreads
@@ -635,18 +748,18 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
     async def get_message_collection(self) -> SqliteMessageCollection[TMessage]:
         return self._message_collection
 
-    async def get_semantic_ref_collection(self) -> interfaces.ISemanticRefCollection:
+    async def get_semantic_ref_collection(self) -> SqliteSemanticRefCollection:
         return self._semantic_ref_collection
 
     # Index getter methods
 
-    async def get_semantic_ref_index(self) -> interfaces.ITermToSemanticRefIndex:
+    async def get_semantic_ref_index(self) -> SqliteTermToSemanticRefIndex:
         return self._conversation_index
 
     async def get_property_index(self) -> interfaces.IPropertyToSemanticRefIndex:
         return self._property_index
 
-    async def get_timestamp_index(self) -> interfaces.ITimestampToTextRangeIndex:
+    async def get_timestamp_index(self) -> SqliteTimestampToTextRangeIndex:
         return self._timestamp_index
 
     async def get_message_text_index(self) -> interfaces.IMessageTextIndex[TMessage]:
@@ -657,116 +770,3 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
 
     async def get_conversation_threads(self) -> interfaces.IConversationThreads:
         return self._conversation_threads
-
-
-class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
-    """SQL-based timestamp index that queries Messages table directly."""
-
-    def __init__(self, db: sqlite3.Connection):
-        self.db = db
-
-    async def size(self) -> int:
-        return self._size()
-
-    def _size(self) -> int:
-        cursor = self.db.cursor()
-        cursor.execute(
-            "SELECT COUNT(*) FROM Messages WHERE start_timestamp IS NOT NULL"
-        )
-        return cursor.fetchone()[0]
-
-    async def add_timestamp(
-        self, message_ordinal: interfaces.MessageOrdinal, timestamp: str
-    ) -> bool:
-        return self._add_timestamp(message_ordinal, timestamp)
-
-    def _add_timestamp(
-        self, message_ordinal: interfaces.MessageOrdinal, timestamp: str
-    ) -> bool:
-        """Add timestamp to Messages table start_timestamp column."""
-        if not timestamp:
-            return False
-
-        # Normalize timestamp format for consistency
-        from datetime import datetime
-
-        try:
-            timestamp_datetime = datetime.fromisoformat(timestamp)
-            normalized_timestamp = timestamp_datetime.isoformat()
-        except ValueError:
-            return False
-
-        with self.db:
-            cursor = self.db.cursor()
-            cursor.execute(
-                "UPDATE Messages SET start_timestamp = ? WHERE msg_id = ?",
-                (normalized_timestamp, message_ordinal),
-            )
-        return cursor.rowcount > 0
-
-    async def add_timestamps(
-        self, message_timestamps: list[tuple[interfaces.MessageOrdinal, str]]
-    ) -> None:
-        self._add_timestamps(message_timestamps)
-
-    def _add_timestamps(
-        self, message_timestamps: list[tuple[interfaces.MessageOrdinal, str]]
-    ) -> None:
-        """Add multiple timestamps to Messages table."""
-        from datetime import datetime
-
-        with self.db:
-            cursor = self.db.cursor()
-            # Normalize timestamps and filter out empty/invalid ones
-            updates = []
-            for message_ordinal, timestamp in message_timestamps:
-                if timestamp:
-                    try:
-                        timestamp_datetime = datetime.fromisoformat(timestamp)
-                        normalized_timestamp = timestamp_datetime.isoformat()
-                        updates.append((normalized_timestamp, message_ordinal))
-                    except ValueError:
-                        continue  # Skip invalid timestamps
-
-            cursor.executemany(
-                "UPDATE Messages SET start_timestamp = ? WHERE msg_id = ?", updates
-            )
-
-    async def lookup_range(
-        self, date_range: interfaces.DateRange
-    ) -> list[interfaces.TimestampedTextRange]:
-        return self._lookup_range(date_range)
-
-    def _lookup_range(
-        self, date_range: interfaces.DateRange
-    ) -> list[interfaces.TimestampedTextRange]:
-        """Look up timestamped text ranges in the given date range."""
-        start_timestamp = date_range.start.isoformat()
-
-        cursor = self.db.cursor()
-
-        if date_range.end is None:
-            # Point query - find messages exactly at start time
-            cursor.execute(
-                "SELECT msg_id, start_timestamp FROM Messages WHERE start_timestamp = ? ORDER BY start_timestamp",
-                (start_timestamp,),
-            )
-        else:
-            # Range query - start <= timestamp < end (end exclusive)
-            end_timestamp = date_range.end.isoformat()
-            cursor.execute(
-                "SELECT msg_id, start_timestamp FROM Messages "
-                "WHERE start_timestamp >= ? AND start_timestamp < ? "
-                "ORDER BY start_timestamp",
-                (start_timestamp, end_timestamp),
-            )
-
-        results = []
-        for msg_id, timestamp in cursor.fetchall():
-            message_ordinal = msg_id  # msg_id is 0-based like message_ordinal
-            text_range = text_range_from_message_chunk(message_ordinal)
-            results.append(
-                interfaces.TimestampedTextRange(timestamp=timestamp, range=text_range)
-            )
-
-        return results
