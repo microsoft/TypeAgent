@@ -105,7 +105,9 @@ async def test_property_index_population_from_database():
         )
 
         prop_index = await storage2.get_property_index()
-        assert isinstance(prop_index, PropertyIndex)
+        from typeagent.knowpro.interfaces import IPropertyToSemanticRefIndex
+
+        assert isinstance(prop_index, IPropertyToSemanticRefIndex)
 
         # Verify property index is populated
         prop_size = await prop_index.size()

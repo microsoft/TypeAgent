@@ -4,7 +4,7 @@
 
 - Make all the indexes other than timestamp SQLite-backed (one at a time)
   - semantic ref index (done)
-  - property index
+  - property index (done)
   - message text index (done)
   - related terms index
   - (conversation threads index -- skip for now, we're getting rid of it eventually)

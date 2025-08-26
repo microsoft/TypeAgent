@@ -614,6 +614,15 @@ async def load_podcast_index(
         if size > 0:
             print(f"Reusing existing conversation in {dbname!r} with {size} messages.")
             conversation = await podcast.Podcast.create(settings)
+            # Only rebuild property index if it's empty
+            if (
+                conversation.secondary_indexes
+                and conversation.secondary_indexes.property_to_semantic_ref_index
+                and await conversation.secondary_indexes.property_to_semantic_ref_index.size() == 0
+            ):
+                from typeagent.knowpro.propindex import build_property_index
+
+                await build_property_index(conversation)
             await print_conversation_stats(conversation)
             return query.QueryEvalContext(conversation)
 

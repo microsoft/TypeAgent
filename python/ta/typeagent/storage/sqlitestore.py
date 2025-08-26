@@ -78,8 +78,32 @@ MESSAGE_TEXT_INDEX_MESSAGE_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_message_text_index_message ON MessageTextIndex(msg_id, chunk_ordinal);
 """
 
+PROPERTY_INDEX_SCHEMA = """
+CREATE TABLE IF NOT EXISTS PropertyIndex (
+    prop_name TEXT NOT NULL,
+    value_str TEXT NOT NULL,
+    score REAL NOT NULL DEFAULT 1.0,
+    semref_id INTEGER NOT NULL,
+
+    FOREIGN KEY (semref_id) REFERENCES SemanticRefs(semref_id) ON DELETE CASCADE
+);
+"""
+
+PROPERTY_INDEX_PROP_NAME_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_property_index_prop_name ON PropertyIndex(prop_name);
+"""
+
+PROPERTY_INDEX_VALUE_STR_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_property_index_value_str ON PropertyIndex(value_str);
+"""
+
+PROPERTY_INDEX_COMBINED_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_property_index_combined ON PropertyIndex(prop_name, value_str);
+"""
+
 type ShreddedSemanticRef = tuple[int, str, str, str]
 type ShreddedMessageText = tuple[int, str, int, int, bytes | None]
+type ShreddedPropertyIndex = tuple[str, str, float, int]
 
 
 class SqliteMessageCollection[TMessage: interfaces.IMessage](
@@ -514,6 +538,120 @@ class SqliteTermToSemanticRefIndex(interfaces.ITermToSemanticRefIndex):
         return term.lower()
 
 
+class SqlitePropertyIndex(interfaces.IPropertyToSemanticRefIndex):
+    """SQLite-backed implementation of property to semantic ref index."""
+
+    def __init__(self, db: sqlite3.Connection):
+        self.db = db
+
+    async def size(self) -> int:
+        cursor = self.db.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM (SELECT DISTINCT prop_name, value_str FROM PropertyIndex)"
+        )
+        return cursor.fetchone()[0]
+
+    async def get_values(self) -> list[str]:
+        cursor = self.db.cursor()
+        cursor.execute(
+            "SELECT DISTINCT value_str FROM PropertyIndex ORDER BY value_str"
+        )
+        return [row[0] for row in cursor.fetchall()]
+
+    async def add_property(
+        self,
+        property_name: str,
+        value: str,
+        semantic_ref_ordinal: (
+            interfaces.SemanticRefOrdinal | interfaces.ScoredSemanticRefOrdinal
+        ),
+    ) -> None:
+        # Extract semref_id and score from the ordinal
+        if isinstance(semantic_ref_ordinal, interfaces.ScoredSemanticRefOrdinal):
+            semref_id = semantic_ref_ordinal.semantic_ref_ordinal
+            score = semantic_ref_ordinal.score
+        else:
+            semref_id = semantic_ref_ordinal
+            score = 1.0
+
+        # Normalize property name and value (to match in-memory implementation)
+        from ..knowpro.propindex import (
+            make_property_term_text,
+            split_property_term_text,
+        )
+
+        term_text = make_property_term_text(property_name, value)
+        term_text = term_text.lower()  # Matches PropertyIndex._prepare_term_text
+        property_name, value = split_property_term_text(term_text)
+        # Remove "prop." prefix that was added by make_property_term_text
+        if property_name.startswith("prop."):
+            property_name = property_name[5:]
+
+        with self.db:
+            cursor = self.db.cursor()
+            cursor.execute(
+                """
+                INSERT INTO PropertyIndex (prop_name, value_str, score, semref_id)
+                VALUES (?, ?, ?, ?)
+                """,
+                (property_name, value, score, semref_id),
+            )
+
+    async def clear(self) -> None:
+        with self.db:
+            cursor = self.db.cursor()
+            cursor.execute("DELETE FROM PropertyIndex")
+
+    async def lookup_property(
+        self,
+        property_name: str,
+        value: str,
+    ) -> list[interfaces.ScoredSemanticRefOrdinal] | None:
+        # Normalize property name and value (to match in-memory implementation)
+        from ..knowpro.propindex import (
+            make_property_term_text,
+            split_property_term_text,
+        )
+
+        term_text = make_property_term_text(property_name, value)
+        term_text = term_text.lower()  # Matches PropertyIndex._prepare_term_text
+        property_name, value = split_property_term_text(term_text)
+        # Remove "prop." prefix that was added by make_property_term_text
+        if property_name.startswith("prop."):
+            property_name = property_name[5:]
+
+        cursor = self.db.cursor()
+        cursor.execute(
+            "SELECT semref_id, score FROM PropertyIndex WHERE prop_name = ? AND value_str = ?",
+            (property_name, value),
+        )
+
+        results = [
+            interfaces.ScoredSemanticRefOrdinal(semref_id, score)
+            for semref_id, score in cursor.fetchall()
+        ]
+
+        return results if results else None
+
+    async def remove_property(self, prop_name: str, semref_id: int) -> None:
+        """Remove all properties for a specific property name and semantic ref."""
+        with self.db:
+            cursor = self.db.cursor()
+            cursor.execute(
+                "DELETE FROM PropertyIndex WHERE prop_name = ? AND semref_id = ?",
+                (prop_name, semref_id),
+            )
+
+    async def remove_all_for_semref(self, semref_id: int) -> None:
+        """Remove all properties for a specific semantic ref."""
+        with self.db:
+            cursor = self.db.cursor()
+            cursor.execute(
+                "DELETE FROM PropertyIndex WHERE semref_id = ?",
+                (semref_id,),
+            )
+
+
 class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
     """SQL-based timestamp index that queries Messages table directly."""
 
@@ -856,7 +994,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
     _message_collection: SqliteMessageCollection[TMessage]
     _semantic_ref_collection: SqliteSemanticRefCollection
     _conversation_index: SqliteTermToSemanticRefIndex
-    _property_index: PropertyIndex
+    _property_index: SqlitePropertyIndex
     _timestamp_index: SqliteTimestampToTextRangeIndex
     _message_text_index: interfaces.IMessageTextIndex[TMessage]
     _related_terms_index: RelatedTermsIndex
@@ -886,7 +1024,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
 
         # Initialize all indexes
         self._conversation_index = SqliteTermToSemanticRefIndex(self.db)
-        self._property_index = PropertyIndex()
+        self._property_index = SqlitePropertyIndex(self.db)
         self._timestamp_index = SqliteTimestampToTextRangeIndex(self.db)
         self._message_text_index = SqliteMessageTextIndex(
             self.db, message_text_settings
@@ -906,37 +1044,8 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
 
     async def _populate_indexes_from_data(self) -> None:
         """Populate in-memory indexes from persisted data."""
-        from ..knowpro import kplib
-        from ..knowpro.propindex import (
-            add_entity_properties_to_index,
-            add_action_properties_to_index,
-        )
-
-        # Build property index from semantic refs
-        # Note: Semantic ref index is persistent in SQLite and guaranteed to be complete
-        semref_size = await self._semantic_ref_collection.size()
-        sem_refs = await self._semantic_ref_collection.get_slice(0, semref_size)
-        for sem_ref in sem_refs:
-            knowledge = sem_ref.knowledge
-            ref_ordinal = sem_ref.semantic_ref_ordinal
-
-            if isinstance(knowledge, kplib.ConcreteEntity):
-                # Add to property index
-                await add_entity_properties_to_index(
-                    knowledge, self._property_index, ref_ordinal
-                )
-
-            elif isinstance(knowledge, kplib.Action):
-                # Add to property index
-                await add_action_properties_to_index(
-                    knowledge, self._property_index, ref_ordinal
-                )
-
-            elif isinstance(knowledge, interfaces.Tag):
-                # Add to property index
-                await self._property_index.add_property(
-                    "tag", knowledge.text, ref_ordinal
-                )
+        # Property index and timestamp index are transient and should be populated
+        # by the caller (like build_secondary_indexes) rather than here
 
         # Build timestamp index from messages
         msg_count = await self._message_collection.size()
@@ -972,6 +1081,10 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
             db.execute(MESSAGE_TEXT_INDEX_SCHEMA)
             db.execute(MESSAGE_TEXT_INDEX_TEXT_INDEX)
             db.execute(MESSAGE_TEXT_INDEX_MESSAGE_INDEX)
+            db.execute(PROPERTY_INDEX_SCHEMA)
+            db.execute(PROPERTY_INDEX_PROP_NAME_INDEX)
+            db.execute(PROPERTY_INDEX_VALUE_STR_INDEX)
+            db.execute(PROPERTY_INDEX_COMBINED_INDEX)
         return db
 
     # Collection getter methods

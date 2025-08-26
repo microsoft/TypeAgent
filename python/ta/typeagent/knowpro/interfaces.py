@@ -327,7 +327,10 @@ class Term:
 
 
 # Allows for faster retrieval of name, value properties
+@runtime_checkable
 class IPropertyToSemanticRefIndex(Protocol):
+    async def size(self) -> int: ...
+
     async def get_values(self) -> list[str]: ...
 
     async def add_property(
@@ -340,6 +343,12 @@ class IPropertyToSemanticRefIndex(Protocol):
     async def lookup_property(
         self, property_name: str, value: str
     ) -> list[ScoredSemanticRefOrdinal] | None: ...
+
+    async def clear(self) -> None: ...
+
+    async def remove_property(self, prop_name: str, semref_id: int) -> None: ...
+
+    async def remove_all_for_semref(self, semref_id: int) -> None: ...
 
 
 @dataclass
