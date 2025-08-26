@@ -2,7 +2,7 @@
 applyTo: '**/*.py'
 ---
 
-**No praise. Be terse.**
+**I AM IN A TERRIBLE HURRY. BE TERSE.**
 
 # For Agent mode
 
