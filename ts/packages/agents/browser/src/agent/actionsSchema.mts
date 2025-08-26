@@ -23,7 +23,7 @@ export type BrowserActions =
     | SearchWebMemories
     | OpenSearchResult
     | ChangeSearchProvider
-    | FindImageAction;
+    | SearchImageAction;
 
 export type WebPage = string;
 export type WebSearchResult = string;
@@ -210,11 +210,10 @@ export type ChangeSearchProvider = {
     };
 };
 
-// Choose this action if the user wants to "see", "show", "find", "lookup" pictures/images/photos/memes or otherwise requesting visual output
-// Finds images on the internet to show the user
+// Searches (finds) for images on the internet to show the user
 // if the user asks doesn't specify a quantity, randomly select anywhere between 3 and 10 images
-export type FindImageAction = {
-    actionName: "findImageAction";
+export type SearchImageAction = {
+    actionName: "searchImageAction";
     parameters: {
         // the original request of the user
         originalRequest: string;

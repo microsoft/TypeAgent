@@ -1175,7 +1175,7 @@ async function executeBrowserAction(
                     return openSearchResult(context, action);
                 case "changeSearchProvider":
                     return changeSearchProvider(context, action);
-                case "findImageAction": {
+                case "searchImageAction": {
                     return openWebPage(context, {
                         schemaName: "browser",
                         actionName: "openWebPage",
