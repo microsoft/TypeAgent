@@ -14,7 +14,6 @@ import path from "node:path";
 import { WebSocketMessageV2 } from "common-utils";
 import { runDemo } from "./demo.js";
 import {
-    ShellSettings,
     ShellUserSettings,
     ShellWindowState,
     ShellSettingManager,
@@ -76,7 +75,6 @@ export class ShellWindow {
     private inlineWidth: number;
     private readonly contentLoadP: Promise<void>[];
     private readonly handlers = new Map<string, (event: any) => void>();
-    private readonly settings: ShellSettingManager;
     private closing: boolean = false;
 
     // Multi-tab browser support
@@ -91,15 +89,13 @@ export class ShellWindow {
         }
         return activeBrowserView.webContentsView;
     }
-    constructor(shellSettings: ShellSettings, instanceDir: string) {
+    constructor(private readonly settings: ShellSettingManager) {
         if (ShellWindow.instance !== undefined) {
             throw new Error("ShellWindow already created");
         }
-        this.settings = new ShellSettingManager(shellSettings, instanceDir);
 
-        this.inlineWidth = shellSettings.window.inlineWidth;
-
-        const state = shellSettings.window;
+        const state = this.settings.window;
+        this.inlineWidth = state.inlineWidth;
         const mainWindow = createMainWindow(state);
 
         setupDevicePermissions(mainWindow);
@@ -464,8 +460,15 @@ export class ShellWindow {
             const inlineWidth = width - chatWidth;
             this.inlineWidth = inlineWidth;
 
+            const browserViewBounds = {
+                x: chatWidth + 4, // 4px divider
+                y: 0,
+                width: width - chatWidth - 4,
+                height: height,
+            };
+
             // Update browser view manager for multi-tab layout
-            this.browserViewManager.updateActiveBrowserViewBounds();
+            this.browserViewManager.setBounds(browserViewBounds);
         } else {
             // No browser content - chat should fill the entire width
             chatWidth = width;

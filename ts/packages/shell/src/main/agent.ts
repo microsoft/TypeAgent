@@ -91,8 +91,10 @@ class ShellSetSettingCommandHandler implements CommandHandler {
                 description: "Name of the setting to set",
             },
             value: {
-                description: "The new value for the setting",
+                description:
+                    "The new value for the setting (reset to default if omitted)",
                 implicitQuotes: true,
+                optional: true,
             },
         },
     } as const;
@@ -120,7 +122,7 @@ class ShellSetSettingCommandHandler implements CommandHandler {
                     name,
                     completions: getObjectPropertyNames(
                         context.agentContext.shellWindow.getUserSettings(),
-                    ),
+                    ).sort(),
                 });
             }
 
