@@ -4,10 +4,7 @@
 import { existsSync, writeFileSync, mkdirSync, readFileSync } from "fs";
 import path from "path";
 import { isDirectoryPath } from "typeagent";
-
-// type compressedUrlCache = {
-//     temp: string;
-// }
+import zlib from "zlib";
 
 export type domainCache = {
     [key: string]: domainData
@@ -72,9 +69,34 @@ export class UrlResolverCache {
             throw new Error(`The directory ${this.cacheDir} does not exist!`);
         }
 
-        this.domains = JSON.parse(readFileSync(path.join(this.cacheDir, this.domainFile), "utf-8"));
-        this.urls = JSON.parse(readFileSync(path.join(this.cacheDir, this.urlFile), "utf-8"));
-        this.phrases = JSON.parse(readFileSync(path.join(this.cacheDir, this.phrasesFile), "utf-8"));
+        try {
+            const domainsGz = path.join(this.cacheDir, `${this.domainFile}.gz`);
+            const urlsGz = path.join(this.cacheDir, `${this.urlFile}.gz`);
+            const phrasesGz = path.join(this.cacheDir, `${this.phrasesFile}.gz`);
+
+            if (existsSync(domainsGz)) {
+                const buf = readFileSync(domainsGz);
+                this.domains = JSON.parse(zlib.gunzipSync(buf).toString("utf-8"));
+            } else if (existsSync(path.join(this.cacheDir, this.domainFile))) {
+                this.domains = JSON.parse(readFileSync(path.join(this.cacheDir, this.domainFile), "utf-8"));
+            }
+
+            if (existsSync(urlsGz)) {
+                const buf = readFileSync(urlsGz);
+                this.urls = JSON.parse(zlib.gunzipSync(buf).toString("utf-8"));
+            } else if (existsSync(path.join(this.cacheDir, this.urlFile))) {
+                this.urls = JSON.parse(readFileSync(path.join(this.cacheDir, this.urlFile), "utf-8"));
+            }
+
+            if (existsSync(phrasesGz)) {
+                const buf = readFileSync(phrasesGz);
+                this.phrases = JSON.parse(zlib.gunzipSync(buf).toString("utf-8"));
+            } else if (existsSync(path.join(this.cacheDir, this.phrasesFile))) {
+                this.phrases = JSON.parse(readFileSync(path.join(this.cacheDir, this.phrasesFile), "utf-8"));
+            }
+        } catch (err) {
+            throw new Error(`Failed to read compressed cache files: ${err instanceof Error ? err.message : String(err)}`);
+        }
     }
 
     /**
@@ -90,19 +112,26 @@ export class UrlResolverCache {
             }
         }
 
-        writeFileSync(
-            path.join(this.cacheDir, `${this.phrasesFile}`),
-            JSON.stringify(this.phrases, null, 2),
-        );
-        writeFileSync(
-            path.join(this.cacheDir, `${this.domainFile}`),
-            JSON.stringify(this.domains, null, 2),
-        );
-        writeFileSync(
-            path.join(this.cacheDir, `${this.urlFile}`),
-            JSON.stringify(this.urls, null, 2),
-        );
+        try {
+            const phrasesContent = JSON.stringify(this.phrases, null, 2);
+            writeFileSync(
+                path.join(this.cacheDir, `${this.phrasesFile}.gz`),
+                zlib.gzipSync(Buffer.from(phrasesContent, "utf-8")),
+            );
 
-        // TODO: save compressed/.bin
+            const domainsContent = JSON.stringify(this.domains, null, 2);
+            writeFileSync(
+                path.join(this.cacheDir, `${this.domainFile}.gz`),
+                zlib.gzipSync(Buffer.from(domainsContent, "utf-8")),
+            );
+
+            const urlsContent = JSON.stringify(this.urls, null, 2);            
+            writeFileSync(
+                path.join(this.cacheDir, `${this.urlFile}.gz`),
+                zlib.gzipSync(Buffer.from(urlsContent, "utf-8")),
+            );
+        } catch (err) {
+            throw new Error(`Failed to write compressed cache files: ${err instanceof Error ? err.message : String(err)}`);
+        }
     }
 }
