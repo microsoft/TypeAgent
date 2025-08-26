@@ -5,9 +5,8 @@
 - Make TimestampIndex async
 - Make all the indexes other than timestamp SQLite-backed (one at a time)
 - Temporarily
-  - Write a function that populates the semantic ref index
-    given the semantic ref collection (or from a list of semantic refs)
-  - Write a function that populates related terms (aliases and fuzzy_index)
+  - Speed up _populate_indexes_from_data
+  - Add code to populate aliases
 - Eventually
   - Write a function that does the following:
     - Add a given list of messages to the end of the message collection
