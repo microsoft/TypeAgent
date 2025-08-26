@@ -29,7 +29,7 @@ export class searchResultsPhraseGenerator {
     private downloadUrl: string =
         "https://radar.cloudflare.com/charts/LargerTopDomainsTable/attachment?id=1257&top=";
     private topN: number = 1000;
-    private topNFile: string = `examples/websiteAliases/top${this.topN}.csv`;
+    private topNFile: string = `examples/websiteAliases/data/top${this.topN}.csv`;
     private outputCacheFile: string = "examples/websiteAliases/cache/openPhrasesCache.json";
     private outputDomainFile: string = "examples/websiteAliases/cache/domains.json";
     private outputURLFile: string = "examples/websiteAliases/cache/urls.json";
