@@ -353,17 +353,19 @@ class ITimestampToTextRangeIndex(Protocol):
     # - Timestamps must be ISO-8601 strings sortable lexicographically.
     # - lookup_range(DateRange) returns items with start <= t < end (end exclusive).
     #   If end is None, treat as a point query with end = start + epsilon.
-    def size(self) -> int: ...
+    async def size(self) -> int: ...
 
-    def add_timestamp(
+    async def add_timestamp(
         self, message_ordinal: MessageOrdinal, timestamp: str
     ) -> bool: ...
 
-    def add_timestamps(
+    async def add_timestamps(
         self, message_timestamps: list[tuple[MessageOrdinal, str]]
     ) -> None: ...
 
-    def lookup_range(self, date_range: DateRange) -> list[TimestampedTextRange]: ...
+    async def lookup_range(
+        self, date_range: DateRange
+    ) -> list[TimestampedTextRange]: ...
 
 
 class ITermToRelatedTerms(Protocol):

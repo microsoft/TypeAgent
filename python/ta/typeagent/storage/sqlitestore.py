@@ -507,7 +507,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         for i in range(msg_count):
             message = await self._message_collection.get_item(i)
             if message.timestamp:
-                self._timestamp_index.add_timestamp(i, message.timestamp)
+                await self._timestamp_index.add_timestamp(i, message.timestamp)
 
         # Build message text index from messages
         if msg_count > 0:
@@ -576,14 +576,17 @@ class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
     def __init__(self, db: sqlite3.Connection):
         self.db = db
 
-    def size(self):
+    def _size(self):
         cursor = self.db.cursor()
         cursor.execute(
             "SELECT COUNT(*) FROM Messages WHERE start_timestamp IS NOT NULL"
         )
         return cursor.fetchone()[0]
 
-    def add_timestamp(
+    async def size(self):
+        return self._size()
+
+    def _add_timestamp(
         self, message_ordinal: interfaces.MessageOrdinal, timestamp: str
     ) -> bool:
         """Add timestamp to Messages table start_timestamp column."""
@@ -607,7 +610,12 @@ class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
             )
         return cursor.rowcount > 0
 
-    def add_timestamps(
+    async def add_timestamp(
+        self, message_ordinal: interfaces.MessageOrdinal, timestamp: str
+    ) -> bool:
+        return self._add_timestamp(message_ordinal, timestamp)
+
+    def _add_timestamps(
         self, message_timestamps: list[tuple[interfaces.MessageOrdinal, str]]
     ) -> None:
         """Add multiple timestamps to Messages table."""
@@ -630,7 +638,12 @@ class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
                 "UPDATE Messages SET start_timestamp = ? WHERE msg_id = ?", updates
             )
 
-    def lookup_range(
+    async def add_timestamps(
+        self, message_timestamps: list[tuple[interfaces.MessageOrdinal, str]]
+    ) -> None:
+        return self._add_timestamps(message_timestamps)
+
+    def _lookup_range(
         self, date_range: interfaces.DateRange
     ) -> list[interfaces.TimestampedTextRange]:
         """Look up timestamped text ranges in the given date range."""
@@ -663,3 +676,8 @@ class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
             )
 
         return results
+
+    async def lookup_range(
+        self, date_range: interfaces.DateRange
+    ) -> list[interfaces.TimestampedTextRange]:
+        return self._lookup_range(date_range)

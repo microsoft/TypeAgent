@@ -46,10 +46,13 @@ class TimestampToTextRangeIndex(ITimestampToTextRangeIndex):
     def __init__(self):
         self._ranges: list[TimestampedTextRange] = []
 
-    def size(self) -> int:
+    def _size(self) -> int:
         return len(self._ranges)
 
-    def lookup_range(self, date_range: DateRange):
+    async def size(self) -> int:
+        return self._size()
+
+    def _lookup_range(self, date_range: DateRange):
         start_at = date_range.start.isoformat()
         stop_at = None if date_range.end is None else date_range.end.isoformat()
         return get_in_range(
@@ -59,20 +62,36 @@ class TimestampToTextRangeIndex(ITimestampToTextRangeIndex):
             key=lambda x: x.timestamp,
         )
 
-    def add_timestamp(
+    async def lookup_range(self, date_range: DateRange):
+        return self._lookup_range(date_range)
+
+    def _add_timestamp(
         self,
         message_ordinal: MessageOrdinal,
         timestamp: str,
     ) -> bool:
         return self._insert_timestamp(message_ordinal, timestamp, True)
 
-    def add_timestamps(
+    async def add_timestamp(
+        self,
+        message_ordinal: MessageOrdinal,
+        timestamp: str,
+    ) -> bool:
+        return self._add_timestamp(message_ordinal, timestamp)
+
+    def _add_timestamps(
         self,
         message_timestamps: list[tuple[MessageOrdinal, str]],
     ) -> None:
         for message_ordinal, timestamp in message_timestamps:
             self._insert_timestamp(message_ordinal, timestamp, False)
         self._ranges.sort(key=lambda x: x.timestamp)
+
+    async def add_timestamps(
+        self,
+        message_timestamps: list[tuple[MessageOrdinal, str]],
+    ) -> None:
+        return self._add_timestamps(message_timestamps)
 
     def _insert_timestamp(
         self,
@@ -154,4 +173,4 @@ async def add_to_timestamp_index(
         if timestamp:
             message_timestamps.append((base_message_ordinal + i, timestamp))
         i += 1
-    timestamp_index.add_timestamps(message_timestamps)
+    await timestamp_index.add_timestamps(message_timestamps)

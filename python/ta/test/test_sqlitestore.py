@@ -217,18 +217,18 @@ async def test_sqlite_timestamp_index(
     ]
 
     for i, timestamp in enumerate(test_timestamps):
-        result = timestamp_index.add_timestamp(i, timestamp)
+        result = await timestamp_index.add_timestamp(i, timestamp)
         print(f"add_timestamp({i}, {timestamp}) = {result}")
         assert result is True
 
     # Test add_timestamps (will overwrite some of the above)
     more_timestamps = [(0, "2024-01-01T09:00:00Z"), (2, "2024-01-01T13:00:00Z")]
-    timestamp_index.add_timestamps(more_timestamps)
+    await timestamp_index.add_timestamps(more_timestamps)
 
     # Test lookup_range - point query
     point_date = datetime.fromisoformat("2024-01-01T09:00:00+00:00")
     point_range = DateRange(start=point_date, end=None)
-    results = timestamp_index.lookup_range(point_range)
+    results = await timestamp_index.lookup_range(point_range)
     assert len(results) == 1
     assert results[0].timestamp == "2024-01-01T09:00:00+00:00"  # Normalized format
     assert results[0].range.start.message_ordinal == 0  # Message ordinal 0
@@ -237,7 +237,7 @@ async def test_sqlite_timestamp_index(
     start_date = datetime.fromisoformat("2024-01-01T10:00:00Z")
     end_date = datetime.fromisoformat("2024-01-01T12:00:00Z")
     range_query = DateRange(start=start_date, end=end_date)
-    results = timestamp_index.lookup_range(range_query)
+    results = await timestamp_index.lookup_range(range_query)
 
     # Should find messages with timestamps: 11:00 (09:00 is before range, 12:00 is excluded, 13:00 is after)
     assert len(results) == 1
@@ -248,7 +248,7 @@ async def test_sqlite_timestamp_index(
     empty_start = datetime.fromisoformat("2024-02-01T00:00:00Z")
     empty_end = datetime.fromisoformat("2024-02-01T23:59:59Z")
     empty_range = DateRange(start=empty_start, end=empty_end)
-    empty_results = timestamp_index.lookup_range(empty_range)
+    empty_results = await timestamp_index.lookup_range(empty_range)
     assert len(empty_results) == 0
 
 
@@ -446,7 +446,7 @@ async def test_populate_indexes_from_data_comprehensive(
         from typeagent.storage.sqlitestore import SqliteTimestampToTextRangeIndex
 
         assert isinstance(timestamp_index, SqliteTimestampToTextRangeIndex)
-        assert timestamp_index.size() == 2  # Both messages have timestamps
+        assert await timestamp_index.size() == 2  # Both messages have timestamps
 
         # Test the index actually works for lookups
         from datetime import datetime
@@ -455,7 +455,7 @@ async def test_populate_indexes_from_data_comprehensive(
         start_time = datetime.fromisoformat("2024-01-01T10:30:00Z")
         end_time = datetime.fromisoformat("2024-01-01T11:30:00Z")
         date_range = DateRange(start=start_time, end=end_time)
-        timestamped_ranges = timestamp_index.lookup_range(date_range)
+        timestamped_ranges = await timestamp_index.lookup_range(date_range)
         assert len(timestamped_ranges) == 1  # Only msg2 in range
         assert timestamped_ranges[0].range.start.message_ordinal == 1
 
@@ -486,7 +486,7 @@ async def test_populate_indexes_empty_data(
         from typeagent.storage.sqlitestore import SqliteTimestampToTextRangeIndex
 
         assert isinstance(timestamp_index, SqliteTimestampToTextRangeIndex)
-        assert timestamp_index.size() == 0
+        assert await timestamp_index.size() == 0
 
     finally:
         await provider.close()

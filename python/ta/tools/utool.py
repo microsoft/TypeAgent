@@ -44,7 +44,6 @@ from typeagent.knowpro.convsettings import ConversationSettings
 from typeagent.knowpro import kplib
 from typeagent.knowpro import query
 from typeagent.knowpro import search, search_query_schema, searchlang
-from typeagent.knowpro import semrefindex
 from typeagent.knowpro import serialization
 from typeagent.knowpro import timestampindex
 
@@ -209,11 +208,11 @@ async def print_conversation_stats(c: IConversation) -> None:
             print("NO TIMESTAMP INDEX")
         else:
             if isinstance(s.timestamp_index, timestampindex.TimestampToTextRangeIndex):
-                print(f"{len(s.timestamp_index._ranges)} timestamp index entries.")
+                print(f"{await s.timestamp_index.size()} timestamp index entries.")
             elif isinstance(
                 s.timestamp_index, sqlitestore.SqliteTimestampToTextRangeIndex
             ):
-                print(f"{s.timestamp_index.size()} timestamp index entries.")
+                print(f"{await s.timestamp_index.size()} timestamp index entries.")
             else:
                 print(
                     f"Unrecognized timestamp index of type {type(s.timestamp_index).__name__}"

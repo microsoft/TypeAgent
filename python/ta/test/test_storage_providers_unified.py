@@ -256,7 +256,7 @@ async def test_timestamp_index_behavior_parity(
     end_time = Datetime.fromisoformat("2024-01-02T00:00:00")
     date_range = DateRange(start=start_time, end=end_time)
 
-    empty_results = time_index.lookup_range(date_range)
+    empty_results = await time_index.lookup_range(date_range)
     assert isinstance(empty_results, list)
     assert len(empty_results) == 0
 

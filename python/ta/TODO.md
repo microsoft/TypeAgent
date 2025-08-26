@@ -2,11 +2,10 @@
 
 ## TODOs for fully implementing persistence through SQLite
 
-- Make TimestampIndex async
 - Make all the indexes other than timestamp SQLite-backed (one at a time)
 - Temporarily
-  - Speed up _populate_indexes_from_data
-  - Add code to populate aliases
+  - Speed up _populate_indexes_from_data (it takes 7 seconds?!?!?!)
+  - Add code to populate aliases (assume it's a podcast -- use metadata source/dest)
 - Eventually
   - Write a function that does the following:
     - Add a given list of messages to the end of the message collection
