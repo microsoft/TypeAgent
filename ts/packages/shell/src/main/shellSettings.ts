@@ -76,29 +76,8 @@ export function ensureShellDataDir(instanceDir: string) {
     return shellDataDir;
 }
 
-export function getSettingsPath(instanceDir: string) {
+function getSettingsPath(instanceDir: string) {
     return path.join(getShellDataDir(instanceDir), "shellSettings.json");
-}
-
-export function loadShellSettings(instanceDir: string): ShellSettings {
-    const settingsPath = getSettingsPath(instanceDir);
-    debugShell(
-        `Loading shell settings from '${settingsPath}'`,
-        performance.now(),
-    );
-    const settings = cloneConfig(defaultSettings);
-    if (existsSync(settingsPath)) {
-        try {
-            const existingSettings = JSON.parse(
-                readFileSync(settingsPath, "utf-8"),
-            );
-            mergeConfig(settings, existingSettings);
-        } catch (e) {
-            debugShell(`Error loading shell settings: ${e}`);
-        }
-    }
-    debugShell(`Shell settings: ${JSON.stringify(settings, undefined, 2)}`);
-    return settings;
 }
 
 export class ShellSettingManager {
