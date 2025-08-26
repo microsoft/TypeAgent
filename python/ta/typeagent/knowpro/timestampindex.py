@@ -46,11 +46,14 @@ class TimestampToTextRangeIndex(ITimestampToTextRangeIndex):
     def __init__(self):
         self._ranges: list[TimestampedTextRange] = []
 
+    async def size(self) -> int:
+        return self._size()
+
     def _size(self) -> int:
         return len(self._ranges)
 
-    async def size(self) -> int:
-        return self._size()
+    async def lookup_range(self, date_range: DateRange):
+        return self._lookup_range(date_range)
 
     def _lookup_range(self, date_range: DateRange):
         start_at = date_range.start.isoformat()
@@ -62,8 +65,12 @@ class TimestampToTextRangeIndex(ITimestampToTextRangeIndex):
             key=lambda x: x.timestamp,
         )
 
-    async def lookup_range(self, date_range: DateRange):
-        return self._lookup_range(date_range)
+    async def add_timestamp(
+        self,
+        message_ordinal: MessageOrdinal,
+        timestamp: str,
+    ) -> bool:
+        return self._add_timestamp(message_ordinal, timestamp)
 
     def _add_timestamp(
         self,
@@ -72,12 +79,11 @@ class TimestampToTextRangeIndex(ITimestampToTextRangeIndex):
     ) -> bool:
         return self._insert_timestamp(message_ordinal, timestamp, True)
 
-    async def add_timestamp(
+    async def add_timestamps(
         self,
-        message_ordinal: MessageOrdinal,
-        timestamp: str,
-    ) -> bool:
-        return self._add_timestamp(message_ordinal, timestamp)
+        message_timestamps: list[tuple[MessageOrdinal, str]],
+    ) -> None:
+        return self._add_timestamps(message_timestamps)
 
     def _add_timestamps(
         self,
@@ -86,12 +92,6 @@ class TimestampToTextRangeIndex(ITimestampToTextRangeIndex):
         for message_ordinal, timestamp in message_timestamps:
             self._insert_timestamp(message_ordinal, timestamp, False)
         self._ranges.sort(key=lambda x: x.timestamp)
-
-    async def add_timestamps(
-        self,
-        message_timestamps: list[tuple[MessageOrdinal, str]],
-    ) -> None:
-        return self._add_timestamps(message_timestamps)
 
     def _insert_timestamp(
         self,
