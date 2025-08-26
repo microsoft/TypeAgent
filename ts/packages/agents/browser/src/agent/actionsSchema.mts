@@ -72,7 +72,7 @@ export type Search = {
     actionName: "search";
     parameters: {
         query?: string;
-        newTab: boolean // default is false;
+        newTab: boolean; // default is false;
     };
 };
 

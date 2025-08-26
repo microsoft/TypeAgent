@@ -104,7 +104,10 @@ import {
     saveSettings,
 } from "./browserActions.mjs";
 import { ChunkChatResponse, generateAnswer } from "typeagent";
-import { BrowserLookupActions, LookupAndAnswerInternet } from "./lookupAndAnswerSchema.mjs";
+import {
+    BrowserLookupActions,
+    LookupAndAnswerInternet,
+} from "./lookupAndAnswerSchema.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
 const debugWebSocket = registerDebug("typeagent:browser:ws");
@@ -1071,7 +1074,7 @@ async function executeBrowserAction(
         | TypeAgentAction<ShoppingActions, "browser.commerce">
         | TypeAgentAction<InstacartActions, "browser.instacart">
         | TypeAgentAction<SchemaDiscoveryActions, "browser.actionDiscovery">
-        | TypeAgentAction<BrowserLookupActions, "browser.lookupAndAnswer">,        
+        | TypeAgentAction<BrowserLookupActions, "browser.lookupAndAnswer">,
 
     context: ActionContext<BrowserActionContext>,
 ) {
@@ -1121,7 +1124,7 @@ async function executeBrowserAction(
                             .activeSearchProvider,
                         {
                             newTab: action.parameters.newTab,
-                        }
+                        },
                     );
                     return createActionResultFromTextDisplay(
                         `Opened new tab with query ${action.parameters.query}`,
@@ -1200,12 +1203,14 @@ async function executeBrowserAction(
                 }
             }
             break;
-        case "browser.lookupAndAnswer": 
-            switch(action.actionName) {
+        case "browser.lookupAndAnswer":
+            switch (action.actionName) {
                 case "lookupAndAnswerInternet":
                     return await lookup(context, action);
                 default: {
-                    throw new Error(`Unknown action for lookupAndAnswer: ${(action as any).actionName}`);
+                    throw new Error(
+                        `Unknown action for lookupAndAnswer: ${(action as any).actionName}`,
+                    );
                 }
             }
     }
