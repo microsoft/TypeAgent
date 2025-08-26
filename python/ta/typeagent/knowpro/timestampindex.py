@@ -46,6 +46,9 @@ class TimestampToTextRangeIndex(ITimestampToTextRangeIndex):
     def __init__(self):
         self._ranges: list[TimestampedTextRange] = []
 
+    def size(self) -> int:
+        return len(self._ranges)
+
     def lookup_range(self, date_range: DateRange):
         start_at = date_range.start.isoformat()
         stop_at = None if date_range.end is None else date_range.end.isoformat()

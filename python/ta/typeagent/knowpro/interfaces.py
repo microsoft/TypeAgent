@@ -353,6 +353,8 @@ class ITimestampToTextRangeIndex(Protocol):
     # - Timestamps must be ISO-8601 strings sortable lexicographically.
     # - lookup_range(DateRange) returns items with start <= t < end (end exclusive).
     #   If end is None, treat as a point query with end = start + epsilon.
+    def size(self) -> int: ...
+
     def add_timestamp(
         self, message_ordinal: MessageOrdinal, timestamp: str
     ) -> bool: ...
