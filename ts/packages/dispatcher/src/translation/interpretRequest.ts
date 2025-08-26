@@ -215,10 +215,10 @@ async function interpretRequestWithActivityContext(
 export async function interpretRequest(
     context: ActionContext<CommandHandlerContext>,
     request: string,
-    attachments?: CachedImageWithDetails[] | undefined,
+    attachments: CachedImageWithDetails[] | undefined,
+    history: HistoryContext | undefined,
 ): Promise<InterpretResult> {
     const systemContext = context.sessionContext.agentContext;
-    const history = getHistoryContext(systemContext);
     const activeSchemaNames = systemContext.agents.getActiveSchemas();
 
     const tokenUsage: ai.CompletionUsageStats = {
