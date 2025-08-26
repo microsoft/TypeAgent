@@ -12,25 +12,7 @@ import {
 import { Worker } from "worker_threads";
 import path from "path";
 import { fileURLToPath } from "url";
-import { openPhraseGeneratorAgent } from "azure-ai-foundry";
-
-type cachedUrls = {
-    domains: {
-        [key: string]: { 
-            dateIndexed: number;
-            urlsFound: number;
-        }
-    }
-    urls: {
-        [key: string]: {
-            phrases?: string[];
-            title?: string;
-        };
-    };
-    phrases: {
-        [key: string]: string[];
-    };
-};
+import { openPhraseGeneratorAgent, UrlResolverCache, domainCache, urlCache } from "azure-ai-foundry";
 
 type cachedUrls_compact = {
     domains: {
@@ -46,14 +28,12 @@ export class searchResultsPhraseGenerator {
     // manually downloadable from: https://radar.cloudflare.com/domains
     private downloadUrl: string =
         "https://radar.cloudflare.com/charts/LargerTopDomainsTable/attachment?id=1257&top=";
-    private topN: number = 50000;
+    private topN: number = 1000;
     private topNFile: string = `examples/websiteAliases/top${this.topN}.csv`;
-    private outputFile: string = "examples/websiteAliases/openPhrasesCache.json";
-    private processed: cachedUrls = {
-        domains: {},
-        urls: {},
-        phrases: {},
-    };
+    private outputCacheFile: string = "examples/websiteAliases/cache/openPhrasesCache.json";
+    private outputDomainFile: string = "examples/websiteAliases/cache/domains.json";
+    private outputURLFile: string = "examples/websiteAliases/cache/urls.json";
+    private cache: UrlResolverCache = new UrlResolverCache();
 
     constructor(topN: number,) {
         if (topN && topN > 0) {
@@ -83,19 +63,17 @@ export class searchResultsPhraseGenerator {
     public async index(clear: boolean = false): Promise<void> {
         try {
             // start over from scratch?
-            if (!clear && existsSync(this.outputFile)) {
-                this.processed = JSON.parse(
-                    readFileSync(this.outputFile, "utf-8"),
-                ) as cachedUrls;
+            if (!clear && existsSync(this.outputCacheFile)) {
+                this.cache.load(this.outputCacheFile);
             }
         } catch (error) {
             console.error(
                 chalk.red(
-                    `Error reading output file ${this.outputFile}: ${error}`,
+                    `Error reading output file ${this.outputCacheFile}: ${error}`,
                 ),
             );
             console.warn("Deleting output file...");
-            unlinkSync(this.outputFile);
+            unlinkSync(this.outputCacheFile);
         }
 
         // open the file, throw away the headers
@@ -125,7 +103,7 @@ export class searchResultsPhraseGenerator {
             }
 
             // skip empty domains or domains that are already processed
-            if (!domain || this.processed.domains[domain] !== undefined) {
+            if (!domain || this.cache.domains[domain] !== undefined) {
                 console.warn(chalk.yellowBright(`Skipping domain: ${domain}`));
                 continue;
             }
@@ -156,7 +134,7 @@ export class searchResultsPhraseGenerator {
                     }
 
                     // record that we processed this domain
-                    this.processed.domains[msg.domain] = {
+                    this.cache.domains[msg.domain] = {
                         urlsFound: msg.phrases?.urls.length || 0,
                         dateIndexed: Date.now(),
                     };
@@ -188,20 +166,35 @@ export class searchResultsPhraseGenerator {
                 console.log(chalk.bgBlueBright(`Batch ${batchNumber} of ${batchCount} completed.`));
 
                 // periodically save the output file so we don't have to start from scratch if we restart
-                writeFileSync(
-                    this.outputFile,
-                    JSON.stringify(this.processed, null, 2),
-                );
+                this.saveOutput();
                 console.log(
                     chalk.green(
-                        `Saved progress to ${this.outputFile} (${statSync(this.outputFile).size} bytes)`,
+                        `Saved progress to ${this.outputCacheFile} (${statSync(this.outputCacheFile).size} bytes)`,
                     ),
                 );
             }
         }
 
         // save the output file
-        writeFileSync(this.outputFile, JSON.stringify(this.processed, null, 2));
+        this.saveOutput();
+    }
+
+    /**
+     * Saves the cache to the output files
+     */
+    private saveOutput() {
+        writeFileSync(
+            this.outputCacheFile,
+            JSON.stringify(this.cache.phrases, null, 2),
+        );
+        writeFileSync(
+            this.outputDomainFile,
+            JSON.stringify(this.cache.domains, null, 2),
+        );
+        writeFileSync(
+            this.outputURLFile,
+            JSON.stringify(this.cache.urls, null, 2),
+        );
     }
 
     /**
@@ -231,26 +224,26 @@ export class searchResultsPhraseGenerator {
                 }
 
                 // record the phrase entry
-                if (this.processed.phrases[alias] === undefined) {
-                    this.processed.phrases[alias] = [element.pageUrl];
+                if (this.cache.phrases[alias] === undefined) {
+                    this.cache.phrases[alias] = [element.pageUrl];
                 } else {
-                    this.processed.phrases[alias] = [
+                    this.cache.phrases[alias] = [
                         ...new Set([
-                            ...this.processed.phrases[alias],
+                            ...this.cache.phrases[alias],
                             element.pageUrl,
                         ]),
                     ];
 
                     console.log(
                         chalk.yellow(
-                            `\t${alias} now maps to ${this.processed.phrases[alias].length} sites.`,
+                            `\t${alias} now maps to ${this.cache.phrases[alias].length} sites.`,
                         ),
                     );
                 }
             });
 
             // record domain stats
-            this.processed.urls[element.pageUrl] = { 
+            this.cache.urls[element.pageUrl] = { 
                 title: element.pageTitle,
                 phrases: element.openPhrases,
             };
@@ -263,8 +256,8 @@ export class searchResultsPhraseGenerator {
     public summarize() {
         console.log(chalk.dim("Processing..."));
 
-        console.log(`Loading previous results from ${this.outputFile}`);
-        this.processed = JSON.parse(readFileSync(this.outputFile, "utf-8"));
+        console.log(`Loading previous results from ${this.outputCacheFile}`);
+        this.cache = JSON.parse(readFileSync(this.outputCacheFile, "utf-8"));
 
         let minUrlsPerDomain: number = Number.MAX_SAFE_INTEGER;
         let maxUrlsPerDomain: number = Number.MIN_SAFE_INTEGER;
@@ -273,18 +266,19 @@ export class searchResultsPhraseGenerator {
         //let minD: string = "";
         let domainsWithMaxUrlCount: string[] = [];
 
-        for (const [domain, stats] of Object.entries(this.processed.domains)) {
-            if (stats.urlsFound < minUrlsPerDomain) {
-                minUrlsPerDomain = stats.urlsFound;
+        for (const [domain, stats] of Object.entries(this.cache.domains)) {
+            const dd: domainCache = stats as domainCache;
+            if (dd.urlsFound < minUrlsPerDomain) {
+                minUrlsPerDomain = dd.urlsFound;
             }
 
-            if (stats.urlsFound > maxUrlsPerDomain) {
-                maxUrlsPerDomain = stats.urlsFound;
+            if (dd.urlsFound > maxUrlsPerDomain) {
+                maxUrlsPerDomain = dd.urlsFound;
                 domainsWithMaxUrlCount.push(domain);
             }
             
             count++;
-            avgUrlsPerDomain += stats.urlsFound;
+            avgUrlsPerDomain += dd.urlsFound;
         }
 
         console.log(chalk.white(`Number of domains processed: ${count}`));
@@ -297,8 +291,9 @@ export class searchResultsPhraseGenerator {
         let maxPhraseCount = Number.MIN_SAFE_INTEGER;
         let urlsWithMaxPhraseCount: string[] = [];
 
-        for (const [url, info] of Object.entries(this.processed.urls)) {
-            const phraseCount = info.phrases?.length ?? 0;
+        for (const [url, info] of Object.entries(this.cache.urls)) {
+            const ii: urlCache = info as urlCache;
+            const phraseCount = ii.phrases?.length ?? 0;
             totalPhraseCount += phraseCount;
 
             if (phraseCount < minPhraseCount) {
@@ -313,7 +308,7 @@ export class searchResultsPhraseGenerator {
             }
         }
 
-        const numUrlsIndexed = Object.keys(this.processed.urls).length;
+        const numUrlsIndexed = Object.keys(this.cache.urls).length;
         const avgPhrasesPerDomain = numUrlsIndexed > 0 ? totalPhraseCount / numUrlsIndexed : 0;
 
         console.log(chalk.green(`Number of URLs indexed: ${numUrlsIndexed}`));
@@ -330,33 +325,31 @@ export class searchResultsPhraseGenerator {
     public compact() {
 
         // do we have a compressable file?
-        if (!existsSync(this.outputFile)) {
-            console.error(`Output file ${this.outputFile} does not exist.`);
+        if (!existsSync(this.outputCacheFile)) {
+            console.error(`Output file ${this.outputCacheFile} does not exist.`);
             return;
         }
 
         // Load the data
         console.log(chalk.blueBright("Loading uncompressed file."));
-        this.processed = JSON.parse(
-            readFileSync(this.outputFile, "utf-8"),
-        ) as cachedUrls;
+        this.cache.load(this.outputCacheFile);
 
         console.log(chalk.dim("Processing..."));
         const compressed: cachedUrls_compact = {
-            domains: this.processed.domains,
+            domains: this.cache.domains,
             phrases: {},
         };     
 
         console.log(chalk.blueBright("Indexing Domains"));
         const domainMap: Map<string, any> = new Map<string, any>();
-        for(const [domain] of Object.entries(this.processed.domains)) {
+        for(const [domain] of Object.entries(this.cache.domains)) {
             domainMap.set(domain, { });
         }
 
         // collapse URLs into domains
         console.log(chalk.blueBright("Collapsing URLs into domains."));
         const urlToIdMap: Map<string, number> = new Map<string, number>();
-        for (const [url, value] of Object.entries(this.processed.urls)) {
+        for (const [url, value] of Object.entries(this.cache.urls)) {
             const domain = new URL(url).hostname;
 
             // crate the domain entry for this URL if we need to
@@ -367,8 +360,8 @@ export class searchResultsPhraseGenerator {
             // move the URL into the domain
             urlToIdMap.set(url, urlToIdMap.size);
 
-            delete value.phrases;
-            delete value.title;
+            delete (value as any).phrases;
+            delete (value as any).title;
 
             domainMap.get(domain).urls = {};
             domainMap.get(domain).urls[url] = value;
@@ -378,9 +371,9 @@ export class searchResultsPhraseGenerator {
         compressed.domains = Object.fromEntries(domainMap);
 
         console.log(chalk.greenBright("Processing URLs."));
-        Object.entries(this.processed.phrases).forEach(([phrase, urls]) => {
+        Object.entries(this.cache.phrases).forEach(([phrase, urls]) => {
             const urlIds: number[] = [];
-            urls.forEach((value: string) => {
+            (urls as urlCache).forEach((value: string) => {
                 urlIds.push(urlToIdMap.get(value)!);
             });
             compressed.phrases[phrase] = urlIds;
@@ -406,20 +399,20 @@ export class searchResultsPhraseGenerator {
         // compressed.phrases = phraseTree;
 
         const small: string[] = [];
-        Object.entries(this.processed.phrases).forEach(([phrase, urls]) => {
+        Object.entries(this.cache.phrases).forEach(([phrase, urls]) => {
             const ids: string[] = [];
-            urls.forEach((url) => {
+            (urls as urlCache).forEach((url: string) => {
                 ids.push(`${urlToIdMap.get(url)}`);
             })
             small.push(`${phrase}\t${ids.join("\t")}`);
         });
 
-        writeFileSync(this.outputFile.replace(".json", ".compact.tsv"), small.join("\n"));
+        writeFileSync(this.outputCacheFile.replace(".json", ".compact.tsv"), small.join("\n"));
 
 
         console.log(chalk.redBright("Writing compressed file."));
         writeFileSync(
-            this.outputFile.replace(".json", ".compact.json"),
+            this.outputCacheFile.replace(".json", ".compact.json"),
             JSON.stringify(compressed, null, 2),
         );
 
