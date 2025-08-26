@@ -104,6 +104,7 @@ export class UrlResolverCache {
             this.cacheDir = dir
         }
 
+        // TODO: make async
         if (!existsSync(this.cacheDir)) {
             throw new Error(`The directory ${this.cacheDir} does not exist!`);
         }
