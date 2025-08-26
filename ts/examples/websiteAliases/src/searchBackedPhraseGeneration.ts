@@ -12,7 +12,7 @@ import {
 import { Worker } from "worker_threads";
 import path from "path";
 import { fileURLToPath } from "url";
-import { openPhraseGeneratorAgent, UrlResolverCache, domainCache, urlCache } from "azure-ai-foundry";
+import { openPhraseGeneratorAgent, urlResolverCache } from "azure-ai-foundry";
 
 type cachedUrls_compact = {
     domains: {
@@ -30,10 +30,9 @@ export class searchResultsPhraseGenerator {
         "https://radar.cloudflare.com/charts/LargerTopDomainsTable/attachment?id=1257&top=";
     private topN: number = 1000;
     private topNFile: string = `examples/websiteAliases/data/top${this.topN}.csv`;
-    private outputCacheFile: string = "examples/websiteAliases/cache/openPhrasesCache.json";
-    private outputDomainFile: string = "examples/websiteAliases/cache/domains.json";
-    private outputURLFile: string = "examples/websiteAliases/cache/urls.json";
-    private cache: UrlResolverCache = new UrlResolverCache();
+    private outputCacheFile: string = "examples/websiteAliases/cache/phrases.json";
+    private outputPath: string = path.join(path.dirname(path.dirname(fileURLToPath(import.meta.url))), "cache");
+    private cache: urlResolverCache.UrlResolverCache = new urlResolverCache.UrlResolverCache(this.outputPath);
 
     constructor(topN: number,) {
         if (topN && topN > 0) {
@@ -63,8 +62,8 @@ export class searchResultsPhraseGenerator {
     public async index(clear: boolean = false): Promise<void> {
         try {
             // start over from scratch?
-            if (!clear && existsSync(this.outputCacheFile)) {
-                this.cache.load(this.outputCacheFile);
+            if (!clear && existsSync(this.outputPath)) {
+                this.cache.load();
             }
         } catch (error) {
             console.error(
@@ -166,7 +165,7 @@ export class searchResultsPhraseGenerator {
                 console.log(chalk.bgBlueBright(`Batch ${batchNumber} of ${batchCount} completed.`));
 
                 // periodically save the output file so we don't have to start from scratch if we restart
-                this.saveOutput();
+                this.cache.save();
                 console.log(
                     chalk.green(
                         `Saved progress to ${this.outputCacheFile} (${statSync(this.outputCacheFile).size} bytes)`,
@@ -176,25 +175,7 @@ export class searchResultsPhraseGenerator {
         }
 
         // save the output file
-        this.saveOutput();
-    }
-
-    /**
-     * Saves the cache to the output files
-     */
-    private saveOutput() {
-        writeFileSync(
-            this.outputCacheFile,
-            JSON.stringify(this.cache.phrases, null, 2),
-        );
-        writeFileSync(
-            this.outputDomainFile,
-            JSON.stringify(this.cache.domains, null, 2),
-        );
-        writeFileSync(
-            this.outputURLFile,
-            JSON.stringify(this.cache.urls, null, 2),
-        );
+        this.cache.save();
     }
 
     /**
@@ -256,8 +237,8 @@ export class searchResultsPhraseGenerator {
     public summarize() {
         console.log(chalk.dim("Processing..."));
 
-        console.log(`Loading previous results from ${this.outputCacheFile}`);
-        this.cache = JSON.parse(readFileSync(this.outputCacheFile, "utf-8"));
+        console.log(`Loading previous results from ${this.outputPath}`);
+        this.cache.load();
 
         let minUrlsPerDomain: number = Number.MAX_SAFE_INTEGER;
         let maxUrlsPerDomain: number = Number.MIN_SAFE_INTEGER;
@@ -267,7 +248,7 @@ export class searchResultsPhraseGenerator {
         let domainsWithMaxUrlCount: string[] = [];
 
         for (const [domain, stats] of Object.entries(this.cache.domains)) {
-            const dd: domainCache = stats as domainCache;
+            const dd: urlResolverCache.domainData = stats as urlResolverCache.domainData;
             if (dd.urlsFound < minUrlsPerDomain) {
                 minUrlsPerDomain = dd.urlsFound;
             }
@@ -292,7 +273,7 @@ export class searchResultsPhraseGenerator {
         let urlsWithMaxPhraseCount: string[] = [];
 
         for (const [url, info] of Object.entries(this.cache.urls)) {
-            const ii: urlCache = info as urlCache;
+            const ii: urlResolverCache.urlData = info as urlResolverCache.urlData;
             const phraseCount = ii.phrases?.length ?? 0;
             totalPhraseCount += phraseCount;
 
@@ -373,7 +354,7 @@ export class searchResultsPhraseGenerator {
         console.log(chalk.greenBright("Processing URLs."));
         Object.entries(this.cache.phrases).forEach(([phrase, urls]) => {
             const urlIds: number[] = [];
-            (urls as urlCache).forEach((value: string) => {
+            urls.forEach((value: string) => {
                 urlIds.push(urlToIdMap.get(value)!);
             });
             compressed.phrases[phrase] = urlIds;
@@ -401,7 +382,7 @@ export class searchResultsPhraseGenerator {
         const small: string[] = [];
         Object.entries(this.cache.phrases).forEach(([phrase, urls]) => {
             const ids: string[] = [];
-            (urls as urlCache).forEach((url: string) => {
+            urls.forEach((url: string) => {
                 ids.push(`${urlToIdMap.get(url)}`);
             })
             small.push(`${phrase}\t${ids.join("\t")}`);

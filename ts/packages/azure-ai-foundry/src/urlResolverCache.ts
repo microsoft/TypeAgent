@@ -1,25 +1,34 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { existsSync, writeFileSync } from "fs";
+import { existsSync, writeFileSync, mkdirSync, readFileSync } from "fs";
 import path from "path";
+import { isDirectoryPath } from "typeagent";
 
 // type compressedUrlCache = {
 //     temp: string;
 // }
 
 export type domainCache = {
-    [key: string]: { 
-        dateIndexed: number;
-        urlsFound: number;
-    }
+    [key: string]: domainData
+}
+
+export type domainData = { 
+    dateIndexed: number;
+    urlsFound: number;
 }
 
 export type urlCache = {
-    [key: string]: {
-        phrases?: string[];
-        title?: string;
-    };
+    [key: string]: urlData;
+}
+
+export type urlData = {
+    phrases?: string[];
+    title?: string;
+};
+
+export type phraseCache = {
+    [key: string]: string[];
 }
 
 /**
@@ -27,22 +36,25 @@ export type urlCache = {
  */
 export class UrlResolverCache {
 
-    private cacheFile: string = "";
+    private cacheDir: string = "";
     private domainFile: string = "domains.json";
     private urlFile: string = "urls.json";
-    private phrasesFile: string = "cache.json"
+    private phrasesFile: string = "phrases.json"
 
     public domains: domainCache = {};
 
     public urls: urlCache = {};
 
-    public phrases: {
-        [key: string]: string[];
-    } = {};
+    public phrases: phraseCache = {};
 
-    constructor(file?: string) {
-        if (file) {
-            this.cacheFile = file;
+    constructor(dir: string) {
+
+        if (!isDirectoryPath(dir)) {
+            throw new Error(`The directory ${dir} does not exist!`);
+        }
+
+        if (dir) {
+            this.cacheDir = dir;
         }
     }
 
@@ -50,42 +62,44 @@ export class UrlResolverCache {
      * Loads the cache file
      * @param file - The path to the cache file to load
      */
-    public load(file: string) {
+    public load(dir?: string) {
 
-        if (!existsSync(file)) {
-            throw new Error(`The file ${file} does not exist!`);
+        if (dir) {
+            this.cacheDir = dir
         }
 
-        this.cacheFile = file;
+        if (!existsSync(this.cacheDir)) {
+            throw new Error(`The directory ${this.cacheDir} does not exist!`);
+        }
 
-        console.log(this.cacheFile);
-        // load the compressed cache
-        //const cc: compressedUrlCache = JSON.parse(readFileSync(this.cacheFile, "utf-8"));
-
-        // reconstruct the human understandable cache
+        this.domains = JSON.parse(readFileSync(path.join(this.cacheDir, this.domainFile), "utf-8"));
+        this.urls = JSON.parse(readFileSync(path.join(this.cacheDir, this.urlFile), "utf-8"));
+        this.phrases = JSON.parse(readFileSync(path.join(this.cacheDir, this.phrasesFile), "utf-8"));
     }
 
     /**
      * Saves the uncompressed cache with all associated meta data.
-     * @param outDir - The folder where the cache files should be written
-     * @param fileNamePrefix - A file name prefix for the cache files
      */
-    public save(outDir: string, fileNamePrefix?: string) {
+    public save() {
 
-        if (!existsSync(outDir)) {
-            throw new Error (`The supplied path '${outDir} does not exist`);
+        if (!existsSync(this.cacheDir)) {
+            try {
+                mkdirSync(this.cacheDir, { recursive: true });
+            } catch (err) {
+                throw new Error(`Failed to create cache directory '${this.cacheDir}': ${err instanceof Error ? err.message : String(err)}`);
+            }
         }
 
         writeFileSync(
-            path.join(outDir, `${fileNamePrefix}${this.phrasesFile}`),
+            path.join(this.cacheDir, `${this.phrasesFile}`),
             JSON.stringify(this.phrases, null, 2),
         );
         writeFileSync(
-            path.join(outDir, `${fileNamePrefix}${this.domainFile}`),
+            path.join(this.cacheDir, `${this.domainFile}`),
             JSON.stringify(this.domains, null, 2),
         );
         writeFileSync(
-            path.join(outDir, `${fileNamePrefix}${this.urlFile}`),
+            path.join(this.cacheDir, `${this.urlFile}`),
             JSON.stringify(this.urls, null, 2),
         );
 
