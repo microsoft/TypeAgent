@@ -68,15 +68,6 @@ export type CloseWebPage = {
     actionName: "closeWebPage";
 };
 
-// Explicit search action requested by the user
-export type Search = {
-    actionName: "search";
-    parameters: {
-        query?: string;
-        newTab: boolean; // default is false;
-    };
-};
-
 export type GoBack = {
     actionName: "goBack";
 };
@@ -157,7 +148,18 @@ export type GetWebsiteStats = {
     };
 };
 
+// Display a search results page for the specified query
+// Do NOT default to search if the user request doesn't explicitly ask for a search
+export type Search = {
+    actionName: "search";
+    parameters: {
+        query?: string;
+        newTab: boolean; // default is false;
+    };
+};
+
 // Search web memories (unified search replacing queryWebKnowledge and searchWebsites)
+// Do NOT default to search if the user request doesn't explicitly ask for a search
 export type SearchWebMemories = {
     actionName: "searchWebMemories";
     parameters: {
