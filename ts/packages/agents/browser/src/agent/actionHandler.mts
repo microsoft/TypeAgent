@@ -72,8 +72,7 @@ import {
     BrowserActions,
     OpenWebPage,
     OpenSearchResult,
-    SwitchTabs,
-    LookupAndAnswerInternet,
+    ChangeTabs,
 } from "./actionsSchema.mjs";
 import {
     resolveURLWithHistory,
@@ -105,6 +104,7 @@ import {
     saveSettings,
 } from "./browserActions.mjs";
 import { ChunkChatResponse, generateAnswer } from "typeagent";
+import { BrowserLookupActions, LookupAndAnswerInternet } from "./lookupAndAnswerSchema.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
 const debugWebSocket = registerDebug("typeagent:browser:ws");
@@ -856,14 +856,14 @@ async function closeWebPage(context: ActionContext<BrowserActionContext>) {
     return result;
 }
 
-async function switchTabs(
+async function changeTabs(
     context: ActionContext<BrowserActionContext>,
-    action: TypeAgentAction<SwitchTabs>,
+    action: TypeAgentAction<ChangeTabs>,
 ) {
     const browserControl = getActionBrowserControl(context);
 
     displayStatus(
-        `Switching to tab: ${action.parameters.tabDescription}.`,
+        `Activating tab: ${action.parameters.tabDescription}.`,
         context,
     );
     let result: ActionResult | undefined = undefined;
@@ -1070,7 +1070,8 @@ async function executeBrowserAction(
         | TypeAgentAction<CrosswordActions, "browser.crossword">
         | TypeAgentAction<ShoppingActions, "browser.commerce">
         | TypeAgentAction<InstacartActions, "browser.instacart">
-        | TypeAgentAction<SchemaDiscoveryActions, "browser.actionDiscovery">,
+        | TypeAgentAction<SchemaDiscoveryActions, "browser.actionDiscovery">
+        | TypeAgentAction<BrowserLookupActions, "browser.lookupAndAnswer">,        
 
     context: ActionContext<BrowserActionContext>,
 ) {
@@ -1082,8 +1083,8 @@ async function executeBrowserAction(
                     return openWebPage(context, action);
                 case "closeWebPage":
                     return closeWebPage(context);
-                case "switchTabs":
-                    return switchTabs(context, action);
+                case "changeTab":
+                    return changeTabs(context, action);
                 case "getWebsiteStats":
                     return getWebsiteStats(context, action);
                 case "searchWebMemories":
@@ -1118,6 +1119,9 @@ async function executeBrowserAction(
                         undefined,
                         context.sessionContext.agentContext
                             .activeSearchProvider,
+                        {
+                            newTab: action.parameters.newTab,
+                        }
                     );
                     return createActionResultFromTextDisplay(
                         `Opened new tab with query ${action.parameters.query}`,
@@ -1171,8 +1175,6 @@ async function executeBrowserAction(
                     return openSearchResult(context, action);
                 case "changeSearchProvider":
                     return changeSearchProvider(context, action);
-                case "lookupAndAnswerInternet":
-                    return await lookup(context, action);
                 case "findImageAction": {
                     return openWebPage(context, {
                         schemaName: "browser",
@@ -1198,6 +1200,14 @@ async function executeBrowserAction(
                 }
             }
             break;
+        case "browser.lookupAndAnswer": 
+            switch(action.actionName) {
+                case "lookupAndAnswerInternet":
+                    return await lookup(context, action);
+                default: {
+                    throw new Error(`Unknown action for lookupAndAnswer: ${(action as any).actionName}`);
+                }
+            }
     }
     const webSocketEndpoint = context.sessionContext.agentContext.webSocket;
     const connector = context.sessionContext.agentContext.browserConnector;
