@@ -18,11 +18,16 @@
     - Add to the semantic ref collection
     - Add to the semantic ref index
     - Update all the other indexes
-  - Also a function that adds a list of messages *and* a list of corresponding
+  - Write a function that adds a list of messages *and* a list of corresponding
     semantic refs, and then updates everything. This is somewhat complicated
     because we won't know the message ordinals/ids until they have been
     inserted, and ditto for the semantic refs.
     (Why do semantic refs contain their own ord/id anyway?)
+- Maybe
+  - Flatten secondary indexes into Conversation (they are no longer optional)
+  - Make the collection/index accessors in StorageProvider synchronous
+    (the async work is all done in create())
+  - Replace the storage accessors with readonly @property functions
 
 # From Meeting 8/12/2025 morning
 
