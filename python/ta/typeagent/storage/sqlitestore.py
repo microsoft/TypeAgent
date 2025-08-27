@@ -18,7 +18,7 @@ from ..knowpro.textlocindex import ScoredTextLocation
 
 
 # Constants
-CONVERSATION_SCHEMA_VERSION = "1.0"
+CONVERSATION_SCHEMA_VERSION = "0.1"
 
 MESSAGES_SCHEMA = """
 CREATE TABLE IF NOT EXISTS Messages (
@@ -169,16 +169,15 @@ type ShreddedRelatedTermsFuzzy = tuple[str, str, float]
 
 
 @dataclass
-@dataclass
 class ConversationMetadata:
     """Metadata for the current conversation stored in SQLite."""
 
     name_tag: str
     schema_version: str
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
-    tags: list[str] | None = None
-    extra: dict[str, typing.Any] | None = None
+    created_at: datetime
+    updated_at: datetime
+    tags: list[str]
+    extra: dict[str, typing.Any]
 
 
 def _datetime_to_utc_string(dt: datetime) -> str:
@@ -192,6 +191,19 @@ def _datetime_to_utc_string(dt: datetime) -> str:
 def _string_to_utc_datetime(s: str) -> datetime:
     """Convert ISO string to UTC datetime."""
     return datetime.fromisoformat(s).replace(tzinfo=timezone.utc)
+
+
+def _create_default_metadata() -> ConversationMetadata:
+    """Create a ConversationMetadata with all defaults."""
+    now = datetime.now(timezone.utc)
+    return ConversationMetadata(
+        name_tag="",
+        schema_version=CONVERSATION_SCHEMA_VERSION,
+        created_at=now,
+        updated_at=now,
+        tags=[],
+        extra={},
+    )
 
 
 class SqliteMessageCollection[TMessage: interfaces.IMessage](
@@ -285,7 +297,7 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
             """
             SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
             FROM Messages WHERE msg_id = ?
-        """,
+            """,
             (arg,),
         )
         row = cursor.fetchone()
@@ -301,7 +313,7 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
             """
             SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
             FROM Messages WHERE msg_id >= ? AND msg_id < ? ORDER BY msg_id
-        """,
+            """,
             (start, stop),
         )
         rows = cursor.fetchall()
@@ -330,7 +342,7 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
                 """
                 INSERT INTO Messages (msg_id, chunks, chunk_uri, start_timestamp, tags, metadata, extra)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
+                """,
                 (
                     msg_id,
                     chunks_json,
@@ -359,7 +371,7 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
                     """
                     INSERT INTO Messages (msg_id, chunks, chunk_uri, start_timestamp, tags, metadata, extra)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
+                    """,
                     (
                         msg_id,
                         chunks_json,
@@ -425,7 +437,7 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
             """
             SELECT semref_id, range_json, knowledge_type, knowledge_json
             FROM SemanticRefs ORDER BY semref_id
-        """
+            """
         )
         for row in cursor:
             yield self._deserialize_semantic_ref_from_row(row)
@@ -438,7 +450,7 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
             """
             SELECT semref_id, range_json, knowledge_type, knowledge_json
             FROM SemanticRefs WHERE semref_id = ?
-        """,
+            """,
             (arg,),
         )
         row = cursor.fetchone()
@@ -455,7 +467,7 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
             SELECT semref_id, range_json, knowledge_type, knowledge_json
             FROM SemanticRefs WHERE semref_id >= ? AND semref_id < ?
             ORDER BY semref_id
-        """,
+            """,
             (start, stop),
         )
         rows = cursor.fetchall()
@@ -479,7 +491,7 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
                 """
                 INSERT INTO SemanticRefs (semref_id, range_json, knowledge_type, knowledge_json)
                 VALUES (?, ?, ?, ?)
-            """,
+                """,
                 (semref_id, range_json, knowledge_type, knowledge_json),
             )
 
@@ -494,7 +506,7 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
                     """
                     INSERT INTO SemanticRefs (semref_id, range_json, knowledge_type, knowledge_json)
                     VALUES (?, ?, ?, ?)
-                """,
+                    """,
                     (semref_id, range_json, knowledge_type, knowledge_json),
                 )
 
@@ -1312,6 +1324,9 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         # Initialize database connection first
         self.db = self._create_db(self.db_path)
 
+        # Check schema version compatibility if metadata exists
+        await self._validate_schema_version()
+
         # Initialize collections
         self._message_collection = SqliteMessageCollection(self.db, message_type)
         self._semantic_ref_collection = SqliteSemanticRefCollection(self.db)
@@ -1408,8 +1423,8 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
 
     # Conversation metadata methods
 
-    async def get_conversation_metadata(self) -> ConversationMetadata | None:
-        """Get conversation metadata from the single row in the table."""
+    async def get_conversation_metadata(self) -> ConversationMetadata:
+        """Get conversation metadata from the single row in the table, creating defaults if needed."""
         assert self.db is not None, "Database connection is closed"
         cursor = self.db.cursor()
         cursor.execute(
@@ -1420,25 +1435,62 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         )
         row = cursor.fetchone()
         if row is None:
-            return None
+            # No metadata exists, create default row directly
+            default_metadata = _create_default_metadata()
+            self._insert_metadata_row(default_metadata)
+            return default_metadata
 
         name_tag, schema_version, created_at, updated_at, tags_json, extra_json = row
 
-        tags = json.loads(tags_json) if tags_json else None
-        extra = json.loads(extra_json) if extra_json else None
+        # Parse JSON fields with defaults
+        tags = json.loads(tags_json) if tags_json else []
+        extra = json.loads(extra_json) if extra_json else {}
 
-        # Convert string timestamps to datetime objects
-        created_at_dt = _string_to_utc_datetime(created_at) if created_at else None
-        updated_at_dt = _string_to_utc_datetime(updated_at) if updated_at else None
+        # Convert string timestamps to datetime objects with defaults
+        now = datetime.now(timezone.utc)
+        created_at_dt = _string_to_utc_datetime(created_at) if created_at else now
+        updated_at_dt = _string_to_utc_datetime(updated_at) if updated_at else now
 
         return ConversationMetadata(
-            name_tag=name_tag,
+            name_tag=name_tag or "",
             schema_version=schema_version,
             created_at=created_at_dt,
             updated_at=updated_at_dt,
             tags=tags,
             extra=extra,
         )
+
+    def _insert_metadata_row(self, metadata: ConversationMetadata) -> None:
+        """Insert a metadata row directly without calling get_conversation_metadata."""
+        assert self.db is not None, "Database connection is closed"
+
+        # Convert datetime objects to UTC strings for storage
+        created_at_str = _datetime_to_utc_string(metadata.created_at)
+        updated_at_str = _datetime_to_utc_string(metadata.updated_at)
+
+        # Serialize JSON fields
+        tags_json = json.dumps(metadata.tags)
+        extra_json = json.dumps(metadata.extra)
+
+        with self.db:
+            cursor = self.db.cursor()
+            # Clear existing row and insert new one
+            cursor.execute("DELETE FROM ConversationMetadata")
+            cursor.execute(
+                """
+                INSERT INTO ConversationMetadata 
+                (name_tag, schema_version, created_at, updated_at, tags, extra)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    metadata.name_tag,
+                    metadata.schema_version,
+                    created_at_str,
+                    updated_at_str,
+                    tags_json,
+                    extra_json,
+                ),
+            )
 
     async def set_conversation_metadata(
         self,
@@ -1453,59 +1505,47 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         """Set conversation metadata with smart defaults and validation."""
         assert self.db is not None, "Database connection is closed"
 
-        # Get existing metadata as baseline
-        existing = await self.get_conversation_metadata()
-
         # Schema version validation
         if schema_version is not None and schema_version != CONVERSATION_SCHEMA_VERSION:
             raise ValueError(
                 f"Schema version mismatch: expected {CONVERSATION_SCHEMA_VERSION}, got {schema_version}"
             )
+
+        # Get existing metadata as baseline (this will create defaults if none exist)
+        baseline = await self.get_conversation_metadata()
+
+        # Use baseline to fill in defaults for arguments given as None
+        now = datetime.now(timezone.utc)
+        final_name_tag = name_tag if name_tag is not None else baseline.name_tag
         final_schema_version = schema_version or CONVERSATION_SCHEMA_VERSION
+        final_created_at = created_at if created_at is not None else baseline.created_at
+        final_updated_at = updated_at if updated_at is not None else now
+        final_tags = tags if tags is not None else baseline.tags
+        final_extra = extra if extra is not None else baseline.extra
 
-        # Timestamp handling
-        now = datetime.now()
-        final_updated_at = updated_at or now
-
-        if existing is not None:
-            # Keep existing values unless explicitly overridden
-            final_name_tag = name_tag or existing.name_tag
-            final_created_at = created_at or existing.created_at
-            final_tags = tags if tags is not None else existing.tags
-            final_extra = extra if extra is not None else existing.extra
-        else:
-            # New conversation - use provided values or defaults
-            final_name_tag = name_tag or ""
-            final_created_at = created_at or now
-            final_tags = tags
-            final_extra = extra
-
-        # Convert datetime objects to UTC strings for storage
-        created_at_str = (
-            _datetime_to_utc_string(final_created_at) if final_created_at else None
+        # Create new metadata object
+        new_metadata = ConversationMetadata(
+            name_tag=final_name_tag,
+            schema_version=final_schema_version,
+            created_at=final_created_at,
+            updated_at=final_updated_at,
+            tags=final_tags,
+            extra=final_extra,
         )
-        updated_at_str = _datetime_to_utc_string(final_updated_at)
 
-        # Serialize JSON fields
-        tags_json = json.dumps(final_tags) if final_tags else None
-        extra_json = json.dumps(final_extra) if final_extra else None
+        # Insert the updated metadata
+        self._insert_metadata_row(new_metadata)
 
-        with self.db:
-            cursor = self.db.cursor()
-            # Clear existing row and insert new one
-            cursor.execute("DELETE FROM ConversationMetadata")
-            cursor.execute(
-                """
-                INSERT INTO ConversationMetadata
-                (name_tag, schema_version, created_at, updated_at, tags, extra)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    final_name_tag,
-                    final_schema_version,
-                    created_at_str,
-                    updated_at_str,
-                    tags_json,
-                    extra_json,
-                ),
-            )
+    async def _validate_schema_version(self) -> None:
+        """Validate that existing schema version matches expected version."""
+        assert self.db is not None, "Database connection is closed"
+        cursor = self.db.cursor()
+        cursor.execute("SELECT schema_version FROM ConversationMetadata LIMIT 1")
+        row = cursor.fetchone()
+        if row is not None:
+            existing_version = row[0]
+            if existing_version != CONVERSATION_SCHEMA_VERSION:
+                raise ValueError(
+                    f"Database schema version mismatch: expected {CONVERSATION_SCHEMA_VERSION}, "
+                    f"found {existing_version}. Please migrate the database or use a compatible version."
+                )
