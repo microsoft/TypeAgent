@@ -5,7 +5,7 @@ import json
 import sqlite3
 import typing
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
 from ..knowpro.convthreads import ConversationThreads
 from ..knowpro import interfaces
@@ -16,6 +16,9 @@ from ..knowpro.semrefindex import text_range_from_message_chunk
 from ..knowpro.serialization import deserialize_object, serialize_object
 from ..knowpro.textlocindex import ScoredTextLocation
 
+
+# Constants
+CONVERSATION_SCHEMA_VERSION = "1.0"
 
 MESSAGES_SCHEMA = """
 CREATE TABLE IF NOT EXISTS Messages (
@@ -172,10 +175,23 @@ class ConversationMetadata:
 
     name_tag: str
     schema_version: str
-    created_at: str | None = None
-    updated_at: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
     tags: list[str] | None = None
     extra: dict[str, typing.Any] | None = None
+
+
+def _datetime_to_utc_string(dt: datetime) -> str:
+    """Convert datetime to UTC ISO string. Assumes local timezone if naive."""
+    if dt.tzinfo is None:
+        # Assume local timezone
+        dt = dt.replace(tzinfo=datetime.now().astimezone().tzinfo)
+    return dt.astimezone(timezone.utc).isoformat()
+
+
+def _string_to_utc_datetime(s: str) -> datetime:
+    """Convert ISO string to UTC datetime."""
+    return datetime.fromisoformat(s).replace(tzinfo=timezone.utc)
 
 
 class SqliteMessageCollection[TMessage: interfaces.IMessage](
@@ -1411,22 +1427,68 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         tags = json.loads(tags_json) if tags_json else None
         extra = json.loads(extra_json) if extra_json else None
 
+        # Convert string timestamps to datetime objects
+        created_at_dt = _string_to_utc_datetime(created_at) if created_at else None
+        updated_at_dt = _string_to_utc_datetime(updated_at) if updated_at else None
+
         return ConversationMetadata(
             name_tag=name_tag,
             schema_version=schema_version,
-            created_at=created_at,
-            updated_at=updated_at,
+            created_at=created_at_dt,
+            updated_at=updated_at_dt,
             tags=tags,
             extra=extra,
         )
 
-    async def set_conversation_metadata(self, metadata: ConversationMetadata) -> None:
-        """Set conversation metadata (replaces the single row)."""
+    async def set_conversation_metadata(
+        self,
+        *,
+        name_tag: str | None = None,
+        schema_version: str | None = None,
+        created_at: datetime | None = None,
+        updated_at: datetime | None = None,
+        tags: list[str] | None = None,
+        extra: dict[str, typing.Any] | None = None,
+    ) -> None:
+        """Set conversation metadata with smart defaults and validation."""
         assert self.db is not None, "Database connection is closed"
 
+        # Get existing metadata as baseline
+        existing = await self.get_conversation_metadata()
+
+        # Schema version validation
+        if schema_version is not None and schema_version != CONVERSATION_SCHEMA_VERSION:
+            raise ValueError(
+                f"Schema version mismatch: expected {CONVERSATION_SCHEMA_VERSION}, got {schema_version}"
+            )
+        final_schema_version = schema_version or CONVERSATION_SCHEMA_VERSION
+
+        # Timestamp handling
+        now = datetime.now()
+        final_updated_at = updated_at or now
+
+        if existing is not None:
+            # Keep existing values unless explicitly overridden
+            final_name_tag = name_tag or existing.name_tag
+            final_created_at = created_at or existing.created_at
+            final_tags = tags if tags is not None else existing.tags
+            final_extra = extra if extra is not None else existing.extra
+        else:
+            # New conversation - use provided values or defaults
+            final_name_tag = name_tag or ""
+            final_created_at = created_at or now
+            final_tags = tags
+            final_extra = extra
+
+        # Convert datetime objects to UTC strings for storage
+        created_at_str = (
+            _datetime_to_utc_string(final_created_at) if final_created_at else None
+        )
+        updated_at_str = _datetime_to_utc_string(final_updated_at)
+
         # Serialize JSON fields
-        tags_json = json.dumps(metadata.tags) if metadata.tags else None
-        extra_json = json.dumps(metadata.extra) if metadata.extra else None
+        tags_json = json.dumps(final_tags) if final_tags else None
+        extra_json = json.dumps(final_extra) if final_extra else None
 
         with self.db:
             cursor = self.db.cursor()
@@ -1439,24 +1501,11 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    metadata.name_tag,
-                    metadata.schema_version,
-                    metadata.created_at,
-                    metadata.updated_at,
+                    final_name_tag,
+                    final_schema_version,
+                    created_at_str,
+                    updated_at_str,
                     tags_json,
                     extra_json,
                 ),
-            )
-
-    async def update_conversation_timestamp(self) -> None:
-        """Update the updated_at timestamp to the current time."""
-        assert self.db is not None, "Database connection is closed"
-
-        current_time = datetime.now().isoformat()
-
-        with self.db:
-            cursor = self.db.cursor()
-            cursor.execute(
-                "UPDATE ConversationMetadata SET updated_at = ?",
-                (current_time,),
             )

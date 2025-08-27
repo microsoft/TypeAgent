@@ -24,6 +24,15 @@ CREATE TABLE ConversationMetadata (
 );
 ```
 
+#### Conversation Metadata Behavior
+- **Single Row Storage**: Contains exactly one row with all conversation metadata
+- **Schema Version**: Enforced to match `CONVERSATION_SCHEMA_VERSION` constant (default: "1.0")
+- **Smart Timestamps**:
+  - `updated_at`: Always set to current time when metadata is modified (unless explicitly overridden)
+  - `created_at`: Preserved from existing metadata, or set to current time for new conversations
+- **Timezone Handling**: All datetime inputs converted to UTC for storage, returned as UTC datetime objects
+- **Selective Updates**: Only specified fields are updated, others retain existing values or use defaults
+
 ### Messages Table
 ```sql
 CREATE TABLE Messages (
@@ -235,13 +244,49 @@ class IStorageProvider(Protocol):
     # Note: EmbeddingIndex is used internally by RelatedTermsIndex and MessageTextIndex
     # Note: Timestamp queries handled directly on Messages table using start_timestamp/end_timestamp columns
 
-    # Conversation metadata (new) - single row storage
+    # Conversation metadata (new) - single row storage with smart defaults
     async def get_conversation_metadata(self) -> ConversationMetadata | None: ...
-    async def set_conversation_metadata(self, metadata: ConversationMetadata) -> None: ...
-    async def update_conversation_timestamp(self) -> None: ...
+    async def set_conversation_metadata(
+        self,
+        *,
+        name_tag: str | None = None,
+        schema_version: str | None = None,
+        created_at: datetime | None = None,
+        updated_at: datetime | None = None,
+        tags: list[str] | None = None,
+        extra: dict[str, Any] | None = None,
+    ) -> None: ...
 
     # Resource management
     async def close(self) -> None: ...
+```
+
+#### Conversation Metadata Usage Examples
+```python
+# Create new conversation with defaults (timestamps auto-set to now)
+await provider.set_conversation_metadata(name_tag="my_conversation")
+
+# Update just the tags, timestamp gets updated automatically
+await provider.set_conversation_metadata(tags=["important", "work"])
+
+# Update timestamp only (equivalent to refresh/touch)
+await provider.set_conversation_metadata()
+
+# Override everything explicitly with timezone handling
+from datetime import datetime, timezone
+await provider.set_conversation_metadata(
+    name_tag="conversation",
+    created_at=datetime(2025, 1, 1, 12, 0, 0),      # Assumes local TZ
+    updated_at=datetime.now(timezone.utc),          # Explicit UTC
+    tags=["tag1", "tag2"],
+    extra={"custom_field": "value"}
+)
+
+# Schema version validation (raises ValueError if mismatch)
+await provider.set_conversation_metadata(
+    schema_version="2.0"  # Would raise error if not supported
+)
+```
 ```
 
 ## Related Documents
