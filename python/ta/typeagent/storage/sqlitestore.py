@@ -909,20 +909,16 @@ class SqliteMessageTextIndex[TMessage: interfaces.IMessage](
         await self._embedding_index.add_texts(texts)
 
         # Store only the locations in SQLite
+        location_tuples = [
+            (text_location.message_ordinal, text_location.chunk_ordinal)
+            for text, text_location in all_chunks
+        ]
         with self.db:
             cursor = self.db.cursor()
-            for text, text_location in all_chunks:
-
-                cursor.execute(
-                    """
-                    INSERT INTO MessageTextIndex (msg_id, chunk_ordinal)
-                    VALUES (?, ?)
-                    """,
-                    (
-                        text_location.message_ordinal,
-                        text_location.chunk_ordinal,
-                    ),
-                )
+            cursor.executemany(
+                "INSERT INTO MessageTextIndex (msg_id, chunk_ordinal) VALUES (?, ?)",
+                location_tuples,
+            )
 
     async def _get_next_message_ordinal(self) -> int:
         """Get the next message ordinal from the Messages table."""
@@ -1072,20 +1068,16 @@ class SqliteMessageTextIndex[TMessage: interfaces.IMessage](
         # Insert text locations into SQLite (without duplicating text content)
         # The text content is already stored in the Messages table
         if text_locations:
+            location_tuples = [
+                (loc_data["messageOrdinal"], loc_data["chunkOrdinal"])
+                for loc_data in text_locations
+            ]
             with self.db:
                 cursor = self.db.cursor()
-                for loc_data in text_locations:
-                    msg_ordinal = loc_data["messageOrdinal"]
-                    chunk_ordinal = loc_data["chunkOrdinal"]
-
-                    # Insert only the location info
-                    cursor.execute(
-                        """
-                        INSERT INTO MessageTextIndex (msg_id, chunk_ordinal)
-                        VALUES (?, ?)
-                        """,
-                        (msg_ordinal, chunk_ordinal),
-                    )
+                cursor.executemany(
+                    "INSERT INTO MessageTextIndex (msg_id, chunk_ordinal) VALUES (?, ?)",
+                    location_tuples,
+                )
 
         # Restore the in-memory embedding index from serialized data
         if embeddings is not None:
