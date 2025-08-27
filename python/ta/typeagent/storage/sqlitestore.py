@@ -84,16 +84,10 @@ MESSAGE_TEXT_INDEX_SCHEMA = """
 CREATE TABLE IF NOT EXISTS MessageTextIndex (
     msg_id INTEGER NOT NULL,
     chunk_ordinal INTEGER NOT NULL,
-    chunk_text TEXT NOT NULL,
-    embedding BLOB NULL,           -- Serialized embedding vector
 
     PRIMARY KEY (msg_id, chunk_ordinal),
     FOREIGN KEY (msg_id) REFERENCES Messages(msg_id) ON DELETE CASCADE
 );
-"""
-
-MESSAGE_TEXT_INDEX_TEXT_INDEX = """
-CREATE INDEX IF NOT EXISTS idx_message_text_index_text ON MessageTextIndex(chunk_text);
 """
 
 MESSAGE_TEXT_INDEX_MESSAGE_INDEX = """
@@ -910,31 +904,23 @@ class SqliteMessageTextIndex[TMessage: interfaces.IMessage](
         if not all_chunks:
             return
 
-        # Add texts to embedding index to get embeddings
+        # Add texts to embedding index
         texts = [chunk for chunk, _ in all_chunks]
         await self._embedding_index.add_texts(texts)
 
-        # Store in SQLite
+        # Store only the locations in SQLite
         with self.db:
             cursor = self.db.cursor()
-            for i, (text, text_location) in enumerate(all_chunks):
-                # Get embedding from the in-memory index
-                embedding = self._embedding_index.get(i)
-                # Serialize embedding as bytes
-                import pickle
-
-                embedding_data = pickle.dumps(embedding)
+            for text, text_location in all_chunks:
 
                 cursor.execute(
                     """
-                    INSERT INTO MessageTextIndex (msg_id, chunk_ordinal, chunk_text, embedding)
-                    VALUES (?, ?, ?, ?)
+                    INSERT INTO MessageTextIndex (msg_id, chunk_ordinal)
+                    VALUES (?, ?)
                     """,
                     (
                         text_location.message_ordinal,
                         text_location.chunk_ordinal,
-                        text,
-                        embedding_data,
                     ),
                 )
 
@@ -1067,14 +1053,43 @@ class SqliteMessageTextIndex[TMessage: interfaces.IMessage](
         )
 
     def deserialize(self, data: interfaces.MessageTextIndexData) -> None:
-        """Deserialize is not needed for SQLite-backed implementation."""
-        # The text data is already persisted in SQLite
-        # We only need to restore the in-memory embedding index
+        """Deserialize message text index data into SQLite table and embedding index."""
         index_data = data.get("indexData")
-        if index_data is not None:
-            embeddings = index_data.get("embeddings")
-            if embeddings is not None:
-                self._embedding_index.deserialize(embeddings)
+        if index_data is None:
+            return
+
+        text_locations = index_data.get("textLocations", [])
+        embeddings = index_data.get("embeddings")
+
+        if not text_locations:
+            return
+
+        # Clear existing data
+        with self.db:
+            cursor = self.db.cursor()
+            cursor.execute("DELETE FROM MessageTextIndex")
+
+        # Insert text locations into SQLite (without duplicating text content)
+        # The text content is already stored in the Messages table
+        if text_locations:
+            with self.db:
+                cursor = self.db.cursor()
+                for loc_data in text_locations:
+                    msg_ordinal = loc_data["messageOrdinal"]
+                    chunk_ordinal = loc_data["chunkOrdinal"]
+
+                    # Insert only the location info
+                    cursor.execute(
+                        """
+                        INSERT INTO MessageTextIndex (msg_id, chunk_ordinal)
+                        VALUES (?, ?)
+                        """,
+                        (msg_ordinal, chunk_ordinal),
+                    )
+
+        # Restore the in-memory embedding index from serialized data
+        if embeddings is not None:
+            self._embedding_index.deserialize(embeddings)
 
 
 class SqliteRelatedTermsAliases(interfaces.ITermToRelatedTerms):
@@ -1278,9 +1293,14 @@ class SqliteRelatedTermsIndex(interfaces.ITermToRelatedTermsIndex):
         return interfaces.TermsToRelatedTermsIndexData()
 
     async def deserialize(self, data: interfaces.TermsToRelatedTermsIndexData) -> None:
-        """Deserialize is not needed for SQLite-backed implementation."""
-        # The data is already persisted in SQLite
-        pass
+        """Deserialize related terms index data."""
+        # Deserialize alias data
+        alias_data = data.get("aliasData")
+        if alias_data is not None:
+            await self._aliases.deserialize(alias_data)
+
+        # The fuzzy index doesn't currently support deserialization
+        # TODO: Implement fuzzy index deserialization if needed
 
 
 class SqliteStorageProvider[TMessage: interfaces.IMessage](
@@ -1379,7 +1399,6 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
             db.execute(SEMANTIC_REF_INDEX_SCHEMA)
             db.execute(SEMANTIC_REF_INDEX_TERM_INDEX)
             db.execute(MESSAGE_TEXT_INDEX_SCHEMA)
-            db.execute(MESSAGE_TEXT_INDEX_TEXT_INDEX)
             db.execute(MESSAGE_TEXT_INDEX_MESSAGE_INDEX)
             db.execute(PROPERTY_INDEX_SCHEMA)
             db.execute(PROPERTY_INDEX_PROP_NAME_INDEX)
