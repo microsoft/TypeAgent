@@ -15,10 +15,11 @@ This specification defines the updated storage provider interface and SQLite sch
 ### ConversationMetadata Table
 ```sql
 CREATE TABLE ConversationMetadata (
-    name_tag TEXT PRIMARY KEY,
+    name_tag TEXT NOT NULL,
     schema_version TEXT NOT NULL,
     created_at TEXT NULL,         -- ISO format with Z timezone
     updated_at TEXT NULL,         -- ISO format with Z timezone
+    tags JSON NULL,               -- JSON array of conversation tags
     extra JSON NULL               -- Other per-conversation metadata
 );
 ```
@@ -234,10 +235,10 @@ class IStorageProvider(Protocol):
     # Note: EmbeddingIndex is used internally by RelatedTermsIndex and MessageTextIndex
     # Note: Timestamp queries handled directly on Messages table using start_timestamp/end_timestamp columns
 
-    # Conversation metadata (new)
-    async def get_conversation_metadata(self, name_tag: str) -> dict[str, Any] | None: ...
-    async def set_conversation_metadata(self, name_tag: str, metadata: dict[str, Any]) -> None: ...
-    async def list_conversations(self) -> list[str]: ...
+    # Conversation metadata (new) - single row storage
+    async def get_conversation_metadata(self) -> ConversationMetadata | None: ...
+    async def set_conversation_metadata(self, metadata: ConversationMetadata) -> None: ...
+    async def update_conversation_timestamp(self) -> None: ...
 
     # Resource management
     async def close(self) -> None: ...

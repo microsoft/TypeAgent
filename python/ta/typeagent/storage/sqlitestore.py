@@ -4,6 +4,8 @@
 import json
 import sqlite3
 import typing
+from dataclasses import dataclass
+from datetime import datetime
 
 from ..knowpro.convthreads import ConversationThreads
 from ..knowpro import interfaces
@@ -39,6 +41,17 @@ type ShreddedMessage = tuple[
 
 TIMESTAMP_INDEX_SCHEMA = """
 CREATE INDEX IF NOT EXISTS idx_messages_start_timestamp ON Messages(start_timestamp);
+"""
+
+CONVERSATION_METADATA_SCHEMA = """
+CREATE TABLE IF NOT EXISTS ConversationMetadata (
+    name_tag TEXT NOT NULL,
+    schema_version TEXT NOT NULL,
+    created_at TEXT NULL,         -- ISO format with Z timezone
+    updated_at TEXT NULL,         -- ISO format with Z timezone
+    tags JSON NULL,               -- JSON array of conversation tags
+    extra JSON NULL               -- Other per-conversation metadata
+);
 """
 
 SEMANTIC_REFS_SCHEMA = """
@@ -150,6 +163,19 @@ type ShreddedMessageText = tuple[int, int, str, bytes | None]
 type ShreddedPropertyIndex = tuple[str, str, float, int]
 type ShreddedRelatedTermsAlias = tuple[str, str]
 type ShreddedRelatedTermsFuzzy = tuple[str, str, float]
+
+
+@dataclass
+@dataclass
+class ConversationMetadata:
+    """Metadata for the current conversation stored in SQLite."""
+
+    name_tag: str
+    schema_version: str
+    created_at: str | None = None
+    updated_at: str | None = None
+    tags: list[str] | None = None
+    extra: dict[str, typing.Any] | None = None
 
 
 class SqliteMessageCollection[TMessage: interfaces.IMessage](
@@ -1316,6 +1342,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         with db:
             db.execute(MESSAGES_SCHEMA)
             db.execute(TIMESTAMP_INDEX_SCHEMA)
+            db.execute(CONVERSATION_METADATA_SCHEMA)
             db.execute(SEMANTIC_REFS_SCHEMA)
             db.execute(SEMANTIC_REF_INDEX_SCHEMA)
             db.execute(SEMANTIC_REF_INDEX_TERM_INDEX)
@@ -1362,3 +1389,74 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
 
     async def get_conversation_threads(self) -> interfaces.IConversationThreads:
         return self._conversation_threads
+
+    # Conversation metadata methods
+
+    async def get_conversation_metadata(self) -> ConversationMetadata | None:
+        """Get conversation metadata from the single row in the table."""
+        assert self.db is not None, "Database connection is closed"
+        cursor = self.db.cursor()
+        cursor.execute(
+            """
+            SELECT name_tag, schema_version, created_at, updated_at, tags, extra
+            FROM ConversationMetadata
+            """,
+        )
+        row = cursor.fetchone()
+        if row is None:
+            return None
+
+        name_tag, schema_version, created_at, updated_at, tags_json, extra_json = row
+
+        tags = json.loads(tags_json) if tags_json else None
+        extra = json.loads(extra_json) if extra_json else None
+
+        return ConversationMetadata(
+            name_tag=name_tag,
+            schema_version=schema_version,
+            created_at=created_at,
+            updated_at=updated_at,
+            tags=tags,
+            extra=extra,
+        )
+
+    async def set_conversation_metadata(self, metadata: ConversationMetadata) -> None:
+        """Set conversation metadata (replaces the single row)."""
+        assert self.db is not None, "Database connection is closed"
+
+        # Serialize JSON fields
+        tags_json = json.dumps(metadata.tags) if metadata.tags else None
+        extra_json = json.dumps(metadata.extra) if metadata.extra else None
+
+        with self.db:
+            cursor = self.db.cursor()
+            # Clear existing row and insert new one
+            cursor.execute("DELETE FROM ConversationMetadata")
+            cursor.execute(
+                """
+                INSERT INTO ConversationMetadata
+                (name_tag, schema_version, created_at, updated_at, tags, extra)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    metadata.name_tag,
+                    metadata.schema_version,
+                    metadata.created_at,
+                    metadata.updated_at,
+                    tags_json,
+                    extra_json,
+                ),
+            )
+
+    async def update_conversation_timestamp(self) -> None:
+        """Update the updated_at timestamp to the current time."""
+        assert self.db is not None, "Database connection is closed"
+
+        current_time = datetime.now().isoformat()
+
+        with self.db:
+            cursor = self.db.cursor()
+            cursor.execute(
+                "UPDATE ConversationMetadata SET updated_at = ?",
+                (current_time,),
+            )
