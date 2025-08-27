@@ -46,14 +46,15 @@ TIMESTAMP_INDEX_SCHEMA = """
 CREATE INDEX IF NOT EXISTS idx_messages_start_timestamp ON Messages(start_timestamp);
 """
 
+# Conversation metadata table (single row)
 CONVERSATION_METADATA_SCHEMA = """
 CREATE TABLE IF NOT EXISTS ConversationMetadata (
-    name_tag TEXT NOT NULL,
-    schema_version TEXT NOT NULL,
-    created_at TEXT NULL,         -- ISO format with Z timezone
-    updated_at TEXT NULL,         -- ISO format with Z timezone
-    tags JSON NULL,               -- JSON array of conversation tags
-    extra JSON NULL               -- Other per-conversation metadata
+    name_tag TEXT NOT NULL,           -- User-defined name for this conversation
+    schema_version TEXT NOT NULL,     -- Version of the metadata schema
+    created_at TEXT NOT NULL,         -- UTC timestamp when conversation was created
+    updated_at TEXT NOT NULL,         -- UTC timestamp when metadata was last updated
+    tags JSON NOT NULL,               -- JSON array of string tags
+    extra JSON NOT NULL               -- JSON object for additional metadata
 );
 """
 
@@ -1478,7 +1479,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
             cursor.execute("DELETE FROM ConversationMetadata")
             cursor.execute(
                 """
-                INSERT INTO ConversationMetadata 
+                INSERT INTO ConversationMetadata
                 (name_tag, schema_version, created_at, updated_at, tags, extra)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
