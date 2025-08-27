@@ -65,9 +65,9 @@ CREATE INDEX IF NOT EXISTS idx_semantic_ref_index_term ON SemanticRefIndex(term)
 
 MESSAGE_TEXT_INDEX_SCHEMA = """
 CREATE TABLE IF NOT EXISTS MessageTextIndex (
-    text TEXT NOT NULL,
     msg_id INTEGER NOT NULL,
     chunk_ordinal INTEGER NOT NULL,
+    chunk_text TEXT NOT NULL,
     embedding BLOB NULL,           -- Serialized embedding vector
 
     PRIMARY KEY (msg_id, chunk_ordinal),
@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS MessageTextIndex (
 """
 
 MESSAGE_TEXT_INDEX_TEXT_INDEX = """
-CREATE INDEX IF NOT EXISTS idx_message_text_index_text ON MessageTextIndex(text);
+CREATE INDEX IF NOT EXISTS idx_message_text_index_text ON MessageTextIndex(chunk_text);
 """
 
 MESSAGE_TEXT_INDEX_MESSAGE_INDEX = """
@@ -146,7 +146,7 @@ CREATE INDEX IF NOT EXISTS idx_related_fuzzy_score ON RelatedTermsFuzzy(score);
 """
 
 type ShreddedSemanticRef = tuple[int, str, str, str]
-type ShreddedMessageText = tuple[int, str, int, int, bytes | None]
+type ShreddedMessageText = tuple[int, int, str, bytes | None]
 type ShreddedPropertyIndex = tuple[str, str, float, int]
 type ShreddedRelatedTermsAlias = tuple[str, str]
 type ShreddedRelatedTermsFuzzy = tuple[str, str, float]
@@ -872,13 +872,13 @@ class SqliteMessageTextIndex[TMessage: interfaces.IMessage](
 
                 cursor.execute(
                     """
-                    INSERT INTO MessageTextIndex (text, msg_id, chunk_ordinal, embedding)
+                    INSERT INTO MessageTextIndex (msg_id, chunk_ordinal, chunk_text, embedding)
                     VALUES (?, ?, ?, ?)
                     """,
                     (
-                        text,
                         text_location.message_ordinal,
                         text_location.chunk_ordinal,
+                        text,
                         embedding_data,
                     ),
                 )
