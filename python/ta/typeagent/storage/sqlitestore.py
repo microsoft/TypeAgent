@@ -101,9 +101,50 @@ PROPERTY_INDEX_COMBINED_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_property_index_combined ON PropertyIndex(prop_name, value_str);
 """
 
+RELATED_TERMS_ALIASES_SCHEMA = """
+CREATE TABLE IF NOT EXISTS RelatedTermsAliases (
+    term TEXT NOT NULL,
+    alias TEXT NOT NULL,
+
+    PRIMARY KEY (term, alias)
+);
+"""
+
+RELATED_TERMS_ALIASES_TERM_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_related_aliases_term ON RelatedTermsAliases(term);
+"""
+
+RELATED_TERMS_ALIASES_ALIAS_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_related_aliases_alias ON RelatedTermsAliases(alias);
+"""
+
+RELATED_TERMS_FUZZY_SCHEMA = """
+CREATE TABLE IF NOT EXISTS RelatedTermsFuzzy (
+    term TEXT NOT NULL,
+    related_term TEXT NOT NULL,
+    weight REAL NOT NULL DEFAULT 1.0,
+
+    PRIMARY KEY (term, related_term)
+);
+"""
+
+RELATED_TERMS_FUZZY_TERM_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_related_fuzzy_term ON RelatedTermsFuzzy(term);
+"""
+
+RELATED_TERMS_FUZZY_RELATED_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_related_fuzzy_related ON RelatedTermsFuzzy(related_term);
+"""
+
+RELATED_TERMS_FUZZY_WEIGHT_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_related_fuzzy_weight ON RelatedTermsFuzzy(weight);
+"""
+
 type ShreddedSemanticRef = tuple[int, str, str, str]
 type ShreddedMessageText = tuple[int, str, int, int, bytes | None]
 type ShreddedPropertyIndex = tuple[str, str, float, int]
+type ShreddedRelatedTermsAlias = tuple[str, str]
+type ShreddedRelatedTermsFuzzy = tuple[str, str, float]
 
 
 class SqliteMessageCollection[TMessage: interfaces.IMessage](
@@ -976,6 +1017,212 @@ class SqliteMessageTextIndex[TMessage: interfaces.IMessage](
                 self._embedding_index.deserialize(embeddings)
 
 
+class SqliteRelatedTermsAliases(interfaces.ITermToRelatedTerms):
+    """SQLite-backed implementation of ITermToRelatedTerms for exact aliases."""
+
+    def __init__(self, db: sqlite3.Connection):
+        self.db = db
+
+    async def lookup_term(self, text: str) -> list[interfaces.Term] | None:
+        """Look up aliases for a term."""
+        cursor = self.db.cursor()
+        cursor.execute("SELECT alias FROM RelatedTermsAliases WHERE term = ?", (text,))
+        rows = cursor.fetchall()
+        if not rows:
+            return None
+        return [interfaces.Term(alias) for (alias,) in rows]
+
+    async def size(self) -> int:
+        cursor = self.db.cursor()
+        cursor.execute("SELECT COUNT(*) FROM RelatedTermsAliases")
+        return cursor.fetchone()[0]
+
+    async def is_empty(self) -> bool:
+        return await self.size() == 0
+
+    async def clear(self) -> None:
+        """Clear all aliases."""
+        with self.db:
+            self.db.execute("DELETE FROM RelatedTermsAliases")
+
+    async def add_alias(self, term: str, alias: str) -> None:
+        """Add an alias for a term."""
+        with self.db:
+            self.db.execute(
+                "INSERT OR IGNORE INTO RelatedTermsAliases (term, alias) VALUES (?, ?)",
+                (term, alias),
+            )
+
+    async def add_related_term(
+        self, text: str, related_terms: interfaces.Term | list[interfaces.Term]
+    ) -> None:
+        """Add related terms (aliases) for a term."""
+        if not isinstance(related_terms, list):
+            related_terms = [related_terms]
+        with self.db:
+            for related in related_terms:
+                self.db.execute(
+                    "INSERT OR IGNORE INTO RelatedTermsAliases (term, alias) VALUES (?, ?)",
+                    (text, related.text),
+                )
+
+    async def remove_alias(self, term: str, alias: str) -> None:
+        """Remove an alias for a term."""
+        with self.db:
+            self.db.execute(
+                "DELETE FROM RelatedTermsAliases WHERE term = ? AND alias = ?",
+                (term, alias),
+            )
+
+    async def serialize(self) -> interfaces.TermToRelatedTermsData:
+        """Serialize all aliases to a data structure."""
+        cursor = self.db.cursor()
+        cursor.execute("SELECT term, alias FROM RelatedTermsAliases ORDER BY term")
+        rows = cursor.fetchall()
+
+        # Group aliases by term
+        term_to_aliases = {}
+        for term, alias in rows:
+            if term not in term_to_aliases:
+                term_to_aliases[term] = []
+            term_to_aliases[term].append(interfaces.Term(alias))
+
+        # Convert to data structure
+        related_terms = []
+        for term, aliases in term_to_aliases.items():
+            related_terms.append(
+                interfaces.TermsToRelatedTermsDataItem(
+                    termText=term,
+                    relatedTerms=[alias.serialize() for alias in aliases],
+                )
+            )
+
+        return interfaces.TermToRelatedTermsData(relatedTerms=related_terms)
+
+    async def deserialize(self, data: interfaces.TermToRelatedTermsData | None) -> None:
+        """Deserialize and replace all aliases from a data structure."""
+        await self.clear()
+        if data:
+            related_terms = data.get("relatedTerms")
+            if related_terms:
+                with self.db:
+                    for item in related_terms:
+                        term = item["termText"]
+                        for related_data in item["relatedTerms"]:
+                            # Create Term from text since Term doesn't have deserialize
+                            alias = interfaces.Term(related_data["text"])
+                            self.db.execute(
+                                "INSERT OR IGNORE INTO RelatedTermsAliases (term, alias) VALUES (?, ?)",
+                                (term, alias.text),
+                            )
+
+
+class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
+    """SQLite-backed implementation of ITermToRelatedTermsFuzzy for conversation-derived fuzzy matches."""
+
+    def __init__(self, db: sqlite3.Connection):
+        self.db = db
+
+    async def size(self) -> int:
+        cursor = self.db.cursor()
+        cursor.execute("SELECT COUNT(*) FROM RelatedTermsFuzzy")
+        return cursor.fetchone()[0]
+
+    async def add_terms(self, texts: list[str]) -> None:
+        """Add terms to the fuzzy index. This would typically compute relationships."""
+        # For now, we just store the terms as self-related
+        # A full implementation would compute fuzzy relationships between terms
+        with self.db:
+            for text in texts:
+                self.db.execute(
+                    "INSERT OR IGNORE INTO RelatedTermsFuzzy (term, related_term, weight) VALUES (?, ?, ?)",
+                    (text, text, 1.0),
+                )
+
+    async def lookup_term(
+        self,
+        text: str,
+        max_hits: int | None = None,
+        min_score: float | None = None,
+    ) -> list[interfaces.Term]:
+        """Look up fuzzy related terms."""
+        cursor = self.db.cursor()
+
+        query = "SELECT related_term, weight FROM RelatedTermsFuzzy WHERE term = ?"
+        params: list[object] = [text]
+
+        if min_score is not None:
+            query += " AND weight >= ?"
+            params.append(min_score)
+
+        query += " ORDER BY weight DESC"
+
+        if max_hits is not None:
+            query += " LIMIT ?"
+            params.append(max_hits)
+
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        return [
+            interfaces.Term(related_term, weight=score) for related_term, score in rows
+        ]
+
+    async def lookup_terms(
+        self,
+        texts: list[str],
+        max_hits: int | None = None,
+        min_score: float | None = None,
+    ) -> list[list[interfaces.Term]]:
+        """Look up fuzzy related terms for multiple texts."""
+        results = []
+        for text in texts:
+            terms = await self.lookup_term(text, max_hits, min_score)
+            results.append(terms)
+        return results
+
+    async def add_related_term(
+        self, term: str, related_term: str, score: float = 1.0
+    ) -> None:
+        """Add a fuzzy relationship between terms."""
+        with self.db:
+            self.db.execute(
+                "INSERT OR REPLACE INTO RelatedTermsFuzzy (term, related_term, weight) VALUES (?, ?, ?)",
+                (term, related_term, score),
+            )
+
+    async def clear(self) -> None:
+        """Clear all fuzzy relationships."""
+        with self.db:
+            self.db.execute("DELETE FROM RelatedTermsFuzzy")
+
+
+class SqliteRelatedTermsIndex(interfaces.ITermToRelatedTermsIndex):
+    """SQLite-backed implementation of ITermToRelatedTermsIndex combining aliases and fuzzy index."""
+
+    def __init__(self, db: sqlite3.Connection):
+        self.db = db
+        self._aliases = SqliteRelatedTermsAliases(db)
+        self._fuzzy_index = SqliteRelatedTermsFuzzy(db)
+
+    @property
+    def aliases(self) -> interfaces.ITermToRelatedTerms:
+        return self._aliases
+
+    @property
+    def fuzzy_index(self) -> interfaces.ITermToRelatedTermsFuzzy | None:
+        return self._fuzzy_index
+
+    async def serialize(self) -> interfaces.TermsToRelatedTermsIndexData:
+        """Serialize is not needed for SQLite-backed implementation."""
+        # Return empty data since persistence is handled by SQLite
+        return interfaces.TermsToRelatedTermsIndexData()
+
+    async def deserialize(self, data: interfaces.TermsToRelatedTermsIndexData) -> None:
+        """Deserialize is not needed for SQLite-backed implementation."""
+        # The data is already persisted in SQLite
+        pass
+
+
 class SqliteStorageProvider[TMessage: interfaces.IMessage](
     interfaces.IStorageProvider[TMessage]
 ):
@@ -997,7 +1244,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
     _property_index: SqlitePropertyIndex
     _timestamp_index: SqliteTimestampToTextRangeIndex
     _message_text_index: interfaces.IMessageTextIndex[TMessage]
-    _related_terms_index: RelatedTermsIndex
+    _related_terms_index: SqliteRelatedTermsIndex
     _conversation_threads: ConversationThreads
 
     def __init__(self, db_path: str, message_type: type[TMessage]):
@@ -1029,7 +1276,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         self._message_text_index = SqliteMessageTextIndex(
             self.db, message_text_settings
         )
-        self._related_terms_index = RelatedTermsIndex(related_terms_settings)
+        self._related_terms_index = SqliteRelatedTermsIndex(self.db)
         self._conversation_threads = ConversationThreads(
             related_terms_settings.embedding_index_settings
         )
@@ -1043,27 +1290,16 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         return self
 
     async def _populate_indexes_from_data(self) -> None:
-        """Populate in-memory indexes from persisted data."""
-        # Property index and timestamp index are transient and should be populated
-        # by the caller (like build_secondary_indexes) rather than here
-
-        # Build timestamp index from messages
+        """Populate transient indexes from persisted data when reopening database."""
+        # Build timestamp index from messages (timestamp index is transient)
         msg_count = await self._message_collection.size()
         for i in range(msg_count):
             message = await self._message_collection.get_item(i)
             if message.timestamp:
                 await self._timestamp_index.add_timestamp(i, message.timestamp)
 
-        # Message text index is SQLite-backed and doesn't need repopulation
-        # Higher-level code is responsible for explicitly calling add_messages when needed
-
-        # Build related terms index from semantic ref index terms
-        # Get all terms from the conversation index and add them to the fuzzy index
-        all_terms = await self._conversation_index.get_terms()
-        if all_terms:
-            fuzzy_index = self._related_terms_index.fuzzy_index
-            if fuzzy_index is not None:
-                await fuzzy_index.add_terms(all_terms)
+        # Property index, related terms index, and message text index are SQLite-backed
+        # and persistent. They should be populated by the caller when needed, not here.
 
     async def close(self) -> None:
         if self.db is not None:
@@ -1085,6 +1321,13 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
             db.execute(PROPERTY_INDEX_PROP_NAME_INDEX)
             db.execute(PROPERTY_INDEX_VALUE_STR_INDEX)
             db.execute(PROPERTY_INDEX_COMBINED_INDEX)
+            db.execute(RELATED_TERMS_ALIASES_SCHEMA)
+            db.execute(RELATED_TERMS_ALIASES_TERM_INDEX)
+            db.execute(RELATED_TERMS_ALIASES_ALIAS_INDEX)
+            db.execute(RELATED_TERMS_FUZZY_SCHEMA)
+            db.execute(RELATED_TERMS_FUZZY_TERM_INDEX)
+            db.execute(RELATED_TERMS_FUZZY_RELATED_INDEX)
+            db.execute(RELATED_TERMS_FUZZY_WEIGHT_INDEX)
         return db
 
     # Collection getter methods

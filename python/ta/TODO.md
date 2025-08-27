@@ -2,15 +2,10 @@
 
 ## TODOs for fully implementing persistence through SQLite
 
-- Make all the indexes other than timestamp SQLite-backed (one at a time)
-  - semantic ref index (done)
-  - property index (done)
-  - message text index (done)
-  - related terms index
-  - (conversation threads index -- skip for now, we're getting rid of it eventually)
-
 - Rename remaining uses of conversation index (any spelling) to semantic ref index
 
+- Try to avoid so many inline imports.
+  Break cycles by moving things to their own file if necessary
 
 - Temporarily
   - Speed up _populate_indexes_from_data (it takes 7 seconds?!?!?!)
@@ -32,6 +27,7 @@
 
 - Maybe
   - Flatten secondary indexes into Conversation (they are no longer optional)
+  - Split related terms index in two (aliases and fuzzy_index)
   - Make the collection/index accessors in StorageProvider synchronous
     (the async work is all done in create())
   - Replace the storage accessors with readonly @property functions

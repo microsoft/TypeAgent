@@ -39,14 +39,16 @@ class TermToRelatedTermsMap(ITermToRelatedTerms):
         # The inner dict represents a set of terms disregarding their weights.
         self.map: dict[str, dict[str, Term]] = {}
 
-    def add_related_term(self, text: str, related_terms: Term | list[Term]) -> None:
+    async def add_related_term(
+        self, text: str, related_terms: Term | list[Term]
+    ) -> None:
         if not isinstance(related_terms, list):
             related_terms = [related_terms]
         terms: dict[str, Term] = self.map.setdefault(text, {})
         for related in related_terms:
             terms.setdefault(related.text, related)
 
-    def lookup_term(self, text: str) -> list[Term] | None:
+    async def lookup_term(self, text: str) -> list[Term] | None:
         result = self.map.get(text)
         if result:
             return list(result.values())
@@ -56,7 +58,7 @@ class TermToRelatedTermsMap(ITermToRelatedTerms):
     def remove_term(self, text: str) -> None:
         self.map.pop(text, None)
 
-    def clear(self) -> None:
+    async def clear(self) -> None:
         self.map.clear()
 
     async def size(self) -> int:
@@ -65,7 +67,7 @@ class TermToRelatedTermsMap(ITermToRelatedTerms):
     async def is_empty(self) -> bool:
         return len(self.map) == 0
 
-    def serialize(self) -> TermToRelatedTermsData:
+    async def serialize(self) -> TermToRelatedTermsData:
         related_terms: list[TermsToRelatedTermsDataItem] = []
         for key, value in self.map.items():
             related_terms.append(
@@ -76,7 +78,7 @@ class TermToRelatedTermsMap(ITermToRelatedTerms):
             )
         return TermToRelatedTermsData(relatedTerms=related_terms)
 
-    def deserialize(self, data: TermToRelatedTermsData | None) -> None:
+    async def deserialize(self, data: TermToRelatedTermsData | None) -> None:
         self.map.clear()
         if data is None:
             return
@@ -90,7 +92,7 @@ class TermToRelatedTermsMap(ITermToRelatedTerms):
                 Term(term_data["text"], weight=term_data.get("weight"))
                 for term_data in related_terms_data
             ]
-            self.add_related_term(term_text, related_terms)
+            await self.add_related_term(term_text, related_terms)
 
 
 async def build_related_terms_index[
@@ -135,16 +137,16 @@ class RelatedTermsIndex(ITermToRelatedTermsIndex):
     def fuzzy_index(self) -> ITermToRelatedTermsFuzzy | None:
         return self._term_index
 
-    def serialize(self) -> TermsToRelatedTermsIndexData:
+    async def serialize(self) -> TermsToRelatedTermsIndexData:
         return TermsToRelatedTermsIndexData(
-            aliasData=self._alias_map.serialize(),
+            aliasData=await self._alias_map.serialize(),
             textEmbeddingData=self._term_index.serialize(),
         )
 
-    def deserialize(self, data: TermsToRelatedTermsIndexData) -> None:
-        self._alias_map.clear()
+    async def deserialize(self, data: TermsToRelatedTermsIndexData) -> None:
+        await self._alias_map.clear()
         self._term_index.clear()
-        self._alias_map.deserialize(data.get("aliasData"))
+        await self._alias_map.deserialize(data.get("aliasData"))
         text_embedding_data = data.get("textEmbeddingData")
         if text_embedding_data is not None:
             self._term_index.deserialize(text_embedding_data)
@@ -178,7 +180,7 @@ async def resolve_related_terms(
         term_text = search_term.term.text
         # Resolve any specific term to related term mappings
         if search_term.related_terms is None:
-            search_term.related_terms = related_terms_index.aliases.lookup_term(
+            search_term.related_terms = await related_terms_index.aliases.lookup_term(
                 term_text
             )
         # If no mappings to aliases, add to fuzzy retrieval list

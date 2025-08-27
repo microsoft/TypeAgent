@@ -614,15 +614,32 @@ async def load_podcast_index(
         if size > 0:
             print(f"Reusing existing conversation in {dbname!r} with {size} messages.")
             conversation = await podcast.Podcast.create(settings)
-            # Only rebuild property index if it's empty
-            if (
-                conversation.secondary_indexes
-                and conversation.secondary_indexes.property_to_semantic_ref_index
-                and await conversation.secondary_indexes.property_to_semantic_ref_index.size() == 0
-            ):
-                from typeagent.knowpro.propindex import build_property_index
+            # Only rebuild indexes if they're empty
+            if conversation.secondary_indexes:
+                # Rebuild property index if empty
+                if (
+                    conversation.secondary_indexes.property_to_semantic_ref_index
+                    and await conversation.secondary_indexes.property_to_semantic_ref_index.size()
+                    == 0
+                ):
+                    from typeagent.knowpro.propindex import build_property_index
 
-                await build_property_index(conversation)
+                    await build_property_index(conversation)
+
+                # Rebuild related terms fuzzy index if empty
+                if (
+                    conversation.secondary_indexes.term_to_related_terms_index
+                    and conversation.secondary_indexes.term_to_related_terms_index.fuzzy_index
+                    and await conversation.secondary_indexes.term_to_related_terms_index.fuzzy_index.size()
+                    == 0
+                ):
+                    from typeagent.knowpro.reltermsindex import (
+                        build_related_terms_index,
+                    )
+
+                    await build_related_terms_index(
+                        conversation, settings.related_term_index_settings
+                    )
             await print_conversation_stats(conversation)
             return query.QueryEvalContext(conversation)
 

@@ -104,6 +104,18 @@ async def test_property_index_population_from_database():
             PodcastMessage,
         )
 
+        # Create a test conversation and build property index
+        from typeagent.podcasts.podcast import Podcast
+        from typeagent.knowpro.convsettings import ConversationSettings
+        from typeagent.knowpro.propindex import build_property_index
+
+        settings2 = ConversationSettings()
+        settings2.storage_provider = storage2
+        conversation = await Podcast.create(settings2)
+
+        # Build property index from the semantic refs
+        await build_property_index(conversation)
+
         prop_index = await storage2.get_property_index()
         from typeagent.knowpro.interfaces import IPropertyToSemanticRefIndex
 

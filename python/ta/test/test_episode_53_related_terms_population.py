@@ -59,6 +59,11 @@ async def test_episode_53_related_terms_index_population():
         # Create a fresh podcast and load from the database
         pod3 = await podcast.Podcast.create(settings3)
 
+        # Build the related terms index since it's not auto-populated
+        from typeagent.knowpro.reltermsindex import build_related_terms_index
+
+        await build_related_terms_index(pod3, settings3.related_term_index_settings)
+
         # Check that data was persisted and indexes are populated
         msg_count = await pod3.messages.size()
         sem_ref_count = await pod3.semantic_refs.size() if pod3.semantic_refs else 0

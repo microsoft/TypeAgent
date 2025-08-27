@@ -290,7 +290,7 @@ async def test_related_terms_index_interface_parity(
     assert aliases is not None
 
     # Test empty lookup via aliases
-    empty_results = aliases.lookup_term("nonexistent")
+    empty_results = await aliases.lookup_term("nonexistent")
     assert empty_results is None or len(empty_results) == 0
 
 

@@ -127,9 +127,22 @@ async def test_related_terms_index_population_from_database():
             entity_refs
         ), f"Expected {len(entity_refs)} semantic refs, got {sem_ref_count}"
 
+        # Create a test conversation and build related terms index
+        from typeagent.podcasts.podcast import Podcast
+        from typeagent.knowpro.convsettings import ConversationSettings
+        from typeagent.knowpro.reltermsindex import build_related_terms_index
+        from typeagent.storage.sqlitestore import SqliteRelatedTermsIndex
+
+        settings2 = ConversationSettings()
+        settings2.storage_provider = storage2
+        conversation = await Podcast.create(settings2)
+
+        # Build related terms index from the semantic refs
+        await build_related_terms_index(conversation, related_terms_settings)
+
         # Check related terms index
         related_terms_index = await storage2.get_related_terms_index()
-        assert isinstance(related_terms_index, RelatedTermsIndex)
+        assert isinstance(related_terms_index, SqliteRelatedTermsIndex)
 
         # Check if fuzzy index has entries
         fuzzy_index = related_terms_index.fuzzy_index
