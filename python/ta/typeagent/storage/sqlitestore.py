@@ -24,7 +24,12 @@ CREATE TABLE IF NOT EXISTS Messages (
     start_timestamp TEXT NULL,    -- ISO format with Z timezone
     tags JSON NULL,               -- JSON array of tags
     metadata JSON NULL,           -- Message metadata (source, dest, etc.)
-    extra JSON NULL               -- Extra message fields that were serialized
+    extra JSON NULL,              -- Extra message fields that were serialized
+
+    CONSTRAINT chunks_xor_chunkuri CHECK (
+        (chunks IS NOT NULL AND chunk_uri IS NULL) OR
+        (chunks IS NULL AND chunk_uri IS NOT NULL)
+    )
 );
 """
 
@@ -122,7 +127,7 @@ RELATED_TERMS_FUZZY_SCHEMA = """
 CREATE TABLE IF NOT EXISTS RelatedTermsFuzzy (
     term TEXT NOT NULL,
     related_term TEXT NOT NULL,
-    weight REAL NOT NULL DEFAULT 1.0,
+    score REAL NOT NULL DEFAULT 1.0,
 
     PRIMARY KEY (term, related_term)
 );
@@ -136,8 +141,8 @@ RELATED_TERMS_FUZZY_RELATED_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_related_fuzzy_related ON RelatedTermsFuzzy(related_term);
 """
 
-RELATED_TERMS_FUZZY_WEIGHT_INDEX = """
-CREATE INDEX IF NOT EXISTS idx_related_fuzzy_weight ON RelatedTermsFuzzy(weight);
+RELATED_TERMS_FUZZY_SCORE_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_related_fuzzy_score ON RelatedTermsFuzzy(score);
 """
 
 type ShreddedSemanticRef = tuple[int, str, str, str]
@@ -1135,7 +1140,7 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         with self.db:
             for text in texts:
                 self.db.execute(
-                    "INSERT OR IGNORE INTO RelatedTermsFuzzy (term, related_term, weight) VALUES (?, ?, ?)",
+                    "INSERT OR IGNORE INTO RelatedTermsFuzzy (term, related_term, score) VALUES (?, ?, ?)",
                     (text, text, 1.0),
                 )
 
@@ -1148,14 +1153,14 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         """Look up fuzzy related terms."""
         cursor = self.db.cursor()
 
-        query = "SELECT related_term, weight FROM RelatedTermsFuzzy WHERE term = ?"
+        query = "SELECT related_term, score FROM RelatedTermsFuzzy WHERE term = ?"
         params: list[object] = [text]
 
         if min_score is not None:
-            query += " AND weight >= ?"
+            query += " AND score >= ?"
             params.append(min_score)
 
-        query += " ORDER BY weight DESC"
+        query += " ORDER BY score DESC"
 
         if max_hits is not None:
             query += " LIMIT ?"
@@ -1186,7 +1191,7 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         """Add a fuzzy relationship between terms."""
         with self.db:
             self.db.execute(
-                "INSERT OR REPLACE INTO RelatedTermsFuzzy (term, related_term, weight) VALUES (?, ?, ?)",
+                "INSERT OR REPLACE INTO RelatedTermsFuzzy (term, related_term, score) VALUES (?, ?, ?)",
                 (term, related_term, score),
             )
 
@@ -1327,7 +1332,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
             db.execute(RELATED_TERMS_FUZZY_SCHEMA)
             db.execute(RELATED_TERMS_FUZZY_TERM_INDEX)
             db.execute(RELATED_TERMS_FUZZY_RELATED_INDEX)
-            db.execute(RELATED_TERMS_FUZZY_WEIGHT_INDEX)
+            db.execute(RELATED_TERMS_FUZZY_SCORE_INDEX)
         return db
 
     # Collection getter methods
