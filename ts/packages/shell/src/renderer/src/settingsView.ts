@@ -11,6 +11,7 @@ import { getTTS, getTTSProviders, getTTSVoices } from "./tts/tts.js";
 import { iconMoon, iconSun } from "./icon.js";
 import { DisplayType } from "@typeagent/agent-sdk";
 import { getClientAPI } from "./main";
+import type { ReadonlyDeep } from "type-fest";
 
 function addOption(
     select: HTMLSelectElement,
@@ -92,7 +93,7 @@ export class SettingsView {
     private _shellSettings: ShellUserSettings =
         structuredClone(defaultUserSettings);
     private updateFromSettings: () => Promise<void>;
-    public get shellSettings(): Readonly<ShellUserSettings> {
+    public get shellSettings(): ReadonlyDeep<ShellUserSettings> {
         return this._shellSettings;
     }
     private devUICheckBox: HTMLInputElement;
@@ -104,7 +105,7 @@ export class SettingsView {
         this.microphoneSources.value = value.microphoneId ?? "";
         this.intellisenseCheckBox.checked = value.partialCompletion;
         this.agentGreetingCheckBox.checked = value.agentGreeting;
-        this.devUICheckBox.checked = !value.devUI;
+        this.devUICheckBox.checked = !value.ui.dev;
         this.saveChatHistoryCheckBox.checked = value.chatHistory;
         this.updateFromSettings();
     }
@@ -175,15 +176,15 @@ export class SettingsView {
                 : undefined;
 
             chatView.enablePartialInput(this.shellSettings.partialCompletion);
-            chatView.setMetricsVisible(this.shellSettings.devUI);
+            chatView.setMetricsVisible(this.shellSettings.ui.dev);
         };
 
         const updateTheme = () => {
             const labelElement = document.createElement("span");
-            labelElement.innerText = this._shellSettings.darkMode
+            labelElement.innerText = this._shellSettings.ui.darkMode
                 ? "Light mode"
                 : "Dark mode";
-            if (this._shellSettings.darkMode) {
+            if (this._shellSettings.ui.darkMode) {
                 this.darkModeToggle.innerHTML = "";
                 this.darkModeToggle.appendChild(iconSun());
                 this.darkModeToggle.appendChild(labelElement);
@@ -290,18 +291,19 @@ export class SettingsView {
         });
 
         this.devUICheckBox = this.addCheckbox("Auto-hide metrics", () => {
-            this._shellSettings.devUI = !this.agentGreetingCheckBox.checked;
+            this._shellSettings.ui.dev = !this.agentGreetingCheckBox.checked;
             chatView.setMetricsVisible(!this.devUICheckBox.checked);
         });
 
         this.darkModeToggle = this.addButton(
-            this._shellSettings.darkMode ? iconSun() : iconMoon(),
+            this._shellSettings.ui.darkMode ? iconSun() : iconMoon(),
             () => {
-                this._shellSettings.darkMode = !this._shellSettings.darkMode;
+                this._shellSettings.ui.darkMode =
+                    !this._shellSettings.ui.darkMode;
                 this.saveSettings();
                 this.updateFromSettings();
             },
-            this._shellSettings.darkMode ? "Light mode" : "Dark mode",
+            this._shellSettings.ui.darkMode ? "Light mode" : "Dark mode",
         );
 
         this.saveChatHistoryCheckBox = this.addCheckbox(
