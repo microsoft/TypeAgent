@@ -73,6 +73,7 @@ import {
     OpenWebPage,
     OpenSearchResult,
     ChangeTabs,
+    Search,
 } from "./actionsSchema.mjs";
 import {
     resolveURLWithHistory,
@@ -103,7 +104,7 @@ import {
     getActionBrowserControl,
     saveSettings,
 } from "./browserActions.mjs";
-import { ChunkChatResponse, generateAnswer } from "typeagent";
+import { ChunkChatResponse, generateAnswer, summarize, SummarizeResponse } from "typeagent";
 import {
     BrowserLookupActions,
     LookupAndAnswerInternet,
@@ -1117,7 +1118,7 @@ async function executeBrowserAction(
                     await getActionBrowserControl(context).zoomReset();
                     return;
                 case "search":
-                    await getActionBrowserControl(context).search(
+                    const pageUrl: URL = await getActionBrowserControl(context).search(
                         action.parameters.query,
                         undefined,
                         context.sessionContext.agentContext
@@ -1126,8 +1127,11 @@ async function executeBrowserAction(
                             newTab: action.parameters.newTab,
                         },
                     );
-                    return createActionResultFromTextDisplay(
-                        `Opened new tab with query ${action.parameters.query}`,
+
+                    return summarizeSearchResults(context, 
+                        action, 
+                        pageUrl,
+                        await getActionBrowserControl(context).getPageContents()
                     );
                 case "readPage":
                     await getActionBrowserControl(context).readPage();
@@ -1277,6 +1281,62 @@ async function executeBrowserAction(
         throw new Error("No websocket connection.");
     }
     return undefined;
+}
+
+/**
+ * Summarizes the search results and does entity extraction on it.
+ * @param context - The current context
+ * @param action - The search action
+ * @param pageUrl - The URL of the search page 
+ * @param pageContents - The contents of the search page
+ * @returns - The action result 
+ */
+async function summarizeSearchResults(context: ActionContext<BrowserActionContext>, 
+    action: Search, 
+    pageUrl: URL,
+    pageContents: string) {
+
+    displayStatus(
+        `Reading and summarizing search results, please stand by...`,
+        context,
+    );                    
+    
+    const model = openai.createJsonChatModel("GPT_35_TURBO", [
+        "SearchPageSummary",
+    ]);
+    const answerResult = await summarize(
+        model,
+        pageContents,
+        4096 * 8,
+        (text: string) => {
+            //displayStatus(text, context);
+        },
+        true
+    );
+
+    if (answerResult.success) {
+        const summaryResponse = answerResult.data as SummarizeResponse;
+        if (summaryResponse) {
+
+            // add the search results page as an entity
+            if (!summaryResponse.entities) {
+                summaryResponse.entities = [];
+            }
+
+            summaryResponse.entities.push({
+                name: pageUrl.toString(),
+                type: ["WebPage"],
+            });
+
+            return createActionResultFromTextDisplay(summaryResponse.summary, summaryResponse.summary, summaryResponse.entities)
+        } else {
+            return createActionResultFromTextDisplay((answerResult.data as string[]).join("\n"));
+        }
+    }
+
+    return createActionResultFromTextDisplay(
+        `Opened new tab with query ${action.parameters.query}`,
+    );
 }
 
 async function lookup(
