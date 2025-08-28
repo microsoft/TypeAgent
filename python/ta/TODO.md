@@ -4,8 +4,7 @@
 
 ## Temporarily
 
-- Speed up _populate_indexes_from_data (it takes 7 seconds?!?!?!)
-- Add code to populate aliases (assume it's a podcast -- use metadata source/dest)
+- Speed up filling indexes
 
 ## Eventually
 
