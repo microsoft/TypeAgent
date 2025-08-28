@@ -624,8 +624,14 @@ class ActionParser {
         };
     }
 
-    private parseLiteralType(node: ts.LiteralTypeNode): SchemaTypeStringUnion | SchemaTypeTrue | SchemaTypeFalse {
-        const allowedLiterals = [ ts.SyntaxKind.StringLiteral, ts.SyntaxKind.TrueKeyword, ts.SyntaxKind.FalseKeyword ];
+    private parseLiteralType(
+        node: ts.LiteralTypeNode,
+    ): SchemaTypeStringUnion | SchemaTypeTrue | SchemaTypeFalse {
+        const allowedLiterals = [
+            ts.SyntaxKind.StringLiteral,
+            ts.SyntaxKind.TrueKeyword,
+            ts.SyntaxKind.FalseKeyword,
+        ];
         if (!allowedLiterals.includes(node.literal.kind)) {
             throw new Error("Only string literal types are supported");
         }
@@ -645,7 +651,7 @@ class ActionParser {
             };
         }
 
-        throw new Error("Unsupported Literal Type")!
+        throw new Error("Unsupported Literal Type")!;
     }
 
     private parseTypeUnionType(
