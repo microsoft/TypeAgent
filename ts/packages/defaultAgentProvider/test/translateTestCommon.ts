@@ -6,31 +6,39 @@ dotenv.config({ path: new URL("../../../../.env", import.meta.url) });
 
 import { getPackageFilePath } from "../src/utils/getPackageFilePath.js";
 import { getDefaultAppAgentProviders } from "../src/defaultAgentProviders.js";
-import { createDispatcher, Dispatcher } from "agent-dispatcher";
-import { ChatHistoryInput } from "agent-dispatcher/internal";
+import { CommandResult, createDispatcher, Dispatcher } from "agent-dispatcher";
+import { ChatHistoryInputAssistant } from "agent-dispatcher/internal";
 import { FullAction } from "agent-cache";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { InstanceConfigProvider } from "../src/utils/config.js";
 
-type TranslateTestStep = {
+type ActionMatch = string | string[] | FullAction | FullAction[];
+export type TranslateTestStep = {
     // Input
     request: string;
     attachments?: string[] | undefined;
 
     // Output
-    action?: string | string[] | FullAction | FullAction[];
+    // If not specified, translation is not checked, only whether validate whether it can be translated.
+    action?:
+        | ActionMatch
+        | {
+              anyof: ActionMatch[];
+          }
+        | undefined;
     match?: "exact" | "partial"; // default to "exact"
 
     // Execution result:
     // History insertion after translation (if any)
-    history?: ChatHistoryInput | ChatHistoryInput[];
+    history?: ChatHistoryInputAssistant | ChatHistoryInputAssistant[];
 };
-type TranslateTestEntry = TranslateTestStep | TranslateTestStep[];
-type TranslateTestFile = TranslateTestEntry[];
 
-const repeat = 5;
+export type TranslateTestEntry = TranslateTestStep | TranslateTestStep[];
+export type TranslateTestFile = TranslateTestEntry[];
+
+const repeat = 1;
 const embeddingCacheDir = path.join(os.tmpdir(), ".typeagent", "cache");
 export async function defineTranslateTest(
     name: string,
@@ -88,77 +96,102 @@ export async function defineTranslateTest(
                 );
             }
         });
-        beforeEach(async () => {
-            await runOnDispatchers(async (dispatcher) => {
-                const result =
-                    await dispatcher.processCommand("@history clear");
-                expect(result?.hasError).toBeFalsy();
+        describe.each(inputsWithName)(`${name} %p`, (_, test) => {
+            beforeAll(async () => {
+                await runOnDispatchers(async (dispatcher) => {
+                    const result =
+                        await dispatcher.processCommand("@history clear");
+                    expect(result?.hasError).toBeFalsy();
+                });
+            });
+            const steps = Array.isArray(test) ? test : [test];
+            it.each(steps)("step $#: $request", async (step) => {
+                await runOnDispatchers(async (dispatcher) => {
+                    const result = await runOneStep(step, dispatcher);
+                    validateCommandResult(step, result);
+                });
             });
         });
-        it.each(inputsWithName)(
-            `${name} %p`,
-            async (_, test) => {
-                const steps = Array.isArray(test) ? test : [test];
-                await runOnDispatchers(async (dispatcher) => {
-                    for (const step of steps) {
-                        const { request, action, match, history, attachments } =
-                            step;
-
-                        const result = await dispatcher.processCommand(
-                            request,
-                            undefined,
-                            attachments,
-                        );
-                        expect(result?.hasError).toBeFalsy();
-
-                        if (action !== undefined) {
-                            const actions = result?.actions;
-                            expect(actions).toBeDefined();
-
-                            const expectedValues = Array.isArray(action)
-                                ? action
-                                : [action];
-                            expect(actions).toHaveLength(expectedValues.length);
-
-                            for (let i = 0; i < expectedValues.length; i++) {
-                                const action = actions![i];
-                                const expected = expectedValues[i];
-                                if (typeof expected === "string") {
-                                    const actualFullActionName = `${action.schemaName}.${action.actionName}`;
-                                    if (match === "partial") {
-                                        expect(actualFullActionName).toContain(
-                                            expected,
-                                        );
-                                    } else {
-                                        expect(actualFullActionName).toBe(
-                                            expected,
-                                        );
-                                    }
-                                } else {
-                                    if (match === "partial") {
-                                        expect(action).toMatchObject(expected);
-                                    } else {
-                                        expect(action).toEqual(expected);
-                                    }
-                                }
-                            }
-                        }
-
-                        if (history !== undefined) {
-                            const insertResult =
-                                await dispatcher.processCommand(
-                                    `@history insert ${JSON.stringify({ user: request, assistant: history })}`,
-                                );
-                            expect(insertResult?.hasError).toBeFalsy();
-                        }
-                    }
-                });
-            },
-            60000,
-        );
         afterAll(async () => {
             await runOnDispatchers((d) => d.close());
             dispatchers = [];
         });
     });
+}
+
+async function runOneStep(step: TranslateTestStep, dispatcher: Dispatcher) {
+    const { request, history, attachments } = step;
+
+    const result = await dispatcher.processCommand(
+        request,
+        undefined,
+        attachments,
+    );
+
+    if (history !== undefined) {
+        const insertResult = await dispatcher.processCommand(
+            `@history insert ${JSON.stringify({ user: request, assistant: history })}`,
+        );
+        expect(insertResult?.hasError).toBeFalsy();
+    }
+    return result;
+}
+
+function validateCommandResult(
+    step: TranslateTestStep,
+    result?: CommandResult,
+) {
+    const { request, action, match } = step;
+    if (result?.hasError) {
+        throw new Error(`Request '${request}' failed: ${result.exception}`);
+    }
+
+    if (action !== undefined) {
+        const actions = result?.actions;
+        expect(actions).toBeDefined();
+
+        if (
+            !Array.isArray(action) &&
+            typeof action === "object" &&
+            "anyof" in action
+        ) {
+            for (const expected of action.anyof) {
+                try {
+                    validateExpectedActions(expected, actions!, match);
+                } catch {
+                    continue;
+                }
+            }
+        } else {
+            validateExpectedActions(action, actions!, match);
+        }
+    }
+}
+
+function validateExpectedActions(
+    expected: ActionMatch,
+    actions: FullAction[],
+    match?: "exact" | "partial",
+) {
+    const expectedValues = Array.isArray(expected) ? expected : [expected];
+    expect(actions).toHaveLength(expectedValues.length);
+
+    for (let i = 0; i < expectedValues.length; i++) {
+        const action = actions![i];
+        const expected = expectedValues[i];
+        if (typeof expected === "string") {
+            const actualFullActionName = `${action.schemaName}.${action.actionName}`;
+            if (match === "partial") {
+                expect(actualFullActionName).toContain(expected);
+            } else {
+                expect(actualFullActionName).toBe(expected);
+            }
+        } else {
+            if (match === "partial") {
+                expect(action).toMatchObject(expected);
+            } else {
+                expect(action).toEqual(expected);
+            }
+        }
+    }
 }

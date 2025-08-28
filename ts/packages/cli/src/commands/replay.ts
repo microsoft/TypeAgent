@@ -16,6 +16,10 @@ import {
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
 import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
 import fs from "node:fs";
+import type {
+    TranslateTestFile,
+    TranslateTestStep,
+} from "default-agent-provider/test";
 
 const modelNames = await getChatModelNames();
 const instanceDir = getInstanceDir();
@@ -103,6 +107,9 @@ export default class ReplayCommand extends Command {
             default: true, // follow DispatcherOptions default
             allowNo: true,
         }),
+        generateTest: Flags.string({
+            description: "Record action to generate test file",
+        }),
     };
 
     static description = "Translate a request into action";
@@ -150,25 +157,37 @@ export default class ReplayCommand extends Command {
                 clientId: getClientId(),
                 indexingServiceRegistry:
                     await getIndexingServiceRegistry(instanceDir),
+                collectCommandResult: flags.generateTest !== undefined,
             });
 
+            const entries = Array.isArray(history) ? history : [history];
+            const steps: TranslateTestStep[] = [];
             try {
-                if (Array.isArray(history)) {
-                    for (const entry of history) {
-                        await dispatcher.processCommand(entry.user);
-                        if (flags.translate) {
-                            await dispatcher.processCommand(
-                                `@history insert ${JSON.stringify(entry)}`,
-                            );
-                        }
-                    }
-                } else {
-                    await dispatcher.processCommand(history.user);
+                for (const entry of entries) {
+                    const result = await dispatcher.processCommand(entry.user);
+                    steps.push({
+                        request: entry.user,
+                        action: result?.actions,
+                        history: entry.assistant,
+                    });
+
                     if (flags.translate) {
                         await dispatcher.processCommand(
-                            `@history insert ${JSON.stringify(history)}`,
+                            `@history insert ${JSON.stringify(entry)}`,
                         );
                     }
+                }
+                if (flags.generateTest !== undefined) {
+                    const fileName = flags.generateTest;
+                    const data: TranslateTestFile = [steps];
+
+                    await fs.promises.writeFile(
+                        fileName,
+                        JSON.stringify(data, undefined, 2),
+                    );
+                    console.log(
+                        `Generated test file '${fileName}' with a test with ${steps.length} steps`,
+                    );
                 }
             } finally {
                 await dispatcher.close();
