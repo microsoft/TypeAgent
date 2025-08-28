@@ -1389,12 +1389,12 @@ async function lookup(
                 `${answer.generatedText}`,
                 { speak: true },
                 [
-                    // the web page
                     {
                         name: "WebPage",
                         type: ["WebPage"],
                         uniqueId: searchURL.toString(),
                     },
+                    ...answer.entities
                 ],
             );
         } else {
