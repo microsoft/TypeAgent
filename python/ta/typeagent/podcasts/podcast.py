@@ -330,12 +330,7 @@ class Podcast(IConversation[PodcastMessage, semrefindex.TermToSemanticRefIndex])
             filename_prefix, embedding_size
         )
 
-        provider = await create_storage_provider(
-            settings.message_text_index_settings,
-            settings.related_term_index_settings,
-            dbname,
-            PodcastMessage,
-        )
+        provider = await settings.get_storage_provider()
         msgs = await provider.get_message_collection()
         semrefs = await provider.get_semantic_ref_collection()
         if await msgs.size() or await semrefs.size():
