@@ -151,7 +151,7 @@ export type GetWebsiteStats = {
 // Display a search results page for the specified query
 // Do NOT default to search if the user request doesn't explicitly ask for a search
 export type Search = {
-    disable: true // DO NOT SELECT THIS ACTION
+    disable: true; // DO NOT SELECT THIS ACTION
     actionName: "search";
     parameters: {
         query?: string;

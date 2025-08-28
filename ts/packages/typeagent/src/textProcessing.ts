@@ -1180,9 +1180,8 @@ export async function summarize(
     text: string,
     maxCharsPerChunk: number,
     progress?: Progress<string>,
-    knowledgeExtraction?: boolean | undefined
+    knowledgeExtraction?: boolean | undefined,
 ): Promise<Result<string[] | SummarizeResponse>> {
-
     if (knowledgeExtraction) {
         const response = await getCompletionOnLargeText(
             text,
@@ -1206,7 +1205,6 @@ export async function summarize(
             progress,
         );
     }
-
 }
 
 /**
