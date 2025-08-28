@@ -1075,7 +1075,7 @@ async function changeSearchProvider(
 
 async function executeBrowserAction(
     action:
-        | TypeAgentAction<BrowserActions | DisabledBrowserActions, "browser">    
+        | TypeAgentAction<BrowserActions | DisabledBrowserActions, "browser">
         | TypeAgentAction<BrowserActions, "browser">
         | TypeAgentAction<ExternalBrowserActions, "browser.external">
         | TypeAgentAction<CrosswordActions, "browser.crossword">
