@@ -398,6 +398,8 @@ export class ShellWindow {
     public setUserSettingValue(name: string, value: unknown) {
         const changed = this.settings.setUserSettingValue(name, value);
         if (changed) {
+            // Overly general test for need to update window size,
+            // as some of the UI settings doesn't need to update the window size
             if (name.startsWith("ui")) {
                 const position = this.getWindowPositionState();
                 this.verticalLayout = this.settings.user.ui.verticalLayout;
