@@ -55,7 +55,7 @@ class TermToRelatedTermsMap(ITermToRelatedTerms):
         else:
             return None
 
-    def remove_term(self, text: str) -> None:
+    async def remove_term(self, text: str) -> None:
         self.map.pop(text, None)
 
     async def clear(self) -> None:

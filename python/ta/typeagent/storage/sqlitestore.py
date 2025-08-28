@@ -1085,6 +1085,14 @@ class SqliteMessageTextIndex[TMessage: interfaces.IMessage](
 
 
 class SqliteRelatedTermsAliases(interfaces.ITermToRelatedTerms):
+    async def remove_term(self, text: str) -> None:
+        """Remove all aliases for a term."""
+        with self.db:
+            self.db.execute(
+                "DELETE FROM RelatedTermsAliases WHERE term = ?",
+                (text,),
+            )
+
     """SQLite-backed implementation of ITermToRelatedTerms for exact aliases."""
 
     def __init__(self, db: sqlite3.Connection):
