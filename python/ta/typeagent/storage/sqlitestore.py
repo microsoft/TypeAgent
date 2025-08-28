@@ -1262,6 +1262,30 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         with self.db:
             self.db.execute("DELETE FROM RelatedTermsFuzzy")
 
+    async def deserialize(self, data: interfaces.TextEmbeddingIndexData | None) -> None:
+        """Deserialize fuzzy relationships from text embedding data."""
+        if data is None:
+            return
+
+        # Clear existing data first
+        await self.clear()
+
+        text_items = data.get("textItems", [])
+        embeddings = data.get("embeddings")
+
+        if not text_items or embeddings is None:
+            return
+
+        # For SQLite implementation, we need to compute term relationships
+        # from the embeddings and store them in the database
+        # For now, we'll add the terms as self-related (placeholder implementation)
+        with self.db:
+            for text in text_items:
+                self.db.execute(
+                    "INSERT OR IGNORE INTO RelatedTermsFuzzy (term, related_term, score) VALUES (?, ?, ?)",
+                    (text, text, 1.0),
+                )
+
 
 class SqliteRelatedTermsIndex(interfaces.ITermToRelatedTermsIndex):
     """SQLite-backed implementation of ITermToRelatedTermsIndex combining aliases and fuzzy index."""
@@ -1291,8 +1315,10 @@ class SqliteRelatedTermsIndex(interfaces.ITermToRelatedTermsIndex):
         if alias_data is not None:
             await self._aliases.deserialize(alias_data)
 
-        # The fuzzy index doesn't currently support deserialization
-        # TODO: Implement fuzzy index deserialization if needed
+        # Deserialize fuzzy index data
+        text_embedding_data = data.get("textEmbeddingData")
+        if text_embedding_data is not None:
+            await self._fuzzy_index.deserialize(text_embedding_data)
 
 
 class SqliteStorageProvider[TMessage: interfaces.IMessage](
