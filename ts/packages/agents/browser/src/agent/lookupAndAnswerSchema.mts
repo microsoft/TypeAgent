@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type LookupAndAnswerActions = LookupAndAnswerInternet;
+export type BrowserLookupActions = LookupAndAnswerInternet;
 
 // The user request is a question about general knowledge that can be found from the internet.
 // (e.g. "what is the current price of Microsoft stock?")

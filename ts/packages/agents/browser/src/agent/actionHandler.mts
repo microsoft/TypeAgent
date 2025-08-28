@@ -112,7 +112,7 @@ import {
     SummarizeResponse,
 } from "typeagent";
 import {
-    LookupAndAnswerActions,
+    BrowserLookupActions,
     LookupAndAnswerInternet,
 } from "./lookupAndAnswerSchema.mjs";
 
@@ -1082,7 +1082,7 @@ async function executeBrowserAction(
         | TypeAgentAction<ShoppingActions, "browser.commerce">
         | TypeAgentAction<InstacartActions, "browser.instacart">
         | TypeAgentAction<SchemaDiscoveryActions, "browser.actionDiscovery">
-        | TypeAgentAction<LookupAndAnswerActions, "browser.lookupAndAnswer">,
+        | TypeAgentAction<BrowserLookupActions, "browser.lookupAndAnswer">,
 
     context: ActionContext<BrowserActionContext>,
 ) {
