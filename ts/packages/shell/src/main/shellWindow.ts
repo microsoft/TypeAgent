@@ -1011,6 +1011,9 @@ function createMainWindow(bounds: Electron.Rectangle) {
         },
     });
 
+    // This (seemingly redundant) call is needed when we use a BrowserView.
+    // Without this call, the mainWindow opens using default width/height, not the
+    // values saved in ShellSettings
     mainWindow.setBounds(bounds);
     mainWindow.removeMenu();
 
