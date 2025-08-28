@@ -15,6 +15,10 @@ Here are some tips when working with the TypeAgent repo listed in no particular 
 
 - To reset your git repo without having to re-clone, you can run `git clean -dfX` and then `pnpm i`
 
+## Issues
+
+- **Test projects aren't appearing in Jest Explorer** - To fix this modify the [settings.json](../../../ts/.vscode/settings.json) file and add the project to the `jest.virtualFolders` section.  
+
 ## Errors
 
 Here are some troubleshooting steps and or possible solutions to specific errors you might encounter.

@@ -23,6 +23,7 @@
         "editor.defaultFormatter": "vscode.html-language-features"
     },
     "jest.virtualFolders": [
+        {"name": "actionSchema", "rootPath": "packages/actionSchema"},
         {"name": "aiclient", "rootPath": "packages/aiclient"},
         {"name": "api", "rootPath": "packages/api"},
         {"name": "cache", "rootPath": "packages/cache"},
