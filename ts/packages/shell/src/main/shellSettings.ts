@@ -31,9 +31,15 @@ export type BrowserTabState = {
 export type ShellWindowState = {
     x: number;
     y: number;
-    width: number;
-    height: number;
-    inlineWidth: number;
+    // for use with horizontal layout
+    chatWidth: number;
+    contentWidth: number;
+    windowHeight: number;
+    // for use with vertical layout
+    chatHeight: number;
+    contentHeight: number;
+    windowWidth: number;
+
     zoomLevel: number;
     devTools: boolean;
     canvas?: string; // should the canvas be reopen upon start?
@@ -50,9 +56,12 @@ const defaultSettings: ShellSettings = {
     window: {
         x: -1,
         y: -1,
-        width: 900,
-        height: 1200,
-        inlineWidth: 1000,
+        chatWidth: 900,
+        contentWidth: 1000,
+        windowHeight: 1200,
+        chatHeight: 230,
+        contentHeight: 1000,
+        windowWidth: 1200,
         zoomLevel: 1,
         devTools: false,
         canvas: undefined,

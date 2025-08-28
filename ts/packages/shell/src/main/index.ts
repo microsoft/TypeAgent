@@ -133,8 +133,8 @@ function createWindow(shellSettings: ShellSettingManager) {
 
     initializeSpeech(shellWindow.chatView);
 
-    ipcMain.on("views-resized-by-user", (_, newX: number) => {
-        shellWindow.updateContentSize(newX);
+    ipcMain.on("views-resized-by-user", (_, newPos: number) => {
+        shellWindow.updateContentSize(newPos);
     });
 
     ipcMain.handle("init-browser-ipc", async () => {
