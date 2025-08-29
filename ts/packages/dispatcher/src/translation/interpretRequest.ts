@@ -36,7 +36,7 @@ export function createHistoryContext(
     if (promptSections.length !== 0) {
         promptSections.unshift({
             content:
-                "The following is a history of the conversation with the user that can be used to translate user requests",
+                "The following is a history of the conversation with the user that can be used for context to translate the current user request.",
             role: "system",
         });
     }
