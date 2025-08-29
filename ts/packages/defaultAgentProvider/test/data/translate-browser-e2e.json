@@ -5,7 +5,8 @@
             "schemaName": "browser",
             "actionName": "openWebPage",
             "parameters": {
-                "site": "portugal consulate"
+                "site": "portugal consulate",
+                "tab": "current"
             }
         }
     }
