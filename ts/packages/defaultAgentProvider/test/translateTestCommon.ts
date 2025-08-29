@@ -97,16 +97,10 @@ export async function defineTranslateTest(
             }
         });
         describe.each(inputsWithName)(`${name} %p`, (_, test) => {
-            beforeAll(async () => {
-                await runOnDispatchers(async (dispatcher) => {
-                    const result =
-                        await dispatcher.processCommand("@history clear");
-                    expect(result?.hasError).toBeFalsy();
-                });
-            });
             const steps = Array.isArray(test) ? test : [test];
             it.each(steps)("step $#: $request", async (step) => {
                 await runOnDispatchers(async (dispatcher) => {
+                    await setupOneStep(steps, step, dispatcher);
                     const result = await runOneStep(step, dispatcher);
                     validateCommandResult(step, result);
                 });
@@ -119,22 +113,40 @@ export async function defineTranslateTest(
     });
 }
 
-async function runOneStep(step: TranslateTestStep, dispatcher: Dispatcher) {
-    const { request, history, attachments } = step;
-
-    const result = await dispatcher.processCommand(
-        request,
-        undefined,
-        attachments,
-    );
-
-    if (history !== undefined) {
-        const insertResult = await dispatcher.processCommand(
-            `@history insert ${JSON.stringify({ user: request, assistant: history })}`,
-        );
-        expect(insertResult?.hasError).toBeFalsy();
+async function setupOneStep(
+    steps: TranslateTestStep[],
+    curr: TranslateTestStep,
+    dispatcher: Dispatcher,
+) {
+    const result = await dispatcher.processCommand("@history clear");
+    if (result?.hasError === true) {
+        throw new Error(`Failed to clear history: ${result.exception}`);
     }
-    return result;
+    for (const step of steps) {
+        if (step === curr) {
+            return;
+        }
+        const { request, history } = step;
+
+        if (history !== undefined) {
+            const insertResult = await dispatcher.processCommand(
+                `@history insert ${JSON.stringify({ user: request, assistant: history })}`,
+            );
+            if (insertResult?.hasError === true) {
+                throw new Error(
+                    `Failed to insert history: ${insertResult.exception}`,
+                );
+            }
+        }
+    }
+
+    throw new Error(`Test step not found: ${curr.request}`);
+}
+
+async function runOneStep(step: TranslateTestStep, dispatcher: Dispatcher) {
+    const { request, attachments } = step;
+
+    return await dispatcher.processCommand(request, undefined, attachments);
 }
 
 function validateCommandResult(
