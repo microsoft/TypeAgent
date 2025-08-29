@@ -4,10 +4,12 @@
 # Third-party imports
 import pytest
 import pytest_asyncio
+from typing import AsyncGenerator
 
 # TypeAgent imports
+from typeagent.aitools.embeddings import AsyncEmbeddingModel
 from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
-from typeagent.knowpro.interfaces import Term, IMessage
+from typeagent.knowpro.interfaces import Term, IMessage, ITermToRelatedTermsIndex
 from typeagent.knowpro.kplib import KnowledgeResponse
 from typeagent.knowpro.messageindex import MessageTextIndexSettings
 from typeagent.knowpro.query import CompiledSearchTerm, CompiledTermGroup
@@ -26,7 +28,11 @@ from fixtures import needs_auth, embedding_model, temp_db_path
 
 
 @pytest_asyncio.fixture(params=["memory", "sqlite"])
-async def related_terms_index(request, embedding_model, temp_db_path):
+async def related_terms_index(
+    request: pytest.FixtureRequest,
+    embedding_model: AsyncEmbeddingModel,
+    temp_db_path: str,
+) -> AsyncGenerator[ITermToRelatedTermsIndex, None]:
     class DummyTestMessage(IMessage):
         text_chunks: list[str]
         tags: list[str] = []
@@ -59,7 +65,9 @@ async def related_terms_index(request, embedding_model, temp_db_path):
 
 
 @pytest.mark.asyncio
-async def test_add_and_lookup_related_term(related_terms_index, needs_auth):
+async def test_add_and_lookup_related_term(
+    related_terms_index: ITermToRelatedTermsIndex, needs_auth: None
+) -> None:
     await related_terms_index.aliases.add_related_term(
         "python", Term(text="programming")
     )
@@ -72,7 +80,9 @@ async def test_add_and_lookup_related_term(related_terms_index, needs_auth):
 
 
 @pytest.mark.asyncio
-async def test_remove_term(related_terms_index, needs_auth):
+async def test_remove_term(
+    related_terms_index: ITermToRelatedTermsIndex, needs_auth: None
+) -> None:
     await related_terms_index.aliases.add_related_term(
         "python", Term(text="programming")
     )
@@ -82,7 +92,9 @@ async def test_remove_term(related_terms_index, needs_auth):
 
 
 @pytest.mark.asyncio
-async def test_clear_and_size(related_terms_index, needs_auth):
+async def test_clear_and_size(
+    related_terms_index: ITermToRelatedTermsIndex, needs_auth: None
+) -> None:
     await related_terms_index.aliases.add_related_term(
         "python", Term(text="programming")
     )
@@ -93,7 +105,9 @@ async def test_clear_and_size(related_terms_index, needs_auth):
 
 
 @pytest.mark.asyncio
-async def test_serialize_and_deserialize(related_terms_index, needs_auth):
+async def test_serialize_and_deserialize(
+    related_terms_index: ITermToRelatedTermsIndex, needs_auth: None
+) -> None:
     await related_terms_index.aliases.add_related_term(
         "python", Term(text="programming")
     )
@@ -106,7 +120,7 @@ async def test_serialize_and_deserialize(related_terms_index, needs_auth):
 
 
 @pytest.mark.asyncio
-async def test_related_terms_index_basic(needs_auth):
+async def test_related_terms_index_basic(needs_auth: None) -> None:
     settings = RelatedTermIndexSettings(TextEmbeddingIndexSettings())
     index = RelatedTermsIndex(settings)
     assert isinstance(index.aliases, TermToRelatedTermsMap)
@@ -117,13 +131,16 @@ async def test_related_terms_index_basic(needs_auth):
 
 
 @pytest.mark.asyncio
-async def test_resolve_related_terms_fuzzy_and_alias(related_terms_index, needs_auth):
+async def test_resolve_related_terms_fuzzy_and_alias(
+    related_terms_index: ITermToRelatedTermsIndex, needs_auth: None
+) -> None:
     # Add alias for 'python', but not for 'java'
     await related_terms_index.aliases.add_related_term(
         "python", Term(text="programming")
     )
     # Add terms to fuzzy index (add a different term than the search term)
-    await related_terms_index.fuzzy_index.add_terms(["javascript", "javac"])
+    if related_terms_index.fuzzy_index is not None:
+        await related_terms_index.fuzzy_index.add_terms(["javascript", "javac"])
     # Create compiled terms with explicit construction: one with alias, one without
     st1 = CompiledSearchTerm(
         term=Term(text="python"), related_terms=None, related_terms_required=False
@@ -147,9 +164,15 @@ async def test_resolve_related_terms_fuzzy_and_alias(related_terms_index, needs_
         assert len(related_texts) > 0
 
 
-def make_compiled_search_term(text, related_terms=None, required=False, weight=1.0):
+def make_compiled_search_term(
+    text: str,
+    related_terms: list[Term] | None = None,
+    required: bool = False,
+    weight: float = 1.0,
+) -> CompiledSearchTerm:
     term = Term(text=text, weight=weight)
     # Properly construct CompiledSearchTerm with explicit arguments
+    processed_related_terms: list[Term] | None
     if related_terms is None or (
         isinstance(related_terms, list) and len(related_terms) == 0
     ):
@@ -158,12 +181,16 @@ def make_compiled_search_term(text, related_terms=None, required=False, weight=1
         if all(isinstance(t, Term) for t in related_terms):
             processed_related_terms = related_terms
         else:
+            # This branch should not happen with proper typing, but handle it safely
             processed_related_terms = [
-                Term(text=getattr(t, "text", str(t)), weight=getattr(t, "weight", None))
+                Term(text=getattr(t, "text", str(t)), weight=getattr(t, "weight", 1.0))
                 for t in related_terms
             ]
     else:
-        processed_related_terms = [related_terms]
+        # This branch should also not happen with proper typing
+        processed_related_terms = (
+            [related_terms] if isinstance(related_terms, Term) else None
+        )
 
     # Create with explicit field values to avoid pydantic defaults
     st = CompiledSearchTerm(
@@ -174,7 +201,7 @@ def make_compiled_search_term(text, related_terms=None, required=False, weight=1
     return st
 
 
-def test_dedupe_related_terms_basic():
+def test_dedupe_related_terms_basic() -> None:
     # Test deduplication with terms that don't overlap with search terms
     t1 = Term(text="programming", weight=1.0)  # related to python but not a search term
     t2 = Term(text="coffee", weight=2.0)  # related to java but not a search term
@@ -197,7 +224,7 @@ def test_dedupe_related_terms_basic():
     assert st1.related_terms[0].weight == 1.5  # Should keep the higher weight
 
 
-def test_dedupe_related_terms_weight():
+def test_dedupe_related_terms_weight() -> None:
     # Test that deduplication keeps max weight and removes search term overlaps
     # Test case: related terms that overlap with search terms should be removed
     t1 = Term(

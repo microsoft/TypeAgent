@@ -178,6 +178,10 @@ class FakeTermIndex(ITermToSemanticRefIndex):
             if not self.term_to_refs[term]:
                 del self.term_to_refs[term]
 
+    async def clear(self) -> None:
+        """Clear all terms from the index."""
+        self.term_to_refs.clear()
+
     async def lookup_term(self, term: str) -> list[ScoredSemanticRefOrdinal] | None:
         return self.term_to_refs.get(term)
 

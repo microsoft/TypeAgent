@@ -120,6 +120,8 @@ class ITermToSemanticRefIndex(Protocol):
 
     async def lookup_term(self, term: str) -> list[ScoredSemanticRefOrdinal] | None: ...
 
+    async def clear(self) -> None: ...
+
 
 type KnowledgeType = Literal["entity", "action", "topic", "tag"]
 

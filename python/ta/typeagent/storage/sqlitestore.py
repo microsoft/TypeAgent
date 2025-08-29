@@ -580,6 +580,12 @@ class SqliteTermToSemanticRefIndex(interfaces.ITermToSemanticRefIndex):
             results.append(interfaces.ScoredSemanticRefOrdinal(semref_id, 1.0))
         return results
 
+    async def clear(self) -> None:
+        """Clear all terms from the semantic ref index."""
+        with self.db:
+            cursor = self.db.cursor()
+            cursor.execute("DELETE FROM SemanticRefIndex")
+
     def serialize(self) -> interfaces.TermToSemanticRefIndexData:
         """Serialize the index data for compatibility with in-memory version."""
         cursor = self.db.cursor()
