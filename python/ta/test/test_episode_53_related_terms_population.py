@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
 
 """Test to verify related terms index population with Episode 53 data."""
 
@@ -6,10 +8,11 @@ import asyncio
 import tempfile
 import os
 import pytest
-from typeagent.storage.sqlitestore import SqliteStorageProvider
+
+from typeagent.aitools.utils import load_dotenv
 from typeagent.knowpro.convsettings import ConversationSettings
 from typeagent.podcasts import podcast
-from typeagent.aitools.utils import load_dotenv
+from typeagent.storage.sqlitestore import SqliteStorageProvider
 
 
 @pytest.mark.asyncio

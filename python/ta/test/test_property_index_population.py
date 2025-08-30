@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
 
 """Test to verify property index population in storage providers."""
 
@@ -6,17 +8,18 @@ import asyncio
 import tempfile
 import os
 import pytest
-from typeagent.storage.sqlitestore import SqliteStorageProvider
-from typeagent.knowpro.propindex import PropertyIndex
-from typeagent.knowpro import kplib
+
+import numpy as np
+
+from typeagent.aitools.embeddings import AsyncEmbeddingModel
+from typeagent.aitools.utils import load_dotenv
 from typeagent.knowpro.interfaces import Tag, SemanticRef, TextRange, TextLocation
+from typeagent.knowpro import kplib
 from typeagent.knowpro.messageindex import MessageTextIndexSettings
 from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
 from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
-from typeagent.aitools.embeddings import AsyncEmbeddingModel
-from typeagent.podcasts.podcast import PodcastMessage, PodcastMessageMeta
-from typeagent.aitools.utils import load_dotenv
-import numpy as np
+from typeagent.podcasts.podcast import PodcastMessage
+from typeagent.storage.sqlitestore import SqliteStorageProvider
 
 
 class MockEmbeddingModel(AsyncEmbeddingModel):
