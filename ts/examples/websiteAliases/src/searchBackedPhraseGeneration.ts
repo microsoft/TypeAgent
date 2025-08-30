@@ -25,18 +25,20 @@ type cachedUrls_compact = {
 };
 
 export class searchResultsPhraseGenerator {
-    // manually downloadable from: https://radar.cloudflare.com/domains
+    // DATASETS
+    // 1. CloudFlare TopN domains Report -  https://radar.cloudflare.com/domains
+    // 2. Open Page Rangk Manual download - https://www.domcop.com/openpagerank/what-is-openpagerank
     private downloadUrl: string =
         "https://radar.cloudflare.com/charts/LargerTopDomainsTable/attachment?id=1257&top=";
-    private topN: number = 1000;
-    private topNFile: string = `examples/websiteAliases/data/top${this.topN}.csv`;
+    private limit: number = 1000;
+    private dataFile: string = `examples/websiteAliases/data/top1Milliondomains.csv`;
     private outputCacheFile: string = "examples/websiteAliases/cache/phrases.json";
     private outputPath: string = path.join(path.dirname(path.dirname(fileURLToPath(import.meta.url))), "cache");
-    private cache: urlResolverCache.UrlResolverCache = new urlResolverCache.UrlResolverCache(this.outputPath);
+    private cache: urlResolverCache.UrlResolverCache = new urlResolverCache.UrlResolverCache();
 
-    constructor(topN: number,) {
-        if (topN && topN > 0) {
-            this.topN = topN;
+    constructor(limit: number,) {
+        if (limit && limit > 0) {
+            this.limit = limit;
         }
 
         const possibleOptions: number[] = [
@@ -44,16 +46,16 @@ export class searchResultsPhraseGenerator {
             200_000, 500_000, 1_000_000,
         ];
 
-        if (!possibleOptions.includes(this.topN)) {
+        if (!possibleOptions.includes(this.limit)) {
             console.warn(
                 chalk.yellow(
-                    `Invalid topN value. Falling back to default: ${this.topN}`,
+                    `Invalid topN value. Falling back to default: ${this.limit}`,
                 ),
             );
-            this.topN = 100;
+            this.limit = 100;
         }
 
-        this.downloadUrl += this.topN;
+        this.downloadUrl += this.limit;
     }
 
     /**
@@ -63,7 +65,7 @@ export class searchResultsPhraseGenerator {
         try {
             // start over from scratch?
             if (!clear && existsSync(this.outputPath)) {
-                this.cache.load();
+                this.cache.load(this.outputPath);
             }
         } catch (error) {
             console.error(
@@ -76,15 +78,18 @@ export class searchResultsPhraseGenerator {
         }
 
         // open the file, throw away the headers
-        const fileContent = readFileSync(this.topNFile, "utf-8");
+        const fileContent = readFileSync(this.dataFile, "utf-8");
         const lines = fileContent.split("\n").slice(1);
 
+        const stop: number = this.limit <= 0 ? lines.length : this.limit; 
         const batchSize = 20;
-        const batchCount = Math.ceil(lines.length / batchSize);
+        const batchCount = Math.ceil(stop / batchSize);
         let batchNumber = 0;
         const batchPromises: Promise<void>[] = [];
+        
+
         console.log(
-            `${lines.length} domains. Processing in ${batchCount} batches of ${batchSize} domains each.`,
+            `Found ${lines.length} domains. Stopping at ${stop}. Processing in ${batchCount} batches of ${batchSize} domains each.`,
         );
 
         const batchSourceFile = path.join(
@@ -92,13 +97,14 @@ export class searchResultsPhraseGenerator {
             "./search_BatchWorker.js",
         );
 
-        for (let i = 0; i < lines.length; i++) {
+        
+        for (let i = 0; i < stop; i++) {
             const columns = lines[i].split(",");
-            let domain = lines[i];
+            let domain = lines[i].replaceAll("\"", "");
 
             // get the domain from the 2nd column if we have one
             if (columns.length === 3) {
-                domain = columns[1].trim();
+                domain = columns[1].trim().replaceAll("\"", "");
             }
 
             // skip empty domains or domains that are already processed
@@ -152,7 +158,7 @@ export class searchResultsPhraseGenerator {
             // wait for all of the promises to complete once the batch size is full, then continue
             if (
                 batchPromises.length >= batchSize ||
-                i >= lines.length - 1
+                i >= stop - 1
             ) {
                 await Promise.all(batchPromises);
 
@@ -238,7 +244,7 @@ export class searchResultsPhraseGenerator {
         console.log(chalk.dim("Processing..."));
 
         console.log(`Loading previous results from ${this.outputPath}`);
-        this.cache.load();
+        this.cache.load(this.outputPath);
 
         let minUrlsPerDomain: number = Number.MAX_SAFE_INTEGER;
         let maxUrlsPerDomain: number = Number.MIN_SAFE_INTEGER;

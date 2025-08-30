@@ -1,0 +1,1610 @@
+{
+  "https://maps.google.com/": {
+    "title": "Google Maps",
+    "phrases": [
+      "google maps",
+      "find directions",
+      "map search",
+      "location finder",
+      "google navigation"
+    ]
+  },
+  "https://maps.google.com/help/": {
+    "title": "Google Maps Help",
+    "phrases": [
+      "google maps help",
+      "maps support",
+      "maps assistance",
+      "maps troubleshooting"
+    ]
+  },
+  "https://maps.google.com/timeline": {
+    "title": "Google Maps Timeline",
+    "phrases": [
+      "maps timeline",
+      "google maps history",
+      "location timeline",
+      "travel history"
+    ]
+  },
+  "https://maps.google.com/localguides": {
+    "title": "Google Maps Local Guides",
+    "phrases": [
+      "local guides",
+      "maps local guides",
+      "google maps contributors",
+      "maps reviews"
+    ]
+  },
+  "https://maps.google.com/apis": {
+    "title": "Google Maps API",
+    "phrases": [
+      "maps api",
+      "google maps developer",
+      "maps integration",
+      "maps programming"
+    ]
+  },
+  "https://fonts.googleapis.com/": {
+    "title": "Google Fonts",
+    "phrases": [
+      "google fonts",
+      "fonts by google",
+      "web fonts library",
+      "free fonts for websites",
+      "google font API"
+    ]
+  },
+  "https://fonts.google.com/": {
+    "title": "Google Fonts – Making the web more beautiful, fast, and open.",
+    "phrases": [
+      "google fonts homepage",
+      "browse google fonts",
+      "find web fonts",
+      "font selection by google",
+      "explore google font styles"
+    ]
+  },
+  "https://developers.google.com/fonts/docs/getting_started": {
+    "title": "Google Fonts API Documentation",
+    "phrases": [
+      "google fonts api docs",
+      "fonts api documentation",
+      "how to use google fonts api",
+      "developer guide for google fonts",
+      "google fonts integration"
+    ]
+  },
+  "https://fonts.googleblog.com/": {
+    "title": "Google Fonts Blog",
+    "phrases": [
+      "google fonts blog",
+      "news about google fonts",
+      "updates from google fonts",
+      "font release blog",
+      "google fonts articles"
+    ]
+  },
+  "https://github.com/google/fonts": {
+    "title": "Google Fonts on GitHub",
+    "phrases": [
+      "google fonts github",
+      "open source google fonts",
+      "google fonts repository",
+      "download fonts from github",
+      "contribute to google fonts"
+    ]
+  },
+  "https://gmpg.org/": {
+    "title": "GMPG: The Global Multimedia Protocol Group",
+    "phrases": [
+      "gmpg homepage",
+      "global multimedia protocol group",
+      "semantic web standards group",
+      "gmpg organization",
+      "gmpg main site"
+    ]
+  },
+  "https://gmpg.org/about": {
+    "title": "GMPG: About",
+    "phrases": [
+      "gmpg about page",
+      "learn about gmpg",
+      "gmpg organization info",
+      "gmpg mission statement"
+    ]
+  },
+  "https://gmpg.org/xfn/11": {
+    "title": "GMPG: XFN 1.1 profile",
+    "phrases": [
+      "xfn profile",
+      "xfn 1.1 specification",
+      "gmpg xfn standard",
+      "xfn relationship profile"
+    ]
+  },
+  "https://gmpg.org/xfn/": {
+    "title": "GMPG: XFN - XHTML Friends Network",
+    "phrases": [
+      "xhtml friends network",
+      "xfn homepage",
+      "gmpg xfn project",
+      "xfn protocol"
+    ]
+  },
+  "https://gmpg.org/contact": {
+    "title": "GMPG: Contact",
+    "phrases": [
+      "gmpg contact page",
+      "contact global multimedia protocol group",
+      "gmpg support",
+      "reach gmpg"
+    ]
+  },
+  "https://twitter.com": {
+    "title": "Twitter",
+    "phrases": [
+      "twitter",
+      "x social network",
+      "tweet platform",
+      "elon musk social site",
+      "microblogging site"
+    ]
+  },
+  "https://play.google.com/": {
+    "title": "Google Play",
+    "phrases": [
+      "google play",
+      "android app store",
+      "play store",
+      "download android apps",
+      "google play home"
+    ]
+  },
+  "https://play.google.com/store/apps": {
+    "title": "Google Play Apps",
+    "phrases": [
+      "google play apps",
+      "android apps",
+      "browse apps on play store",
+      "find mobile apps",
+      "app marketplace"
+    ]
+  },
+  "https://play.google.com/store/games": {
+    "title": "Google Play Games",
+    "phrases": [
+      "google play games",
+      "android games",
+      "play store games",
+      "mobile games",
+      "game marketplace"
+    ]
+  },
+  "https://play.google.com/store/movies": {
+    "title": "Google Play Movies & TV",
+    "phrases": [
+      "google play movies",
+      "play store movies",
+      "android movies",
+      "watch movies on play store",
+      "google play tv"
+    ]
+  },
+  "https://play.google.com/store/books": {
+    "title": "Google Play Books",
+    "phrases": [
+      "google play books",
+      "android books",
+      "ebook store",
+      "read books on play store",
+      "google books marketplace"
+    ]
+  },
+  "https://drive.google.com/": {
+    "title": "Google Drive",
+    "phrases": [
+      "google drive",
+      "cloud storage",
+      "file storage",
+      "online documents",
+      "google docs"
+    ]
+  },
+  "https://support.google.com/drive/": {
+    "title": "Google Drive Help",
+    "phrases": [
+      "google drive support",
+      "google drive help",
+      "google drive troubleshooting",
+      "google drive assistance",
+      "google drive customer service"
+    ]
+  },
+  "https://www.google.com/drive/download/": {
+    "title": "Google Drive for Desktop",
+    "phrases": [
+      "google drive desktop",
+      "download drive app",
+      "drive for pc",
+      "google drive software",
+      "install google drive"
+    ]
+  },
+  "https://play.google.com/store/apps/details?id=com.google.android.apps.docs": {
+    "title": "Google Drive - Apps on Google Play",
+    "phrases": [
+      "google drive app",
+      "drive on android",
+      "download drive mobile",
+      "google drive play store",
+      "drive for phone"
+    ]
+  },
+  "https://blog.google/products/drive/": {
+    "title": "Google Drive Blog",
+    "phrases": [
+      "google drive blog",
+      "drive news",
+      "updates from google drive",
+      "drive product blog",
+      "google drive announcements"
+    ]
+  },
+  "https://www.linkedin.com/": {
+    "title": "LinkedIn: Log In or Sign Up",
+    "phrases": [
+      "linkedin",
+      "professional network",
+      "business social network",
+      "career site",
+      "job networking"
+    ]
+  },
+  "https://www.linkedin.com/jobs/": {
+    "title": "LinkedIn Jobs: Find Jobs, Post Jobs, Search Resumes",
+    "phrases": [
+      "linkedin jobs",
+      "job search linkedin",
+      "find jobs linkedin",
+      "career opportunities linkedin"
+    ]
+  },
+  "https://www.linkedin.com/learning/": {
+    "title": "LinkedIn Learning: Online Courses for Creative, Technology, Business Skills",
+    "phrases": [
+      "linkedin learning",
+      "online courses linkedin",
+      "business training linkedin",
+      "professional development linkedin"
+    ]
+  },
+  "https://www.linkedin.com/sales/": {
+    "title": "LinkedIn Sales Navigator",
+    "phrases": [
+      "linkedin sales navigator",
+      "sales tool linkedin",
+      "lead generation linkedin",
+      "sales platform linkedin"
+    ]
+  },
+  "https://business.linkedin.com/marketing-solutions": {
+    "title": "LinkedIn Marketing Solutions",
+    "phrases": [
+      "linkedin marketing",
+      "advertising linkedin",
+      "marketing solutions linkedin",
+      "business marketing linkedin"
+    ]
+  },
+  "https://github.com/": {
+    "title": "GitHub: Where the world builds software",
+    "phrases": [
+      "github",
+      "code hosting",
+      "software repository",
+      "git platform",
+      "developer collaboration"
+    ]
+  },
+  "https://docs.github.com/": {
+    "title": "GitHub Docs",
+    "phrases": [
+      "github documentation",
+      "github help",
+      "github guides",
+      "github docs",
+      "github support articles"
+    ]
+  },
+  "https://github.com/about/careers": {
+    "title": "GitHub Careers",
+    "phrases": [
+      "github jobs",
+      "github careers",
+      "work at github",
+      "github employment",
+      "github hiring"
+    ]
+  },
+  "https://education.github.com/": {
+    "title": "GitHub Education",
+    "phrases": [
+      "github education",
+      "github student benefits",
+      "github for students",
+      "github classroom",
+      "github academic resources"
+    ]
+  },
+  "https://github.com/marketplace": {
+    "title": "GitHub Marketplace",
+    "phrases": [
+      "github marketplace",
+      "github apps",
+      "github integrations",
+      "github tools",
+      "github plugins"
+    ]
+  },
+  "https://youtu.be/": {
+    "title": "YouTube",
+    "phrases": [
+      "youtube",
+      "video sharing",
+      "watch videos",
+      "youtube short link",
+      "youtube homepage"
+    ]
+  },
+  "https://youtu.be/help": {
+    "title": "YouTube Help",
+    "phrases": [
+      "youtube help",
+      "youtube support",
+      "youtube assistance",
+      "youtube faq"
+    ]
+  },
+  "https://youtu.be/privacy": {
+    "title": "YouTube Privacy Policy",
+    "phrases": [
+      "youtube privacy policy",
+      "youtube privacy",
+      "youtube data policy"
+    ]
+  },
+  "https://youtu.be/tos": {
+    "title": "YouTube Terms of Service",
+    "phrases": [
+      "youtube terms of service",
+      "youtube tos",
+      "youtube terms"
+    ]
+  },
+  "https://youtu.be/community": {
+    "title": "YouTube Community Guidelines",
+    "phrases": [
+      "youtube community guidelines",
+      "youtube rules",
+      "youtube community standards"
+    ]
+  },
+  "https://www.facebook.com/": {
+    "title": "Facebook – log in or sign up",
+    "phrases": [
+      "facebook",
+      "social network",
+      "fb",
+      "meta social site",
+      "log in to facebook"
+    ]
+  },
+  "https://www.facebook.com/marketplace/": {
+    "title": "Facebook Marketplace: Buy and Sell Items Locally or Shipped",
+    "phrases": [
+      "facebook marketplace",
+      "buy and sell on facebook",
+      "fb marketplace",
+      "local deals on facebook",
+      "facebook shopping"
+    ]
+  },
+  "https://www.facebook.com/messages/": {
+    "title": "Facebook Messenger",
+    "phrases": [
+      "facebook messenger",
+      "fb messages",
+      "chat on facebook",
+      "send messages on facebook",
+      "facebook chat"
+    ]
+  },
+  "https://www.facebook.com/help/": {
+    "title": "Facebook Help Center",
+    "phrases": [
+      "facebook help",
+      "fb support",
+      "facebook help center",
+      "get help on facebook",
+      "facebook customer support"
+    ]
+  },
+  "https://www.facebook.com/watch/": {
+    "title": "Facebook Watch",
+    "phrases": [
+      "facebook watch",
+      "fb videos",
+      "watch videos on facebook",
+      "facebook video platform",
+      "facebook shows"
+    ]
+  },
+  "https://www.instagram.com/": {
+    "title": "Instagram",
+    "phrases": [
+      "instagram",
+      "photo sharing app",
+      "social media pictures",
+      "ig",
+      "share photos online"
+    ]
+  },
+  "https://help.instagram.com/": {
+    "title": "Instagram Help Center",
+    "phrases": [
+      "instagram help",
+      "instagram support",
+      "instagram customer service",
+      "instagram faq",
+      "instagram troubleshooting"
+    ]
+  },
+  "https://about.instagram.com/blog/": {
+    "title": "Instagram Blog",
+    "phrases": [
+      "instagram blog",
+      "instagram news",
+      "instagram updates",
+      "instagram announcements",
+      "instagram stories"
+    ]
+  },
+  "https://www.instagram.com/about/jobs/": {
+    "title": "Instagram Careers",
+    "phrases": [
+      "instagram jobs",
+      "instagram careers",
+      "work at instagram",
+      "instagram employment",
+      "instagram hiring"
+    ]
+  },
+  "https://business.instagram.com/": {
+    "title": "Instagram for Business",
+    "phrases": [
+      "instagram business",
+      "instagram for companies",
+      "instagram marketing",
+      "instagram ads",
+      "instagram business tools"
+    ]
+  },
+  "https://cdnjs.com/": {
+    "title": "cdnjs - The #1 free and open source CDN built to make life easier for developers",
+    "phrases": [
+      "cdnjs homepage",
+      "free open source CDN",
+      "JavaScript library CDN",
+      "Cloudflare cdnjs service",
+      "cdnjs library search"
+    ]
+  },
+  "https://cdnjs.cloudflare.com/": {
+    "title": "cdnjs.cloudflare.com Introduction",
+    "phrases": [
+      "cdnjs Cloudflare CDN",
+      "open source library CDN",
+      "cdnjs documentation",
+      "cdnjs terms and privacy",
+      "cdnjs reliability info"
+    ]
+  },
+  "https://www.cloudflare.com/application-services/products/cdn/": {
+    "title": "Cloudflare CDN | Content Delivery Network",
+    "phrases": [
+      "Cloudflare CDN info",
+      "enterprise CDN service",
+      "global content delivery",
+      "Cloudflare CDN benefits",
+      "CDN for web performance"
+    ]
+  },
+  "https://blog.cloudflare.com/automatically-replacing-polyfill-io-links-with-cloudflares-mirror-for-a-safer-internet/": {
+    "title": "Automatically replacing polyfill.io links with Cloudflare’s mirror for a safer Internet",
+    "phrases": [
+      "Cloudflare polyfill mirror",
+      "polyfill.io replacement info",
+      "JavaScript security CDN",
+      "Cloudflare supply chain protection",
+      "polyfill CDN update"
+    ]
+  },
+  "https://www.cloudflare.com/": {
+    "title": "Connect, protect, and build everywhere | Cloudflare",
+    "phrases": [
+      "Cloudflare homepage",
+      "Cloudflare connectivity cloud",
+      "Cloudflare security services",
+      "Cloudflare developer platform",
+      "Cloudflare AI solutions"
+    ]
+  },
+  "https://www.googletagmanager.com/": {
+    "title": "Google Tag Manager",
+    "phrases": [
+      "google tag manager",
+      "gtm dashboard",
+      "tag manager by google",
+      "manage website tags",
+      "google analytics tag manager"
+    ]
+  },
+  "https://www.googletagmanager.com/help/": {
+    "title": "Google Tag Manager Help",
+    "phrases": [
+      "google tag manager help",
+      "gtm support",
+      "tag manager documentation",
+      "google tag manager guide",
+      "gtm troubleshooting"
+    ]
+  },
+  "https://www.googletagmanager.com/terms.html": {
+    "title": "Google Tag Manager Terms of Service",
+    "phrases": [
+      "google tag manager terms",
+      "gtm terms of service",
+      "tag manager legal",
+      "google tag manager agreement"
+    ]
+  },
+  "https://www.googletagmanager.com/privacy.html": {
+    "title": "Google Tag Manager Privacy Policy",
+    "phrases": [
+      "google tag manager privacy",
+      "gtm privacy policy",
+      "tag manager privacy statement",
+      "google tag manager data policy"
+    ]
+  },
+  "https://www.googletagmanager.com/api/": {
+    "title": "Google Tag Manager API",
+    "phrases": [
+      "google tag manager api",
+      "gtm api documentation",
+      "tag manager developer api",
+      "google tag manager integration"
+    ]
+  },
+  "https://wordpress.org/": {
+    "title": "WordPress.org: Blog Tool, Publishing Platform, and CMS",
+    "phrases": [
+      "wordpress",
+      "wordpress official site",
+      "wordpress cms",
+      "wordpress blog platform",
+      "wordpress open source"
+    ]
+  },
+  "https://wordpress.org/download/": {
+    "title": "Download WordPress",
+    "phrases": [
+      "wordpress download",
+      "get wordpress",
+      "download wordpress installer",
+      "wordpress latest version",
+      "wordpress setup"
+    ]
+  },
+  "https://wordpress.org/themes/": {
+    "title": "WordPress Themes",
+    "phrases": [
+      "wordpress themes",
+      "browse wordpress themes",
+      "wordpress theme directory",
+      "find wordpress themes",
+      "wordpress templates"
+    ]
+  },
+  "https://wordpress.org/plugins/": {
+    "title": "WordPress Plugins",
+    "phrases": [
+      "wordpress plugins",
+      "browse wordpress plugins",
+      "wordpress plugin directory",
+      "find wordpress plugins",
+      "wordpress add-ons"
+    ]
+  },
+  "https://wordpress.org/support/": {
+    "title": "Support – WordPress.org",
+    "phrases": [
+      "wordpress support",
+      "wordpress help",
+      "wordpress community support",
+      "wordpress troubleshooting",
+      "wordpress forums"
+    ]
+  },
+  "https://www.google.com/": {
+    "title": "Google",
+    "phrases": [
+      "google",
+      "search engine",
+      "google homepage",
+      "internet search",
+      "find websites"
+    ]
+  },
+  "https://images.google.com/": {
+    "title": "Google Images",
+    "phrases": [
+      "google images",
+      "image search",
+      "find pictures",
+      "search photos",
+      "google photo search"
+    ]
+  },
+  "https://news.google.com/": {
+    "title": "Google News",
+    "phrases": [
+      "google news",
+      "latest headlines",
+      "news search",
+      "current events",
+      "google headlines"
+    ]
+  },
+  "https://www.youtube.com/": {
+    "title": "YouTube",
+    "phrases": [
+      "youtube",
+      "video site",
+      "watch videos",
+      "google video platform",
+      "stream videos"
+    ]
+  },
+  "https://www.youtube.com/feed/trending": {
+    "title": "YouTube Trending",
+    "phrases": [
+      "youtube trending",
+      "trending videos",
+      "popular videos",
+      "viral videos",
+      "hot videos"
+    ]
+  },
+  "https://music.youtube.com/": {
+    "title": "YouTube Music",
+    "phrases": [
+      "youtube music",
+      "music streaming",
+      "listen to music",
+      "google music platform",
+      "music videos"
+    ]
+  },
+  "https://www.youtube.com/shorts/": {
+    "title": "YouTube Shorts",
+    "phrases": [
+      "youtube shorts",
+      "short videos",
+      "quick videos",
+      "vertical videos",
+      "short form content"
+    ]
+  },
+  "https://www.youtubekids.com/": {
+    "title": "YouTube Kids",
+    "phrases": [
+      "youtube kids",
+      "kids videos",
+      "children's videos",
+      "safe videos for kids",
+      "family friendly videos"
+    ]
+  },
+  "https://support.google.com/": {
+    "title": "Google Help",
+    "phrases": [
+      "google support",
+      "google help center",
+      "google customer service",
+      "google troubleshooting",
+      "google assistance"
+    ]
+  },
+  "https://support.google.com/accounts/": {
+    "title": "Google Account Help",
+    "phrases": [
+      "google account support",
+      "google account help",
+      "google login help",
+      "google password reset",
+      "google account troubleshooting"
+    ]
+  },
+  "https://support.google.com/mail/": {
+    "title": "Gmail Help",
+    "phrases": [
+      "gmail support",
+      "gmail help center",
+      "gmail troubleshooting",
+      "gmail customer service",
+      "gmail assistance"
+    ]
+  },
+  "https://support.google.com/chrome/": {
+    "title": "Google Chrome Help",
+    "phrases": [
+      "chrome support",
+      "chrome help center",
+      "chrome troubleshooting",
+      "chrome customer service",
+      "chrome browser help"
+    ]
+  },
+  "https://bit.ly/": {
+    "title": "Bitly Connections Platform | Short URLs, QR Codes, and More",
+    "phrases": [
+      "bitly",
+      "bitly url shortener",
+      "bitly qr code platform",
+      "bitly link management",
+      "bitly landing pages"
+    ]
+  },
+  "https://bit.ly/m/MK-Search": {
+    "title": "We Make Careers Happen. - Landing Page - Bitly",
+    "phrases": [
+      "mk search careers",
+      "make careers happen",
+      "mk job search",
+      "career landing page"
+    ]
+  },
+  "https://bit.ly/m/usajobs": {
+    "title": "USA Remote Jobs Search® - Landing Page",
+    "phrases": [
+      "usa remote jobs",
+      "us work from home jobs",
+      "remote job search usa",
+      "find usa remote jobs"
+    ]
+  },
+  "https://bit.ly/m/Login-": {
+    "title": "Welcome! - Landing Page",
+    "phrases": [
+      "bitly login page",
+      "bitly welcome page",
+      "bitly access landing",
+      "bitly sign in"
+    ]
+  },
+  "https://bit.ly/m/toskie": {
+    "title": "Welcome to Toskie! - Landing Page",
+    "phrases": [
+      "toskie app",
+      "toskie neighborhood search",
+      "toskie professional search",
+      "toskie landing page"
+    ]
+  },
+  "https://medium.com/": {
+    "title": "Medium – Where good ideas find you.",
+    "phrases": [
+      "medium",
+      "medium homepage",
+      "online articles platform",
+      "blogging site medium",
+      "read stories on medium"
+    ]
+  },
+  "https://medium.com/membership": {
+    "title": "Become a Medium member",
+    "phrases": [
+      "medium membership",
+      "subscribe to medium",
+      "medium premium",
+      "medium member benefits"
+    ]
+  },
+  "https://help.medium.com/": {
+    "title": "Medium Help Center",
+    "phrases": [
+      "medium help",
+      "medium support",
+      "medium help center",
+      "medium customer service"
+    ]
+  },
+  "https://medium.com/creators": {
+    "title": "Medium Partner Program",
+    "phrases": [
+      "medium partner program",
+      "medium for creators",
+      "medium earn money",
+      "medium writing program"
+    ]
+  },
+  "https://medium.com/publications": {
+    "title": "Medium Publications",
+    "phrases": [
+      "medium publications",
+      "medium magazines",
+      "medium curated stories",
+      "medium featured publications"
+    ]
+  },
+  "https://creativecommons.org/licenses/by/4.0/": {
+    "title": "Creative Commons — Attribution 4.0 International — CC BY 4.0",
+    "phrases": [
+      "creative commons attribution license",
+      "cc by 4.0",
+      "creative commons 4.0",
+      "attribution license details",
+      "cc license information"
+    ]
+  },
+  "https://creativecommons.org/": {
+    "title": "Creative Commons - Unlocking the full potential of the internet",
+    "phrases": [
+      "creative commons homepage",
+      "creative commons main site",
+      "cc official site",
+      "creative commons organization",
+      "creative commons portal"
+    ]
+  },
+  "https://creativecommons.org/licenses/": {
+    "title": "About CC Licenses - Creative Commons",
+    "phrases": [
+      "creative commons licenses",
+      "cc license types",
+      "creative commons license overview",
+      "cc license options",
+      "creative commons licensing"
+    ]
+  },
+  "https://search.creativecommons.org/": {
+    "title": "Search for Creative Commons licensed content",
+    "phrases": [
+      "creative commons search",
+      "cc image search",
+      "find creative commons content",
+      "search cc licensed works",
+      "creative commons content finder"
+    ]
+  },
+  "https://creativecommons.org/about/": {
+    "title": "What is Creative Commons? - Creative Commons",
+    "phrases": [
+      "about creative commons",
+      "creative commons information",
+      "learn about cc",
+      "creative commons overview",
+      "what is creative commons"
+    ]
+  },
+  "https://www.nytimes.com/": {
+    "title": "The New York Times - Breaking News, US News, World News",
+    "phrases": [
+      "new york times",
+      "nytimes",
+      "ny times",
+      "the times newspaper",
+      "us news times"
+    ]
+  },
+  "https://www.nytimes.com/section/todayspaper": {
+    "title": "Today's Paper - The New York Times",
+    "phrases": [
+      "today's paper",
+      "nytimes today's edition",
+      "new york times print edition",
+      "daily newspaper nytimes"
+    ]
+  },
+  "https://www.nytimes.com/section/world": {
+    "title": "World News - The New York Times",
+    "phrases": [
+      "world news nytimes",
+      "international news times",
+      "global news new york times",
+      "nytimes world section"
+    ]
+  },
+  "https://www.nytimes.com/section/opinion": {
+    "title": "Opinion - The New York Times",
+    "phrases": [
+      "nytimes opinion",
+      "new york times editorials",
+      "times opinion section",
+      "opinion articles nytimes"
+    ]
+  },
+  "https://cooking.nytimes.com/": {
+    "title": "The New York Times Cooking",
+    "phrases": [
+      "nytimes cooking",
+      "new york times recipes",
+      "times cooking section",
+      "cooking nytimes"
+    ]
+  },
+  "https://developers.google.com/": {
+    "title": "Google Developers",
+    "phrases": [
+      "google developers",
+      "google dev portal",
+      "google developer documentation",
+      "google api docs",
+      "google developer resources"
+    ]
+  },
+  "https://developers.google.com/maps/documentation": {
+    "title": "Google Maps Platform Documentation",
+    "phrases": [
+      "google maps api docs",
+      "google maps developer documentation",
+      "google maps platform docs",
+      "google maps developer portal"
+    ]
+  },
+  "https://developers.google.com/api-client-library": {
+    "title": "Google Cloud APIs",
+    "phrases": [
+      "google cloud api docs",
+      "google api client library",
+      "google cloud developer documentation"
+    ]
+  },
+  "https://developers.google.com/identity/sign-in/web": {
+    "title": "Google Sign-In for Websites",
+    "phrases": [
+      "google sign-in docs",
+      "google identity api docs",
+      "google sign-in developer documentation"
+    ]
+  },
+  "https://developers.google.com/analytics": {
+    "title": "Google Analytics Developer Documentation",
+    "phrases": [
+      "google analytics api docs",
+      "google analytics developer documentation",
+      "google analytics developer portal"
+    ]
+  },
+  "https://www.microsoft.com/": {
+    "title": "Microsoft – Cloud, Computers, Apps & Gaming",
+    "phrases": [
+      "microsoft",
+      "windows maker",
+      "office creator",
+      "azure provider",
+      "xbox company"
+    ]
+  },
+  "https://account.microsoft.com/": {
+    "title": "Microsoft Account – Sign In or Create Your Account Today",
+    "phrases": [
+      "microsoft account",
+      "sign in to microsoft",
+      "my microsoft profile",
+      "microsoft login",
+      "create microsoft account"
+    ]
+  },
+  "https://support.microsoft.com/": {
+    "title": "Microsoft Support: Help with Windows, Office, & More",
+    "phrases": [
+      "microsoft support",
+      "windows help",
+      "office help",
+      "get microsoft assistance",
+      "microsoft customer service"
+    ]
+  },
+  "https://www.microsoft.com/en-us/microsoft-365": {
+    "title": "Microsoft 365: Apps for Home, Education, and Business",
+    "phrases": [
+      "microsoft 365",
+      "office 365",
+      "microsoft productivity suite",
+      "word excel powerpoint online",
+      "microsoft subscription"
+    ]
+  },
+  "https://www.microsoft.com/en-us/store/b/home": {
+    "title": "Microsoft Store – Official Home for Devices, Software, and Games",
+    "phrases": [
+      "microsoft store",
+      "buy microsoft products",
+      "windows laptop shop",
+      "xbox shop",
+      "microsoft devices store"
+    ]
+  },
+  "https://en.wikipedia.org/wiki/Main_Page": {
+    "title": "Wikipedia, the free encyclopedia",
+    "phrases": [
+      "wikipedia",
+      "the free encyclopedia",
+      "wiki main page",
+      "online encyclopedia",
+      "encyclopedia website"
+    ]
+  },
+  "https://en.wikipedia.org/wiki/Wikipedia:About": {
+    "title": "Wikipedia: About",
+    "phrases": [
+      "wikipedia about page",
+      "wiki information",
+      "learn about wikipedia"
+    ]
+  },
+  "https://en.wikipedia.org/wiki/Wikipedia:Contents": {
+    "title": "Wikipedia: Contents",
+    "phrases": [
+      "wikipedia contents",
+      "wiki topics list",
+      "encyclopedia contents"
+    ]
+  },
+  "https://en.wikipedia.org/wiki/Wikipedia:Featured_articles": {
+    "title": "Wikipedia: Featured articles",
+    "phrases": [
+      "wikipedia featured articles",
+      "wiki best articles",
+      "encyclopedia highlights"
+    ]
+  },
+  "https://en.wikipedia.org/wiki/Portal:Current_events": {
+    "title": "Wikipedia: Current events",
+    "phrases": [
+      "wikipedia current events",
+      "wiki news portal",
+      "encyclopedia current events"
+    ]
+  },
+  "https://www.tiktok.com/": {
+    "title": "TikTok - Make Your Day",
+    "phrases": [
+      "tiktok",
+      "tiktok home",
+      "tiktok main site",
+      "short video app",
+      "viral video platform"
+    ]
+  },
+  "https://en.wikipedia.org/wiki/TikTok": {
+    "title": "TikTok - Wikipedia",
+    "phrases": [
+      "tiktok wikipedia",
+      "tiktok info page",
+      "tiktok encyclopedia",
+      "tiktok history"
+    ]
+  },
+  "https://www.tiktok.com/business/": {
+    "title": "TikTok for Business",
+    "phrases": [
+      "tiktok for business",
+      "tiktok ads",
+      "tiktok marketing",
+      "tiktok business solutions"
+    ]
+  },
+  "https://www.tiktok.com/shop/": {
+    "title": "TikTok Shop",
+    "phrases": [
+      "tiktok shop",
+      "tiktok shopping",
+      "tiktok marketplace",
+      "buy on tiktok"
+    ]
+  },
+  "https://www.tiktok.com/creators/creator-portal/en-us/": {
+    "title": "TikTok Creator Portal",
+    "phrases": [
+      "tiktok creator portal",
+      "tiktok creator resources",
+      "tiktok for creators",
+      "tiktok creator help"
+    ]
+  },
+  "https://goo.gl/": {
+    "title": "Google URL Shortener",
+    "phrases": [
+      "google url shortener",
+      "goo.gl homepage",
+      "shorten a link with google",
+      "google link shortener",
+      "goo.gl main page"
+    ]
+  },
+  "https://goo.gl/help/": {
+    "title": "Google URL Shortener Help",
+    "phrases": [
+      "google url shortener help",
+      "goo.gl support",
+      "goo.gl faq",
+      "help for google link shortener"
+    ]
+  },
+  "https://goo.gl/terms/": {
+    "title": "Google URL Shortener Terms of Service",
+    "phrases": [
+      "google url shortener terms",
+      "goo.gl terms of service",
+      "terms for google link shortener"
+    ]
+  },
+  "https://goo.gl/privacy/": {
+    "title": "Google URL Shortener Privacy Policy",
+    "phrases": [
+      "google url shortener privacy",
+      "goo.gl privacy policy",
+      "privacy for google link shortener"
+    ]
+  },
+  "https://goo.gl/api/": {
+    "title": "Google URL Shortener API",
+    "phrases": [
+      "google url shortener api",
+      "goo.gl api",
+      "api for google link shortener"
+    ]
+  },
+  "https://docs.google.com/": {
+    "title": "Google Docs",
+    "phrases": [
+      "google docs",
+      "docs",
+      "online documents",
+      "google document editor",
+      "collaborative documents"
+    ]
+  },
+  "https://docs.google.com/document/u/0/": {
+    "title": "Google Docs: Sign-in",
+    "phrases": [
+      "google docs sign in",
+      "docs login",
+      "access google documents",
+      "my google docs",
+      "document dashboard"
+    ]
+  },
+  "https://support.google.com/docs/": {
+    "title": "Google Docs Editors Help",
+    "phrases": [
+      "google docs help",
+      "docs support",
+      "document editor help",
+      "google docs troubleshooting",
+      "docs faq"
+    ]
+  },
+  "https://docs.google.com/templates": {
+    "title": "Google Docs Templates",
+    "phrases": [
+      "google docs templates",
+      "document templates",
+      "docs template gallery",
+      "create with templates",
+      "template options"
+    ]
+  },
+  "https://developers.google.com/docs/api": {
+    "title": "Google Docs API",
+    "phrases": [
+      "google docs api",
+      "docs developer tools",
+      "document api",
+      "integrate with google docs",
+      "docs programming"
+    ]
+  },
+  "https://www.amazon.com/": {
+    "title": "Amazon.com: Online Shopping for Electronics, Apparel, Computers, Books, DVDs & more",
+    "phrases": [
+      "amazon",
+      "amazon shopping",
+      "amazon online store",
+      "amazon homepage",
+      "amazon retail"
+    ]
+  },
+  "https://www.amazon.com/ap/signin": {
+    "title": "Amazon Sign-In",
+    "phrases": [
+      "amazon login",
+      "amazon sign in",
+      "amazon account access"
+    ]
+  },
+  "https://www.amazon.com/prime": {
+    "title": "Amazon Prime",
+    "phrases": [
+      "amazon prime",
+      "amazon membership",
+      "amazon prime benefits"
+    ]
+  },
+  "https://www.amazon.com/Best-Sellers/zgbs": {
+    "title": "Amazon Best Sellers: Best items in Amazon",
+    "phrases": [
+      "amazon best sellers",
+      "amazon top products",
+      "amazon trending items"
+    ]
+  },
+  "https://www.amazon.com/gp/help/customer/display.html": {
+    "title": "Amazon Customer Service",
+    "phrases": [
+      "amazon customer service",
+      "amazon help",
+      "amazon support"
+    ]
+  },
+  "https://apps.apple.com/": {
+    "title": "App Store - Apple",
+    "phrases": [
+      "app store",
+      "apple app store",
+      "download apps for iphone",
+      "ios app marketplace",
+      "find iphone apps"
+    ]
+  },
+  "https://apps.apple.com/us/genre/ios/id36": {
+    "title": "Top Free Apps on the App Store",
+    "phrases": [
+      "top free apps",
+      "popular free iphone apps",
+      "best free apps on app store",
+      "free ios apps",
+      "trending free apps"
+    ]
+  },
+  "https://apps.apple.com/us/genre/ios-games/id6014": {
+    "title": "Games - App Store",
+    "phrases": [
+      "app store games",
+      "iphone games",
+      "ios games",
+      "download games for iphone",
+      "game apps on app store"
+    ]
+  },
+  "https://apps.apple.com/us/arcade": {
+    "title": "Apple Arcade - App Store",
+    "phrases": [
+      "apple arcade",
+      "arcade games on app store",
+      "ios arcade",
+      "arcade subscription",
+      "play arcade games on iphone"
+    ]
+  },
+  "https://apps.apple.com/us/genre/ipad/id110": {
+    "title": "Apps for iPad - App Store",
+    "phrases": [
+      "ipad apps",
+      "app store for ipad",
+      "download apps for ipad",
+      "best ipad apps",
+      "ios apps for ipad"
+    ]
+  },
+  "https://accounts.google.com/": {
+    "title": "Google Account",
+    "phrases": [
+      "google account",
+      "my google login",
+      "sign in to google",
+      "google sign in page",
+      "access google account"
+    ]
+  },
+  "https://accounts.google.com/signin": {
+    "title": "Sign in - Google Accounts",
+    "phrases": [
+      "google sign in",
+      "login to google",
+      "google login page",
+      "google authentication",
+      "google accounts sign in"
+    ]
+  },
+  "https://accounts.google.com/help": {
+    "title": "Google Account Help",
+    "phrases": [
+      "google account help",
+      "google account support",
+      "google account assistance",
+      "help with google account",
+      "google account troubleshooting"
+    ]
+  },
+  "https://accounts.google.com/signup": {
+    "title": "Create your Google Account",
+    "phrases": [
+      "create google account",
+      "sign up for google",
+      "register google account",
+      "google account signup",
+      "new google account"
+    ]
+  },
+  "https://accounts.google.com/signin/recovery": {
+    "title": "Google Account Recovery",
+    "phrases": [
+      "google account recovery",
+      "recover google account",
+      "reset google password",
+      "google account reset",
+      "forgot google password"
+    ]
+  },
+  "https://itunes.apple.com/us/mix/taylor-swift/id341699016": {
+    "title": "Taylor Swift by Taylor Swift - Download Taylor Swift on iTunes",
+    "phrases": [
+      "taylor swift music",
+      "taylor swift album",
+      "taylor swift playlist",
+      "listen to taylor swift",
+      "download taylor swift songs"
+    ]
+  },
+  "https://itunes.apple.com/us/mix/power-ballads/id72318679": {
+    "title": "Power Ballads by Various Artists - Download Power Ballads on iTunes",
+    "phrases": [
+      "power ballads playlist",
+      "power ballads album",
+      "listen to power ballads",
+      "download power ballads songs",
+      "various artists power ballads"
+    ]
+  },
+  "https://itunes.apple.com/lookup?id=1584215428": {
+    "title": "Photos - Browse, edit, and share your picture-perfect moments",
+    "phrases": [
+      "photos app",
+      "apple photos",
+      "edit photos",
+      "share photos",
+      "manage photo library"
+    ]
+  },
+  "https://itunes.apple.com/lookup?id=1029207872": {
+    "title": "Notes - Get things done together, faster",
+    "phrases": [
+      "notes app",
+      "apple notes",
+      "take notes",
+      "organize notes",
+      "search notes"
+    ]
+  },
+  "https://itunes.apple.com/lookup?id=915249334": {
+    "title": "Shortcuts - Automate tasks with over 300 built-in actions",
+    "phrases": [
+      "shortcuts app",
+      "apple shortcuts",
+      "automate tasks",
+      "create shortcuts",
+      "use siri shortcuts"
+    ]
+  },
+  "https://open.spotify.com/search": {
+    "title": "Spotify – Search",
+    "phrases": [
+      "spotify search",
+      "find music on spotify",
+      "search songs on spotify",
+      "spotify artist search",
+      "spotify playlist search"
+    ]
+  },
+  "https://open.spotify.com/home": {
+    "title": "Spotify – Web Player",
+    "phrases": [
+      "spotify web player",
+      "listen to music on spotify",
+      "spotify online player",
+      "spotify homepage",
+      "stream songs on spotify"
+    ]
+  },
+  "https://open.spotify.com/genre/browse-page": {
+    "title": "Browse - Spotify",
+    "phrases": [
+      "spotify browse",
+      "explore genres on spotify",
+      "spotify genre browser",
+      "discover music on spotify",
+      "spotify music categories"
+    ]
+  },
+  "https://open.spotify.com/artist/4LADVWbGgajvchOHelqZv2": {
+    "title": "Search | Spotify",
+    "phrases": [
+      "search artist on spotify",
+      "spotify artist page",
+      "listen to Search on spotify",
+      "spotify monthly listeners",
+      "spotify artist profile"
+    ]
+  },
+  "https://open.spotify.com/search/songs": {
+    "title": "Spotify – Web Player",
+    "phrases": [
+      "spotify song search",
+      "find tracks on spotify",
+      "search for songs on spotify",
+      "spotify music search",
+      "spotify track finder"
+    ]
+  },
+  "https://policies.google.com/?hl=en": {
+    "title": "Privacy & Terms – Google",
+    "phrases": [
+      "google privacy and terms",
+      "google policy center",
+      "google privacy info",
+      "google legal policies",
+      "google terms overview"
+    ]
+  },
+  "https://policies.google.com/terms?hl=en": {
+    "title": "Google Terms of Service – Privacy & Terms – Google",
+    "phrases": [
+      "google terms of service",
+      "google tos",
+      "google user agreement",
+      "google service rules"
+    ]
+  },
+  "https://policies.google.com/privacy?hl=en": {
+    "title": "Privacy Policy – Privacy & Terms – Google",
+    "phrases": [
+      "google privacy policy",
+      "google data policy",
+      "google information policy",
+      "google privacy statement"
+    ]
+  },
+  "https://policies.google.com/terms/information-requests?hl=en-US": {
+    "title": "How Google handles government requests for user information – Privacy & Terms – Google",
+    "phrases": [
+      "google government requests policy",
+      "google law enforcement requests",
+      "google user data requests",
+      "google transparency report"
+    ]
+  },
+  "https://policies.google.com/terms/service-specific?hl=en": {
+    "title": "List of services & service-specific additional terms – Privacy & Terms – Google",
+    "phrases": [
+      "google service-specific terms",
+      "google product terms",
+      "google additional terms",
+      "google services policy list"
+    ]
+  },
+  "https://www.reddit.com/": {
+    "title": "Reddit - Dive into anything",
+    "phrases": [
+      "reddit",
+      "social news site",
+      "discussion forums",
+      "online communities",
+      "popular threads"
+    ]
+  },
+  "https://www.reddit.com/r/popular/": {
+    "title": "Reddit: Trending and Popular Posts",
+    "phrases": [
+      "reddit popular",
+      "trending posts on reddit",
+      "top reddit threads",
+      "most upvoted reddit",
+      "reddit hot topics"
+    ]
+  },
+  "https://www.reddit.com/subreddits/": {
+    "title": "Reddit: All Subreddits",
+    "phrases": [
+      "reddit subreddits",
+      "list of reddit communities",
+      "browse reddit groups",
+      "find subreddits",
+      "reddit categories"
+    ]
+  },
+  "https://www.reddit.com/register/": {
+    "title": "Reddit: Sign Up",
+    "phrases": [
+      "reddit sign up",
+      "create reddit account",
+      "join reddit",
+      "register on reddit",
+      "new reddit user"
+    ]
+  },
+  "https://www.reddit.com/login/": {
+    "title": "Reddit: Log In",
+    "phrases": [
+      "reddit login",
+      "sign in to reddit",
+      "access reddit account",
+      "reddit authentication",
+      "log into reddit"
+    ]
+  },
+  "https://www.pinterest.com/?search_box_open=true": {
+    "title": "Pinterest",
+    "phrases": [
+      "pinterest",
+      "idea inspiration site",
+      "visual discovery platform",
+      "find creative ideas",
+      "image collage inspiration"
+    ]
+  },
+  "https://help.pinterest.com/en/article/search-for-ideas-on-pinterest": {
+    "title": "Search for ideas on Pinterest | Pinterest help",
+    "phrases": [
+      "pinterest search help",
+      "how to find ideas on pinterest",
+      "pinterest search guide",
+      "explore pinterest topics",
+      "discover trends on pinterest"
+    ]
+  },
+  "https://help.pinterest.com/en/article/discover-ideas-on-pinterest": {
+    "title": "Discover ideas on Pinterest | Pinterest help",
+    "phrases": [
+      "discover pinterest ideas",
+      "explore pinterest feed",
+      "find trending pins",
+      "pinterest home feed",
+      "see pinterest recommendations"
+    ]
+  },
+  "https://help.pinterest.com/en/article/find-and-follow-boards": {
+    "title": "Find boards on Pinterest | Pinterest help",
+    "phrases": [
+      "find pinterest boards",
+      "search pinterest boards",
+      "follow pinterest boards",
+      "explore pinterest collections",
+      "discover pinterest topics"
+    ]
+  },
+  "https://help.pinterest.com/en/article/use-visual-search-features": {
+    "title": "Use visual search features | Pinterest Business help",
+    "phrases": [
+      "pinterest visual search",
+      "search by image on pinterest",
+      "find similar items pinterest",
+      "pinterest collage tools",
+      "discover styles on pinterest"
+    ]
+  }
+}

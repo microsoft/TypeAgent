@@ -38,16 +38,16 @@ export async function ensureOpenPhraseGeneratorAgent(
         groundingConfig.openPhraseGeneratorAgentId!,
         project,
         {
-            model: "gpt-41",
+            model: "gpt-4.1",
             name: "TypeAgent_OpenPhraseGenerator",
             description: "Auto created Phrase Generator Agent",
             temperature: 0.01,
             instructions: `
 There is a system that uses the command "Open" to open URLs in the browser.  You generate terms that can be cached such that when the user says "open apple" it goes to "https://apple.com".  You generate alternate terms/keywords/phrases/descriptions a user could use to invoke the same site. 
 
-You are provided a domain that you generate open phrases for by doing a Bing search for \`site:domain\` where the domain is the one provided.
+You are provided a domain that you generate open phrases for by doing a Bing search for 'site:domain' where the domain is the one provided.
 
-Generate a SearchResult for each of the top 20 search results. Do not include "open" in the openPhrase statement since that is implied.
+Generate a SearchResult for each of the top 5 search results. Do not include "open" in the openPhrase statement since that is implied.
 
 For example: apple.com could be:
 
@@ -55,7 +55,7 @@ For example: apple.com could be:
 - open iphone maker
 - open ipad maker
 
-Try to create between 5 and 10 phrases for each URL.
+Try to create between 3 and 5 phrases for each URL. Do not include the URL in the result set for non-English web sites.  Also, do not include URLs in the results if it is not an obvious URL that a user would say an open command for. For example, don't return CDN URLs, API urls, or URLs whose search results indicate other issues.
 
 Respond strictly with JSON. The JSON should be compatible with the TypeScript type Response from the following:
 
@@ -68,7 +68,7 @@ type SearchResult = {
   pageTitle: string;
   pageUrl: string;
   openPhrases: string[];
-}
+}         
             `,
             tools: [
                 ToolUtility.createBingGroundingTool([

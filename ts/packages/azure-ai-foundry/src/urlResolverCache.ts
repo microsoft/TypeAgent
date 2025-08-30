@@ -5,6 +5,9 @@ import { existsSync, writeFileSync, mkdirSync, readFileSync } from "fs";
 import path from "path";
 import { isDirectoryPath } from "typeagent";
 import zlib from "zlib";
+import registerDebug from "debug";
+
+const debug = registerDebug("typeagent:azure-ai-foundry:urlResolverCache");
 
 export type domainCache = {
     [key: string]: domainData
@@ -37,6 +40,7 @@ export class UrlResolverCache {
     private domainFile: string = "domains.json";
     private urlFile: string = "urls.json";
     private phrasesFile: string = "phrases.json"
+    private compressed: boolean = false;
 
     public domains: domainCache = {};
 
@@ -44,14 +48,10 @@ export class UrlResolverCache {
 
     public phrases: phraseCache = {};
 
-    constructor(dir: string) {
-
-        if (!isDirectoryPath(dir)) {
-            throw new Error(`The directory ${dir} does not exist!`);
-        }
-
-        if (dir) {
-            this.cacheDir = dir;
+    constructor(compressed?: boolean) {
+ 
+        if (compressed) {
+            this.compressed = compressed;
         }
     }
 
@@ -59,7 +59,12 @@ export class UrlResolverCache {
      * Loads the cache file
      * @param dir - The path to the cache file to load
      */
-    public load(dir?: string) {
+    public load(dir: string) {
+
+        if (!isDirectoryPath(dir)) {
+            mkdirSync(dir, { recursive: true });
+            //throw new Error(`The directory ${dir} does not exist!`);
+        }
 
         if (dir) {
             this.cacheDir = dir
@@ -98,7 +103,7 @@ export class UrlResolverCache {
      * Loads the phrases cache file only
      * @param dir - The path to the cache file to load
      */
-    public loadPhrases(dir?: string) {
+    public loadPhrases(dir: string) {
 
         if (dir) {
             this.cacheDir = dir
@@ -106,7 +111,9 @@ export class UrlResolverCache {
 
         // TODO: make async
         if (!existsSync(this.cacheDir)) {
-            throw new Error(`The directory ${this.cacheDir} does not exist!`);
+            debug(`The directory ${this.cacheDir} does not exist!`);
+            
+            return;
         }
 
         try {
@@ -138,22 +145,42 @@ export class UrlResolverCache {
 
         try {
             const phrasesContent = JSON.stringify(this.phrases, null, 2);
-            writeFileSync(
-                path.join(this.cacheDir, `${this.phrasesFile}.gz`),
-                zlib.gzipSync(Buffer.from(phrasesContent, "utf-8")),
-            );
 
-            const domainsContent = JSON.stringify(this.domains, null, 2);
-            writeFileSync(
-                path.join(this.cacheDir, `${this.domainFile}.gz`),
-                zlib.gzipSync(Buffer.from(domainsContent, "utf-8")),
-            );
+            if (this.compressed) {
+                writeFileSync(
+                    path.join(this.cacheDir, `${this.phrasesFile}.gz`),
+                    zlib.gzipSync(Buffer.from(phrasesContent, "utf-8")),
+                );
 
-            const urlsContent = JSON.stringify(this.urls, null, 2);            
-            writeFileSync(
-                path.join(this.cacheDir, `${this.urlFile}.gz`),
-                zlib.gzipSync(Buffer.from(urlsContent, "utf-8")),
-            );
+                const domainsContent = JSON.stringify(this.domains, null, 2);
+                writeFileSync(
+                    path.join(this.cacheDir, `${this.domainFile}.gz`),
+                    zlib.gzipSync(Buffer.from(domainsContent, "utf-8")),
+                );
+
+                const urlsContent = JSON.stringify(this.urls, null, 2);            
+                writeFileSync(
+                    path.join(this.cacheDir, `${this.urlFile}.gz`),
+                    zlib.gzipSync(Buffer.from(urlsContent, "utf-8")),
+                );
+            } else {
+                writeFileSync(
+                    path.join(this.cacheDir, `${this.phrasesFile}`),
+                    phrasesContent, "utf-8"
+                );
+
+                const domainsContent = JSON.stringify(this.domains, null, 2);
+                writeFileSync(
+                    path.join(this.cacheDir, `${this.domainFile}`),
+                    domainsContent, "utf-8"
+                );
+
+                const urlsContent = JSON.stringify(this.urls, null, 2);            
+                writeFileSync(
+                    path.join(this.cacheDir, `${this.urlFile}`),
+                    urlsContent, "utf-8"
+                );
+            }
         } catch (err) {
             throw new Error(`Failed to write compressed cache files: ${err instanceof Error ? err.message : String(err)}`);
         }

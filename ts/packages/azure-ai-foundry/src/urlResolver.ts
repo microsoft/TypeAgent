@@ -27,10 +27,10 @@ import { UrlResolverCache } from "./urlResolverCache.js";
 const debug = registerDebug("typeagent:azure-ai-foundry:urlResolver");
 
 // lazily load url cache
-const urlCache: UrlResolverCache = new UrlResolverCache("../../examples/websiteAliases/cache");
+const urlCache: UrlResolverCache = new UrlResolverCache();
 const urlCacheLoadPromise: Promise<void> = new Promise((resolve) => {
     // simulate async loading
-    urlCache.loadPhrases();
+    urlCache.loadPhrases("../../examples/websiteAliases/cache");
     resolve();
 });
 
@@ -61,7 +61,12 @@ export async function flushAgent(
     );
     await agents.flushAgents(
         urlResolutionAgentId,
-        [groundingConfig.urlResolutionAgentId!],
+        [
+            groundingConfig.urlResolutionAgentId!,
+            groundingConfig.validatorAgentId!,
+            groundingConfig.aliasKeywordExtractorAgentId!,
+            groundingConfig.openPhraseGeneratorAgentId!
+        ],
         project,
     );
 }
