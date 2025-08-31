@@ -16,13 +16,13 @@ from typeagent.knowpro.convsettings import ConversationSettings
 from typeagent.knowpro.messageindex import MessageTextIndexSettings
 from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
 from typeagent.knowpro.timestampindex import TimestampToTextRangeIndex
-from typeagent.storage.memorystore import MemoryStorageProvider
+from typeagent.storage.memory import MemoryStorageProvider
 from typeagent.knowpro.secindex import (
     ConversationSecondaryIndexes,
     build_secondary_indexes,
     build_transient_secondary_indexes,
 )
-from typeagent.knowpro.collections import (
+from typeagent.storage.memory import (
     MemoryMessageCollection as MemoryMessageCollection,
     MemorySemanticRefCollection,
 )

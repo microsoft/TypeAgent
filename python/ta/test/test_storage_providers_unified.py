@@ -31,7 +31,7 @@ from typeagent.knowpro.interfaces import (
 )
 from typeagent.knowpro.messageindex import MessageTextIndexSettings
 from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
-from typeagent.storage.memorystore import MemoryStorageProvider
+from typeagent.storage.memory import MemoryStorageProvider
 from typeagent.storage.sqlitestore import SqliteStorageProvider
 
 from fixtures import needs_auth, embedding_model, temp_db_path
@@ -60,7 +60,7 @@ async def storage_provider_type(
 
     match request.param:
         case "memory":
-            provider = MemoryStorageProvider(
+            provider = await MemoryStorageProvider.create(
                 message_text_settings=message_text_settings,
                 related_terms_settings=related_terms_settings,
             )
@@ -318,7 +318,7 @@ async def test_cross_provider_message_collection_equivalence(
     message_text_settings = MessageTextIndexSettings(embedding_settings)
     related_terms_settings = RelatedTermIndexSettings(embedding_settings)
 
-    memory_provider = MemoryStorageProvider(
+    memory_provider = await MemoryStorageProvider.create(
         message_text_settings=message_text_settings,
         related_terms_settings=related_terms_settings,
     )

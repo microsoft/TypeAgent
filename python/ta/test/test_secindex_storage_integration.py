@@ -9,7 +9,7 @@ from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
 from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
 from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
 from typeagent.knowpro.secindex import ConversationSecondaryIndexes
-from typeagent.storage.memorystore import MemoryStorageProvider
+from typeagent.storage.memory import MemoryStorageProvider
 
 
 @pytest.mark.asyncio

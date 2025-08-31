@@ -50,7 +50,7 @@ async def related_terms_index(
             message_text_settings=message_text_settings,
             related_terms_settings=related_terms_settings,
         )
-        index = await provider.get_related_terms_index()
+        index = await storage_provider.get_related_terms_index()
         yield index
     else:
         provider = await SqliteStorageProvider.create(
