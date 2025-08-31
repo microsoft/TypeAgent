@@ -65,8 +65,8 @@ def temp_db_path() -> Iterator[str]:
         os.remove(path)
 
 
-@pytest_asyncio.fixture
-async def memory_storage(
+@pytest.fixture
+def memory_storage(
     embedding_model: AsyncEmbeddingModel,
 ) -> MemoryStorageProvider:
     """Create a memory storage provider with settings."""
@@ -77,7 +77,7 @@ async def memory_storage(
     related_terms_settings = RelatedTermIndexSettings(
         embedding_index_settings=embedding_settings
     )
-    return await MemoryStorageProvider.create(
+    return MemoryStorageProvider(
         message_text_settings=message_text_settings,
         related_terms_settings=related_terms_settings,
     )

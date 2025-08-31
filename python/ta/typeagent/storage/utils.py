@@ -25,10 +25,7 @@ async def create_storage_provider[TMessage: IMessage](
     if dbname is None:
         from .memory import MemoryStorageProvider
 
-        return await MemoryStorageProvider.create(
-            message_text_settings=message_text_settings,
-            related_terms_settings=related_terms_settings
-        )
+        return MemoryStorageProvider(message_text_settings, related_terms_settings)
     else:
         from .sqlitestore import SqliteStorageProvider
 

@@ -64,13 +64,13 @@ async def test_indexes_work_independently(needs_auth):
     message_text_settings = MessageTextIndexSettings(embedding_settings)
     related_terms_settings = RelatedTermIndexSettings(embedding_settings)
 
-    storage1 = await MemoryStorageProvider.create(
+    storage1 = MemoryStorageProvider(
         message_text_settings=message_text_settings,
-        related_terms_settings=related_terms_settings
+        related_terms_settings=related_terms_settings,
     )
-    storage2 = await MemoryStorageProvider.create(
+    storage2 = MemoryStorageProvider(
         message_text_settings=message_text_settings,
-        related_terms_settings=related_terms_settings
+        related_terms_settings=related_terms_settings,
     )
 
     # Get indexes from both storage providers
@@ -92,9 +92,9 @@ async def test_indexes_available_after_create(needs_auth):
     related_terms_settings = RelatedTermIndexSettings(embedding_settings)
 
     # Use the async factory method
-    storage = await MemoryStorageProvider.create(
+    storage = MemoryStorageProvider(
         message_text_settings=message_text_settings,
-        related_terms_settings=related_terms_settings
+        related_terms_settings=related_terms_settings,
     )
 
     # Should work immediately after create
@@ -111,9 +111,9 @@ async def test_storage_provider_collections_still_work(needs_auth):
     message_text_settings = MessageTextIndexSettings(embedding_settings)
     related_terms_settings = RelatedTermIndexSettings(embedding_settings)
 
-    storage = await MemoryStorageProvider.create(
+    storage = MemoryStorageProvider(
         message_text_settings=message_text_settings,
-        related_terms_settings=related_terms_settings
+        related_terms_settings=related_terms_settings,
     )
 
     # Test message collection creation

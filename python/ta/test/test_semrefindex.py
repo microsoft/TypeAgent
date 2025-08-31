@@ -55,7 +55,7 @@ async def semantic_ref_index(
     related_terms_settings = RelatedTermIndexSettings(embedding_settings)
 
     if request.param == "memory":
-        provider = await MemoryStorageProvider.create(
+        provider = MemoryStorageProvider(
             message_text_settings=message_text_settings,
             related_terms_settings=related_terms_settings,
         )
@@ -95,7 +95,7 @@ async def semantic_ref_setup(
     related_terms_settings = RelatedTermIndexSettings(embedding_settings)
 
     if request.param == "memory":
-        provider = await MemoryStorageProvider.create(
+        provider = MemoryStorageProvider(
             message_text_settings=message_text_settings,
             related_terms_settings=related_terms_settings,
         )

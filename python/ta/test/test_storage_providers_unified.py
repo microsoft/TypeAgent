@@ -60,7 +60,7 @@ async def storage_provider_type(
 
     match request.param:
         case "memory":
-            provider = await MemoryStorageProvider.create(
+            provider = MemoryStorageProvider(
                 message_text_settings=message_text_settings,
                 related_terms_settings=related_terms_settings,
             )
@@ -318,7 +318,7 @@ async def test_cross_provider_message_collection_equivalence(
     message_text_settings = MessageTextIndexSettings(embedding_settings)
     related_terms_settings = RelatedTermIndexSettings(embedding_settings)
 
-    memory_provider = await MemoryStorageProvider.create(
+    memory_provider = MemoryStorageProvider(
         message_text_settings=message_text_settings,
         related_terms_settings=related_terms_settings,
     )

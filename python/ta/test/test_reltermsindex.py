@@ -46,7 +46,7 @@ async def related_terms_index(
     message_text_settings = MessageTextIndexSettings(embedding_settings)
     related_terms_settings = RelatedTermIndexSettings(embedding_settings)
     if request.param == "memory":
-        storage_provider = await MemoryStorageProvider.create(
+        storage_provider = MemoryStorageProvider(
             message_text_settings=message_text_settings,
             related_terms_settings=related_terms_settings,
         )
