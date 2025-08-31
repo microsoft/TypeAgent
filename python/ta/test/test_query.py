@@ -34,7 +34,7 @@ from typeagent.knowpro.interfaces import (
 from typeagent.knowpro.kplib import KnowledgeResponse
 from typeagent.knowpro.messageindex import MessageTextIndexSettings
 from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
-from typeagent.storage.memorystore import MemoryStorageProvider
+from typeagent.storage.memory import MemoryStorageProvider
 from typeagent.knowpro.convsettings import ConversationSettings
 from typeagent.knowpro.query import (
     TextRangeSelector,

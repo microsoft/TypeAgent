@@ -1,9 +1,13 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-"""Memory storage implementation."""
+"""Memory-based storage implementations."""
 
 from .collections import MemoryMessageCollection, MemorySemanticRefCollection
 from .provider import MemoryStorageProvider
 
-__all__ = ["MemoryMessageCollection", "MemorySemanticRefCollection", "MemoryStorageProvider"]
+__all__ = [
+    "MemoryMessageCollection",
+    "MemorySemanticRefCollection",
+    "MemoryStorageProvider",
+]

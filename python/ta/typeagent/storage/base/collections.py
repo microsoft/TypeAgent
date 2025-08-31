@@ -61,6 +61,7 @@ class BaseCollection[T, TOrdinal: int](ICollection[T, TOrdinal]):
 
 class BaseSemanticRefCollection(BaseCollection[SemanticRef, SemanticRefOrdinal]):
     """Base semantic reference collection."""
+
     pass
 
 
@@ -68,4 +69,5 @@ class BaseMessageCollection[TMessage: IMessage](
     BaseCollection[TMessage, MessageOrdinal]
 ):
     """Base message collection."""
+
     pass

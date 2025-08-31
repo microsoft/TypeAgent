@@ -34,7 +34,7 @@ from ..knowpro.messageindex import MessageTextIndex
 from ..knowpro.reltermsindex import TermToRelatedTermsMap
 from ..storage.utils import create_storage_provider
 from ..knowpro import serialization
-from ..knowpro.collections import (
+from ..storage.memory.collections import (
     MemoryMessageCollection,
     MemorySemanticRefCollection,
 )

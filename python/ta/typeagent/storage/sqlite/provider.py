@@ -42,9 +42,9 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         self,
         db_path: str = ":memory:",
         conversation_id: str = "default",
-        message_type: type[TMessage] = interfaces.Message,  # type: ignore
-        semantic_ref_type: type[interfaces.ISemanticRef] = interfaces.SemanticRef,  # type: ignore
-        conversation_index_settings: interfaces.ConversationIndexSettings | None = None,
+        message_type: type[TMessage] = None,  # type: ignore
+        semantic_ref_type: type[interfaces.SemanticRef] = None,  # type: ignore
+        conversation_index_settings=None,
         message_text_index_settings: MessageTextIndexSettings | None = None,
         related_term_index_settings: RelatedTermIndexSettings | None = None,
     ):
@@ -52,11 +52,9 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         self.conversation_id = conversation_id
         self.message_type = message_type
         self.semantic_ref_type = semantic_ref_type
-        
+
         # Settings with defaults
-        self.conversation_index_settings = (
-            conversation_index_settings or interfaces.ConversationIndexSettings()
-        )
+        self.conversation_index_settings = conversation_index_settings or {}
         self.message_text_index_settings = (
             message_text_index_settings or MessageTextIndexSettings()
         )
@@ -67,7 +65,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         # Initialize database connection
         self.db = sqlite3.connect(db_path)
         self.db.execute("PRAGMA foreign_keys = ON")
-        
+
         # Initialize schema
         init_db_schema(self.db)
 
@@ -75,7 +73,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         self._messages = SqliteMessageCollection[TMessage](
             self.db, self.conversation_id, self.message_type
         )
-        self._semantic_refs = SqliteSemanticRefCollection[interfaces.ISemanticRef](
+        self._semantic_refs = SqliteSemanticRefCollection(
             self.db, self.conversation_id, self.semantic_ref_type
         )
 
@@ -102,7 +100,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         return self._messages
 
     @property
-    def semantic_refs(self) -> SqliteSemanticRefCollection[interfaces.ISemanticRef]:
+    def semantic_refs(self) -> SqliteSemanticRefCollection:
         return self._semantic_refs
 
     @property
@@ -142,14 +140,14 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         # Clear in-memory indexes
         await self._message_text_index.clear()
 
-    def serialize(self) -> interfaces.ConversationIndexData:
+    def serialize(self) -> dict:
         """Serialize all storage provider data."""
-        return interfaces.ConversationIndexData(
-            termToSemanticRefIndexData=self._term_to_semantic_ref_index.serialize(),
-            relatedTermsIndexData=self._related_terms_index.serialize(),
-        )
+        return {
+            "termToSemanticRefIndexData": self._term_to_semantic_ref_index.serialize(),
+            "relatedTermsIndexData": self._related_terms_index.serialize(),
+        }
 
-    def deserialize(self, data: interfaces.ConversationIndexData) -> None:
+    def deserialize(self, data: dict) -> None:
         """Deserialize storage provider data."""
         # Deserialize term to semantic ref index
         if data.get("termToSemanticRefIndexData"):
@@ -183,13 +181,13 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         """Update conversation metadata."""
         with self.db:
             cursor = self.db.cursor()
-            
+
             # Check if conversation exists
             cursor.execute(
                 "SELECT 1 FROM Conversations WHERE conversation_id = ?",
                 (self.conversation_id,),
             )
-            
+
             if cursor.fetchone():
                 # Update existing
                 updates = []
@@ -200,7 +198,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
                 if updated_at is not None:
                     updates.append("updated_at = ?")
                     params.append(updated_at)
-                
+
                 if updates:
                     params.append(self.conversation_id)
                     cursor.execute(

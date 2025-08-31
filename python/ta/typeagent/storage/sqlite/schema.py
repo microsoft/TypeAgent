@@ -3,6 +3,7 @@
 
 """SQLite database schema definitions."""
 
+import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import typing
@@ -179,13 +180,46 @@ def _string_to_utc_datetime(s: str) -> datetime:
 
 
 def _create_default_metadata() -> ConversationMetadata:
-    """Create a ConversationMetadata with all defaults."""
-    now = datetime.now(timezone.utc)
+    """Create default conversation metadata."""
+    current_time = datetime.now(timezone.utc)
     return ConversationMetadata(
         name_tag="",
         schema_version=CONVERSATION_SCHEMA_VERSION,
-        created_at=now,
-        updated_at=now,
         tags=[],
         extra={},
+        created_at=current_time,
+        updated_at=current_time,
     )
+
+
+def init_db_schema(db: sqlite3.Connection) -> None:
+    """Initialize the database schema with all required tables."""
+    with db:
+        cursor = db.cursor()
+
+        # Create all tables
+        cursor.execute(CONVERSATION_METADATA_SCHEMA)
+        cursor.execute(MESSAGES_SCHEMA)
+        cursor.execute(SEMANTIC_REFS_SCHEMA)
+        cursor.execute(SEMANTIC_REF_INDEX_SCHEMA)
+        cursor.execute(MESSAGE_TEXT_INDEX_SCHEMA)
+        cursor.execute(PROPERTY_INDEX_SCHEMA)
+        cursor.execute(RELATED_TERMS_ALIASES_SCHEMA)
+        cursor.execute(RELATED_TERMS_FUZZY_SCHEMA)
+        cursor.execute(TIMESTAMP_INDEX_SCHEMA)
+
+
+def get_db_schema_version(db: sqlite3.Connection) -> str:
+    """Get the database schema version."""
+    try:
+        cursor = db.cursor()
+        cursor.execute("SELECT schema_version FROM ConversationMetadata LIMIT 1")
+        row = cursor.fetchone()
+        return row[0] if row else CONVERSATION_SCHEMA_VERSION
+    except sqlite3.OperationalError:
+        # Table doesn't exist, return current version
+        return CONVERSATION_SCHEMA_VERSION
+
+
+# Schema aliases for backward compatibility
+CONVERSATIONS_SCHEMA = CONVERSATION_METADATA_SCHEMA

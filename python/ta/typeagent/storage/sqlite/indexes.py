@@ -386,7 +386,9 @@ class SqliteMessageTextIndex(interfaces.IMessageTextIndex):
                 text_location = interfaces.TextLocation(
                     message_ordinal=message_ordinal, chunk_ordinal=chunk_ordinal
                 )
-                await self._text_to_location_index.add_text_location(chunk, text_location)
+                await self._text_to_location_index.add_text_location(
+                    chunk, text_location
+                )
             i += 1
 
     async def lookup_text(
@@ -406,6 +408,7 @@ class SqliteMessageTextIndex(interfaces.IMessageTextIndex):
 
 
 # Related terms index implementations
+
 
 class SqliteRelatedTermsAliases(interfaces.ITermToRelatedTerms):
     """SQLite-backed implementation of term to related terms aliases."""
@@ -494,9 +497,7 @@ class SqliteRelatedTermsAliases(interfaces.ITermToRelatedTerms):
         items = []
         for term, aliases in term_to_aliases.items():
             items.append(
-                interfaces.TermToRelatedTermsDataItem(
-                    term=term, relatedTerms=aliases
-                )
+                interfaces.TermToRelatedTermsDataItem(term=term, relatedTerms=aliases)
             )
 
         return interfaces.TermToRelatedTermsData(items=items)
@@ -526,7 +527,9 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
 
     async def lookup_term(self, term: str) -> list[interfaces.Term] | None:
         cursor = self.db.cursor()
-        cursor.execute("SELECT related_term, score FROM RelatedTermsFuzzy WHERE term = ?", (term,))
+        cursor.execute(
+            "SELECT related_term, score FROM RelatedTermsFuzzy WHERE term = ?", (term,)
+        )
         results = [
             interfaces.Term(related_term, score)
             for related_term, score in cursor.fetchall()
@@ -568,7 +571,9 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         return [row[0] for row in cursor.fetchall()]
 
     async def add_terms(
-        self, terms: typing.AsyncIterable[interfaces.Term], related_terms: list[interfaces.Term]
+        self,
+        terms: typing.AsyncIterable[interfaces.Term],
+        related_terms: list[interfaces.Term],
     ) -> None:
         """Add multiple terms."""
         async for term in terms:
@@ -578,22 +583,22 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         self, term: str, max_matches: int | None = None, min_score: float | None = None
     ) -> list[interfaces.Term] | None:
         cursor = self.db.cursor()
-        
+
         query = "SELECT related_term, score FROM RelatedTermsFuzzy WHERE term = ?"
         params: list[typing.Any] = [term]
-        
+
         if min_score is not None:
             query += " AND score >= ?"
             params.append(min_score)
-            
+
         query += " ORDER BY score DESC"
-        
+
         if max_matches is not None:
             query += " LIMIT ?"
             params.append(max_matches)
-            
+
         cursor.execute(query, params)
-        
+
         results = [
             interfaces.Term(related_term, score)
             for related_term, score in cursor.fetchall()
@@ -601,7 +606,10 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         return results if results else None
 
     async def lookup_terms(
-        self, terms: list[str], max_matches: int | None = None, min_score: float | None = None
+        self,
+        terms: list[str],
+        max_matches: int | None = None,
+        min_score: float | None = None,
     ) -> list[interfaces.Term] | None:
         """Look up multiple terms at once."""
         all_results = []
@@ -609,16 +617,16 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
             term_results = await self.lookup_term(term)
             if term_results:
                 all_results.extend(term_results)
-        
+
         # Sort by score and apply limits
         all_results.sort(key=lambda x: x.score or 0.0, reverse=True)
-        
+
         if min_score is not None:
             all_results = [r for r in all_results if (r.score or 0.0) >= min_score]
-            
+
         if max_matches is not None:
             all_results = all_results[:max_matches]
-            
+
         return all_results if all_results else None
 
     async def deserialize(self, data: interfaces.TextEmbeddingIndexData) -> None:
@@ -655,10 +663,12 @@ class SqliteRelatedTermsIndex(interfaces.ITermToRelatedTermsIndex):
         alias_data = data.get("aliasData")
         if alias_data is not None:
             import asyncio
+
             asyncio.create_task(self._aliases.deserialize(alias_data))
 
         # Deserialize fuzzy index data
         text_embedding_data = data.get("textEmbeddingData")
         if text_embedding_data is not None:
             import asyncio
+
             asyncio.create_task(self._fuzzy_index.deserialize(text_embedding_data))

@@ -24,9 +24,7 @@ from typeagent.knowpro.propindex import (
     split_property_term_text,
     is_known_property,
 )
-from typeagent.knowpro.collections import (
-    MemorySemanticRefCollection,
-)
+from typeagent.storage.memory import MemorySemanticRefCollection
 
 from fixtures import needs_auth, FakeConversation
 

@@ -12,7 +12,7 @@ import pytest_asyncio
 from typeagent.aitools import utils
 from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
 from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
-from typeagent.knowpro.collections import (
+from typeagent.storage.memory.collections import (
     MemoryMessageCollection,
     MemorySemanticRefCollection,
 )
@@ -34,7 +34,7 @@ from typeagent.knowpro.kplib import KnowledgeResponse
 from typeagent.knowpro.messageindex import MessageTextIndexSettings
 from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
 from typeagent.knowpro.secindex import ConversationSecondaryIndexes
-from typeagent.storage.memorystore import MemoryStorageProvider
+from typeagent.storage.memory import MemoryStorageProvider
 from typeagent.storage.sqlitestore import SqliteStorageProvider
 
 
@@ -66,13 +66,18 @@ def temp_db_path() -> Iterator[str]:
 
 
 @pytest_asyncio.fixture
-async def memory_storage(embedding_model: AsyncEmbeddingModel) -> MemoryStorageProvider:
-    """Create a MemoryStorageProvider for testing."""
-    embedding_settings = TextEmbeddingIndexSettings(embedding_model)
-    message_text_settings = MessageTextIndexSettings(embedding_settings)
-    related_terms_settings = RelatedTermIndexSettings(embedding_settings)
-
-    return MemoryStorageProvider(
+async def memory_storage(
+    embedding_model: AsyncEmbeddingModel,
+) -> MemoryStorageProvider:
+    """Create a memory storage provider with settings."""
+    embedding_settings = TextEmbeddingIndexSettings(embedding_model=embedding_model)
+    message_text_settings = MessageTextIndexSettings(
+        embedding_index_settings=embedding_settings
+    )
+    related_terms_settings = RelatedTermIndexSettings(
+        embedding_index_settings=embedding_settings
+    )
+    return await MemoryStorageProvider.create(
         message_text_settings=message_text_settings,
         related_terms_settings=related_terms_settings,
     )

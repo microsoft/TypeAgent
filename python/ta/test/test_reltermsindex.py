@@ -20,7 +20,7 @@ from typeagent.knowpro.reltermsindex import (
     dedupe_related_terms,
     resolve_related_terms,
 )
-from typeagent.storage.memorystore import MemoryStorageProvider
+from typeagent.storage.memory import MemoryStorageProvider
 from typeagent.storage.sqlitestore import SqliteStorageProvider
 
 # Test fixtures
@@ -46,7 +46,7 @@ async def related_terms_index(
     message_text_settings = MessageTextIndexSettings(embedding_settings)
     related_terms_settings = RelatedTermIndexSettings(embedding_settings)
     if request.param == "memory":
-        provider = MemoryStorageProvider(
+        storage_provider = await MemoryStorageProvider.create(
             message_text_settings=message_text_settings,
             related_terms_settings=related_terms_settings,
         )

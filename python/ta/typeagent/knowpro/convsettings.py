@@ -60,9 +60,9 @@ class ConversationSettings:
     async def get_storage_provider(self) -> IStorageProvider:
         """Get or create the storage provider asynchronously."""
         if not self._storage_provider_created:
-            from ..storage.memorystore import MemoryStorageProvider
+            from ..storage.memory import MemoryStorageProvider
 
-            self._storage_provider = MemoryStorageProvider(
+            self._storage_provider = await MemoryStorageProvider.create(
                 message_text_settings=self.message_text_index_settings,
                 related_terms_settings=self.related_term_index_settings,
             )

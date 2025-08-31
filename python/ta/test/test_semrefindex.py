@@ -9,7 +9,7 @@ from typing import cast, Dict, AsyncGenerator
 # TypeAgent imports
 from typeagent.aitools.embeddings import AsyncEmbeddingModel
 from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
-from typeagent.knowpro.collections import MemorySemanticRefCollection
+from typeagent.storage.memory import MemorySemanticRefCollection
 from typeagent.knowpro.interfaces import (
     Topic,
     IMessage,
@@ -26,7 +26,7 @@ from typeagent.knowpro.semrefindex import (
     add_action_to_index,
     add_knowledge_to_index,
 )
-from typeagent.storage.memorystore import MemoryStorageProvider
+from typeagent.storage.memory import MemoryStorageProvider
 from typeagent.storage.sqlitestore import SqliteStorageProvider
 
 # Test fixtures
@@ -55,7 +55,7 @@ async def semantic_ref_index(
     related_terms_settings = RelatedTermIndexSettings(embedding_settings)
 
     if request.param == "memory":
-        provider = MemoryStorageProvider(
+        provider = await MemoryStorageProvider.create(
             message_text_settings=message_text_settings,
             related_terms_settings=related_terms_settings,
         )
@@ -95,7 +95,7 @@ async def semantic_ref_setup(
     related_terms_settings = RelatedTermIndexSettings(embedding_settings)
 
     if request.param == "memory":
-        provider = MemoryStorageProvider(
+        provider = await MemoryStorageProvider.create(
             message_text_settings=message_text_settings,
             related_terms_settings=related_terms_settings,
         )

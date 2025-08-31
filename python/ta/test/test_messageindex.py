@@ -18,9 +18,9 @@ from typeagent.knowpro.interfaces import (
     TextLocation,
     TextToTextLocationIndexData,
 )
-from typeagent.storage.memorystore import MemoryStorageProvider
-from typeagent.knowpro.collections import (
-    MemoryMessageCollection as MemoryMessageCollection,
+from typeagent.storage.memory import (
+    MemoryStorageProvider,
+    MemoryMessageCollection,
 )
 from typeagent.knowpro.textlocindex import TextToTextLocationIndex
 
@@ -210,8 +210,9 @@ async def test_build_message_index(needs_auth: None):
     message_text_settings = MessageTextIndexSettings(embedding_settings)
     related_terms_settings = RelatedTermIndexSettings(embedding_settings)
 
-    storage_provider = MemoryStorageProvider(
-        message_text_settings, related_terms_settings
+    storage_provider = await MemoryStorageProvider.create(
+        message_text_settings=message_text_settings,
+        related_terms_settings=related_terms_settings,
     )
     conversation = FakeConversation(
         messages=messages, storage_provider=storage_provider, has_secondary_indexes=True

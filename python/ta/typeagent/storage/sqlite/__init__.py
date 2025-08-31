@@ -22,7 +22,7 @@ __all__ = [
     "SqliteMessageCollection",
     "SqliteSemanticRefCollection",
     "SqliteMessageTextIndex",
-    "SqlitePropertyIndex", 
+    "SqlitePropertyIndex",
     "SqliteRelatedTermsIndex",
     "SqliteTermToSemanticRefIndex",
     "SqliteTimestampToTextRangeIndex",

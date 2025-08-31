@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from typechat import Failure
 
 from . import convknowledge, kplib, secindex
-from .collections import MemorySemanticRefCollection
 from .convknowledge import KnowledgeExtractor
 from .convsettings import ConversationSettings
 from .interfaces import (
