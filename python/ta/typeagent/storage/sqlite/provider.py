@@ -53,14 +53,23 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         self.message_type = message_type
         self.semantic_ref_type = semantic_ref_type
 
-        # Settings with defaults
+        # Settings with defaults (require embedding settings)
         self.conversation_index_settings = conversation_index_settings or {}
-        self.message_text_index_settings = (
-            message_text_index_settings or MessageTextIndexSettings()
-        )
-        self.related_term_index_settings = (
-            related_term_index_settings or RelatedTermIndexSettings()
-        )
+        if message_text_index_settings is None:
+            # Create default embedding settings if not provided
+            from ...aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
+            from ...aitools.vectorbase import TextEmbeddingIndexSettings
+
+            model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
+            embedding_settings = TextEmbeddingIndexSettings(model)
+            message_text_index_settings = MessageTextIndexSettings(embedding_settings)
+        self.message_text_index_settings = message_text_index_settings
+
+        if related_term_index_settings is None:
+            # Use the same embedding settings
+            embedding_settings = message_text_index_settings.embedding_index_settings
+            related_term_index_settings = RelatedTermIndexSettings(embedding_settings)
+        self.related_term_index_settings = related_term_index_settings
 
         # Initialize database connection
         self.db = sqlite3.connect(db_path)
@@ -70,12 +79,8 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         init_db_schema(self.db)
 
         # Initialize collections
-        self._messages = SqliteMessageCollection[TMessage](
-            self.db, self.conversation_id, self.message_type
-        )
-        self._semantic_refs = SqliteSemanticRefCollection(
-            self.db, self.conversation_id, self.semantic_ref_type
-        )
+        self._message_collection = SqliteMessageCollection(self.db, self.message_type)
+        self._semantic_ref_collection = SqliteSemanticRefCollection(self.db)
 
         # Initialize indexes
         self._term_to_semantic_ref_index = SqliteTermToSemanticRefIndex(self.db)
@@ -86,22 +91,24 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         )
         self._related_terms_index = SqliteRelatedTermsIndex(self.db)
 
-    def close(self) -> None:
+    async def close(self) -> None:
         """Close the database connection."""
         if hasattr(self, "db"):
             self.db.close()
 
     def __del__(self) -> None:
         """Ensure database is closed when object is deleted."""
-        self.close()
+        # Can't use async in __del__, so close directly
+        if hasattr(self, "db"):
+            self.db.close()
 
     @property
     def messages(self) -> SqliteMessageCollection[TMessage]:
-        return self._messages
+        return self._message_collection
 
     @property
     def semantic_refs(self) -> SqliteSemanticRefCollection:
-        return self._semantic_refs
+        return self._semantic_ref_collection
 
     @property
     def term_to_semantic_ref_index(self) -> SqliteTermToSemanticRefIndex:
@@ -147,7 +154,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
             "relatedTermsIndexData": self._related_terms_index.serialize(),
         }
 
-    def deserialize(self, data: dict) -> None:
+    async def deserialize(self, data: dict) -> None:
         """Deserialize storage provider data."""
         # Deserialize term to semantic ref index
         if data.get("termToSemanticRefIndexData"):
@@ -157,7 +164,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
 
         # Deserialize related terms index
         if data.get("relatedTermsIndexData"):
-            self._related_terms_index.deserialize(data["relatedTermsIndexData"])
+            await self._related_terms_index.deserialize(data["relatedTermsIndexData"])
 
     def get_conversation_metadata(self) -> ConversationMetadata | None:
         """Get conversation metadata."""
@@ -169,9 +176,12 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         row = cursor.fetchone()
         if row:
             return ConversationMetadata(
-                conversation_id=self.conversation_id,
+                name_tag=f"conversation_{self.conversation_id}",
+                schema_version="1.0",
                 created_at=row[0],
                 updated_at=row[1],
+                tags=[],
+                extra={},
             )
         return None
 
@@ -214,4 +224,8 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
 
     def get_db_version(self) -> int:
         """Get the database schema version."""
-        return get_db_schema_version(self.db)
+        version_str = get_db_schema_version(self.db)
+        try:
+            return int(version_str.split(".")[0])  # Get major version as int
+        except (ValueError, AttributeError):
+            return 1  # Default version

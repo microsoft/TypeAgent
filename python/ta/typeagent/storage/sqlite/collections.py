@@ -34,10 +34,10 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
         cursor.execute("SELECT COUNT(*) FROM Messages")
         return cursor.fetchone()[0]
 
-    def __aiter__(self) -> typing.AsyncIterator[TMessage]:
+    def __aiter__(self) -> typing.AsyncGenerator[TMessage, None]:
         return self._async_iterator()
 
-    async def _async_iterator(self) -> typing.AsyncIterator[TMessage]:
+    async def _async_iterator(self) -> typing.AsyncGenerator[TMessage, None]:
         cursor = self.db.cursor()
         cursor.execute(
             """
@@ -243,7 +243,7 @@ class SqliteSemanticRefCollection(BaseSemanticRefCollection):
         cursor.execute("SELECT COUNT(*) FROM SemanticRefs")
         return cursor.fetchone()[0]
 
-    async def __aiter__(self) -> typing.AsyncIterator[interfaces.SemanticRef]:
+    async def __aiter__(self) -> typing.AsyncGenerator[interfaces.SemanticRef, None]:
         cursor = self.db.cursor()
         cursor.execute(
             """

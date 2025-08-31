@@ -341,6 +341,61 @@ class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
 
         return results
 
+    async def add_timestamps(
+        self, message_timestamps: list[tuple[interfaces.MessageOrdinal, str]]
+    ) -> None:
+        """Add multiple timestamps."""
+        with self.db:
+            cursor = self.db.cursor()
+            for message_ordinal, timestamp in message_timestamps:
+                cursor.execute(
+                    "UPDATE Messages SET start_timestamp = ? WHERE msg_id = ?",
+                    (timestamp, message_ordinal),
+                )
+
+    async def lookup_range(
+        self, date_range: interfaces.DateRange
+    ) -> list[interfaces.TimestampedTextRange]:
+        """Lookup messages in a date range."""
+        cursor = self.db.cursor()
+
+        if date_range.end is None:
+            # Point query
+            cursor.execute(
+                """
+                SELECT msg_id, start_timestamp, content
+                FROM Messages 
+                WHERE start_timestamp = ? 
+                ORDER BY msg_id
+                """,
+                (date_range.start,),
+            )
+        else:
+            # Range query
+            cursor.execute(
+                """
+                SELECT msg_id, start_timestamp, content
+                FROM Messages 
+                WHERE start_timestamp >= ? AND start_timestamp < ?
+                ORDER BY msg_id
+                """,
+                (date_range.start, date_range.end),
+            )
+
+        results = []
+        for msg_id, timestamp, content in cursor.fetchall():
+            text_location = interfaces.TextLocation(
+                message_ordinal=msg_id, chunk_ordinal=0
+            )
+            text_range = interfaces.TextRange(
+                start=text_location, end=None  # Point range
+            )
+            results.append(
+                interfaces.TimestampedTextRange(timestamp=timestamp, range=text_range)
+            )
+
+        return results
+
 
 class SqliteMessageTextIndex(interfaces.IMessageTextIndex):
     """SQLite-backed message text index with embedding support."""
@@ -363,13 +418,11 @@ class SqliteMessageTextIndex(interfaces.IMessageTextIndex):
 
     async def add_messages(
         self,
-        messages: typing.AsyncIterable[interfaces.IMessage],
-        base_message_ordinal: int,
+        messages: typing.Iterable[interfaces.IMessage],
     ) -> None:
         """Add messages to the text index."""
-        i = 0
-        async for message in messages:
-            message_ordinal = base_message_ordinal + i
+        for i, message in enumerate(messages):
+            message_ordinal = i
             for chunk_ordinal, chunk in enumerate(message.text_chunks):
                 # Add to SQLite index
                 with self.db:
@@ -399,6 +452,80 @@ class SqliteMessageTextIndex(interfaces.IMessageTextIndex):
             text, max_matches, min_score
         )
 
+    async def lookup_messages(
+        self,
+        message_text: str,
+        max_matches: int | None = None,
+        threshold_score: float | None = None,
+    ) -> list[interfaces.ScoredMessageOrdinal]:
+        """Look up messages by text content."""
+        # Use the embedding index to find text locations
+        scored_locations = await self._text_to_location_index.lookup_text(
+            message_text, max_matches, threshold_score
+        )
+
+        # Convert to scored message ordinals (group by message)
+        message_scores: dict[int, float] = {}
+        for scored_loc in scored_locations:
+            msg_ord = scored_loc.text_location.message_ordinal
+            if msg_ord not in message_scores:
+                message_scores[msg_ord] = scored_loc.score
+            else:
+                # Take the max score across chunks
+                message_scores[msg_ord] = max(message_scores[msg_ord], scored_loc.score)
+
+        # Convert to list and sort by score
+        results = [
+            interfaces.ScoredMessageOrdinal(message_ordinal=ordinal, score=score)
+            for ordinal, score in message_scores.items()
+        ]
+        results.sort(key=lambda x: x.score, reverse=True)
+
+        if max_matches is not None:
+            results = results[:max_matches]
+
+        return results
+
+    async def lookup_messages_in_subset(
+        self,
+        message_text: str,
+        ordinals_to_search: list[interfaces.MessageOrdinal],
+        max_matches: int | None = None,
+        threshold_score: float | None = None,
+    ) -> list[interfaces.ScoredMessageOrdinal]:
+        """Look up messages in a subset of ordinals."""
+        # Get all matches first
+        all_matches = await self.lookup_messages(message_text, None, threshold_score)
+
+        # Filter to only include the specified ordinals
+        ordinals_set = set(ordinals_to_search)
+        filtered_matches = [
+            match for match in all_matches if match.message_ordinal in ordinals_set
+        ]
+
+        # Apply max_matches limit
+        if max_matches is not None:
+            filtered_matches = filtered_matches[:max_matches]
+
+        return filtered_matches
+
+    async def is_empty(self) -> bool:
+        """Check if the index is empty."""
+        size = await self.size()
+        return size == 0
+
+    def serialize(self) -> interfaces.MessageTextIndexData:
+        """Serialize the message text index."""
+        # Return empty data for now - in a full implementation this would
+        # serialize the embedding vectors and other index data
+        return {}
+
+    def deserialize(self, data: interfaces.MessageTextIndexData) -> None:
+        """Deserialize message text index data."""
+        # For now, this is a placeholder
+        # In a full implementation, this would restore the index state
+        pass
+
     async def clear(self) -> None:
         """Clear the message text index."""
         with self.db:
@@ -416,30 +543,36 @@ class SqliteRelatedTermsAliases(interfaces.ITermToRelatedTerms):
     def __init__(self, db: sqlite3.Connection):
         self.db = db
 
-    async def lookup_term(self, term: str) -> list[interfaces.Term] | None:
+    async def lookup_term(self, text: str) -> list[interfaces.Term] | None:
         cursor = self.db.cursor()
-        cursor.execute("SELECT alias FROM RelatedTermsAliases WHERE term = ?", (term,))
+        cursor.execute("SELECT alias FROM RelatedTermsAliases WHERE term = ?", (text,))
         results = [interfaces.Term(row[0]) for row in cursor.fetchall()]
         return results if results else None
 
     async def add_related_term(
-        self, term: str, related_terms: list[interfaces.Term]
+        self, text: str, related_terms: interfaces.Term | list[interfaces.Term]
     ) -> None:
+        # Convert single Term to list
+        if isinstance(related_terms, str):
+            related_terms = [interfaces.Term(related_terms)]
+        elif isinstance(related_terms, interfaces.Term):
+            related_terms = [related_terms]
+
         with self.db:
             cursor = self.db.cursor()
             # Clear existing aliases for this term
-            cursor.execute("DELETE FROM RelatedTermsAliases WHERE term = ?", (term,))
+            cursor.execute("DELETE FROM RelatedTermsAliases WHERE term = ?", (text,))
             # Add new aliases
             for related_term in related_terms:
                 cursor.execute(
                     "INSERT INTO RelatedTermsAliases (term, alias) VALUES (?, ?)",
-                    (term, related_term.text),
+                    (text, related_term.text),
                 )
 
-    async def remove_term(self, term: str) -> None:
+    async def remove_term(self, text: str) -> None:
         with self.db:
             cursor = self.db.cursor()
-            cursor.execute("DELETE FROM RelatedTermsAliases WHERE term = ?", (term,))
+            cursor.execute("DELETE FROM RelatedTermsAliases WHERE term = ?", (text,))
 
     async def clear(self) -> None:
         with self.db:
@@ -479,7 +612,7 @@ class SqliteRelatedTermsAliases(interfaces.ITermToRelatedTerms):
         cursor.execute("SELECT COUNT(*) FROM RelatedTermsAliases")
         return cursor.fetchone()[0] == 0
 
-    def serialize(self) -> interfaces.TermToRelatedTermsData:
+    async def serialize(self) -> interfaces.TermToRelatedTermsData:
         """Serialize the aliases data."""
         cursor = self.db.cursor()
         cursor.execute(
@@ -496,23 +629,29 @@ class SqliteRelatedTermsAliases(interfaces.ITermToRelatedTerms):
         # Convert to the expected format
         items = []
         for term, aliases in term_to_aliases.items():
+            term_data_list = [interfaces.TermData(text=alias) for alias in aliases]
             items.append(
-                interfaces.TermToRelatedTermsDataItem(term=term, relatedTerms=aliases)
+                interfaces.TermsToRelatedTermsDataItem(
+                    termText=term, relatedTerms=term_data_list
+                )
             )
 
-        return interfaces.TermToRelatedTermsData(items=items)
+        return interfaces.TermToRelatedTermsData(relatedTerms=items)
 
-    async def deserialize(self, data: interfaces.TermToRelatedTermsData) -> None:
+    async def deserialize(self, data: interfaces.TermToRelatedTermsData | None) -> None:
         """Deserialize alias data."""
-        related_terms = data.get("items", [])
+        if data is None:
+            return
+        related_terms = data.get("relatedTerms", [])
         if related_terms:
             with self.db:
                 cursor = self.db.cursor()
                 cursor.execute("DELETE FROM RelatedTermsAliases")
                 for item in related_terms:
-                    if item and item.get("term") and item.get("relatedTerms"):
-                        term = item["term"]
-                        for alias in item["relatedTerms"]:
+                    if item and item.get("termText") and item.get("relatedTerms"):
+                        term = item["termText"]
+                        for term_data in item["relatedTerms"]:
+                            alias = term_data["text"]
                             cursor.execute(
                                 "INSERT INTO RelatedTermsAliases (term, alias) VALUES (?, ?)",
                                 (term, alias),
@@ -525,16 +664,32 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
     def __init__(self, db: sqlite3.Connection):
         self.db = db
 
-    async def lookup_term(self, term: str) -> list[interfaces.Term] | None:
+    async def lookup_term(
+        self,
+        text: str,
+        max_hits: int | None = None,
+        min_score: float | None = None,
+    ) -> list[interfaces.Term]:
         cursor = self.db.cursor()
-        cursor.execute(
-            "SELECT related_term, score FROM RelatedTermsFuzzy WHERE term = ?", (term,)
-        )
+        query = "SELECT related_term, score FROM RelatedTermsFuzzy WHERE term = ?"
+        params: list[str | int | float] = [text]
+
+        if min_score is not None:
+            query += " AND score >= ?"
+            params.append(min_score)
+
+        query += " ORDER BY score DESC"
+
+        if max_hits is not None:
+            query += " LIMIT ?"
+            params.append(max_hits)
+
+        cursor.execute(query, params)
         results = [
             interfaces.Term(related_term, score)
             for related_term, score in cursor.fetchall()
         ]
-        return results if results else None
+        return results
 
     async def add_related_term(
         self, term: str, related_terms: list[interfaces.Term]
@@ -570,14 +725,17 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         cursor.execute("SELECT DISTINCT term FROM RelatedTermsFuzzy ORDER BY term")
         return [row[0] for row in cursor.fetchall()]
 
-    async def add_terms(
-        self,
-        terms: typing.AsyncIterable[interfaces.Term],
-        related_terms: list[interfaces.Term],
-    ) -> None:
-        """Add multiple terms."""
-        async for term in terms:
-            await self.add_related_term(term.text, related_terms)
+    async def add_terms(self, texts: list[str]) -> None:
+        # For this implementation, we just add the terms to the database
+        # In a real implementation, you might want to extract related terms
+        with self.db:
+            cursor = self.db.cursor()
+            for text in texts:
+                # For now, just insert the term with itself as a related term
+                cursor.execute(
+                    "INSERT OR IGNORE INTO RelatedTermsFuzzy (term, related_term, score) VALUES (?, ?, 1.0)",
+                    (text, text),
+                )
 
     async def get_related_terms(
         self, term: str, max_matches: int | None = None, min_score: float | None = None
@@ -607,27 +765,16 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
 
     async def lookup_terms(
         self,
-        terms: list[str],
-        max_matches: int | None = None,
+        texts: list[str],
+        max_hits: int | None = None,
         min_score: float | None = None,
-    ) -> list[interfaces.Term] | None:
+    ) -> list[list[interfaces.Term]]:
         """Look up multiple terms at once."""
-        all_results = []
-        for term in terms:
-            term_results = await self.lookup_term(term)
-            if term_results:
-                all_results.extend(term_results)
-
-        # Sort by score and apply limits
-        all_results.sort(key=lambda x: x.score or 0.0, reverse=True)
-
-        if min_score is not None:
-            all_results = [r for r in all_results if (r.score or 0.0) >= min_score]
-
-        if max_matches is not None:
-            all_results = all_results[:max_matches]
-
-        return all_results if all_results else None
+        results = []
+        for text in texts:
+            term_results = await self.lookup_term(text, max_hits, min_score)
+            results.append(term_results)
+        return results
 
     async def deserialize(self, data: interfaces.TextEmbeddingIndexData) -> None:
         """Deserialize fuzzy index data."""
@@ -652,12 +799,12 @@ class SqliteRelatedTermsIndex(interfaces.ITermToRelatedTermsIndex):
     def fuzzy_index(self) -> interfaces.ITermToRelatedTermsFuzzy | None:
         return self._fuzzy_index
 
-    def serialize(self) -> interfaces.TermsToRelatedTermsIndexData:
+    async def serialize(self) -> interfaces.TermsToRelatedTermsIndexData:
         """Serialize is not needed for SQLite-backed implementation."""
         # Return empty data since persistence is handled by SQLite
         return interfaces.TermsToRelatedTermsIndexData()
 
-    def deserialize(self, data: interfaces.TermsToRelatedTermsIndexData) -> None:
+    async def deserialize(self, data: interfaces.TermsToRelatedTermsIndexData) -> None:
         """Deserialize related terms index data."""
         # Deserialize alias data
         alias_data = data.get("aliasData")
