@@ -3,7 +3,6 @@
 
 """Memory storage provider implementation."""
 
-from ..base.provider import BaseStorageProvider
 from .collections import MemoryMessageCollection, MemorySemanticRefCollection
 from ...knowpro.semrefindex import TermToSemanticRefIndex
 from ...knowpro.convthreads import ConversationThreads
@@ -14,6 +13,7 @@ from ...knowpro.interfaces import (
     IMessage,
     IMessageTextIndex,
     IPropertyToSemanticRefIndex,
+    IStorageProvider,
     ITermToRelatedTermsIndex,
     ITermToSemanticRefIndex,
     ITimestampToTextRangeIndex,
@@ -24,7 +24,7 @@ from ...knowpro.reltermsindex import RelatedTermsIndex
 from ...knowpro.timestampindex import TimestampToTextRangeIndex
 
 
-class MemoryStorageProvider[TMessage: IMessage](BaseStorageProvider[TMessage]):
+class MemoryStorageProvider[TMessage: IMessage](IStorageProvider[TMessage]):
     """A storage provider that operates in memory."""
 
     _message_collection: MemoryMessageCollection[TMessage]

@@ -9,7 +9,6 @@ import typing
 from ...knowpro import interfaces
 from ...knowpro.messageindex import MessageTextIndexSettings
 from ...knowpro.reltermsindex import RelatedTermIndexSettings
-from ..base import BaseStorageProvider
 from .collections import SqliteMessageCollection, SqliteSemanticRefCollection
 from .indexes import (
     SqliteMessageTextIndex,
@@ -34,7 +33,7 @@ from .schema import (
 
 
 class SqliteStorageProvider[TMessage: interfaces.IMessage](
-    BaseStorageProvider[TMessage]
+    interfaces.IStorageProvider[TMessage]
 ):
     """SQLite-backed storage provider implementation."""
 

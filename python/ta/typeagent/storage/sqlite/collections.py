@@ -7,21 +7,19 @@ import json
 import sqlite3
 import typing
 
-from ..base.collections import BaseSemanticRefCollection, BaseMessageCollection
 from .schema import ShreddedMessage, ShreddedSemanticRef
 from ...knowpro import interfaces
 from ...knowpro import serialization
 
 
 class SqliteMessageCollection[TMessage: interfaces.IMessage](
-    BaseMessageCollection[TMessage]
+    interfaces.IMessageCollection[TMessage]
 ):
     """SQLite-backed message collection."""
 
     def __init__(
         self, db: sqlite3.Connection, message_type: type[TMessage] | None = None
     ):
-        super().__init__()  # Don't pass items to base class
         self.db = db
         self.message_type = message_type
 
@@ -193,11 +191,10 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
                 )
 
 
-class SqliteSemanticRefCollection(BaseSemanticRefCollection):
+class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
     """SQLite-backed semantic reference collection."""
 
     def __init__(self, db: sqlite3.Connection):
-        super().__init__()  # Don't pass items to base class
         self.db = db
 
     def _deserialize_semantic_ref_from_row(
