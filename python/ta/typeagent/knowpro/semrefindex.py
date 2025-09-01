@@ -30,6 +30,7 @@ from .interfaces import (
     TextRange,
     Topic,
 )
+from .utils import text_range_from_message_chunk
 from .knowledge import extract_knowledge_from_text_batch
 
 
@@ -38,16 +39,6 @@ class SemanticRefIndexSettings:
     batch_size: int
     auto_extract_knowledge: bool
     knowledge_extractor: KnowledgeExtractor | None = None
-
-
-def text_range_from_message_chunk(
-    message_ordinal: MessageOrdinal,
-    chunk_ordinal: int = 0,
-) -> TextRange:
-    return TextRange(
-        start=TextLocation(message_ordinal, chunk_ordinal),
-        end=None,
-    )
 
 
 def text_range_from_location(

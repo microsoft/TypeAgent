@@ -4,11 +4,13 @@
 from dataclasses import dataclass
 import json
 import os
-from typing import TypedDict, cast
+from typing import TypedDict, cast, Any
 
+import numpy as np
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 from pydantic import Field, AliasChoices
 
+from ..aitools.embeddings import NormalizedEmbeddings
 from ..knowpro import semrefindex, kplib, secindex
 from ..knowpro.field_helpers import CamelCaseField
 from ..knowpro.convthreads import ConversationThreads
@@ -320,13 +322,44 @@ class Podcast(IConversation[PodcastMessage, semrefindex.TermToSemanticRefIndex])
         await self._build_transient_secondary_indexes(True)
 
     @staticmethod
+    def _read_conversation_data_from_file(
+        filename_prefix: str, embedding_size: int
+    ) -> ConversationDataWithIndexes[Any]:
+        """Read podcast conversation data from files. No exceptions are caught; they just bubble out."""
+        with open(filename_prefix + "_data.json", "r", encoding="utf-8") as f:
+            json_data: serialization.ConversationJsonData[PodcastMessageData] = (
+                json.load(f)
+            )
+        embeddings_list: list[NormalizedEmbeddings] | None = None
+        if embedding_size:
+            with open(filename_prefix + "_embeddings.bin", "rb") as f:
+                embeddings = np.fromfile(f, dtype=np.float32).reshape(
+                    (-1, embedding_size)
+                )
+                embeddings_list = [embeddings]
+        else:
+            print(
+                "Warning: not reading embeddings file because size is {embedding_size}"
+            )
+            embeddings_list = None
+        file_data = serialization.ConversationFileData(
+            jsonData=json_data,
+            binaryData=serialization.ConversationBinaryData(
+                embeddingsList=embeddings_list
+            ),
+        )
+        if json_data.get("fileHeader") is None:
+            json_data["fileHeader"] = serialization.create_file_header()
+        return serialization.from_conversation_file_data(file_data)
+
+    @staticmethod
     async def read_from_file(
         filename_prefix: str,
         settings: ConversationSettings,
         dbname: str | None = None,
     ) -> "Podcast":
         embedding_size = settings.embedding_model.embedding_size
-        data = serialization.read_conversation_data_from_file(
+        data = Podcast._read_conversation_data_from_file(
             filename_prefix, embedding_size
         )
 

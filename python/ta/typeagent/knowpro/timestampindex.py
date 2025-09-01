@@ -22,7 +22,6 @@ import bisect
 from collections.abc import AsyncIterable, Callable
 from typing import Any
 
-from . import semrefindex
 from .interfaces import (
     DateRange,
     Datetime,
@@ -32,6 +31,7 @@ from .interfaces import (
     MessageOrdinal,
     TimestampedTextRange,
 )
+from .utils import text_range_from_message_chunk
 
 
 class TimestampToTextRangeIndex(ITimestampToTextRangeIndex):
@@ -103,7 +103,7 @@ class TimestampToTextRangeIndex(ITimestampToTextRangeIndex):
             return False
         timestamp_datetime = Datetime.fromisoformat(timestamp)
         entry: TimestampedTextRange = TimestampedTextRange(
-            range=semrefindex.text_range_from_message_chunk(message_ordinal),
+            range=text_range_from_message_chunk(message_ordinal),
             # This string is formatted to be lexically sortable.
             timestamp=timestamp_datetime.isoformat(),
         )
