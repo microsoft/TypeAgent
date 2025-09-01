@@ -30,7 +30,7 @@ export class searchResultsPhraseGenerator {
     // 2. Open Page Rangk Manual download - https://www.domcop.com/openpagerank/what-is-openpagerank
     private downloadUrl: string =
         "https://radar.cloudflare.com/charts/LargerTopDomainsTable/attachment?id=1257&top=";
-    private limit: number = 10000;
+    private limit: number = 20000;
     private dataFile: string = `examples/websiteAliases/data/top1Milliondomains.csv`;
     private outputCacheFile: string = "examples/websiteAliases/cache/phrases.json";
     private outputPath: string = path.join(path.dirname(path.dirname(fileURLToPath(import.meta.url))), "cache");
@@ -52,7 +52,7 @@ export class searchResultsPhraseGenerator {
                     `Invalid topN value. Falling back to default: ${this.limit}`,
                 ),
             );
-            this.limit = 10000;
+            this.limit = 20000;
         }
 
         this.downloadUrl += this.limit;
@@ -82,7 +82,7 @@ export class searchResultsPhraseGenerator {
         const lines = fileContent.split("\n").slice(1);
 
         const stop: number = this.limit <= 0 ? lines.length : this.limit; 
-        const batchSize = 20;
+        const batchSize = 1;
         const batchCount = Math.ceil(stop / batchSize);
         let batchNumber = 0;
         const batchPromises: Promise<void>[] = [];

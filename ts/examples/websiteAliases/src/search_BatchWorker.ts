@@ -7,12 +7,29 @@ import dotenv from "dotenv";
 import { bingWithGrounding, openPhraseGeneratorAgent } from "azure-ai-foundry";
 import { AIProjectClient } from "@azure/ai-projects";
 import { DefaultAzureCredential } from "@azure/identity";
+import { isPageAvailable } from "./common.js";
 
 async function processDomain(domain: string, groundingConfig: bingWithGrounding.ApiSettings, project: AIProjectClient) {
 
     try {
         const phrases: openPhraseGeneratorAgent.openPhrases | undefined | null = await openPhraseGeneratorAgent.createOpenPhrasesForDomain(domain, groundingConfig, project);
         console.log(chalk.green(`Successfully processed domain ${domain} - Found ${phrases?.urls.length} urls`));
+
+        // make sure the that URLs we got back are accessible
+        // phrases?.urls.forEach(async (sr: openPhraseGeneratorAgent.SearchResult) => {
+        //     const isAvailable = await isPageAvailable(sr.pageUrl);
+        //     if (!isAvailable) {
+        //         console.warn(chalk.yellow(`Skipping inaccessible URL: ${sr.pageUrl}`));
+        //     }
+        // });
+
+        if (phrases?.urls) {
+            const availableUrls = await Promise.all(phrases?.urls.filter(async (sr: openPhraseGeneratorAgent.SearchResult) => {
+                return await isPageAvailable(sr.pageUrl);
+            }));
+
+            phrases.urls = availableUrls;
+        }        
 
         // send the result to the parent
         parentPort?.postMessage({
