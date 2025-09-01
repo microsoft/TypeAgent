@@ -30,7 +30,7 @@ export class searchResultsPhraseGenerator {
     // 2. Open Page Rangk Manual download - https://www.domcop.com/openpagerank/what-is-openpagerank
     private downloadUrl: string =
         "https://radar.cloudflare.com/charts/LargerTopDomainsTable/attachment?id=1257&top=";
-    private limit: number = 1000;
+    private limit: number = 10000;
     private dataFile: string = `examples/websiteAliases/data/top1Milliondomains.csv`;
     private outputCacheFile: string = "examples/websiteAliases/cache/phrases.json";
     private outputPath: string = path.join(path.dirname(path.dirname(fileURLToPath(import.meta.url))), "cache");
@@ -52,7 +52,7 @@ export class searchResultsPhraseGenerator {
                     `Invalid topN value. Falling back to default: ${this.limit}`,
                 ),
             );
-            this.limit = 100;
+            this.limit = 10000;
         }
 
         this.downloadUrl += this.limit;
