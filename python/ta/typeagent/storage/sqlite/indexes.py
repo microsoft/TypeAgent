@@ -3,19 +3,12 @@
 
 """SQLite-based index implementations."""
 
-import json
 import sqlite3
 import typing
 
 from ...knowpro import interfaces
 from ...knowpro.messageindex import MessageTextIndexSettings
 from ...knowpro.textlocindex import ScoredTextLocation
-from .schema import (
-    ShreddedMessageText,
-    ShreddedPropertyIndex,
-    ShreddedRelatedTermsAlias,
-    ShreddedRelatedTermsFuzzy,
-)
 
 
 class SqliteTermToSemanticRefIndex(interfaces.ITermToSemanticRefIndex):
