@@ -10,7 +10,7 @@ import typing
 from ..base.collections import BaseSemanticRefCollection, BaseMessageCollection
 from .schema import ShreddedMessage, ShreddedSemanticRef
 from ...knowpro import interfaces
-from ...knowpro.serialization import deserialize_object, serialize_object
+from ...knowpro import serialization
 
 
 class SqliteMessageCollection[TMessage: interfaces.IMessage](
@@ -70,14 +70,14 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
         # The serialization.deserialize_object will convert to snake_case Python attributes.
         if self.message_type is None:
             raise ValueError(
-                "Deserialization requires message_type passed to either get_message_collection or SqliteMessageCollection"
+                "Deserialization requires message_type passed to SqliteMessageCollection"
             )
-        return deserialize_object(self.message_type, message_data)
+        return serialization.deserialize_object(self.message_type, message_data)
 
     def _serialize_message_to_row(self, message: TMessage) -> ShreddedMessage:
         """Shred a message object into database columns."""
         # Serialize the message to JSON first (this uses camelCase)
-        message_data = serialize_object(message)
+        message_data = serialization.serialize_object(message)
 
         # Extract shredded fields (JSON uses camelCase)
         chunks_json = json.dumps(message_data.pop("textChunks", []))
