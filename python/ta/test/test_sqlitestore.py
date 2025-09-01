@@ -233,7 +233,7 @@ async def test_sqlite_timestamp_index(
     point_range = DateRange(start=point_date, end=None)
     results = await timestamp_index.lookup_range(point_range)
     assert len(results) == 1
-    assert results[0].timestamp == "2024-01-01T09:00:00+00:00"  # Normalized format
+    assert results[0].timestamp == "2024-01-01T09:00:00Z"  # Z format
     assert results[0].range.start.message_ordinal == 0  # Message ordinal 0
 
     # Test lookup_range - range query
@@ -244,7 +244,7 @@ async def test_sqlite_timestamp_index(
 
     # Should find messages with timestamps: 11:00 (09:00 is before range, 12:00 is excluded, 13:00 is after)
     assert len(results) == 1
-    assert results[0].timestamp == "2024-01-01T11:00:00+00:00"  # Normalized format
+    assert results[0].timestamp == "2024-01-01T11:00:00Z"  # Z format
     assert results[0].range.start.message_ordinal == 1
 
     # Test empty range

@@ -359,6 +359,14 @@ class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
         """Lookup messages in a date range."""
         cursor = self.db.cursor()
 
+        # Convert datetime objects to ISO format strings for comparison
+        start_timestamp = date_range.start.isoformat().replace("+00:00", "Z")
+        end_timestamp = (
+            date_range.end.isoformat().replace("+00:00", "Z")
+            if date_range.end
+            else None
+        )
+
         if date_range.end is None:
             # Point query
             cursor.execute(
@@ -368,7 +376,7 @@ class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
                 WHERE start_timestamp = ? 
                 ORDER BY msg_id
                 """,
-                (date_range.start,),
+                (start_timestamp,),
             )
         else:
             # Range query
@@ -379,7 +387,7 @@ class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
                 WHERE start_timestamp >= ? AND start_timestamp < ?
                 ORDER BY msg_id
                 """,
-                (date_range.start, date_range.end),
+                (start_timestamp, end_timestamp),
             )
 
         results = []
@@ -560,12 +568,10 @@ class SqliteRelatedTermsAliases(interfaces.ITermToRelatedTerms):
 
         with self.db:
             cursor = self.db.cursor()
-            # Clear existing aliases for this term
-            cursor.execute("DELETE FROM RelatedTermsAliases WHERE term = ?", (text,))
-            # Add new aliases
+            # Add new aliases (use INSERT OR IGNORE to avoid duplicates)
             for related_term in related_terms:
                 cursor.execute(
-                    "INSERT INTO RelatedTermsAliases (term, alias) VALUES (?, ?)",
+                    "INSERT OR IGNORE INTO RelatedTermsAliases (term, alias) VALUES (?, ?)",
                     (text, related_term.text),
                 )
 

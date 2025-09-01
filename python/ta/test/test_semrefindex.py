@@ -68,6 +68,26 @@ async def semantic_ref_index(
             message_text_index_settings=message_text_settings,
             related_term_index_settings=related_terms_settings,
         )
+
+        # For SQLite, we need to create semantic refs first due to foreign key constraints
+        from typeagent.knowpro.interfaces import (
+            SemanticRef,
+            TextRange,
+            TextLocation,
+            Topic,
+        )
+
+        collection = await provider.get_semantic_ref_collection()
+
+        # Create semantic refs with ordinals 1, 2, 3 that the tests expect
+        for i in range(1, 4):
+            ref = SemanticRef(
+                semantic_ref_ordinal=i,
+                range=TextRange(start=TextLocation(message_ordinal=0, chunk_ordinal=0)),
+                knowledge=Topic(text=f"test_topic_{i}"),
+            )
+            await collection.append(ref)
+
         index = await provider.get_semantic_ref_index()
         yield index
         await provider.close()
