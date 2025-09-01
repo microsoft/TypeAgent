@@ -162,7 +162,7 @@ Based on code analysis, we have **7 index implementations** in `IConversationSec
 Index creation is currently **scattered** across multiple files:
 
 - `secindex.py`: `ConversationSecondaryIndexes` class coordinates some indexes
-- `semrefindex.py`: Functions like `build_semantic_ref_index_for_conversation()`, `build_semantic_ref_index()`
+- `semrefindex.py`: Functions like `build_semantic_ref()`, `build_semantic_ref_index()`
 - `timestampindex.py`: `build_timestamp_index()`
 - `messageindex.py`: Index creation within `MessageTextIndex.add_messages()`
 - Individual index classes have their own `add_*()` methods
@@ -381,7 +381,7 @@ Modify existing functions to use storage provider indexes:
 
 ```python
 # In semrefindex.py
-async def build_semantic_ref_index_for_conversation[TMessage: IMessage](
+async def build_semantic_ref[TMessage: IMessage](
     conversation: IConversation[TMessage, SemanticRefIndex],
     conversation_settings: importing.ConversationSettings,
     event_handler: IndexingEventHandlers | None = None,

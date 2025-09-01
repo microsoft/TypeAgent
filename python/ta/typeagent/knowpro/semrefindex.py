@@ -599,7 +599,7 @@ class TermToSemanticRefIndex(ITermToSemanticRefIndex):
 # ...
 
 
-async def build_semantic_ref_index_for_conversation[TMessage: IMessage](
+async def build_semantic_ref[TMessage: IMessage](
     conversation: IConversation[TMessage, TermToSemanticRefIndex],
     conversation_settings: ConversationSettings,
 ) -> None:

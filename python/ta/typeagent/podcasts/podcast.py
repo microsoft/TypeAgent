@@ -210,8 +210,8 @@ class Podcast(IConversation[PodcastMessage, semrefindex.TermToSemanticRefIndex])
         assert (
             self.settings is not None
         ), "Settings must be initialized before building index"
-        await semrefindex.build_semantic_ref_index_for_conversation(self, self.settings)
-        # build_semantic_ref_index_for_conversation automatically builds standard secondary indexes.
+        await semrefindex.build_semantic_ref(self, self.settings)
+        # build_semantic_ref automatically builds standard secondary indexes.
         # Pass false here to build podcast specific secondary indexes only.
         await self._build_transient_secondary_indexes(False)
         if self.secondary_indexes is not None:
