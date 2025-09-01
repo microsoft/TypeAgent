@@ -181,7 +181,7 @@ async def test_term_to_semantic_ref_index_remove_term(
 
 
 @pytest.mark.asyncio
-async def test_conversation_index_serialize_and_deserialize(
+async def test_semantic_ref_index_serialize_and_deserialize(
     legacy_semantic_ref_index: TermToSemanticRefIndex, needs_auth: None
 ) -> None:
     """Test serialization and deserialization of the TermToSemanticRefIndex."""
@@ -357,7 +357,7 @@ async def test_add_knowledge_to_index(
 
 
 @pytest.mark.asyncio
-async def test_conversation_index_size_and_get_terms(
+async def test_semantic_ref_index_size_and_get_terms(
     semantic_ref_index: ITermToSemanticRefIndex, needs_auth: None
 ) -> None:
     """Test size() and get_terms method."""
@@ -371,7 +371,7 @@ async def test_conversation_index_size_and_get_terms(
 
 
 @pytest.mark.asyncio
-async def test_conversation_index_contains(
+async def test_semantic_ref_index_contains(
     semantic_ref_index: ITermToSemanticRefIndex, needs_auth: None
 ) -> None:
     """Test presence of a term using lookup_term."""
@@ -381,7 +381,7 @@ async def test_conversation_index_contains(
 
 
 @pytest.mark.asyncio
-async def test_conversation_index_clear(
+async def test_semantic_ref_index_clear(
     semantic_ref_index: ITermToSemanticRefIndex, needs_auth: None
 ) -> None:
     """Test clear method."""
@@ -393,14 +393,14 @@ async def test_conversation_index_clear(
 
 
 @pytest.mark.asyncio
-async def test_conversation_index_remove_term_nonexistent(
+async def test_semantic_ref_index_remove_term_nonexistent(
     semantic_ref_index: ITermToSemanticRefIndex, needs_auth: None
 ) -> None:
     """Test removing a term that does not exist does not raise."""
     await semantic_ref_index.remove_term("nonexistent", 123)  # Should not raise
 
 
-def test_conversation_index_serialize_empty(
+def test_semantic_ref_index_serialize_empty(
     legacy_semantic_ref_index: TermToSemanticRefIndex,
 ) -> None:
     """Test serialize on an empty index."""

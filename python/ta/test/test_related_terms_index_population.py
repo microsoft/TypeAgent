@@ -154,7 +154,7 @@ async def test_related_terms_index_population_from_database():
         fuzzy_index_size = await fuzzy_index.size()
         print(f"Related terms fuzzy index size: {fuzzy_index_size}")
 
-        # The fuzzy index should have entries for all the terms that were added to the conversation index
+        # The fuzzy index should have entries for all the terms that were added to the semantic ref index
         # This includes entity names and their types
         assert (
             fuzzy_index_size > 0

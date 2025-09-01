@@ -13,7 +13,7 @@ TypeAgent implements a conversation-based knowledge processing system with dual 
   - `SemanticRefCollection` - Stores semantic references and knowledge artifacts
 
 - **Indexes (6 types)**:
-  - `ConversationIndex` - Term → SemanticRef mappings for content discovery
+  - `SemanticRefIndex` - Term → SemanticRef mappings for content discovery
   - `PropertyIndex` - Property name → SemanticRef mappings for structured queries  
   - `TimestampToTextRangeIndex` - Temporal navigation and filtering
   - `MessageTextIndex` - Embedding-based semantic similarity search

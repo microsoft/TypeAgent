@@ -225,10 +225,10 @@ async def test_semantic_ref_collection_basic_operations(
 
 
 @pytest.mark.asyncio
-async def test_conversation_index_behavior_parity(
+async def test_semantic_ref_index_behavior_parity(
     storage_provider_type: tuple[IStorageProvider, str], needs_auth
 ):
-    """Test that conversation index behaves identically in both providers."""
+    """Test that semantic ref index behaves identically in both providers."""
     storage_provider, provider_type = storage_provider_type
 
     conv_index = await storage_provider.get_semantic_ref_index()

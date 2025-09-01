@@ -7,7 +7,7 @@ This is the **Python implementation of TypeAgent's Structured RAG** system - an 
 ## Architecture Components
 
 ### Core Libraries (`typeagent/`)
-- **`knowpro/`** - Structured RAG implementation with conversation indexing, query processing, and answer generation
+- **`knowpro/`** - Structured RAG implementation with semantic ref indexing, query processing, and answer generation
 - **`aitools/`** - Azure/OpenAI integration, embeddings, and vector storage
 - **`storage/`** - SQLite-based storage providers for persistent conversation data
 - **`mcp/`** - Model Context Protocol server implementation
