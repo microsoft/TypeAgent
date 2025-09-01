@@ -12,7 +12,7 @@ import pytest
 from typeagent.aitools.utils import load_dotenv
 from typeagent.knowpro.convsettings import ConversationSettings
 from typeagent.podcasts import podcast
-from typeagent.storage.sqlitestore import SqliteStorageProvider
+from typeagent.storage import SqliteStorageProvider
 
 
 @pytest.mark.asyncio
@@ -31,11 +31,11 @@ async def test_episode_53_related_terms_index_population():
         print(f"Loaded podcast: {pod1.name_tag}")
 
         # Create a new storage provider with the test path
-        storage_provider2 = await SqliteStorageProvider.create(
-            settings1.message_text_index_settings,
-            settings1.related_term_index_settings,
-            temp_db_path,
-            podcast.PodcastMessage,
+        storage_provider2 = SqliteStorageProvider(
+            db_path=temp_db_path,
+            message_type=podcast.PodcastMessage,
+            message_text_index_settings=settings1.message_text_index_settings,
+            related_term_index_settings=settings1.related_term_index_settings,
         )
 
         # Transfer the data by serializing and deserializing
@@ -51,11 +51,11 @@ async def test_episode_53_related_terms_index_population():
 
         # Reopen database with fresh settings to test index population
         settings3 = ConversationSettings()
-        storage_provider3 = await SqliteStorageProvider.create(
-            settings3.message_text_index_settings,
-            settings3.related_term_index_settings,
-            temp_db_path,
-            podcast.PodcastMessage,
+        storage_provider3 = SqliteStorageProvider(
+            db_path=temp_db_path,
+            message_type=podcast.PodcastMessage,
+            message_text_index_settings=settings3.message_text_index_settings,
+            related_term_index_settings=settings3.related_term_index_settings,
         )
         settings3.storage_provider = storage_provider3
 

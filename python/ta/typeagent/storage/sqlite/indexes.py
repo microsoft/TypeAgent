@@ -363,7 +363,7 @@ class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
             # Point query
             cursor.execute(
                 """
-                SELECT msg_id, start_timestamp, content
+                SELECT msg_id, start_timestamp, chunks
                 FROM Messages 
                 WHERE start_timestamp = ? 
                 ORDER BY msg_id
@@ -374,7 +374,7 @@ class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
             # Range query
             cursor.execute(
                 """
-                SELECT msg_id, start_timestamp, content
+                SELECT msg_id, start_timestamp, chunks
                 FROM Messages 
                 WHERE start_timestamp >= ? AND start_timestamp < ?
                 ORDER BY msg_id
@@ -383,7 +383,7 @@ class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
             )
 
         results = []
-        for msg_id, timestamp, content in cursor.fetchall():
+        for msg_id, timestamp, chunks in cursor.fetchall():
             text_location = interfaces.TextLocation(
                 message_ordinal=msg_id, chunk_ordinal=0
             )

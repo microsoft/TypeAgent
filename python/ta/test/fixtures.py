@@ -35,7 +35,7 @@ from typeagent.knowpro.messageindex import MessageTextIndexSettings
 from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
 from typeagent.knowpro.secindex import ConversationSecondaryIndexes
 from typeagent.storage.memory import MemoryStorageProvider
-from typeagent.storage.sqlitestore import SqliteStorageProvider
+from typeagent.storage import SqliteStorageProvider
 
 
 @pytest.fixture(scope="session")
@@ -132,8 +132,11 @@ async def sqlite_storage(
     message_text_settings = MessageTextIndexSettings(embedding_settings)
     related_terms_settings = RelatedTermIndexSettings(embedding_settings)
 
-    provider = await SqliteStorageProvider.create(
-        message_text_settings, related_terms_settings, temp_db_path, FakeMessage
+    provider = SqliteStorageProvider(
+        db_path=temp_db_path,
+        message_type=FakeMessage,
+        message_text_index_settings=message_text_settings,
+        related_term_index_settings=related_terms_settings,
     )
     yield provider
     await provider.close()

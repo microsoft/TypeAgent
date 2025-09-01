@@ -21,7 +21,7 @@ from typeagent.knowpro.reltermsindex import (
     resolve_related_terms,
 )
 from typeagent.storage.memory import MemoryStorageProvider
-from typeagent.storage.sqlitestore import SqliteStorageProvider
+from typeagent.storage import SqliteStorageProvider
 
 # Test fixtures
 from fixtures import needs_auth, embedding_model, temp_db_path
@@ -53,11 +53,11 @@ async def related_terms_index(
         index = await storage_provider.get_related_terms_index()
         yield index
     else:
-        provider = await SqliteStorageProvider.create(
-            message_text_settings,
-            related_terms_settings,
-            temp_db_path,
-            DummyTestMessage,
+        provider = SqliteStorageProvider(
+            db_path=temp_db_path,
+            message_type=DummyTestMessage,
+            message_text_index_settings=message_text_settings,
+            related_term_index_settings=related_terms_settings,
         )
         index = await provider.get_related_terms_index()
         yield index

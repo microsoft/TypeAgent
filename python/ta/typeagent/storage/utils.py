@@ -27,10 +27,16 @@ async def create_storage_provider[TMessage: IMessage](
 
         return MemoryStorageProvider(message_text_settings, related_terms_settings)
     else:
-        from .sqlitestore import SqliteStorageProvider
+        from .sqlite import SqliteStorageProvider
 
         if message_type is None:
             raise ValueError("Message type must be specified for SQLite storage")
-        return await SqliteStorageProvider.create(
-            message_text_settings, related_terms_settings, dbname, message_type
+
+        # Create the new provider directly (constructor is now synchronous)
+        provider = SqliteStorageProvider(
+            db_path=dbname,
+            message_type=message_type,
+            message_text_index_settings=message_text_settings,
+            related_term_index_settings=related_terms_settings,
         )
+        return provider

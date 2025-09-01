@@ -15,9 +15,6 @@ from .sqlite import (
     SqliteSemanticRefCollection,
 )
 
-# Keep legacy import for backward compatibility during transition
-from .sqlitestore import SqliteStorageProvider as LegacySqliteStorageProvider
-
 __all__ = [
     "MemoryStorageProvider",
     "MemoryMessageCollection",
@@ -25,5 +22,4 @@ __all__ = [
     "SqliteStorageProvider",
     "SqliteMessageCollection",
     "SqliteSemanticRefCollection",
-    "LegacySqliteStorageProvider",  # Temporary for migration
 ]

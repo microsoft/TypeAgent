@@ -17,7 +17,7 @@ from typeagent.knowpro import kplib
 from typeagent.knowpro.messageindex import MessageTextIndexSettings
 from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings, RelatedTermsIndex
 from typeagent.podcasts.podcast import PodcastMessage, PodcastMessageMeta
-from typeagent.storage.sqlitestore import SqliteStorageProvider
+from typeagent.storage import SqliteStorageProvider
 
 
 @pytest.mark.asyncio
@@ -34,11 +34,11 @@ async def test_related_terms_index_population_from_database():
         related_terms_settings = RelatedTermIndexSettings(embedding_settings)
 
         # Create and populate database
-        storage1 = await SqliteStorageProvider.create(
-            message_text_settings,
-            related_terms_settings,
-            temp_db_path,
-            PodcastMessage,
+        storage1 = SqliteStorageProvider(
+            db_path=temp_db_path,
+            message_type=PodcastMessage,
+            message_text_index_settings=message_text_settings,
+            related_term_index_settings=related_terms_settings,
         )
 
         # Add test messages
@@ -107,11 +107,11 @@ async def test_related_terms_index_population_from_database():
         await storage1.close()
 
         # Reopen database and verify related terms index
-        storage2 = await SqliteStorageProvider.create(
-            message_text_settings,
-            related_terms_settings,
-            temp_db_path,
-            PodcastMessage,
+        storage2 = SqliteStorageProvider(
+            db_path=temp_db_path,
+            message_type=PodcastMessage,
+            message_text_index_settings=message_text_settings,
+            related_term_index_settings=related_terms_settings,
         )
 
         # Check message collection size
@@ -134,7 +134,7 @@ async def test_related_terms_index_population_from_database():
         from typeagent.podcasts.podcast import Podcast
         from typeagent.knowpro.convsettings import ConversationSettings
         from typeagent.knowpro.reltermsindex import build_related_terms_index
-        from typeagent.storage.sqlitestore import SqliteRelatedTermsIndex
+        from typeagent.storage.sqlite.indexes import SqliteRelatedTermsIndex
 
         settings2 = ConversationSettings()
         settings2.storage_provider = storage2

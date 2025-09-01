@@ -27,7 +27,7 @@ from typeagent.knowpro.semrefindex import (
     add_knowledge_to_index,
 )
 from typeagent.storage.memory import MemoryStorageProvider
-from typeagent.storage.sqlitestore import SqliteStorageProvider
+from typeagent.storage import SqliteStorageProvider
 
 # Test fixtures
 from fixtures import needs_auth, embedding_model, temp_db_path
@@ -62,11 +62,11 @@ async def semantic_ref_index(
         index = await provider.get_semantic_ref_index()
         yield index
     else:
-        provider = await SqliteStorageProvider.create(
-            message_text_settings,
-            related_terms_settings,
-            temp_db_path,
-            DummyTestMessage,
+        provider = SqliteStorageProvider(
+            db_path=temp_db_path,
+            message_type=DummyTestMessage,
+            message_text_index_settings=message_text_settings,
+            related_term_index_settings=related_terms_settings,
         )
         index = await provider.get_semantic_ref_index()
         yield index
@@ -103,11 +103,11 @@ async def semantic_ref_setup(
         collection = await provider.get_semantic_ref_collection()
         yield {"index": index, "collection": collection}
     else:
-        provider = await SqliteStorageProvider.create(
-            message_text_settings,
-            related_terms_settings,
-            temp_db_path,
-            DummyTestMessage,
+        provider = SqliteStorageProvider(
+            db_path=temp_db_path,
+            message_type=DummyTestMessage,
+            message_text_index_settings=message_text_settings,
+            related_term_index_settings=related_terms_settings,
         )
         index = await provider.get_semantic_ref_index()
         collection = await provider.get_semantic_ref_collection()

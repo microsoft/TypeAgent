@@ -130,6 +130,47 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
     def related_terms_index(self) -> SqliteRelatedTermsIndex:
         return self._related_terms_index
 
+    # Async getters required by base class
+    async def get_message_collection(
+        self, message_type: type[TMessage] | None = None
+    ) -> interfaces.IMessageCollection[TMessage]:
+        """Get the message collection."""
+        return self._message_collection
+
+    async def get_semantic_ref_collection(self) -> interfaces.ISemanticRefCollection:
+        """Get the semantic reference collection."""
+        return self._semantic_ref_collection
+
+    async def get_semantic_ref_index(self) -> interfaces.ITermToSemanticRefIndex:
+        """Get the semantic reference index."""
+        return self._term_to_semantic_ref_index
+
+    async def get_property_index(self) -> interfaces.IPropertyToSemanticRefIndex:
+        """Get the property index."""
+        return self._property_index
+
+    async def get_timestamp_index(self) -> interfaces.ITimestampToTextRangeIndex:
+        """Get the timestamp index."""
+        return self._timestamp_index
+
+    async def get_message_text_index(self) -> interfaces.IMessageTextIndex[TMessage]:
+        """Get the message text index."""
+        return self._message_text_index
+
+    async def get_related_terms_index(self) -> interfaces.ITermToRelatedTermsIndex:
+        """Get the related terms index."""
+        return self._related_terms_index
+
+    async def get_conversation_threads(self) -> interfaces.IConversationThreads:
+        """Get the conversation threads."""
+        # For now, return a simple implementation
+        # In a full implementation, this would be stored/retrieved from SQLite
+        from ...knowpro.convthreads import ConversationThreads
+
+        return ConversationThreads(
+            self.message_text_index_settings.embedding_index_settings
+        )
+
     async def clear(self) -> None:
         """Clear all data from the storage provider."""
         with self.db:

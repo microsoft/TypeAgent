@@ -32,7 +32,7 @@ from typeagent.knowpro.interfaces import (
 from typeagent.knowpro.messageindex import MessageTextIndexSettings
 from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
 from typeagent.storage.memory import MemoryStorageProvider
-from typeagent.storage.sqlitestore import SqliteStorageProvider
+from typeagent.storage import SqliteStorageProvider
 
 from fixtures import needs_auth, embedding_model, temp_db_path
 
@@ -66,11 +66,11 @@ async def storage_provider_type(
             )
             yield provider, request.param
         case "sqlite":
-            provider = await SqliteStorageProvider.create(
-                message_text_settings,
-                related_terms_settings,
-                temp_db_path,
-                DummyTestMessage,
+            provider = SqliteStorageProvider(
+                db_path=temp_db_path,
+                message_type=DummyTestMessage,
+                message_text_index_settings=message_text_settings,
+                related_term_index_settings=related_terms_settings,
             )
             yield provider, request.param
             await provider.close()
@@ -323,8 +323,11 @@ async def test_cross_provider_message_collection_equivalence(
         related_terms_settings=related_terms_settings,
     )
 
-    sqlite_provider = await SqliteStorageProvider.create(
-        message_text_settings, related_terms_settings, temp_db_path, DummyTestMessage
+    sqlite_provider = SqliteStorageProvider(
+        db_path=temp_db_path,
+        message_type=DummyTestMessage,
+        message_text_index_settings=message_text_settings,
+        related_term_index_settings=related_terms_settings,
     )
 
     try:
