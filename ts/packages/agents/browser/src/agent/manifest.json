@@ -9,6 +9,9 @@
       "description": "Enhanced website indexing with knowledge extraction"
     }
   },
+  "cachedActivities": {
+    "browsingWebPage": "shared"
+  },
   "schema": {
     "description": "Browser agent that allows you control an existing browser window and perform actions such as opening a new tab, closing a tab, scrolling, zooming and navigating to a specific URL.",
     "schemaFile": "./actionsSchema.mts",
@@ -18,6 +21,16 @@
     }
   },
   "subActionManifests": {
+    "lookupAndAnswer": {
+      "defaultEnabled": true,
+      "transient": false,
+      "schema": {
+        "description": "Actions to lookup information from the web and answer user queries.",
+        "schemaFile": "./lookupAndAnswerSchema.mts",
+        "schemaType": "LookupAndAnswerActions",
+        "injected": true
+      }
+    },
     "external": {
       "defaultEnabled": false,
       "transient": true,

@@ -53,6 +53,9 @@ export function createExternalBrowserClient(
         closeWebPage: async () => {
             return rpc.invoke("closeWebPage");
         },
+        switchTabs: async (...args) => {
+            return rpc.invoke("switchTabs", ...args);
+        },
         goForward: async () => {
             return rpc.invoke("goForward");
         },
@@ -104,6 +107,9 @@ export function createExternalBrowserClient(
         },
         captureScreenshot: async () => {
             return rpc.invoke("captureScreenshot");
+        },
+        getPageContents: async () => {
+            return rpc.invoke("getPageContents");
         },
     };
 }

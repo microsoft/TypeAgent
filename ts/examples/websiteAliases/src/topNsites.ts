@@ -28,14 +28,21 @@ type extractedDomains = {
     };
 };
 
+// type crawlPages = {
+//     pages: number;
+//     pageSize: number;
+//     blocks: number;
+// }
+
 export class topNDomainsExtractor {
     // manually downloadable from: https://radar.cloudflare.com/domains
     private downloadUrl: string =
         "https://radar.cloudflare.com/charts/LargerTopDomainsTable/attachment?id=1257&top=";
     private topN: number = 50000;
-    private topNFile: string = `examples/websiteAliases/data/top${this.topN}.csv`;
+    private topNFile: string = `examples/websiteAliases/top${this.topN}.csv`;
     private outputFile: string =
         "examples/websiteAliases/phrases_to_sites.json";
+    //private keywordsToSites: Record<string, string[]> = {};
     private processed: extractedDomains = {
         dateIndexed: Date.now(),
         domains: {},
@@ -138,7 +145,7 @@ export class topNDomainsExtractor {
                 const batchDomains = domains[page];
                 const batchSourceFile = path.join(
                     path.dirname(fileURLToPath(import.meta.url)),
-                    "./topN_BatchWorker.js",
+                    "./batchWorker.js",
                 );
                 const worker = new Worker(batchSourceFile, {
                     workerData: {
@@ -164,7 +171,7 @@ export class topNDomainsExtractor {
                             // Retry each domain individually
                             for (const domain of batchDomains) {
                                 const singleWorker = new Worker(
-                                    "./topN_BatchWorker.js",
+                                    "./batchWorker.js",
                                     {
                                         workerData: {
                                             domains: [domain],

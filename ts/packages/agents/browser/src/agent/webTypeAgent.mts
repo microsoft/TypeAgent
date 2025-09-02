@@ -10,7 +10,7 @@ import {
     GenericChannelProvider,
 } from "agent-rpc/channel";
 import { createRpc } from "agent-rpc/rpc";
-import { BrowserActionContext } from "./actionHandler.mjs";
+import { BrowserActionContext } from "./browserActions.mjs";
 import { WebAgentMessage } from "../common/webAgentMessageTypes.mjs";
 
 import registerDebug from "debug";

@@ -12,7 +12,11 @@ export class TSTNode<TData> {
     data: TData | undefined;
 }
 
-export class TST<TData> {
+export interface BaseTSTData {
+    sortIndex?: number;
+}
+
+export class TST<TData extends BaseTSTData> {
     private root: TSTNode<TData> | undefined = undefined;
 
     init() {
@@ -214,7 +218,9 @@ export class TST<TData> {
         if (prefix === undefined) {
             throw new Error("prefix is undefined");
         } else if (prefix.length === 0) {
-            return this.data();
+            return this.data().sort((a, b) => {
+                return (a.sortIndex ?? 0) - (b.sortIndex ?? 0);
+            });
         }
         const keys: string[] = [];
         const data: TData[] = [];
@@ -226,7 +232,9 @@ export class TST<TData> {
             data.push(x.data);
         }
         this.collect(x.middle, prefix, keys, data);
-        return data;
+        return data.sort((a, b) => {
+            return (a.sortIndex ?? 0) - (b.sortIndex ?? 0);
+        });
     }
 
     collect(

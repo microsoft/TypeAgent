@@ -15,9 +15,10 @@ import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { getParameterNames, validateAction } from "action-schema";
 import { executeActions } from "../../../execute/actionHandlers.js";
 import { FullAction, toExecutableActions } from "agent-cache";
-import { getActionSchema } from "../../../internal.js";
 import { DeepPartialUndefined, getObjectProperty } from "common-utils";
 import { getActionParamCompletion } from "../../../translation/requestCompletion.js";
+import { getActionSchema } from "../../../translation/actionSchemaUtils.js";
+import { tryGetActionSchema } from "../../../translation/actionSchemaFileCache.js";
 
 export class ActionCommandHandler implements CommandHandler {
     public readonly description = "Execute an action";
@@ -50,14 +51,7 @@ export class ActionCommandHandler implements CommandHandler {
             throw new Error(`Invalid schema name ${schemaName}`);
         }
 
-        const actionSchema =
-            actionSchemaFile.parsedActionSchema.actionSchemas.get(actionName);
-        if (actionSchema === undefined) {
-            throw new Error(
-                `Invalid action name ${actionName} for schema ${schemaName}`,
-            );
-        }
-
+        const actionSchema = getActionSchema(actionSchemaFile, actionName);
         const action: AppAction = {
             schemaName: schemaName,
             actionName,
@@ -118,7 +112,7 @@ export class ActionCommandHandler implements CommandHandler {
                     actionName: params.args?.actionName,
                     parameters: params.flags?.parameters,
                 };
-                const actionInfo = getActionSchema(
+                const actionInfo = tryGetActionSchema(
                     action,
                     systemContext.agents,
                 );
@@ -156,10 +150,10 @@ export class ActionCommandHandler implements CommandHandler {
                     name.substring("--parameters.".length),
                 );
 
-                if (parameterCompletion && parameterCompletion.length > 0) {
+                if (parameterCompletion) {
                     completions.push({
                         name,
-                        completions: parameterCompletion,
+                        ...parameterCompletion,
                     });
                 }
 

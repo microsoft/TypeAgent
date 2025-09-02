@@ -11,7 +11,7 @@ import {
     AIExtractionFailedError,
 } from "website-memory";
 import { SessionContext } from "@typeagent/agent-sdk";
-import { BrowserActionContext } from "../actionHandler.mjs";
+import { BrowserActionContext } from "../browserActions.mjs";
 import { conversation as kpLib } from "knowledge-processor";
 import { openai as ai } from "aiclient";
 import { ActionDetectionAdapter } from "./actionDetectionAdapter.mjs";

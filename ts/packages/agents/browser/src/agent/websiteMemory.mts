@@ -12,7 +12,7 @@ import {
     ImportWebsiteData,
     ImportHtmlFolder,
 } from "./knowledge/schema/knowledgeImport.mjs";
-import { BrowserActionContext } from "./actionHandler.mjs";
+import { BrowserActionContext } from "./browserActions.mjs";
 import {
     searchWebMemories,
     SearchWebMemoriesRequest,

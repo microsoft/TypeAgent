@@ -3,14 +3,16 @@
 
 import { HistoryContext, MatchResult } from "agent-cache";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
-import { ActionContext } from "@typeagent/agent-sdk";
+import { ActionContext, ActivityContext } from "@typeagent/agent-sdk";
 import { TranslationResult } from "./translateRequest.js";
 
 import registerDebug from "debug";
-import { unicodeChar } from "../command/command.js";
-import { confirmTranslation } from "./confirmTranslation.js";
 import { getAppAgentName } from "./agentTranslators.js";
 import { canResolvePropertyEntity } from "../execute/pendingActions.js";
+import {
+    DispatcherActivityName,
+    DispatcherName,
+} from "../context/dispatcher/dispatcherUtils.js";
 
 const debugConstValidation = registerDebug("typeagent:const:validation");
 
@@ -104,10 +106,66 @@ async function getValidatedMatch(
     return undefined;
 }
 
+export function getActivityActiveSchemas(
+    activeSchemaNames: string[],
+    activityContext: ActivityContext,
+) {
+    const activitySchemas = activeSchemaNames.filter(
+        (schemaName) =>
+            getAppAgentName(schemaName) === activityContext.appAgentName,
+    );
+
+    if (activitySchemas.length === 0) {
+        throw new Error(
+            `Activity context schema ${activityContext.appAgentName} not active`,
+        );
+    }
+    // Dispatcher schema (for unknown) is always active
+    activitySchemas.push(DispatcherName, DispatcherActivityName);
+
+    return activitySchemas;
+}
+
+export function getNonActivityActiveSchemas(
+    activeSchemaNames: string[],
+    activityContext: ActivityContext,
+): string[] {
+    return activeSchemaNames.filter(
+        (schemaName) =>
+            getAppAgentName(schemaName) !== activityContext.appAgentName,
+    );
+}
+export function getActivityCacheSpec(
+    context: CommandHandlerContext,
+    activityContext?: ActivityContext,
+) {
+    if (activityContext === undefined) {
+        return "shared"; // shared cache when no activity is active.
+    }
+
+    const { appAgentName, activityName } = activityContext;
+    const actionConfig = context.agents.getActionConfig(appAgentName);
+    return actionConfig.cachedActivities?.[activityName] ?? false;
+}
+
+export function getActivityNamespaceSuffix(
+    context: CommandHandlerContext,
+    activityContext?: ActivityContext,
+): string | undefined {
+    const cacheSpec = getActivityCacheSpec(context, activityContext);
+    if (cacheSpec === false) {
+        throw new Error(
+            "Cannot match request during activity with cache disabled",
+        );
+    }
+    return cacheSpec !== "shared" ? activityContext!.activityName : undefined;
+}
+
 export async function matchRequest(
-    request: string,
     context: ActionContext<CommandHandlerContext>,
+    request: string,
     history?: HistoryContext,
+    activeSchemas?: string[],
 ): Promise<TranslationResult | undefined> {
     const systemContext = context.sessionContext.agentContext;
     const constructionStore = systemContext.agentCache.constructionStore;
@@ -116,13 +174,29 @@ export async function matchRequest(
     }
     const startTime = performance.now();
     const config = systemContext.session.getConfig();
-    const activeSchemaNames = systemContext.agents.getActiveSchemas();
-    const matches = constructionStore.match(request, {
+    const activityContext = history?.activityContext;
+    const activeSchemaNames = activityContext
+        ? getActivityActiveSchemas(
+              activeSchemas ?? systemContext.agents.getActiveSchemas(),
+              activityContext,
+          )
+        : (activeSchemas ?? systemContext.agents.getActiveSchemas());
+
+    const namespaceSuffix = getActivityNamespaceSuffix(
+        systemContext,
+        activityContext,
+    );
+    const matchConfig = {
         wildcard: config.cache.matchWildcard,
         entityWildcard: config.cache.matchEntityWildcard,
         rejectReferences: config.explainer.filter.reference.list,
-        namespaceKeys:
-            systemContext.agentCache.getNamespaceKeys(activeSchemaNames),
+    };
+    const matches = constructionStore.match(request, {
+        ...matchConfig,
+        namespaceKeys: systemContext.agentCache.getNamespaceKeys(
+            activeSchemaNames,
+            namespaceSuffix,
+        ),
         history,
     });
 
@@ -132,34 +206,18 @@ export async function matchRequest(
     if (match === undefined) {
         return undefined;
     }
-    const { requestAction, replacedAction } = await confirmTranslation(
-        elapsedMs,
-        unicodeChar.constructionSign,
-        match.match,
-        context,
-    );
 
-    if (!systemContext.batchMode) {
-        systemContext.logger?.logEvent("match", {
-            elapsedMs,
-            request,
-            actions: requestAction.actions,
-            replacedAction,
-            developerMode: systemContext.developerMode,
-            translators: activeSchemaNames,
-            explainerName: systemContext.agentCache.explainerName,
-            matchWildcard: config.cache.matchWildcard,
-            allMatches: matches.map((m) => {
-                const { construction: _, match, ...rest } = m;
-                return { action: match.actions, ...rest };
-            }),
-            history,
-        });
-    }
     return {
-        requestAction,
+        type: "match",
+        requestAction: match.match,
         elapsedMs,
-        fromUser: replacedAction !== undefined,
-        fromCache: true,
+        config: {
+            ...matchConfig,
+            explainerName: systemContext.agentCache.explainerName,
+        },
+        allMatches: matches.map((m) => {
+            const { construction: _, match, ...rest } = m;
+            return { action: match.actions, ...rest };
+        }),
     };
 }

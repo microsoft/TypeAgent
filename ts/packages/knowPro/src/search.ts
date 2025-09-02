@@ -36,11 +36,11 @@ import {
     createMatchTermsBooleanExpr,
     isActionPropertyTerm,
     isEntityPropertyTerm,
-    isPropertyTerm,
-    isSearchGroupTerm,
     toRequiredSearchTerm,
     validateSearchTermGroup,
 } from "./compileLib.js";
+import { isSearchGroupTerm } from "./searchLib.js";
+import { isPropertyTerm } from "./searchLib.js";
 import { NormalizedEmbedding } from "typeagent";
 import { getTimestampedScoredSemanticRefOrdinals } from "./knowledgeLib.js";
 

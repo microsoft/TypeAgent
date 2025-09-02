@@ -7,9 +7,10 @@ from dataclasses import dataclass, field
 import heapq
 import math
 import sys
-from typing import Set, cast
+from typing import cast, Set  # Set is an alias for builtin set
 
 from .interfaces import (
+    ICollection,
     IMessage,
     IMessageCollection,
     ISemanticRefCollection,
@@ -328,11 +329,11 @@ class SemanticRefAccumulator(MatchAccumulator[SemanticRefOrdinal]):
         groups: dict[KnowledgeType, SemanticRefAccumulator] = {}
         for match in self:
             semantic_ref = await semantic_refs.get_item(match.value)
-            group = groups.get(semantic_ref.knowledge_type)
+            group = groups.get(semantic_ref.knowledge.knowledge_type)
             if group is None:
                 group = SemanticRefAccumulator()
                 group.search_term_matches = self.search_term_matches
-                groups[semantic_ref.knowledge_type] = group
+                groups[semantic_ref.knowledge.knowledge_type] = group
             group.set_match(match)
         return groups
 

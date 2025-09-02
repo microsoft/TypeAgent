@@ -9,26 +9,17 @@ import {
     ActionResultSuccess,
 } from "@typeagent/agent-sdk";
 import { downloadImage } from "common-utils";
-import { StopWatch } from "telemetry";
 import {
     createActionResult,
     createActionResultFromHtmlDisplayWithScript,
 } from "@typeagent/agent-sdk/helpers/action";
-import { bing, GeneratedImage, openai } from "aiclient";
+import { GeneratedImage, openai } from "aiclient";
 import { randomBytes, randomUUID } from "crypto";
-import {
-    CreateImageAction,
-    FindImageAction,
-    ImageAction,
-} from "./imageActionSchema.js";
-import path from "path";
+import { CreateImageAction, ImageAction } from "./imageActionSchema.js";
 
 export function instantiate(): AppAgent {
     return {
-        //initializeAgentContext: initializePhotoContext,
-        //updateAgentContext: updatePhotoContext,
         executeAction: executePhotoAction,
-        //validateWildcardMatch: photoValidateWildcardMatch,
     };
 }
 
@@ -50,52 +41,6 @@ async function handlePhotoAction(
 ) {
     let result: ActionResult | undefined = undefined;
     switch (action.actionName) {
-        case "findImageAction": {
-            const findImageAction: FindImageAction = action as FindImageAction;
-            photoContext.actionIO.setDisplay(
-                `Searching for '${findImageAction.parameters.searchTerm}'`,
-            );
-
-            const stopWatch = new StopWatch();
-            stopWatch.start(
-                "IMAGE SEARCH: " + findImageAction.parameters.searchTerm,
-            );
-            const searchResults: bing.Image[] = await bing.searchImages(
-                findImageAction.parameters.searchTerm,
-                findImageAction.parameters.numImages,
-            );
-            stopWatch.stop("IMAGE SEARCH");
-
-            photoContext.actionIO.setDisplay(
-                `Found '${findImageAction.parameters.numImages}' results...`,
-            );
-
-            console.log(`Found ${searchResults.length} images`);
-
-            if (searchResults.length == 0) {
-                result = createActionResult(
-                    `Unable to find any images for ${findImageAction.parameters.searchTerm}`,
-                );
-            } else {
-                const urls: string[] = [];
-                const captions: string[] = [];
-                searchResults.map((i: bing.Image) => {
-                    urls.push(i.contentUrl);
-                    captions.push(findImageAction.parameters.searchTerm);
-                });
-                result = createCarouselForImages(urls, captions);
-
-                // add the found images to the entities
-                for (let i = 0; i < searchResults.length; i++) {
-                    result.entities.push({
-                        name: path.basename(searchResults[i].contentUrl),
-                        type: ["image", "url", "search"],
-                        uniqueId: searchResults[i].contentUrl,
-                    });
-                }
-            }
-            break;
-        }
         case "createImageAction":
             const createImageAction: CreateImageAction =
                 action as CreateImageAction;

@@ -15,11 +15,15 @@ import {
 import { showBadgeBusy, showBadgeHealthy } from "./ui";
 import { createContentScriptRpcClient } from "../../common/contentScriptRpc/client.mjs";
 import { ContentScriptRpc } from "../../common/contentScriptRpc/types.mjs";
+//import { generateEmbedding, indexesOfNearest, NormalizedEmbedding, SimilarityType } from "../../../../../typeagent/dist/indexNode";
+//import { openai } from "aiclient";
 
 async function ensureActiveTab() {
     const targetTab = await getActiveTab();
     if (!targetTab || targetTab.id === undefined) {
-        throw new Error("No active tab found.");
+        throw new Error(
+            "No browser tabs are currently open. Please open a browser tab to continue.",
+        );
     }
     return targetTab;
 }
@@ -113,12 +117,12 @@ export function createExternalBrowserServer(channel: RpcChannel) {
     );
 
     const invokeFunctions: BrowserControlInvokeFunctions = {
-        openWebPage: async (url: string) => {
+        openWebPage: async (url: string, options?: { newTab?: boolean }) => {
             // Resolve custom protocol URLs to actual extension URLs
             const resolvedUrl = resolveCustomProtocolUrl(url);
 
             const targetTab = await getActiveTab();
-            if (targetTab) {
+            if (targetTab && !options?.newTab) {
                 await chrome.tabs.update(targetTab.id!, { url: resolvedUrl });
             } else {
                 await chrome.tabs.create({ url: resolvedUrl });
@@ -127,6 +131,57 @@ export function createExternalBrowserServer(channel: RpcChannel) {
         closeWebPage: async () => {
             const targetTab = await ensureActiveTab();
             await chrome.tabs.remove(targetTab.id!);
+        },
+        switchTabs: async (
+            tabDescription: string,
+            tabIndex?: number,
+        ): Promise<boolean> => {
+            console.log(
+                `Tab switch requested: '${tabDescription}', index: ${tabIndex}`,
+            );
+
+            // 08.22.2025 - robgruen - This code will not work as is since the imports
+            // for the embedding model are supported by the vite compiler since that pulls
+            // in dependencies that aren't supported.  For now we will only support this in
+            // the inline browser experience.
+            // const ids: string[] = [];
+            // const score_threshold = 0.85;
+            // const titleEmbedding: NormalizedEmbedding[] = [];
+            // const urlEmbedding: NormalizedEmbedding[] = [];
+            //  const embeddingModel = openai.createEmbeddingModel();
+            // const queryEmbedding = await generateEmbedding(embeddingModel, tabDescription);
+
+            // const tabData: any[] = [];
+            // chrome.tabs.query({}, function(tabs) {
+            //     tabs.forEach((tab) => {
+            //         console.log(`Tab ID: ${tab.id}, Title: ${tab.title}, URL: ${tab.url}`);
+            //         tabData.push({
+            //             id: tab.id,
+            //             title: tab.title,
+            //             url: tab.url
+            //         });
+            //     });
+            // });
+
+            // for (let i = 0; i < tabData.length; i++) {
+            //     const tab = tabData[i];
+            //     ids.push(tab.id.toString());
+            //     titleEmbedding.push(await generateEmbedding(embeddingModel, tab.title));
+            //     urlEmbedding.push(await generateEmbedding(embeddingModel, tab.url));
+            // }
+
+            // const topNTitle = indexesOfNearest(titleEmbedding, queryEmbedding, 1, SimilarityType.Dot);
+            // const topNUrl = indexesOfNearest(urlEmbedding, queryEmbedding, 1, SimilarityType.Dot);
+
+            // const idx = topNTitle[0].score > topNUrl[0].score ? topNTitle[0].item : topNUrl[0].item;
+            // const maxScore = Math.max(topNTitle[0].score, topNUrl[0].score);
+
+            // if (maxScore < score_threshold) {
+            //     throw new Error(`No matching tabs found for '${tabDescription}'.`);
+            // }
+
+            // await chrome.tabs.update(tabData[idx].id!, { active: true });
+            return false;
         },
         goForward: async () => {
             const targetTab = await ensureActiveTab();
@@ -235,11 +290,14 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             }
         },
 
-        search: async (query?: string) => {
+        search: async (query?: string): Promise<URL> => {
             await chrome.search.query({
                 disposition: "NEW_TAB",
                 text: query,
             });
+
+            // todo return search provider URL
+            return new URL(`/?q=${query}`);
         },
         readPage: async () => {
             const targetTab = await getActiveTab();
@@ -273,6 +331,22 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             return chrome.tabs.captureVisibleTab(targetTab.windowId, {
                 quality: 100,
             });
+        },
+        getPageContents: async (): Promise<string> => {
+            const targetTab = await getActiveTab();
+            const article = await chrome.tabs.sendMessage(targetTab?.id!, {
+                type: "read_page_content",
+            });
+
+            if (article.error) {
+                throw new Error(article.error);
+            }
+
+            if (article?.formattedText) {
+                return article.formattedText;
+            }
+
+            throw new Error("No formatted text found.");
         },
     };
     const callFunctions: BrowserControlCallFunctions = {

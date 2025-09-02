@@ -1,7 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from dataclasses import is_dataclass, Field, MISSING
+from dataclasses import is_dataclass, MISSING
 from datetime import datetime
 import functools
 import json
@@ -21,13 +21,13 @@ from typing import (
 )
 
 import numpy as np
+from pydantic.alias_generators import to_camel
 
 from ..aitools.embeddings import NormalizedEmbeddings
-from ..podcasts import podcast
 
-from .searchlang import SearchTermGroupTypes
 from .interfaces import (
     ConversationDataWithIndexes,
+    SearchTermGroupTypes,
     Tag,
     Topic,
 )
@@ -145,77 +145,31 @@ def to_conversation_file_data[TMessageData](
     return file_data
 
 
-# This converts any vanilla class instance to a dict, recursively,
-# with field named converted to camelCase.
+# This converts any Pydantic dataclass instance to a dict, recursively,
+# with field names converted to camelCase.
 @overload
 def serialize_object(arg: None) -> None: ...
 @overload
 def serialize_object(arg: object) -> Any:
-    # NOTE: Actually this only takes objects with a __dict__.
+    # NOTE: This now works specifically with Pydantic dataclasses.
     ...
 
 
 def serialize_object(arg: Any) -> Any | None:
     if arg is None:
         return None
-    assert hasattr(arg, "__dict__"), f"Cannot serialize knowledge of type {type(arg)}"
-    result = to_json(arg)
-    assert isinstance(result, dict), f"Serialized knowledge is not a dict: {result}"
-    return result
 
+    # Require Pydantic dataclass
+    if not hasattr(arg, "__pydantic_serializer__"):
+        raise TypeError(f"Object must be a Pydantic dataclass, got {type(arg)}")
 
-def to_json(obj: Any) -> Any:
-    if obj is None:
-        return None
-    d = getattr(obj, "__dict__", None)
-    if d is not None:
-        obj = d
-    tp = type(obj)
-    if tp is dict:
-        return {to_camel(key): to_json(value) for key, value in obj.items()}
-    if tp is list:
-        return [to_json(value) for value in obj]
-    if tp in (str, int, float, bool, None):
-        return obj
-    raise TypeError(f"Cannot jsonify {tp}: {obj!r}")
-
-
-@functools.cache
-def to_camel(name: str) -> str:
-    assert isinstance(name, str), f"Cannot convert {name!r} to camel case"
-    # Name must be of the form foo_bar_baz.
-    # Result will be fooBarBaz.
-    # Don't pass edge cases.
-    parts = name.split("_")
-    return parts[0] + "".join(part.capitalize() for part in parts[1:])
+    # Use Pydantic's serialization with aliases
+    return arg.__pydantic_serializer__.to_python(arg, by_alias=True)  # type: ignore
 
 
 # ----------------
 # Deserialization
 # -----------------
-
-
-# No exceptions are caught; they just bubble out.
-def read_conversation_data_from_file(
-    filename_prefix: str, embedding_size: int
-) -> ConversationDataWithIndexes[Any] | None:
-    with open(filename_prefix + DATA_FILE_SUFFIX, "r", encoding="utf-8") as f:
-        json_data: ConversationJsonData[podcast.PodcastMessageData] = json.load(f)
-    embeddings_list: list[NormalizedEmbeddings] | None = None
-    if embedding_size:
-        with open(filename_prefix + EMBEDDING_FILE_SUFFIX, "rb") as f:
-            embeddings = np.fromfile(f, dtype=np.float32).reshape((-1, embedding_size))
-            embeddings_list = [embeddings]
-    else:
-        print("Warning: not reading embeddings file because size is {embedding_size}")
-        embeddings_list = None
-    file_data = ConversationFileData(
-        jsonData=json_data,
-        binaryData=ConversationBinaryData(embeddingsList=embeddings_list),
-    )
-    if json_data.get("fileHeader") is None:
-        json_data["fileHeader"] = create_file_header()
-    return from_conversation_file_data(file_data)
 
 
 def from_conversation_file_data(
@@ -356,20 +310,18 @@ def deserialize_object(typ: Any, obj: Any) -> Any:
         elif isinstance(typ, type) and is_dataclass(typ):
             if not isinstance(obj, dict):
                 raise DeserializationError(f"Expected dict for {typ}, got {type(obj)}")
-            kwargs = {}
-            for field_name, field_obj in typ.__dataclass_fields__.items():
-                json_key = to_camel(field_name)
-                if json_key in obj:
-                    kwargs[field_name] = deserialize_object(
-                        field_obj.type, obj[json_key]
-                    )
-                elif not may_be_none(field_obj):
-                    raise DeserializationError(
-                        f"Missing required field '{json_key}' for {typ.__name__}"
-                    )
-            return typ(
-                **kwargs
-            )  # TODO: This may raise if a mandatory field is missing. Unify with union handling?
+
+            # Require Pydantic dataclass
+            if not hasattr(typ, "__pydantic_validator__"):
+                raise TypeError(f"Type must be a Pydantic dataclass, got {typ}")
+
+            try:
+                # Use Pydantic's validator with aliases
+                return typ.__pydantic_validator__.validate_python(obj)  # type: ignore
+            except Exception as e:
+                raise DeserializationError(
+                    f"Pydantic validation failed for {typ.__name__}: {e}"
+                ) from e
         else:
             # Could be a class that's not a dataclass -- we don't know the signature.
             raise TypeError(f"Unsupported origin-less type {typ}")
@@ -436,14 +388,3 @@ def deserialize_object(typ: Any, obj: Any) -> Any:
         )
 
     raise TypeError(f"Unsupported type {typ}, object {obj!r} of type {type(obj)}")
-
-
-def may_be_none(field_obj: Field) -> bool:
-    """Check if a field may be None."""
-    if field_obj.default is not MISSING or field_obj.default_factory is not MISSING:
-        return True
-    if get_origin(field_obj.type) in (Union, types.UnionType):
-        return type(None) in get_args(field_obj.type)
-    if get_origin(field_obj.type) is Annotated:
-        return type(None) in get_args(get_args(field_obj.type)[0])
-    return False

@@ -237,9 +237,11 @@ class InteractiveApp {
                 }
             }
         } catch (error) {
-            this._stdio.writer.writeLine(
-                `${error instanceof Error ? error.message : error}`,
-            );
+            let errorMsg = error instanceof Error ? error.message : undefined;
+            if (!errorMsg) {
+                errorMsg = JSON.stringify(error);
+            }
+            this._stdio.writer.writeLine(`Error:\n${errorMsg}`);
             if (this.settings.stopOnError) {
                 return false;
             }

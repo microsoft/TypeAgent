@@ -1,10 +1,11 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+from collections.abc import Callable
 import copy
 from dataclasses import dataclass, replace
 import datetime
-from typing import Callable, Literal, TypeGuard, cast
+from typing import Literal, TypeGuard, cast
 
 import typechat
 
@@ -24,7 +25,7 @@ from ..knowpro.interfaces import (
     Term,
     WhenFilter,
 )
-from ..knowpro.propindex import PropertyNames
+from ..storage.memory.propindex import PropertyNames
 from ..knowpro.search import (
     ConversationSearchResult,
     SearchOptions,

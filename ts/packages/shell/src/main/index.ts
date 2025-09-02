@@ -23,8 +23,7 @@ import {
 import {
     ensureShellDataDir,
     getShellDataDir,
-    loadShellSettings,
-    ShellSettings,
+    ShellSettingManager,
     ShellUserSettings,
 } from "./shellSettings.js";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -41,6 +40,8 @@ import { createGenericChannel } from "agent-rpc/channel";
 import net from "node:net";
 import { createClientIORpcClient } from "agent-dispatcher/rpc/clientio/client";
 import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
+import { getStatusSummary } from "agent-dispatcher/helpers/status";
+import { getConsolePrompt } from "agent-dispatcher/helpers/console";
 import { ShellWindow } from "./shellWindow.js";
 
 import { debugShell, debugShellError } from "./debug.js";
@@ -53,6 +54,7 @@ import {
     startBackgroundUpdateCheck,
 } from "./commands/update.js";
 import { createInlineBrowserControl } from "./inlineBrowserControl.js";
+import { BrowserControl } from "browser-typeagent/agent/types";
 
 debugShell("App name", app.getName());
 debugShell("App version", app.getVersion());
@@ -123,16 +125,16 @@ if (parsedArgs.update) {
 const time = performance.now();
 debugShell("Starting...");
 
-function createWindow(shellSettings: ShellSettings) {
+function createWindow(shellSettings: ShellSettingManager) {
     debugShell("Creating window", performance.now() - time);
 
     // Create the browser window.
-    const shellWindow = new ShellWindow(shellSettings, instanceDir);
+    const shellWindow = new ShellWindow(shellSettings);
 
     initializeSpeech(shellWindow.chatView);
 
-    ipcMain.on("views-resized-by-user", (_, newX: number) => {
-        shellWindow.updateContentSize(newX);
+    ipcMain.on("views-resized-by-user", (_, newPos: number) => {
+        shellWindow.updateContentSize(newPos);
     });
 
     ipcMain.handle("init-browser-ipc", async () => {
@@ -229,7 +231,7 @@ function initializeSpeech(chatView: WebContentsView) {
 async function initializeDispatcher(
     instanceDir: string,
     shellWindow: ShellWindow,
-    updateSummary: (dispatcher: Dispatcher) => void,
+    updateSummary: (dispatcher: Dispatcher) => string,
 ) {
     try {
         const clientIOChannel = createGenericChannel((message: any) => {
@@ -263,23 +265,40 @@ async function initializeDispatcher(
             },
             openLocalView: (port: number) => {
                 debugShell(`Opening local view on port ${port}`);
-                return shellWindow.openInlineBrowser(
+                shellWindow.createBrowserTab(
                     new URL(`http://localhost:${port}/`),
+                    { background: false },
                 );
+                return Promise.resolve();
             },
             closeLocalView: (port: number) => {
-                const current = shellWindow.inlineBrowserUrl;
+                const targetUrl = `http://localhost:${port}/`;
                 debugShell(
-                    `Closing local view on port ${port}, current url: ${current}`,
+                    `Closing local view on port ${port}, target url: ${targetUrl}`,
                 );
-                if (current === `http://localhost:${port}/`) {
-                    shellWindow.closeInlineBrowser();
+
+                // Find and close the tab with the matching URL
+                const allTabs = shellWindow.getAllBrowserTabs();
+                const matchingTab = allTabs.find(
+                    (tab) => tab.url === targetUrl,
+                );
+
+                if (matchingTab) {
+                    shellWindow.closeBrowserTab(matchingTab.id);
+                    debugShell(`Closed tab with URL: ${targetUrl}`);
+                } else {
+                    debugShell(`No tab found with URL: ${targetUrl}`);
                 }
             },
             exit: () => {
                 app.quit();
             },
         };
+
+        let browserControl: BrowserControl | undefined;
+        try {
+            browserControl = createInlineBrowserControl(shellWindow);
+        } catch {}
 
         // Set up dispatcher
         const newDispatcher = await createDispatcher("shell", {
@@ -288,7 +307,7 @@ async function initializeDispatcher(
                 ...getDefaultAppAgentProviders(instanceDir),
             ],
             agentInitOptions: {
-                browser: createInlineBrowserControl(shellWindow),
+                browser: browserControl,
             },
             agentInstaller: getDefaultAppAgentInstaller(instanceDir),
             persistSession: true,
@@ -313,9 +332,14 @@ async function initializeDispatcher(
             if (typeof text !== "string" || typeof id !== "string") {
                 throw new Error("Invalid request");
             }
-            debugShell(newDispatcher.getPrompt(), text);
+
             // Update before processing the command in case there was change outside of command processing
-            updateSummary(dispatcher);
+            const summary = updateSummary(dispatcher);
+
+            if (debugShell.enabled) {
+                debugShell(getConsolePrompt(summary), text);
+            }
+
             const commandResult = await newDispatcher.processCommand(
                 text,
                 id,
@@ -368,13 +392,15 @@ async function initializeDispatcher(
 
 async function initializeInstance(
     instanceDir: string,
-    shellSettings: ShellSettings,
+    shellSettings: ShellSettingManager,
 ) {
     const shellWindow = createWindow(shellSettings);
     const { mainWindow, chatView } = shellWindow;
     let title: string = "";
     function updateTitle(dispatcher: Dispatcher) {
-        const newSettingSummary = dispatcher.getSettingSummary();
+        const status = dispatcher.getStatus();
+
+        const newSettingSummary = getStatusSummary(status);
         const zoomFactor = chatView.webContents.zoomFactor;
         const pendingUpdate = hasPendingUpdate() ? " [Pending Update]" : "";
         const zoomFactorTitle =
@@ -384,11 +410,13 @@ async function initializeInstance(
             title = newTitle;
             chatView.webContents.send(
                 "setting-summary-changed",
-                dispatcher.getTranslatorNameToEmojiMap(),
+                status.agents.map((agent) => [agent.name, agent.emoji]),
             );
 
             mainWindow.setTitle(newTitle);
         }
+
+        return newSettingSummary;
     }
 
     // Note: Make sure dom ready before using dispatcher.
@@ -499,7 +527,7 @@ async function initialize() {
         "/macrosLibrary.html": `chrome-extension://${extension.id}/views/macrosLibrary.html`,
     };
 
-    const shellSettings = loadShellSettings(instanceDir);
+    const shellSettings = new ShellSettingManager(instanceDir);
     const settings = shellSettings.user;
     const dataDir = getShellDataDir(instanceDir);
     const chatHistory: string = path.join(dataDir, "chat_history.html");

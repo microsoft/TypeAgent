@@ -33,13 +33,12 @@ import {
     LookupActivity,
     LookupAndAnswerAction,
 } from "./schema/lookupActionSchema.js";
-import {
-    getHistoryContextForTranslation,
-    translateRequest,
-} from "../../translation/translateRequest.js";
+import { translateRequest } from "../../translation/translateRequest.js";
 import { ActivityActions } from "./schema/activityActionSchema.js";
 import { ClarifyEntityAction } from "../../execute/pendingActions.js";
 import { MatchCommandHandler } from "./handlers/matchCommandHandler.js";
+import { DispatcherEmoji } from "./dispatcherUtils.js";
+import { getHistoryContext } from "../../translation/interpretRequest.js";
 
 const dispatcherHandlers: CommandHandlerTable = {
     description: "Type Agent Dispatcher Commands",
@@ -190,7 +189,7 @@ async function clarifyWithLookup(
     }
 
     // TODO: This translation can probably more scoped based on the `actionName` field.
-    const history = getHistoryContextForTranslation(systemContext);
+    const history = getHistoryContext(systemContext);
     if (history === undefined) {
         // Can't do clarify without history.
         return undefined;
@@ -202,8 +201,8 @@ async function clarifyWithLookup(
     });
 
     const translationResult = await translateRequest(
-        action.parameters.request,
         context,
+        action.parameters.request,
         history,
     );
 
@@ -251,7 +250,7 @@ function clarifyEntityAction(
 }
 
 export const dispatcherManifest: AppAgentManifest = {
-    emojiChar: "🤖",
+    emojiChar: DispatcherEmoji,
     description: "Built-in agent to dispatch requests",
     schema: {
         description: "",

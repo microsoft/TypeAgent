@@ -88,7 +88,7 @@ export interface DeletionInfo {
 /**
  * Types of knowledge objects {@link Knowledge}
  */
-export type KnowledgeType = "entity" | "action" | "topic" | "tag" | "sTag"; // sTag: Experimental ;
+export type KnowledgeType = "entity" | "action" | "topic" | "tag" | "sTag";
 /**
  * Knowledge objects
  */

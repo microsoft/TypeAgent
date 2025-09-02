@@ -9,6 +9,7 @@
         "Knowpro",
         "ktype",
         "lightgray",
+        "Lucene",
         "NOCASE",
         "oclif",
         "openai",
@@ -22,6 +23,7 @@
         "editor.defaultFormatter": "vscode.html-language-features"
     },
     "jest.virtualFolders": [
+        {"name": "actionSchema", "rootPath": "packages/actionSchema"},
         {"name": "aiclient", "rootPath": "packages/aiclient"},
         {"name": "api", "rootPath": "packages/api"},
         {"name": "cache", "rootPath": "packages/cache"},
@@ -34,6 +36,7 @@
         {"name": "knowpro", "rootPath": "packages/knowpro"},
         {"name": "knowpro-conversation", "rootPath": "packages/memory/conversation"},
         {"name": "knowpro-storage", "rootPath": "packages/memory/storage"},
+        {"name": "browser", "rootPath": "packages/agents/browser"},
     ],
     "jest.runMode": "on-demand",
     "[json]": {

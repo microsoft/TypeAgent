@@ -18,7 +18,7 @@ import { UserIntent } from "./schema/recordedActions.mjs";
 import { SchemaDiscoveryActions } from "./schema/discoveryActions.mjs";
 import { SchemaDiscoveryAgent } from "./translator.mjs";
 import { WebPlanResult, WebPlanSuggestions } from "./schema/evaluatePlan.mjs";
-import { BrowserActionContext } from "../actionHandler.mjs";
+import { BrowserActionContext } from "../browserActions.mjs";
 
 // Context interface for authoring action handler functions
 interface AuthoringActionHandlerContext {

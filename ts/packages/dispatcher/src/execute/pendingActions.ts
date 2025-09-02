@@ -39,6 +39,7 @@ import { conversation as kp } from "knowledge-processor";
 import { getObjectProperty } from "common-utils";
 import { ActionSchemaFile } from "../translation/actionConfigProvider.js";
 import { ActionSchemaEntityTypeDefinition } from "../../../actionSchema/dist/type.js";
+import { getActionParametersType } from "../translation/actionSchemaUtils.js";
 
 const debugEntities = registerDebug("typeagent:dispatcher:actions:entities");
 
@@ -257,8 +258,8 @@ export function getEntityPropertyTypeName(
         return undefined;
     }
     const actionParametersType = getActionParametersType(
-        actionName,
         actionSchemaFile,
+        actionName,
     );
     const parameterType = getPropertyType(actionParametersType, paramName);
     if (parameterType === undefined) {
@@ -769,28 +770,6 @@ async function getParameterEntities(
     }
 }
 
-export function getActionParametersType(
-    actionName: string,
-    actionSchemaFile: ActionSchemaFile,
-): ActionParamObject {
-    const schema =
-        actionSchemaFile.parsedActionSchema.actionSchemas.get(actionName);
-
-    if (schema === undefined) {
-        throw new Error(
-            `Action schema not found for ${actionSchemaFile.schemaName}.${actionName}`,
-        );
-    }
-
-    const actionParametersType = schema.type.fields.parameters?.type;
-    if (actionParametersType?.type !== "object") {
-        throw new Error(
-            `Action schema parameter type mismatch: ${actionSchemaFile.schemaName}.${actionName}`,
-        );
-    }
-    return actionParametersType;
-}
-
 export async function resolveEntities(
     agents: AppAgentManager,
     action: TypeAgentAction<FullAction>,
@@ -804,8 +783,8 @@ export async function resolveEntities(
     const config = agents.getActionConfig(action.schemaName);
     const actionSchemaFile = agents.getActionSchemaFileForConfig(config);
     const actionParametersType = getActionParametersType(
-        action.actionName,
         actionSchemaFile,
+        action.actionName,
     );
 
     let resolvedEntities: Entity[] | undefined;

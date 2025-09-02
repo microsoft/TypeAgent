@@ -6,6 +6,13 @@ export type TTSSettings = {
     voice?: string | undefined;
 };
 
+export type UISettings = {
+    verticalLayout: boolean;
+    verticalContentAlwaysVisible: boolean;
+    horizontalContentAlwaysVisible: boolean;
+    dev: boolean;
+    darkMode: boolean;
+};
 export type ShellUserSettings = {
     microphoneId: string | undefined;
     microphoneName: string | undefined;
@@ -13,9 +20,8 @@ export type ShellUserSettings = {
     ttsSettings: TTSSettings;
     agentGreeting: boolean;
     multiModalContent: boolean;
-    devUI: boolean;
+    ui: UISettings;
     partialCompletion: boolean;
-    darkMode: boolean;
     chatHistory: boolean; // should the shell load the chat history?
     notifyFilter: string;
     disallowedDisplayType: string; // semicolon separated list of display types that should not be used
@@ -38,10 +44,15 @@ export const defaultUserSettings: ShellUserSettings = {
     },
     agentGreeting: true,
     multiModalContent: true,
-    devUI: false,
+    ui: {
+        verticalLayout: false,
+        verticalContentAlwaysVisible: true,
+        horizontalContentAlwaysVisible: false,
+        dev: false,
+        darkMode: false,
+    },
     partialCompletion: true,
     disallowedDisplayType: "",
-    darkMode: false,
     chatHistory: true,
     canvas: undefined,
     autoUpdate: {

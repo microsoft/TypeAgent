@@ -49,14 +49,14 @@
   {
     "request": "look up information about Oregon and write a poem using what you found",
     "action": [
-      "dispatcher.lookup.lookupAndAnswer",
+      "browser.lookupAndAnswer.lookupAndAnswerInternet",
       "dispatcher.pendingRequestAction"
     ]
   },
   {
     "request": "look up the recipe for tarte a l'oignan and add the ingredients to my grocery list",
     "action": [
-      "dispatcher.lookup.lookupAndAnswer",
+      "browser.lookupAndAnswer.lookupAndAnswerInternet",
       "dispatcher.pendingRequestAction"
     ]
   },
