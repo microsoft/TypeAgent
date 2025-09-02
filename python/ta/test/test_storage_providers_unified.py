@@ -29,8 +29,8 @@ from typeagent.knowpro.interfaces import (
     TextRange,
     Topic,
 )
-from typeagent.knowpro.messageindex import MessageTextIndexSettings
-from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
+from typeagent.knowpro.convsettings import MessageTextIndexSettings
+from typeagent.knowpro.convsettings import RelatedTermIndexSettings
 from typeagent.storage.memory import MemoryStorageProvider
 from typeagent.storage import SqliteStorageProvider
 

@@ -5,11 +5,16 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ..aitools.vectorbase import ScoredInt, TextEmbeddingIndexSettings, VectorBase
+from typeagent.aitools.vectorbase import (
+    ScoredInt,
+    TextEmbeddingIndexSettings,
+    VectorBase,
+)
 
-from .collections import TermSet
-from .common import is_search_term_wildcard
-from .interfaces import (
+from typeagent.knowpro.collections import TermSet
+from typeagent.knowpro.common import is_search_term_wildcard
+from typeagent.knowpro.convsettings import RelatedTermIndexSettings
+from typeagent.knowpro.interfaces import (
     IConversation,
     IMessage,
     ITermToRelatedTerms,
@@ -23,15 +28,7 @@ from .interfaces import (
     TermsToRelatedTermsIndexData,
     TextEmbeddingIndexData,
 )
-from .query import CompiledSearchTerm, CompiledTermGroup
-
-
-@dataclass
-class RelatedTermIndexSettings:
-    embedding_index_settings: TextEmbeddingIndexSettings
-
-    def __init__(self, embedding_index_settings: TextEmbeddingIndexSettings):
-        self.embedding_index_settings = embedding_index_settings
+from typeagent.knowpro.query import CompiledSearchTerm, CompiledTermGroup
 
 
 class TermToRelatedTermsMap(ITermToRelatedTerms):

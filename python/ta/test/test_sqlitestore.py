@@ -21,8 +21,8 @@ from typeagent.knowpro.interfaces import (
     Topic,
 )
 from typeagent.knowpro.kplib import KnowledgeResponse
-from typeagent.knowpro.messageindex import MessageTextIndexSettings
-from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
+from typeagent.knowpro.convsettings import MessageTextIndexSettings
+from typeagent.knowpro.convsettings import RelatedTermIndexSettings
 from typeagent.storage import SqliteStorageProvider
 
 from fixtures import embedding_model, FakeMessage

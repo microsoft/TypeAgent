@@ -8,8 +8,7 @@ without circular import issues.
 """
 
 from ..knowpro.interfaces import IMessage, IStorageProvider
-from ..knowpro.messageindex import MessageTextIndexSettings
-from ..knowpro.reltermsindex import RelatedTermIndexSettings
+from ..knowpro.convsettings import MessageTextIndexSettings, RelatedTermIndexSettings
 
 
 async def create_storage_provider[TMessage: IMessage](

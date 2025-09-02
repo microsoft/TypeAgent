@@ -7,7 +7,7 @@ import sqlite3
 import typing
 
 from ...knowpro import interfaces
-from ...knowpro.messageindex import MessageTextIndexSettings
+from ...knowpro.convsettings import MessageTextIndexSettings
 from ...knowpro.textlocindex import ScoredTextLocation
 
 
@@ -181,7 +181,7 @@ class SqlitePropertyIndex(interfaces.IPropertyToSemanticRefIndex):
             score = 1.0
 
         # Normalize property name and value (to match in-memory implementation)
-        from ...knowpro.propindex import (
+        from ...storage.memory.propindex import (
             make_property_term_text,
             split_property_term_text,
         )
@@ -214,7 +214,7 @@ class SqlitePropertyIndex(interfaces.IPropertyToSemanticRefIndex):
         value: str,
     ) -> list[interfaces.ScoredSemanticRefOrdinal] | None:
         # Normalize property name and value (to match in-memory implementation)
-        from ...knowpro.propindex import (
+        from ...storage.memory.propindex import (
             make_property_term_text,
             split_property_term_text,
         )

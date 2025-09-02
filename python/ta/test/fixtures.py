@@ -31,8 +31,10 @@ from typeagent.knowpro.interfaces import (
     TextLocation,
 )
 from typeagent.knowpro.kplib import KnowledgeResponse
-from typeagent.knowpro.messageindex import MessageTextIndexSettings
-from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
+from typeagent.knowpro.convsettings import (
+    MessageTextIndexSettings,
+    RelatedTermIndexSettings,
+)
 from typeagent.knowpro.secindex import ConversationSecondaryIndexes
 from typeagent.storage.memory import MemoryStorageProvider
 from typeagent.storage import SqliteStorageProvider

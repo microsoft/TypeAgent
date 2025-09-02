@@ -11,12 +11,14 @@ from typeagent.aitools.embeddings import AsyncEmbeddingModel
 from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
 from typeagent.knowpro.interfaces import Term, IMessage, ITermToRelatedTermsIndex
 from typeagent.knowpro.kplib import KnowledgeResponse
-from typeagent.knowpro.messageindex import MessageTextIndexSettings
+from typeagent.knowpro.convsettings import (
+    MessageTextIndexSettings,
+    RelatedTermIndexSettings,
+)
 from typeagent.knowpro.query import CompiledSearchTerm, CompiledTermGroup
-from typeagent.knowpro.reltermsindex import (
+from typeagent.storage.memory.reltermsindex import (
     TermToRelatedTermsMap,
     RelatedTermsIndex,
-    RelatedTermIndexSettings,
     dedupe_related_terms,
     resolve_related_terms,
 )

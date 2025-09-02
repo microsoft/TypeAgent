@@ -14,8 +14,11 @@ from typeagent.aitools.utils import load_dotenv
 from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
 from typeagent.knowpro.interfaces import SemanticRef, TextRange, TextLocation
 from typeagent.knowpro import kplib
-from typeagent.knowpro.messageindex import MessageTextIndexSettings
-from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings, RelatedTermsIndex
+from typeagent.knowpro.convsettings import (
+    MessageTextIndexSettings,
+    RelatedTermIndexSettings,
+)
+from typeagent.storage.memory.reltermsindex import RelatedTermsIndex
 from typeagent.podcasts.podcast import PodcastMessage, PodcastMessageMeta
 from typeagent.storage import SqliteStorageProvider
 
@@ -133,7 +136,7 @@ async def test_related_terms_index_population_from_database():
         # Create a test conversation and build related terms index
         from typeagent.podcasts.podcast import Podcast
         from typeagent.knowpro.convsettings import ConversationSettings
-        from typeagent.knowpro.reltermsindex import build_related_terms_index
+        from typeagent.storage.memory.reltermsindex import build_related_terms_index
         from typeagent.storage.sqlite.indexes import SqliteRelatedTermsIndex
 
         settings2 = ConversationSettings()

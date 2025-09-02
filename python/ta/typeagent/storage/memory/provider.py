@@ -4,10 +4,13 @@
 """Memory storage provider implementation."""
 
 from .collections import MemoryMessageCollection, MemorySemanticRefCollection
-from ...knowpro.semrefindex import TermToSemanticRefIndex
-from ...knowpro.convthreads import ConversationThreads
-from ...knowpro.messageindex import MessageTextIndexSettings
-from ...knowpro.reltermsindex import RelatedTermIndexSettings
+from .semrefindex import TermToSemanticRefIndex
+from .convthreads import ConversationThreads
+from .messageindex import MessageTextIndex
+from .reltermsindex import RelatedTermsIndex
+from .propindex import PropertyIndex
+from .timestampindex import TimestampToTextRangeIndex
+from ...knowpro.convsettings import MessageTextIndexSettings, RelatedTermIndexSettings
 from ...knowpro.interfaces import (
     IConversationThreads,
     IMessage,
@@ -18,10 +21,6 @@ from ...knowpro.interfaces import (
     ITermToSemanticRefIndex,
     ITimestampToTextRangeIndex,
 )
-from ...knowpro.messageindex import MessageTextIndex
-from ...knowpro.propindex import PropertyIndex
-from ...knowpro.reltermsindex import RelatedTermsIndex
-from ...knowpro.timestampindex import TimestampToTextRangeIndex
 
 
 class MemoryStorageProvider[TMessage: IMessage](IStorageProvider[TMessage]):

@@ -9,9 +9,9 @@ import tempfile
 import os
 import pytest
 from typeagent.storage import SqliteStorageProvider
-from typeagent.knowpro.messageindex import MessageTextIndex
-from typeagent.knowpro.messageindex import MessageTextIndexSettings
-from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
+from typeagent.storage.memory.messageindex import MessageTextIndex
+from typeagent.knowpro.convsettings import MessageTextIndexSettings
+from typeagent.knowpro.convsettings import RelatedTermIndexSettings
 from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
 from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
 from typeagent.podcasts.podcast import PodcastMessage, PodcastMessageMeta

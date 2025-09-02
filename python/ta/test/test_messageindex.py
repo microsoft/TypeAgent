@@ -6,12 +6,12 @@ from unittest.mock import AsyncMock, MagicMock
 from typing import cast
 
 from fixtures import FakeConversation, FakeMessage
-from typeagent.knowpro.messageindex import (
+from typeagent.storage.memory.messageindex import (
     MessageTextIndex,
-    MessageTextIndexSettings,
     build_message_index,
     IMessageTextEmbeddingIndex,
 )
+from typeagent.knowpro.convsettings import MessageTextIndexSettings
 
 from typeagent.knowpro.interfaces import (
     MessageTextIndexData,
@@ -202,8 +202,10 @@ async def test_build_message_index(needs_auth: None):
     # Create storage provider asynchronously
     from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
     from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
-    from typeagent.knowpro.messageindex import MessageTextIndexSettings
-    from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
+    from typeagent.knowpro.convsettings import (
+        MessageTextIndexSettings,
+        RelatedTermIndexSettings,
+    )
 
     test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
     embedding_settings = TextEmbeddingIndexSettings(test_model)

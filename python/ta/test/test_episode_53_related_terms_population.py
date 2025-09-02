@@ -63,7 +63,7 @@ async def test_episode_53_related_terms_index_population():
         pod3 = await podcast.Podcast.create(settings3)
 
         # Build the related terms index since it's not auto-populated
-        from typeagent.knowpro.reltermsindex import build_related_terms_index
+        from typeagent.storage.memory.reltermsindex import build_related_terms_index
 
         await build_related_terms_index(pod3, settings3.related_term_index_settings)
 

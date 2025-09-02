@@ -45,7 +45,7 @@ from typeagent.knowpro import kplib
 from typeagent.knowpro import query
 from typeagent.knowpro import search, search_query_schema, searchlang
 from typeagent.knowpro import serialization
-from typeagent.knowpro import timestampindex
+from typeagent.storage.memory import timestampindex
 
 from typeagent.podcasts import podcast
 
@@ -611,7 +611,7 @@ async def load_podcast_index(
                     and await conversation.secondary_indexes.property_to_semantic_ref_index.size()
                     == 0
                 ):
-                    from typeagent.knowpro.propindex import build_property_index
+                    from typeagent.storage.memory.propindex import build_property_index
 
                     await build_property_index(conversation)
 
@@ -622,7 +622,7 @@ async def load_podcast_index(
                     and await conversation.secondary_indexes.term_to_related_terms_index.fuzzy_index.size()
                     == 0
                 ):
-                    from typeagent.knowpro.reltermsindex import (
+                    from typeagent.storage.memory.reltermsindex import (
                         build_related_terms_index,
                     )
 

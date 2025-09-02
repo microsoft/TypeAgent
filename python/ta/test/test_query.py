@@ -32,8 +32,8 @@ from typeagent.knowpro.interfaces import (
     Topic,
 )
 from typeagent.knowpro.kplib import KnowledgeResponse
-from typeagent.knowpro.messageindex import MessageTextIndexSettings
-from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
+from typeagent.knowpro.convsettings import MessageTextIndexSettings
+from typeagent.knowpro.convsettings import RelatedTermIndexSettings
 from typeagent.storage.memory import MemoryStorageProvider
 from typeagent.knowpro.convsettings import ConversationSettings
 from typeagent.knowpro.query import (
@@ -59,7 +59,7 @@ from typeagent.knowpro.query import (
     match_entity_name_or_type,
     lookup_knowledge_type,
 )
-from typeagent.knowpro.propindex import PropertyIndex
+from typeagent.storage.memory.propindex import PropertyIndex
 from typeagent.storage.memory import (
     MemoryMessageCollection,
     MemorySemanticRefCollection,

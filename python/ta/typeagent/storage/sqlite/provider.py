@@ -7,8 +7,7 @@ import sqlite3
 import typing
 
 from ...knowpro import interfaces
-from ...knowpro.messageindex import MessageTextIndexSettings
-from ...knowpro.reltermsindex import RelatedTermIndexSettings
+from ...knowpro.convsettings import MessageTextIndexSettings, RelatedTermIndexSettings
 from .collections import SqliteMessageCollection, SqliteSemanticRefCollection
 from .indexes import (
     SqliteMessageTextIndex,
@@ -164,7 +163,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         """Get the conversation threads."""
         # For now, return a simple implementation
         # In a full implementation, this would be stored/retrieved from SQLite
-        from ...knowpro.convthreads import ConversationThreads
+        from ...storage.memory.convthreads import ConversationThreads
 
         return ConversationThreads(
             self.message_text_index_settings.embedding_index_settings

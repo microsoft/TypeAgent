@@ -6,8 +6,8 @@ import pytest
 from fixtures import needs_auth, memory_storage, embedding_model  # type: ignore  # It's used!
 from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
 from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
-from typeagent.knowpro.messageindex import MessageTextIndexSettings
-from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
+from typeagent.knowpro.convsettings import MessageTextIndexSettings
+from typeagent.knowpro.convsettings import RelatedTermIndexSettings
 from typeagent.storage.memory import MemoryStorageProvider
 
 

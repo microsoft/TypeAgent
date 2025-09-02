@@ -17,9 +17,11 @@ from typeagent.knowpro.interfaces import (
     ISemanticRefCollection,
 )
 from typeagent.knowpro.kplib import ConcreteEntity, Facet, Action, KnowledgeResponse
-from typeagent.knowpro.messageindex import MessageTextIndexSettings
-from typeagent.knowpro.reltermsindex import RelatedTermIndexSettings
-from typeagent.knowpro.semrefindex import (
+from typeagent.knowpro.convsettings import (
+    MessageTextIndexSettings,
+    RelatedTermIndexSettings,
+)
+from typeagent.storage.memory.semrefindex import (
     TermToSemanticRefIndex,
     add_entity_to_index,
     add_topic_to_index,

@@ -11,9 +11,10 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 from pydantic import Field, AliasChoices
 
 from ..aitools.embeddings import NormalizedEmbeddings
-from ..knowpro import semrefindex, kplib, secindex
+from ..storage.memory import semrefindex
+from ..knowpro import kplib, secindex
 from ..knowpro.field_helpers import CamelCaseField
-from ..knowpro.convthreads import ConversationThreads
+from ..storage.memory.convthreads import ConversationThreads
 from ..knowpro.convsettings import ConversationSettings
 from ..knowpro.interfaces import (
     ConversationDataWithIndexes,
@@ -32,8 +33,8 @@ from ..knowpro.interfaces import (
     Term,
     Timedelta,
 )
-from ..knowpro.messageindex import MessageTextIndex
-from ..knowpro.reltermsindex import TermToRelatedTermsMap
+from ..storage.memory.messageindex import MessageTextIndex
+from ..storage.memory.reltermsindex import TermToRelatedTermsMap
 from ..storage.utils import create_storage_provider
 from ..knowpro import serialization
 from ..storage.memory.collections import (

@@ -22,7 +22,7 @@ import bisect
 from collections.abc import AsyncIterable, Callable
 from typing import Any
 
-from .interfaces import (
+from ...knowpro.interfaces import (
     DateRange,
     Datetime,
     IConversation,
@@ -31,7 +31,7 @@ from .interfaces import (
     MessageOrdinal,
     TimestampedTextRange,
 )
-from .utils import text_range_from_message_chunk
+from ...knowpro.utils import text_range_from_message_chunk
 
 
 class TimestampToTextRangeIndex(ITimestampToTextRangeIndex):

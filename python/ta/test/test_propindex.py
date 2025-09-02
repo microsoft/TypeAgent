@@ -11,7 +11,7 @@ from typeagent.knowpro.interfaces import (
     TextRange,
 )
 from typeagent.knowpro.kplib import Facet, ConcreteEntity, Action
-from typeagent.knowpro.propindex import (
+from typeagent.storage.memory.propindex import (
     PropertyIndex,
     PropertyNames,
     add_facet,
