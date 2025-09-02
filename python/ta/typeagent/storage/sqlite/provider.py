@@ -77,6 +77,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         init_db_schema(self.db)
 
         # Initialize collections
+        # Initialize message collection first
         self._message_collection = SqliteMessageCollection(self.db, self.message_type)
         self._semantic_ref_collection = SqliteSemanticRefCollection(self.db)
 
@@ -85,7 +86,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         self._property_index = SqlitePropertyIndex(self.db)
         self._timestamp_index = SqliteTimestampToTextRangeIndex(self.db)
         self._message_text_index = SqliteMessageTextIndex(
-            self.db, self.message_text_index_settings
+            self.db, self.message_text_index_settings, self._message_collection
         )
         self._related_terms_index = SqliteRelatedTermsIndex(self.db)
 

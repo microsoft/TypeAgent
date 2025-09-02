@@ -401,9 +401,15 @@ class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
 class SqliteMessageTextIndex(interfaces.IMessageTextIndex):
     """SQLite-backed message text index with embedding support."""
 
-    def __init__(self, db: sqlite3.Connection, settings: MessageTextIndexSettings):
+    def __init__(
+        self,
+        db: sqlite3.Connection,
+        settings: MessageTextIndexSettings,
+        message_collection: interfaces.IMessageCollection | None = None,
+    ):
         self.db = db
         self.settings = settings
+        self._message_collection = message_collection
         # For simplicity, keep the embedding index in memory for now
         # In a full implementation, embeddings would also be stored in SQLite
         from ...knowpro.textlocindex import TextToTextLocationIndex
@@ -411,6 +417,48 @@ class SqliteMessageTextIndex(interfaces.IMessageTextIndex):
         self._text_to_location_index = TextToTextLocationIndex(
             settings.embedding_index_settings
         )
+        self._embeddings_built = False
+
+    async def _ensure_embeddings_built(self) -> None:
+        """Ensure that the in-memory embedding index is built from existing messages."""
+        if self._embeddings_built or self._message_collection is None:
+            return
+
+        # Check if we have entries in SQLite but empty embedding index
+        sqlite_size = await self.size()
+        embedding_size = await self._text_to_location_index.size()
+
+        if sqlite_size > 0 and embedding_size == 0:
+            # Need to rebuild embeddings from existing messages
+            from ...aitools import utils
+
+            with utils.timelog("regenerate message embeddings"):
+                # Collect all text and location pairs
+                text_and_locations = []
+
+                async def aenumerate(async_iterable, start=0):
+                    """Async version of enumerate()."""
+                    index = start
+                    async for item in async_iterable:
+                        yield index, item
+                        index += 1
+
+                async for message_ordinal, message in aenumerate(
+                    self._message_collection
+                ):
+                    for chunk_ordinal, chunk in enumerate(message.text_chunks):
+                        text_location = interfaces.TextLocation(
+                            message_ordinal=message_ordinal,
+                            chunk_ordinal=chunk_ordinal,
+                        )
+                        text_and_locations.append((chunk, text_location))
+
+                # Add all texts efficiently in batch
+                await self._text_to_location_index.add_text_locations(
+                    text_and_locations
+                )
+
+        self._embeddings_built = True
 
     async def size(self) -> int:
         cursor = self.db.cursor()
@@ -449,6 +497,7 @@ class SqliteMessageTextIndex(interfaces.IMessageTextIndex):
         self, text: str, max_matches: int | None = None, min_score: float | None = None
     ) -> list[ScoredTextLocation]:
         """Look up text using embeddings."""
+        await self._ensure_embeddings_built()
         return await self._text_to_location_index.lookup_text(
             text, max_matches, min_score
         )
@@ -460,6 +509,7 @@ class SqliteMessageTextIndex(interfaces.IMessageTextIndex):
         threshold_score: float | None = None,
     ) -> list[interfaces.ScoredMessageOrdinal]:
         """Look up messages by text content."""
+        await self._ensure_embeddings_built()
         # Use the embedding index to find text locations
         scored_locations = await self._text_to_location_index.lookup_text(
             message_text, max_matches, threshold_score
