@@ -210,6 +210,95 @@ export function addUserDataStrings(userData: SpotifyUserData) {
     return userData.nameMap;
 }
 
+export function getUserDataCompletions(
+    userData: SpotifyUserData,
+    track = true,
+    artist = false,
+    album = false,
+): string[] {
+    const completions: string[] = [];
+    if (track) {
+        // return names of tracks, sorted by timestamp
+        const trackNames = Array.from(userData.tracks.values())
+            .sort((a, b) => {
+                const aTime =
+                    a.timestamps.length > 0
+                        ? new Date(
+                              a.timestamps[a.timestamps.length - 1],
+                          ).getTime()
+                        : 0;
+                const bTime =
+                    b.timestamps.length > 0
+                        ? new Date(
+                              b.timestamps[b.timestamps.length - 1],
+                          ).getTime()
+                        : 0;
+                return bTime - aTime;
+            })
+            .map((t) => t.name);
+        completions.push(...trackNames);
+    }
+    if (artist) {
+        // return names of artists, sorted by timestamp
+        const artistNames = Array.from(userData.artists.values())
+            .sort((a, b) => {
+                const aTime =
+                    a.timestamps.length > 0
+                        ? new Date(
+                              a.timestamps[a.timestamps.length - 1],
+                          ).getTime()
+                        : 0;
+                const bTime =
+                    b.timestamps.length > 0
+                        ? new Date(
+                              b.timestamps[b.timestamps.length - 1],
+                          ).getTime()
+                        : 0;
+                return bTime - aTime;
+            })
+            .map((a) => a.name);
+        completions.push(...artistNames);
+    }
+    if (album) {
+        // for now just return names no sorting
+        const albumNames = Array.from(userData.albums.values()).map(
+            (a) => a.name,
+        );
+        completions.push(...albumNames);
+    }
+    return completions;
+}
+
+export function addFullTracks(
+    userData: SpotifyUserData,
+    tracks: SpotifyApi.TrackObjectFull[],
+) {
+    const ts = new Date(Date.now()).toISOString();
+    const trackArtists = [] as SpotifyApi.ArtistObjectSimplified[];
+    for (const track of tracks) {
+        trackArtists.push(...track.artists);
+    }
+    mergeUserDataKind(
+        userData.artists,
+        trackArtists.map((a) => ({
+            freq: 1,
+            timestamps: [ts],
+            id: a.id,
+            name: a.name,
+        })),
+    );
+    mergeUserDataKind(
+        userData.tracks,
+        tracks.map((t) => ({
+            id: t.id,
+            name: t.name,
+            freq: 1,
+            timestamps: [ts],
+            albumName: t.album?.name,
+            albumArtist: t.album?.artists[0]?.name,
+        })),
+    );
+}
 async function updateUserData(
     storage: Storage,
     service: SpotifyService,
@@ -326,6 +415,7 @@ async function updateUserData(
 
 export type UserData = {
     data: SpotifyUserData;
+    instanceStorage: Storage;
     timeoutId?: NodeJS.Timeout;
 };
 
@@ -336,7 +426,7 @@ export async function initializeUserData(
 ) {
     debugData("Loading saved user data");
     const data = await loadUserData(instanceStorage);
-    const result: UserData = { data };
+    const result: UserData = { data, instanceStorage };
     debugData(
         `Tracks: ${data.tracks.size}, Artists: ${data.artists.size}, Albums: ${data.albums.size}`,
     );

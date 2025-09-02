@@ -52,6 +52,7 @@ import {
     saveUserData,
     addUserDataStrings,
     UserData,
+    addFullTracks,
 } from "./userData.js";
 
 import {
@@ -462,6 +463,11 @@ async function playTrackAction(
 
     if (equivalentNames(action.parameters.trackName, tracks[0].name)) {
         tracks.splice(1);
+        const userData = clientContext.userData;
+        if (userData) {
+            addFullTracks(userData.data, tracks);
+            await saveUserData(userData.instanceStorage, userData.data);
+        }
     }
     const collection = new TrackCollection(tracks);
     return playTrackCollection(collection, clientContext);

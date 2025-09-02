@@ -12,6 +12,7 @@ export interface AuthTokenProvider {
 export enum AzureTokenScopes {
     CogServices = "https://cognitiveservices.azure.com/.default",
     AzureMaps = "https://atlas.microsoft.com/.default",
+    AzureSearch = "https://search.azure.com/",
 }
 
 export function createAzureTokenProvider(
@@ -70,4 +71,8 @@ export function createAzureTokenProvider(
         const now = Date.now();
         return accessToken.expiresOnTimestamp <= now;
     }
+}
+
+export function createDefaultCredential(): DefaultAzureCredential {
+    return new DefaultAzureCredential();
 }

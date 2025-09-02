@@ -1,14 +1,21 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import json
 import os
-from typing import TypedDict, cast
+from typing import TypedDict, cast, Any
 
-from ..knowpro import convindex, kplib, secindex
-from ..knowpro.convthreads import ConversationThreads
-from ..knowpro.importing import ConversationSettings
+import numpy as np
+from pydantic.dataclasses import dataclass as pydantic_dataclass
+from pydantic import Field, AliasChoices
+
+from ..aitools.embeddings import NormalizedEmbeddings
+from ..storage.memory import semrefindex
+from ..knowpro import kplib, secindex
+from ..knowpro.field_helpers import CamelCaseField
+from ..storage.memory.convthreads import ConversationThreads
+from ..knowpro.convsettings import ConversationSettings
 from ..knowpro.interfaces import (
     ConversationDataWithIndexes,
     Datetime,
@@ -20,26 +27,28 @@ from ..knowpro.interfaces import (
     IMessageCollection,
     IMessageMetadata,
     ISemanticRefCollection,
-    IndexingEventHandlers,
-    IndexingResults,
+    IStorageProvider,
     MessageOrdinal,
     SemanticRef,
     Term,
     Timedelta,
 )
-from ..knowpro.messageindex import MessageTextIndex
-from ..knowpro.reltermsindex import TermToRelatedTermsMap
+from ..storage.memory.messageindex import MessageTextIndex
+from ..storage.memory.reltermsindex import TermToRelatedTermsMap
+from ..storage.utils import create_storage_provider
 from ..knowpro import serialization
-from ..knowpro.storage import MessageCollection, SemanticRefCollection
-from ..storage.sqlitestore import get_storage_provider
+from ..storage.memory.collections import (
+    MemoryMessageCollection,
+    MemorySemanticRefCollection,
+)
 
 
-@dataclass
+@pydantic_dataclass
 class PodcastMessageMeta(IKnowledgeSource, IMessageMetadata):
     """Metadata class (!= metaclass) for podcast messages."""
 
     speaker: str | None = None
-    listeners: list[str] = field(default_factory=list)
+    listeners: list[str] = Field(default_factory=list)
 
     @property
     def source(self) -> str | None:  # type: ignore[reportIncompatibleVariableOverride]
@@ -104,11 +113,15 @@ class PodcastMessageData(TypedDict):
     timestamp: str | None
 
 
-@dataclass
+@pydantic_dataclass
 class PodcastMessage(IMessage):
-    text_chunks: list[str]
-    metadata: PodcastMessageMeta
-    tags: list[str] = field(default_factory=list[str])
+    text_chunks: list[str] = CamelCaseField("The text chunks of the podcast message")
+    metadata: PodcastMessageMeta = CamelCaseField(
+        "Metadata associated with the podcast message"
+    )
+    tags: list[str] = CamelCaseField(
+        "Tags associated with the message", default_factory=list
+    )
     timestamp: str | None = None
 
     def get_knowledge(self) -> kplib.KnowledgeResponse:
@@ -121,28 +134,11 @@ class PodcastMessage(IMessage):
         self.text_chunks[0] += content
 
     def serialize(self) -> PodcastMessageData:
-        return PodcastMessageData(
-            metadata=PodcastMessageMetaData(
-                speaker=self.metadata.speaker,
-                listeners=self.metadata.listeners,
-            ),
-            textChunks=self.text_chunks,
-            tags=self.tags,
-            timestamp=self.timestamp,
-        )
+        return self.__pydantic_serializer__.to_python(self, by_alias=True)  # type: ignore
 
     @staticmethod
     def deserialize(message_data: PodcastMessageData) -> "PodcastMessage":
-        metadata_data = message_data["metadata"]
-        return PodcastMessage(
-            text_chunks=message_data["textChunks"],
-            metadata=PodcastMessageMeta(
-                speaker=metadata_data.get("speaker"),
-                listeners=metadata_data.get("listeners"),
-            ),
-            tags=message_data["tags"],
-            timestamp=message_data["timestamp"],
-        )
+        return PodcastMessage.__pydantic_validator__.validate_python(message_data)  # type: ignore
 
 
 class PodcastData(ConversationDataWithIndexes[PodcastMessageData]):
@@ -150,36 +146,52 @@ class PodcastData(ConversationDataWithIndexes[PodcastMessageData]):
 
 
 @dataclass
-class Podcast(
-    IConversation[
-        PodcastMessage,
-        convindex.ConversationIndex,
-    ]
-):
-    name_tag: str = ""
-    messages: IMessageCollection[PodcastMessage] = field(
-        default_factory=MessageCollection[PodcastMessage]
-    )
-    tags: list[str] = field(default_factory=list[str])
-    semantic_refs: ISemanticRefCollection | None = field(
-        default_factory=SemanticRefCollection
-    )
-    settings: ConversationSettings = field(default_factory=ConversationSettings)
-    semantic_ref_index: convindex.ConversationIndex = field(
-        default_factory=convindex.ConversationIndex
-    )
+class Podcast(IConversation[PodcastMessage, semrefindex.TermToSemanticRefIndex]):
+    settings: ConversationSettings
+    name_tag: str
+    messages: IMessageCollection[PodcastMessage]
+    semantic_refs: ISemanticRefCollection
+    tags: list[str]
+    semantic_ref_index: semrefindex.TermToSemanticRefIndex
+    secondary_indexes: IConversationSecondaryIndexes[PodcastMessage] | None
 
-    secondary_indexes: IConversationSecondaryIndexes[PodcastMessage] = field(init=False)
-
-    def __post_init__(self) -> None:
-        self.secondary_indexes = secindex.ConversationSecondaryIndexes(  # type: ignore  # TODO
-            self.settings.related_term_index_settings
+    @classmethod
+    async def create(
+        cls,
+        settings: ConversationSettings,
+        name_tag: str | None = None,
+        messages: IMessageCollection[PodcastMessage] | None = None,
+        semantic_refs: ISemanticRefCollection | None = None,
+        semantic_ref_index: semrefindex.TermToSemanticRefIndex | None = None,
+        tags: list[str] | None = None,
+        secondary_indexes: IConversationSecondaryIndexes[PodcastMessage] | None = None,
+    ) -> "Podcast":
+        """Create a fully initialized Podcast instance."""
+        storage_provider = await settings.get_storage_provider()
+        return cls(
+            settings,
+            name_tag or "",
+            messages or await storage_provider.get_message_collection(),
+            semantic_refs or await storage_provider.get_semantic_ref_collection(),
+            tags if tags is not None else [],
+            semantic_ref_index or await storage_provider.get_semantic_ref_index(),  # type: ignore
+            secondary_indexes
+            or await secindex.ConversationSecondaryIndexes.create(
+                storage_provider, settings.related_term_index_settings
+            ),
         )
+
+    def _get_secondary_indexes(self) -> IConversationSecondaryIndexes[PodcastMessage]:
+        """Get secondary indexes, asserting they are initialized."""
+        assert (
+            self.secondary_indexes is not None
+        ), "Use await Podcast.create() to create an initialized instance"
+        return self.secondary_indexes
 
     async def add_metadata_to_index(self) -> None:
         if self.semantic_ref_index is not None:
             assert self.semantic_refs is not None
-            await convindex.add_metadata_to_index(
+            await semrefindex.add_metadata_to_index(
                 self.messages,
                 self.semantic_refs,
                 self.semantic_ref_index,
@@ -194,19 +206,18 @@ class Podcast(
 
     async def build_index(
         self,
-        event_handler: IndexingEventHandlers | None = None,
-    ) -> IndexingResults:
+    ) -> None:
         await self.add_metadata_to_index()
-        result = await convindex.build_conversation_index(
-            self, self.settings, event_handler
-        )
-        # build_conversation_index automatically builds standard secondary indexes.
+        assert (
+            self.settings is not None
+        ), "Settings must be initialized before building index"
+        await semrefindex.build_semantic_ref(self, self.settings)
+        # build_semantic_ref automatically builds standard secondary indexes.
         # Pass false here to build podcast specific secondary indexes only.
         await self._build_transient_secondary_indexes(False)
         if self.secondary_indexes is not None:
             if self.secondary_indexes.threads is not None:
                 await self.secondary_indexes.threads.build_index()  # type: ignore  # TODO
-        return result
 
     async def serialize(self) -> PodcastData:
         data = PodcastData(
@@ -220,16 +231,18 @@ class Podcast(
             ),
         )
         # Set the rest only if they aren't None.
-        if self.semantic_ref_index:
+        if self.semantic_ref_index is not None:
             data["semanticIndexData"] = self.semantic_ref_index.serialize()
-        if self.secondary_indexes.term_to_related_terms_index:
+
+        secondary_indexes = self._get_secondary_indexes()
+        if secondary_indexes.term_to_related_terms_index is not None:
             data["relatedTermsIndexData"] = (
-                self.secondary_indexes.term_to_related_terms_index.serialize()
+                await secondary_indexes.term_to_related_terms_index.serialize()
             )
-        if self.secondary_indexes.threads:
-            data["threadData"] = self.secondary_indexes.threads.serialize()
-        if self.secondary_indexes.message_index:
-            data["messageIndexData"] = self.secondary_indexes.message_index.serialize()
+        if secondary_indexes.threads:
+            data["threadData"] = secondary_indexes.threads.serialize()
+        if secondary_indexes.message_index is not None:
+            data["messageIndexData"] = secondary_indexes.message_index.serialize()
         return data
 
     async def write_to_file(self, filename: str) -> None:
@@ -253,7 +266,7 @@ class Podcast(
         semantic_refs_data = podcast_data.get("semanticRefs")
         if semantic_refs_data is not None:
             if self.semantic_refs is None:
-                self.semantic_refs = SemanticRefCollection()
+                self.semantic_refs = MemorySemanticRefCollection()
             semrefs = [SemanticRef.deserialize(r) for r in semantic_refs_data]
             await self.semantic_refs.extend(semrefs)
 
@@ -261,82 +274,134 @@ class Podcast(
 
         semantic_index_data = podcast_data.get("semanticIndexData")
         if semantic_index_data is not None:
-            self.semantic_ref_index = convindex.ConversationIndex(  # type: ignore  # TODO
-                semantic_index_data
-            )
+            if self.semantic_ref_index is not None:
+                # Use the existing index and deserialize into it (for persistent storage)
+                self.semantic_ref_index.deserialize(semantic_index_data)
+            else:
+                # Direct construction for in-memory storage
+                self.semantic_ref_index = semrefindex.TermToSemanticRefIndex(  # type: ignore  # TODO
+                    semantic_index_data
+                )
 
         related_terms_index_data = podcast_data.get("relatedTermsIndexData")
         if related_terms_index_data is not None:
-            term_to_related_terms_index = (
-                self.secondary_indexes.term_to_related_terms_index
-            )
+            secondary_indexes = self._get_secondary_indexes()
+            term_to_related_terms_index = secondary_indexes.term_to_related_terms_index
             if term_to_related_terms_index is not None:
-                term_to_related_terms_index.deserialize(related_terms_index_data)
+                # Assert empty before deserializing
+                assert (
+                    await term_to_related_terms_index.aliases.is_empty()
+                ), "Term to related terms index must be empty before deserializing"
+                await term_to_related_terms_index.deserialize(related_terms_index_data)
 
         thread_data = podcast_data.get("threadData")
         if thread_data is not None:
-            self.secondary_indexes.threads = ConversationThreads(
+            assert (
+                self.settings is not None
+            ), "Settings must be initialized for deserialization"
+            secondary_indexes = self._get_secondary_indexes()
+            secondary_indexes.threads = ConversationThreads(
                 self.settings.thread_settings
             )
-            self.secondary_indexes.threads.deserialize(thread_data)
+            secondary_indexes.threads.deserialize(thread_data)
 
         message_index_data = podcast_data.get("messageIndexData")
         if message_index_data is not None:
-            self.secondary_indexes.message_index = MessageTextIndex(
-                self.settings.message_text_index_settings
-            )
-            self.secondary_indexes.message_index.deserialize(message_index_data)
+            secondary_indexes = self._get_secondary_indexes()
+            # Assert the message index is empty before deserializing
+            assert (
+                secondary_indexes.message_index is not None
+            ), "Message index should be initialized"
+
+            if isinstance(secondary_indexes.message_index, MessageTextIndex):
+                index_size = await secondary_indexes.message_index.size()
+                assert (
+                    index_size == 0
+                ), "Message index must be empty before deserializing"
+            secondary_indexes.message_index.deserialize(message_index_data)
 
         await self._build_transient_secondary_indexes(True)
 
     @staticmethod
+    def _read_conversation_data_from_file(
+        filename_prefix: str, embedding_size: int
+    ) -> ConversationDataWithIndexes[Any]:
+        """Read podcast conversation data from files. No exceptions are caught; they just bubble out."""
+        with open(filename_prefix + "_data.json", "r", encoding="utf-8") as f:
+            json_data: serialization.ConversationJsonData[PodcastMessageData] = (
+                json.load(f)
+            )
+        embeddings_list: list[NormalizedEmbeddings] | None = None
+        if embedding_size:
+            with open(filename_prefix + "_embeddings.bin", "rb") as f:
+                embeddings = np.fromfile(f, dtype=np.float32).reshape(
+                    (-1, embedding_size)
+                )
+                embeddings_list = [embeddings]
+        else:
+            print(
+                "Warning: not reading embeddings file because size is {embedding_size}"
+            )
+            embeddings_list = None
+        file_data = serialization.ConversationFileData(
+            jsonData=json_data,
+            binaryData=serialization.ConversationBinaryData(
+                embeddingsList=embeddings_list
+            ),
+        )
+        if json_data.get("fileHeader") is None:
+            json_data["fileHeader"] = serialization.create_file_header()
+        return serialization.from_conversation_file_data(file_data)
+
+    @staticmethod
     async def read_from_file(
         filename_prefix: str,
-        settings: ConversationSettings | None = None,
+        settings: ConversationSettings,
         dbname: str | None = None,
-    ) -> "Podcast | None":
-        settings = settings or ConversationSettings()
+    ) -> "Podcast":
         embedding_size = settings.embedding_model.embedding_size
-        data = serialization.read_conversation_data_from_file(
+        data = Podcast._read_conversation_data_from_file(
             filename_prefix, embedding_size
         )
-        if not data:
-            return None
-        provider = get_storage_provider(dbname)
-        msgs = provider.create_message_collection(PodcastMessage)
-        semrefs = provider.create_semantic_ref_collection()
+
+        provider = await settings.get_storage_provider()
+        msgs = await provider.get_message_collection()
+        semrefs = await provider.get_semantic_ref_collection()
         if await msgs.size() or await semrefs.size():
             raise RuntimeError(
                 f"Database {dbname!r} already has messages or semantic refs."
             )
-        podcast = Podcast(messages=msgs, semantic_refs=semrefs, settings=settings)
+        podcast = await Podcast.create(settings, messages=msgs, semantic_refs=semrefs)
         await podcast.deserialize(data)
         return podcast
 
     async def _build_transient_secondary_indexes(self, build_all: bool) -> None:
+        # Secondary indexes are already initialized via create() factory method
         if build_all:
-            await secindex.build_transient_secondary_indexes(self)
+            await secindex.build_transient_secondary_indexes(self, self.settings)
         await self._build_participant_aliases()
-        self._add_synonyms()
+        await self._add_synonyms()
 
     async def _build_participant_aliases(self) -> None:
-        aliases = self.secondary_indexes.term_to_related_terms_index.aliases  # type: ignore  # TODO
-        assert aliases is not None
-        aliases.clear()  # type: ignore  # Same issue as above.
+        secondary_indexes = self._get_secondary_indexes()
+        term_to_related_terms_index = secondary_indexes.term_to_related_terms_index
+        assert term_to_related_terms_index is not None
+        aliases = term_to_related_terms_index.aliases
+        await aliases.clear()
         name_to_alias_map = await self._collect_participant_aliases()
         for name in name_to_alias_map.keys():
             related_terms: list[Term] = [
                 Term(text=alias) for alias in name_to_alias_map[name]
             ]
-            aliases.add_related_term(name, related_terms)  # type: ignore  # TODO: Same issue as above.
+            await aliases.add_related_term(name, related_terms)
 
-    def _add_synonyms(self) -> None:
-        assert self.secondary_indexes.term_to_related_terms_index is not None
+    async def _add_synonyms(self) -> None:
+        secondary_indexes = self._get_secondary_indexes()
+        assert secondary_indexes.term_to_related_terms_index is not None
         aliases = cast(
             TermToRelatedTermsMap,
-            self.secondary_indexes.term_to_related_terms_index.aliases,
+            secondary_indexes.term_to_related_terms_index.aliases,
         )
-        assert aliases is not None
         synonym_file = os.path.join(os.path.dirname(__file__), "podcastVerbs.json")
         with open(synonym_file) as f:
             data: list[dict] = json.load(f)
@@ -347,7 +412,7 @@ class Podcast(
                 if text and synonyms:
                     related_term = Term(text=text.lower())
                     for synonym in synonyms:
-                        aliases.add_related_term(
+                        await aliases.add_related_term(
                             synonym.lower(),
                             related_term,
                         )

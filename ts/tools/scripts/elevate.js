@@ -10,9 +10,9 @@ async function elevate(startDateTime) {
     // get PIM client
     const client = await getClient();
 
-    // elevate
-    await config.forEach((element) => {
-        var v = client.elevate({
+    for (element of config) {
+        console.log(`>> Elevating ${element.roleName}`);
+        var v = await client.elevate({
             requestType: element.properties.RequestType,
             roleName: element.roleName,
             expirationType: element.properties.ScheduleInfo.Expiration.Type,
@@ -20,7 +20,7 @@ async function elevate(startDateTime) {
                 element.properties.ScheduleInfo.Expiration.Duration,
             startDateTime: startDateTime,
         });
-    });
+    }
 }
 
 (async () => {

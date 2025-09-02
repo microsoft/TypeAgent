@@ -52,6 +52,10 @@ function registerClient(client: Client) {
         },
     );
 
+    ipcRenderer.on("focus-chat-input", () => {
+        client.focusInput();
+    });
+
     // Signal the main process that the client has been registered
     ipcRenderer.send("dom ready");
 }

@@ -3,3 +3,4 @@
 
 export * from "./fileSystem.js";
 export * as sqlite from "./sqlite/index.js";
+export * as azSearch from "./azSearch/index.js";

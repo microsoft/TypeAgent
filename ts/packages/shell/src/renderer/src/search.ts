@@ -6,7 +6,7 @@ import { TST } from "./prefixTree";
 export type SearchMenuItem = {
     matchText: string;
     emojiChar?: string;
-
+    sortIndex?: number;
     selectedText: string;
     needQuotes?: boolean; // default is true, and will add quote to the selectedText if it has spaces.
 };
@@ -123,7 +123,11 @@ export class SearchMenu {
     public setChoices(choices: SearchMenuItem[]) {
         this.trie.init();
         for (const choice of choices) {
-            this.trie.insert(normalizeMatchText(choice.matchText), choice);
+            // choices are sorted in priority order so prefer first norm text
+            const normText = normalizeMatchText(choice.matchText);
+            if (!this.trie.get(normText)) {
+                this.trie.insert(normText, choice);
+            }
         }
     }
 

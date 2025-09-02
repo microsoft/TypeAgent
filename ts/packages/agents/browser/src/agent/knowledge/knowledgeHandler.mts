@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { SessionContext } from "@typeagent/agent-sdk";
-import { BrowserActionContext } from "../actionHandler.mjs";
+import { BrowserActionContext } from "../browserActions.mjs";
 import { searchWebMemories } from "../searchWebMemories.mjs";
 import * as website from "website-memory";
 import {
@@ -429,11 +429,12 @@ export async function indexWebPageContent(
     parameters: {
         url: string;
         title: string;
-        htmlFragments: any[];
+        htmlFragments?: any[];
         extractKnowledge: boolean;
         timestamp: string;
         textOnly?: boolean;
         mode?: "basic" | "content" | "full";
+        extractedKnowledge?: any;
     },
     context: SessionContext<BrowserActionContext>,
 ): Promise<{
@@ -442,31 +443,39 @@ export async function indexWebPageContent(
     entityCount: number;
 }> {
     try {
-        // Create individual extraction inputs for each HTML fragment
-        const extractionInputs = createExtractionInputsFromFragments(
-            parameters.htmlFragments,
-            parameters.url,
-            parameters.title,
-            "index",
-            parameters.timestamp,
-        );
+        let aggregatedResults: any;
+        let combinedTextContent = "";
 
-        const extractionMode = parameters.mode || "content";
-        const extractor = new BrowserKnowledgeExtractor(context);
+        if (parameters.extractedKnowledge) {
+            aggregatedResults = parameters.extractedKnowledge;
+            combinedTextContent = aggregatedResults.summary || "";
+        } else {
+            // Create individual extraction inputs for each HTML fragment
+            const extractionInputs = createExtractionInputsFromFragments(
+                parameters.htmlFragments!,
+                parameters.url,
+                parameters.title,
+                "index",
+                parameters.timestamp,
+            );
 
-        // Process each fragment individually using batch processing
-        const extractionResults = await extractor.extractBatch(
-            extractionInputs,
-            extractionMode,
-        );
+            const extractionMode = parameters.mode || "content";
+            const extractor = new BrowserKnowledgeExtractor(context);
 
-        // Aggregate results for indexing
-        const aggregatedResults = aggregateExtractionResults(extractionResults);
+            // Process each fragment individually using batch processing
+            const extractionResults = await extractor.extractBatch(
+                extractionInputs,
+                extractionMode,
+            );
 
-        // Create combined text content for website memory indexing
-        const combinedTextContent = extractionInputs
-            .map((input) => input.textContent)
-            .join("\n\n");
+            // Aggregate results for indexing
+            aggregatedResults = aggregateExtractionResults(extractionResults);
+
+            // Create combined text content for website memory indexing
+            combinedTextContent = extractionInputs
+                .map((input) => input.textContent)
+                .join("\n\n");
+        }
 
         const visitInfo: website.WebsiteVisitInfo = {
             url: parameters.url,
@@ -483,7 +492,7 @@ export async function indexWebPageContent(
         if (aggregatedResults && aggregatedResults.entities.length > 0) {
             // Set knowledge based on what the website-memory package expects
             websiteObj.knowledge = {
-                entities: aggregatedResults.entities.map((entity) => ({
+                entities: aggregatedResults.entities.map((entity: any) => ({
                     ...entity,
                     type: Array.isArray(entity.type)
                         ? entity.type
@@ -518,78 +527,73 @@ export async function indexWebPageContent(
         }
 
         if (context.agentContext.websiteCollection) {
-            if (parameters.extractKnowledge) {
-                try {
-                    const isNewPage = !checkPageExistsInIndex(
-                        parameters.url,
-                        context,
-                    );
+            try {
+                const isNewPage = !checkPageExistsInIndex(
+                    parameters.url,
+                    context,
+                );
 
-                    if (isNewPage) {
-                        const docPart =
-                            website.WebsiteDocPart.fromWebsite(websiteObj);
-                        const result =
-                            await context.agentContext.websiteCollection.addWebsiteToIndex(
-                                docPart,
-                            );
-                        if (hasIndexingErrors(result)) {
-                            console.warn(
-                                "Incremental indexing failed, falling back to full rebuild",
-                            );
-                            context.agentContext.websiteCollection.addWebsites([
-                                websiteObj,
-                            ]);
-                            await context.agentContext.websiteCollection.buildIndex();
-                        }
-                    } else {
-                        const docPart =
-                            website.WebsiteDocPart.fromWebsite(websiteObj);
-                        const result =
-                            await context.agentContext.websiteCollection.updateWebsiteInIndex(
-                                parameters.url,
-                                docPart,
-                            );
-                        if (hasIndexingErrors(result)) {
-                            console.warn(
-                                "Update indexing failed, falling back to full rebuild",
-                            );
-                            context.agentContext.websiteCollection.addWebsites([
-                                websiteObj,
-                            ]);
-                            await context.agentContext.websiteCollection.buildIndex();
-                        }
-                    }
-                } catch (error) {
-                    console.warn(
-                        "Indexing error, falling back to full rebuild:",
-                        error,
-                    );
-                    context.agentContext.websiteCollection.addWebsites([
-                        websiteObj,
-                    ]);
-                    await context.agentContext.websiteCollection.buildIndex();
-                }
-
-                try {
-                    if (context.agentContext.index?.path) {
-                        await context.agentContext.websiteCollection.writeToFile(
-                            context.agentContext.index.path,
-                            "index",
+                if (isNewPage) {
+                    const docPart =
+                        website.WebsiteDocPart.fromWebsite(websiteObj);
+                    const result =
+                        await context.agentContext.websiteCollection.addWebsiteToIndex(
+                            docPart,
                         );
-                        console.log(
-                            `Saved updated website collection to ${context.agentContext.index.path}`,
-                        );
-                    } else {
+                    if (hasIndexingErrors(result)) {
                         console.warn(
-                            "No index path available, indexed page data not persisted to disk",
+                            "Incremental indexing failed, falling back to full rebuild",
                         );
+                        context.agentContext.websiteCollection.addWebsites([
+                            websiteObj,
+                        ]);
+                        await context.agentContext.websiteCollection.buildIndex();
                     }
-                } catch (error) {
-                    console.error(
-                        "Error persisting website collection:",
-                        error,
+                } else {
+                    const docPart =
+                        website.WebsiteDocPart.fromWebsite(websiteObj);
+                    const result =
+                        await context.agentContext.websiteCollection.updateWebsiteInIndex(
+                            parameters.url,
+                            docPart,
+                        );
+                    if (hasIndexingErrors(result)) {
+                        console.warn(
+                            "Update indexing failed, falling back to full rebuild",
+                        );
+                        context.agentContext.websiteCollection.addWebsites([
+                            websiteObj,
+                        ]);
+                        await context.agentContext.websiteCollection.buildIndex();
+                    }
+                }
+            } catch (error) {
+                console.warn(
+                    "Indexing error, falling back to full rebuild:",
+                    error,
+                );
+                context.agentContext.websiteCollection.addWebsites([
+                    websiteObj,
+                ]);
+                await context.agentContext.websiteCollection.buildIndex();
+            }
+
+            try {
+                if (context.agentContext.index?.path) {
+                    await context.agentContext.websiteCollection.writeToFile(
+                        context.agentContext.index.path,
+                        "index",
+                    );
+                    console.log(
+                        `Saved updated website collection to ${context.agentContext.index.path}`,
+                    );
+                } else {
+                    console.warn(
+                        "No index path available, indexed page data not persisted to disk",
                     );
                 }
+            } catch (error) {
+                console.error("Error persisting website collection:", error);
             }
         }
 
@@ -759,7 +763,7 @@ export async function clearKnowledgeIndex(
 }
 
 // Enhanced suggested questions using content analysis and DataFrames
-async function generateSmartSuggestedQuestions(
+export async function generateSmartSuggestedQuestions(
     knowledge: any,
     extractionResult: any,
     url: string,
@@ -1636,6 +1640,8 @@ export async function getPageIndexedKnowledge(
             );
 
             // Generate contextual questions for indexed content
+            const suggestedQuestions: string[] = [];
+            /*
             const suggestedQuestions: string[] =
                 await generateSmartSuggestedQuestions(
                     knowledge,
@@ -1643,6 +1649,7 @@ export async function getPageIndexedKnowledge(
                     parameters.url,
                     context,
                 );
+            */
 
             // Calculate content metrics from the stored text
             const textContent = foundWebsite.textChunks?.join("\n\n") || "";

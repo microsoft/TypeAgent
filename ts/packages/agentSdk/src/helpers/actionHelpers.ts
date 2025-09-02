@@ -58,10 +58,11 @@ export function createActionResult(
 export function createActionResultFromTextDisplay(
     displayText: string,
     historyText?: string,
+    entities?: Entity[] | undefined,
 ): ActionResultSuccess {
     return {
         historyText,
-        entities: [],
+        entities: entities ? entities : [],
         displayContent: displayText,
     };
 }

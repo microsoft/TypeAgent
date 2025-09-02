@@ -3,6 +3,9 @@
 
 import pytest
 
+from fixtures import FakeConversation, FakeMessage, FakeTermIndex  # type: ignore
+from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
+from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
 from typeagent.knowpro.collections import (
     MatchAccumulator,
     SemanticRefAccumulator,
@@ -11,13 +14,17 @@ from typeagent.knowpro.collections import (
     TextRangeCollection,
     TextRangesInScope,
 )
+from typeagent.knowpro.convsettings import ConversationSettings
 from typeagent.knowpro.interfaces import (
+    DateRange,
+    Datetime,
     IConversation,
     IMessage,
+    IStorageProvider,
     ITermToSemanticRefIndex,
+    PropertySearchTerm,
     Term,
     SearchTerm,
-    PropertySearchTerm,
     SemanticRef,
     ScoredSemanticRefOrdinal,
     TextRange,
@@ -25,8 +32,13 @@ from typeagent.knowpro.interfaces import (
     Topic,
 )
 from typeagent.knowpro.kplib import KnowledgeResponse
+from typeagent.knowpro.convsettings import MessageTextIndexSettings
+from typeagent.knowpro.convsettings import RelatedTermIndexSettings
+from typeagent.storage.memory import MemoryStorageProvider
+from typeagent.knowpro.convsettings import ConversationSettings
 from typeagent.knowpro.query import (
     TextRangeSelector,
+    get_text_range_for_date_range,
     is_conversation_searchable,
     lookup_term_filtered,
     lookup_term,
@@ -47,8 +59,13 @@ from typeagent.knowpro.query import (
     match_entity_name_or_type,
     lookup_knowledge_type,
 )
-from typeagent.knowpro.propindex import PropertyIndex
-from typeagent.knowpro.storage import MessageCollection, SemanticRefCollection
+from typeagent.storage.memory.propindex import PropertyIndex
+from typeagent.storage.memory import (
+    MemoryMessageCollection,
+    MemorySemanticRefCollection,
+)
+
+from fixtures import needs_auth
 
 
 def downcast[T](cls: type[T], obj: object) -> T:
@@ -57,139 +74,103 @@ def downcast[T](cls: type[T], obj: object) -> T:
     return obj
 
 
-class MockMessage(IMessage):
-    """Mock message for testing."""
-
-    def __init__(self, message_ordinal: int, text: str = ""):
-        self.ordinal = message_ordinal
-        self.text_chunks = [text]
-        # Assign a valid ISO-format timestamp string
-        # For variety, increment the hour by message_ordinal
-        self.timestamp = f"2020-01-01T0{message_ordinal}:00:00"
-        self.tags = []
-
-    def get_knowledge(self) -> KnowledgeResponse:
-        raise RuntimeError
-
-
-class MockMessageCollection(MessageCollection[MockMessage]):
-    pass
+from fixtures import needs_auth  # type: ignore
 
 
 def make_semantic_ref(ordinal: int, text_range: TextRange):
     return SemanticRef(
         semantic_ref_ordinal=ordinal,
         range=text_range,
-        knowledge_type="topic",
         knowledge=Topic("test_topic"),
     )
 
 
-class MockTermIndex(ITermToSemanticRefIndex):
-    """Mock term index for testing."""
+def create_searchable_conversation(
+    has_refs: bool = True, has_index: bool = True
+) -> FakeConversation:
+    """Create a FakeConversation with searchable data for testing."""
+    messages = [FakeMessage("First message", 0), FakeMessage("Second message", 1)]
 
-    def __init__(self, term_to_refs: dict[str, list[ScoredSemanticRefOrdinal]]):
-        self.term_to_refs = term_to_refs
+    # Create semantic refs
+    refs = []
+    if has_refs:
+        refs = [
+            make_semantic_ref(0, TextRange(TextLocation(0, 0), TextLocation(0, 10))),
+            make_semantic_ref(1, TextRange(TextLocation(1, 0), TextLocation(1, 10))),
+        ]
 
-    def get_terms(self) -> list[str]:
-        return list(self.term_to_refs.keys())
+    # Create term index with data
+    term_to_refs = {}
+    if has_index:
+        term_to_refs = {
+            "first": [ScoredSemanticRefOrdinal(0, 1.0)],
+            "second": [ScoredSemanticRefOrdinal(1, 0.8)],
+            "test": [
+                ScoredSemanticRefOrdinal(0, 0.9),
+                ScoredSemanticRefOrdinal(1, 0.7),
+            ],
+        }
 
-    def add_term(self, term, semantic_ref_ordinal):
-        raise RuntimeError
+    # Create conversation (using None storage provider for simplicity in non-async context)
+    conv = FakeConversation(
+        name_tag="MockConversation",
+        messages=messages,
+        semantic_refs=refs,
+        storage_provider=None,
+        has_secondary_indexes=False,
+    )
 
-    def remove_term(self, term, semantic_ref_ordinal):
-        raise RuntimeError
+    # Set up semantic ref index with test data
+    if has_index:
+        conv.semantic_ref_index = FakeTermIndex(term_to_refs)
+    else:
+        conv.semantic_ref_index = None
 
-    def lookup_term(self, term: str) -> list[ScoredSemanticRefOrdinal]:
-        return self.term_to_refs.get(term, [])
-
-
-class MockConversation(IConversation[MockMessage, MockTermIndex]):
-    """Mock conversation for testing."""
-
-    def __init__(
-        self,
-        name_tag: str = "MockConversation",
-        has_refs: bool = True,
-        has_index: bool = True,
-    ):
-        self.name_tag = name_tag
-        self.tags = []
-        messages = [MockMessage(0, "First message"), MockMessage(1, "Second message")]
-        self.messages = MockMessageCollection(messages)
-        self.semantic_refs = None
-        self.semantic_ref_index = None
-        self.secondary_indexes = None
-
-        # Create semantic refs
-        refs = []
-        if has_refs:
-            refs = [
-                make_semantic_ref(
-                    0, TextRange(TextLocation(0, 0), TextLocation(0, 10))
-                ),
-                make_semantic_ref(
-                    1, TextRange(TextLocation(1, 0), TextLocation(1, 10))
-                ),
-            ]
-            self.semantic_refs = SemanticRefCollection(refs)
-        else:
-            self.semantic_refs = None
-
-        # Create semantic ref index
-        term_to_refs = {}
-        if has_index:
-            term_to_refs = {
-                "first": [ScoredSemanticRefOrdinal(0, 1.0)],
-                "second": [ScoredSemanticRefOrdinal(1, 0.8)],
-                "test": [
-                    ScoredSemanticRefOrdinal(0, 0.9),
-                    ScoredSemanticRefOrdinal(1, 0.7),
-                ],
-            }
-        self.semantic_ref_index = MockTermIndex(term_to_refs) if has_index else None
+    return conv
 
 
 @pytest.fixture
-def searchable_conversation():
-    return MockConversation(has_refs=True, has_index=True)
+def searchable_conversation(needs_auth: None) -> FakeConversation:
+    return create_searchable_conversation(has_refs=True, has_index=True)
 
 
 @pytest.fixture
-def non_searchable_conversation():
-    return MockConversation(has_refs=False, has_index=False)
+def non_searchable_conversation(needs_auth: None) -> FakeConversation:
+    return create_searchable_conversation(has_refs=False, has_index=False)
 
 
 @pytest.fixture
-def eval_context(searchable_conversation) -> QueryEvalContext:
+def eval_context(searchable_conversation: FakeConversation) -> QueryEvalContext:
     return QueryEvalContext(conversation=searchable_conversation)
 
 
-class TestConversationSearchability:
+class FakeConversationSearchability:
     def test_is_conversation_searchable_true(
-        self, searchable_conversation: MockConversation
+        self, searchable_conversation: FakeConversation
     ):
         """Test is_conversation_searchable with a searchable conversation."""
         assert is_conversation_searchable(searchable_conversation) is True
 
     def test_is_conversation_searchable_false(
-        self, non_searchable_conversation: MockConversation
+        self, non_searchable_conversation: FakeConversation
     ):
         """Test is_conversation_searchable with a non-searchable conversation."""
         assert is_conversation_searchable(non_searchable_conversation) is False
 
     def test_is_conversation_searchable_partial(self):
         """Test is_conversation_searchable with partial initialization."""
-        conv = MockConversation(has_refs=True, has_index=False)
+        conv = create_searchable_conversation(has_refs=True, has_index=False)
         assert is_conversation_searchable(conv) is False
 
-        conv = MockConversation(has_refs=False, has_index=True)
+        conv = create_searchable_conversation(has_refs=False, has_index=True)
         assert is_conversation_searchable(conv) is False
 
 
 class TestTermLookup:
     @pytest.mark.asyncio
-    async def test_lookup_term_filtered(self, searchable_conversation):
+    async def test_lookup_term_filtered(
+        self, searchable_conversation: FakeConversation
+    ):
         """Test lookup_term_filtered function."""
         term = Term("test")
 
@@ -198,7 +179,7 @@ class TestTermLookup:
             return scored_ref.score > 0.8
 
         results = await lookup_term_filtered(
-            searchable_conversation.semantic_ref_index,
+            searchable_conversation.semantic_ref_index,  # type: ignore[arg-type]
             term,
             searchable_conversation.semantic_refs,
             high_score_filter,
@@ -210,7 +191,9 @@ class TestTermLookup:
         assert results[0].score == 0.9
 
     @pytest.mark.asyncio
-    async def test_lookup_term_filtered_no_results(self, searchable_conversation):
+    async def test_lookup_term_filtered_no_results(
+        self, searchable_conversation: FakeConversation
+    ):
         """Test lookup_term_filtered with no matching results."""
         term = Term("nonexistent")
 
@@ -218,7 +201,7 @@ class TestTermLookup:
             return True
 
         results = await lookup_term_filtered(
-            searchable_conversation.semantic_ref_index,
+            searchable_conversation.semantic_ref_index,  # type: ignore[arg-type]
             term,
             searchable_conversation.semantic_refs,
             any_filter,
@@ -227,12 +210,12 @@ class TestTermLookup:
         assert results is None
 
     @pytest.mark.asyncio
-    async def test_lookup_term(self, searchable_conversation):
+    async def test_lookup_term(self, searchable_conversation: FakeConversation):
         """Test lookup_term function with no scope."""
         term = Term("test")
 
         results = await lookup_term(
-            searchable_conversation.semantic_ref_index,
+            searchable_conversation.semantic_ref_index,  # type: ignore[arg-type]
             term,
             searchable_conversation.semantic_refs,
         )
@@ -243,7 +226,9 @@ class TestTermLookup:
         assert results[1].semantic_ref_ordinal == 1
 
     @pytest.mark.asyncio
-    async def test_lookup_term_with_scope(self, searchable_conversation):
+    async def test_lookup_term_with_scope(
+        self, searchable_conversation: FakeConversation
+    ):
         """Test lookup_term function with a scope."""
         term = Term("test")
 
@@ -254,7 +239,7 @@ class TestTermLookup:
         ranges_in_scope = TextRangesInScope([range_collection])
 
         results = await lookup_term(
-            searchable_conversation.semantic_ref_index,
+            searchable_conversation.semantic_ref_index,  # type: ignore[arg-type]
             term,
             searchable_conversation.semantic_refs,
             ranges_in_scope,
@@ -266,7 +251,7 @@ class TestTermLookup:
 
 
 class TestQueryEvalContext:
-    def test_initialization(self, searchable_conversation):
+    def test_initialization(self, searchable_conversation: FakeConversation):
         """Test QueryEvalContext initialization."""
         context = QueryEvalContext(conversation=searchable_conversation)
 
@@ -277,7 +262,7 @@ class TestQueryEvalContext:
         assert isinstance(context.matched_property_terms, PropertyTermSet)
         assert isinstance(context.text_ranges_in_scope, TextRangesInScope)
 
-    def test_initialization_error(self, non_searchable_conversation):
+    def test_initialization_error(self, non_searchable_conversation: FakeConversation):
         """Test QueryEvalContext initialization with non-searchable conversation."""
         with pytest.raises(ValueError):
             QueryEvalContext(conversation=non_searchable_conversation)
@@ -302,13 +287,13 @@ class TestQueryEvalContext:
     async def test_get_message_for_ref(self, eval_context: QueryEvalContext):
         """Test get_message_for_ref method."""
         ref = await eval_context.get_semantic_ref(0)
-        message = downcast(MockMessage, await eval_context.get_message_for_ref(ref))
+        message = downcast(FakeMessage, await eval_context.get_message_for_ref(ref))
         assert message.ordinal == 0
 
     @pytest.mark.asyncio
     async def test_get_message(self, eval_context: QueryEvalContext):
         """Test get_message method."""
-        message = downcast(MockMessage, await eval_context.get_message(1))
+        message = downcast(FakeMessage, await eval_context.get_message(1))
         assert message.ordinal == 1
 
     def test_clear_matched_terms(self, eval_context: QueryEvalContext):
@@ -387,6 +372,11 @@ class MockPropertyIndex(PropertyIndex):
 
     def __init__(self):
         super().__init__()
+
+    @classmethod
+    async def create(cls):
+        """Create and initialize a MockPropertyIndex with test data."""
+        instance = cls()
         properties = {
             "name": [
                 ScoredSemanticRefOrdinal(0, 1.0),
@@ -401,7 +391,8 @@ class MockPropertyIndex(PropertyIndex):
         }
         for name, values in properties.items():
             for value in values:
-                self.add_property(name, "test", value)
+                await instance.add_property(name, "test", value)
+        return instance
 
 
 class TestMatchPropertySearchTermExpr:
@@ -411,7 +402,7 @@ class TestMatchPropertySearchTermExpr:
     async def test_accumulate_matches_known_prop(self, eval_context: QueryEvalContext):
         """Test accumulating matches for a property search term."""
         # property_name is a string (KnowledgePropertyName); calls accumulate_matches_for_property()
-        eval_context.property_index = MockPropertyIndex()
+        eval_context.property_index = await MockPropertyIndex.create()
         property_search_term = PropertySearchTerm("name", SearchTerm(term=Term("test")))
         expr = MatchPropertySearchTermExpr(property_search_term)
         matches = SemanticRefAccumulator()
@@ -422,7 +413,7 @@ class TestMatchPropertySearchTermExpr:
     async def test_accumulate_matches_user_prop(self, eval_context: QueryEvalContext):
         """Test accumulating matches for a property search term with SearchTerm property name."""
         # property_name is a SearchTerm(Term()); calls accumulate_matches_for_facets()
-        eval_context.property_index = MockPropertyIndex()
+        eval_context.property_index = await MockPropertyIndex.create()
         property_search_term = PropertySearchTerm(
             SearchTerm(Term("name")),
             SearchTerm(term=Term("test")),
@@ -437,7 +428,7 @@ class TestMatchPropertySearchTermExpr:
         self, eval_context: QueryEvalContext
     ):
         """Test accumulate_matches_for_property method."""
-        eval_context.property_index = MockPropertyIndex()
+        eval_context.property_index = await MockPropertyIndex.create()
         dummy_search_term = PropertySearchTerm("name", SearchTerm(term=Term("test")))
         expr = MatchPropertySearchTermExpr(dummy_search_term)
         matches = SemanticRefAccumulator()
@@ -449,7 +440,7 @@ class TestMatchPropertySearchTermExpr:
     @pytest.mark.asyncio
     async def test_accumulate_matches_for_facets(self, eval_context: QueryEvalContext):
         """Test accumulate_matches_for_facets method."""
-        eval_context.property_index = MockPropertyIndex()
+        eval_context.property_index = await MockPropertyIndex.create()
         dummy_search_term = PropertySearchTerm("name", SearchTerm(term=Term("test")))
         expr = MatchPropertySearchTermExpr(dummy_search_term)
         matches = SemanticRefAccumulator()
@@ -462,7 +453,7 @@ class TestMatchPropertySearchTermExpr:
         self, eval_context: QueryEvalContext
     ):
         """Test accumulate_matches_for_property_value method."""
-        eval_context.property_index = MockPropertyIndex()
+        eval_context.property_index = await MockPropertyIndex.create()
         dummy_search_term = PropertySearchTerm("name", SearchTerm(term=Term("test")))
         expr = MatchPropertySearchTermExpr(dummy_search_term)
 
@@ -548,7 +539,7 @@ class TestBooleanExpressions:
         assert result.get_match(1) is not None  # Only ref 1 matches both expressions
 
     @pytest.mark.asyncio
-    async def test_match_terms_and_expr(self, eval_context):
+    async def test_match_terms_and_expr(self, eval_context: QueryEvalContext):
         """Test AND expression."""
         expr = MatchTermsAndExpr(term_expressions=[self.expr1, self.expr2])
 
@@ -559,7 +550,9 @@ class TestBooleanExpressions:
         assert result.get_match(1) is not None
 
     @pytest.mark.asyncio
-    async def test_match_terms_and_expr_no_matches(self, eval_context):
+    async def test_match_terms_and_expr_no_matches(
+        self, eval_context: QueryEvalContext
+    ):
         """Test AND expression with a non-matching term."""
         expr = MatchTermsAndExpr(term_expressions=[self.expr1, self.expr3])
 
@@ -570,7 +563,7 @@ class TestBooleanExpressions:
 
 class TestSelectTopNExpr:
     @pytest.mark.asyncio
-    async def test_eval(self, eval_context):
+    async def test_eval(self, eval_context: QueryEvalContext):
         """Test selecting top N matches."""
 
         # Create a mock source expression
@@ -595,17 +588,8 @@ class TestSelectTopNExpr:
 
 @pytest.mark.asyncio
 async def test_get_text_range_for_date_range():
-    from typeagent.knowpro.query import get_text_range_for_date_range
-    from typeagent.knowpro.interfaces import (
-        TextLocation,
-        TextRange,
-        DateRange,
-        Datetime,
-    )
-
     # Should return None for empty input and any date range
-    empty_conv = MockConversation()
-    empty_conv.messages = MockMessageCollection()
+    empty_conv = FakeConversation(messages=[])
     date_range = DateRange(
         start=Datetime(2020, 1, 1, 0, 0, 0),
         end=Datetime(2020, 1, 2, 0, 0, 0),
@@ -614,7 +598,7 @@ async def test_get_text_range_for_date_range():
 
     # Should return a TextRange for a valid date range (simulate all messages in range)
     # (Assume all messages are in the date range for this mock)
-    conv = MockConversation()
+    conv = create_searchable_conversation()
     result_with_range = await get_text_range_for_date_range(conv, date_range)
     assert isinstance(result_with_range, TextRange)
     assert result_with_range.start == TextLocation(0, 0)
@@ -688,26 +672,33 @@ async def test_lookup_knowledge_type():
         TextLocation,
         Topic,
     )
-    from typeagent.knowpro.storage import SemanticRefCollection
+    from typeagent.knowpro.kplib import ConcreteEntity
 
-    # Create valid TextRange and Topic objects
+    # Create valid TextRange and knowledge objects
     rng = TextRange(TextLocation(0, 0), TextLocation(0, 1))
     topic1 = Topic("foo")
+    entity1 = ConcreteEntity("test_entity", ["type1"])
     topic2 = Topic("bar")
 
-    # Use only valid knowledge_type values: 'entity', 'action', 'topic', 'tag'
+    # Use consistent knowledge_type and knowledge objects
     refs = [
         SemanticRef(
-            semantic_ref_ordinal=0, range=rng, knowledge_type="topic", knowledge=topic1
+            semantic_ref_ordinal=0,
+            range=rng,
+            knowledge=topic1,
         ),
         SemanticRef(
-            semantic_ref_ordinal=1, range=rng, knowledge_type="entity", knowledge=topic2
+            semantic_ref_ordinal=1,
+            range=rng,
+            knowledge=entity1,
         ),
         SemanticRef(
-            semantic_ref_ordinal=2, range=rng, knowledge_type="topic", knowledge=topic2
+            semantic_ref_ordinal=2,
+            range=rng,
+            knowledge=topic2,
         ),
     ]
-    collection = SemanticRefCollection(refs)
+    collection = MemorySemanticRefCollection(refs)
     result = await lookup_knowledge_type(collection, "topic")
     assert isinstance(result, list)
     assert all(isinstance(r, ScoredSemanticRefOrdinal) for r in result)

@@ -19,11 +19,15 @@ export {
 } from "./utils/test/explanationTestData.js";
 
 export { getAssistantSelectionSchemas } from "./translation/unknownSwitcher.js";
-export { getActionSchema } from "./translation/actionSchemaFileCache.js";
 export { getFullSchemaText } from "./translation/agentTranslators.js";
-
+export { tryGetActionSchema } from "./translation/actionSchemaFileCache.js";
 export { getAppAgentName } from "./translation/agentTranslators.js";
 export { createSchemaInfoProvider } from "./translation/actionSchemaFileCache.js";
 export { getAllActionConfigProvider } from "./context/inlineAgentProvider.js";
 
-export { ChatHistoryInput, isChatHistoryInput } from "./context/chatHistory.js";
+export {
+    ChatHistoryInput,
+    ChatHistoryInputEntry,
+    ChatHistoryInputAssistant,
+    isChatHistoryInput,
+} from "./context/chatHistory.js";

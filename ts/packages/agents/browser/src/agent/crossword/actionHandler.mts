@@ -6,7 +6,7 @@ import { SessionContext } from "@typeagent/agent-sdk";
 import { Crossword, CrosswordClue } from "./schema/pageSchema.mjs";
 import { CrosswordPresence } from "./schema/pageFrame.mjs";
 import { createCrosswordPageTranslator } from "./translator.mjs";
-import { BrowserActionContext, getBrowserControl } from "../actionHandler.mjs";
+import { BrowserActionContext, getBrowserControl } from "../browserActions.mjs";
 import { BrowserConnector } from "../browserConnector.mjs";
 import { getCachedSchema, setCachedSchema } from "./cachedSchema.mjs";
 

@@ -11,7 +11,7 @@ import {
 } from "./schema/pageComponents.mjs";
 import { PageActionsPlan, UserIntent } from "./schema/recordedActions.mjs";
 import { createExecutionTracker } from "../planVisualizationClient.mjs";
-import { BrowserActionContext } from "../actionHandler.mjs";
+import { BrowserActionContext } from "../browserActions.mjs";
 import { SessionContext } from "@typeagent/agent-sdk";
 import registerDebug from "debug";
 

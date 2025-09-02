@@ -127,6 +127,12 @@ export class AppAgentManager implements ActionConfigProvider {
         const record = this.getRecord(appAgentName);
         return record.manifest.description;
     }
+
+    public getAppAgentEmoji(appAgentName: string) {
+        const record = this.getRecord(appAgentName);
+        return record.manifest.emojiChar;
+    }
+
     public getLocalHostPort(appAgentName: string) {
         const record = this.getRecord(appAgentName);
         return record.port;

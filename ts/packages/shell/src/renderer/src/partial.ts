@@ -244,15 +244,18 @@ export class PartialCompletion {
                 this.current = partial;
                 this.space = result.space;
 
-                const completions = result.completions.flatMap((group) =>
-                    group.completions.map((choice) => {
+                const completions = result.completions.flatMap((group) => {
+                    return group.completions.map((choice, index) => {
                         return {
                             matchText: choice,
                             selectedText: choice,
+                            sortIndex: index,
                             needQuotes: group.needQuotes,
+                            emojiChar: group.emojiChar,
                         };
-                    }),
-                );
+                    });
+                });
+
                 if (completions.length === 0) {
                     debug(
                         `Partial completion skipped: No current completions for '${partial}'`,

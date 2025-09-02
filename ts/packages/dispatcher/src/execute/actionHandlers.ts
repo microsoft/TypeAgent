@@ -42,7 +42,6 @@ import {
     isSwitchEnabled,
     translatePendingRequestAction,
 } from "../translation/translateRequest.js";
-import { getActionSchema } from "../internal.js";
 import { validateAction } from "action-schema";
 import {
     PendingAction,
@@ -55,6 +54,7 @@ import {
     addResultToMemory,
 } from "../context/memory.js";
 import { setActivityContext } from "./activityContext.js";
+import { tryGetActionSchema } from "../translation/actionSchemaFileCache.js";
 
 const debugActions = registerDebug("typeagent:dispatcher:actions");
 
@@ -331,9 +331,21 @@ export async function executeActions(
             context,
             actionIndex,
         );
+
+        // add the action result to memory whether it has error or not.
+        addActionResultToMemory(
+            systemContext,
+            executableAction,
+            resolvedEntities,
+            action.schemaName,
+            result,
+        );
+
         if (result.error !== undefined) {
+            // Stop executing further action on error.
             return;
         }
+
         const resultEntityId = executableAction.resultEntityId;
         if (resultEntityId !== undefined) {
             if (result.resultEntity === undefined) {
@@ -356,15 +368,6 @@ export async function executeActions(
                 },
             );
         }
-
-        // add the action result to memory.
-        addActionResultToMemory(
-            systemContext,
-            executableAction,
-            resolvedEntities,
-            action.schemaName,
-            result,
-        );
 
         if (result.activityContext !== undefined) {
             if (actionQueue.length > 0) {
@@ -458,7 +461,7 @@ function getAdditionalExecutableActions(
             }
         }
 
-        const actionInfo = getActionSchema(fullAction, context.agents);
+        const actionInfo = tryGetActionSchema(fullAction, context.agents);
         if (actionInfo === undefined) {
             throw new Error(
                 `Action not found ${fullAction.schemaName}.${fullAction.actionName}`,

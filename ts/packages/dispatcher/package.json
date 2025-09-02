@@ -20,6 +20,7 @@
     "./helpers/console": "./dist/helpers/console.js",
     "./helpers/data": "./dist/helpers/userData.js",
     "./helpers/config": "./dist/helpers/config.js",
+    "./helpers/status": "./dist/helpers/status.js",
     "./helpers/npmAgentProvider": "./dist/npmAgentProvider.js",
     "./internal": "./dist/internal.js",
     "./explorer": "./dist/explorer.js"

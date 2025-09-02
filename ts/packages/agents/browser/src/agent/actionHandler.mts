@@ -17,6 +17,7 @@ import {
 } from "@typeagent/agent-sdk";
 import {
     createActionResult,
+    createActionResultFromError,
     createActionResultFromHtmlDisplay,
     createActionResultFromMarkdownDisplay,
     createActionResultFromTextDisplay,
@@ -27,7 +28,6 @@ import {
     displaySuccess,
     getMessage,
 } from "@typeagent/agent-sdk/helpers/display";
-import { Crossword } from "./crossword/schema/pageSchema.mjs";
 import {
     getBoardSchema,
     handleCrosswordAction,
@@ -35,7 +35,7 @@ import {
 
 import { BrowserConnector } from "./browserConnector.mjs";
 import { handleCommerceAction } from "./commerce/actionHandler.mjs";
-import { TabTitleIndex, createTabTitleIndex } from "./tabTitleIndex.mjs";
+import { createTabTitleIndex } from "./tabTitleIndex.mjs";
 import { ChildProcess, fork } from "child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -65,7 +65,6 @@ import {
 import {
     loadAllowDynamicAgentDomains,
     processWebAgentMessage,
-    WebAgentChannels,
 } from "./webTypeAgent.mjs";
 import { isWebAgentMessage } from "../common/webAgentMessageTypes.mjs";
 import { handleSchemaDiscoveryAction } from "./discovery/actionHandler.mjs";
@@ -73,6 +72,9 @@ import {
     BrowserActions,
     OpenWebPage,
     OpenSearchResult,
+    ChangeTabs,
+    Search,
+    DisabledBrowserActions,
 } from "./actionsSchema.mjs";
 import {
     resolveURLWithHistory,
@@ -85,13 +87,34 @@ import { InstacartActions } from "./instacart/schema/userActions.mjs";
 import { ShoppingActions } from "./commerce/schema/userActions.mjs";
 import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
-import { BrowserControl } from "../common/browserControl.mjs";
-import { openai, TextEmbeddingModel } from "aiclient";
+import {
+    BrowserControl,
+    defaultSearchProviders,
+} from "../common/browserControl.mjs";
+import { openai } from "aiclient";
 import { urlResolver } from "azure-ai-foundry";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 import { deleteCachedSchema } from "./crossword/cachedSchema.mjs";
 import { getCrosswordCommandHandlerTable } from "./crossword/commandHandler.mjs";
-import { MacroStore } from "./storage/index.mjs";
+import {
+    SearchProviderCommandHandlerTable,
+    SetCommandHandler,
+} from "./searchProvider/searchProviderCommandHandlers.mjs";
+import {
+    BrowserActionContext,
+    getActionBrowserControl,
+    saveSettings,
+} from "./browserActions.mjs";
+import {
+    ChunkChatResponse,
+    generateAnswer,
+    summarize,
+    SummarizeResponse,
+} from "typeagent";
+import {
+    LookupAndAnswerActions,
+    LookupAndAnswerInternet,
+} from "./lookupAndAnswerSchema.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
 const debugWebSocket = registerDebug("typeagent:browser:ws");
@@ -105,33 +128,6 @@ export function instantiate(): AppAgent {
         ...getCommandInterface(handlers),
     };
 }
-
-export type BrowserActionContext = {
-    clientBrowserControl?: BrowserControl | undefined;
-    externalBrowserControl?: BrowserControl | undefined;
-    useExternalBrowserControl: boolean;
-    webSocket?: WebSocket | undefined;
-    webAgentChannels?: WebAgentChannels | undefined;
-    crosswordCachedSchemas?: Map<string, Crossword> | undefined;
-    crossWordState?: Crossword | undefined;
-    browserConnector?: BrowserConnector | undefined;
-    browserProcess?: ChildProcess | undefined;
-    tabTitleIndex?: TabTitleIndex | undefined;
-    allowDynamicAgentDomains?: string[];
-    websiteCollection?: website.WebsiteCollection | undefined;
-    fuzzyMatchingModel?: TextEmbeddingModel | undefined;
-    index: website.IndexData | undefined;
-    viewProcess?: ChildProcess | undefined;
-    localHostPort: number;
-    macrosStore?: MacroStore | undefined; // Add MacroStore instance
-    currentWebSearchResults?: Map<string, any[]> | undefined; // Store search results for follow-up actions
-    resolverSettings: {
-        searchResolver?: boolean | undefined;
-        keywordResolver?: boolean | undefined;
-        wikipediaResolver?: boolean | undefined;
-        historyResolver?: boolean | undefined;
-    };
-};
 
 export interface urlResolutionAction {
     originalRequest: string;
@@ -165,6 +161,8 @@ async function initializeBrowserContext(
             wikipediaResolver: true,
             historyResolver: false,
         },
+        searchProviders: defaultSearchProviders,
+        activeSearchProvider: defaultSearchProviders[0],
     };
 }
 
@@ -243,9 +241,7 @@ async function updateBrowserContext(
 
                 if (data.error) {
                     console.error(data.error);
-                    // TODO: Handle the case where no clients were found. Prompt the user
-                    //       to launch inline browser or run automation in the headless browser.
-                    return;
+                    throw new Error(data.error);
                 }
 
                 if (data.method) {
@@ -259,7 +255,7 @@ async function updateBrowserContext(
             });
         }
 
-        // rehydrate resolver settings
+        // rehydrate cached settings
         const sessionDir: string | undefined =
             await getSessionFolderPath(context);
         const contents: string = await readFileSync(
@@ -269,14 +265,23 @@ async function updateBrowserContext(
 
         if (contents.length > 0) {
             const config = JSON.parse(contents);
+
+            // resolver settings
             context.agentContext.resolverSettings.searchResolver =
-                config.searchResolver;
+                config.resolverSettings.searchResolver;
             context.agentContext.resolverSettings.keywordResolver =
-                config.keywordResolver;
+                config.resolverSettings.keywordResolver;
             context.agentContext.resolverSettings.wikipediaResolver =
-                config.wikipediaResolver;
+                config.resolverSettings.wikipediaResolver;
             context.agentContext.resolverSettings.historyResolver =
-                config.historyResolver;
+                config.resolverSettings.historyResolver;
+
+            // search provider settings
+            context.agentContext.searchProviders =
+                config.searchProviders || defaultSearchProviders;
+            context.agentContext.activeSearchProvider =
+                config.activeSearchProvider ||
+                context.agentContext.searchProviders[0];
         }
     } else {
         const webSocket = context.agentContext.webSocket;
@@ -648,13 +653,6 @@ async function getSessionFolderPath(
     return sessionDir;
 }
 
-async function saveSettings(context: SessionContext<BrowserActionContext>) {
-    await context.sessionStorage?.write(
-        "settings.json",
-        JSON.stringify(context.agentContext.resolverSettings),
-    );
-}
-
 async function resolveEntity(
     type: string,
     name: string,
@@ -761,7 +759,7 @@ async function resolveWebPage(
                 context.agentContext.resolverSettings.keywordResolver ||
                 fastResolution
             ) {
-                const cachehitUrls = await urlResolver.resolveURLByKeyword(site);
+                const cachehitUrls = urlResolver.resolveURLByKeyword(site);
                 if (cachehitUrls && cachehitUrls.length > 0) {
                     debug(`Resolved URLs from cache: ${cachehitUrls}`);
 
@@ -807,38 +805,17 @@ async function resolveWebPage(
             }
 
             // default to search
-            // TODO: use preferred search provider
             return [
-                "https://www.bing.com/search?q=" + encodeURIComponent(site),
+                context.agentContext.activeSearchProvider.url.replace(
+                    "%s",
+                    encodeURIComponent(site),
+                ),
             ];
         }
     }
 
     // can't get a URL
     throw new Error(`Unable to find a URL for: '${site}'`);
-}
-
-export function getActionBrowserControl(
-    actionContext: ActionContext<BrowserActionContext>,
-) {
-    return getBrowserControl(actionContext.sessionContext.agentContext);
-}
-export function getSessionBrowserControl(
-    sessionContext: SessionContext<BrowserActionContext>,
-) {
-    return getBrowserControl(sessionContext.agentContext);
-}
-
-export function getBrowserControl(agentContext: BrowserActionContext) {
-    const browserControl = agentContext.useExternalBrowserControl
-        ? agentContext.externalBrowserControl
-        : agentContext.clientBrowserControl;
-    if (!browserControl) {
-        throw new Error(
-            `${agentContext.externalBrowserControl ? "External" : "Client"} browser control is not available.`,
-        );
-    }
-    return browserControl;
 }
 
 async function openWebPage(
@@ -862,7 +839,9 @@ async function openWebPage(
             context,
         );
     }
-    await browserControl.openWebPage(url);
+    await browserControl.openWebPage(url, {
+        newTab: action.parameters.tab === "new",
+    });
     const result = createActionResult("Web page opened successfully.");
 
     result.activityContext = {
@@ -884,6 +863,33 @@ async function closeWebPage(context: ActionContext<BrowserActionContext>) {
     await browserControl.closeWebPage();
     const result = createActionResult("Web page closed successfully.");
     result.activityContext = null; // clear the activity context.
+    return result;
+}
+
+async function changeTabs(
+    context: ActionContext<BrowserActionContext>,
+    action: TypeAgentAction<ChangeTabs>,
+) {
+    const browserControl = getActionBrowserControl(context);
+
+    displayStatus(
+        `Activating tab: ${action.parameters.tabDescription}.`,
+        context,
+    );
+    let result: ActionResult | undefined = undefined;
+    if (
+        await browserControl.switchTabs(
+            action.parameters.tabDescription,
+            action.parameters.tabIndex,
+        )
+    ) {
+        result = createActionResult("Switched tabs successfully.");
+    } else {
+        result = createActionResultFromError(
+            `Unable to find a tab corresponding to '${action.parameters.tabDescription}'`,
+        );
+    }
+
     return result;
 }
 
@@ -951,12 +957,9 @@ async function openSearchResult(
 
     displayStatus(`Opening search result: ${selectedResult.title}`, context);
 
-    if (openInNewTab) {
-        // Open in new tab - need to implement this in browser control
-        await browserControl.openWebPage(targetUrl);
-    } else {
-        await browserControl.openWebPage(targetUrl);
-    }
+    await browserControl.openWebPage(targetUrl, {
+        newTab: openInNewTab ? openInNewTab : false,
+    });
 
     return createActionResultFromMarkdownDisplay(
         `Opened search result: [${selectedResult.title}](${targetUrl})`,
@@ -1038,17 +1041,52 @@ async function searchWebMemoriesAction(
     }
 }
 
+async function changeSearchProvider(
+    context: ActionContext<BrowserActionContext>,
+    action: TypeAgentAction<any>,
+) {
+    if (
+        context.sessionContext.agentContext.searchProviders.filter(
+            (sp) =>
+                sp.name.toLowerCase() === action.parameters.name.toLowerCase(),
+        ).length > 0
+    ) {
+        const cmd = new SetCommandHandler();
+
+        const params: ParsedCommandParams<any> = {
+            args: { provider: `${action.parameters.name}` },
+            flags: {},
+            tokens: [],
+            lastCompletableParam: undefined,
+            lastParamImplicitQuotes: false,
+            nextArgs: [],
+        };
+
+        await cmd.run(context, params);
+        return createActionResult(
+            `Search provider changed to ${action.parameters.name}`,
+        );
+    } else {
+        return createActionResult(
+            `No search provider by the name '${action.parameters.name}' found.  Search provider is still '${context.sessionContext.agentContext.activeSearchProvider.name}'`,
+        );
+    }
+}
+
 async function executeBrowserAction(
     action:
+        | TypeAgentAction<BrowserActions | DisabledBrowserActions, "browser">
         | TypeAgentAction<BrowserActions, "browser">
         | TypeAgentAction<ExternalBrowserActions, "browser.external">
         | TypeAgentAction<CrosswordActions, "browser.crossword">
         | TypeAgentAction<ShoppingActions, "browser.commerce">
         | TypeAgentAction<InstacartActions, "browser.instacart">
-        | TypeAgentAction<SchemaDiscoveryActions, "browser.actionDiscovery">,
+        | TypeAgentAction<SchemaDiscoveryActions, "browser.actionDiscovery">
+        | TypeAgentAction<LookupAndAnswerActions, "browser.lookupAndAnswer">,
 
     context: ActionContext<BrowserActionContext>,
 ) {
+    // try {
     switch (action.schemaName) {
         case "browser":
             switch (action.actionName) {
@@ -1056,6 +1094,8 @@ async function executeBrowserAction(
                     return openWebPage(context, action);
                 case "closeWebPage":
                     return closeWebPage(context);
+                case "changeTab":
+                    return changeTabs(context, action);
                 case "getWebsiteStats":
                     return getWebsiteStats(context, action);
                 case "searchWebMemories":
@@ -1067,7 +1107,6 @@ async function executeBrowserAction(
                     await getActionBrowserControl(context).goBack();
                     return;
                 case "reloadPage":
-                    // REVIEW: do we need to clear page schema?
                     await getActionBrowserControl(context).reload();
                     return;
                 case "scrollUp":
@@ -1086,11 +1125,25 @@ async function executeBrowserAction(
                     await getActionBrowserControl(context).zoomReset();
                     return;
                 case "search":
-                    await getActionBrowserControl(context).search(
+                    const pageUrl: URL = await getActionBrowserControl(
+                        context,
+                    ).search(
                         action.parameters.query,
+                        undefined,
+                        context.sessionContext.agentContext
+                            .activeSearchProvider,
+                        {
+                            newTab: action.parameters.newTab,
+                        },
                     );
-                    return createActionResultFromTextDisplay(
-                        `Opened new tab with query ${action.parameters.query}`,
+
+                    return summarizeSearchResults(
+                        context,
+                        action,
+                        pageUrl,
+                        await getActionBrowserControl(
+                            context,
+                        ).getPageContents(),
                     );
                 case "readPage":
                     await getActionBrowserControl(context).readPage();
@@ -1139,6 +1192,18 @@ async function executeBrowserAction(
                     );
                 case "openSearchResult":
                     return openSearchResult(context, action);
+                case "changeSearchProvider":
+                    return changeSearchProvider(context, action);
+                case "searchImageAction": {
+                    return openWebPage(context, {
+                        schemaName: "browser",
+                        actionName: "openWebPage",
+                        parameters: {
+                            site: `https://www.bing.com/images/search?q=${action.parameters.searchTerm}`,
+                            tab: "new",
+                        },
+                    });
+                }
                 default:
                     // Should never happen.
                     throw new Error(
@@ -1154,6 +1219,16 @@ async function executeBrowserAction(
                 }
             }
             break;
+        case "browser.lookupAndAnswer":
+            switch (action.actionName) {
+                case "lookupAndAnswerInternet":
+                    return await lookup(context, action);
+                default: {
+                    throw new Error(
+                        `Unknown action for lookupAndAnswer: ${(action as any).actionName}`,
+                    );
+                }
+            }
     }
     const webSocketEndpoint = context.sessionContext.agentContext.webSocket;
     const connector = context.sessionContext.agentContext.browserConnector;
@@ -1218,6 +1293,138 @@ async function executeBrowserAction(
         throw new Error("No websocket connection.");
     }
     return undefined;
+}
+
+/**
+ * Summarizes the search results and does entity extraction on it.
+ * @param context - The current context
+ * @param action - The search action
+ * @param pageUrl - The URL of the search page
+ * @param pageContents - The contents of the search page
+ * @returns - The action result
+ */
+async function summarizeSearchResults(
+    context: ActionContext<BrowserActionContext>,
+    action: Search,
+    pageUrl: URL,
+    pageContents: string,
+) {
+    displayStatus(
+        `Reading and summarizing search results, please stand by...`,
+        context,
+    );
+
+    const model = openai.createJsonChatModel("GPT_35_TURBO", [
+        "SearchPageSummary",
+    ]);
+    const answerResult = await summarize(
+        model,
+        pageContents,
+        4096 * 8,
+        (text: string) => {
+            //displayStatus(text, context);
+        },
+        true,
+    );
+
+    if (answerResult.success) {
+        const summaryResponse = answerResult.data as SummarizeResponse;
+        if (summaryResponse) {
+            // add the search results page as an entity
+            if (!summaryResponse.entities) {
+                summaryResponse.entities = [];
+            }
+
+            summaryResponse.entities.push({
+                name: pageUrl.toString(),
+                type: ["WebPage"],
+            });
+
+            return createActionResultFromTextDisplay(
+                summaryResponse.summary,
+                summaryResponse.summary,
+                summaryResponse.entities,
+            );
+        } else {
+            return createActionResultFromTextDisplay(
+                (answerResult.data as string[]).join("\n"),
+            );
+        }
+    }
+
+    return createActionResultFromTextDisplay(
+        `Opened new tab with query ${action.parameters.query}`,
+    );
+}
+
+async function lookup(
+    context: ActionContext<BrowserActionContext>,
+    action: LookupAndAnswerInternet,
+) {
+    // run a search for the lookup, wait for the page to load
+    displayStatus(
+        `Searching the web for '${action.parameters.internetLookups.join(" ")}'`,
+        context,
+    );
+
+    const searchURL: URL = await getActionBrowserControl(context).search(
+        action.parameters.internetLookups.join(" "),
+        action.parameters.sites,
+        context.sessionContext.agentContext.activeSearchProvider,
+        { waitForPageLoad: true },
+    );
+
+    // go get the page contents
+    const content = await getActionBrowserControl(context).getPageContents();
+
+    // now try to generate an answer from the page contents
+    displayStatus(
+        `Generating the answer for '${action.parameters.originalRequest}'`,
+        context,
+    );
+    const model = openai.createJsonChatModel("GPT_35_TURBO", [
+        "InternetLookupAnswerGenerator",
+    ]); // TODO: GPT_5_MINI/NANO?
+    const answerResult = await generateAnswer(
+        action.parameters.originalRequest,
+        content,
+        4096 * 4,
+        model,
+        1,
+        (text: string, result: ChunkChatResponse) => {
+            displayStatus(result.generatedText!, context);
+        },
+    );
+
+    if (answerResult.success) {
+        const answer: ChunkChatResponse =
+            answerResult.data as ChunkChatResponse;
+        if (
+            answer.answerStatus === "Answered" ||
+            answer.answerStatus === "PartiallyAnswered"
+        ) {
+            return createActionResult(
+                `${answer.generatedText}`,
+                { speak: true },
+                [
+                    {
+                        name: "WebPage",
+                        type: ["WebPage"],
+                        uniqueId: searchURL.toString(),
+                    },
+                    ...answer.entities,
+                ],
+            );
+        } else {
+            return createActionResultFromTextDisplay(
+                `No answer found for '${action.parameters.originalRequest}'.  Try navigating to a search result or trying another query.`,
+            );
+        }
+    } else {
+        return createActionResultFromError(
+            `There was an error generating the answer: ${answerResult.message} `,
+        );
+    }
 }
 
 async function handleTabIndexActions(
@@ -1574,6 +1781,7 @@ class OpenWebPageHandler implements CommandHandler {
             schemaName: "browser",
             parameters: {
                 site: params.args.site,
+                tab: "current",
             },
         });
         if (result.error) {
@@ -2225,5 +2433,6 @@ export const handlers: CommandHandlerTable = {
                 },
             },
         },
+        search: new SearchProviderCommandHandlerTable(),
     },
 };

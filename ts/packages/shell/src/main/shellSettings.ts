@@ -11,6 +11,7 @@ import { cloneConfig, mergeConfig } from "agent-dispatcher/helpers/config";
 import { ReadonlyDeep } from "type-fest";
 import path from "path";
 import {
+    DeepPartialUndefined,
     getObjectProperty,
     getObjectPropertyNames,
     setObjectProperty,
@@ -20,32 +21,52 @@ export type { ShellUserSettings };
 
 import { debugShell } from "./debug.js";
 
+export type BrowserTabState = {
+    id: string;
+    url: string;
+    title: string;
+    isActive: boolean;
+};
+
 export type ShellWindowState = {
     x: number;
     y: number;
-    width: number;
-    height: number;
-    inlineWidth: number;
+    // for use with horizontal layout
+    chatWidth: number;
+    contentWidth: number;
+    windowHeight: number;
+    // for use with vertical layout
+    chatHeight: number;
+    contentHeight: number;
+    windowWidth: number;
+
     zoomLevel: number;
     devTools: boolean;
     canvas?: string; // should the canvas be reopen upon start?
+    browserTabsJson?: string; // multi-tab browser state as JSON string
+    activeBrowserTabId?: string; // which tab is active
 };
 
-export type ShellSettings = {
+type ShellSettings = {
     window: ShellWindowState;
     user: ShellUserSettings;
 };
 
-export const defaultSettings: ShellSettings = {
+const defaultSettings: ShellSettings = {
     window: {
         x: -1,
         y: -1,
-        width: 900,
-        height: 1200,
-        inlineWidth: 1000,
+        chatWidth: 900,
+        contentWidth: 1000,
+        windowHeight: 1200,
+        chatHeight: 230,
+        contentHeight: 1000,
+        windowWidth: 1200,
         zoomLevel: 1,
         devTools: false,
         canvas: undefined,
+        browserTabsJson: undefined,
+        activeBrowserTabId: undefined,
     },
 
     user: defaultUserSettings,
@@ -64,36 +85,42 @@ export function ensureShellDataDir(instanceDir: string) {
     return shellDataDir;
 }
 
-export function getSettingsPath(instanceDir: string) {
+function getSettingsPath(instanceDir: string) {
     return path.join(getShellDataDir(instanceDir), "shellSettings.json");
 }
 
-export function loadShellSettings(instanceDir: string): ShellSettings {
-    const settingsPath = getSettingsPath(instanceDir);
-    debugShell(
-        `Loading shell settings from '${settingsPath}'`,
-        performance.now(),
-    );
-    const settings = cloneConfig(defaultSettings);
-    if (existsSync(settingsPath)) {
-        try {
-            const existingSettings = JSON.parse(
-                readFileSync(settingsPath, "utf-8"),
-            );
-            mergeConfig(settings, existingSettings);
-        } catch (e) {
-            debugShell(`Error loading shell settings: ${e}`);
-        }
-    }
-    debugShell(`Shell settings: ${JSON.stringify(settings, undefined, 2)}`);
-    return settings;
-}
-
 export class ShellSettingManager {
-    constructor(
-        private readonly settings: ShellSettings,
-        private readonly instanceDir: string,
-    ) {}
+    private readonly settings: ShellSettings;
+    private readonly savedSettings: DeepPartialUndefined<ShellSettings>;
+    constructor(private readonly instanceDir: string) {
+        const settingsPath = getSettingsPath(instanceDir);
+        debugShell(
+            `Loading shell settings from '${settingsPath}'`,
+            performance.now(),
+        );
+
+        const settings = cloneConfig(defaultSettings);
+        this.settings = settings;
+        this.savedSettings = {};
+        if (existsSync(settingsPath)) {
+            try {
+                const existingSettings = JSON.parse(
+                    readFileSync(settingsPath, "utf-8"),
+                );
+                this.savedSettings = existingSettings;
+                mergeConfig(settings, existingSettings);
+            } catch (e) {
+                debugShell(`Error loading shell settings: ${e}`);
+            }
+        }
+
+        debugShell(
+            `Shell loaded settings: ${JSON.stringify(this.savedSettings, undefined, 2)}`,
+        );
+        debugShell(
+            `Shell settings: ${JSON.stringify(this.settings, undefined, 2)}`,
+        );
+    }
 
     public get window(): ReadonlyDeep<ShellWindowState> {
         return this.settings.window;
@@ -120,65 +147,60 @@ export class ShellSettingManager {
         if (!names.includes(name)) {
             throw new Error(`Invalid property name '${name}'.`);
         }
-        const currentValue = getObjectProperty(this.settings.user, name);
+
+        const defaultValue = getObjectProperty(defaultSettings.user, name);
         let newValue: any = value;
-        let valueType = typeof currentValue;
-        if (valueType !== typeof value) {
-            // Coerce the type
-            switch (valueType) {
-                case "string":
-                    if (value === undefined) {
-                        // use default value to determine if the value is optional
-                        const defaultValue = getObjectProperty(
-                            defaultSettings,
-                            name,
-                        );
-                        if (defaultValue !== undefined) {
+        if (value !== undefined) {
+            const expectedType = typeof defaultValue; // The default value determines the type
+            if (expectedType !== typeof value) {
+                // Coerce the type
+                switch (expectedType) {
+                    case "string":
+                    case "undefined": // undefined default means string
+                        newValue = String(value);
+                        break;
+
+                    case "number":
+                        newValue = Number(value);
+                        if (isNaN(newValue)) {
                             throw new Error(
-                                `Invalid undefined for property '${name}`,
+                                `Invalid number value '${value}' for property '${name}'.`,
                             );
                         }
                         break;
-                    }
-                case "undefined": // only allow optional on string types
-                    newValue = String(value);
-                    break;
-
-                case "number":
-                    newValue = Number(value);
-                    if (isNaN(newValue)) {
+                    case "boolean":
+                        switch (value) {
+                            case "true":
+                            case "1":
+                                newValue = true;
+                                break;
+                            case "false":
+                            case "0":
+                                newValue = false;
+                                break;
+                            default:
+                                throw new Error(
+                                    `Invalid boolean value '${value}' for property '${name}'.`,
+                                );
+                        }
+                        break;
+                    default:
                         throw new Error(
-                            `Invalid number value '${value}' for property '${name}'.`,
+                            `Property '${name}' has unknown type ${expectedType} and cannot be set.`,
                         );
-                    }
-                    break;
-                case "boolean":
-                    switch (value) {
-                        case "true":
-                        case "1":
-                            newValue = true;
-                            break;
-                        case "false":
-                        case "0":
-                            newValue = false;
-                            break;
-                        default:
-                            throw new Error(
-                                `Invalid boolean value '${value}' for property '${name}'.`,
-                            );
-                    }
-                    break;
-                default:
-                    throw new Error(
-                        `Property '${name}' has unknown type ${valueType} and cannot be set.`,
-                    );
+                }
             }
         }
-
-        if (newValue === currentValue) {
+        if (newValue === getObjectProperty(this.savedSettings.user, name)) {
             return false;
         }
-        setObjectProperty(this.settings, "user", name, newValue);
+        setObjectProperty(this.savedSettings, "user", name, newValue);
+        setObjectProperty(
+            this.settings,
+            "user",
+            name,
+            newValue ?? defaultValue,
+        );
         return true;
     }
 
@@ -186,7 +208,7 @@ export class ShellSettingManager {
         const settingsPath = getSettingsPath(this.instanceDir);
         debugShell(`Saving settings to '${settingsPath}'.`);
 
-        const settings = this.settings;
+        const settings = this.savedSettings;
         settings.window = windowState;
         debugShell(JSON.stringify(settings, undefined, 2));
         writeFileSync(settingsPath, JSON.stringify(settings));

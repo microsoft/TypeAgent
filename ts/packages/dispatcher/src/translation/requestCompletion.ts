@@ -3,27 +3,74 @@
 
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import registerDebug from "debug";
-import { getHistoryContextForTranslation } from "./translateRequest.js";
 import { ExecutableAction, getPropertyInfo } from "agent-cache";
 import { CompletionGroup, TypeAgentAction } from "@typeagent/agent-sdk";
 import { DeepPartialUndefined } from "common-utils";
 import {
     ActionParamType,
     ActionResolvedParamType,
+    CompletionEmojis,
     getPropertyType,
     resolveTypeReference,
 } from "action-schema";
 import { getAppAgentName } from "./agentTranslators.js";
-import {
-    getActionParametersType,
-    resolveEntityTypeName,
-} from "../execute/pendingActions.js";
+import { resolveEntityTypeName } from "../execute/pendingActions.js";
 import { WildcardMode } from "agent-cache";
+import {
+    getActivityActiveSchemas,
+    getActivityCacheSpec,
+    getActivityNamespaceSuffix,
+    getNonActivityActiveSchemas,
+} from "./matchRequest.js";
+import { getHistoryContext } from "./interpretRequest.js";
+import {
+    getActionSchema,
+    getActionSchemaParameterType,
+} from "./actionSchemaUtils.js";
+import { getParamPatternValue } from "./actionSchemaFileCache.js";
 
 const debugCompletion = registerDebug("typeagent:request:completion");
 const debugCompletionError = registerDebug(
     "typeagent:request:completion:error",
 );
+
+function getCompletionNamespaceKeys(context: CommandHandlerContext): string[] {
+    const cache = context.agentCache;
+    const activeSchemaNames = context.agents.getActiveSchemas();
+    const activityContext = context.activityContext;
+    if (activityContext === undefined) {
+        return cache.getNamespaceKeys(activeSchemaNames, undefined);
+    }
+
+    const cacheSpec = getActivityCacheSpec(context, activityContext);
+    if (cacheSpec === false) {
+        // activity cache is disable, only return non-activity completions.
+        return cache.getNamespaceKeys(
+            getNonActivityActiveSchemas(activeSchemaNames, activityContext),
+            undefined,
+        );
+    }
+    const namespaceSuffix = getActivityNamespaceSuffix(
+        context,
+        activityContext,
+    );
+
+    if (namespaceSuffix === undefined) {
+        return cache.getNamespaceKeys(activeSchemaNames, undefined);
+    }
+    return cache
+        .getNamespaceKeys(
+            getActivityActiveSchemas(activeSchemaNames, activityContext),
+            namespaceSuffix,
+        )
+        .concat(
+            cache.getNamespaceKeys(
+                getNonActivityActiveSchemas(activeSchemaNames, activityContext),
+                undefined,
+            ),
+        );
+}
+
 export async function requestCompletion(
     requestPrefix: string | undefined,
     context: CommandHandlerContext,
@@ -33,11 +80,10 @@ export async function requestCompletion(
         return [];
     }
 
-    debugCompletion(`Request completion for prefix '${requestPrefix}'`);
-    const config = context.session.getConfig();
-    const activeSchemaNames = context.agents.getActiveSchemas();
-    const namespaceKeys =
-        context.agentCache.getNamespaceKeys(activeSchemaNames);
+    debugCompletion(`Request completion for prefix: '${requestPrefix}'`);
+
+    const namespaceKeys = getCompletionNamespaceKeys(context);
+    debugCompletion(`Request completion namespace keys`, namespaceKeys);
     if (!requestPrefix) {
         const completions = constructionStore.getPrefix(namespaceKeys);
 
@@ -51,12 +97,14 @@ export async function requestCompletion(
               ]
             : [];
     }
+
+    const config = context.session.getConfig();
     const results = constructionStore.match(requestPrefix, {
         partial: true,
         wildcard: config.cache.matchWildcard,
         rejectReferences: config.explainer.filter.reference.list,
         namespaceKeys,
-        history: getHistoryContextForTranslation(context),
+        history: getHistoryContext(context),
     });
 
     debugCompletion(`Request completion construction match: ${results.length}`);
@@ -153,7 +201,7 @@ async function collectActionCompletions(
         if (paramCompletion !== undefined) {
             propertyCompletions.set(propertyName, {
                 name: `property ${propertyName}`,
-                completions: paramCompletion,
+                ...paramCompletion,
                 needQuotes: false, // Request completions are partial, no quotes needed
             });
         }
@@ -164,7 +212,9 @@ export async function getActionParamCompletion(
     systemContext: CommandHandlerContext,
     partialAction: DeepPartialUndefined<TypeAgentAction>,
     parameterName: string,
-): Promise<string[] | undefined> {
+): Promise<
+    { completions: string[]; emojiChar: string | undefined } | undefined
+> {
     const { schemaName, actionName } = partialAction;
     if (schemaName === undefined || actionName === undefined) {
         return undefined;
@@ -183,10 +233,14 @@ export async function getActionParamCompletion(
 
     const agents = systemContext.agents;
     const actionSchemaFile = agents.tryGetActionSchemaFile(schemaName);
+    let entityCompletionEmojis: CompletionEmojis | undefined;
+    let paramCompletionEmojis: CompletionEmojis | undefined;
     if (actionSchemaFile !== undefined) {
-        const actionParametersType = getActionParametersType(
-            actionName,
+        const actionSchema = getActionSchema(actionSchemaFile, actionName);
+        const actionParametersType = getActionSchemaParameterType(
             actionSchemaFile,
+            actionName,
+            actionSchema,
         );
         fieldType = getPropertyType(actionParametersType, parameterName);
         resolvedFieldType = resolveTypeReference(fieldType);
@@ -204,8 +258,12 @@ export async function getActionParamCompletion(
                 literalCompletion = literals.length > 0 ? literals : undefined;
                 break;
         }
+
+        paramCompletionEmojis = actionSchema.paramCompletionEmojis;
+        entityCompletionEmojis = actionSchema.entityCompletionEmojis;
     }
 
+    let entityEmojiChar: string | undefined;
     const appAgentName = getAppAgentName(schemaName);
     const appAgent = agents.getAppAgent(appAgentName);
     if (appAgent.getActionCompletion !== undefined) {
@@ -219,6 +277,13 @@ export async function getActionParamCompletion(
                       entitySchemas,
                   )
                 : undefined;
+
+        if (entityTypeName) {
+            entityEmojiChar = getParamPatternValue(
+                entityCompletionEmojis,
+                entityTypeName,
+            );
+        }
         const sessionContext = agents.getSessionContext(appAgentName);
         try {
             actionCompletion = await appAgent.getActionCompletion(
@@ -235,9 +300,18 @@ export async function getActionParamCompletion(
         }
     }
 
-    return literalCompletion
+    const completions = literalCompletion
         ? actionCompletion
             ? literalCompletion.concat(actionCompletion)
             : literalCompletion
         : actionCompletion;
+
+    return completions === undefined || completions.length === 0
+        ? undefined
+        : {
+              completions,
+              emojiChar:
+                  entityEmojiChar ??
+                  getParamPatternValue(paramCompletionEmojis, parameterName),
+          };
 }

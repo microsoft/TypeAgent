@@ -3,37 +3,37 @@
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock
+from typing import cast
 
-from typeagent.knowpro.secindex import (
-    ConversationSecondaryIndexes,
-)
-from typeagent.knowpro.kplib import KnowledgeResponse
-from typeagent.knowpro.messageindex import (
+from fixtures import FakeConversation, FakeMessage
+from typeagent.storage.memory.messageindex import (
     MessageTextIndex,
     build_message_index,
+    IMessageTextEmbeddingIndex,
 )
-from typeagent.knowpro.importing import MessageTextIndexSettings
+from typeagent.knowpro.convsettings import MessageTextIndexSettings
 
 from typeagent.knowpro.interfaces import (
-    IConversation,
-    IMessage,
-    TextLocation,
-    ListIndexingResult,
-    IndexingEventHandlers,
     MessageTextIndexData,
+    TextLocation,
     TextToTextLocationIndexData,
 )
-from typeagent.knowpro.storage import MessageCollection
+from typeagent.storage.memory import (
+    MemoryStorageProvider,
+    MemoryMessageCollection,
+)
 from typeagent.knowpro.textlocindex import TextToTextLocationIndex
 
-from fixtures import needs_auth  # type: ignore  # It's used!
+from fixtures import needs_auth
 
 
 @pytest.fixture
-def mock_text_location_index():
+def mock_text_location_index() -> MagicMock:
     """Fixture to mock the TextToTextLocationIndex."""
     mock_index = MagicMock(spec=TextToTextLocationIndex)
-    mock_index.add_text_locations = AsyncMock(return_value=ListIndexingResult(2))
+    # Empty index, so first message starts at ordinal 0
+    mock_index.size = AsyncMock(return_value=0)
+    mock_index.add_text_locations = AsyncMock(return_value=None)
     mock_index.lookup_text = AsyncMock(return_value=[])
     mock_index.lookup_text_in_subset = AsyncMock(return_value=[])
     mock_index.serialize = MagicMock(return_value={"mock": "data"})
@@ -42,9 +42,16 @@ def mock_text_location_index():
 
 
 @pytest.fixture
-def message_text_index(mock_text_location_index):
+def message_text_index(
+    mock_text_location_index: MagicMock,
+) -> IMessageTextEmbeddingIndex:
     """Fixture to create a MessageTextIndex instance with a mocked TextToTextLocationIndex."""
-    settings = MessageTextIndexSettings()
+    from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
+    from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
+
+    test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
+    embedding_settings = TextEmbeddingIndexSettings(test_model)
+    settings = MessageTextIndexSettings(embedding_settings)
     index = MessageTextIndex(settings)
     index.text_location_index = mock_text_location_index
     return index
@@ -52,32 +59,57 @@ def message_text_index(mock_text_location_index):
 
 def test_message_text_index_init(needs_auth: None):
     """Test initialization of MessageTextIndex."""
-    settings = MessageTextIndexSettings()
+    from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
+    from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
+
+    test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
+    embedding_settings = TextEmbeddingIndexSettings(test_model)
+    settings = MessageTextIndexSettings(embedding_settings)
     index = MessageTextIndex(settings)
     assert index.settings == settings
     assert isinstance(index.text_location_index, TextToTextLocationIndex)
 
 
 @pytest.mark.asyncio
-async def test_add_messages(message_text_index, needs_auth: None):
+async def test_add_messages(
+    message_text_index: IMessageTextEmbeddingIndex, needs_auth: None
+):
     """Test adding messages to the MessageTextIndex."""
     messages = [
         MagicMock(text_chunks=["chunk1", "chunk2"]),
         MagicMock(text_chunks=["chunk3"]),
     ]
 
-    event_handler = MagicMock()
+    await message_text_index.add_messages(messages)
 
-    result = await message_text_index.add_messages(messages, event_handler)
-
-    assert result.number_completed == 2
-    message_text_index.text_location_index.add_text_locations.assert_awaited_once()
+    # Check that add_text_locations was called with the expected text and location data
+    mock_text_loc_index = cast(
+        MagicMock, cast(MessageTextIndex, message_text_index).text_location_index
+    )
+    call_args = mock_text_loc_index.add_text_locations.call_args
+    assert call_args is not None
+    text_and_locations = call_args[0][0]  # First positional argument
+    assert (
+        len(text_and_locations) == 3
+    )  # Two chunks from first message, one from second
+    assert text_and_locations[0] == (
+        "chunk1",
+        TextLocation(0, 0),
+    )  # First message starts at ordinal 0
+    assert text_and_locations[1] == ("chunk2", TextLocation(0, 1))
+    assert text_and_locations[2] == (
+        "chunk3",
+        TextLocation(1, 0),
+    )  # Second message at ordinal 1
 
 
 @pytest.mark.asyncio
-async def test_lookup_messages(message_text_index):
+async def test_lookup_messages(message_text_index: IMessageTextEmbeddingIndex):
     """Test looking up messages in the MessageTextIndex."""
-    message_text_index.text_location_index.lookup_text.return_value = [
+    mock_text_loc_index = cast(
+        MagicMock, cast(MessageTextIndex, message_text_index).text_location_index
+    )
+    mock_text_loc_index.lookup_text.return_value = [
         MagicMock(text_location=TextLocation(1, 0), score=0.9),
         MagicMock(text_location=TextLocation(2, 0), score=0.8),
     ]
@@ -94,9 +126,14 @@ async def test_lookup_messages(message_text_index):
 
 
 @pytest.mark.asyncio
-async def test_lookup_messages_in_subset(message_text_index):
+async def test_lookup_messages_in_subset(
+    message_text_index: IMessageTextEmbeddingIndex,
+):
     """Test looking up messages in a subset of the MessageTextIndex."""
-    message_text_index.text_location_index.lookup_text_in_subset.return_value = [
+    mock_text_loc_index = cast(
+        MagicMock, cast(MessageTextIndex, message_text_index).text_location_index
+    )
+    mock_text_loc_index.lookup_text_in_subset.return_value = [
         MagicMock(text_location=TextLocation(1, 0), score=0.9),
     ]
 
@@ -113,32 +150,41 @@ async def test_lookup_messages_in_subset(message_text_index):
     reason="TODO: Doesn't work; also does too much mocking (probably related)"
 )
 @pytest.mark.asyncio
-async def test_generate_embedding(message_text_index):
+async def test_generate_embedding(message_text_index: IMessageTextEmbeddingIndex):
     """Test generating an embedding for a message."""
-    message_text_index.text_location_index._vector_base.get_embedding = AsyncMock(
+    mock_text_loc_index = cast(
+        MagicMock, cast(MessageTextIndex, message_text_index).text_location_index
+    )
+    mock_text_loc_index._vector_base.get_embedding = AsyncMock(
         return_value=[0.1, 0.2, 0.3]
     )
 
     embedding = await message_text_index.generate_embedding("test message")
 
     assert embedding == [0.1, 0.2, 0.3]
-    message_text_index.text_location_index._vector_base.get_embedding.assert_awaited_once()
+    mock_text_loc_index._vector_base.get_embedding.assert_awaited_once()
 
 
-def test_serialize(message_text_index):
+def test_serialize(message_text_index: IMessageTextEmbeddingIndex):
     """Test serialization of the MessageTextIndex."""
     serialized = message_text_index.serialize()
-    assert serialized["indexData"] == {"mock": "data"}
-    message_text_index.text_location_index.serialize.assert_called_once()
+    assert serialized.get("indexData") == {"mock": "data"}
+    mock_text_loc_index = cast(
+        MagicMock, cast(MessageTextIndex, message_text_index).text_location_index
+    )
+    mock_text_loc_index.serialize.assert_called_once()
 
 
-def test_deserialize(message_text_index):
+def test_deserialize(message_text_index: IMessageTextEmbeddingIndex):
     """Test deserialization of the MessageTextIndex."""
     data = MessageTextIndexData(
         indexData=TextToTextLocationIndexData(textLocations=[], embeddings=None)
     )
     message_text_index.deserialize(data)
-    message_text_index.text_location_index.deserialize.assert_called_once_with(
+    mock_text_loc_index = cast(
+        MagicMock, cast(MessageTextIndex, message_text_index).text_location_index
+    )
+    mock_text_loc_index.deserialize.assert_called_once_with(
         dict(textLocations=[], embeddings=None)
     )
 
@@ -147,48 +193,38 @@ def test_deserialize(message_text_index):
 async def test_build_message_index(needs_auth: None):
     """Test building a message index without using mocks."""
 
-    class FakeMessage(IMessage):
-        """Concrete implementation of IMessage for testing."""
-
-        def __init__(self, text_chunks: list[str]):
-            self.text_chunks = text_chunks
-            self.tags = []
-
-        def get_knowledge(self) -> KnowledgeResponse:
-            return KnowledgeResponse(
-                entities=[],
-                actions=[],
-                inverse_actions=[],
-                topics=[],
-            )
-
-    class FakeConversation(IConversation):
-        """Concrete implementation of IConversation for testing."""
-
-        def __init__(self, messages):
-            self.name_tag = "test_conversation"
-            self.tags = []
-            self.semantic_refs = None
-            self.semantic_ref_index = None
-            # Convert plain list to MessageCollection for proper async iteration
-            self.messages = MessageCollection(messages)
-            self.secondary_indexes = ConversationSecondaryIndexes()
-
     # Create test messages and conversation
     messages = [
         FakeMessage(["chunk1", "chunk2"]),
         FakeMessage(["chunk3"]),
     ]
-    conversation = FakeConversation(messages)
+
+    # Create storage provider asynchronously
+    from typeagent.aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
+    from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
+    from typeagent.knowpro.convsettings import (
+        MessageTextIndexSettings,
+        RelatedTermIndexSettings,
+    )
+
+    test_model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
+    embedding_settings = TextEmbeddingIndexSettings(test_model)
+    message_text_settings = MessageTextIndexSettings(embedding_settings)
+    related_terms_settings = RelatedTermIndexSettings(embedding_settings)
+
+    storage_provider = MemoryStorageProvider(
+        message_text_settings=message_text_settings,
+        related_terms_settings=related_terms_settings,
+    )
+    conversation = FakeConversation(
+        messages=messages, storage_provider=storage_provider, has_secondary_indexes=True
+    )
 
     # Build the message index
-    settings = MessageTextIndexSettings()
-    event_handler = IndexingEventHandlers()
-    result = await build_message_index(conversation, settings, event_handler)
+    # Pass the storage provider instead of settings
+    storage_provider = await conversation.settings.get_storage_provider()
+    await build_message_index(conversation, storage_provider)
 
-    # Assertions
-    assert result.error is None
-    assert result.number_completed == 3  # Counts chunks, not messages
     # TODO: The final assert triggers; fix this
     # assert conversation.secondary_indexes is not None
     # assert conversation.secondary_indexes.message_index is not None

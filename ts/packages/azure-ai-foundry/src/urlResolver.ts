@@ -20,19 +20,11 @@ import {
     wikipedia,
     wikipediaSchemas,
 } from "aiclient";
+import { readFileSync } from "fs";
 import { Result } from "typechat";
 import { encodeWikipediaTitle } from "../../aiclient/dist/wikipedia.js";
-import { UrlResolverCache } from "./urlResolverCache.js";
 
 const debug = registerDebug("typeagent:azure-ai-foundry:urlResolver");
-
-// lazily load url cache
-const urlCache: UrlResolverCache = new UrlResolverCache();
-const urlCacheLoadPromise: Promise<void> = new Promise((resolve) => {
-    // simulate async loading
-    urlCache.loadPhrases("../../examples/websiteAliases/cache");
-    resolve();
-});
 
 export interface urlResolutionAction {
     originalRequest: string;
@@ -61,12 +53,7 @@ export async function flushAgent(
     );
     await agents.flushAgents(
         urlResolutionAgentId,
-        [
-            groundingConfig.urlResolutionAgentId!,
-            groundingConfig.validatorAgentId!,
-            groundingConfig.aliasKeywordExtractorAgentId!,
-            groundingConfig.openPhraseGeneratorAgentId!
-        ],
+        [groundingConfig.urlResolutionAgentId!],
         project,
     );
 }
@@ -492,15 +479,36 @@ export let keyWordsToSites: Record<string, string[] | undefined> | undefined;
  * @param keyword The keyword to resolve.
  * @returns The resolved URL or undefined if not found.
  */
-export async function resolveURLByKeyword(
+export function resolveURLByKeyword(
     keyword: string,
-): Promise<string[] | undefined | null> {
+): string[] | undefined | null {
+    if (!keyWordsToSites) {
+        const phrasesToSites = JSON.parse(
+            readFileSync(
+                "../../examples/websiteAliases/phrases_to_sites.json",
+                "utf-8",
+            ),
+        );
+        keyWordsToSites = phrasesToSites.phrases;
+    }
 
-    // make sure we have loaded the cache
-    await Promise.resolve(urlCacheLoadPromise);
+    // prepend https:// to any URLs that don't already have a protocol specified
+    if (keyWordsToSites![keyword] && Array.isArray(keyWordsToSites![keyword])) {
+        for (let i = 0; i < keyWordsToSites![keyword]!.length; i++) {
+            if (!/^https?:\/\//i.test(keyWordsToSites![keyword]![i])) {
+                keyWordsToSites![keyword]![i] =
+                    `https://${keyWordsToSites![keyword]![i]}`;
+            }
+        }
+        for (let i = 0; i < keyWordsToSites![keyword]!.length; i++) {
+            if (!/^https?:\/\//i.test(keyWordsToSites![keyword]![i])) {
+                keyWordsToSites![keyword]![i] =
+                    `https://${keyWordsToSites![keyword]![i]}`;
+            }
+        }
+    }
 
-    // get the cached item
-    return urlCache.phrases[keyword] ? urlCache.phrases[keyword] : null;
+    return keyWordsToSites![keyword] ?? null;
 }
 
 async function getTypeChatResponse(
