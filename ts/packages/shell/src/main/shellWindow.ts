@@ -1019,10 +1019,11 @@ function createMainWindow(bounds: Electron.Rectangle) {
     mainWindow.setBounds(bounds);
     mainWindow.removeMenu();
 
-    // make sure links are opened in the external browser
+    // make sure links are opened in the the shell
     mainWindow.webContents.setWindowOpenHandler((details) => {
+        // TODO: add logic for opening in external browser if a modifier key is pressed
         shell.openExternal(details.url);
-        return { action: "deny" };
+        return { action: "allow" };
     });
 
     return mainWindow;
@@ -1037,12 +1038,6 @@ function createChatView(state: ShellWindowState) {
         },
     });
 
-    // ensure links are opened in a new browser window
-    chatView.webContents.setWindowOpenHandler((details) => {
-        // TODO: add logic for keeping things in the browser window
-        shell.openExternal(details.url);
-        return { action: "deny" };
-    });
     return chatView;
 }
 
