@@ -182,7 +182,3 @@ async def test_related_terms_index_population_from_database():
     finally:
         if os.path.exists(temp_db_path):
             os.remove(temp_db_path)
-
-
-if __name__ == "__main__":
-    asyncio.run(test_related_terms_index_population_from_database())

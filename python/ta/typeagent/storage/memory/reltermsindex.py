@@ -3,7 +3,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, TYPE_CHECKING
 
 from typeagent.aitools.vectorbase import (
     ScoredInt,
@@ -28,7 +28,9 @@ from typeagent.knowpro.interfaces import (
     TermsToRelatedTermsIndexData,
     TextEmbeddingIndexData,
 )
-from typeagent.knowpro.query import CompiledSearchTerm, CompiledTermGroup
+
+if TYPE_CHECKING:
+    from typeagent.knowpro.query import CompiledSearchTerm, CompiledTermGroup
 
 
 class TermToRelatedTermsMap(ITermToRelatedTerms):
@@ -151,7 +153,7 @@ class RelatedTermsIndex(ITermToRelatedTermsIndex):
 
 async def resolve_related_terms(
     related_terms_index: ITermToRelatedTermsIndex,
-    compiled_terms: list[CompiledTermGroup],
+    compiled_terms: list["CompiledTermGroup"],
     ensure_single_occurrence: bool = True,
     should_resolve_fuzzy: Callable[[SearchTerm], bool] | None = None,
 ) -> None:
@@ -207,7 +209,7 @@ async def resolve_related_terms(
 
 
 def dedupe_related_terms(
-    compiled_terms: list[CompiledSearchTerm],
+    compiled_terms: list["CompiledSearchTerm"],
     ensure_single_occurrence: bool,
 ) -> None:
     all_search_terms = TermSet()
