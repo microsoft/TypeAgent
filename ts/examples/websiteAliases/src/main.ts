@@ -5,8 +5,9 @@ import dotenv from "dotenv";
 import { bingWithGrounding } from "azure-ai-foundry";
 import { AIProjectClient } from "@azure/ai-projects";
 import { DefaultAzureCredential } from "@azure/identity";
-import { searchKeywordExtractor } from "./searchEngineKeywords.js";
-import { topNDomainsExtractor } from "./topNsites.js";
+import { pageContentKeywordExtractor } from "./pageContentKeywords.js";
+//import { topNDomainsExtractor } from "./topNsites.js";
+import { searchResultsPhraseGenerator } from "./searchBackedPhraseGeneration.js";
 
 // Load environment variables from .env file
 const envPath = new URL("../../../.env", import.meta.url);
@@ -30,23 +31,32 @@ const limit = parseInt(
 );
 
 // go get top websites and keywords from Moz
-if (process.argv.includes("--moz")) {
+if (process.argv.includes("--pageContent")) {
     console.log("Website search keyword extractor selected.");
-    const ee = new searchKeywordExtractor(project, groundingConfig);
+    const ee = new pageContentKeywordExtractor(project, groundingConfig);
     await ee.extract();
-} else {
-    // go get top NNN sites from CloudFlare
-    console.log("Top N sites extractor selected.");
+// } else if (process.argv.includes("--topN")) {
+//     // go get top NNN sites from CloudFlare
+//     console.log("Top N sites extractor selected.");
 
-    const topN = parseInt(
-        process.argv[process.argv.indexOf("--topN") + 1],
-        100,
-    );
-    const topNExtractor = new topNDomainsExtractor(topN);
+//     const topNExtractor = new topNDomainsExtractor(topN);
+
+//     if (process.argv.includes("--summary")) {
+//         await topNExtractor.summarize();
+//     } else {
+//         await topNExtractor.index(process.argv.includes("--clear"));
+//     }
+} else {
+    // search engine based phrase generation
+    console.log("Search results phrase generator selected.");
+
+    const searchResultsExtractor = new searchResultsPhraseGenerator(limit);
 
     if (process.argv.includes("--summary")) {
-        await topNExtractor.summarize();
+        await searchResultsExtractor.summarize();
+    } else if (process.argv.includes("--compact")) {
+        await searchResultsExtractor.compact();
     } else {
-        await topNExtractor.index(process.argv.includes("--clear"));
-    }
+        await searchResultsExtractor.index(process.argv.includes("--clear"));
+    }    
 }
