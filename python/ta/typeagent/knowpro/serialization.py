@@ -25,9 +25,9 @@ from pydantic.alias_generators import to_camel
 
 from ..aitools.embeddings import NormalizedEmbeddings
 
-from .searchlang import SearchTermGroupTypes
 from .interfaces import (
     ConversationDataWithIndexes,
+    SearchTermGroupTypes,
     Tag,
     Topic,
 )
