@@ -57,6 +57,19 @@ Load via `utils.load_dotenv()` which looks for `../ts/.env` (shared with TypeScr
 - **Unions**: Preserve as Python unions, string literals become `Literal` types
 - **Async**: All storage operations are async even for in-memory providers
 
+### Import Architecture Rules
+**Core Principle**: Never import a symbol from another module that imports it. Always import directly from the module that defines it.
+
+- **Bad**: `from searchlang import SearchTermGroupTypes` (when searchlang imports it from interfaces)
+- **Good**: `from interfaces import SearchTermGroupTypes` (where it's actually defined)
+
+**Exceptions**:
+- Modules with `__all__` - intentional public API
+- Explicit export markers: `# For export` comments
+- Re-export pattern: `from X import Y as Y`
+
+This prevents circular imports and creates cleaner dependency graphs.
+
 ## Key Interfaces & Patterns
 
 ### Storage Provider Pattern
