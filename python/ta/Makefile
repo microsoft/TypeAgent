@@ -21,7 +21,7 @@ test: venv
 .PHONY: coverage
 coverage: venv
 	.venv/bin/python -m coverage run --source=typeagent -m pytest test $(FLAGS)
-	coverage report
+	coverage report --sort=cover
 
 .PHONY: demo
 demo: venv

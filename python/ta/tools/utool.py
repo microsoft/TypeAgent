@@ -176,7 +176,10 @@ async def main():
 
     utils.pretty_print(context, Fore.BLUE, Fore.RESET)
 
-    if args.batch:
+    if args.question:
+        print(Fore.YELLOW + f"Processing single question: {args.question}" + Fore.RESET)
+        await process_query(context, args.question)
+    elif args.batch:
         print(
             Fore.YELLOW
             + f"Running in batch mode [{args.offset}:{args.offset + args.limit if args.limit else ''}]."
@@ -479,6 +482,12 @@ def make_arg_parser(description: str) -> argparse.ArgumentParser:
         default=None,
         help="Path to the SQLite database file (default: no SQLite)",
     )
+    parser.add_argument(
+        "--question",
+        type=str,
+        default=None,
+        help="Process a single question and exit (equivalent to echo 'question' | utool.py)",
+    )
 
     batch = parser.add_argument_group("Batch mode options")
     batch.add_argument(
@@ -568,6 +577,9 @@ def fill_in_debug_defaults(
 ) -> None:
     # In batch mode, defaults are diff, diff, diff, diff.
     # In interactive mode they are none, none, none, nice.
+    if args.question and args.batch:
+        parser.exit(2, "Error: --question cannot be combined with --batch\n")
+
     if not args.batch:
         if args.start or args.offset or args.limit:
             parser.exit(2, "Error: --start, --offset and --limit require --batch\n")
