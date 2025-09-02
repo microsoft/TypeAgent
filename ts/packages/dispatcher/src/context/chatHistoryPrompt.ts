@@ -22,11 +22,11 @@ export function createTypeAgentRequestPrompt(
     if (validator.getSchemaText() === "") {
         // If the schema is empty, we are skipping the type script schema because of json schema.
         prompts.push(
-            `You are a service that translates user requests into JSON objects`,
+            `You are a service that translates the current user request into JSON objects`,
         );
     } else {
         prompts.push(
-            `You are a service that translates user requests into JSON objects of type "${validator.getTypeName()}" according to the following TypeScript definitions:`,
+            `You are a service that translates the current user request into JSON objects of type "${validator.getTypeName()}" according to the following TypeScript definitions:`,
             `\`\`\``,
             validator.getSchemaText(),
             `\`\`\``,

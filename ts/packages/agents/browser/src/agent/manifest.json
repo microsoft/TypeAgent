@@ -27,7 +27,7 @@
       "schema": {
         "description": "Actions to lookup information from the web and answer user queries.",
         "schemaFile": "./lookupAndAnswerSchema.mts",
-        "schemaType": "BrowserLookupActions",
+        "schemaType": "LookupAndAnswerActions",
         "injected": true
       }
     },

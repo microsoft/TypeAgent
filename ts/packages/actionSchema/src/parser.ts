@@ -17,6 +17,8 @@ import {
     ActionSchemaEntryTypeDefinitions,
     ActionSchemaEntityTypeDefinition,
     ResolvedSchemaType,
+    SchemaTypeTrue,
+    SchemaTypeFalse,
 } from "./type.js";
 import ts from "typescript";
 import { ActionParamSpecs, SchemaConfig } from "./schemaConfig.js";
@@ -622,14 +624,34 @@ class ActionParser {
         };
     }
 
-    private parseLiteralType(node: ts.LiteralTypeNode): SchemaTypeStringUnion {
-        if (node.literal.kind !== ts.SyntaxKind.StringLiteral) {
+    private parseLiteralType(
+        node: ts.LiteralTypeNode,
+    ): SchemaTypeStringUnion | SchemaTypeTrue | SchemaTypeFalse {
+        const allowedLiterals = [
+            ts.SyntaxKind.StringLiteral,
+            ts.SyntaxKind.TrueKeyword,
+            ts.SyntaxKind.FalseKeyword,
+        ];
+        if (!allowedLiterals.includes(node.literal.kind)) {
             throw new Error("Only string literal types are supported");
         }
-        return {
-            type: "string-union",
-            typeEnum: [node.literal.text],
-        };
+
+        if (node.literal.kind === ts.SyntaxKind.StringLiteral) {
+            return {
+                type: "string-union",
+                typeEnum: [node.literal.text],
+            };
+        } else if (node.literal.kind === ts.SyntaxKind.TrueKeyword) {
+            return {
+                type: "true",
+            };
+        } else if (node.literal.kind === ts.SyntaxKind.FalseKeyword) {
+            return {
+                type: "false",
+            };
+        }
+
+        throw new Error("Unsupported Literal Type")!;
     }
 
     private parseTypeUnionType(

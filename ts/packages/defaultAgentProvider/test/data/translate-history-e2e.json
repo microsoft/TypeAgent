@@ -72,14 +72,14 @@
     {
       "request": "look up the ingredient for shepherd's pie for me please",
       "action": {
-        "schemaName": "dispatcher.lookup",
-        "actionName": "lookupAndAnswer",
+        "schemaName": "browser.lookupAndAnswer",
+        "actionName": "lookupAndAnswerInternet",
         "parameters": {
           "originalRequest": "look up the ingredient for shepherd's pie for me please",
           "question": "What are the ingredients for shepherd's pie?",
           "lookup": {
             "source": "internet",
-            "internetLookups": ["shepherd's pie ingredients"]
+            "internetLookups": ["ingredient for shepherd's pie"]
           }
         }
       },

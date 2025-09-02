@@ -163,7 +163,7 @@
         background: #f0f0f0;
       }
 
-      .divider {
+      .divider-vertical {
         position: absolute;
         /* Full height always */
         top: 0;
@@ -172,6 +172,21 @@
         width: 5px;
         cursor: ew-resize;
         background-color: #ddd;
+        /* Hidden initially */
+        visibility: hidden;
+      }
+
+      .divider-horizontal {
+        position: absolute;
+        /* Full width always */
+        left: 0;
+        right: 0;
+        top: 40px;
+        height: 5px;
+        cursor: ns-resize;
+        background-color: #ddd;
+        /* Hidden initially */
+        visibility: hidden;
       }
     </style>
   </head>
@@ -203,13 +218,15 @@
       </button>
     </div>
 
-    <div class="divider" id="divider"></div>
+    <div class="divider-vertical" id="divider-vertical"></div>
+    <div class="divider-horizontal" id="divider-horizontal"></div>
     <script>
       const ipcRenderer = window.electron.ipcRenderer;
 
       // DOM elements
       const header = document.getElementById("header");
-      const divider = document.getElementById("divider");
+      const dividerVertical = document.getElementById("divider-vertical");
+      const dividerHorizontal = document.getElementById("divider-horizontal");
       const tabBar = document.getElementById("tab-bar");
       const backBtn = document.getElementById("back-btn");
       const forwardBtn = document.getElementById("forward-btn");
@@ -220,18 +237,28 @@
       let isDragging = false;
       let tabs = [];
       let activeTabId = null;
+      let verticalLayout = false;
 
       // Divider functionality
-      divider.addEventListener("mousedown", () => {
+      dividerVertical.addEventListener("mousedown", () => {
         isDragging = true;
       });
 
+      dividerHorizontal.addEventListener("mousedown", () => {
+        isDragging = true;
+      });
       window.addEventListener("mousemove", (e) => {
         if (!isDragging) return;
-        const newX = e.clientX;
-        divider.style.left = `${newX}px`;
-        header.style.left = `${newX + 5}px`; // Position header just after divider
-        ipcRenderer.send("views-resized-by-user", newX);
+        if (verticalLayout) {
+          const newY = e.clientY;
+          dividerHorizontal.style.top = `${newY}px`;
+          ipcRenderer.send("views-resized-by-user", newY);
+        } else {
+          const newX = e.clientX;
+          dividerVertical.style.left = `${newX}px`;
+          header.style.left = `${newX + 5}px`; // Position header just after divider
+          ipcRenderer.send("views-resized-by-user", newX);
+        }
       });
 
       window.addEventListener("mouseup", () => {
@@ -324,16 +351,35 @@
       }
 
       // IPC handlers
-      ipcRenderer.on("set-divider-left", (_, newX) => {
-        if (newX < 0) {
-          divider.style.visibility = "hidden";
-          header.classList.remove("visible");
+      ipcRenderer.on("set-layout", (_, layout) => {
+        verticalLayout = layout.verticalLayout;
+        if (verticalLayout) {
+          dividerVertical.style.visibility = "hidden";
+          const newY = layout.pos;
+          if (newY < 0) {
+            dividerHorizontal.style.visibility = "hidden";
+            header.classList.remove("visible");
+          } else {
+            dividerHorizontal.style.top = `${newY}px`;
+            dividerHorizontal.style.visibility = "visible";
+            header.style.left = "0px";
+            if (tabs.length > 0) {
+              header.classList.add("visible");
+            }
+          }
         } else {
-          divider.style.left = `${newX}px`;
-          header.style.left = `${newX + 5}px`; // Position header just after divider
-          divider.style.visibility = "visible";
-          if (tabs.length > 0) {
-            header.classList.add("visible");
+          dividerHorizontal.style.visibility = "hidden";
+          const newX = layout.pos;
+          if (newX < 0) {
+            dividerVertical.style.visibility = "hidden";
+            header.classList.remove("visible");
+          } else {
+            dividerVertical.style.left = `${newX}px`;
+            dividerVertical.style.visibility = "visible";
+            header.style.left = `${newX + 5}px`; // Position header just after divider
+            if (tabs.length > 0) {
+              header.classList.add("visible");
+            }
           }
         }
       });
