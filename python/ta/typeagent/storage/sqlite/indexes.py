@@ -808,13 +808,9 @@ class SqliteRelatedTermsIndex(interfaces.ITermToRelatedTermsIndex):
         # Deserialize alias data
         alias_data = data.get("aliasData")
         if alias_data is not None:
-            import asyncio
-
-            asyncio.create_task(self._aliases.deserialize(alias_data))
+            await self._aliases.deserialize(alias_data)
 
         # Deserialize fuzzy index data
         text_embedding_data = data.get("textEmbeddingData")
         if text_embedding_data is not None:
-            import asyncio
-
-            asyncio.create_task(self._fuzzy_index.deserialize(text_embedding_data))
+            await self._fuzzy_index.deserialize(text_embedding_data)
