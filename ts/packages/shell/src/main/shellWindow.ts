@@ -6,7 +6,6 @@ import {
     DevicePermissionHandlerHandlerDetails,
     globalShortcut,
     ipcMain,
-    shell,
     WebContents,
     WebContentsView,
 } from "electron";
@@ -1019,10 +1018,11 @@ function createMainWindow(bounds: Electron.Rectangle) {
     mainWindow.setBounds(bounds);
     mainWindow.removeMenu();
 
-    // make sure links are opened in the external browser
-    mainWindow.webContents.setWindowOpenHandler((details) => {
-        shell.openExternal(details.url);
-        return { action: "deny" };
+    // make sure links are opened in the the shell
+    mainWindow.webContents.setWindowOpenHandler(() => {
+        // TODO: add logic for opening in external browser if a modifier key is pressed
+        //shell.openExternal(details.url);
+        return { action: "allow" };
     });
 
     return mainWindow;
@@ -1037,12 +1037,6 @@ function createChatView(state: ShellWindowState) {
         },
     });
 
-    // ensure links are opened in a new browser window
-    chatView.webContents.setWindowOpenHandler((details) => {
-        // TODO: add logic for keeping things in the browser window
-        shell.openExternal(details.url);
-        return { action: "deny" };
-    });
     return chatView;
 }
 
