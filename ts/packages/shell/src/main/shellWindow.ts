@@ -6,7 +6,6 @@ import {
     DevicePermissionHandlerHandlerDetails,
     globalShortcut,
     ipcMain,
-    shell,
     WebContents,
     WebContentsView,
 } from "electron";
@@ -1020,9 +1019,9 @@ function createMainWindow(bounds: Electron.Rectangle) {
     mainWindow.removeMenu();
 
     // make sure links are opened in the the shell
-    mainWindow.webContents.setWindowOpenHandler((details) => {
+    mainWindow.webContents.setWindowOpenHandler(() => {
         // TODO: add logic for opening in external browser if a modifier key is pressed
-        shell.openExternal(details.url);
+        //shell.openExternal(details.url);
         return { action: "allow" };
     });
 
