@@ -170,10 +170,14 @@ function validateCommandResult(
             for (const expected of action.anyof) {
                 try {
                     validateExpectedActions(expected, actions!, match);
-                } catch {
-                    continue;
-                }
+                    return;
+                } catch {}
             }
+            throw new Error(
+                `None of the expected actions matched:\n  received:${JSON.stringify(actions!)}\n. expected:${JSON.stringify(
+                    action.anyof,
+                )}`,
+            );
         } else {
             validateExpectedActions(action, actions!, match);
         }
