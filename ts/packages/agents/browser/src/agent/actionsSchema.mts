@@ -71,7 +71,7 @@ export type CloseWebPage = {
 // Close all web page views
 export type CloseAllWebPages = {
     actionName: "closeAllWebPages";
-}
+};
 
 export type GoBack = {
     actionName: "goBack";

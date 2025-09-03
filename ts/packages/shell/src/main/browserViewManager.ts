@@ -240,7 +240,8 @@ export class BrowserViewManager {
      * Close a browser tab
      */
     closeBrowserTab(tabId: string): boolean {
-        const browserView: BrowserViewContext | undefined = this.browserViews.get(tabId);
+        const browserView: BrowserViewContext | undefined =
+            this.browserViews.get(tabId);
         if (!browserView) {
             debug(`Cannot close tab ${tabId}: not found`);
             return false;

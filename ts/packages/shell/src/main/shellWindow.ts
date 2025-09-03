@@ -145,16 +145,12 @@ export class ShellWindow {
         });
 
         this.browserViewManager.setTabClosedCallback((tabId: string) => {
-            this.mainWindow.webContents.send(
-                "browser-tab-closed",
-                tabId,
-            );
+            this.mainWindow.webContents.send("browser-tab-closed", tabId);
 
             // Update layout if no tabs left
             if (!this.hasBrowserTabs()) {
                 this.setWindowSize(this.getWindowPositionState());
             }
-
         });
 
         const resizeHandlerCleanup = setupResizeHandler(mainWindow, () =>
