@@ -102,7 +102,7 @@ export function createMultipleActionSchema(
                 requests: sc.array(requestEntryType),
             }),
         }),
-        undefined,
+        "ONLY use when the current user request has multiple parts and require multiple actions. Do NOT include completed requests from chat history.",
         true,
     );
     return schema;
