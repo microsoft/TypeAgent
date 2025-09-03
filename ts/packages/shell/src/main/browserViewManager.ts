@@ -32,6 +32,7 @@ export class BrowserViewManager {
     private onTabUpdateCallback?: () => void;
     private onNavigationUpdateCallback?: () => void;
     private onPageLoadCompleteCallback?: (tabId: string) => void;
+    private onTabClosedCallback?: (tabId: string) => void;
     private viewBounds: Electron.Rectangle | null = null;
     constructor(mainWindow: BrowserWindow) {
         this.mainWindow = mainWindow;
@@ -57,6 +58,14 @@ export class BrowserViewManager {
      */
     setPageLoadCompleteCallback(callback: (tabId: string) => void): void {
         this.onPageLoadCompleteCallback = callback;
+    }
+
+    /**
+     * Set callback for tab closed
+     * @param callback - The tab closed callback
+     */
+    setTabClosedCallback(callback: (tabId: string) => void): void {
+        this.onTabClosedCallback = callback;
     }
 
     /**
@@ -231,7 +240,8 @@ export class BrowserViewManager {
      * Close a browser tab
      */
     closeBrowserTab(tabId: string): boolean {
-        const browserView = this.browserViews.get(tabId);
+        const browserView: BrowserViewContext | undefined =
+            this.browserViews.get(tabId);
         if (!browserView) {
             debug(`Cannot close tab ${tabId}: not found`);
             return false;
@@ -263,6 +273,9 @@ export class BrowserViewManager {
                 this.setActiveBrowserView(remainingTabs[0].id);
             }
         }
+
+        // remove the tab from the browser header
+        this.onTabClosedCallback?.(tabId);
 
         debug(`Browser tab closed: ${tabId}`);
         return true;
