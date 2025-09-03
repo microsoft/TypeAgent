@@ -1,0 +1,34 @@
+{
+  "name": "debug-doc-generator-example",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Debug Documentation Generator - generates markup file listing registerDebug call hierarchy",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/examples/debugDocGenerator"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "scripts": {
+    "build": "npm run tsc",
+    "postbuild": "copyfiles -u 1 \"src/**/*Schema.ts\" \"src/**/*.txt\" dist",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "start": "node dist/main.js",
+    "start:help": "node dist/main.js --help",
+    "scan": "node dist/main.js",
+    "tsc": "tsc -p src"
+  },
+  "dependencies": {
+    "common-utils": "workspace:*",
+    "typescript": "~5.4.5"
+  },
+  "devDependencies": {
+    "copyfiles": "^2.4.1",
+    "rimraf": "^5.0.1"
+  }
+}
