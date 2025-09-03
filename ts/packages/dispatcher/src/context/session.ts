@@ -106,7 +106,7 @@ export type DispatcherConfig = {
         multiple: MultipleActionConfig;
         history: {
             enabled: boolean;
-            limit: number;
+            limit: number; // number of entities,
         };
         schema: {
             generation: {

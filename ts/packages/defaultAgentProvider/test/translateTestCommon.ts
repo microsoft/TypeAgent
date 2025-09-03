@@ -39,6 +39,7 @@ export type TranslateTestEntry = TranslateTestStep | TranslateTestStep[];
 export type TranslateTestFile = TranslateTestEntry[];
 
 const repeat = 5;
+const concurrency = 5;
 const embeddingCacheDir = path.join(os.tmpdir(), ".typeagent", "cache");
 export async function defineTranslateTest(
     name: string,
@@ -69,17 +70,51 @@ export async function defineTranslateTest(
     );
     describe(`${name} action stability`, () => {
         let dispatchers: Dispatcher[] = [];
+        let dispatcherP: Promise<void> | undefined;
+        let dispatcherDone: (() => void) | undefined;
+        async function acquireDispatcher() {
+            while (dispatchers.length === 0) {
+                if (dispatcherP === undefined) {
+                    dispatcherP = new Promise<void>((resolve) => {
+                        dispatcherDone = resolve;
+                    });
+                }
+                await dispatcherP;
+            }
+            return dispatchers.pop()!;
+        }
+        function releaseDispatcher(d: Dispatcher) {
+            dispatchers.push(d);
+            const done = dispatcherDone;
+            dispatcherDone = undefined;
+            dispatcherP = undefined;
+            done?.();
+        }
+        async function runOnDispatcher(
+            fn: (dispatcher: Dispatcher) => Promise<void>,
+        ) {
+            const d = await acquireDispatcher();
+            try {
+                await fn(d);
+            } finally {
+                releaseDispatcher(d);
+            }
+        }
+
         async function runOnDispatchers(
             fn: (dispatcher: Dispatcher) => Promise<void>,
         ) {
-            const p = dispatchers.map(fn);
+            const p: Promise<void>[] = [];
+            for (let i = 0; i < repeat; i++) {
+                p.push(runOnDispatcher(fn));
+            }
             // Make sure all promise finished before checking the result
             await Promise.allSettled(p);
             // Propagate any errors
             return Promise.all(p);
         }
         beforeAll(async () => {
-            for (let i = 0; i < repeat; i++) {
+            for (let i = 0; i < Math.min(concurrency, repeat); i++) {
                 dispatchers.push(
                     await createDispatcher("cli test translate", {
                         appAgentProviders: defaultAppAgentProviders,
@@ -98,17 +133,23 @@ export async function defineTranslateTest(
         });
         describe.each(inputsWithName)(`${name} %p`, (_, test) => {
             const steps = Array.isArray(test) ? test : [test];
-            it.each(steps)("step $#: $request", async (step) => {
-                await runOnDispatchers(async (dispatcher) => {
-                    await setupOneStep(steps, step, dispatcher);
-                    const result = await runOneStep(step, dispatcher);
-                    validateCommandResult(step, result);
-                });
-            });
+            it.each(steps)(
+                "step $#: $request",
+                async (step) => {
+                    await runOnDispatchers(async (dispatcher) => {
+                        await setupOneStep(steps, step, dispatcher);
+                        const result = await runOneStep(step, dispatcher);
+                        validateCommandResult(step, result);
+                    });
+                },
+                6000 * repeat,
+            );
         });
         afterAll(async () => {
-            await runOnDispatchers((d) => d.close());
+            const p = dispatchers.map((d) => d.close());
+            await Promise.allSettled(p);
             dispatchers = [];
+            await Promise.all(p);
         });
     });
 }
