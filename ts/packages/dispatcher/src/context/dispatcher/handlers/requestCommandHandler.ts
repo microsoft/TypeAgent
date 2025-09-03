@@ -45,6 +45,7 @@ import { addRequestToMemory, addResultToMemory } from "../../memory.js";
 import { requestCompletion } from "../../../translation/requestCompletion.js";
 import {
     getCannotUseCacheReason,
+    getHistoryContext,
     interpretRequest,
     InterpretResult,
 } from "../../../translation/interpretRequest.js";
@@ -346,6 +347,8 @@ export class RequestCommandHandler implements CommandHandler {
 
             // Translate to action
 
+            // Get the history context before adding the request to memory
+            const history = getHistoryContext(systemContext);
             addRequestToMemory(systemContext, request, cachedAttachments);
             let interpretResult: InterpretResult;
             try {
@@ -353,6 +356,7 @@ export class RequestCommandHandler implements CommandHandler {
                     context,
                     request,
                     cachedAttachments,
+                    history,
                 );
             } catch (e: any) {
                 addResultToMemory(

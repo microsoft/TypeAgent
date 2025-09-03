@@ -23,8 +23,7 @@ import {
 import {
     ensureShellDataDir,
     getShellDataDir,
-    loadShellSettings,
-    ShellSettings,
+    ShellSettingManager,
     ShellUserSettings,
 } from "./shellSettings.js";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -126,16 +125,16 @@ if (parsedArgs.update) {
 const time = performance.now();
 debugShell("Starting...");
 
-function createWindow(shellSettings: ShellSettings) {
+function createWindow(shellSettings: ShellSettingManager) {
     debugShell("Creating window", performance.now() - time);
 
     // Create the browser window.
-    const shellWindow = new ShellWindow(shellSettings, instanceDir);
+    const shellWindow = new ShellWindow(shellSettings);
 
     initializeSpeech(shellWindow.chatView);
 
-    ipcMain.on("views-resized-by-user", (_, newX: number) => {
-        shellWindow.updateContentSize(newX);
+    ipcMain.on("views-resized-by-user", (_, newPos: number) => {
+        shellWindow.updateContentSize(newPos);
     });
 
     ipcMain.handle("init-browser-ipc", async () => {
@@ -393,7 +392,7 @@ async function initializeDispatcher(
 
 async function initializeInstance(
     instanceDir: string,
-    shellSettings: ShellSettings,
+    shellSettings: ShellSettingManager,
 ) {
     const shellWindow = createWindow(shellSettings);
     const { mainWindow, chatView } = shellWindow;
@@ -528,7 +527,7 @@ async function initialize() {
         "/macrosLibrary.html": `chrome-extension://${extension.id}/views/macrosLibrary.html`,
     };
 
-    const shellSettings = loadShellSettings(instanceDir);
+    const shellSettings = new ShellSettingManager(instanceDir);
     const settings = shellSettings.user;
     const dataDir = getShellDataDir(instanceDir);
     const chatHistory: string = path.join(dataDir, "chat_history.html");

@@ -331,9 +331,21 @@ export async function executeActions(
             context,
             actionIndex,
         );
+
+        // add the action result to memory whether it has error or not.
+        addActionResultToMemory(
+            systemContext,
+            executableAction,
+            resolvedEntities,
+            action.schemaName,
+            result,
+        );
+
         if (result.error !== undefined) {
+            // Stop executing further action on error.
             return;
         }
+
         const resultEntityId = executableAction.resultEntityId;
         if (resultEntityId !== undefined) {
             if (result.resultEntity === undefined) {
@@ -356,15 +368,6 @@ export async function executeActions(
                 },
             );
         }
-
-        // add the action result to memory.
-        addActionResultToMemory(
-            systemContext,
-            executableAction,
-            resolvedEntities,
-            action.schemaName,
-            result,
-        );
 
         if (result.activityContext !== undefined) {
             if (actionQueue.length > 0) {

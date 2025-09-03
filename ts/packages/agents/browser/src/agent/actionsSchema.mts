@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+export type DisabledBrowserActions = Search | SearchWebMemories;
 export type BrowserActions =
     | OpenWebPage
     | CloseWebPage
@@ -11,7 +12,6 @@ export type BrowserActions =
     | ScrollUp
     | FollowLinkByText
     | FollowLinkByPosition
-    | Search
     | ReadPageContent
     | StopReadPageContent
     | ZoomIn
@@ -20,7 +20,6 @@ export type BrowserActions =
     | CaptureScreenshot
     | ReloadPage
     | GetWebsiteStats
-    | SearchWebMemories
     | OpenSearchResult
     | ChangeSearchProvider
     | SearchImageAction;
@@ -66,15 +65,6 @@ export type ChangeTabs = {
 // Close the current web site view
 export type CloseWebPage = {
     actionName: "closeWebPage";
-};
-
-// Explicit search action requested by the user
-export type Search = {
-    actionName: "search";
-    parameters: {
-        query?: string;
-        newTab: boolean; // default is false;
-    };
 };
 
 export type GoBack = {
@@ -157,7 +147,18 @@ export type GetWebsiteStats = {
     };
 };
 
+// Display a search results page for the specified query
+// Do NOT default to search if the user request doesn't explicitly ask for a search
+export type Search = {
+    actionName: "search";
+    parameters: {
+        query?: string;
+        newTab: boolean; // default is false;
+    };
+};
+
 // Search web memories (unified search replacing queryWebKnowledge and searchWebsites)
+// Do NOT default to search if the user request doesn't explicitly ask for a search
 export type SearchWebMemories = {
     actionName: "searchWebMemories";
     parameters: {

@@ -3,7 +3,7 @@
 
 export type DispatcherActions = UnknownAction;
 
-// user request isn't any of the action available and no schema group that may have potential actions to look up from.
+// Use UnknownAction when all the available actions in the schema is not relevant to the user request
 export interface UnknownAction {
     actionName: "unknown";
     parameters: {

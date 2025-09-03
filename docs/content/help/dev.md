@@ -15,6 +15,11 @@ Here are some tips when working with the TypeAgent repo listed in no particular 
 
 - To reset your git repo without having to re-clone, you can run `git clean -dfX` and then `pnpm i`
 
+## Issues
+
+- **Test projects aren't appearing in Jest Explorer** - To fix this modify the [settings.json](../../../ts/.vscode/settings.json) file and add the project to the `jest.virtualFolders` section.  
+- **Unable to debug tests** - If you try to debug a test using jest and in the output you get a message `No tests found, exiting with code 1` it's possible that the [launch.json](../../../ts/.vscode/launch.json) file is pointing to another project. Modify the working directory of the `vscode-jest-tests.v2` launch spec to point to the project folder you are wanting to debug.
+
 ## Errors
 
 Here are some troubleshooting steps and or possible solutions to specific errors you might encounter.

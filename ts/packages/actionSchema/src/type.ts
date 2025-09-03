@@ -9,6 +9,8 @@ export interface SchemaBase {
         | "string"
         | "number"
         | "boolean"
+        | "true"
+        | "false"
         | "undefined"
         | "string-union"
         | "object"
@@ -31,6 +33,14 @@ export interface SchemaTypeNumber extends SchemaBase {
 
 export interface SchemaTypeBoolean extends SchemaBase {
     type: "boolean";
+}
+
+export interface SchemaTypeTrue extends SchemaBase {
+    type: "true";
+}
+
+export interface SchemaTypeFalse extends SchemaBase {
+    type: "false";
 }
 
 export interface SchemaTypeUndefined extends SchemaBase {
@@ -109,7 +119,9 @@ export type ResolvedSchemaType =
     | SchemaTypeUnion
     | SchemaTypeObject
     | SchemaTypeArray
-    | SchemaTypeAny;
+    | SchemaTypeAny
+    | SchemaTypeTrue
+    | SchemaTypeFalse;
 
 export type SchemaType = ResolvedSchemaType | SchemaTypeReference;
 

@@ -1,12 +1,17 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from ..knowpro.collections import MemoryMessageCollection, MemorySemanticRefCollection
-from ..knowpro.semrefindex import TermToSemanticRefIndex
-from ..knowpro.convthreads import ConversationThreads
-from ..knowpro.messageindex import MessageTextIndexSettings
-from ..knowpro.reltermsindex import RelatedTermIndexSettings
-from ..knowpro.interfaces import (
+"""Memory storage provider implementation."""
+
+from .collections import MemoryMessageCollection, MemorySemanticRefCollection
+from .semrefindex import TermToSemanticRefIndex
+from .convthreads import ConversationThreads
+from .messageindex import MessageTextIndex
+from .reltermsindex import RelatedTermsIndex
+from .propindex import PropertyIndex
+from .timestampindex import TimestampToTextRangeIndex
+from ...knowpro.convsettings import MessageTextIndexSettings, RelatedTermIndexSettings
+from ...knowpro.interfaces import (
     IConversationThreads,
     IMessage,
     IMessageTextIndex,
@@ -16,10 +21,6 @@ from ..knowpro.interfaces import (
     ITermToSemanticRefIndex,
     ITimestampToTextRangeIndex,
 )
-from ..knowpro.messageindex import MessageTextIndex
-from ..knowpro.propindex import PropertyIndex
-from ..knowpro.reltermsindex import RelatedTermsIndex
-from ..knowpro.timestampindex import TimestampToTextRangeIndex
 
 
 class MemoryStorageProvider[TMessage: IMessage](IStorageProvider[TMessage]):
@@ -35,15 +36,12 @@ class MemoryStorageProvider[TMessage: IMessage](IStorageProvider[TMessage]):
     _related_terms_index: RelatedTermsIndex
     _conversation_threads: ConversationThreads
 
-    @classmethod
-    async def create(
-        cls,
+    def __init__(
+        self,
         message_text_settings: MessageTextIndexSettings,
         related_terms_settings: RelatedTermIndexSettings,
-    ) -> "MemoryStorageProvider[TMessage]":
+    ) -> None:
         """Create and initialize a MemoryStorageProvider with all indexes."""
-        self = cls()
-
         self._message_collection = MemoryMessageCollection[TMessage]()
         self._semantic_ref_collection = MemorySemanticRefCollection()
 
@@ -54,8 +52,6 @@ class MemoryStorageProvider[TMessage: IMessage](IStorageProvider[TMessage]):
         self._related_terms_index = RelatedTermsIndex(related_terms_settings)
         thread_settings = message_text_settings.embedding_index_settings
         self._conversation_threads = ConversationThreads(thread_settings)
-
-        return self
 
     async def get_semantic_ref_index(self) -> ITermToSemanticRefIndex:
         return self._conversation_index
@@ -76,8 +72,7 @@ class MemoryStorageProvider[TMessage: IMessage](IStorageProvider[TMessage]):
         return self._conversation_threads
 
     async def get_message_collection(
-        self,
-        message_type: type[TMessage] | None = None,
+        self, message_type: type[TMessage] | None = None
     ) -> MemoryMessageCollection[TMessage]:
         return self._message_collection
 

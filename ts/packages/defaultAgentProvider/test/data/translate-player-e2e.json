@@ -1,0 +1,222 @@
+[  
+  {  
+    "request": "Could you please play Blinding Lights by The Weeknd?",  
+    "action": {  
+      "schemaName": "player",  
+      "actionName": "playTrack",  
+      "parameters": {  
+        "trackName": "Blinding Lights",  
+        "artists": ["The Weeknd"]  
+      }  
+    }  
+  },  
+  {  
+    "request": "Hey, would you mind putting on Rolling in the Deep by Adele?",  
+    "action": {  
+      "schemaName": "player",  
+      "actionName": "playTrack",  
+      "parameters": {  
+        "trackName": "Rolling in the Deep",  
+        "artists": ["Adele"]  
+      }  
+    }  
+  },  
+  {  
+    "request": "If it's not too much trouble, play Uptown Funk by Mark Ronson featuring Bruno Mars.",  
+    "action": {  
+      "schemaName": "player",  
+      "actionName": "playTrack",  
+      "parameters": {  
+        "trackName": "Uptown Funk",  
+        "artists": ["Mark Ronson", "Bruno Mars"]  
+      }  
+    }  
+  },  
+  {  
+    "request": "Please could you play Bad Guy by Billie Eilish?",  
+    "action": {  
+      "schemaName": "player",  
+      "actionName": "playTrack",  
+      "parameters": {  
+        "trackName": "Bad Guy",  
+        "artists": ["Billie Eilish"]  
+      }  
+    }  
+  },  
+  {  
+    "request": "Whenever you get a chance, play Shape of You by Ed Sheeran.",  
+    "action": {  
+      "schemaName": "player",  
+      "actionName": "playTrack",  
+      "parameters": {  
+        "trackName": "Shape of You",  
+        "artists": ["Ed Sheeran"]  
+      }  
+    }  
+  },  
+  {  
+    "request": "Could I trouble you to start playing Royals by Lorde?",  
+    "action": {  
+      "schemaName": "player",  
+      "actionName": "playTrack",  
+      "parameters": {  
+        "trackName": "Royals",  
+        "artists": ["Lorde"]  
+      }  
+    }  
+  },  
+  {  
+    "request": "Please, play Seven Nation Army by The White Stripes for me.",  
+    "action": {  
+      "schemaName": "player",  
+      "actionName": "playTrack",  
+      "parameters": {  
+        "trackName": "Seven Nation Army",  
+        "artists": ["The White Stripes"]  
+      }  
+    }  
+  },  
+  {  
+    "request": "Mind putting on Happy by Pharrell Williams?",  
+    "action": {  
+      "schemaName": "player",  
+      "actionName": "playTrack",  
+      "parameters": {  
+        "trackName": "Happy",  
+        "artists": ["Pharrell Williams"]  
+      }  
+    }  
+  },  
+  {  
+    "request": "Could you kindly play Someone Like You by Adele?",  
+    "action": {  
+      "schemaName": "player",  
+      "actionName": "playTrack",  
+      "parameters": {  
+        "trackName": "Someone Like You",  
+        "artists": ["Adele"]  
+      }  
+    }  
+  },  
+  {  
+    "request": "Would you be so kind as to put on Viva La Vida by Coldplay?",  
+    "action": {  
+      "schemaName": "player",  
+      "actionName": "playTrack",  
+      "parameters": {  
+        "trackName": "Viva La Vida",  
+        "artists": ["Coldplay"]  
+      }  
+    }  
+  },  
+  {  
+    "request": "If you don't mind, play Can't Stop the Feeling! by Justin Timberlake.",  
+    "action": {  
+      "schemaName": "player",  
+      "actionName": "playTrack",  
+      "parameters": {  
+        "trackName": "Can't Stop the Feeling!",  
+        "artists": ["Justin Timberlake"]  
+      }  
+    }  
+  },  
+  {  
+    "request": "Whenever possible, please play Poker Face by Lady Gaga.",  
+    "action": {  
+      "schemaName": "player",  
+      "actionName": "playTrack",  
+      "parameters": {  
+        "trackName": "Poker Face",  
+        "artists": ["Lady Gaga"]  
+      }  
+    }  
+  },  
+  {  
+    "request": "Start Mr. Brightside by The Killers, please?",  
+    "action": {  
+      "schemaName": "player",  
+      "actionName": "playTrack",  
+      "parameters": {  
+        "trackName": "Mr. Brightside",  
+        "artists": ["The Killers"]  
+      }  
+    }  
+  },  
+  {  
+    "request": "Do you mind playing Chandelier by Sia for me?",  
+    "action": {  
+      "schemaName": "player",  
+      "actionName": "playTrack",  
+      "parameters": {  
+        "trackName": "Chandelier",  
+        "artists": ["Sia"]  
+      }  
+    }  
+  },  
+  {  
+    "request": "I’d really appreciate it if you could play Radioactive by Imagine Dragons.",  
+    "action": {  
+      "schemaName": "player",  
+      "actionName": "playTrack",  
+      "parameters": {  
+        "trackName": "Radioactive",  
+        "artists": ["Imagine Dragons"]  
+      }  
+    }  
+  },  
+  {  
+    "request": "Would you please play Take Me to Church by Hozier?",  
+    "action": {  
+      "schemaName": "player",  
+      "actionName": "playTrack",  
+      "parameters": {  
+        "trackName": "Take Me to Church",  
+        "artists": ["Hozier"]  
+      }  
+    }  
+  },  
+  {  
+    "request": "Could you be so kind as to start playing Levitating by Dua Lipa?",  
+    "action": {  
+      "schemaName": "player",  
+      "actionName": "playTrack",  
+      "parameters": {  
+        "trackName": "Levitating",  
+        "artists": ["Dua Lipa"]  
+      }  
+    }  
+  },  
+  {  
+    "request": "If it's okay, play Somebody That I Used to Know by Gotye featuring Kimbra.",  
+    "action": {  
+      "schemaName": "player",  
+      "actionName": "playTrack",  
+      "parameters": {  
+        "trackName": "Somebody That I Used to Know",  
+        "artists": ["Gotye", "Kimbra"]  
+      }  
+    }  
+  },  
+  {  
+    "request": "Would you mind playing Hey Ya! by OutKast, please?",  
+    "action": {  
+      "schemaName": "player",  
+      "actionName": "playTrack",  
+      "parameters": {  
+        "trackName": "Hey Ya!",  
+        "artists": ["OutKast"]  
+      }  
+    }  
+  },  
+  {  
+    "request": "Please could you put on Fireflies by Owl City?",  
+    "action": {  
+      "schemaName": "player",  
+      "actionName": "playTrack",  
+      "parameters": {  
+        "trackName": "Fireflies",  
+        "artists": ["Owl City"]  
+      }  
+    }  
+  }  
+]  

@@ -294,6 +294,12 @@ export async function processCommandNoLock(
         );
         debugCommandError(e.stack);
 
+        context?.logger?.logEvent("command:exception", {
+            request: originalInput,
+            message: e.message,
+            stack: e.stack,
+        });
+
         const commandResult = getCommandResult(context);
         if (commandResult !== undefined) {
             commandResult.exception = e.message;

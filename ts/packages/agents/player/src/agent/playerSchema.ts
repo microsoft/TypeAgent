@@ -42,6 +42,7 @@ export interface PlayRandomAction {
     };
 }
 
+// Play a specific track
 export interface PlayTrackAction {
     actionName: "playTrack";
     parameters: {
@@ -51,6 +52,7 @@ export interface PlayTrackAction {
     };
 }
 
+// Play a specific album
 export interface PlayAlbumAction {
     actionName: "playAlbum";
     parameters: {
