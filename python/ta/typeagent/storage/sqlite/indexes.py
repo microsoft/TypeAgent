@@ -7,11 +7,14 @@ import sqlite3
 from ...aitools.embeddings import AsyncEmbeddingModel
 import typing
 
-from ...knowpro import interfaces
-from ...storage.memory.messageindex import IMessageTextEmbeddingIndex
 from ...aitools.embeddings import NormalizedEmbedding
+from ...aitools.vectorbase import TextEmbeddingIndexSettings, VectorBase
+
 from ...knowpro.convsettings import MessageTextIndexSettings
+from ...knowpro import interfaces
 from ...knowpro.textlocindex import ScoredTextLocation
+
+from ...storage.memory.messageindex import IMessageTextEmbeddingIndex
 
 
 class SqliteTermToSemanticRefIndex(interfaces.ITermToSemanticRefIndex):
@@ -1037,10 +1040,42 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         return results
 
     async def deserialize(self, data: interfaces.TextEmbeddingIndexData) -> None:
-        """Deserialize fuzzy index data."""
-        # For now, this is a placeholder since embedding data is complex
-        # In a full implementation, we would deserialize embedding vectors
-        pass
+        """Deserialize fuzzy index data from JSON into SQLite database."""
+        # Clear existing data
+        await self.clear()
+
+        # Get text items and embeddings from the data
+        text_items = data.get("textItems")
+        embeddings_data = data.get("embeddings")
+
+        if not text_items or embeddings_data is None:
+            return
+
+        # Create temporary VectorBase to deserialize embeddings
+        temp_settings = TextEmbeddingIndexSettings(self._embedding_model)
+        temp_vectorbase = VectorBase(temp_settings)
+        temp_vectorbase.deserialize(embeddings_data)
+
+        # Store each text item with its embedding in the database
+        from .schema import serialize_embedding
+
+        with self.db:
+            cursor = self.db.cursor()
+            for i, text in enumerate(text_items):
+                if i < len(temp_vectorbase):
+                    # Get embedding from temporary VectorBase
+                    embedding = temp_vectorbase.get_embedding_at(i)
+                    if embedding is not None:
+                        serialized_embedding = serialize_embedding(embedding)
+                        # Insert as self-referential entry
+                        cursor.execute(
+                            """
+                            INSERT OR REPLACE INTO RelatedTermsFuzzy
+                            (term, related_term, score, term_embedding, related_embedding)
+                            VALUES (?, ?, 1.0, ?, ?)
+                            """,
+                            (text, text, serialized_embedding, serialized_embedding),
+                        )
 
 
 from ...aitools.embeddings import AsyncEmbeddingModel

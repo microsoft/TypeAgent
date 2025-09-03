@@ -682,20 +682,6 @@ async def load_podcast_index(
             podcast_file_prefix, settings, dbname
         )
 
-    # Build fuzzy index after loading data if it's empty
-    if (
-        conversation.secondary_indexes
-        and conversation.secondary_indexes.term_to_related_terms_index
-    ):
-        fuzzy_index = (
-            conversation.secondary_indexes.term_to_related_terms_index.fuzzy_index
-        )
-        if fuzzy_index and await fuzzy_index.size() == 0:
-            with utils.timelog("build_related_terms_index [2]"):
-                await build_related_terms_index(
-                    conversation, settings.related_term_index_settings
-                )
-
     await print_conversation_stats(conversation, verbose)
 
     return query.QueryEvalContext(conversation)
