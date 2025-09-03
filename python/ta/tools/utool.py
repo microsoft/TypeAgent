@@ -28,6 +28,9 @@ import typechat
 from typeagent.aitools import embeddings
 from typeagent.aitools import utils
 
+from typeagent.knowpro import answers, answer_response_schema
+from typeagent.knowpro import convknowledge
+from typeagent.knowpro.convsettings import ConversationSettings
 from typeagent.knowpro.interfaces import (
     IConversation,
     IMessage,
@@ -38,17 +41,15 @@ from typeagent.knowpro.interfaces import (
     Tag,
     Topic,
 )
-from typeagent.knowpro import answers, answer_response_schema
-from typeagent.knowpro import convknowledge
-from typeagent.knowpro.convsettings import ConversationSettings
 from typeagent.knowpro import kplib
 from typeagent.knowpro import query
 from typeagent.knowpro import search, search_query_schema, searchlang
 from typeagent.knowpro import serialization
-from typeagent.storage.memory import timestampindex
 
 from typeagent.podcasts import podcast
 
+from typeagent.storage.memory.propindex import build_property_index
+from typeagent.storage.memory.reltermsindex import build_related_terms_index
 from typeagent.storage.utils import create_storage_provider
 
 
@@ -664,31 +665,36 @@ async def load_podcast_index(
                     and await conversation.secondary_indexes.property_to_semantic_ref_index.size()
                     == 0
                 ):
-                    from typeagent.storage.memory.propindex import build_property_index
-
                     await build_property_index(conversation)
 
                 # Rebuild related terms fuzzy index if empty
-                if (
-                    conversation.secondary_indexes.term_to_related_terms_index
-                    and conversation.secondary_indexes.term_to_related_terms_index.fuzzy_index
-                    and await conversation.secondary_indexes.term_to_related_terms_index.fuzzy_index.size()
-                    == 0
-                ):
-                    from typeagent.storage.memory.reltermsindex import (
-                        build_related_terms_index,
-                    )
-
-                    await build_related_terms_index(
-                        conversation, settings.related_term_index_settings
-                    )
+                ttri = conversation.secondary_indexes.term_to_related_terms_index
+                if ttri and ttri.fuzzy_index and await ttri.fuzzy_index.size() == 0:
+                    with utils.timelog("build_related_terms_index [1]"):
+                        await build_related_terms_index(
+                            conversation, settings.related_term_index_settings
+                        )
             await print_conversation_stats(conversation, verbose)
             return query.QueryEvalContext(conversation)
 
-    with utils.timelog(f"load podcast from {podcast_file_prefix!r}", verbose):
+    with utils.timelog(f"load podcast from {podcast_file_prefix!r}"):
         conversation = await podcast.Podcast.read_from_file(
             podcast_file_prefix, settings, dbname
         )
+
+    # Build fuzzy index after loading data if it's empty
+    if (
+        conversation.secondary_indexes
+        and conversation.secondary_indexes.term_to_related_terms_index
+    ):
+        fuzzy_index = (
+            conversation.secondary_indexes.term_to_related_terms_index.fuzzy_index
+        )
+        if fuzzy_index and await fuzzy_index.size() == 0:
+            with utils.timelog("build_related_terms_index [2]"):
+                await build_related_terms_index(
+                    conversation, settings.related_term_index_settings
+                )
 
     await print_conversation_stats(conversation, verbose)
 

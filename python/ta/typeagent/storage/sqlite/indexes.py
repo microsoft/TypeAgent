@@ -4,6 +4,7 @@
 """SQLite-based index implementations."""
 
 import sqlite3
+from ...aitools.embeddings import AsyncEmbeddingModel
 import typing
 
 from ...knowpro import interfaces
@@ -367,8 +368,8 @@ class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
             cursor.execute(
                 """
                 SELECT msg_id, start_timestamp, chunks
-                FROM Messages 
-                WHERE start_timestamp = ? 
+                FROM Messages
+                WHERE start_timestamp = ?
                 ORDER BY msg_id
                 """,
                 (start_timestamp,),
@@ -378,7 +379,7 @@ class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
             cursor.execute(
                 """
                 SELECT msg_id, start_timestamp, chunks
-                FROM Messages 
+                FROM Messages
                 WHERE start_timestamp >= ? AND start_timestamp < ?
                 ORDER BY msg_id
                 """,
@@ -412,14 +413,8 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
         self.db = db
         self.settings = settings
         self._message_collection = message_collection
-        # For simplicity, keep the embedding index in memory for now
-        # In a full implementation, embeddings would also be stored in SQLite
-        from ...knowpro.textlocindex import TextToTextLocationIndex
-
-        self._text_to_location_index = TextToTextLocationIndex(
-            settings.embedding_index_settings
-        )
-        self._embeddings_built = False
+        # Use the embedding model from settings
+        self._embedding_model = settings.embedding_index_settings.embedding_model
 
     async def build_embeddings_from_messages(
         self, message_ordinal_pairs: list[tuple[int, interfaces.IMessage]]
@@ -431,91 +426,41 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
         if not message_ordinal_pairs:
             return
 
-        # Collect all text and location pairs
-        text_and_locations = []
+        # Collect all text chunks that need embeddings
+        text_chunks_to_embed = []
         for message_ordinal, message in message_ordinal_pairs:
             for chunk_ordinal, chunk in enumerate(message.text_chunks):
-                text_location = interfaces.TextLocation(
-                    message_ordinal=message_ordinal,
-                    chunk_ordinal=chunk_ordinal,
-                )
-                text_and_locations.append((chunk, text_location))
+                text_chunks_to_embed.append((message_ordinal, chunk_ordinal, chunk))
 
-        if text_and_locations:
+        if text_chunks_to_embed:
             print(
-                f"DEBUG: Adding {len(text_and_locations)} text chunks to embedding index"
-            )
-            # Add all texts efficiently in batch
-            await self._text_to_location_index.add_text_locations(text_and_locations)
-            print(
-                f"DEBUG: Embedding index now has {await self._text_to_location_index.size()} entries"
+                f"DEBUG: Generating embeddings for {len(text_chunks_to_embed)} text chunks"
             )
 
-    async def _ensure_embeddings_built(self) -> None:
-        """Ensure that the in-memory embedding index is built from existing messages."""
-        print(
-            f"DEBUG: _ensure_embeddings_built() called - _embeddings_built={self._embeddings_built}"
-        )
-        if self._embeddings_built or self._message_collection is None:
+            # Generate embeddings in batch for efficiency
+            texts = [chunk for _, _, chunk in text_chunks_to_embed]
+            embeddings = await self._embedding_model.get_embeddings(texts)
+
+            # Store in SQLite
+            from ..sqlite.schema import serialize_embedding
+
+            with self.db:
+                cursor = self.db.cursor()
+                for (msg_id, chunk_ordinal, text), embedding in zip(
+                    text_chunks_to_embed, embeddings
+                ):
+                    cursor.execute(
+                        """
+                        INSERT OR REPLACE INTO MessageTextIndex
+                        (msg_id, chunk_ordinal, text_content, embedding)
+                        VALUES (?, ?, ?, ?)
+                        """,
+                        (msg_id, chunk_ordinal, text, serialize_embedding(embedding)),
+                    )
+
             print(
-                f"DEBUG: Early return - _embeddings_built={self._embeddings_built}, _message_collection={self._message_collection is not None}"
+                f"DEBUG: Stored {len(text_chunks_to_embed)} text chunks with embeddings"
             )
-            return
-
-        # Check if we have entries in SQLite but empty embedding index
-        sqlite_size = await self.size()
-        embedding_size = await self._text_to_location_index.size()
-        print(f"DEBUG: sqlite_size={sqlite_size}, embedding_size={embedding_size}")
-
-        if sqlite_size > 0 and embedding_size == 0:
-            # Need to rebuild embeddings from existing messages
-            from ...aitools import utils
-
-            with utils.timelog("regenerate message embeddings"):
-                await self._rebuild_embeddings_only()
-
-        self._embeddings_built = True
-
-    async def _rebuild_embeddings_only(self) -> None:
-        """Rebuild only the in-memory embeddings without touching SQLite."""
-        if self._message_collection is None:
-            print("DEBUG: No message collection available for embedding rebuild")
-            return
-
-        print("DEBUG: Rebuilding in-memory embeddings from messages...")
-
-        # Collect all text and location pairs
-        text_and_locations = []
-        message_count = 0
-
-        async for message_ordinal, message in self._aenumerate(
-            self._message_collection
-        ):
-            message_count += 1
-            for chunk_ordinal, chunk in enumerate(message.text_chunks):
-                text_location = interfaces.TextLocation(
-                    message_ordinal=message_ordinal,
-                    chunk_ordinal=chunk_ordinal,
-                )
-                text_and_locations.append((chunk, text_location))
-
-        print(
-            f"DEBUG: Collected {len(text_and_locations)} text chunks from {message_count} messages"
-        )
-
-        # Add all texts to the in-memory embedding index
-        if text_and_locations:
-            await self._text_to_location_index.add_text_locations(text_and_locations)
-
-        final_size = await self._text_to_location_index.size()
-        print(f"DEBUG: In-memory embedding index now has {final_size} entries")
-
-    async def _aenumerate(self, async_iterable, start=0):
-        """Async version of enumerate()."""
-        index = start
-        async for item in async_iterable:
-            yield index, item
-            index += 1
 
     async def size(self) -> int:
         cursor = self.db.cursor()
@@ -528,37 +473,50 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
         messages: list[interfaces.IMessage],
     ) -> None:
         """Add messages to the text index starting at the given ordinal."""
-        for i, message in enumerate(messages):
-            message_ordinal = start_ordinal + i
-            for chunk_ordinal, chunk in enumerate(message.text_chunks):
-                # Add to SQLite index (only tracking which chunks exist)
-                with self.db:
-                    cursor = self.db.cursor()
+        text_chunks_to_embed = []
+
+        # First, store the text chunks in SQLite (without embeddings yet)
+        with self.db:
+            cursor = self.db.cursor()
+            for i, message in enumerate(messages):
+                message_ordinal = start_ordinal + i
+                for chunk_ordinal, chunk in enumerate(message.text_chunks):
                     cursor.execute(
                         """
-                        INSERT INTO MessageTextIndex (msg_id, chunk_ordinal)
-                        VALUES (?, ?)
+                        INSERT OR REPLACE INTO MessageTextIndex
+                        (msg_id, chunk_ordinal, text_content, embedding)
+                        VALUES (?, ?, ?, NULL)
                         """,
-                        (message_ordinal, chunk_ordinal),
+                        (message_ordinal, chunk_ordinal, chunk),
                     )
+                    text_chunks_to_embed.append((message_ordinal, chunk_ordinal, chunk))
 
-                # Add to in-memory embedding index
-                text_location = interfaces.TextLocation(
-                    message_ordinal=message_ordinal,
-                    chunk_ordinal=chunk_ordinal,
-                )
-                await self._text_to_location_index.add_text_location(
-                    chunk, text_location
-                )
+        # Generate and store embeddings
+        if text_chunks_to_embed:
+            texts = [chunk for _, _, chunk in text_chunks_to_embed]
+            embeddings = await self._embedding_model.get_embeddings(texts)
+
+            from ..sqlite.schema import serialize_embedding
+
+            with self.db:
+                cursor = self.db.cursor()
+                for (msg_id, chunk_ordinal, text), embedding in zip(
+                    text_chunks_to_embed, embeddings
+                ):
+                    cursor.execute(
+                        """
+                        UPDATE MessageTextIndex
+                        SET embedding = ?
+                        WHERE msg_id = ? AND chunk_ordinal = ?
+                        """,
+                        (serialize_embedding(embedding), msg_id, chunk_ordinal),
+                    )
 
     async def add_messages(
         self,
         messages: typing.Iterable[interfaces.IMessage],
     ) -> None:
         """Add messages to the text index (backward compatibility method)."""
-        # This method assumes the messages should be added sequentially starting from
-        # the current collection size, which may not be accurate.
-        # The add_messages_starting_at method should be preferred.
         message_list = list(messages)
         if not message_list:
             return
@@ -589,16 +547,50 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
         if message_list:
             await self.add_messages_starting_at(0, message_list)
 
-        self._embeddings_built = True
         print(f"DEBUG: Rebuilt message text index with {await self.size()} entries")
 
     async def lookup_text(
         self, text: str, max_matches: int | None = None, min_score: float | None = None
     ) -> list[ScoredTextLocation]:
-        """Look up text using embeddings."""
-        return await self._text_to_location_index.lookup_text(
-            text, max_matches, min_score
+        """Look up text using embeddings stored in SQLite."""
+        # Generate embedding for the search text
+        search_embedding = await self._embedding_model.get_embedding(text)
+
+        # Get all stored embeddings and compute similarity
+        cursor = self.db.cursor()
+        cursor.execute(
+            "SELECT msg_id, chunk_ordinal, embedding FROM MessageTextIndex WHERE embedding IS NOT NULL"
         )
+
+        from ..sqlite.schema import deserialize_embedding
+        import numpy as np
+
+        scored_locations = []
+        for row in cursor.fetchall():
+            msg_id, chunk_ordinal, embedding_blob = row
+            if embedding_blob:
+                stored_embedding = deserialize_embedding(embedding_blob)
+                if stored_embedding is not None:
+                    # Compute cosine similarity
+                    similarity = np.dot(search_embedding, stored_embedding)
+
+                    if min_score is None or similarity >= min_score:
+                        text_location = interfaces.TextLocation(
+                            message_ordinal=msg_id,
+                            chunk_ordinal=chunk_ordinal,
+                        )
+                        scored_locations.append(
+                            ScoredTextLocation(text_location, similarity)
+                        )
+
+        # Sort by score (highest first)
+        scored_locations.sort(key=lambda x: x.score, reverse=True)
+
+        # Apply max_matches limit
+        if max_matches is not None:
+            scored_locations = scored_locations[:max_matches]
+
+        return scored_locations
 
     async def lookup_messages(
         self,
@@ -607,10 +599,8 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
         threshold_score: float | None = None,
     ) -> list[interfaces.ScoredMessageOrdinal]:
         """Look up messages by text content."""
-        # Use the embedding index to find text locations
-        scored_locations = await self._text_to_location_index.lookup_text(
-            message_text, max_matches, threshold_score
-        )
+        # Use lookup_text to find text locations
+        scored_locations = await self.lookup_text(message_text, None, threshold_score)
 
         # Convert to scored message ordinals (group by message)
         message_scores: dict[int, float] = {}
@@ -659,7 +649,7 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
 
     async def generate_embedding(self, text: str) -> NormalizedEmbedding:
         """Generate an embedding for the given text."""
-        return await self._text_to_location_index.generate_embedding(text)
+        return await self._embedding_model.get_embedding(text)
 
     def lookup_by_embedding(
         self,
@@ -669,23 +659,32 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
         predicate: typing.Callable[[interfaces.MessageOrdinal], bool] | None = None,
     ) -> list[interfaces.ScoredMessageOrdinal]:
         """Look up messages by embedding (synchronous version)."""
-        # Use the underlying text location index to find matching locations
-        scored_locations = self._text_to_location_index.lookup_by_embedding(
-            text_embedding, max_matches, threshold_score
+        # Get all stored embeddings and compute similarity
+        cursor = self.db.cursor()
+        cursor.execute(
+            "SELECT msg_id, chunk_ordinal, embedding FROM MessageTextIndex WHERE embedding IS NOT NULL"
         )
 
-        # Convert to scored message ordinals (group by message)
+        from ..sqlite.schema import deserialize_embedding
+        import numpy as np
+
         message_scores: dict[int, float] = {}
-        for scored_loc in scored_locations:
-            msg_ordinal = scored_loc.text_location.message_ordinal
-            if predicate is None or predicate(msg_ordinal):
-                if msg_ordinal not in message_scores:
-                    message_scores[msg_ordinal] = scored_loc.score
-                else:
-                    # Take the best score for this message
-                    message_scores[msg_ordinal] = max(
-                        message_scores[msg_ordinal], scored_loc.score
-                    )
+        for row in cursor.fetchall():
+            msg_id, chunk_ordinal, embedding_blob = row
+            if embedding_blob and (predicate is None or predicate(msg_id)):
+                stored_embedding = deserialize_embedding(embedding_blob)
+                if stored_embedding is not None:
+                    # Compute cosine similarity
+                    similarity = np.dot(text_embedding, stored_embedding)
+
+                    if threshold_score is None or similarity >= threshold_score:
+                        if msg_id not in message_scores:
+                            message_scores[msg_id] = similarity
+                        else:
+                            # Take the best score for this message
+                            message_scores[msg_id] = max(
+                                message_scores[msg_id], similarity
+                            )
 
         # Convert to list and sort by score
         result = [
@@ -739,7 +738,6 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
         with self.db:
             cursor = self.db.cursor()
             cursor.execute("DELETE FROM MessageTextIndex")
-        self._text_to_location_index.clear()
 
 
 # Related terms index implementations
@@ -864,11 +862,16 @@ class SqliteRelatedTermsAliases(interfaces.ITermToRelatedTerms):
                             )
 
 
-class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
-    """SQLite-backed implementation of fuzzy term relationships."""
+from ...aitools.embeddings import AsyncEmbeddingModel
 
-    def __init__(self, db: sqlite3.Connection):
+
+class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
+    """SQLite-backed implementation of fuzzy term relationships with persistent embeddings."""
+
+    def __init__(self, db: sqlite3.Connection, embedding_model: AsyncEmbeddingModel):
         self.db = db
+        # embedding_model is used for generating term embeddings
+        self._embedding_model = embedding_model
 
     async def lookup_term(
         self,
@@ -876,39 +879,82 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         max_hits: int | None = None,
         min_score: float | None = None,
     ) -> list[interfaces.Term]:
+        # Generate embedding for query text
+        query_embedding = await self._embedding_model.get_embedding(text)
+        if query_embedding is None:
+            return []
+
+        # Get all stored terms and their embeddings
         cursor = self.db.cursor()
-        query = "SELECT related_term, score FROM RelatedTermsFuzzy WHERE term = ?"
-        params: list[str | int | float] = [text]
+        cursor.execute(
+            "SELECT DISTINCT term, term_embedding FROM RelatedTermsFuzzy WHERE term_embedding IS NOT NULL"
+        )
 
-        if min_score is not None:
-            query += " AND score >= ?"
-            params.append(min_score)
+        results = []
+        from .schema import deserialize_embedding
+        import numpy as np
 
-        query += " ORDER BY score DESC"
+        for term, embedding_blob in cursor.fetchall():
+            if embedding_blob is None:
+                continue
 
+            # Deserialize the stored embedding
+            stored_embedding = deserialize_embedding(embedding_blob)
+            if stored_embedding is None:
+                continue
+
+            # Compute cosine similarity
+            similarity = np.dot(query_embedding, stored_embedding) / (
+                np.linalg.norm(query_embedding) * np.linalg.norm(stored_embedding)
+            )
+
+            # Skip if below minimum score threshold
+            if min_score is not None and similarity < min_score:
+                continue
+
+            # Skip exact self-match (similarity 1.0 with identical text)
+            if term == text and abs(similarity - 1.0) < 0.001:
+                continue
+
+            results.append(interfaces.Term(term, float(similarity)))
+
+        # Sort by similarity score descending
+        results.sort(key=lambda x: x.weight, reverse=True)
+
+        # Apply max_hits limit
         if max_hits is not None:
-            query += " LIMIT ?"
-            params.append(max_hits)
+            results = results[:max_hits]
 
-        cursor.execute(query, params)
-        results = [
-            interfaces.Term(related_term, score)
-            for related_term, score in cursor.fetchall()
-        ]
         return results
 
     async def add_related_term(
         self, term: str, related_terms: list[interfaces.Term]
     ) -> None:
+        """Add related terms with embeddings to the fuzzy index."""
+        # generate embedding for the main term
+        term_embed = await self._embedding_model.get_embedding(term)
+        from .schema import serialize_embedding
+
         with self.db:
             cursor = self.db.cursor()
-            for related_term in related_terms:
+            for rel in related_terms:
+                # generate embedding for related term
+                rel_embed = await self._embedding_model.get_embedding(rel.text)
+                # use weight if provided
+                weight = rel.weight if rel.weight is not None else 1.0
                 cursor.execute(
                     """
-                    INSERT OR REPLACE INTO RelatedTermsFuzzy (term, related_term, score)
-                    VALUES (?, ?, ?)
+                    INSERT OR REPLACE INTO RelatedTermsFuzzy
+                    (term, related_term, score, term_embedding, related_embedding)
+                    VALUES (?, ?, ?, ?, ?)
                     """,
-                    (term, related_term.text, 1.0),
+                    (
+                        term,
+                        rel.text,
+                        weight,
+                        serialize_embedding(term_embed),
+                        serialize_embedding(rel_embed),
+                    ),
                 )
 
     async def remove_term(self, term: str) -> None:
@@ -932,15 +978,23 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         return [row[0] for row in cursor.fetchall()]
 
     async def add_terms(self, texts: list[str]) -> None:
-        # For this implementation, we just add the terms to the database
-        # In a real implementation, you might want to extract related terms
+        """Add terms with self-related embeddings."""
+        from .schema import serialize_embedding
+
         with self.db:
             cursor = self.db.cursor()
             for text in texts:
-                # For now, just insert the term with itself as a related term
+                # generate embedding for term
+                embed = await self._embedding_model.get_embedding(text)
+                serialized = serialize_embedding(embed)
+                # insert term as related to itself
                 cursor.execute(
-                    "INSERT OR IGNORE INTO RelatedTermsFuzzy (term, related_term, score) VALUES (?, ?, 1.0)",
-                    (text, text),
+                    """
+                    INSERT OR REPLACE INTO RelatedTermsFuzzy
+                    (term, related_term, score, term_embedding, related_embedding)
+                    VALUES (?, ?, 1.0, ?, ?)
+                    """,
+                    (text, text, serialized, serialized),
                 )
 
     async def get_related_terms(
@@ -989,13 +1043,18 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         pass
 
 
+from ...aitools.embeddings import AsyncEmbeddingModel
+
+
 class SqliteRelatedTermsIndex(interfaces.ITermToRelatedTermsIndex):
     """SQLite-backed implementation of ITermToRelatedTermsIndex combining aliases and fuzzy index."""
 
-    def __init__(self, db: sqlite3.Connection):
+    def __init__(self, db: sqlite3.Connection, embedding_model: AsyncEmbeddingModel):
         self.db = db
+        # Initialize alias and fuzzy related terms indexes
         self._aliases = SqliteRelatedTermsAliases(db)
-        self._fuzzy_index = SqliteRelatedTermsFuzzy(db)
+        # Pass embedding_model to fuzzy index for persistent embeddings
+        self._fuzzy_index = SqliteRelatedTermsFuzzy(db, embedding_model)
 
     @property
     def aliases(self) -> interfaces.ITermToRelatedTerms:

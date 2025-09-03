@@ -7,6 +7,8 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import typing
+import numpy as np
+from numpy.typing import NDArray
 
 # Constants
 CONVERSATION_SCHEMA_VERSION = "0.1"
@@ -71,6 +73,8 @@ MESSAGE_TEXT_INDEX_SCHEMA = """
 CREATE TABLE IF NOT EXISTS MessageTextIndex (
     msg_id INTEGER NOT NULL,
     chunk_ordinal INTEGER NOT NULL,
+    text_content TEXT NOT NULL,           -- The text content for this chunk
+    embedding BLOB NULL,                  -- Serialized embedding (numpy array as bytes)
 
     PRIMARY KEY (msg_id, chunk_ordinal),
     FOREIGN KEY (msg_id) REFERENCES Messages(msg_id) ON DELETE CASCADE
@@ -126,6 +130,8 @@ CREATE TABLE IF NOT EXISTS RelatedTermsFuzzy (
     term TEXT NOT NULL,
     related_term TEXT NOT NULL,
     score REAL NOT NULL DEFAULT 1.0,
+    term_embedding BLOB NULL,             -- Serialized embedding for the term
+    related_embedding BLOB NULL,          -- Serialized embedding for the related term
 
     PRIMARY KEY (term, related_term)
 );
@@ -151,7 +157,7 @@ type ShreddedSemanticRef = tuple[int, str, str, str]
 type ShreddedMessageText = tuple[int, int, str, bytes | None]
 type ShreddedPropertyIndex = tuple[str, str, float, int]
 type ShreddedRelatedTermsAlias = tuple[str, str]
-type ShreddedRelatedTermsFuzzy = tuple[str, str, float]
+type ShreddedRelatedTermsFuzzy = tuple[str, str, float, bytes | None, bytes | None]
 
 
 @dataclass
@@ -177,6 +183,28 @@ def _datetime_to_utc_string(dt: datetime) -> str:
 def _string_to_utc_datetime(s: str) -> datetime:
     """Convert ISO string to UTC datetime."""
     return datetime.fromisoformat(s).replace(tzinfo=timezone.utc)
+
+
+@typing.overload
+def serialize_embedding(embedding: NDArray[np.float32]) -> bytes: ...
+
+
+@typing.overload
+def serialize_embedding(embedding: None) -> None: ...
+
+
+def serialize_embedding(embedding: NDArray[np.float32] | None) -> bytes | None:
+    """Serialize a numpy embedding array to bytes for SQLite storage."""
+    if embedding is None:
+        return None
+    return embedding.tobytes()
+
+
+def deserialize_embedding(blob: bytes | None) -> NDArray[np.float32] | None:
+    """Deserialize bytes back to numpy embedding array."""
+    if blob is None:
+        return None
+    return np.frombuffer(blob, dtype=np.float32)
 
 
 def _create_default_metadata() -> ConversationMetadata:

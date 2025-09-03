@@ -55,10 +55,10 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         self.conversation_index_settings = conversation_index_settings or {}
         if message_text_index_settings is None:
             # Create default embedding settings if not provided
-            from ...aitools.embeddings import AsyncEmbeddingModel, TEST_MODEL_NAME
+            from ...aitools.embeddings import AsyncEmbeddingModel
             from ...aitools.vectorbase import TextEmbeddingIndexSettings
 
-            model = AsyncEmbeddingModel(model_name=TEST_MODEL_NAME)
+            model = AsyncEmbeddingModel()
             embedding_settings = TextEmbeddingIndexSettings(model)
             message_text_index_settings = MessageTextIndexSettings(embedding_settings)
         self.message_text_index_settings = message_text_index_settings
@@ -86,9 +86,15 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         self._property_index = SqlitePropertyIndex(self.db)
         self._timestamp_index = SqliteTimestampToTextRangeIndex(self.db)
         self._message_text_index = SqliteMessageTextIndex(
-            self.db, self.message_text_index_settings, self._message_collection
+            self.db,
+            self.message_text_index_settings,
+            self._message_collection,
         )
-        self._related_terms_index = SqliteRelatedTermsIndex(self.db)
+        # Initialize related terms index with embedding model for persistent embeddings
+        embedding_model = (
+            self.related_term_index_settings.embedding_index_settings.embedding_model
+        )
+        self._related_terms_index = SqliteRelatedTermsIndex(self.db, embedding_model)
 
         # Connect message collection to message text index for automatic indexing
         self._message_collection.set_message_text_index(self._message_text_index)
@@ -98,11 +104,9 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         # If there are existing messages but no embeddings, rebuild the embeddings
         # This handles the case where an existing database is loaded
         existing_messages = await self._message_collection.size()
-        embedding_entries = (
-            await self._message_text_index._text_to_location_index.size()
-        )
-        if existing_messages > 0 and embedding_entries == 0:
-            # Rebuild the message text embeddings from existing messages
+        index_entries = await self._message_text_index.size()
+        if existing_messages > 0 and index_entries == 0:
+            # Rebuild the message text index from existing messages
             await self._message_text_index.rebuild_from_all_messages()
 
     async def close(self) -> None:
