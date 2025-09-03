@@ -7,6 +7,8 @@ import sqlite3
 import typing
 
 from ...knowpro import interfaces
+from ...storage.memory.messageindex import IMessageTextEmbeddingIndex
+from ...aitools.embeddings import NormalizedEmbedding
 from ...knowpro.convsettings import MessageTextIndexSettings
 from ...knowpro.textlocindex import ScoredTextLocation
 
@@ -398,7 +400,7 @@ class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
         return results
 
 
-class SqliteMessageTextIndex(interfaces.IMessageTextIndex):
+class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
     """SQLite-backed message text index with embedding support."""
 
     def __init__(
@@ -419,85 +421,181 @@ class SqliteMessageTextIndex(interfaces.IMessageTextIndex):
         )
         self._embeddings_built = False
 
+    async def build_embeddings_from_messages(
+        self, message_ordinal_pairs: list[tuple[int, interfaces.IMessage]]
+    ) -> None:
+        """Build embeddings for the given list of (ordinal, message) pairs."""
+        print(
+            f"DEBUG: build_embeddings_from_messages() called with {len(message_ordinal_pairs)} messages"
+        )
+        if not message_ordinal_pairs:
+            return
+
+        # Collect all text and location pairs
+        text_and_locations = []
+        for message_ordinal, message in message_ordinal_pairs:
+            for chunk_ordinal, chunk in enumerate(message.text_chunks):
+                text_location = interfaces.TextLocation(
+                    message_ordinal=message_ordinal,
+                    chunk_ordinal=chunk_ordinal,
+                )
+                text_and_locations.append((chunk, text_location))
+
+        if text_and_locations:
+            print(
+                f"DEBUG: Adding {len(text_and_locations)} text chunks to embedding index"
+            )
+            # Add all texts efficiently in batch
+            await self._text_to_location_index.add_text_locations(text_and_locations)
+            print(
+                f"DEBUG: Embedding index now has {await self._text_to_location_index.size()} entries"
+            )
+
     async def _ensure_embeddings_built(self) -> None:
         """Ensure that the in-memory embedding index is built from existing messages."""
+        print(
+            f"DEBUG: _ensure_embeddings_built() called - _embeddings_built={self._embeddings_built}"
+        )
         if self._embeddings_built or self._message_collection is None:
+            print(
+                f"DEBUG: Early return - _embeddings_built={self._embeddings_built}, _message_collection={self._message_collection is not None}"
+            )
             return
 
         # Check if we have entries in SQLite but empty embedding index
         sqlite_size = await self.size()
         embedding_size = await self._text_to_location_index.size()
+        print(f"DEBUG: sqlite_size={sqlite_size}, embedding_size={embedding_size}")
 
         if sqlite_size > 0 and embedding_size == 0:
             # Need to rebuild embeddings from existing messages
             from ...aitools import utils
 
             with utils.timelog("regenerate message embeddings"):
-                # Collect all text and location pairs
-                text_and_locations = []
-
-                async def aenumerate(async_iterable, start=0):
-                    """Async version of enumerate()."""
-                    index = start
-                    async for item in async_iterable:
-                        yield index, item
-                        index += 1
-
-                async for message_ordinal, message in aenumerate(
-                    self._message_collection
-                ):
-                    for chunk_ordinal, chunk in enumerate(message.text_chunks):
-                        text_location = interfaces.TextLocation(
-                            message_ordinal=message_ordinal,
-                            chunk_ordinal=chunk_ordinal,
-                        )
-                        text_and_locations.append((chunk, text_location))
-
-                # Add all texts efficiently in batch
-                await self._text_to_location_index.add_text_locations(
-                    text_and_locations
-                )
+                await self._rebuild_embeddings_only()
 
         self._embeddings_built = True
+
+    async def _rebuild_embeddings_only(self) -> None:
+        """Rebuild only the in-memory embeddings without touching SQLite."""
+        if self._message_collection is None:
+            print("DEBUG: No message collection available for embedding rebuild")
+            return
+
+        print("DEBUG: Rebuilding in-memory embeddings from messages...")
+
+        # Collect all text and location pairs
+        text_and_locations = []
+        message_count = 0
+
+        async for message_ordinal, message in self._aenumerate(
+            self._message_collection
+        ):
+            message_count += 1
+            for chunk_ordinal, chunk in enumerate(message.text_chunks):
+                text_location = interfaces.TextLocation(
+                    message_ordinal=message_ordinal,
+                    chunk_ordinal=chunk_ordinal,
+                )
+                text_and_locations.append((chunk, text_location))
+
+        print(
+            f"DEBUG: Collected {len(text_and_locations)} text chunks from {message_count} messages"
+        )
+
+        # Add all texts to the in-memory embedding index
+        if text_and_locations:
+            await self._text_to_location_index.add_text_locations(text_and_locations)
+
+        final_size = await self._text_to_location_index.size()
+        print(f"DEBUG: In-memory embedding index now has {final_size} entries")
+
+    async def _aenumerate(self, async_iterable, start=0):
+        """Async version of enumerate()."""
+        index = start
+        async for item in async_iterable:
+            yield index, item
+            index += 1
 
     async def size(self) -> int:
         cursor = self.db.cursor()
         cursor.execute("SELECT COUNT(*) FROM MessageTextIndex")
         return cursor.fetchone()[0]
 
-    async def add_messages(
+    async def add_messages_starting_at(
         self,
-        messages: typing.Iterable[interfaces.IMessage],
+        start_ordinal: int,
+        messages: list[interfaces.IMessage],
     ) -> None:
-        """Add messages to the text index."""
+        """Add messages to the text index starting at the given ordinal."""
         for i, message in enumerate(messages):
-            message_ordinal = i
+            message_ordinal = start_ordinal + i
             for chunk_ordinal, chunk in enumerate(message.text_chunks):
-                # Add to SQLite index
+                # Add to SQLite index (only tracking which chunks exist)
                 with self.db:
                     cursor = self.db.cursor()
                     cursor.execute(
                         """
-                        INSERT OR REPLACE INTO MessageTextIndex (msg_id, chunk_ordinal)
+                        INSERT INTO MessageTextIndex (msg_id, chunk_ordinal)
                         VALUES (?, ?)
                         """,
                         (message_ordinal, chunk_ordinal),
                     )
 
-                # Add to embedding index
+                # Add to in-memory embedding index
                 text_location = interfaces.TextLocation(
-                    message_ordinal=message_ordinal, chunk_ordinal=chunk_ordinal
+                    message_ordinal=message_ordinal,
+                    chunk_ordinal=chunk_ordinal,
                 )
                 await self._text_to_location_index.add_text_location(
                     chunk, text_location
                 )
-            i += 1
+
+    async def add_messages(
+        self,
+        messages: typing.Iterable[interfaces.IMessage],
+    ) -> None:
+        """Add messages to the text index (backward compatibility method)."""
+        # This method assumes the messages should be added sequentially starting from
+        # the current collection size, which may not be accurate.
+        # The add_messages_starting_at method should be preferred.
+        message_list = list(messages)
+        if not message_list:
+            return
+
+        # Get the current collection size to determine starting ordinal
+        if self._message_collection is not None:
+            start_ordinal = await self._message_collection.size() - len(message_list)
+        else:
+            start_ordinal = 0
+
+        await self.add_messages_starting_at(start_ordinal, message_list)
+
+    async def rebuild_from_all_messages(self) -> None:
+        """Rebuild the entire message text index from all messages in the collection."""
+        if self._message_collection is None:
+            return
+
+        print("DEBUG: Rebuilding message text index from all messages...")
+
+        # Clear existing index
+        await self.clear()
+
+        # Add all messages with their ordinals
+        message_list = []
+        async for message in self._message_collection:
+            message_list.append(message)
+
+        if message_list:
+            await self.add_messages_starting_at(0, message_list)
+
+        self._embeddings_built = True
+        print(f"DEBUG: Rebuilt message text index with {await self.size()} entries")
 
     async def lookup_text(
         self, text: str, max_matches: int | None = None, min_score: float | None = None
     ) -> list[ScoredTextLocation]:
         """Look up text using embeddings."""
-        await self._ensure_embeddings_built()
         return await self._text_to_location_index.lookup_text(
             text, max_matches, min_score
         )
@@ -509,7 +607,6 @@ class SqliteMessageTextIndex(interfaces.IMessageTextIndex):
         threshold_score: float | None = None,
     ) -> list[interfaces.ScoredMessageOrdinal]:
         """Look up messages by text content."""
-        await self._ensure_embeddings_built()
         # Use the embedding index to find text locations
         scored_locations = await self._text_to_location_index.lookup_text(
             message_text, max_matches, threshold_score
@@ -559,6 +656,66 @@ class SqliteMessageTextIndex(interfaces.IMessageTextIndex):
             filtered_matches = filtered_matches[:max_matches]
 
         return filtered_matches
+
+    async def generate_embedding(self, text: str) -> NormalizedEmbedding:
+        """Generate an embedding for the given text."""
+        return await self._text_to_location_index.generate_embedding(text)
+
+    def lookup_by_embedding(
+        self,
+        text_embedding: NormalizedEmbedding,
+        max_matches: int | None = None,
+        threshold_score: float | None = None,
+        predicate: typing.Callable[[interfaces.MessageOrdinal], bool] | None = None,
+    ) -> list[interfaces.ScoredMessageOrdinal]:
+        """Look up messages by embedding (synchronous version)."""
+        # Use the underlying text location index to find matching locations
+        scored_locations = self._text_to_location_index.lookup_by_embedding(
+            text_embedding, max_matches, threshold_score
+        )
+
+        # Convert to scored message ordinals (group by message)
+        message_scores: dict[int, float] = {}
+        for scored_loc in scored_locations:
+            msg_ordinal = scored_loc.text_location.message_ordinal
+            if predicate is None or predicate(msg_ordinal):
+                if msg_ordinal not in message_scores:
+                    message_scores[msg_ordinal] = scored_loc.score
+                else:
+                    # Take the best score for this message
+                    message_scores[msg_ordinal] = max(
+                        message_scores[msg_ordinal], scored_loc.score
+                    )
+
+        # Convert to list and sort by score
+        result = [
+            interfaces.ScoredMessageOrdinal(msg_ordinal, score)
+            for msg_ordinal, score in message_scores.items()
+        ]
+        result.sort(key=lambda x: x.score, reverse=True)
+
+        # Apply max_matches limit
+        if max_matches is not None:
+            result = result[:max_matches]
+
+        return result
+
+    def lookup_in_subset_by_embedding(
+        self,
+        text_embedding: NormalizedEmbedding,
+        ordinals_to_search: list[interfaces.MessageOrdinal],
+        max_matches: int | None = None,
+        threshold_score: float | None = None,
+    ) -> list[interfaces.ScoredMessageOrdinal]:
+        """Look up messages in a subset by embedding (synchronous version)."""
+        # Use the predicate version to filter by ordinals
+        ordinals_set = set(ordinals_to_search)
+        return self.lookup_by_embedding(
+            text_embedding,
+            max_matches,
+            threshold_score,
+            predicate=lambda ordinal: ordinal in ordinals_set,
+        )
 
     async def is_empty(self) -> bool:
         """Check if the index is empty."""

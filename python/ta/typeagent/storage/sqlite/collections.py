@@ -18,10 +18,20 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
     """SQLite-backed message collection."""
 
     def __init__(
-        self, db: sqlite3.Connection, message_type: type[TMessage] | None = None
+        self,
+        db: sqlite3.Connection,
+        message_type: type[TMessage] | None = None,
+        message_text_index: "interfaces.IMessageTextIndex[TMessage] | None" = None,
     ):
         self.db = db
         self.message_type = message_type
+        self.message_text_index = message_text_index
+
+    def set_message_text_index(
+        self, message_text_index: "interfaces.IMessageTextIndex[TMessage]"
+    ) -> None:
+        """Set the message text index for automatic indexing of new messages."""
+        self.message_text_index = message_text_index
 
     @property
     def is_persistent(self) -> bool:
@@ -161,11 +171,21 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
                 ),
             )
 
+        # Also add to message text index if available
+        if self.message_text_index is not None:
+            await self.message_text_index.add_messages_starting_at(msg_id, [item])
+
     async def extend(self, items: typing.Iterable[TMessage]) -> None:
+        items_list = list(items)  # Convert to list to iterate twice
+        if not items_list:
+            return
+
+        # Get the starting ordinal before adding any messages
+        current_size = await self.size()
+
         with self.db:
             cursor = self.db.cursor()
-            current_size = await self.size()
-            for msg_id, item in enumerate(items, current_size):
+            for msg_id, item in enumerate(items_list, current_size):
                 (
                     chunks_json,
                     chunk_uri,
@@ -189,6 +209,12 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
                         extra_json,
                     ),
                 )
+
+        # Also add to message text index if available
+        if self.message_text_index is not None:
+            await self.message_text_index.add_messages_starting_at(
+                current_size, items_list
+            )
 
 
 class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):

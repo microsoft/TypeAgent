@@ -38,4 +38,6 @@ async def create_storage_provider[TMessage: IMessage](
             message_text_index_settings=message_text_settings,
             related_term_index_settings=related_terms_settings,
         )
+        # Initialize the provider asynchronously
+        await provider.initialize()
         return provider

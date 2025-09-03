@@ -90,6 +90,21 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         )
         self._related_terms_index = SqliteRelatedTermsIndex(self.db)
 
+        # Connect message collection to message text index for automatic indexing
+        self._message_collection.set_message_text_index(self._message_text_index)
+
+    async def initialize(self) -> None:
+        """Async initialization - rebuild indexes if needed."""
+        # If there are existing messages but no embeddings, rebuild the embeddings
+        # This handles the case where an existing database is loaded
+        existing_messages = await self._message_collection.size()
+        embedding_entries = (
+            await self._message_text_index._text_to_location_index.size()
+        )
+        if existing_messages > 0 and embedding_entries == 0:
+            # Rebuild the message text embeddings from existing messages
+            await self._message_text_index.rebuild_from_all_messages()
+
     async def close(self) -> None:
         """Close the database connection."""
         if hasattr(self, "db"):

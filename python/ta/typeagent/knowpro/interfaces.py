@@ -496,6 +496,12 @@ class IMessageTextIndex[TMessage: IMessage](Protocol):
         messages: Iterable[TMessage],
     ) -> None: ...
 
+    async def add_messages_starting_at(
+        self,
+        start_ordinal: int,
+        messages: list[TMessage],
+    ) -> None: ...
+
     async def lookup_messages(
         self,
         message_text: str,
