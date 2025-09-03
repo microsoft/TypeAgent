@@ -22,7 +22,7 @@ interface DebugHierarchy {
 /**
  * Recursively scan directories for TypeScript files
  */
-function scanDirectory(dir: string, extensions: string[] = [".ts", ".mts", ".js", ".mjs"]): string[] {
+function scanDirectory(dir: string, extensions: string[] = [".ts", ".mts"]): string[] {
     const files: string[] = [];
     
     try {

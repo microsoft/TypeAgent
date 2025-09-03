@@ -74,7 +74,7 @@ The tool generates a `debug-hierarchy.md` file in the current working directory.
 
 ## How It Works
 
-1. **File Discovery**: Recursively scans directories for `.ts`, `.mts`, `.js`, and `.mjs` files
+1. **File Discovery**: Recursively scans directories for `.ts` and `.mts` files
 2. **Pattern Matching**: Uses regex to find `registerDebug` calls in the format:
    - `const variableName = registerDebug("namespace")`
    - `registerDebug("namespace")`
