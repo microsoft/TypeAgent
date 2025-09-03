@@ -851,7 +851,7 @@ async function openWebPage(
             site: url,
         },
         activityEndAction: {
-            actionName: "closeWebPage",
+            actionName: "closeAllWebPages",
         },
     };
     return result;
@@ -862,6 +862,15 @@ async function closeWebPage(context: ActionContext<BrowserActionContext>) {
     context.actionIO.setDisplay("Closing web page.");
     await browserControl.closeWebPage();
     const result = createActionResult("Web page closed successfully.");
+    result.activityContext = null; // clear the activity context.
+    return result;
+}
+
+async function closeAllWebPages(context: ActionContext<BrowserActionContext>) {
+    const browserControl = getActionBrowserControl(context);
+    context.actionIO.setDisplay("Closing all web pages.");
+    await browserControl.closeAllWebPages();
+    const result = createActionResult("Web pages closed successfully.");
     result.activityContext = null; // clear the activity context.
     return result;
 }
@@ -1094,6 +1103,8 @@ async function executeBrowserAction(
                     return openWebPage(context, action);
                 case "closeWebPage":
                     return closeWebPage(context);
+                case "closeAllWebPages":
+                    return closeAllWebPages(context);
                 case "changeTab":
                     return changeTabs(context, action);
                 case "getWebsiteStats":

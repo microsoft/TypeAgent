@@ -13,6 +13,7 @@ export type BrowserControlInvokeFunctions = {
      * close the browser view.
      */
     closeWebPage(): Promise<void>;
+    closeAllWebPages(): Promise<void>;
     goForward(): Promise<void>;
     goBack(): Promise<void>;
     reload(): Promise<void>;

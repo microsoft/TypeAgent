@@ -68,6 +68,11 @@ export function createInlineBrowserControl(
                 throw new Error("Failed to close active browser tab.");
             }
         },
+        async closeAllWebPages() {
+            shellWindow.getAllBrowserTabs().forEach((tab) => {
+                shellWindow.closeBrowserTab(tab.id);
+            });
+        },
         async switchTabs(
             tabDescription: string,
             tabIndex?: number,
