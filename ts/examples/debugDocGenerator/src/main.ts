@@ -130,7 +130,7 @@ function generateMarkdown(hierarchy: DebugHierarchy, level: number = 0): string[
             
             if (hasCalls) {
                 for (const call of data.calls) {
-                    const relativePath = path.relative(process.cwd(), call.file).replace(/\\\\/g, "/");
+                    const relativePath = path.relative(process.cwd(), call.file).replace(/\\/g, "/");
                     lines.push(`${indent}  - \`${call.variableName}\` in \`${relativePath}:${call.line}\``);
                 }
             }
@@ -203,7 +203,7 @@ function generateDebugDoc(rootPath: string): void {
     
     // Write to file
     const outputPath = path.join(process.cwd(), "debug-hierarchy.md");
-    fs.writeFileSync(outputPath, markdownLines.join("\\n"), "utf-8");
+    fs.writeFileSync(outputPath, markdownLines.join("\n"), "utf-8");
     
     console.log(`Debug documentation generated: ${outputPath}`);
     console.log(`Found ${allCalls.length} debug calls across ${files.length} files`);
