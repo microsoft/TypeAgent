@@ -18,9 +18,9 @@
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "scan": "node dist/main.js",
     "start": "node dist/main.js",
     "start:help": "node dist/main.js --help",
-    "scan": "node dist/main.js",
     "tsc": "tsc -p src"
   },
   "dependencies": {
