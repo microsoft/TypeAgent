@@ -2,7 +2,7 @@
 
 > **Note**: This project was created with AI assistance using Claude Sonnet 4 via GitHub Copilot in VS Code.
 
-> **Sample Output**: See `debug-hierarchy.md` in this directory for an example of the generated documentation.
+> **Sample Output**: See [debug-hierarchy.md](debug-hierarchy.md) in this directory for an example of the generated documentation.
 
 This tool generates a hierarchical markdown document that lists all `registerDebug` calls in the TypeAgent codebase, making it easy to discover which debug namespaces are available for debugging specific components.
 
@@ -45,12 +45,12 @@ node dist/main.js ../../../packages
 
 ### Output
 
-The tool generates a `debug-hierarchy.md` file in the current working directory. This file contains:
+The tool generates a [`debug-hierarchy.md`](debug-hierarchy.md) file in the current working directory. This file contains:
 
 - A table of contents with clickable links to each section
 - A flat list of all namespaces for quick reference and searching
-- A file-based organization showing all debug calls grouped by source file
 - A hierarchical list of all debug namespaces organized by namespace structure
+- A file-based organization showing all debug calls grouped by source file
 - Clickable links to file locations and line numbers for each `registerDebug` call
 - "Back to top" navigation links at the end of each section
 - Usage examples for enabling debug output
@@ -66,16 +66,16 @@ The tool generates a `debug-hierarchy.md` file in the current working directory.
 - `typeagent:shell:speech:error`
 - `typeagent:browser:action`
 
-## File-based Organization
-- **[packages/shell/src/renderer/src/speech.ts](packages/shell/src/renderer/src/speech.ts)**
-  - `typeagent:shell:speech` at [Line 10](packages/shell/src/renderer/src/speech.ts#L10)
-  - `typeagent:shell:speech:error` at [Line 11](packages/shell/src/renderer/src/speech.ts#L11)
-
 ## Namespace Hierarchy
 - **typeagent**
   - **shell**
     - **speech**
       - `debug` in [packages/shell/src/renderer/src/speech.ts:10](packages/shell/src/renderer/src/speech.ts#L10)
+
+## File-based Organization
+- **[packages/shell/src/renderer/src/speech.ts](packages/shell/src/renderer/src/speech.ts)**
+  - `typeagent:shell:speech` at [Line 10](packages/shell/src/renderer/src/speech.ts#L10)
+  - `typeagent:shell:speech:error` at [Line 11](packages/shell/src/renderer/src/speech.ts#L11)
 ```
 
 ## How It Works
