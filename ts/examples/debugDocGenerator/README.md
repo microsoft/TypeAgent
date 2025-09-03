@@ -48,9 +48,9 @@ node dist/main.js ../../../packages
 The tool generates a `debug-hierarchy.md` file in the current working directory. This file contains:
 
 - A table of contents with clickable links to each section
-- A hierarchical list of all debug namespaces organized by namespace structure
 - A flat list of all namespaces for quick reference and searching
 - A file-based organization showing all debug calls grouped by source file
+- A hierarchical list of all debug namespaces organized by namespace structure
 - Clickable links to file locations and line numbers for each `registerDebug` call
 - "Back to top" navigation links at the end of each section
 - Usage examples for enabling debug output
@@ -61,12 +61,6 @@ The tool generates a `debug-hierarchy.md` file in the current working directory.
 ```markdown
 # Debug Namespace Hierarchy
 
-## Namespace Hierarchy
-- **typeagent**
-  - **shell**
-    - **speech**
-      - `debug` in [packages/shell/src/renderer/src/speech.ts:10](packages/shell/src/renderer/src/speech.ts#L10)
-
 ## All Namespaces (Flat List)
 - `typeagent:shell:speech`
 - `typeagent:shell:speech:error`
@@ -76,6 +70,12 @@ The tool generates a `debug-hierarchy.md` file in the current working directory.
 - **[packages/shell/src/renderer/src/speech.ts](packages/shell/src/renderer/src/speech.ts)**
   - `typeagent:shell:speech` at [Line 10](packages/shell/src/renderer/src/speech.ts#L10)
   - `typeagent:shell:speech:error` at [Line 11](packages/shell/src/renderer/src/speech.ts#L11)
+
+## Namespace Hierarchy
+- **typeagent**
+  - **shell**
+    - **speech**
+      - `debug` in [packages/shell/src/renderer/src/speech.ts:10](packages/shell/src/renderer/src/speech.ts#L10)
 ```
 
 ## How It Works
