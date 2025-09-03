@@ -115,6 +115,63 @@ function buildHierarchy(calls: DebugCall[]): DebugHierarchy {
 }
 
 /**
+ * Generate a flat list of all namespaces
+ */
+function generateFlatList(calls: DebugCall[]): string[] {
+    const lines: string[] = [];
+    const namespaces = Array.from(new Set(calls.map(call => call.namespace))).sort();
+    
+    for (const namespace of namespaces) {
+        lines.push(`- \`${namespace}\``);
+    }
+    
+    return lines;
+}
+
+/**
+ * Build file-based hierarchy
+ */
+function buildFileHierarchy(calls: DebugCall[]): { [file: string]: DebugCall[] } {
+    const fileHierarchy: { [file: string]: DebugCall[] } = {};
+    
+    for (const call of calls) {
+        const relativePath = path.relative(process.cwd(), call.file).replace(/\\/g, "/");
+        if (!fileHierarchy[relativePath]) {
+            fileHierarchy[relativePath] = [];
+        }
+        fileHierarchy[relativePath].push(call);
+    }
+    
+    // Sort calls within each file by line number
+    for (const file in fileHierarchy) {
+        fileHierarchy[file].sort((a, b) => a.line - b.line);
+    }
+    
+    return fileHierarchy;
+}
+
+/**
+ * Generate markdown for file hierarchy
+ */
+function generateFileHierarchy(fileHierarchy: { [file: string]: DebugCall[] }): string[] {
+    const lines: string[] = [];
+    const sortedFiles = Object.keys(fileHierarchy).sort();
+    
+    for (const file of sortedFiles) {
+        const calls = fileHierarchy[file];
+        const fileLink = `[${file}](${file})`;
+        lines.push(`- **${fileLink}**`);
+        
+        for (const call of calls) {
+            const lineLink = `[Line ${call.line}](${file}#L${call.line})`;
+            lines.push(`  - \`${call.namespace}\` at ${lineLink}`);
+        }
+    }
+    
+    return lines;
+}
+
+/**
  * Generate markdown documentation from hierarchy
  */
 function generateMarkdown(hierarchy: DebugHierarchy, level: number = 0): string[] {
@@ -167,6 +224,7 @@ function generateDebugDoc(rootPath: string): void {
     
     // Build hierarchy
     const hierarchy = buildHierarchy(allCalls);
+    const fileHierarchy = buildFileHierarchy(allCalls);
     
     // Generate markdown
     const markdownLines = [
@@ -175,6 +233,13 @@ function generateDebugDoc(rootPath: string): void {
         "This document lists all `registerDebug` calls in the TypeAgent codebase,",
         "organized by namespace hierarchy. Use this to determine which debug",
         "namespaces to enable when debugging specific components.",
+        "",
+        "## Table of Contents",
+        "",
+        "1. [Usage](#usage)",
+        "2. [Namespace Hierarchy](#namespace-hierarchy)",
+        "3. [All Namespaces (Flat List)](#all-namespaces-flat-list)",
+        "4. [File-based Organization](#file-based-organization)",
         "",
         "## Usage",
         "",
@@ -194,9 +259,29 @@ function generateDebugDoc(rootPath: string): void {
         "DEBUG=typeagent:shell:*,typeagent:browser:* npm start",
         "```",
         "",
+        "[↑ Back to Top](#debug-namespace-hierarchy)",
+        "",
         "## Namespace Hierarchy",
         "",
         ...generateMarkdown(hierarchy),
+        "",
+        "[↑ Back to Top](#debug-namespace-hierarchy)",
+        "",
+        "## All Namespaces (Flat List)",
+        "",
+        "Complete list of all debug namespaces found in the codebase:",
+        "",
+        ...generateFlatList(allCalls),
+        "",
+        "[↑ Back to Top](#debug-namespace-hierarchy)",
+        "",
+        "## File-based Organization",
+        "",
+        "Debug calls organized by source file:",
+        "",
+        ...generateFileHierarchy(fileHierarchy),
+        "",
+        "[↑ Back to Top](#debug-namespace-hierarchy)",
         "",
         "---",
         "",

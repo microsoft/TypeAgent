@@ -47,8 +47,12 @@ node dist/main.js ../../../packages
 
 The tool generates a `debug-hierarchy.md` file in the current working directory. This file contains:
 
-- A hierarchical list of all debug namespaces
+- A table of contents with clickable links to each section
+- A hierarchical list of all debug namespaces organized by namespace structure
+- A flat list of all namespaces for quick reference and searching
+- A file-based organization showing all debug calls grouped by source file
 - Clickable links to file locations and line numbers for each `registerDebug` call
+- "Back to top" navigation links at the end of each section
 - Usage examples for enabling debug output
 - Statistics about the scan results
 
@@ -58,18 +62,20 @@ The tool generates a `debug-hierarchy.md` file in the current working directory.
 # Debug Namespace Hierarchy
 
 ## Namespace Hierarchy
-
 - **typeagent**
-  - **azure**
-    - **deploy**
-      - `debug` in `tools/scripts/azureDeploy.mjs:11`
-      - **error**
-        - `debugError` in `tools/scripts/azureDeploy.mjs:12`
   - **shell**
     - **speech**
-      - `debug` in `packages/shell/src/renderer/src/speech.ts:10`
-      - **error**
-        - `debugError` in `packages/shell/src/renderer/src/speech.ts:11`
+      - `debug` in [packages/shell/src/renderer/src/speech.ts:10](packages/shell/src/renderer/src/speech.ts#L10)
+
+## All Namespaces (Flat List)
+- `typeagent:shell:speech`
+- `typeagent:shell:speech:error`
+- `typeagent:browser:action`
+
+## File-based Organization
+- **[packages/shell/src/renderer/src/speech.ts](packages/shell/src/renderer/src/speech.ts)**
+  - `typeagent:shell:speech` at [Line 10](packages/shell/src/renderer/src/speech.ts#L10)
+  - `typeagent:shell:speech:error` at [Line 11](packages/shell/src/renderer/src/speech.ts#L11)
 ```
 
 ## How It Works
@@ -106,7 +112,7 @@ DEBUG=typeagent:shell:speech:error npm start
 
 - **Comprehensive Scanning**: Finds all `registerDebug` calls across the entire codebase
 - **Hierarchical Organization**: Groups related debug namespaces together
-- **File References**: Shows exactly where each debug logger is defined
+- **Clickable File References**: Direct links to exact file locations and line numbers on GitHub
 - **Usage Examples**: Provides copy-paste ready DEBUG environment variable examples
 - **Flexible Input**: Can scan any directory, not just the TypeAgent root
 

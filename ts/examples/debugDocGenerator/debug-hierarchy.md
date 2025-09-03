@@ -4,6 +4,13 @@ This document lists all `registerDebug` calls in the TypeAgent codebase,
 organized by namespace hierarchy. Use this to determine which debug
 namespaces to enable when debugging specific components.
 
+## Table of Contents
+
+1. [Usage](#usage)
+2. [Namespace Hierarchy](#namespace-hierarchy)
+3. [All Namespaces (Flat List)](#all-namespaces-flat-list)
+4. [File-based Organization](#file-based-organization)
+
 ## Usage
 
 To enable debugging for a specific namespace, set the `DEBUG` environment variable:
@@ -21,6 +28,8 @@ DEBUG=typeagent:shell:speech npm start
 # Enable multiple namespaces
 DEBUG=typeagent:shell:*,typeagent:browser:* npm start
 ```
+
+[↑ Back to Top](#debug-namespace-hierarchy)
 
 ## Namespace Hierarchy
 
@@ -377,6 +386,479 @@ DEBUG=typeagent:shell:*,typeagent:browser:* npm start
   - **websockets**
     - `debug` in [../../packages/commonUtils/src/webSockets.ts:10](../../packages/commonUtils/src/webSockets.ts#L10)
 
+[↑ Back to Top](#debug-namespace-hierarchy)
+
+## All Namespaces (Flat List)
+
+Complete list of all debug namespaces found in the codebase:
+
+- `conversation-memory.conversation`
+- `conversation-memory.pdfdocs`
+- `conversation-memory.podcast`
+- `knowledge-processor:answerGenerator:error`
+- `knowledge-processor:error`
+- `shell:localWhisper`
+- `shell:localWhisper:error`
+- `typeagent:agent:montage`
+- `typeagent:agent:montage:route`
+- `typeagent:agent:montage:ui`
+- `typeagent:aiClient:agents`
+- `typeagent:azure-ai-foundry:aliasKeywordExtractor`
+- `typeagent:azure-ai-foundry:urlResolver`
+- `typeagent:browser:IndexingService`
+- `typeagent:browser:action`
+- `typeagent:browser:answer-enhancement`
+- `typeagent:browser:answer-generator`
+- `typeagent:browser:content-extractor`
+- `typeagent:browser:content-service`
+- `typeagent:browser:context-builder`
+- `typeagent:browser:crossword:schema`
+- `typeagent:browser:crossword:schema:error`
+- `typeagent:browser:discover:handler`
+- `typeagent:browser:discover:utilities`
+- `typeagent:browser:full-agent-processor`
+- `typeagent:browser:indexing`
+- `typeagent:browser:ipc`
+- `typeagent:browser:macro:store`
+- `typeagent:browser:metadata-ranking`
+- `typeagent:browser:pdfInterceptor`
+- `typeagent:browser:pdfInterceptor:error`
+- `typeagent:browser:pdfView`
+- `typeagent:browser:pdfView:error`
+- `typeagent:browser:query-analyzer`
+- `typeagent:browser:search-enhancement`
+- `typeagent:browser:serviceWorker`
+- `typeagent:browser:serviceWorker:error`
+- `typeagent:browser:unified-search`
+- `typeagent:browser:website-import`
+- `typeagent:browser:website-memory`
+- `typeagent:browser:ws`
+- `typeagent:browser:ws:error`
+- `typeagent:calendar`
+- `typeagent:code`
+- `typeagent:command:completion`
+- `typeagent:command:completion:error`
+- `typeagent:const`
+- `typeagent:const:conflict`
+- `typeagent:const:create`
+- `typeagent:const:match`
+- `typeagent:const:match:stat`
+- `typeagent:const:merge`
+- `typeagent:const:validation`
+- `typeagent:desktop`
+- `typeagent:desktop:data`
+- `typeagent:desktop:error`
+- `typeagent:dispatcher:actions`
+- `typeagent:dispatcher:actions:entities`
+- `typeagent:dispatcher:agentProcess`
+- `typeagent:dispatcher:agents`
+- `typeagent:dispatcher:agents:error`
+- `typeagent:dispatcher:agents:load`
+- `typeagent:dispatcher:command`
+- `typeagent:dispatcher:command:error`
+- `typeagent:dispatcher:init`
+- `typeagent:dispatcher:init:error`
+- `typeagent:dispatcher:lookup`
+- `typeagent:dispatcher:lookup:error`
+- `typeagent:dispatcher:memory`
+- `typeagent:dispatcher:schema:cache`
+- `typeagent:dispatcher:schema:cache:error`
+- `typeagent:dispatcher:schema:config`
+- `typeagent:dispatcher:semantic`
+- `typeagent:email`
+- `typeagent:explain`
+- `typeagent:graphUtils:calendarclient`
+- `typeagent:graphUtils:calendarclient:error`
+- `typeagent:graphUtils:graphClient`
+- `typeagent:graphUtils:graphClient:error`
+- `typeagent:graphUtils:mailClient`
+- `typeagent:greeting`
+- `typeagent:image-memory`
+- `typeagent:indexManager`
+- `typeagent:indexingService`
+- `typeagent:interpret`
+- `typeagent:knowledgeProcessor:image`
+- `typeagent:logger:mongodb`
+- `typeagent:markdown:agent`
+- `typeagent:markdown:collaboration`
+- `typeagent:markdown:service`
+- `typeagent:markdown:translator`
+- `typeagent:openai`
+- `typeagent:profiler`
+- `typeagent:profiler:reader:error`
+- `typeagent:promptLogger`
+- `typeagent:request:completion`
+- `typeagent:rest:error`
+- `typeagent:rest:header`
+- `typeagent:rest:url`
+- `typeagent:rpc`
+- `typeagent:rpc:error`
+- `typeagent:schema:generate`
+- `typeagent:schema:parse`
+- `typeagent:schema:parser`
+- `typeagent:serviceHost`
+- `typeagent:session`
+- `typeagent:shell`
+- `typeagent:shell:browserViewManager`
+- `typeagent:shell:error`
+- `typeagent:shell:partial`
+- `typeagent:shell:partial:error`
+- `typeagent:shell:pdfInterceptor`
+- `typeagent:shell:pdfInterceptor:error`
+- `typeagent:shell:speech`
+- `typeagent:shell:speech:error`
+- `typeagent:shell:tts`
+- `typeagent:shell:tts:error`
+- `typeagent:shell:update`
+- `typeagent:shell:window`
+- `typeagent:shell:window:error`
+- `typeagent:spotify`
+- `typeagent:spotify-verbose:rest`
+- `typeagent:spotify-verbose:search`
+- `typeagent:spotify:data`
+- `typeagent:spotify:error`
+- `typeagent:spotify:rest`
+- `typeagent:spotify:search`
+- `typeagent:spotify:search:error`
+- `typeagent:spotify:search:reuse`
+- `typeagent:storage:error`
+- `typeagent:switch:search`
+- `typeagent:tokenCounter`
+- `typeagent:translate`
+- `typeagent:translate:semantic`
+- `typeagent:typechatagent:correction`
+- `typeagent:views:server`
+- `typeagent:views:server:core`
+- `typeagent:views:server:pdf:routes`
+- `typeagent:views:server:pdf:service`
+- `typeagent:views:server:pdf:urlMap`
+- `typeagent:views:server:plans:routes`
+- `typeagent:views:server:sse`
+- `typeagent:webAgent`
+- `typeagent:webAgent:error`
+- `typeagent:webAgent:proxy`
+- `typeagent:websockets`
+
+[↑ Back to Top](#debug-namespace-hierarchy)
+
+## File-based Organization
+
+Debug calls organized by source file:
+
+- **[../../packages/actionSchema/src/generator.ts](../../packages/actionSchema/src/generator.ts)**
+  - `typeagent:schema:generate` at [Line 12](../../packages/actionSchema/src/generator.ts#L12)
+- **[../../packages/actionSchema/src/parser.ts](../../packages/actionSchema/src/parser.ts)**
+  - `typeagent:schema:parse` at [Line 25](../../packages/actionSchema/src/parser.ts#L25)
+- **[../../packages/actionSchema/src/schemaParser.ts](../../packages/actionSchema/src/schemaParser.ts)**
+  - `typeagent:schema:parser` at [Line 7](../../packages/actionSchema/src/schemaParser.ts#L7)
+- **[../../packages/agentRpc/src/common.ts](../../packages/agentRpc/src/common.ts)**
+  - `typeagent:rpc` at [Line 6](../../packages/agentRpc/src/common.ts#L6)
+  - `typeagent:rpc:error` at [Line 7](../../packages/agentRpc/src/common.ts#L7)
+- **[../../packages/agents/agentUtils/graphUtils/src/calendarClient.ts](../../packages/agents/agentUtils/graphUtils/src/calendarClient.ts)**
+  - `typeagent:graphUtils:calendarclient` at [Line 10](../../packages/agents/agentUtils/graphUtils/src/calendarClient.ts#L10)
+  - `typeagent:graphUtils:calendarclient:error` at [Line 11](../../packages/agents/agentUtils/graphUtils/src/calendarClient.ts#L11)
+- **[../../packages/agents/agentUtils/graphUtils/src/graphClient.ts](../../packages/agents/agentUtils/graphUtils/src/graphClient.ts)**
+  - `typeagent:graphUtils:graphClient` at [Line 56](../../packages/agents/agentUtils/graphUtils/src/graphClient.ts#L56)
+  - `typeagent:graphUtils:graphClient:error` at [Line 57](../../packages/agents/agentUtils/graphUtils/src/graphClient.ts#L57)
+- **[../../packages/agents/agentUtils/graphUtils/src/mailClient.ts](../../packages/agents/agentUtils/graphUtils/src/mailClient.ts)**
+  - `typeagent:graphUtils:mailClient` at [Line 17](../../packages/agents/agentUtils/graphUtils/src/mailClient.ts#L17)
+- **[../../packages/agents/browser/src/agent/actionHandler.mts](../../packages/agents/browser/src/agent/actionHandler.mts)**
+  - `typeagent:browser:action` at [Line 112](../../packages/agents/browser/src/agent/actionHandler.mts#L112)
+  - `typeagent:browser:ws` at [Line 113](../../packages/agents/browser/src/agent/actionHandler.mts#L113)
+- **[../../packages/agents/browser/src/agent/browserContentExtractor.mts](../../packages/agents/browser/src/agent/browserContentExtractor.mts)**
+  - `typeagent:browser:content-extractor` at [Line 10](../../packages/agents/browser/src/agent/browserContentExtractor.mts#L10)
+- **[../../packages/agents/browser/src/agent/contentService.mts](../../packages/agents/browser/src/agent/contentService.mts)**
+  - `typeagent:browser:content-service` at [Line 9](../../packages/agents/browser/src/agent/contentService.mts#L9)
+- **[../../packages/agents/browser/src/agent/crossword/actionHandler.mts](../../packages/agents/browser/src/agent/crossword/actionHandler.mts)**
+  - `typeagent:browser:crossword:schema` at [Line 15](../../packages/agents/browser/src/agent/crossword/actionHandler.mts#L15)
+- **[../../packages/agents/browser/src/agent/crossword/cachedSchema.mts](../../packages/agents/browser/src/agent/crossword/cachedSchema.mts)**
+  - `typeagent:browser:crossword:schema:error` at [Line 8](../../packages/agents/browser/src/agent/crossword/cachedSchema.mts#L8)
+- **[../../packages/agents/browser/src/agent/discovery/actionHandler.mts](../../packages/agents/browser/src/agent/discovery/actionHandler.mts)**
+  - `typeagent:browser:discover:handler` at [Line 34](../../packages/agents/browser/src/agent/discovery/actionHandler.mts#L34)
+- **[../../packages/agents/browser/src/agent/discovery/authoringUtilities.mts](../../packages/agents/browser/src/agent/discovery/authoringUtilities.mts)**
+  - `typeagent:browser:discover:utilities` at [Line 18](../../packages/agents/browser/src/agent/discovery/authoringUtilities.mts#L18)
+- **[../../packages/agents/browser/src/agent/htmlProcessor.mts](../../packages/agents/browser/src/agent/htmlProcessor.mts)**
+  - `typeagent:browser:full-agent-processor` at [Line 21](../../packages/agents/browser/src/agent/htmlProcessor.mts#L21)
+- **[../../packages/agents/browser/src/agent/indexing/browserIndexingService.ts](../../packages/agents/browser/src/agent/indexing/browserIndexingService.ts)**
+  - `typeagent:browser:IndexingService` at [Line 12](../../packages/agents/browser/src/agent/indexing/browserIndexingService.ts#L12)
+- **[../../packages/agents/browser/src/agent/indexing/contentSummaryAdapter.mts](../../packages/agents/browser/src/agent/indexing/contentSummaryAdapter.mts)**
+  - `typeagent:browser:indexing` at [Line 13](../../packages/agents/browser/src/agent/indexing/contentSummaryAdapter.mts#L13)
+- **[../../packages/agents/browser/src/agent/indexing/indexingKnowledgeExtractor.mts](../../packages/agents/browser/src/agent/indexing/indexingKnowledgeExtractor.mts)**
+  - `typeagent:browser:indexing` at [Line 14](../../packages/agents/browser/src/agent/indexing/indexingKnowledgeExtractor.mts#L14)
+- **[../../packages/agents/browser/src/agent/search/answerEnhancementAdapter.mts](../../packages/agents/browser/src/agent/search/answerEnhancementAdapter.mts)**
+  - `typeagent:browser:answer-enhancement` at [Line 11](../../packages/agents/browser/src/agent/search/answerEnhancementAdapter.mts#L11)
+- **[../../packages/agents/browser/src/agent/search/answerGenerator.mts](../../packages/agents/browser/src/agent/search/answerGenerator.mts)**
+  - `typeagent:browser:answer-generator` at [Line 15](../../packages/agents/browser/src/agent/search/answerGenerator.mts#L15)
+- **[../../packages/agents/browser/src/agent/search/queryAnalyzer.mts](../../packages/agents/browser/src/agent/search/queryAnalyzer.mts)**
+  - `typeagent:browser:query-analyzer` at [Line 13](../../packages/agents/browser/src/agent/search/queryAnalyzer.mts#L13)
+- **[../../packages/agents/browser/src/agent/search/queryEnhancementAdapter.mts](../../packages/agents/browser/src/agent/search/queryEnhancementAdapter.mts)**
+  - `typeagent:browser:search-enhancement` at [Line 11](../../packages/agents/browser/src/agent/search/queryEnhancementAdapter.mts#L11)
+- **[../../packages/agents/browser/src/agent/search/utils/contextBuilder.mts](../../packages/agents/browser/src/agent/search/utils/contextBuilder.mts)**
+  - `typeagent:browser:context-builder` at [Line 7](../../packages/agents/browser/src/agent/search/utils/contextBuilder.mts#L7)
+- **[../../packages/agents/browser/src/agent/search/utils/metadataRanker.mts](../../packages/agents/browser/src/agent/search/utils/metadataRanker.mts)**
+  - `typeagent:browser:metadata-ranking` at [Line 8](../../packages/agents/browser/src/agent/search/utils/metadataRanker.mts#L8)
+- **[../../packages/agents/browser/src/agent/searchWebMemories.mts](../../packages/agents/browser/src/agent/searchWebMemories.mts)**
+  - `typeagent:browser:unified-search` at [Line 18](../../packages/agents/browser/src/agent/searchWebMemories.mts#L18)
+- **[../../packages/agents/browser/src/agent/storage/macroStore.mts](../../packages/agents/browser/src/agent/storage/macroStore.mts)**
+  - `typeagent:browser:macro:store` at [Line 15](../../packages/agents/browser/src/agent/storage/macroStore.mts#L15)
+- **[../../packages/agents/browser/src/agent/webTypeAgent.mts](../../packages/agents/browser/src/agent/webTypeAgent.mts)**
+  - `typeagent:webAgent` at [Line 19](../../packages/agents/browser/src/agent/webTypeAgent.mts#L19)
+  - `typeagent:webAgent:error` at [Line 20](../../packages/agents/browser/src/agent/webTypeAgent.mts#L20)
+- **[../../packages/agents/browser/src/agent/websiteImport.mts](../../packages/agents/browser/src/agent/websiteImport.mts)**
+  - `typeagent:browser:website-import` at [Line 11](../../packages/agents/browser/src/agent/websiteImport.mts#L11)
+- **[../../packages/agents/browser/src/agent/websiteMemory.mts](../../packages/agents/browser/src/agent/websiteMemory.mts)**
+  - `typeagent:browser:website-memory` at [Line 74](../../packages/agents/browser/src/agent/websiteMemory.mts#L74)
+- **[../../packages/agents/browser/src/extension/contentScript/pdfInterceptor.ts](../../packages/agents/browser/src/extension/contentScript/pdfInterceptor.ts)**
+  - `typeagent:browser:pdfInterceptor` at [Line 6](../../packages/agents/browser/src/extension/contentScript/pdfInterceptor.ts#L6)
+  - `typeagent:browser:pdfInterceptor:error` at [Line 7](../../packages/agents/browser/src/extension/contentScript/pdfInterceptor.ts#L7)
+- **[../../packages/agents/browser/src/extension/serviceWorker/index.ts](../../packages/agents/browser/src/extension/serviceWorker/index.ts)**
+  - `typeagent:browser:serviceWorker` at [Line 22](../../packages/agents/browser/src/extension/serviceWorker/index.ts#L22)
+  - `typeagent:browser:serviceWorker:error` at [Line 23](../../packages/agents/browser/src/extension/serviceWorker/index.ts#L23)
+  - `typeagent:webAgent:proxy` at [Line 25](../../packages/agents/browser/src/extension/serviceWorker/index.ts#L25)
+- **[../../packages/agents/browser/src/extension/serviceWorker/websocket.ts](../../packages/agents/browser/src/extension/serviceWorker/websocket.ts)**
+  - `typeagent:browser:ws` at [Line 12](../../packages/agents/browser/src/extension/serviceWorker/websocket.ts#L12)
+  - `typeagent:browser:ws:error` at [Line 13](../../packages/agents/browser/src/extension/serviceWorker/websocket.ts#L13)
+- **[../../packages/agents/browser/src/extension/views/pdfView.ts](../../packages/agents/browser/src/extension/views/pdfView.ts)**
+  - `typeagent:browser:pdfView` at [Line 6](../../packages/agents/browser/src/extension/views/pdfView.ts#L6)
+  - `typeagent:browser:pdfView:error` at [Line 7](../../packages/agents/browser/src/extension/views/pdfView.ts#L7)
+- **[../../packages/agents/browser/src/views/server/core/baseServer.ts](../../packages/agents/browser/src/views/server/core/baseServer.ts)**
+  - `typeagent:views:server:core` at [Line 12](../../packages/agents/browser/src/views/server/core/baseServer.ts#L12)
+- **[../../packages/agents/browser/src/views/server/core/sseManager.ts](../../packages/agents/browser/src/views/server/core/sseManager.ts)**
+  - `typeagent:views:server:sse` at [Line 7](../../packages/agents/browser/src/views/server/core/sseManager.ts#L7)
+- **[../../packages/agents/browser/src/views/server/features/pdf/pdfRoutes.ts](../../packages/agents/browser/src/views/server/features/pdf/pdfRoutes.ts)**
+  - `typeagent:views:server:pdf:routes` at [Line 19](../../packages/agents/browser/src/views/server/features/pdf/pdfRoutes.ts#L19)
+- **[../../packages/agents/browser/src/views/server/features/pdf/pdfService.ts](../../packages/agents/browser/src/views/server/features/pdf/pdfService.ts)**
+  - `typeagent:views:server:pdf:service` at [Line 16](../../packages/agents/browser/src/views/server/features/pdf/pdfService.ts#L16)
+- **[../../packages/agents/browser/src/views/server/features/pdf/urlDocumentMappingService.ts](../../packages/agents/browser/src/views/server/features/pdf/urlDocumentMappingService.ts)**
+  - `typeagent:views:server:pdf:urlMap` at [Line 10](../../packages/agents/browser/src/views/server/features/pdf/urlDocumentMappingService.ts#L10)
+- **[../../packages/agents/browser/src/views/server/features/plans/plansRoutes.ts](../../packages/agents/browser/src/views/server/features/plans/plansRoutes.ts)**
+  - `typeagent:views:server:plans:routes` at [Line 18](../../packages/agents/browser/src/views/server/features/plans/plansRoutes.ts#L18)
+- **[../../packages/agents/browser/src/views/server/server.mts](../../packages/agents/browser/src/views/server/server.mts)**
+  - `typeagent:views:server` at [Line 10](../../packages/agents/browser/src/views/server/server.mts#L10)
+- **[../../packages/agents/calendar/src/calendarActionHandlerV1.ts](../../packages/agents/calendar/src/calendarActionHandlerV1.ts)**
+  - `typeagent:calendar` at [Line 49](../../packages/agents/calendar/src/calendarActionHandlerV1.ts#L49)
+- **[../../packages/agents/calendar/src/calendarActionHandlerV2.ts](../../packages/agents/calendar/src/calendarActionHandlerV2.ts)**
+  - `typeagent:calendar` at [Line 48](../../packages/agents/calendar/src/calendarActionHandlerV2.ts#L48)
+- **[../../packages/agents/code/src/codeActionHandler.ts](../../packages/agents/code/src/codeActionHandler.ts)**
+  - `typeagent:code` at [Line 21](../../packages/agents/code/src/codeActionHandler.ts#L21)
+- **[../../packages/agents/desktop/src/connector.ts](../../packages/agents/desktop/src/connector.ts)**
+  - `typeagent:desktop` at [Line 16](../../packages/agents/desktop/src/connector.ts#L16)
+  - `typeagent:desktop:data` at [Line 17](../../packages/agents/desktop/src/connector.ts#L17)
+  - `typeagent:desktop:error` at [Line 18](../../packages/agents/desktop/src/connector.ts#L18)
+- **[../../packages/agents/desktop/src/programNameIndex.ts](../../packages/agents/desktop/src/programNameIndex.ts)**
+  - `typeagent:desktop:error` at [Line 14](../../packages/agents/desktop/src/programNameIndex.ts#L14)
+- **[../../packages/agents/email/src/emailActionHandler.ts](../../packages/agents/email/src/emailActionHandler.ts)**
+  - `typeagent:email` at [Line 32](../../packages/agents/email/src/emailActionHandler.ts#L32)
+- **[../../packages/agents/greeting/src/greetingCommandHandler.ts](../../packages/agents/greeting/src/greetingCommandHandler.ts)**
+  - `typeagent:greeting` at [Line 32](../../packages/agents/greeting/src/greetingCommandHandler.ts#L32)
+- **[../../packages/agents/markdown/src/agent/markdownActionHandler.ts](../../packages/agents/markdown/src/agent/markdownActionHandler.ts)**
+  - `typeagent:markdown:agent` at [Line 23](../../packages/agents/markdown/src/agent/markdownActionHandler.ts#L23)
+- **[../../packages/agents/markdown/src/agent/translator.ts](../../packages/agents/markdown/src/agent/translator.ts)**
+  - `typeagent:markdown:translator` at [Line 18](../../packages/agents/markdown/src/agent/translator.ts#L18)
+- **[../../packages/agents/markdown/src/view/route/collaborationManager.ts](../../packages/agents/markdown/src/view/route/collaborationManager.ts)**
+  - `typeagent:markdown:collaboration` at [Line 7](../../packages/agents/markdown/src/view/route/collaborationManager.ts#L7)
+- **[../../packages/agents/markdown/src/view/route/service.ts](../../packages/agents/markdown/src/view/route/service.ts)**
+  - `typeagent:markdown:service` at [Line 22](../../packages/agents/markdown/src/view/route/service.ts#L22)
+- **[../../packages/agents/montage/src/agent/montageActionHandler.ts](../../packages/agents/montage/src/agent/montageActionHandler.ts)**
+  - `typeagent:agent:montage` at [Line 41](../../packages/agents/montage/src/agent/montageActionHandler.ts#L41)
+- **[../../packages/agents/montage/src/route/route.ts](../../packages/agents/montage/src/route/route.ts)**
+  - `typeagent:agent:montage:route` at [Line 14](../../packages/agents/montage/src/route/route.ts#L14)
+- **[../../packages/agents/montage/src/site/index.ts](../../packages/agents/montage/src/site/index.ts)**
+  - `typeagent:agent:montage:ui` at [Line 17](../../packages/agents/montage/src/site/index.ts#L17)
+- **[../../packages/agents/player/src/agent/playerHandlers.ts](../../packages/agents/player/src/agent/playerHandlers.ts)**
+  - `typeagent:spotify` at [Line 34](../../packages/agents/player/src/agent/playerHandlers.ts#L34)
+- **[../../packages/agents/player/src/debug.ts](../../packages/agents/player/src/debug.ts)**
+  - `typeagent:spotify` at [Line 6](../../packages/agents/player/src/debug.ts#L6)
+  - `typeagent:spotify:error` at [Line 7](../../packages/agents/player/src/debug.ts#L7)
+- **[../../packages/agents/player/src/endpoints.ts](../../packages/agents/player/src/endpoints.ts)**
+  - `typeagent:spotify:rest` at [Line 8](../../packages/agents/player/src/endpoints.ts#L8)
+  - `typeagent:spotify-verbose:rest` at [Line 9](../../packages/agents/player/src/endpoints.ts#L9)
+- **[../../packages/agents/player/src/search.ts](../../packages/agents/player/src/search.ts)**
+  - `typeagent:spotify:search` at [Line 19](../../packages/agents/player/src/search.ts#L19)
+  - `typeagent:spotify:search:reuse` at [Line 20](../../packages/agents/player/src/search.ts#L20)
+  - `typeagent:spotify-verbose:search` at [Line 21](../../packages/agents/player/src/search.ts#L21)
+  - `typeagent:spotify:search:error` at [Line 22](../../packages/agents/player/src/search.ts#L22)
+- **[../../packages/agents/player/src/userData.ts](../../packages/agents/player/src/userData.ts)**
+  - `typeagent:spotify:data` at [Line 16](../../packages/agents/player/src/userData.ts#L16)
+- **[../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/agentProvider/process/agentProcess.ts](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/agentProvider/process/agentProcess.ts)**
+  - `typeagent:dispatcher:agentProcess` at [Line 10](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/agentProvider/process/agentProcess.ts#L10)
+- **[../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/command/command.ts](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/command/command.ts)**
+  - `typeagent:dispatcher:command` at [Line 25](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/command/command.ts#L25)
+  - `typeagent:dispatcher:command:error` at [Line 26](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/command/command.ts#L26)
+- **[../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/appAgentManager.ts](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/appAgentManager.ts)**
+  - `typeagent:dispatcher:agents` at [Line 30](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/appAgentManager.ts#L30)
+  - `typeagent:dispatcher:agents:error` at [Line 31](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/appAgentManager.ts#L31)
+- **[../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/commandHandlerContext.ts](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/commandHandlerContext.ts)**
+  - `typeagent:dispatcher:init` at [Line 68](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/commandHandlerContext.ts#L68)
+  - `typeagent:dispatcher:init:error` at [Line 69](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/commandHandlerContext.ts#L69)
+- **[../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/dispatcher/handlers/requestCommandHandler.ts](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/dispatcher/handlers/requestCommandHandler.ts)**
+  - `typeagent:explain` at [Line 41](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/dispatcher/handlers/requestCommandHandler.ts#L41)
+- **[../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/session.ts](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/session.ts)**
+  - `typeagent:session` at [Line 18](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/session.ts#L18)
+- **[../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/system/handlers/serviceHost/service.ts](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/system/handlers/serviceHost/service.ts)**
+  - `typeagent:serviceHost` at [Line 20](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/system/handlers/serviceHost/service.ts#L20)
+- **[../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/execute/actionHandlers.ts](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/execute/actionHandlers.ts)**
+  - `typeagent:dispatcher:actions` at [Line 54](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/execute/actionHandlers.ts#L54)
+- **[../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/actionConfig.ts](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/actionConfig.ts)**
+  - `typeagent:dispatcher:schema:config` at [Line 10](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/actionConfig.ts#L10)
+- **[../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/actionSchemaFileCache.ts](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/actionSchemaFileCache.ts)**
+  - `typeagent:dispatcher:schema:cache` at [Line 24](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/actionSchemaFileCache.ts#L24)
+  - `typeagent:dispatcher:schema:cache:error` at [Line 25](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/actionSchemaFileCache.ts#L25)
+- **[../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/matchRequest.ts](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/matchRequest.ts)**
+  - `typeagent:const:validation` at [Line 13](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/matchRequest.ts#L13)
+- **[../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/translateRequest.ts](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/translateRequest.ts)**
+  - `typeagent:translate` at [Line 50](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/translateRequest.ts#L50)
+  - `typeagent:translate:semantic` at [Line 51](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/translateRequest.ts#L51)
+- **[../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/unknownSwitcher.ts](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/unknownSwitcher.ts)**
+  - `typeagent:switch:search` at [Line 16](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/unknownSwitcher.ts#L16)
+- **[../../packages/aiclient/src/openai.ts](../../packages/aiclient/src/openai.ts)**
+  - `typeagent:openai` at [Line 43](../../packages/aiclient/src/openai.ts#L43)
+- **[../../packages/aiclient/src/promptLogger.ts](../../packages/aiclient/src/promptLogger.ts)**
+  - `typeagent:promptLogger` at [Line 13](../../packages/aiclient/src/promptLogger.ts#L13)
+- **[../../packages/aiclient/src/restClient.ts](../../packages/aiclient/src/restClient.ts)**
+  - `typeagent:rest:url` at [Line 7](../../packages/aiclient/src/restClient.ts#L7)
+  - `typeagent:rest:header` at [Line 8](../../packages/aiclient/src/restClient.ts#L8)
+  - `typeagent:rest:error` at [Line 9](../../packages/aiclient/src/restClient.ts#L9)
+- **[../../packages/aiclient/src/tokenCounter.ts](../../packages/aiclient/src/tokenCounter.ts)**
+  - `typeagent:tokenCounter` at [Line 7](../../packages/aiclient/src/tokenCounter.ts#L7)
+- **[../../packages/azure-ai-foundry/src/agents.ts](../../packages/azure-ai-foundry/src/agents.ts)**
+  - `typeagent:aiClient:agents` at [Line 8](../../packages/azure-ai-foundry/src/agents.ts#L8)
+- **[../../packages/azure-ai-foundry/src/urlResolver.ts](../../packages/azure-ai-foundry/src/urlResolver.ts)**
+  - `typeagent:azure-ai-foundry:urlResolver` at [Line 27](../../packages/azure-ai-foundry/src/urlResolver.ts#L27)
+- **[../../packages/azure-ai-foundry/src/websiteAliasExtraction.ts](../../packages/azure-ai-foundry/src/websiteAliasExtraction.ts)**
+  - `typeagent:azure-ai-foundry:aliasKeywordExtractor` at [Line 17](../../packages/azure-ai-foundry/src/websiteAliasExtraction.ts#L17)
+- **[../../packages/cache/src/cache/store.ts](../../packages/cache/src/cache/store.ts)**
+  - `typeagent:const:match` at [Line 24](../../packages/cache/src/cache/store.ts#L24)
+- **[../../packages/cache/src/constructions/constructionCache.ts](../../packages/cache/src/constructions/constructionCache.ts)**
+  - `typeagent:const` at [Line 19](../../packages/cache/src/constructions/constructionCache.ts#L19)
+  - `typeagent:const:match:stat` at [Line 20](../../packages/cache/src/constructions/constructionCache.ts#L20)
+- **[../../packages/cache/src/constructions/importConstructions.ts](../../packages/cache/src/constructions/importConstructions.ts)**
+  - `typeagent:const:create` at [Line 23](../../packages/cache/src/constructions/importConstructions.ts#L23)
+  - `typeagent:const:merge` at [Line 24](../../packages/cache/src/constructions/importConstructions.ts#L24)
+- **[../../packages/cache/src/constructions/transforms.ts](../../packages/cache/src/constructions/transforms.ts)**
+  - `typeagent:const:conflict` at [Line 13](../../packages/cache/src/constructions/transforms.ts#L13)
+- **[../../packages/cache/src/explanation/typeChatAgent.ts](../../packages/cache/src/explanation/typeChatAgent.ts)**
+  - `typeagent:typechatagent:correction` at [Line 28](../../packages/cache/src/explanation/typeChatAgent.ts#L28)
+- **[../../packages/commonUtils/src/webSockets.ts](../../packages/commonUtils/src/webSockets.ts)**
+  - `typeagent:websockets` at [Line 10](../../packages/commonUtils/src/webSockets.ts#L10)
+- **[../../packages/dispatcher/src/command/command.ts](../../packages/dispatcher/src/command/command.ts)**
+  - `typeagent:dispatcher:command` at [Line 27](../../packages/dispatcher/src/command/command.ts#L27)
+  - `typeagent:dispatcher:command:error` at [Line 28](../../packages/dispatcher/src/command/command.ts#L28)
+- **[../../packages/dispatcher/src/command/completion.ts](../../packages/dispatcher/src/command/completion.ts)**
+  - `typeagent:command:completion` at [Line 27](../../packages/dispatcher/src/command/completion.ts#L27)
+  - `typeagent:command:completion:error` at [Line 28](../../packages/dispatcher/src/command/completion.ts#L28)
+- **[../../packages/dispatcher/src/context/appAgentManager.ts](../../packages/dispatcher/src/context/appAgentManager.ts)**
+  - `typeagent:dispatcher:agents` at [Line 36](../../packages/dispatcher/src/context/appAgentManager.ts#L36)
+  - `typeagent:dispatcher:agents:error` at [Line 37](../../packages/dispatcher/src/context/appAgentManager.ts#L37)
+  - `typeagent:dispatcher:agents:load` at [Line 38](../../packages/dispatcher/src/context/appAgentManager.ts#L38)
+- **[../../packages/dispatcher/src/context/commandHandlerContext.ts](../../packages/dispatcher/src/context/commandHandlerContext.ts)**
+  - `typeagent:dispatcher:init` at [Line 78](../../packages/dispatcher/src/context/commandHandlerContext.ts#L78)
+  - `typeagent:dispatcher:init:error` at [Line 79](../../packages/dispatcher/src/context/commandHandlerContext.ts#L79)
+- **[../../packages/dispatcher/src/context/dispatcher/handlers/requestCommandHandler.ts](../../packages/dispatcher/src/context/dispatcher/handlers/requestCommandHandler.ts)**
+  - `typeagent:explain` at [Line 51](../../packages/dispatcher/src/context/dispatcher/handlers/requestCommandHandler.ts#L51)
+- **[../../packages/dispatcher/src/context/indexManager.ts](../../packages/dispatcher/src/context/indexManager.ts)**
+  - `typeagent:indexManager` at [Line 16](../../packages/dispatcher/src/context/indexManager.ts#L16)
+- **[../../packages/dispatcher/src/context/memory.ts](../../packages/dispatcher/src/context/memory.ts)**
+  - `typeagent:dispatcher:memory` at [Line 47](../../packages/dispatcher/src/context/memory.ts#L47)
+- **[../../packages/dispatcher/src/context/session.ts](../../packages/dispatcher/src/context/session.ts)**
+  - `typeagent:session` at [Line 33](../../packages/dispatcher/src/context/session.ts#L33)
+- **[../../packages/dispatcher/src/context/system/handlers/serviceHost/service.ts](../../packages/dispatcher/src/context/system/handlers/serviceHost/service.ts)**
+  - `typeagent:serviceHost` at [Line 20](../../packages/dispatcher/src/context/system/handlers/serviceHost/service.ts#L20)
+- **[../../packages/dispatcher/src/execute/actionHandlers.ts](../../packages/dispatcher/src/execute/actionHandlers.ts)**
+  - `typeagent:dispatcher:actions` at [Line 59](../../packages/dispatcher/src/execute/actionHandlers.ts#L59)
+- **[../../packages/dispatcher/src/execute/pendingActions.ts](../../packages/dispatcher/src/execute/pendingActions.ts)**
+  - `typeagent:dispatcher:actions:entities` at [Line 44](../../packages/dispatcher/src/execute/pendingActions.ts#L44)
+- **[../../packages/dispatcher/src/search/search.ts](../../packages/dispatcher/src/search/search.ts)**
+  - `typeagent:dispatcher:lookup` at [Line 21](../../packages/dispatcher/src/search/search.ts#L21)
+  - `typeagent:dispatcher:lookup:error` at [Line 22](../../packages/dispatcher/src/search/search.ts#L22)
+- **[../../packages/dispatcher/src/translation/actionConfig.ts](../../packages/dispatcher/src/translation/actionConfig.ts)**
+  - `typeagent:dispatcher:schema:config` at [Line 11](../../packages/dispatcher/src/translation/actionConfig.ts#L11)
+- **[../../packages/dispatcher/src/translation/actionSchemaFileCache.ts](../../packages/dispatcher/src/translation/actionSchemaFileCache.ts)**
+  - `typeagent:dispatcher:schema:cache` at [Line 32](../../packages/dispatcher/src/translation/actionSchemaFileCache.ts#L32)
+  - `typeagent:dispatcher:schema:cache:error` at [Line 33](../../packages/dispatcher/src/translation/actionSchemaFileCache.ts#L33)
+- **[../../packages/dispatcher/src/translation/actionSchemaSemanticMap.ts](../../packages/dispatcher/src/translation/actionSchemaSemanticMap.ts)**
+  - `typeagent:dispatcher:semantic` at [Line 20](../../packages/dispatcher/src/translation/actionSchemaSemanticMap.ts#L20)
+- **[../../packages/dispatcher/src/translation/interpretRequest.ts](../../packages/dispatcher/src/translation/interpretRequest.ts)**
+  - `typeagent:interpret` at [Line 24](../../packages/dispatcher/src/translation/interpretRequest.ts#L24)
+- **[../../packages/dispatcher/src/translation/matchRequest.ts](../../packages/dispatcher/src/translation/matchRequest.ts)**
+  - `typeagent:const:validation` at [Line 17](../../packages/dispatcher/src/translation/matchRequest.ts#L17)
+- **[../../packages/dispatcher/src/translation/requestCompletion.ts](../../packages/dispatcher/src/translation/requestCompletion.ts)**
+  - `typeagent:request:completion` at [Line 32](../../packages/dispatcher/src/translation/requestCompletion.ts#L32)
+- **[../../packages/dispatcher/src/translation/translateRequest.ts](../../packages/dispatcher/src/translation/translateRequest.ts)**
+  - `typeagent:translate` at [Line 54](../../packages/dispatcher/src/translation/translateRequest.ts#L54)
+  - `typeagent:translate:semantic` at [Line 55](../../packages/dispatcher/src/translation/translateRequest.ts#L55)
+- **[../../packages/dispatcher/src/translation/unknownSwitcher.ts](../../packages/dispatcher/src/translation/unknownSwitcher.ts)**
+  - `typeagent:switch:search` at [Line 16](../../packages/dispatcher/src/translation/unknownSwitcher.ts#L16)
+- **[../../packages/knowledgeProcessor/src/conversation/answerGenerator.ts](../../packages/knowledgeProcessor/src/conversation/answerGenerator.ts)**
+  - `knowledge-processor:answerGenerator:error` at [Line 23](../../packages/knowledgeProcessor/src/conversation/answerGenerator.ts#L23)
+- **[../../packages/knowledgeProcessor/src/diagnostics.ts](../../packages/knowledgeProcessor/src/diagnostics.ts)**
+  - `knowledge-processor:error` at [Line 6](../../packages/knowledgeProcessor/src/diagnostics.ts#L6)
+- **[../../packages/knowledgeProcessor/src/images/image.ts](../../packages/knowledgeProcessor/src/images/image.ts)**
+  - `typeagent:knowledgeProcessor:image` at [Line 41](../../packages/knowledgeProcessor/src/images/image.ts#L41)
+- **[../../packages/memory/conversation/src/conversationMemory.ts](../../packages/memory/conversation/src/conversationMemory.ts)**
+  - `conversation-memory.conversation` at [Line 18](../../packages/memory/conversation/src/conversationMemory.ts#L18)
+- **[../../packages/memory/conversation/src/podcast.ts](../../packages/memory/conversation/src/podcast.ts)**
+  - `conversation-memory.podcast` at [Line 16](../../packages/memory/conversation/src/podcast.ts#L16)
+- **[../../packages/memory/image/src/imageCollection.ts](../../packages/memory/image/src/imageCollection.ts)**
+  - `typeagent:image-memory` at [Line 35](../../packages/memory/image/src/imageCollection.ts#L35)
+- **[../../packages/memory/image/src/imageMeta.ts](../../packages/memory/image/src/imageMeta.ts)**
+  - `typeagent:image-memory` at [Line 15](../../packages/memory/image/src/imageMeta.ts#L15)
+- **[../../packages/memory/image/src/importImages.ts](../../packages/memory/image/src/importImages.ts)**
+  - `typeagent:image-memory` at [Line 16](../../packages/memory/image/src/importImages.ts#L16)
+- **[../../packages/memory/image/src/indexingService.ts](../../packages/memory/image/src/indexingService.ts)**
+  - `typeagent:indexingService` at [Line 17](../../packages/memory/image/src/indexingService.ts#L17)
+- **[../../packages/memory/website/src/extraction/contentExtractor.ts](../../packages/memory/website/src/extraction/contentExtractor.ts)**
+  - `typeagent:browser:indexing` at [Line 21](../../packages/memory/website/src/extraction/contentExtractor.ts#L21)
+- **[../../packages/memory/website/src/indexingService.ts](../../packages/memory/website/src/indexingService.ts)**
+  - `typeagent:indexingService` at [Line 14](../../packages/memory/website/src/indexingService.ts#L14)
+- **[../../packages/shell/src/main/browserIpc.ts](../../packages/shell/src/main/browserIpc.ts)**
+  - `typeagent:browser:ipc` at [Line 12](../../packages/shell/src/main/browserIpc.ts#L12)
+- **[../../packages/shell/src/main/browserViewManager.ts](../../packages/shell/src/main/browserViewManager.ts)**
+  - `typeagent:shell:browserViewManager` at [Line 8](../../packages/shell/src/main/browserViewManager.ts#L8)
+- **[../../packages/shell/src/main/commands/update.ts](../../packages/shell/src/main/commands/update.ts)**
+  - `typeagent:shell:update` at [Line 26](../../packages/shell/src/main/commands/update.ts#L26)
+- **[../../packages/shell/src/main/debug.ts](../../packages/shell/src/main/debug.ts)**
+  - `typeagent:shell` at [Line 5](../../packages/shell/src/main/debug.ts#L5)
+  - `typeagent:shell:error` at [Line 6](../../packages/shell/src/main/debug.ts#L6)
+- **[../../packages/shell/src/main/localWhisperCommandHandler.ts](../../packages/shell/src/main/localWhisperCommandHandler.ts)**
+  - `shell:localWhisper` at [Line 18](../../packages/shell/src/main/localWhisperCommandHandler.ts#L18)
+  - `shell:localWhisper:error` at [Line 19](../../packages/shell/src/main/localWhisperCommandHandler.ts#L19)
+- **[../../packages/shell/src/main/shellWindow.ts](../../packages/shell/src/main/shellWindow.ts)**
+  - `typeagent:shell:window` at [Line 31](../../packages/shell/src/main/shellWindow.ts#L31)
+  - `typeagent:shell:window:error` at [Line 32](../../packages/shell/src/main/shellWindow.ts#L32)
+- **[../../packages/shell/src/preload/pdfInterceptor.ts](../../packages/shell/src/preload/pdfInterceptor.ts)**
+  - `typeagent:shell:pdfInterceptor` at [Line 7](../../packages/shell/src/preload/pdfInterceptor.ts#L7)
+  - `typeagent:shell:pdfInterceptor:error` at [Line 8](../../packages/shell/src/preload/pdfInterceptor.ts#L8)
+- **[../../packages/shell/src/preload/webView.ts](../../packages/shell/src/preload/webView.ts)**
+  - `typeagent:webAgent:proxy` at [Line 14](../../packages/shell/src/preload/webView.ts#L14)
+- **[../../packages/shell/src/renderer/src/partial.ts](../../packages/shell/src/renderer/src/partial.ts)**
+  - `typeagent:shell:partial` at [Line 10](../../packages/shell/src/renderer/src/partial.ts#L10)
+  - `typeagent:shell:partial:error` at [Line 11](../../packages/shell/src/renderer/src/partial.ts#L11)
+- **[../../packages/shell/src/renderer/src/speech.ts](../../packages/shell/src/renderer/src/speech.ts)**
+  - `typeagent:shell:speech` at [Line 10](../../packages/shell/src/renderer/src/speech.ts#L10)
+  - `typeagent:shell:speech:error` at [Line 11](../../packages/shell/src/renderer/src/speech.ts#L11)
+- **[../../packages/shell/src/renderer/src/tts/ttsAzure.ts](../../packages/shell/src/renderer/src/tts/ttsAzure.ts)**
+  - `typeagent:shell:tts` at [Line 11](../../packages/shell/src/renderer/src/tts/ttsAzure.ts#L11)
+  - `typeagent:shell:tts:error` at [Line 12](../../packages/shell/src/renderer/src/tts/ttsAzure.ts#L12)
+- **[../../packages/shell/src/renderer/src/tts/ttsBrowser.ts](../../packages/shell/src/renderer/src/tts/ttsBrowser.ts)**
+  - `typeagent:shell:tts` at [Line 8](../../packages/shell/src/renderer/src/tts/ttsBrowser.ts#L8)
+  - `typeagent:shell:tts:error` at [Line 9](../../packages/shell/src/renderer/src/tts/ttsBrowser.ts#L9)
+- **[../../packages/shell/src/renderer/src/tts/ttsLocal.ts](../../packages/shell/src/renderer/src/tts/ttsLocal.ts)**
+  - `typeagent:shell:tts` at [Line 9](../../packages/shell/src/renderer/src/tts/ttsLocal.ts#L9)
+  - `typeagent:shell:tts:error` at [Line 10](../../packages/shell/src/renderer/src/tts/ttsLocal.ts#L10)
+- **[../../packages/telemetry/src/logger/mongoLoggerSink.ts](../../packages/telemetry/src/logger/mongoLoggerSink.ts)**
+  - `typeagent:logger:mongodb` at [Line 8](../../packages/telemetry/src/logger/mongoLoggerSink.ts#L8)
+- **[../../packages/telemetry/src/profiler/profileLogger.ts](../../packages/telemetry/src/profiler/profileLogger.ts)**
+  - `typeagent:profiler` at [Line 8](../../packages/telemetry/src/profiler/profileLogger.ts#L8)
+- **[../../packages/telemetry/src/profiler/profileReader.ts](../../packages/telemetry/src/profiler/profileReader.ts)**
+  - `typeagent:profiler:reader:error` at [Line 5](../../packages/telemetry/src/profiler/profileReader.ts#L5)
+- **[../../packages/typeagent/src/storage/objectFolder.ts](../../packages/typeagent/src/storage/objectFolder.ts)**
+  - `typeagent:storage:error` at [Line 11](../../packages/typeagent/src/storage/objectFolder.ts#L11)
+- **[../docuProc/src/srag/pdfDocument.ts](../docuProc/src/srag/pdfDocument.ts)**
+  - `conversation-memory.pdfdocs` at [Line 14](../docuProc/src/srag/pdfDocument.ts#L14)
+
+[↑ Back to Top](#debug-namespace-hierarchy)
+
 ---
 
-*Generated on 2025-09-03T16:58:10.106Z from 177 registerDebug calls*
+*Generated on 2025-09-03T17:02:46.815Z from 177 registerDebug calls*
