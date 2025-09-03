@@ -25,358 +25,358 @@ DEBUG=typeagent:shell:*,typeagent:browser:* npm start
 ## Namespace Hierarchy
 
 - **conversation-memory.conversation**
-  - `debug` in `../../packages/memory/conversation/src/conversationMemory.ts:18`
+  - `debug` in [../../packages/memory/conversation/src/conversationMemory.ts:18](../../packages/memory/conversation/src/conversationMemory.ts#L18)
 - **conversation-memory.pdfdocs**
-  - `debug` in `../docuProc/src/srag/pdfDocument.ts:14`
+  - `debug` in [../docuProc/src/srag/pdfDocument.ts:14](../docuProc/src/srag/pdfDocument.ts#L14)
 - **conversation-memory.podcast**
-  - `debug` in `../../packages/memory/conversation/src/podcast.ts:16`
+  - `debug` in [../../packages/memory/conversation/src/podcast.ts:16](../../packages/memory/conversation/src/podcast.ts#L16)
 - **knowledge-processor**
   - **answerGenerator**
     - **error**
-      - `debug` in `../../packages/knowledgeProcessor/src/conversation/answerGenerator.ts:23`
+      - `debug` in [../../packages/knowledgeProcessor/src/conversation/answerGenerator.ts:23](../../packages/knowledgeProcessor/src/conversation/answerGenerator.ts#L23)
   - **error**
-    - `debug` in `../../packages/knowledgeProcessor/src/diagnostics.ts:6`
+    - `debug` in [../../packages/knowledgeProcessor/src/diagnostics.ts:6](../../packages/knowledgeProcessor/src/diagnostics.ts#L6)
 - **shell**
   - **localWhisper**
-    - `debug` in `../../packages/shell/src/main/localWhisperCommandHandler.ts:18`
+    - `debug` in [../../packages/shell/src/main/localWhisperCommandHandler.ts:18](../../packages/shell/src/main/localWhisperCommandHandler.ts#L18)
     - **error**
-      - `debug` in `../../packages/shell/src/main/localWhisperCommandHandler.ts:19`
+      - `debug` in [../../packages/shell/src/main/localWhisperCommandHandler.ts:19](../../packages/shell/src/main/localWhisperCommandHandler.ts#L19)
 - **typeagent**
   - **agent**
     - **montage**
-      - `debug` in `../../packages/agents/montage/src/agent/montageActionHandler.ts:41`
+      - `debug` in [../../packages/agents/montage/src/agent/montageActionHandler.ts:41](../../packages/agents/montage/src/agent/montageActionHandler.ts#L41)
       - **route**
-        - `debug` in `../../packages/agents/montage/src/route/route.ts:14`
+        - `debug` in [../../packages/agents/montage/src/route/route.ts:14](../../packages/agents/montage/src/route/route.ts#L14)
       - **ui**
-        - `debug` in `../../packages/agents/montage/src/site/index.ts:17`
+        - `debug` in [../../packages/agents/montage/src/site/index.ts:17](../../packages/agents/montage/src/site/index.ts#L17)
   - **aiClient**
     - **agents**
-      - `debug` in `../../packages/azure-ai-foundry/src/agents.ts:8`
+      - `debug` in [../../packages/azure-ai-foundry/src/agents.ts:8](../../packages/azure-ai-foundry/src/agents.ts#L8)
   - **azure-ai-foundry**
     - **aliasKeywordExtractor**
-      - `debug` in `../../packages/azure-ai-foundry/src/websiteAliasExtraction.ts:17`
+      - `debug` in [../../packages/azure-ai-foundry/src/websiteAliasExtraction.ts:17](../../packages/azure-ai-foundry/src/websiteAliasExtraction.ts#L17)
     - **urlResolver**
-      - `debug` in `../../packages/azure-ai-foundry/src/urlResolver.ts:27`
+      - `debug` in [../../packages/azure-ai-foundry/src/urlResolver.ts:27](../../packages/azure-ai-foundry/src/urlResolver.ts#L27)
   - **browser**
     - **IndexingService**
-      - `debug` in `../../packages/agents/browser/src/agent/indexing/browserIndexingService.ts:12`
+      - `debug` in [../../packages/agents/browser/src/agent/indexing/browserIndexingService.ts:12](../../packages/agents/browser/src/agent/indexing/browserIndexingService.ts#L12)
     - **action**
-      - `debug` in `../../packages/agents/browser/src/agent/actionHandler.mts:112`
+      - `debug` in [../../packages/agents/browser/src/agent/actionHandler.mts:112](../../packages/agents/browser/src/agent/actionHandler.mts#L112)
     - **answer-enhancement**
-      - `debug` in `../../packages/agents/browser/src/agent/search/answerEnhancementAdapter.mts:11`
+      - `debug` in [../../packages/agents/browser/src/agent/search/answerEnhancementAdapter.mts:11](../../packages/agents/browser/src/agent/search/answerEnhancementAdapter.mts#L11)
     - **answer-generator**
-      - `debug` in `../../packages/agents/browser/src/agent/search/answerGenerator.mts:15`
+      - `debug` in [../../packages/agents/browser/src/agent/search/answerGenerator.mts:15](../../packages/agents/browser/src/agent/search/answerGenerator.mts#L15)
     - **content-extractor**
-      - `debug` in `../../packages/agents/browser/src/agent/browserContentExtractor.mts:10`
+      - `debug` in [../../packages/agents/browser/src/agent/browserContentExtractor.mts:10](../../packages/agents/browser/src/agent/browserContentExtractor.mts#L10)
     - **content-service**
-      - `debug` in `../../packages/agents/browser/src/agent/contentService.mts:9`
+      - `debug` in [../../packages/agents/browser/src/agent/contentService.mts:9](../../packages/agents/browser/src/agent/contentService.mts#L9)
     - **context-builder**
-      - `debug` in `../../packages/agents/browser/src/agent/search/utils/contextBuilder.mts:7`
+      - `debug` in [../../packages/agents/browser/src/agent/search/utils/contextBuilder.mts:7](../../packages/agents/browser/src/agent/search/utils/contextBuilder.mts#L7)
     - **crossword**
       - **schema**
-        - `debug` in `../../packages/agents/browser/src/agent/crossword/actionHandler.mts:15`
+        - `debug` in [../../packages/agents/browser/src/agent/crossword/actionHandler.mts:15](../../packages/agents/browser/src/agent/crossword/actionHandler.mts#L15)
         - **error**
-          - `debug` in `../../packages/agents/browser/src/agent/crossword/cachedSchema.mts:8`
+          - `debug` in [../../packages/agents/browser/src/agent/crossword/cachedSchema.mts:8](../../packages/agents/browser/src/agent/crossword/cachedSchema.mts#L8)
     - **discover**
       - **handler**
-        - `debug` in `../../packages/agents/browser/src/agent/discovery/actionHandler.mts:34`
+        - `debug` in [../../packages/agents/browser/src/agent/discovery/actionHandler.mts:34](../../packages/agents/browser/src/agent/discovery/actionHandler.mts#L34)
       - **utilities**
-        - `debug` in `../../packages/agents/browser/src/agent/discovery/authoringUtilities.mts:18`
+        - `debug` in [../../packages/agents/browser/src/agent/discovery/authoringUtilities.mts:18](../../packages/agents/browser/src/agent/discovery/authoringUtilities.mts#L18)
     - **full-agent-processor**
-      - `debug` in `../../packages/agents/browser/src/agent/htmlProcessor.mts:21`
+      - `debug` in [../../packages/agents/browser/src/agent/htmlProcessor.mts:21](../../packages/agents/browser/src/agent/htmlProcessor.mts#L21)
     - **indexing**
-      - `debug` in `../../packages/agents/browser/src/agent/indexing/contentSummaryAdapter.mts:13`
-      - `debug` in `../../packages/agents/browser/src/agent/indexing/indexingKnowledgeExtractor.mts:14`
-      - `debug` in `../../packages/memory/website/src/extraction/contentExtractor.ts:21`
+      - `debug` in [../../packages/agents/browser/src/agent/indexing/contentSummaryAdapter.mts:13](../../packages/agents/browser/src/agent/indexing/contentSummaryAdapter.mts#L13)
+      - `debug` in [../../packages/agents/browser/src/agent/indexing/indexingKnowledgeExtractor.mts:14](../../packages/agents/browser/src/agent/indexing/indexingKnowledgeExtractor.mts#L14)
+      - `debug` in [../../packages/memory/website/src/extraction/contentExtractor.ts:21](../../packages/memory/website/src/extraction/contentExtractor.ts#L21)
     - **ipc**
-      - `debug` in `../../packages/shell/src/main/browserIpc.ts:12`
+      - `debug` in [../../packages/shell/src/main/browserIpc.ts:12](../../packages/shell/src/main/browserIpc.ts#L12)
     - **macro**
       - **store**
-        - `debug` in `../../packages/agents/browser/src/agent/storage/macroStore.mts:15`
+        - `debug` in [../../packages/agents/browser/src/agent/storage/macroStore.mts:15](../../packages/agents/browser/src/agent/storage/macroStore.mts#L15)
     - **metadata-ranking**
-      - `debug` in `../../packages/agents/browser/src/agent/search/utils/metadataRanker.mts:8`
+      - `debug` in [../../packages/agents/browser/src/agent/search/utils/metadataRanker.mts:8](../../packages/agents/browser/src/agent/search/utils/metadataRanker.mts#L8)
     - **pdfInterceptor**
-      - `debug` in `../../packages/agents/browser/src/extension/contentScript/pdfInterceptor.ts:6`
+      - `debug` in [../../packages/agents/browser/src/extension/contentScript/pdfInterceptor.ts:6](../../packages/agents/browser/src/extension/contentScript/pdfInterceptor.ts#L6)
       - **error**
-        - `debug` in `../../packages/agents/browser/src/extension/contentScript/pdfInterceptor.ts:7`
+        - `debug` in [../../packages/agents/browser/src/extension/contentScript/pdfInterceptor.ts:7](../../packages/agents/browser/src/extension/contentScript/pdfInterceptor.ts#L7)
     - **pdfView**
-      - `debug` in `../../packages/agents/browser/src/extension/views/pdfView.ts:6`
+      - `debug` in [../../packages/agents/browser/src/extension/views/pdfView.ts:6](../../packages/agents/browser/src/extension/views/pdfView.ts#L6)
       - **error**
-        - `debug` in `../../packages/agents/browser/src/extension/views/pdfView.ts:7`
+        - `debug` in [../../packages/agents/browser/src/extension/views/pdfView.ts:7](../../packages/agents/browser/src/extension/views/pdfView.ts#L7)
     - **query-analyzer**
-      - `debug` in `../../packages/agents/browser/src/agent/search/queryAnalyzer.mts:13`
+      - `debug` in [../../packages/agents/browser/src/agent/search/queryAnalyzer.mts:13](../../packages/agents/browser/src/agent/search/queryAnalyzer.mts#L13)
     - **search-enhancement**
-      - `debug` in `../../packages/agents/browser/src/agent/search/queryEnhancementAdapter.mts:11`
+      - `debug` in [../../packages/agents/browser/src/agent/search/queryEnhancementAdapter.mts:11](../../packages/agents/browser/src/agent/search/queryEnhancementAdapter.mts#L11)
     - **serviceWorker**
-      - `debug` in `../../packages/agents/browser/src/extension/serviceWorker/index.ts:22`
+      - `debug` in [../../packages/agents/browser/src/extension/serviceWorker/index.ts:22](../../packages/agents/browser/src/extension/serviceWorker/index.ts#L22)
       - **error**
-        - `debug` in `../../packages/agents/browser/src/extension/serviceWorker/index.ts:23`
+        - `debug` in [../../packages/agents/browser/src/extension/serviceWorker/index.ts:23](../../packages/agents/browser/src/extension/serviceWorker/index.ts#L23)
     - **unified-search**
-      - `debug` in `../../packages/agents/browser/src/agent/searchWebMemories.mts:18`
+      - `debug` in [../../packages/agents/browser/src/agent/searchWebMemories.mts:18](../../packages/agents/browser/src/agent/searchWebMemories.mts#L18)
     - **website-import**
-      - `debug` in `../../packages/agents/browser/src/agent/websiteImport.mts:11`
+      - `debug` in [../../packages/agents/browser/src/agent/websiteImport.mts:11](../../packages/agents/browser/src/agent/websiteImport.mts#L11)
     - **website-memory**
-      - `debug` in `../../packages/agents/browser/src/agent/websiteMemory.mts:74`
+      - `debug` in [../../packages/agents/browser/src/agent/websiteMemory.mts:74](../../packages/agents/browser/src/agent/websiteMemory.mts#L74)
     - **ws**
-      - `debug` in `../../packages/agents/browser/src/agent/actionHandler.mts:113`
-      - `debug` in `../../packages/agents/browser/src/extension/serviceWorker/websocket.ts:12`
+      - `debug` in [../../packages/agents/browser/src/agent/actionHandler.mts:113](../../packages/agents/browser/src/agent/actionHandler.mts#L113)
+      - `debug` in [../../packages/agents/browser/src/extension/serviceWorker/websocket.ts:12](../../packages/agents/browser/src/extension/serviceWorker/websocket.ts#L12)
       - **error**
-        - `debug` in `../../packages/agents/browser/src/extension/serviceWorker/websocket.ts:13`
+        - `debug` in [../../packages/agents/browser/src/extension/serviceWorker/websocket.ts:13](../../packages/agents/browser/src/extension/serviceWorker/websocket.ts#L13)
   - **calendar**
-    - `debug` in `../../packages/agents/calendar/src/calendarActionHandlerV1.ts:49`
-    - `debug` in `../../packages/agents/calendar/src/calendarActionHandlerV2.ts:48`
+    - `debug` in [../../packages/agents/calendar/src/calendarActionHandlerV1.ts:49](../../packages/agents/calendar/src/calendarActionHandlerV1.ts#L49)
+    - `debug` in [../../packages/agents/calendar/src/calendarActionHandlerV2.ts:48](../../packages/agents/calendar/src/calendarActionHandlerV2.ts#L48)
   - **code**
-    - `debug` in `../../packages/agents/code/src/codeActionHandler.ts:21`
+    - `debug` in [../../packages/agents/code/src/codeActionHandler.ts:21](../../packages/agents/code/src/codeActionHandler.ts#L21)
   - **command**
     - **completion**
-      - `debug` in `../../packages/dispatcher/src/command/completion.ts:27`
+      - `debug` in [../../packages/dispatcher/src/command/completion.ts:27](../../packages/dispatcher/src/command/completion.ts#L27)
       - **error**
-        - `debug` in `../../packages/dispatcher/src/command/completion.ts:28`
+        - `debug` in [../../packages/dispatcher/src/command/completion.ts:28](../../packages/dispatcher/src/command/completion.ts#L28)
   - **const**
-    - `debug` in `../../packages/cache/src/constructions/constructionCache.ts:19`
+    - `debug` in [../../packages/cache/src/constructions/constructionCache.ts:19](../../packages/cache/src/constructions/constructionCache.ts#L19)
     - **conflict**
-      - `debug` in `../../packages/cache/src/constructions/transforms.ts:13`
+      - `debug` in [../../packages/cache/src/constructions/transforms.ts:13](../../packages/cache/src/constructions/transforms.ts#L13)
     - **create**
-      - `debug` in `../../packages/cache/src/constructions/importConstructions.ts:23`
+      - `debug` in [../../packages/cache/src/constructions/importConstructions.ts:23](../../packages/cache/src/constructions/importConstructions.ts#L23)
     - **match**
-      - `debug` in `../../packages/cache/src/cache/store.ts:24`
+      - `debug` in [../../packages/cache/src/cache/store.ts:24](../../packages/cache/src/cache/store.ts#L24)
       - **stat**
-        - `debug` in `../../packages/cache/src/constructions/constructionCache.ts:20`
+        - `debug` in [../../packages/cache/src/constructions/constructionCache.ts:20](../../packages/cache/src/constructions/constructionCache.ts#L20)
     - **merge**
-      - `debug` in `../../packages/cache/src/constructions/importConstructions.ts:24`
+      - `debug` in [../../packages/cache/src/constructions/importConstructions.ts:24](../../packages/cache/src/constructions/importConstructions.ts#L24)
     - **validation**
-      - `debug` in `../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/matchRequest.ts:13`
-      - `debug` in `../../packages/dispatcher/src/translation/matchRequest.ts:17`
+      - `debug` in [../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/matchRequest.ts:13](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/matchRequest.ts#L13)
+      - `debug` in [../../packages/dispatcher/src/translation/matchRequest.ts:17](../../packages/dispatcher/src/translation/matchRequest.ts#L17)
   - **desktop**
-    - `debug` in `../../packages/agents/desktop/src/connector.ts:16`
+    - `debug` in [../../packages/agents/desktop/src/connector.ts:16](../../packages/agents/desktop/src/connector.ts#L16)
     - **data**
-      - `debug` in `../../packages/agents/desktop/src/connector.ts:17`
+      - `debug` in [../../packages/agents/desktop/src/connector.ts:17](../../packages/agents/desktop/src/connector.ts#L17)
     - **error**
-      - `debug` in `../../packages/agents/desktop/src/connector.ts:18`
-      - `debug` in `../../packages/agents/desktop/src/programNameIndex.ts:14`
+      - `debug` in [../../packages/agents/desktop/src/connector.ts:18](../../packages/agents/desktop/src/connector.ts#L18)
+      - `debug` in [../../packages/agents/desktop/src/programNameIndex.ts:14](../../packages/agents/desktop/src/programNameIndex.ts#L14)
   - **dispatcher**
     - **actions**
-      - `debug` in `../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/execute/actionHandlers.ts:54`
-      - `debug` in `../../packages/dispatcher/src/execute/actionHandlers.ts:59`
+      - `debug` in [../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/execute/actionHandlers.ts:54](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/execute/actionHandlers.ts#L54)
+      - `debug` in [../../packages/dispatcher/src/execute/actionHandlers.ts:59](../../packages/dispatcher/src/execute/actionHandlers.ts#L59)
       - **entities**
-        - `debug` in `../../packages/dispatcher/src/execute/pendingActions.ts:44`
+        - `debug` in [../../packages/dispatcher/src/execute/pendingActions.ts:44](../../packages/dispatcher/src/execute/pendingActions.ts#L44)
     - **agentProcess**
-      - `debug` in `../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/agentProvider/process/agentProcess.ts:10`
+      - `debug` in [../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/agentProvider/process/agentProcess.ts:10](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/agentProvider/process/agentProcess.ts#L10)
     - **agents**
-      - `debug` in `../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/appAgentManager.ts:30`
-      - `debug` in `../../packages/dispatcher/src/context/appAgentManager.ts:36`
+      - `debug` in [../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/appAgentManager.ts:30](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/appAgentManager.ts#L30)
+      - `debug` in [../../packages/dispatcher/src/context/appAgentManager.ts:36](../../packages/dispatcher/src/context/appAgentManager.ts#L36)
       - **error**
-        - `debug` in `../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/appAgentManager.ts:31`
-        - `debug` in `../../packages/dispatcher/src/context/appAgentManager.ts:37`
+        - `debug` in [../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/appAgentManager.ts:31](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/appAgentManager.ts#L31)
+        - `debug` in [../../packages/dispatcher/src/context/appAgentManager.ts:37](../../packages/dispatcher/src/context/appAgentManager.ts#L37)
       - **load**
-        - `debug` in `../../packages/dispatcher/src/context/appAgentManager.ts:38`
+        - `debug` in [../../packages/dispatcher/src/context/appAgentManager.ts:38](../../packages/dispatcher/src/context/appAgentManager.ts#L38)
     - **command**
-      - `debug` in `../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/command/command.ts:25`
-      - `debug` in `../../packages/dispatcher/src/command/command.ts:27`
+      - `debug` in [../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/command/command.ts:25](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/command/command.ts#L25)
+      - `debug` in [../../packages/dispatcher/src/command/command.ts:27](../../packages/dispatcher/src/command/command.ts#L27)
       - **error**
-        - `debug` in `../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/command/command.ts:26`
-        - `debug` in `../../packages/dispatcher/src/command/command.ts:28`
+        - `debug` in [../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/command/command.ts:26](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/command/command.ts#L26)
+        - `debug` in [../../packages/dispatcher/src/command/command.ts:28](../../packages/dispatcher/src/command/command.ts#L28)
     - **init**
-      - `debug` in `../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/commandHandlerContext.ts:68`
-      - `debug` in `../../packages/dispatcher/src/context/commandHandlerContext.ts:78`
+      - `debug` in [../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/commandHandlerContext.ts:68](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/commandHandlerContext.ts#L68)
+      - `debug` in [../../packages/dispatcher/src/context/commandHandlerContext.ts:78](../../packages/dispatcher/src/context/commandHandlerContext.ts#L78)
       - **error**
-        - `debug` in `../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/commandHandlerContext.ts:69`
-        - `debug` in `../../packages/dispatcher/src/context/commandHandlerContext.ts:79`
+        - `debug` in [../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/commandHandlerContext.ts:69](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/commandHandlerContext.ts#L69)
+        - `debug` in [../../packages/dispatcher/src/context/commandHandlerContext.ts:79](../../packages/dispatcher/src/context/commandHandlerContext.ts#L79)
     - **lookup**
-      - `debug` in `../../packages/dispatcher/src/search/search.ts:21`
+      - `debug` in [../../packages/dispatcher/src/search/search.ts:21](../../packages/dispatcher/src/search/search.ts#L21)
       - **error**
-        - `debug` in `../../packages/dispatcher/src/search/search.ts:22`
+        - `debug` in [../../packages/dispatcher/src/search/search.ts:22](../../packages/dispatcher/src/search/search.ts#L22)
     - **memory**
-      - `debug` in `../../packages/dispatcher/src/context/memory.ts:47`
+      - `debug` in [../../packages/dispatcher/src/context/memory.ts:47](../../packages/dispatcher/src/context/memory.ts#L47)
     - **schema**
       - **cache**
-        - `debug` in `../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/actionSchemaFileCache.ts:24`
-        - `debug` in `../../packages/dispatcher/src/translation/actionSchemaFileCache.ts:32`
+        - `debug` in [../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/actionSchemaFileCache.ts:24](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/actionSchemaFileCache.ts#L24)
+        - `debug` in [../../packages/dispatcher/src/translation/actionSchemaFileCache.ts:32](../../packages/dispatcher/src/translation/actionSchemaFileCache.ts#L32)
         - **error**
-          - `debug` in `../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/actionSchemaFileCache.ts:25`
-          - `debug` in `../../packages/dispatcher/src/translation/actionSchemaFileCache.ts:33`
+          - `debug` in [../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/actionSchemaFileCache.ts:25](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/actionSchemaFileCache.ts#L25)
+          - `debug` in [../../packages/dispatcher/src/translation/actionSchemaFileCache.ts:33](../../packages/dispatcher/src/translation/actionSchemaFileCache.ts#L33)
       - **config**
-        - `debug` in `../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/actionConfig.ts:10`
-        - `debug` in `../../packages/dispatcher/src/translation/actionConfig.ts:11`
+        - `debug` in [../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/actionConfig.ts:10](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/actionConfig.ts#L10)
+        - `debug` in [../../packages/dispatcher/src/translation/actionConfig.ts:11](../../packages/dispatcher/src/translation/actionConfig.ts#L11)
     - **semantic**
-      - `debug` in `../../packages/dispatcher/src/translation/actionSchemaSemanticMap.ts:20`
+      - `debug` in [../../packages/dispatcher/src/translation/actionSchemaSemanticMap.ts:20](../../packages/dispatcher/src/translation/actionSchemaSemanticMap.ts#L20)
   - **email**
-    - `debug` in `../../packages/agents/email/src/emailActionHandler.ts:32`
+    - `debug` in [../../packages/agents/email/src/emailActionHandler.ts:32](../../packages/agents/email/src/emailActionHandler.ts#L32)
   - **explain**
-    - `debug` in `../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/dispatcher/handlers/requestCommandHandler.ts:41`
-    - `debug` in `../../packages/dispatcher/src/context/dispatcher/handlers/requestCommandHandler.ts:51`
+    - `debug` in [../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/dispatcher/handlers/requestCommandHandler.ts:41](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/dispatcher/handlers/requestCommandHandler.ts#L41)
+    - `debug` in [../../packages/dispatcher/src/context/dispatcher/handlers/requestCommandHandler.ts:51](../../packages/dispatcher/src/context/dispatcher/handlers/requestCommandHandler.ts#L51)
   - **graphUtils**
     - **calendarclient**
-      - `debug` in `../../packages/agents/agentUtils/graphUtils/src/calendarClient.ts:10`
+      - `debug` in [../../packages/agents/agentUtils/graphUtils/src/calendarClient.ts:10](../../packages/agents/agentUtils/graphUtils/src/calendarClient.ts#L10)
       - **error**
-        - `debug` in `../../packages/agents/agentUtils/graphUtils/src/calendarClient.ts:11`
+        - `debug` in [../../packages/agents/agentUtils/graphUtils/src/calendarClient.ts:11](../../packages/agents/agentUtils/graphUtils/src/calendarClient.ts#L11)
     - **graphClient**
-      - `debug` in `../../packages/agents/agentUtils/graphUtils/src/graphClient.ts:56`
+      - `debug` in [../../packages/agents/agentUtils/graphUtils/src/graphClient.ts:56](../../packages/agents/agentUtils/graphUtils/src/graphClient.ts#L56)
       - **error**
-        - `debug` in `../../packages/agents/agentUtils/graphUtils/src/graphClient.ts:57`
+        - `debug` in [../../packages/agents/agentUtils/graphUtils/src/graphClient.ts:57](../../packages/agents/agentUtils/graphUtils/src/graphClient.ts#L57)
     - **mailClient**
-      - `debug` in `../../packages/agents/agentUtils/graphUtils/src/mailClient.ts:17`
+      - `debug` in [../../packages/agents/agentUtils/graphUtils/src/mailClient.ts:17](../../packages/agents/agentUtils/graphUtils/src/mailClient.ts#L17)
   - **greeting**
-    - `debug` in `../../packages/agents/greeting/src/greetingCommandHandler.ts:32`
+    - `debug` in [../../packages/agents/greeting/src/greetingCommandHandler.ts:32](../../packages/agents/greeting/src/greetingCommandHandler.ts#L32)
   - **image-memory**
-    - `debug` in `../../packages/memory/image/src/imageCollection.ts:35`
-    - `debug` in `../../packages/memory/image/src/imageMeta.ts:15`
-    - `debug` in `../../packages/memory/image/src/importImages.ts:16`
+    - `debug` in [../../packages/memory/image/src/imageCollection.ts:35](../../packages/memory/image/src/imageCollection.ts#L35)
+    - `debug` in [../../packages/memory/image/src/imageMeta.ts:15](../../packages/memory/image/src/imageMeta.ts#L15)
+    - `debug` in [../../packages/memory/image/src/importImages.ts:16](../../packages/memory/image/src/importImages.ts#L16)
   - **indexManager**
-    - `debug` in `../../packages/dispatcher/src/context/indexManager.ts:16`
+    - `debug` in [../../packages/dispatcher/src/context/indexManager.ts:16](../../packages/dispatcher/src/context/indexManager.ts#L16)
   - **indexingService**
-    - `debug` in `../../packages/memory/image/src/indexingService.ts:17`
-    - `debug` in `../../packages/memory/website/src/indexingService.ts:14`
+    - `debug` in [../../packages/memory/image/src/indexingService.ts:17](../../packages/memory/image/src/indexingService.ts#L17)
+    - `debug` in [../../packages/memory/website/src/indexingService.ts:14](../../packages/memory/website/src/indexingService.ts#L14)
   - **interpret**
-    - `debug` in `../../packages/dispatcher/src/translation/interpretRequest.ts:24`
+    - `debug` in [../../packages/dispatcher/src/translation/interpretRequest.ts:24](../../packages/dispatcher/src/translation/interpretRequest.ts#L24)
   - **knowledgeProcessor**
     - **image**
-      - `debug` in `../../packages/knowledgeProcessor/src/images/image.ts:41`
+      - `debug` in [../../packages/knowledgeProcessor/src/images/image.ts:41](../../packages/knowledgeProcessor/src/images/image.ts#L41)
   - **logger**
     - **mongodb**
-      - `debug` in `../../packages/telemetry/src/logger/mongoLoggerSink.ts:8`
+      - `debug` in [../../packages/telemetry/src/logger/mongoLoggerSink.ts:8](../../packages/telemetry/src/logger/mongoLoggerSink.ts#L8)
   - **markdown**
     - **agent**
-      - `debug` in `../../packages/agents/markdown/src/agent/markdownActionHandler.ts:23`
+      - `debug` in [../../packages/agents/markdown/src/agent/markdownActionHandler.ts:23](../../packages/agents/markdown/src/agent/markdownActionHandler.ts#L23)
     - **collaboration**
-      - `debug` in `../../packages/agents/markdown/src/view/route/collaborationManager.ts:7`
+      - `debug` in [../../packages/agents/markdown/src/view/route/collaborationManager.ts:7](../../packages/agents/markdown/src/view/route/collaborationManager.ts#L7)
     - **service**
-      - `debug` in `../../packages/agents/markdown/src/view/route/service.ts:22`
+      - `debug` in [../../packages/agents/markdown/src/view/route/service.ts:22](../../packages/agents/markdown/src/view/route/service.ts#L22)
     - **translator**
-      - `debug` in `../../packages/agents/markdown/src/agent/translator.ts:18`
+      - `debug` in [../../packages/agents/markdown/src/agent/translator.ts:18](../../packages/agents/markdown/src/agent/translator.ts#L18)
   - **openai**
-    - `debug` in `../../packages/aiclient/src/openai.ts:43`
+    - `debug` in [../../packages/aiclient/src/openai.ts:43](../../packages/aiclient/src/openai.ts#L43)
   - **profiler**
-    - `debug` in `../../packages/telemetry/src/profiler/profileLogger.ts:8`
+    - `debug` in [../../packages/telemetry/src/profiler/profileLogger.ts:8](../../packages/telemetry/src/profiler/profileLogger.ts#L8)
     - **reader**
       - **error**
-        - `debug` in `../../packages/telemetry/src/profiler/profileReader.ts:5`
+        - `debug` in [../../packages/telemetry/src/profiler/profileReader.ts:5](../../packages/telemetry/src/profiler/profileReader.ts#L5)
   - **promptLogger**
-    - `debug` in `../../packages/aiclient/src/promptLogger.ts:13`
+    - `debug` in [../../packages/aiclient/src/promptLogger.ts:13](../../packages/aiclient/src/promptLogger.ts#L13)
   - **request**
     - **completion**
-      - `debug` in `../../packages/dispatcher/src/translation/requestCompletion.ts:32`
+      - `debug` in [../../packages/dispatcher/src/translation/requestCompletion.ts:32](../../packages/dispatcher/src/translation/requestCompletion.ts#L32)
   - **rest**
     - **error**
-      - `debug` in `../../packages/aiclient/src/restClient.ts:9`
+      - `debug` in [../../packages/aiclient/src/restClient.ts:9](../../packages/aiclient/src/restClient.ts#L9)
     - **header**
-      - `debug` in `../../packages/aiclient/src/restClient.ts:8`
+      - `debug` in [../../packages/aiclient/src/restClient.ts:8](../../packages/aiclient/src/restClient.ts#L8)
     - **url**
-      - `debug` in `../../packages/aiclient/src/restClient.ts:7`
+      - `debug` in [../../packages/aiclient/src/restClient.ts:7](../../packages/aiclient/src/restClient.ts#L7)
   - **rpc**
-    - `debug` in `../../packages/agentRpc/src/common.ts:6`
+    - `debug` in [../../packages/agentRpc/src/common.ts:6](../../packages/agentRpc/src/common.ts#L6)
     - **error**
-      - `debug` in `../../packages/agentRpc/src/common.ts:7`
+      - `debug` in [../../packages/agentRpc/src/common.ts:7](../../packages/agentRpc/src/common.ts#L7)
   - **schema**
     - **generate**
-      - `debug` in `../../packages/actionSchema/src/generator.ts:12`
+      - `debug` in [../../packages/actionSchema/src/generator.ts:12](../../packages/actionSchema/src/generator.ts#L12)
     - **parse**
-      - `debug` in `../../packages/actionSchema/src/parser.ts:25`
+      - `debug` in [../../packages/actionSchema/src/parser.ts:25](../../packages/actionSchema/src/parser.ts#L25)
     - **parser**
-      - `debug` in `../../packages/actionSchema/src/schemaParser.ts:7`
+      - `debug` in [../../packages/actionSchema/src/schemaParser.ts:7](../../packages/actionSchema/src/schemaParser.ts#L7)
   - **serviceHost**
-    - `debug` in `../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/system/handlers/serviceHost/service.ts:20`
-    - `debug` in `../../packages/dispatcher/src/context/system/handlers/serviceHost/service.ts:20`
+    - `debug` in [../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/system/handlers/serviceHost/service.ts:20](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/system/handlers/serviceHost/service.ts#L20)
+    - `debug` in [../../packages/dispatcher/src/context/system/handlers/serviceHost/service.ts:20](../../packages/dispatcher/src/context/system/handlers/serviceHost/service.ts#L20)
   - **session**
-    - `debug` in `../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/session.ts:18`
-    - `debug` in `../../packages/dispatcher/src/context/session.ts:33`
+    - `debug` in [../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/session.ts:18](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/context/session.ts#L18)
+    - `debug` in [../../packages/dispatcher/src/context/session.ts:33](../../packages/dispatcher/src/context/session.ts#L33)
   - **shell**
-    - `debug` in `../../packages/shell/src/main/debug.ts:5`
+    - `debug` in [../../packages/shell/src/main/debug.ts:5](../../packages/shell/src/main/debug.ts#L5)
     - **browserViewManager**
-      - `debug` in `../../packages/shell/src/main/browserViewManager.ts:8`
+      - `debug` in [../../packages/shell/src/main/browserViewManager.ts:8](../../packages/shell/src/main/browserViewManager.ts#L8)
     - **error**
-      - `debug` in `../../packages/shell/src/main/debug.ts:6`
+      - `debug` in [../../packages/shell/src/main/debug.ts:6](../../packages/shell/src/main/debug.ts#L6)
     - **partial**
-      - `debug` in `../../packages/shell/src/renderer/src/partial.ts:10`
+      - `debug` in [../../packages/shell/src/renderer/src/partial.ts:10](../../packages/shell/src/renderer/src/partial.ts#L10)
       - **error**
-        - `debug` in `../../packages/shell/src/renderer/src/partial.ts:11`
+        - `debug` in [../../packages/shell/src/renderer/src/partial.ts:11](../../packages/shell/src/renderer/src/partial.ts#L11)
     - **pdfInterceptor**
-      - `debug` in `../../packages/shell/src/preload/pdfInterceptor.ts:7`
+      - `debug` in [../../packages/shell/src/preload/pdfInterceptor.ts:7](../../packages/shell/src/preload/pdfInterceptor.ts#L7)
       - **error**
-        - `debug` in `../../packages/shell/src/preload/pdfInterceptor.ts:8`
+        - `debug` in [../../packages/shell/src/preload/pdfInterceptor.ts:8](../../packages/shell/src/preload/pdfInterceptor.ts#L8)
     - **speech**
-      - `debug` in `../../packages/shell/src/renderer/src/speech.ts:10`
+      - `debug` in [../../packages/shell/src/renderer/src/speech.ts:10](../../packages/shell/src/renderer/src/speech.ts#L10)
       - **error**
-        - `debug` in `../../packages/shell/src/renderer/src/speech.ts:11`
+        - `debug` in [../../packages/shell/src/renderer/src/speech.ts:11](../../packages/shell/src/renderer/src/speech.ts#L11)
     - **tts**
-      - `debug` in `../../packages/shell/src/renderer/src/tts/ttsAzure.ts:11`
-      - `debug` in `../../packages/shell/src/renderer/src/tts/ttsBrowser.ts:8`
-      - `debug` in `../../packages/shell/src/renderer/src/tts/ttsLocal.ts:9`
+      - `debug` in [../../packages/shell/src/renderer/src/tts/ttsAzure.ts:11](../../packages/shell/src/renderer/src/tts/ttsAzure.ts#L11)
+      - `debug` in [../../packages/shell/src/renderer/src/tts/ttsBrowser.ts:8](../../packages/shell/src/renderer/src/tts/ttsBrowser.ts#L8)
+      - `debug` in [../../packages/shell/src/renderer/src/tts/ttsLocal.ts:9](../../packages/shell/src/renderer/src/tts/ttsLocal.ts#L9)
       - **error**
-        - `debug` in `../../packages/shell/src/renderer/src/tts/ttsAzure.ts:12`
-        - `debug` in `../../packages/shell/src/renderer/src/tts/ttsBrowser.ts:9`
-        - `debug` in `../../packages/shell/src/renderer/src/tts/ttsLocal.ts:10`
+        - `debug` in [../../packages/shell/src/renderer/src/tts/ttsAzure.ts:12](../../packages/shell/src/renderer/src/tts/ttsAzure.ts#L12)
+        - `debug` in [../../packages/shell/src/renderer/src/tts/ttsBrowser.ts:9](../../packages/shell/src/renderer/src/tts/ttsBrowser.ts#L9)
+        - `debug` in [../../packages/shell/src/renderer/src/tts/ttsLocal.ts:10](../../packages/shell/src/renderer/src/tts/ttsLocal.ts#L10)
     - **update**
-      - `debug` in `../../packages/shell/src/main/commands/update.ts:26`
+      - `debug` in [../../packages/shell/src/main/commands/update.ts:26](../../packages/shell/src/main/commands/update.ts#L26)
     - **window**
-      - `debug` in `../../packages/shell/src/main/shellWindow.ts:31`
+      - `debug` in [../../packages/shell/src/main/shellWindow.ts:31](../../packages/shell/src/main/shellWindow.ts#L31)
       - **error**
-        - `debug` in `../../packages/shell/src/main/shellWindow.ts:32`
+        - `debug` in [../../packages/shell/src/main/shellWindow.ts:32](../../packages/shell/src/main/shellWindow.ts#L32)
   - **spotify**
-    - `debug` in `../../packages/agents/player/src/agent/playerHandlers.ts:34`
-    - `debug` in `../../packages/agents/player/src/debug.ts:6`
+    - `debug` in [../../packages/agents/player/src/agent/playerHandlers.ts:34](../../packages/agents/player/src/agent/playerHandlers.ts#L34)
+    - `debug` in [../../packages/agents/player/src/debug.ts:6](../../packages/agents/player/src/debug.ts#L6)
     - **data**
-      - `debug` in `../../packages/agents/player/src/userData.ts:16`
+      - `debug` in [../../packages/agents/player/src/userData.ts:16](../../packages/agents/player/src/userData.ts#L16)
     - **error**
-      - `debug` in `../../packages/agents/player/src/debug.ts:7`
+      - `debug` in [../../packages/agents/player/src/debug.ts:7](../../packages/agents/player/src/debug.ts#L7)
     - **rest**
-      - `debug` in `../../packages/agents/player/src/endpoints.ts:8`
+      - `debug` in [../../packages/agents/player/src/endpoints.ts:8](../../packages/agents/player/src/endpoints.ts#L8)
     - **search**
-      - `debug` in `../../packages/agents/player/src/search.ts:19`
+      - `debug` in [../../packages/agents/player/src/search.ts:19](../../packages/agents/player/src/search.ts#L19)
       - **error**
-        - `debug` in `../../packages/agents/player/src/search.ts:22`
+        - `debug` in [../../packages/agents/player/src/search.ts:22](../../packages/agents/player/src/search.ts#L22)
       - **reuse**
-        - `debug` in `../../packages/agents/player/src/search.ts:20`
+        - `debug` in [../../packages/agents/player/src/search.ts:20](../../packages/agents/player/src/search.ts#L20)
   - **spotify-verbose**
     - **rest**
-      - `debug` in `../../packages/agents/player/src/endpoints.ts:9`
+      - `debug` in [../../packages/agents/player/src/endpoints.ts:9](../../packages/agents/player/src/endpoints.ts#L9)
     - **search**
-      - `debug` in `../../packages/agents/player/src/search.ts:21`
+      - `debug` in [../../packages/agents/player/src/search.ts:21](../../packages/agents/player/src/search.ts#L21)
   - **storage**
     - **error**
-      - `debug` in `../../packages/typeagent/src/storage/objectFolder.ts:11`
+      - `debug` in [../../packages/typeagent/src/storage/objectFolder.ts:11](../../packages/typeagent/src/storage/objectFolder.ts#L11)
   - **switch**
     - **search**
-      - `debug` in `../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/unknownSwitcher.ts:16`
-      - `debug` in `../../packages/dispatcher/src/translation/unknownSwitcher.ts:16`
+      - `debug` in [../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/unknownSwitcher.ts:16](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/unknownSwitcher.ts#L16)
+      - `debug` in [../../packages/dispatcher/src/translation/unknownSwitcher.ts:16](../../packages/dispatcher/src/translation/unknownSwitcher.ts#L16)
   - **tokenCounter**
-    - `debug` in `../../packages/aiclient/src/tokenCounter.ts:7`
+    - `debug` in [../../packages/aiclient/src/tokenCounter.ts:7](../../packages/aiclient/src/tokenCounter.ts#L7)
   - **translate**
-    - `debug` in `../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/translateRequest.ts:50`
-    - `debug` in `../../packages/dispatcher/src/translation/translateRequest.ts:54`
+    - `debug` in [../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/translateRequest.ts:50](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/translateRequest.ts#L50)
+    - `debug` in [../../packages/dispatcher/src/translation/translateRequest.ts:54](../../packages/dispatcher/src/translation/translateRequest.ts#L54)
     - **semantic**
-      - `debug` in `../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/translateRequest.ts:51`
-      - `debug` in `../../packages/dispatcher/src/translation/translateRequest.ts:55`
+      - `debug` in [../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/translateRequest.ts:51](../../packages/agents/spelunker/evals/eval-1/source/dispatcher/src/translation/translateRequest.ts#L51)
+      - `debug` in [../../packages/dispatcher/src/translation/translateRequest.ts:55](../../packages/dispatcher/src/translation/translateRequest.ts#L55)
   - **typechatagent**
     - **correction**
-      - `debug` in `../../packages/cache/src/explanation/typeChatAgent.ts:28`
+      - `debug` in [../../packages/cache/src/explanation/typeChatAgent.ts:28](../../packages/cache/src/explanation/typeChatAgent.ts#L28)
   - **views**
     - **server**
-      - `debug` in `../../packages/agents/browser/src/views/server/server.mts:10`
+      - `debug` in [../../packages/agents/browser/src/views/server/server.mts:10](../../packages/agents/browser/src/views/server/server.mts#L10)
       - **core**
-        - `debug` in `../../packages/agents/browser/src/views/server/core/baseServer.ts:12`
+        - `debug` in [../../packages/agents/browser/src/views/server/core/baseServer.ts:12](../../packages/agents/browser/src/views/server/core/baseServer.ts#L12)
       - **pdf**
         - **routes**
-          - `debug` in `../../packages/agents/browser/src/views/server/features/pdf/pdfRoutes.ts:19`
+          - `debug` in [../../packages/agents/browser/src/views/server/features/pdf/pdfRoutes.ts:19](../../packages/agents/browser/src/views/server/features/pdf/pdfRoutes.ts#L19)
         - **service**
-          - `debug` in `../../packages/agents/browser/src/views/server/features/pdf/pdfService.ts:16`
+          - `debug` in [../../packages/agents/browser/src/views/server/features/pdf/pdfService.ts:16](../../packages/agents/browser/src/views/server/features/pdf/pdfService.ts#L16)
         - **urlMap**
-          - `debug` in `../../packages/agents/browser/src/views/server/features/pdf/urlDocumentMappingService.ts:10`
+          - `debug` in [../../packages/agents/browser/src/views/server/features/pdf/urlDocumentMappingService.ts:10](../../packages/agents/browser/src/views/server/features/pdf/urlDocumentMappingService.ts#L10)
       - **plans**
         - **routes**
-          - `debug` in `../../packages/agents/browser/src/views/server/features/plans/plansRoutes.ts:18`
+          - `debug` in [../../packages/agents/browser/src/views/server/features/plans/plansRoutes.ts:18](../../packages/agents/browser/src/views/server/features/plans/plansRoutes.ts#L18)
       - **sse**
-        - `debug` in `../../packages/agents/browser/src/views/server/core/sseManager.ts:7`
+        - `debug` in [../../packages/agents/browser/src/views/server/core/sseManager.ts:7](../../packages/agents/browser/src/views/server/core/sseManager.ts#L7)
   - **webAgent**
-    - `debug` in `../../packages/agents/browser/src/agent/webTypeAgent.mts:19`
+    - `debug` in [../../packages/agents/browser/src/agent/webTypeAgent.mts:19](../../packages/agents/browser/src/agent/webTypeAgent.mts#L19)
     - **error**
-      - `debug` in `../../packages/agents/browser/src/agent/webTypeAgent.mts:20`
+      - `debug` in [../../packages/agents/browser/src/agent/webTypeAgent.mts:20](../../packages/agents/browser/src/agent/webTypeAgent.mts#L20)
     - **proxy**
-      - `debug` in `../../packages/agents/browser/src/extension/serviceWorker/index.ts:25`
-      - `debug` in `../../packages/shell/src/preload/webView.ts:14`
+      - `debug` in [../../packages/agents/browser/src/extension/serviceWorker/index.ts:25](../../packages/agents/browser/src/extension/serviceWorker/index.ts#L25)
+      - `debug` in [../../packages/shell/src/preload/webView.ts:14](../../packages/shell/src/preload/webView.ts#L14)
   - **websockets**
-    - `debug` in `../../packages/commonUtils/src/webSockets.ts:10`
+    - `debug` in [../../packages/commonUtils/src/webSockets.ts:10](../../packages/commonUtils/src/webSockets.ts#L10)
 
 ---
 
-*Generated on 2025-09-03T16:56:48.518Z from 177 registerDebug calls*
+*Generated on 2025-09-03T16:58:10.106Z from 177 registerDebug calls*

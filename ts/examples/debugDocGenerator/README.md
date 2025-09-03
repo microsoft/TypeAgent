@@ -48,7 +48,7 @@ node dist/main.js ../../../packages
 The tool generates a `debug-hierarchy.md` file in the current working directory. This file contains:
 
 - A hierarchical list of all debug namespaces
-- File locations and line numbers for each `registerDebug` call
+- Clickable links to file locations and line numbers for each `registerDebug` call
 - Usage examples for enabling debug output
 - Statistics about the scan results
 

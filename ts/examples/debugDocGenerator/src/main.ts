@@ -131,7 +131,9 @@ function generateMarkdown(hierarchy: DebugHierarchy, level: number = 0): string[
             if (hasCalls) {
                 for (const call of data.calls) {
                     const relativePath = path.relative(process.cwd(), call.file).replace(/\\/g, "/");
-                    lines.push(`${indent}  - \`${call.variableName}\` in \`${relativePath}:${call.line}\``);
+                    // Create GitHub link to the specific line
+                    const fileLink = `[${relativePath}:${call.line}](${relativePath}#L${call.line})`;
+                    lines.push(`${indent}  - \`${call.variableName}\` in ${fileLink}`);
                 }
             }
             
