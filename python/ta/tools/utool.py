@@ -514,6 +514,7 @@ def make_arg_parser(description: str) -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--question",
+        "--query",
         type=str,
         default=None,
         help="Process a single question and exit (equivalent to echo 'question' | utool.py)",
