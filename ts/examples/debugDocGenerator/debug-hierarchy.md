@@ -861,4 +861,4 @@ Debug calls organized by source file:
 
 ---
 
-*Generated on 2025-09-03T17:13:22.124Z from 177 registerDebug calls*
+_Generated on 2025-09-03T17:13:22.124Z from 177 registerDebug calls_

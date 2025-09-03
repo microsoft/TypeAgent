@@ -62,17 +62,20 @@ The tool generates a [`debug-hierarchy.md`](debug-hierarchy.md) file in the curr
 # Debug Namespace Hierarchy
 
 ## All Namespaces (Flat List)
+
 - `typeagent:shell:speech`
 - `typeagent:shell:speech:error`
 - `typeagent:browser:action`
 
 ## Namespace Hierarchy
+
 - **typeagent**
   - **shell**
     - **speech**
       - `debug` in [packages/shell/src/renderer/src/speech.ts:10](packages/shell/src/renderer/src/speech.ts#L10)
 
 ## File-based Organization
+
 - **[packages/shell/src/renderer/src/speech.ts](packages/shell/src/renderer/src/speech.ts)**
   - `typeagent:shell:speech` at [Line 10](packages/shell/src/renderer/src/speech.ts#L10)
   - `typeagent:shell:speech:error` at [Line 11](packages/shell/src/renderer/src/speech.ts#L11)
@@ -95,7 +98,7 @@ Once you have the generated documentation, you can use it to enable specific deb
 # Enable all typeagent debug messages
 DEBUG=typeagent:* npm start
 
-# Enable only shell-related debug messages  
+# Enable only shell-related debug messages
 DEBUG=typeagent:shell:* npm start
 
 # Enable specific component debugging
