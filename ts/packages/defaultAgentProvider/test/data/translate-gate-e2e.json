@@ -1,7 +1,7 @@
 [
   [
     {
-      "request": "open npr",
+      "request": "open the npr webpage",
       "action": [
         {
           "schemaName": "browser",
