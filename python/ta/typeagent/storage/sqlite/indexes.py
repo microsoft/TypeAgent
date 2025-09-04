@@ -12,6 +12,7 @@ from ...aitools.vectorbase import TextEmbeddingIndexSettings, VectorBase
 
 from ...knowpro.convsettings import MessageTextIndexSettings
 from ...knowpro import interfaces
+from ...knowpro.interfaces import ScoredSemanticRefOrdinal
 from ...knowpro.textlocindex import ScoredTextLocation
 
 from ...storage.memory.messageindex import IMessageTextEmbeddingIndex
@@ -88,7 +89,7 @@ class SqliteTermToSemanticRefIndex(interfaces.ITermToSemanticRefIndex):
         results = []
         for row in cursor.fetchall():
             semref_id = row[0]
-            results.append(interfaces.ScoredSemanticRefOrdinal(semref_id, 1.0))
+            results.append(ScoredSemanticRefOrdinal(semref_id, 1.0))
         return results
 
     async def clear(self) -> None:
@@ -109,7 +110,7 @@ class SqliteTermToSemanticRefIndex(interfaces.ITermToSemanticRefIndex):
         for term, semref_id in cursor.fetchall():
             if term not in term_to_semrefs:
                 term_to_semrefs[term] = []
-            scored_ref = interfaces.ScoredSemanticRefOrdinal(semref_id, 1.0)
+            scored_ref = ScoredSemanticRefOrdinal(semref_id, 1.0)
             term_to_semrefs[term].append(scored_ref.serialize())
 
         # Convert to the expected format
@@ -239,7 +240,7 @@ class SqlitePropertyIndex(interfaces.IPropertyToSemanticRefIndex):
         )
 
         results = [
-            interfaces.ScoredSemanticRefOrdinal(semref_id, score)
+            ScoredSemanticRefOrdinal(semref_id, score)
             for semref_id, score in cursor.fetchall()
         ]
 
@@ -730,8 +731,8 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
         cursor = self.db.cursor()
         cursor.execute(
             """
-            SELECT msg_id, chunk_ordinal, text_content, embedding 
-            FROM MessageTextIndex 
+            SELECT msg_id, chunk_ordinal, text_content, embedding
+            FROM MessageTextIndex
             ORDER BY msg_id, chunk_ordinal
         """
         )
@@ -795,6 +796,26 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
         # Prepare data for insertion
         from ..sqlite.schema import serialize_embedding
 
+        # Get all unique message IDs and load their chunks in one query
+        message_ids = set(location["messageOrdinal"] for location in text_locations)
+        message_chunks = {}
+
+        if message_ids:
+            cursor = self.db.cursor()
+            placeholders = ",".join("?" * len(message_ids))
+            cursor.execute(
+                f"SELECT msg_id, chunks FROM Messages WHERE msg_id IN ({placeholders})",
+                list(message_ids),
+            )
+
+            for msg_id, chunks_json in cursor.fetchall():
+                if chunks_json:
+                    import json
+
+                    chunks = json.loads(chunks_json)
+                    message_chunks[msg_id] = chunks
+
+        # Now insert all the text locations
         with self.db:
             cursor = self.db.cursor()
 
@@ -802,21 +823,12 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
                 msg_id = text_location["messageOrdinal"]
                 chunk_ordinal = text_location["chunkOrdinal"]
 
-                # Get the text content from the Messages table
-                cursor.execute(
-                    "SELECT chunks FROM Messages WHERE msg_id = ?", (msg_id,)
-                )
-                row = cursor.fetchone()
-                if row:
-                    import json
-
-                    chunks = json.loads(row[0]) if row[0] else []
-                    if chunk_ordinal < len(chunks):
-                        text_content = chunks[chunk_ordinal]
-                    else:
-                        continue  # Skip if chunk doesn't exist
+                # Get the text content from our cached chunks
+                chunks = message_chunks.get(msg_id, [])
+                if chunk_ordinal < len(chunks):
+                    text_content = chunks[chunk_ordinal]
                 else:
-                    continue  # Skip if message doesn't exist
+                    continue  # Skip if chunk doesn't exist
 
                 # Get embedding if available
                 embedding_blob = None
@@ -972,8 +984,31 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
 
     def __init__(self, db: sqlite3.Connection, embedding_model: AsyncEmbeddingModel):
         self.db = db
-        # embedding_model is used for generating term embeddings
+        # Create a persistent VectorBase for caching and fuzzy matching
+        self._embedding_settings = TextEmbeddingIndexSettings(embedding_model)
+        self._vector_base = VectorBase(self._embedding_settings)
+        # Keep reference to embedding model for direct access if needed
         self._embedding_model = embedding_model
+        # Maintain our own list of terms to map ordinals back to keys
+        self._terms_list: list[str] = []
+        self._terms_to_ordinal: dict[str, int] = {}
+
+    async def _populate_vector_base_from_db(self) -> None:
+        """Populate VectorBase and terms mapping from existing database."""
+        if self._terms_list:  # Already populated
+            return
+
+        cursor = self.db.cursor()
+        cursor.execute("SELECT DISTINCT term FROM RelatedTermsFuzzy ORDER BY term")
+        terms = [row[0] for row in cursor.fetchall()]
+
+        if terms:
+            # Add all terms to VectorBase in one batch for efficiency
+            await self._vector_base.add_keys(terms)
+
+            # Update our local mappings
+            self._terms_list = terms
+            self._terms_to_ordinal = {term: i for i, term in enumerate(terms)}
 
     async def lookup_term(
         self,
@@ -981,6 +1016,42 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         max_hits: int | None = None,
         min_score: float | None = None,
     ) -> list[interfaces.Term]:
+        # Ensure VectorBase is populated from database
+        await self._populate_vector_base_from_db()
+
+        # Use VectorBase for fuzzy embedding search instead of manual similarity calculation
+        try:
+            # Search for similar terms using VectorBase
+            similar_results = await self._vector_base.fuzzy_lookup(
+                text, max_hits=max_hits, min_score=min_score or 0.7
+            )
+
+            # Convert VectorBase results to Term objects
+            results = []
+            for scored_int in similar_results:
+                # Get the term text from our ordinal mapping
+                if scored_int.item < len(self._terms_list):
+                    term_text = self._terms_list[scored_int.item]
+
+                    # Skip exact self-match
+                    if term_text == text and abs(scored_int.score - 1.0) < 0.001:
+                        continue
+
+                    results.append(interfaces.Term(term_text, scored_int.score))
+
+            return results
+
+        except Exception:
+            # Fallback to direct database query if VectorBase fails
+            return await self._lookup_term_fallback(text, max_hits, min_score)
+
+    async def _lookup_term_fallback(
+        self,
+        text: str,
+        max_hits: int | None = None,
+        min_score: float | None = None,
+    ) -> list[interfaces.Term]:
+        """Fallback method using direct embedding comparison."""
         # Generate embedding for query text
         query_embedding = await self._embedding_model.get_embedding(text)
         if query_embedding is None:
@@ -1033,13 +1104,26 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         self, term: str, related_terms: list[interfaces.Term]
     ) -> None:
         """Add related terms with embeddings to the fuzzy index."""
-        # generate embedding for the main term
+        # generate embedding for the main term and add to VectorBase if not present
+        if term not in self._terms_to_ordinal:
+            await self._vector_base.add_key(term)
+            ordinal = len(self._terms_list)
+            self._terms_list.append(term)
+            self._terms_to_ordinal[term] = ordinal
+
         term_embed = await self._embedding_model.get_embedding(term)
         from .schema import serialize_embedding
 
         with self.db:
             cursor = self.db.cursor()
             for rel in related_terms:
+                # Add related term to VectorBase if not present
+                if rel.text not in self._terms_to_ordinal:
+                    await self._vector_base.add_key(rel.text)
+                    ordinal = len(self._terms_list)
+                    self._terms_list.append(rel.text)
+                    self._terms_to_ordinal[rel.text] = ordinal
+
                 # generate embedding for related term
                 rel_embed = await self._embedding_model.get_embedding(rel.text)
                 # use weight if provided
@@ -1063,6 +1147,15 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         with self.db:
             cursor = self.db.cursor()
             cursor.execute("DELETE FROM RelatedTermsFuzzy WHERE term = ?", (term,))
+            # Also remove any entries where this term appears as a related_term
+            cursor.execute(
+                "DELETE FROM RelatedTermsFuzzy WHERE related_term = ?", (term,)
+            )
+
+        # Clear VectorBase and local mappings - they will be rebuilt on next lookup
+        self._vector_base.clear()
+        self._terms_list.clear()
+        self._terms_to_ordinal.clear()
 
     async def clear(self) -> None:
         with self.db:
@@ -1086,7 +1179,14 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         with self.db:
             cursor = self.db.cursor()
             for text in texts:
-                # generate embedding for term
+                # Add to VectorBase for fuzzy lookup if not already present
+                if text not in self._terms_to_ordinal:
+                    await self._vector_base.add_key(text)
+                    ordinal = len(self._terms_list)
+                    self._terms_list.append(text)
+                    self._terms_to_ordinal[text] = ordinal
+
+                # generate embedding for term and store in database
                 embed = await self._embedding_model.get_embedding(text)
                 serialized = serialize_embedding(embed)
                 # insert term as related to itself
@@ -1150,10 +1250,8 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         if not text_items or embeddings_data is None:
             return
 
-        # Create temporary VectorBase to deserialize embeddings
-        temp_settings = TextEmbeddingIndexSettings(self._embedding_model)
-        temp_vectorbase = VectorBase(temp_settings)
-        temp_vectorbase.deserialize(embeddings_data)
+        # Use persistent VectorBase to deserialize embeddings (preserves caching)
+        self._vector_base.deserialize(embeddings_data)
 
         # Store each text item with its embedding in the database
         from .schema import serialize_embedding
@@ -1161,9 +1259,9 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         with self.db:
             cursor = self.db.cursor()
             for i, text in enumerate(text_items):
-                if i < len(temp_vectorbase):
-                    # Get embedding from temporary VectorBase
-                    embedding = temp_vectorbase.get_embedding_at(i)
+                if i < len(self._vector_base):
+                    # Get embedding from persistent VectorBase
+                    embedding = self._vector_base.get_embedding_at(i)
                     if embedding is not None:
                         serialized_embedding = serialize_embedding(embedding)
                         # Insert as self-referential entry
