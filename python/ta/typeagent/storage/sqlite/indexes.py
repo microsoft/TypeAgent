@@ -726,15 +726,114 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
 
     def serialize(self) -> interfaces.MessageTextIndexData:
         """Serialize the message text index."""
-        # Return empty data for now - in a full implementation this would
-        # serialize the embedding vectors and other index data
+        # Get all data from the MessageTextIndex table
+        cursor = self.db.cursor()
+        cursor.execute(
+            """
+            SELECT msg_id, chunk_ordinal, text_content, embedding 
+            FROM MessageTextIndex 
+            ORDER BY msg_id, chunk_ordinal
+        """
+        )
+
+        # Build the text locations and embeddings
+        text_locations = []
+        embeddings_list = []
+
+        from ..sqlite.schema import deserialize_embedding
+        from ...knowpro.interfaces import TextLocationData, TextToTextLocationIndexData
+
+        for msg_id, chunk_ordinal, text_content, embedding_blob in cursor.fetchall():
+            # Create text location data
+            text_location = TextLocationData(
+                messageOrdinal=msg_id, chunkOrdinal=chunk_ordinal
+            )
+            text_locations.append(text_location)
+
+            if embedding_blob:
+                embedding = deserialize_embedding(embedding_blob)
+                embeddings_list.append(embedding)
+            else:
+                # Handle case where embedding is None
+                embeddings_list.append(None)
+
+        if text_locations:
+            # Convert embeddings to numpy array if we have any
+            import numpy as np
+
+            valid_embeddings = [e for e in embeddings_list if e is not None]
+            if valid_embeddings:
+                embeddings_array = np.array(valid_embeddings, dtype=np.float32)
+            else:
+                embeddings_array = None
+
+            index_data = TextToTextLocationIndexData(
+                textLocations=text_locations, embeddings=embeddings_array
+            )
+            return interfaces.MessageTextIndexData(indexData=index_data)
+
         return {}
 
     def deserialize(self, data: interfaces.MessageTextIndexData) -> None:
         """Deserialize message text index data."""
-        # For now, this is a placeholder
-        # In a full implementation, this would restore the index state
-        pass
+        # Clear existing data
+        with self.db:
+            cursor = self.db.cursor()
+            cursor.execute("DELETE FROM MessageTextIndex")
+
+        # Get the index data
+        index_data = data.get("indexData")
+        if not index_data:
+            return
+
+        text_locations = index_data.get("textLocations", [])
+        embeddings = index_data.get("embeddings")
+
+        if not text_locations:
+            return
+
+        # Prepare data for insertion
+        from ..sqlite.schema import serialize_embedding
+
+        with self.db:
+            cursor = self.db.cursor()
+
+            for i, text_location in enumerate(text_locations):
+                msg_id = text_location["messageOrdinal"]
+                chunk_ordinal = text_location["chunkOrdinal"]
+
+                # Get the text content from the Messages table
+                cursor.execute(
+                    "SELECT chunks FROM Messages WHERE msg_id = ?", (msg_id,)
+                )
+                row = cursor.fetchone()
+                if row:
+                    import json
+
+                    chunks = json.loads(row[0]) if row[0] else []
+                    if chunk_ordinal < len(chunks):
+                        text_content = chunks[chunk_ordinal]
+                    else:
+                        continue  # Skip if chunk doesn't exist
+                else:
+                    continue  # Skip if message doesn't exist
+
+                # Get embedding if available
+                embedding_blob = None
+                if embeddings is not None and i < len(embeddings):
+                    embedding = embeddings[i]
+                    if embedding is not None:
+                        embedding_blob = serialize_embedding(embedding)
+
+                # Insert into MessageTextIndex
+                cursor.execute(
+                    """
+                    INSERT INTO MessageTextIndex
+                    (msg_id, chunk_ordinal, text_content, embedding)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (msg_id, chunk_ordinal, text_content, embedding_blob),
+                )
 
     async def clear(self) -> None:
         """Clear the message text index."""

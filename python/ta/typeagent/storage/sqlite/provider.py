@@ -225,6 +225,10 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         if data.get("relatedTermsIndexData"):
             await self._related_terms_index.deserialize(data["relatedTermsIndexData"])
 
+        # Deserialize message text index
+        if data.get("messageIndexData"):
+            self._message_text_index.deserialize(data["messageIndexData"])
+
     def get_conversation_metadata(self) -> ConversationMetadata | None:
         """Get conversation metadata."""
         cursor = self.db.cursor()
