@@ -8,7 +8,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/action";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import {
-    LookupAndAnswerAction,
+    LookupAction,
     TermFilter,
 } from "../context/dispatcher/schema/lookupActionSchema.js";
 import { ActionContext, ActionResult, Entity } from "@typeagent/agent-sdk";
@@ -89,10 +89,10 @@ async function getAnswerFromConversationManager(
 }
 
 export async function lookupAndAnswer(
-    lookupAction: LookupAndAnswerAction,
+    lookupAction: LookupAction,
     context: ActionContext<CommandHandlerContext>,
 ): Promise<ActionResult> {
-    const source = lookupAction.parameters.lookup.source;
+    const source = lookupAction.actionName;
     switch (source) {
         // case "internet": {
         //     const { question, lookup, originalRequest } =
@@ -109,13 +109,13 @@ export async function lookupAndAnswer(
 
         //     return result;
         // }
-        case "conversation": {
+        case "lookupAndAnswerConversation": {
             const systemContext = context.sessionContext.agentContext;
             if (systemContext.session.getConfig().execution.memory.legacy) {
                 return getAnswerFromConversationManager(
                     context,
                     lookupAction.parameters.question,
-                    lookupAction.parameters.lookup.conversationLookupFilters,
+                    lookupAction.parameters.conversationLookupFilters,
                 );
             }
             const historyText = await lookupAndAnswerFromMemory(
