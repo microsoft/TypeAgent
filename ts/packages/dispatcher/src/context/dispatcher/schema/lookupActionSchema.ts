@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type LookupAction = LookupAndAnswerAction;
+export type LookupAction = LookupAndAnswerConversation;
 export type LookupActivity = StartLookupAction;
 export type DateVal = {
     day: number;
@@ -43,23 +43,18 @@ export type TermFilter = {
     timeRange?: DateTimeRange | undefined; // in this time range
 };
 
-// look up for private information from past conversations (i.e. chat history) including private events, plans, projects in progress, attachments, files, file names, and other items from discussions with team members or the assistant, use the conversation lookup filters
-type LookupConversation = {
-    source: "conversation";
-    conversationLookupFilters: TermFilter[];
-};
-
 // The user request is a question about previous conversations.
 // (e.g. "what did we say about the project last week?")
 // The user expects only the answer, and not an action to be taken.
-export interface LookupAndAnswerAction {
-    actionName: "lookupAndAnswer";
+export interface LookupAndAnswerConversation {
+    actionName: "lookupAndAnswerConversation";
     parameters: {
         // the original request from the user
         originalRequest: string;
         // The question to get answer for.
         question: string;
-        lookup: LookupConversation;
+        // look up for private information from past conversations (i.e. chat history) including private events, plans, projects in progress, attachments, files, file names, and other items from discussions with team members or the assistant, use the conversation lookup filters
+        conversationLookupFilters: TermFilter[];
     };
 }
 
