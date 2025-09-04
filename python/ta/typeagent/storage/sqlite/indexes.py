@@ -126,25 +126,38 @@ class SqliteTermToSemanticRefIndex(interfaces.ITermToSemanticRefIndex):
 
     def deserialize(self, data: interfaces.TermToSemanticRefIndexData) -> None:
         """Deserialize index data by populating the SQLite table."""
-        # Clear existing data
+        # Use a single transaction for the entire operation
         with self.db:
-            cursor = self.db.cursor()
-            cursor.execute("DELETE FROM SemanticRefIndex")
+            self._deserialize_in_transaction(data)
 
-            # Add all the terms
-            for item in data["items"]:
-                if item and item["term"]:
-                    term = item["term"]
-                    for semref_ordinal_data in item["semanticRefOrdinals"]:
-                        if isinstance(semref_ordinal_data, dict):
-                            semref_id = semref_ordinal_data["semanticRefOrdinal"]
-                        else:
-                            # Fallback for direct integer
-                            semref_id = semref_ordinal_data
-                        cursor.execute(
-                            "INSERT OR IGNORE INTO SemanticRefIndex (term, semref_id) VALUES (?, ?)",
-                            (self._prepare_term(term), semref_id),
-                        )
+    def _deserialize_in_transaction(
+        self, data: interfaces.TermToSemanticRefIndexData
+    ) -> None:
+        """Deserialize index data within an existing transaction."""
+        cursor = self.db.cursor()
+
+        # Clear existing data
+        cursor.execute("DELETE FROM SemanticRefIndex")
+
+        # Prepare all insertion data for bulk operation
+        insertion_data = []
+        for item in data["items"]:
+            if item and item["term"]:
+                term = self._prepare_term(item["term"])
+                for semref_ordinal_data in item["semanticRefOrdinals"]:
+                    if isinstance(semref_ordinal_data, dict):
+                        semref_id = semref_ordinal_data["semanticRefOrdinal"]
+                    else:
+                        # Fallback for direct integer
+                        semref_id = semref_ordinal_data
+                    insertion_data.append((term, semref_id))
+
+        # Bulk insert all the data
+        if insertion_data:
+            cursor.executemany(
+                "INSERT OR IGNORE INTO SemanticRefIndex (term, semref_id) VALUES (?, ?)",
+                insertion_data,
+            )
 
     def _prepare_term(self, term: str) -> str:
         """Normalize term by converting to lowercase."""
@@ -479,21 +492,28 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
         """Add messages to the text index starting at the given ordinal."""
         text_chunks_to_embed = []
 
-        # First, store the text chunks in SQLite (without embeddings yet)
+        # Prepare all text chunk data for bulk insertion
+        text_insertion_data = []
+        for i, message in enumerate(messages):
+            message_ordinal = start_ordinal + i
+            for chunk_ordinal, chunk in enumerate(message.text_chunks):
+                text_insertion_data.append(
+                    (message_ordinal, chunk_ordinal, chunk, None)
+                )
+                text_chunks_to_embed.append((message_ordinal, chunk_ordinal, chunk))
+
+        # Bulk insert text chunks (without embeddings yet)
         with self.db:
             cursor = self.db.cursor()
-            for i, message in enumerate(messages):
-                message_ordinal = start_ordinal + i
-                for chunk_ordinal, chunk in enumerate(message.text_chunks):
-                    cursor.execute(
-                        """
-                        INSERT OR REPLACE INTO MessageTextIndex
-                        (msg_id, chunk_ordinal, text_content, embedding)
-                        VALUES (?, ?, ?, NULL)
-                        """,
-                        (message_ordinal, chunk_ordinal, chunk),
-                    )
-                    text_chunks_to_embed.append((message_ordinal, chunk_ordinal, chunk))
+            if text_insertion_data:
+                cursor.executemany(
+                    """
+                    INSERT OR REPLACE INTO MessageTextIndex
+                    (msg_id, chunk_ordinal, text_content, embedding)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    text_insertion_data,
+                )
 
         # Generate and store embeddings
         if text_chunks_to_embed:
@@ -502,18 +522,26 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
 
             from ..sqlite.schema import serialize_embedding
 
+            # Prepare embedding update data for bulk operation
+            embedding_update_data = []
+            for (msg_id, chunk_ordinal, text), embedding in zip(
+                text_chunks_to_embed, embeddings
+            ):
+                embedding_update_data.append(
+                    (serialize_embedding(embedding), msg_id, chunk_ordinal)
+                )
+
+            # Bulk update embeddings
             with self.db:
                 cursor = self.db.cursor()
-                for (msg_id, chunk_ordinal, text), embedding in zip(
-                    text_chunks_to_embed, embeddings
-                ):
-                    cursor.execute(
+                if embedding_update_data:
+                    cursor.executemany(
                         """
                         UPDATE MessageTextIndex
                         SET embedding = ?
                         WHERE msg_id = ? AND chunk_ordinal = ?
                         """,
-                        (serialize_embedding(embedding), msg_id, chunk_ordinal),
+                        embedding_update_data,
                     )
 
     async def add_messages(
@@ -777,10 +805,18 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
 
     def deserialize(self, data: interfaces.MessageTextIndexData) -> None:
         """Deserialize message text index data."""
-        # Clear existing data
+        # Use a single transaction for the entire operation
         with self.db:
-            cursor = self.db.cursor()
-            cursor.execute("DELETE FROM MessageTextIndex")
+            self._deserialize_in_transaction(data)
+
+    def _deserialize_in_transaction(
+        self, data: interfaces.MessageTextIndexData
+    ) -> None:
+        """Deserialize message text index data within an existing transaction."""
+        cursor = self.db.cursor()
+
+        # Clear existing data
+        cursor.execute("DELETE FROM MessageTextIndex")
 
         # Get the index data
         index_data = data.get("indexData")
@@ -801,7 +837,6 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
         message_chunks = {}
 
         if message_ids:
-            cursor = self.db.cursor()
             placeholders = ",".join("?" * len(message_ids))
             cursor.execute(
                 f"SELECT msg_id, chunks FROM Messages WHERE msg_id IN ({placeholders})",
@@ -815,37 +850,38 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
                     chunks = json.loads(chunks_json)
                     message_chunks[msg_id] = chunks
 
-        # Now insert all the text locations
-        with self.db:
-            cursor = self.db.cursor()
+        # Prepare all insertion data for bulk operation
+        insertion_data = []
+        for i, text_location in enumerate(text_locations):
+            msg_id = text_location["messageOrdinal"]
+            chunk_ordinal = text_location["chunkOrdinal"]
 
-            for i, text_location in enumerate(text_locations):
-                msg_id = text_location["messageOrdinal"]
-                chunk_ordinal = text_location["chunkOrdinal"]
+            # Get the text content from our cached chunks
+            chunks = message_chunks.get(msg_id, [])
+            if chunk_ordinal < len(chunks):
+                text_content = chunks[chunk_ordinal]
+            else:
+                continue  # Skip if chunk doesn't exist
 
-                # Get the text content from our cached chunks
-                chunks = message_chunks.get(msg_id, [])
-                if chunk_ordinal < len(chunks):
-                    text_content = chunks[chunk_ordinal]
-                else:
-                    continue  # Skip if chunk doesn't exist
+            # Get embedding if available
+            embedding_blob = None
+            if embeddings is not None and i < len(embeddings):
+                embedding = embeddings[i]
+                if embedding is not None:
+                    embedding_blob = serialize_embedding(embedding)
 
-                # Get embedding if available
-                embedding_blob = None
-                if embeddings is not None and i < len(embeddings):
-                    embedding = embeddings[i]
-                    if embedding is not None:
-                        embedding_blob = serialize_embedding(embedding)
+            insertion_data.append((msg_id, chunk_ordinal, text_content, embedding_blob))
 
-                # Insert into MessageTextIndex
-                cursor.execute(
-                    """
-                    INSERT INTO MessageTextIndex
-                    (msg_id, chunk_ordinal, text_content, embedding)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    (msg_id, chunk_ordinal, text_content, embedding_blob),
-                )
+        # Bulk insert all the data
+        if insertion_data:
+            cursor.executemany(
+                """
+                INSERT INTO MessageTextIndex
+                (msg_id, chunk_ordinal, text_content, embedding)
+                VALUES (?, ?, ?, ?)
+                """,
+                insertion_data,
+            )
 
     async def clear(self) -> None:
         """Clear the message text index."""
@@ -960,20 +996,39 @@ class SqliteRelatedTermsAliases(interfaces.ITermToRelatedTerms):
         """Deserialize alias data."""
         if data is None:
             return
+        # Use a single transaction for the entire operation
+        with self.db:
+            await self._deserialize_in_transaction(data)
+
+    async def _deserialize_in_transaction(
+        self, data: interfaces.TermToRelatedTermsData | None
+    ) -> None:
+        """Deserialize alias data within an existing transaction."""
+        if data is None:
+            return
+
+        cursor = self.db.cursor()
         related_terms = data.get("relatedTerms", [])
+
         if related_terms:
-            with self.db:
-                cursor = self.db.cursor()
-                cursor.execute("DELETE FROM RelatedTermsAliases")
-                for item in related_terms:
-                    if item and item.get("termText") and item.get("relatedTerms"):
-                        term = item["termText"]
-                        for term_data in item["relatedTerms"]:
-                            alias = term_data["text"]
-                            cursor.execute(
-                                "INSERT INTO RelatedTermsAliases (term, alias) VALUES (?, ?)",
-                                (term, alias),
-                            )
+            # Clear existing data
+            cursor.execute("DELETE FROM RelatedTermsAliases")
+
+            # Prepare all insertion data for bulk operation
+            insertion_data = []
+            for item in related_terms:
+                if item and item.get("termText") and item.get("relatedTerms"):
+                    term = item["termText"]
+                    for term_data in item["relatedTerms"]:
+                        alias = term_data["text"]
+                        insertion_data.append((term, alias))
+
+            # Bulk insert all the data
+            if insertion_data:
+                cursor.executemany(
+                    "INSERT INTO RelatedTermsAliases (term, alias) VALUES (?, ?)",
+                    insertion_data,
+                )
 
 
 from ...aitools.embeddings import AsyncEmbeddingModel
@@ -1240,8 +1295,21 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
 
     async def deserialize(self, data: interfaces.TextEmbeddingIndexData) -> None:
         """Deserialize fuzzy index data from JSON into SQLite database."""
+        # Use a single transaction for the entire operation
+        with self.db:
+            await self._deserialize_in_transaction(data)
+
+    async def _deserialize_in_transaction(
+        self, data: interfaces.TextEmbeddingIndexData
+    ) -> None:
+        """Deserialize fuzzy index data within an existing transaction."""
         # Clear existing data
-        await self.clear()
+        cursor = self.db.cursor()
+        cursor.execute("DELETE FROM RelatedTermsFuzzy")
+
+        # Clear local mappings
+        self._terms_list.clear()
+        self._terms_to_ordinal.clear()
 
         # Get text items and embeddings from the data
         text_items = data.get("textItems")
@@ -1253,26 +1321,34 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         # Use persistent VectorBase to deserialize embeddings (preserves caching)
         self._vector_base.deserialize(embeddings_data)
 
-        # Store each text item with its embedding in the database
+        # Prepare all insertion data for bulk operation
         from .schema import serialize_embedding
 
-        with self.db:
-            cursor = self.db.cursor()
-            for i, text in enumerate(text_items):
-                if i < len(self._vector_base):
-                    # Get embedding from persistent VectorBase
-                    embedding = self._vector_base.get_embedding_at(i)
-                    if embedding is not None:
-                        serialized_embedding = serialize_embedding(embedding)
-                        # Insert as self-referential entry
-                        cursor.execute(
-                            """
-                            INSERT OR REPLACE INTO RelatedTermsFuzzy
-                            (term, related_term, score, term_embedding, related_embedding)
-                            VALUES (?, ?, 1.0, ?, ?)
-                            """,
-                            (text, text, serialized_embedding, serialized_embedding),
-                        )
+        insertion_data = []
+        for i, text in enumerate(text_items):
+            if i < len(self._vector_base):
+                # Get embedding from persistent VectorBase
+                embedding = self._vector_base.get_embedding_at(i)
+                if embedding is not None:
+                    serialized_embedding = serialize_embedding(embedding)
+                    # Insert as self-referential entry
+                    insertion_data.append(
+                        (text, text, 1.0, serialized_embedding, serialized_embedding)
+                    )
+                    # Update local mappings
+                    self._terms_list.append(text)
+                    self._terms_to_ordinal[text] = len(self._terms_to_ordinal)
+
+        # Bulk insert all the data
+        if insertion_data:
+            cursor.executemany(
+                """
+                INSERT OR REPLACE INTO RelatedTermsFuzzy
+                (term, related_term, score, term_embedding, related_embedding)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                insertion_data,
+            )
 
 
 from ...aitools.embeddings import AsyncEmbeddingModel
@@ -1303,12 +1379,20 @@ class SqliteRelatedTermsIndex(interfaces.ITermToRelatedTermsIndex):
 
     async def deserialize(self, data: interfaces.TermsToRelatedTermsIndexData) -> None:
         """Deserialize related terms index data."""
+        # Use a single transaction for the entire operation
+        with self.db:
+            await self._deserialize_in_transaction(data)
+
+    async def _deserialize_in_transaction(
+        self, data: interfaces.TermsToRelatedTermsIndexData
+    ) -> None:
+        """Deserialize related terms index data within an existing transaction."""
         # Deserialize alias data
         alias_data = data.get("aliasData")
         if alias_data is not None:
-            await self._aliases.deserialize(alias_data)
+            await self._aliases._deserialize_in_transaction(alias_data)
 
         # Deserialize fuzzy index data
         text_embedding_data = data.get("textEmbeddingData")
         if text_embedding_data is not None:
-            await self._fuzzy_index.deserialize(text_embedding_data)
+            await self._fuzzy_index._deserialize_in_transaction(text_embedding_data)

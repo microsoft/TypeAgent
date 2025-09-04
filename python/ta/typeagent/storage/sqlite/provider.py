@@ -71,7 +71,17 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
 
         # Initialize database connection
         self.db = sqlite3.connect(db_path)
+
+        # Configure SQLite for optimal bulk insertion performance
         self.db.execute("PRAGMA foreign_keys = ON")
+        # Improve write performance for bulk operations
+        self.db.execute("PRAGMA synchronous = NORMAL")  # Faster than FULL, still safe
+        self.db.execute(
+            "PRAGMA journal_mode = WAL"
+        )  # Write-Ahead Logging for better concurrency
+        self.db.execute("PRAGMA cache_size = -64000")  # 64MB cache (negative = KB)
+        self.db.execute("PRAGMA temp_store = MEMORY")  # Store temp tables in memory
+        self.db.execute("PRAGMA mmap_size = 268435456")  # 256MB memory-mapped I/O
 
         # Initialize schema
         init_db_schema(self.db)
@@ -215,19 +225,25 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
 
     async def deserialize(self, data: dict) -> None:
         """Deserialize storage provider data."""
-        # Deserialize term to semantic ref index
-        if data.get("termToSemanticRefIndexData"):
-            self._term_to_semantic_ref_index.deserialize(
-                data["termToSemanticRefIndexData"]
-            )
+        # Use a single transaction for the entire deserialization operation
+        with self.db:
+            # Deserialize term to semantic ref index
+            if data.get("termToSemanticRefIndexData"):
+                self._term_to_semantic_ref_index._deserialize_in_transaction(
+                    data["termToSemanticRefIndexData"]
+                )
 
-        # Deserialize related terms index
-        if data.get("relatedTermsIndexData"):
-            await self._related_terms_index.deserialize(data["relatedTermsIndexData"])
+            # Deserialize related terms index
+            if data.get("relatedTermsIndexData"):
+                await self._related_terms_index._deserialize_in_transaction(
+                    data["relatedTermsIndexData"]
+                )
 
-        # Deserialize message text index
-        if data.get("messageIndexData"):
-            self._message_text_index.deserialize(data["messageIndexData"])
+            # Deserialize message text index
+            if data.get("messageIndexData"):
+                self._message_text_index._deserialize_in_transaction(
+                    data["messageIndexData"]
+                )
 
     def get_conversation_metadata(self) -> ConversationMetadata | None:
         """Get conversation metadata."""

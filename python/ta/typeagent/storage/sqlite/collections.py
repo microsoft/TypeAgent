@@ -183,31 +183,39 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
         # Get the starting ordinal before adding any messages
         current_size = await self.size()
 
-        with self.db:
-            cursor = self.db.cursor()
-            for msg_id, item in enumerate(items_list, current_size):
+        # Prepare all insertion data for bulk operation
+        insertion_data = []
+        for msg_id, item in enumerate(items_list, current_size):
+            (
+                chunks_json,
+                chunk_uri,
+                start_timestamp,
+                tags_json,
+                metadata_json,
+                extra_json,
+            ) = self._serialize_message_to_row(item)
+            insertion_data.append(
                 (
+                    msg_id,
                     chunks_json,
                     chunk_uri,
                     start_timestamp,
                     tags_json,
                     metadata_json,
                     extra_json,
-                ) = self._serialize_message_to_row(item)
-                cursor.execute(
+                )
+            )
+
+        # Bulk insert all messages
+        with self.db:
+            cursor = self.db.cursor()
+            if insertion_data:
+                cursor.executemany(
                     """
                     INSERT INTO Messages (msg_id, chunks, chunk_uri, start_timestamp, tags, metadata, extra)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (
-                        msg_id,
-                        chunks_json,
-                        chunk_uri,
-                        start_timestamp,
-                        tags_json,
-                        metadata_json,
-                        extra_json,
-                    ),
+                    insertion_data,
                 )
 
         # Also add to message text index if available
@@ -331,16 +339,28 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
             )
 
     async def extend(self, items: typing.Iterable[interfaces.SemanticRef]) -> None:
+        items_list = list(items)
+        if not items_list:
+            return
+
+        # Prepare all insertion data for bulk operation
+        insertion_data = []
+        for item in items_list:
+            semref_id, range_json, knowledge_type, knowledge_json = (
+                self._serialize_semantic_ref_to_row(item)
+            )
+            insertion_data.append(
+                (semref_id, range_json, knowledge_type, knowledge_json)
+            )
+
+        # Bulk insert all semantic refs
         with self.db:
             cursor = self.db.cursor()
-            for item in items:
-                semref_id, range_json, knowledge_type, knowledge_json = (
-                    self._serialize_semantic_ref_to_row(item)
-                )
-                cursor.execute(
+            if insertion_data:
+                cursor.executemany(
                     """
                     INSERT INTO SemanticRefs (semref_id, range_json, knowledge_type, knowledge_json)
                     VALUES (?, ?, ?, ?)
                     """,
-                    (semref_id, range_json, knowledge_type, knowledge_json),
+                    insertion_data,
                 )
