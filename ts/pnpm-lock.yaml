@@ -2433,11 +2433,11 @@ importers:
   packages/defaultAgentProvider:
     dependencies:
       '@modelcontextprotocol/sdk':
-        specifier: ^1.8.0
-        version: 1.11.3
+        specifier: ^1.17.5
+        version: 1.17.5
       '@modelcontextprotocol/server-filesystem':
-        specifier: 2025.7.1
-        version: 2025.7.1(zod@3.24.4)
+        specifier: 2025.8.21
+        version: 2025.8.21(zod@3.24.4)
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
@@ -4934,20 +4934,16 @@ packages:
   '@milkdown/utils@7.13.1':
     resolution: {integrity: sha512-4ct/ovL0h/0kuLFligLdZgt3qtWbNZEHnIKO321qvkaGLx1HmzbMpiL6V8tq7iDqNKeoqAzFb/2vnUeYGv1Ndw==}
 
-  '@modelcontextprotocol/sdk@1.11.3':
-    resolution: {integrity: sha512-rmOWVRUbUJD7iSvJugjUbFZshTAuJ48MXoZ80Osx1GM0K/H1w7rSEvmw8m6vdWxNASgtaHIhAgre4H/E9GJiYQ==}
-    engines: {node: '>=18'}
-
   '@modelcontextprotocol/sdk@1.12.1':
     resolution: {integrity: sha512-KG1CZhZfWg+u8pxeM/mByJDScJSrjjxLc8fwQqbsS8xCjBmQfMNEBTotYdNanKekepnfRI85GtgQlctLFpcYPw==}
     engines: {node: '>=18'}
 
-  '@modelcontextprotocol/sdk@1.13.3':
-    resolution: {integrity: sha512-bGwA78F/U5G2jrnsdRkPY3IwIwZeWUEfb5o764b79lb0rJmMT76TLwKhdNZOWakOQtedYefwIR4emisEMvInKA==}
+  '@modelcontextprotocol/sdk@1.17.5':
+    resolution: {integrity: sha512-QakrKIGniGuRVfWBdMsDea/dx1PNE739QJ7gCM41s9q+qaCYTHCdsIBXQVVXry3mfWAiaM9kT22Hyz53Uw8mfg==}
     engines: {node: '>=18'}
 
-  '@modelcontextprotocol/server-filesystem@2025.7.1':
-    resolution: {integrity: sha512-mGXxYX8l4EWQPgh/1pLZI2baKifPy4+WUx1jJ572TsCbe/Bs7S8f7z0Dp9aRlpcLEMr/Qp+Rp1m3NXNsgdKUmg==}
+  '@modelcontextprotocol/server-filesystem@2025.8.21':
+    resolution: {integrity: sha512-Kk+E+lAuAQPLhrJlrsboEdwTBxWU0DYfsuELIuP3Nvfn8Kvd72BU6KVjhEa5EjbC4YckQDCxH9VJK47x6psxow==}
     hasBin: true
 
   '@mongodb-js/saslprep@1.2.2':
@@ -14842,21 +14838,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@modelcontextprotocol/sdk@1.11.3':
-    dependencies:
-      content-type: 1.0.5
-      cors: 2.8.5
-      cross-spawn: 7.0.6
-      eventsource: 3.0.6
-      express: 5.1.0
-      express-rate-limit: 7.5.0(express@5.1.0)
-      pkce-challenge: 5.0.0
-      raw-body: 3.0.0
-      zod: 3.24.4
-      zod-to-json-schema: 3.24.5(zod@3.24.4)
-    transitivePeerDependencies:
-      - supports-color
-
   '@modelcontextprotocol/sdk@1.12.1':
     dependencies:
       ajv: 6.12.6
@@ -14873,7 +14854,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@modelcontextprotocol/sdk@1.13.3':
+  '@modelcontextprotocol/sdk@1.17.5':
     dependencies:
       ajv: 6.12.6
       content-type: 1.0.5
@@ -14890,9 +14871,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@modelcontextprotocol/server-filesystem@2025.7.1(zod@3.24.4)':
+  '@modelcontextprotocol/server-filesystem@2025.8.21(zod@3.24.4)':
     dependencies:
-      '@modelcontextprotocol/sdk': 1.13.3
+      '@modelcontextprotocol/sdk': 1.17.5
       diff: 5.2.0
       glob: 10.4.5
       minimatch: 10.0.1
