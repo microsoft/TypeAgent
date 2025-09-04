@@ -1,13 +1,22 @@
 [
-    {
-        "request": "Open the portugal consulate website",
-        "action": {
+  {
+    "request": "Open the portugal consulate website",
+    "expected": {
+      "anyof": [
+        {
+          "action": {
             "schemaName": "browser",
             "actionName": "openWebPage",
             "parameters": {
-                "site": "portugal consulate",
-                "tab": "current"
+              "site": "portugal consulate",
+              "tab": "current"
             }
+          },
+          "alternates": {
+            "site": "portugal consulate website"
+          }
         }
+      ]
     }
+  }
 ]
