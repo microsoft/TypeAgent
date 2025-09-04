@@ -4,15 +4,13 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterable, Callable
-from dataclasses import dataclass
 
 from typechat import Failure
 
-from . import convknowledge, kplib, secindex
-from .collections import MemorySemanticRefCollection
-from .convknowledge import KnowledgeExtractor
-from .convsettings import ConversationSettings
-from .interfaces import (
+from ...knowpro import convknowledge, kplib, secindex
+from ...knowpro.convsettings import ConversationSettings
+from ...knowpro.convsettings import SemanticRefIndexSettings
+from ...knowpro.interfaces import (
     # Interfaces.
     IConversation,
     IMessage,
@@ -31,24 +29,8 @@ from .interfaces import (
     TextRange,
     Topic,
 )
-from .knowledge import extract_knowledge_from_text_batch
-
-
-@dataclass
-class SemanticRefIndexSettings:
-    batch_size: int
-    auto_extract_knowledge: bool
-    knowledge_extractor: KnowledgeExtractor | None = None
-
-
-def text_range_from_message_chunk(
-    message_ordinal: MessageOrdinal,
-    chunk_ordinal: int = 0,
-) -> TextRange:
-    return TextRange(
-        start=TextLocation(message_ordinal, chunk_ordinal),
-        end=None,
-    )
+from ...knowpro.utils import text_range_from_message_chunk
+from ...knowpro.knowledge import extract_knowledge_from_text_batch
 
 
 def text_range_from_location(
@@ -536,7 +518,10 @@ class TermToSemanticRefIndex(ITermToSemanticRefIndex):
     async def get_terms(self) -> list[str]:
         return list(self._map)
 
-    def clear(self) -> None:
+    async def clear(self) -> None:
+        self._clear()
+
+    def _clear(self) -> None:
         self._map.clear()
 
     async def add_term(
@@ -562,13 +547,18 @@ class TermToSemanticRefIndex(ITermToSemanticRefIndex):
     async def remove_term(
         self, term: str, semantic_ref_ordinal: SemanticRefOrdinal
     ) -> None:
-        self._map.pop(self._prepare_term(term), None)
-
-    def remove_term_if_empty(self, term: str) -> None:
-        """Clean up a term if it has lost its last semantic reference."""
         term = self._prepare_term(term)
-        if term in self._map and len(self._map[term]) == 0:
-            self._map.pop(term)
+        if term in self._map:
+            # Remove only the specific semantic ref ordinal, not the entire term
+            scored_refs = self._map[term]
+            self._map[term] = [
+                ref
+                for ref in scored_refs
+                if ref.semantic_ref_ordinal != semantic_ref_ordinal
+            ]
+            # Clean up empty terms
+            if not self._map[term]:
+                del self._map[term]
 
     def serialize(self) -> TermToSemanticRefIndexData:
         items: list[TermToSemanticRefIndexItemData] = []
@@ -584,7 +574,7 @@ class TermToSemanticRefIndex(ITermToSemanticRefIndex):
         return TermToSemanticRefIndexData(items=items)
 
     def deserialize(self, data: TermToSemanticRefIndexData) -> None:
-        self.clear()
+        self._clear()
         for index_item_data in data["items"]:
             term = index_item_data.get("term")
             term = self._prepare_term(term)
@@ -601,7 +591,7 @@ class TermToSemanticRefIndex(ITermToSemanticRefIndex):
 # ...
 
 
-async def build_conversation_index[TMessage: IMessage](
+async def build_semantic_ref[TMessage: IMessage](
     conversation: IConversation[TMessage, TermToSemanticRefIndex],
     conversation_settings: ConversationSettings,
 ) -> None:

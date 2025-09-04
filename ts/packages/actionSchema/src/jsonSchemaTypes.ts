@@ -8,6 +8,8 @@ export type JsonSchema =
     | JsonSchemaString
     | JsonSchemaNumber
     | JsonSchemaBoolean
+    | JsonSchemaTrue
+    | JsonSchemaFalse
     | JsonSchemaNull
     | JsonSchemaUnion
     | JsonSchemaReference;
@@ -58,5 +60,15 @@ export type JsonSchemaUnion = {
 
 export type JsonSchemaReference = {
     $ref: string;
+    description?: string;
+};
+
+export type JsonSchemaTrue = {
+    type: "true";
+    description?: string;
+};
+
+export type JsonSchemaFalse = {
+    type: "false";
     description?: string;
 };

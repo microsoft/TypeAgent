@@ -68,6 +68,11 @@ export function createInlineBrowserControl(
                 throw new Error("Failed to close active browser tab.");
             }
         },
+        async closeAllWebPages() {
+            shellWindow.getAllBrowserTabs().forEach((tab) => {
+                shellWindow.closeBrowserTab(tab.id);
+            });
+        },
         async switchTabs(
             tabDescription: string,
             tabIndex?: number,
@@ -263,7 +268,7 @@ export function createInlineBrowserControl(
             query: string,
             sites: string[],
             searchProvider: SearchProvider,
-            options: { waitForPageLoad?: boolean },
+            options: { waitForPageLoad?: boolean; newTab?: boolean } = {},
         ): Promise<URL> {
             // append any site specific scoping
             if (sites && sites.length > 0) {
@@ -284,10 +289,17 @@ export function createInlineBrowserControl(
             );
 
             // Always use tabs
-            await shellWindow.createBrowserTab(searchUrl, {
-                background: false,
-                waitForPageLoad: options?.waitForPageLoad,
-            });
+            const activeTab = shellWindow.getActiveBrowserView();
+            if (options?.newTab || !activeTab) {
+                await shellWindow.createBrowserTab(searchUrl, {
+                    background: false,
+                    waitForPageLoad: options?.waitForPageLoad,
+                });
+            } else {
+                activeTab.webContentsView.webContents.loadURL(
+                    searchUrl.toString(),
+                );
+            }
 
             return searchUrl;
         },

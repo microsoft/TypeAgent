@@ -4,9 +4,10 @@
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
-from ..aitools.embeddings import NormalizedEmbedding
-from ..aitools.vectorbase import TextEmbeddingIndexSettings
-from .interfaces import (
+from ...aitools.embeddings import NormalizedEmbedding
+from ...aitools.vectorbase import TextEmbeddingIndexSettings
+from ...knowpro.convsettings import MessageTextIndexSettings
+from ...knowpro.interfaces import (
     IConversation,
     IMessage,
     IMessageTextIndex,
@@ -17,15 +18,7 @@ from .interfaces import (
     ScoredMessageOrdinal,
     TextLocation,
 )
-from .textlocindex import ScoredTextLocation, TextToTextLocationIndex
-
-
-@dataclass
-class MessageTextIndexSettings:
-    embedding_index_settings: TextEmbeddingIndexSettings
-
-    def __init__(self, embedding_index_settings: TextEmbeddingIndexSettings):
-        self.embedding_index_settings = embedding_index_settings
+from ...knowpro.textlocindex import ScoredTextLocation, TextToTextLocationIndex
 
 
 async def build_message_index[
@@ -42,7 +35,7 @@ async def build_message_index[
         csi.message_index = await storage_provider.get_message_text_index()
     messages = conversation.messages
     # Convert collection to list for add_messages
-    messages_list = [message async for message in messages]
+    messages_list = await messages.get_slice(0, await messages.size())
     await csi.message_index.add_messages(messages_list)
 
 

@@ -43,6 +43,7 @@ export {
     toJsonActions,
     fromJsonActions,
     getFullActionName,
+    splitFullActionName,
     createExecutableAction,
     toExecutableActions,
     toFullActions,

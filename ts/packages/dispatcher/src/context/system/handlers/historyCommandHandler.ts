@@ -15,6 +15,7 @@ import fs from "node:fs";
 import { expandHome } from "../../../utils/fsUtils.js";
 import { isChatHistoryInput } from "../../chatHistory.js";
 import { setActivityContext } from "../../../execute/activityContext.js";
+import { DispatcherActivityName } from "../../dispatcher/dispatcherUtils.js";
 
 class HistoryListCommandHandler implements CommandHandlerNoParams {
     public readonly description = "List history";
@@ -25,12 +26,27 @@ class HistoryListCommandHandler implements CommandHandlerNoParams {
     }
 }
 
-class HistoryClearCommandHandler implements CommandHandlerNoParams {
+class HistoryClearCommandHandler implements CommandHandler {
     public readonly description = "Clear the history";
-    public async run(context: ActionContext<CommandHandlerContext>) {
+    public readonly parameters = {
+        flags: {
+            activity: {
+                description: "Clear the current activity context",
+                type: "boolean",
+                default: true,
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        param: ParsedCommandParams<typeof this.parameters>,
+    ) {
         const systemContext = context.sessionContext.agentContext;
         const history = systemContext.chatHistory;
         history.clear();
+        if (param.flags.activity) {
+            setActivityContext(DispatcherActivityName, null, systemContext);
+        }
         displayResult("Chat history cleared.", context);
     }
 }

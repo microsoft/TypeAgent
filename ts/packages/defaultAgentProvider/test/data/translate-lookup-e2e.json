@@ -1,31 +1,31 @@
 [
   {
     "request": "I am planning a trip to Spain. can you look up some of the cities I should visit.",
-    "action": "dispatcher.lookup.lookupAndAnswer"
+    "expected": "browser.lookupAndAnswer.lookupAndAnswerInternet"
   },
   {
     "request": "Look up the ingredients for lemon meringue pie",
-    "action": "dispatcher.lookup.lookupAndAnswer"
+    "expected": "browser.lookupAndAnswer.lookupAndAnswerInternet"
   },
   {
     "request": "Did duke win its bball game",
-    "action": "dispatcher.lookup.lookupAndAnswer"
+    "expected": "browser.lookupAndAnswer.lookupAndAnswerInternet"
   },
   {
     "request": "Lookup duke result on the web",
-    "action": "dispatcher.lookup.lookupAndAnswer"
+    "expected": "browser.lookupAndAnswer.lookupAndAnswerInternet"
   },
   {
     "request": "lookup snowdrop flowers",
-    "action": "dispatcher.lookup.lookupAndAnswer"
+    "expected": "browser.lookupAndAnswer.lookupAndAnswerInternet"
   },
   {
     "request": "lookup snowdrops on the web",
-    "action": "dispatcher.lookup.lookupAndAnswer"
+    "expected": "browser.lookupAndAnswer.lookupAndAnswerInternet"
   },
   {
     "request": "I'd like to look up something on the web",
-    "action": {
+    "expected": {
       "schemaName": "dispatcher.lookup",
       "actionName": "startLookup",
       "parameters": {
@@ -37,7 +37,7 @@
   },
   {
     "request": "I'd like to look up something on https://wikipedia.com",
-    "action": {
+    "expected": {
       "schemaName": "dispatcher.lookup",
       "actionName": "startLookup",
       "parameters": {
@@ -50,10 +50,10 @@
   },
   {
     "request": "play the song by Bach we talked about yesterday",
-    "action": "dispatcher.clarify.clarifyUnresolvedReference"
+    "expected": "dispatcher.clarify.clarifyUnresolvedReference"
   },
   {
     "request": "play song from the artist that we talked about when we were discussing flower",
-    "action": "dispatcher.clarify.clarifyUnresolvedReference"
+    "expected": "dispatcher.clarify.clarifyUnresolvedReference"
   }
 ]

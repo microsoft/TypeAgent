@@ -1,14 +1,14 @@
 [
   {
     "request": "why do birds suddenly appear every time you are near",
-    "action": "chat.generateResponse"
+    "expected": "chat.generateResponse"
   },
-  { "request": "add play to the To do list", "action": "list.addItems" },
-  { "request": "add homework to To do list", "action": "list.addItems" },
-  { "request": "add plan holiday to To do list.", "action": "list.addItems" },
+  { "request": "add play to the To do list", "expected": "list.addItems" },
+  { "request": "add homework to To do list", "expected": "list.addItems" },
+  { "request": "add plan holiday to To do list.", "expected": "list.addItems" },
   {
     "request": "play some EDM please",
-    "action": {
+    "expected": {
       "schemaName": "player",
       "actionName": "playGenre",
       "parameters": {
@@ -18,7 +18,7 @@
   },
   {
     "request": "play some Symphony by Beethoven please",
-    "action": {
+    "expected": {
       "schemaName": "player",
       "actionName": "playTrack",
       "parameters": {
@@ -29,7 +29,7 @@
   },
   {
     "request": "play Hello by Adele",
-    "action": {
+    "expected": {
       "schemaName": "player",
       "actionName": "playTrack",
       "parameters": {
@@ -40,7 +40,7 @@
   },
   {
     "request": "get my top 50 favorite songs, filter the current list to Bach pieces, and create a playlist call test",
-    "action": [
+    "expected": [
       "player.getFavorites",
       "player.filterTracks",
       "player.createPlaylist"
@@ -48,22 +48,22 @@
   },
   {
     "request": "look up information about Oregon and write a poem using what you found",
-    "action": [
-      "dispatcher.lookup.lookupAndAnswer",
+    "expected": [
+      "browser.lookupAndAnswer.lookupAndAnswerInternet",
       "dispatcher.pendingRequestAction"
     ]
   },
   {
     "request": "look up the recipe for tarte a l'oignan and add the ingredients to my grocery list",
-    "action": [
-      "dispatcher.lookup.lookupAndAnswer",
+    "expected": [
+      "browser.lookupAndAnswer.lookupAndAnswerInternet",
       "dispatcher.pendingRequestAction"
     ]
   },
   [
     {
       "request": "add ham to the list",
-      "action": "dispatcher.clarify.clarifyMissingParameter",
+      "expected": "dispatcher.clarify.clarifyMissingParameter",
       "history": {
         "text": "Which list would you like to add ham to?",
         "source": "list",
@@ -74,7 +74,7 @@
     },
     {
       "request": "grocery",
-      "action": {
+      "expected": {
         "schemaName": "list",
         "actionName": "addItems",
         "parameters": {

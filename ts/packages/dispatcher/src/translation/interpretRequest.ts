@@ -36,7 +36,8 @@ export function createHistoryContext(
     if (promptSections.length !== 0) {
         promptSections.unshift({
             content:
-                "The following is a history of the conversation with the user that can be used to translate user requests",
+                "The following is the chat history of requests and action results with the user, used for context to translate the current user request." +
+                "Do NOT translate actions from requests in the chat history unless the current user request refers to it.",
             role: "system",
         });
     }
@@ -215,10 +216,10 @@ async function interpretRequestWithActivityContext(
 export async function interpretRequest(
     context: ActionContext<CommandHandlerContext>,
     request: string,
-    attachments?: CachedImageWithDetails[] | undefined,
+    attachments: CachedImageWithDetails[] | undefined,
+    history: HistoryContext | undefined,
 ): Promise<InterpretResult> {
     const systemContext = context.sessionContext.agentContext;
-    const history = getHistoryContext(systemContext);
     const activeSchemaNames = systemContext.agents.getActiveSchemas();
 
     const tokenUsage: ai.CompletionUsageStats = {

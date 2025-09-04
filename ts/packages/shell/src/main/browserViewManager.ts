@@ -32,7 +32,8 @@ export class BrowserViewManager {
     private onTabUpdateCallback?: () => void;
     private onNavigationUpdateCallback?: () => void;
     private onPageLoadCompleteCallback?: (tabId: string) => void;
-
+    private onTabClosedCallback?: (tabId: string) => void;
+    private viewBounds: Electron.Rectangle | null = null;
     constructor(mainWindow: BrowserWindow) {
         this.mainWindow = mainWindow;
         debug("BrowserViewManager initialized");
@@ -57,6 +58,14 @@ export class BrowserViewManager {
      */
     setPageLoadCompleteCallback(callback: (tabId: string) => void): void {
         this.onPageLoadCompleteCallback = callback;
+    }
+
+    /**
+     * Set callback for tab closed
+     * @param callback - The tab closed callback
+     */
+    setTabClosedCallback(callback: (tabId: string) => void): void {
+        this.onTabClosedCallback = callback;
     }
 
     /**
@@ -231,7 +240,8 @@ export class BrowserViewManager {
      * Close a browser tab
      */
     closeBrowserTab(tabId: string): boolean {
-        const browserView = this.browserViews.get(tabId);
+        const browserView: BrowserViewContext | undefined =
+            this.browserViews.get(tabId);
         if (!browserView) {
             debug(`Cannot close tab ${tabId}: not found`);
             return false;
@@ -263,6 +273,9 @@ export class BrowserViewManager {
                 this.setActiveBrowserView(remainingTabs[0].id);
             }
         }
+
+        // remove the tab from the browser header
+        this.onTabClosedCallback?.(tabId);
 
         debug(`Browser tab closed: ${tabId}`);
         return true;
@@ -326,38 +339,27 @@ export class BrowserViewManager {
     }
 
     /**
+     * Set the bounds for the browser view area
+     * @param bounds Bounds rectangle
+     */
+    public setBounds(bounds: Electron.Rectangle): void {
+        this.viewBounds = bounds;
+        this.updateActiveBrowserViewBounds();
+    }
+
+    /**
      * Update bounds for the active browser view
      */
-    updateActiveBrowserViewBounds(): void {
+    private updateActiveBrowserViewBounds(): void {
         const activeView = this.getActiveBrowserView();
-        if (!activeView) {
+        if (!activeView || !this.viewBounds) {
             return;
         }
 
-        // Get main window content bounds
-        const bounds = this.mainWindow.getContentBounds();
-
-        // Calculate browser view bounds (accounting for header and chat panel)
         const headerHeight = 40; // Height of the tab/navigation header
-
-        // Get the current chat view bounds to calculate browser area
-        const chatViewBounds = this.mainWindow.contentView.children
-            .find(
-                (child) =>
-                    child instanceof WebContentsView &&
-                    child !== activeView.webContentsView,
-            )
-            ?.getBounds();
-
-        const chatWidth =
-            chatViewBounds?.width || Math.floor(bounds.width * 0.5);
-
-        const browserViewBounds = {
-            x: chatWidth + 4, // 4px divider
-            y: headerHeight,
-            width: bounds.width - chatWidth - 4,
-            height: bounds.height - headerHeight,
-        };
+        const browserViewBounds = { ...this.viewBounds };
+        browserViewBounds.y = headerHeight;
+        browserViewBounds.height -= headerHeight;
 
         activeView.webContentsView.setBounds(browserViewBounds);
         debug(`Updated active browser view bounds:`, browserViewBounds);

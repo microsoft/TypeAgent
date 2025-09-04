@@ -11,7 +11,7 @@ from typeagent.knowpro.interfaces import (
     TextRange,
 )
 from typeagent.knowpro.kplib import Facet, ConcreteEntity, Action
-from typeagent.knowpro.propindex import (
+from typeagent.storage.memory.propindex import (
     PropertyIndex,
     PropertyNames,
     add_facet,
@@ -24,9 +24,7 @@ from typeagent.knowpro.propindex import (
     split_property_term_text,
     is_known_property,
 )
-from typeagent.knowpro.collections import (
-    MemorySemanticRefCollection,
-)
+from typeagent.storage.memory import MemorySemanticRefCollection
 
 from fixtures import needs_auth, FakeConversation
 
@@ -285,7 +283,7 @@ async def test_property_index_clear(property_index: PropertyIndex):
     await property_index.add_property("name", "value", 0)
     assert await property_index.size() > 0
 
-    property_index.clear()
+    await property_index.clear()
     assert await property_index.size() == 0
 
 

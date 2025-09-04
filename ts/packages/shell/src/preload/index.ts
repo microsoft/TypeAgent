@@ -53,16 +53,7 @@ function registerClient(client: Client) {
     );
 
     ipcRenderer.on("focus-chat-input", () => {
-        // Focus the chat input element
-        const inputElement = document.querySelector(
-            'input[type="text"], textarea',
-        ) as HTMLElement;
-        if (inputElement) {
-            inputElement.focus();
-            if ("select" in inputElement) {
-                (inputElement as HTMLInputElement).select();
-            }
-        }
+        client.focusInput();
     });
 
     // Signal the main process that the client has been registered

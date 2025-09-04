@@ -25,6 +25,7 @@ import {
     fromJsonActions,
     toJsonActions,
     ExecutableAction,
+    FullAction,
 } from "agent-cache";
 import { glob } from "glob";
 import { fileURLToPath } from "node:url";
@@ -149,7 +150,7 @@ function normalizeParams(obj: any) {
     }
 }
 
-function normalizeAction(action: JSONAction) {
+export function normalizeAction(action: JSONAction | FullAction) {
     if (action.parameters !== undefined) {
         normalizeParams(action.parameters);
     }

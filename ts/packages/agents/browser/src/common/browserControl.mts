@@ -13,6 +13,7 @@ export type BrowserControlInvokeFunctions = {
      * close the browser view.
      */
     closeWebPage(): Promise<void>;
+    closeAllWebPages(): Promise<void>;
     goForward(): Promise<void>;
     goBack(): Promise<void>;
     reload(): Promise<void>;
@@ -37,7 +38,7 @@ export type BrowserControlInvokeFunctions = {
         query?: string,
         sites?: string[],
         searchProvider?: SearchProvider,
-        options?: { waitForPageLoad?: boolean },
+        options?: { waitForPageLoad?: boolean; newTab?: boolean },
     ): Promise<URL>;
     switchTabs(tabDescription: string, tabIndex?: number): Promise<boolean>;
 

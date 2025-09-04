@@ -1,17 +1,18 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+export type DisabledBrowserActions = Search | SearchWebMemories;
 export type BrowserActions =
     | OpenWebPage
     | CloseWebPage
-    | SwitchTabs
+    | CloseAllWebPages
+    | ChangeTabs
     | GoBack
     | GoForward
     | ScrollDown
     | ScrollUp
     | FollowLinkByText
     | FollowLinkByPosition
-    | Search
     | ReadPageContent
     | StopReadPageContent
     | ZoomIn
@@ -20,10 +21,9 @@ export type BrowserActions =
     | CaptureScreenshot
     | ReloadPage
     | GetWebsiteStats
-    | SearchWebMemories
     | OpenSearchResult
     | ChangeSearchProvider
-    | LookupAndAnswerInternet;
+    | SearchImageAction;
 
 export type WebPage = string;
 export type WebSearchResult = string;
@@ -53,9 +53,9 @@ export type OpenWebPage = {
     };
 };
 
-// Switch to a different tab
-export type SwitchTabs = {
-    actionName: "switchTabs";
+// Make another tab the activbe tab
+export type ChangeTabs = {
+    actionName: "changeTab";
     parameters: {
         tabDescription: string;
         // The numerical index referred to by the descripton if applicable.  (i.e. first = 1, second = 2, etc.)
@@ -68,11 +68,9 @@ export type CloseWebPage = {
     actionName: "closeWebPage";
 };
 
-export type Search = {
-    actionName: "search";
-    parameters: {
-        query?: string;
-    };
+// Close all web page views
+export type CloseAllWebPages = {
+    actionName: "closeAllWebPages";
 };
 
 export type GoBack = {
@@ -155,7 +153,18 @@ export type GetWebsiteStats = {
     };
 };
 
+// Display a search results page for the specified query
+// Do NOT default to search if the user request doesn't explicitly ask for a search
+export type Search = {
+    actionName: "search";
+    parameters: {
+        query?: string;
+        newTab: boolean; // default is false;
+    };
+};
+
 // Search web memories (unified search replacing queryWebKnowledge and searchWebsites)
+// Do NOT default to search if the user request doesn't explicitly ask for a search
 export type SearchWebMemories = {
     actionName: "searchWebMemories";
     parameters: {
@@ -209,21 +218,16 @@ export type ChangeSearchProvider = {
     };
 };
 
-// The user request is a question about general knowledge that can be found from the internet.
-// (e.g. "what is the current price of Microsoft stock?")
-// look up for contemporary internet information including sports scores, news events, or current commerce offerings, use the lookups parameter to request a lookup of the information on the user's behalf; the assistant will generate a response based on the lookup results
-// Lookup *facts* you don't know or if your facts are out of date.
-// E.g. stock prices, time sensitive data, etc
-// the search strings to look up on the user's behalf should be specific enough to return the correct information
-// it is recommended to include the same entities as in the user request
-export type LookupAndAnswerInternet = {
-    actionName: "lookupAndAnswerInternet";
+// Searches (finds) for images on the internet to show the user
+// if the user asks doesn't specify a quantity, randomly select anywhere between 3 and 10 images
+export type SearchImageAction = {
+    actionName: "searchImageAction";
     parameters: {
         // the original request of the user
         originalRequest: string;
-        // the internet search terms to use
-        internetLookups: string[];
-        // specific sites to look up in.
-        sites?: string[];
+        // the search term for the image(s) to find
+        searchTerm: string;
+        // the number of images to show the user
+        numImages: number;
     };
 };

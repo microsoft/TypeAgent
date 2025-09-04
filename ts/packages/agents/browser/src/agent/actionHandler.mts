@@ -72,7 +72,9 @@ import {
     BrowserActions,
     OpenWebPage,
     OpenSearchResult,
-    SwitchTabs,
+    ChangeTabs,
+    Search,
+    DisabledBrowserActions,
 } from "./actionsSchema.mjs";
 import {
     resolveURLWithHistory,
@@ -103,7 +105,16 @@ import {
     getActionBrowserControl,
     saveSettings,
 } from "./browserActions.mjs";
-import { ChunkChatResponse, generateAnswer } from "typeagent";
+import {
+    ChunkChatResponse,
+    generateAnswer,
+    summarize,
+    SummarizeResponse,
+} from "typeagent";
+import {
+    LookupAndAnswerActions,
+    LookupAndAnswerInternet,
+} from "./lookupAndAnswerSchema.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
 const debugWebSocket = registerDebug("typeagent:browser:ws");
@@ -840,7 +851,7 @@ async function openWebPage(
             site: url,
         },
         activityEndAction: {
-            actionName: "closeWebPage",
+            actionName: "closeAllWebPages",
         },
     };
     return result;
@@ -855,14 +866,23 @@ async function closeWebPage(context: ActionContext<BrowserActionContext>) {
     return result;
 }
 
-async function switchTabs(
+async function closeAllWebPages(context: ActionContext<BrowserActionContext>) {
+    const browserControl = getActionBrowserControl(context);
+    context.actionIO.setDisplay("Closing all web pages.");
+    await browserControl.closeAllWebPages();
+    const result = createActionResult("Web pages closed successfully.");
+    result.activityContext = null; // clear the activity context.
+    return result;
+}
+
+async function changeTabs(
     context: ActionContext<BrowserActionContext>,
-    action: TypeAgentAction<SwitchTabs>,
+    action: TypeAgentAction<ChangeTabs>,
 ) {
     const browserControl = getActionBrowserControl(context);
 
     displayStatus(
-        `Switching to tab: ${action.parameters.tabDescription}.`,
+        `Activating tab: ${action.parameters.tabDescription}.`,
         context,
     );
     let result: ActionResult | undefined = undefined;
@@ -1064,12 +1084,14 @@ async function changeSearchProvider(
 
 async function executeBrowserAction(
     action:
+        | TypeAgentAction<BrowserActions | DisabledBrowserActions, "browser">
         | TypeAgentAction<BrowserActions, "browser">
         | TypeAgentAction<ExternalBrowserActions, "browser.external">
         | TypeAgentAction<CrosswordActions, "browser.crossword">
         | TypeAgentAction<ShoppingActions, "browser.commerce">
         | TypeAgentAction<InstacartActions, "browser.instacart">
-        | TypeAgentAction<SchemaDiscoveryActions, "browser.actionDiscovery">,
+        | TypeAgentAction<SchemaDiscoveryActions, "browser.actionDiscovery">
+        | TypeAgentAction<LookupAndAnswerActions, "browser.lookupAndAnswer">,
 
     context: ActionContext<BrowserActionContext>,
 ) {
@@ -1081,8 +1103,10 @@ async function executeBrowserAction(
                     return openWebPage(context, action);
                 case "closeWebPage":
                     return closeWebPage(context);
-                case "switchTabs":
-                    return switchTabs(context, action);
+                case "closeAllWebPages":
+                    return closeAllWebPages(context);
+                case "changeTab":
+                    return changeTabs(context, action);
                 case "getWebsiteStats":
                     return getWebsiteStats(context, action);
                 case "searchWebMemories":
@@ -1112,14 +1136,25 @@ async function executeBrowserAction(
                     await getActionBrowserControl(context).zoomReset();
                     return;
                 case "search":
-                    await getActionBrowserControl(context).search(
+                    const pageUrl: URL = await getActionBrowserControl(
+                        context,
+                    ).search(
                         action.parameters.query,
                         undefined,
                         context.sessionContext.agentContext
                             .activeSearchProvider,
+                        {
+                            newTab: action.parameters.newTab,
+                        },
                     );
-                    return createActionResultFromTextDisplay(
-                        `Opened new tab with query ${action.parameters.query}`,
+
+                    return summarizeSearchResults(
+                        context,
+                        action,
+                        pageUrl,
+                        await getActionBrowserControl(
+                            context,
+                        ).getPageContents(),
                     );
                 case "readPage":
                     await getActionBrowserControl(context).readPage();
@@ -1170,78 +1205,16 @@ async function executeBrowserAction(
                     return openSearchResult(context, action);
                 case "changeSearchProvider":
                     return changeSearchProvider(context, action);
-                case "lookupAndAnswerInternet":
-                    // TODO: beter answer handling, streaming answer, return entities from search result, etc.
-                    // run a search for the lookup, wait for the page to load
-                    displayStatus(
-                        `Searching the web for '${action.parameters.internetLookups.join(" ")}'`,
-                        context,
-                    );
-
-                    const searchURL: URL = await getActionBrowserControl(
-                        context,
-                    ).search(
-                        action.parameters.internetLookups.join(" "),
-                        action.parameters.sites,
-                        context.sessionContext.agentContext
-                            .activeSearchProvider,
-                        { waitForPageLoad: true },
-                    );
-
-                    // go get the page contents
-                    const content =
-                        await getActionBrowserControl(
-                            context,
-                        ).getPageContents();
-
-                    // now try to generate an answer from the page contents
-                    displayStatus(
-                        `Generating the answer for '${action.parameters.originalRequest}'`,
-                        context,
-                    );
-                    const model = openai.createJsonChatModel("GPT_35_TURBO", [
-                        "InternetLookupAnswerGenerator",
-                    ]); // TODO: GPT_5_MINI/NANO?
-                    const answerResult = await generateAnswer(
-                        action.parameters.originalRequest,
-                        content,
-                        4096 * 4,
-                        model,
-                        1,
-                        (text: string, result: ChunkChatResponse) => {
-                            displayStatus(result.generatedText!, context);
+                case "searchImageAction": {
+                    return openWebPage(context, {
+                        schemaName: "browser",
+                        actionName: "openWebPage",
+                        parameters: {
+                            site: `https://www.bing.com/images/search?q=${action.parameters.searchTerm}`,
+                            tab: "new",
                         },
-                    );
-
-                    if (answerResult.success) {
-                        const answer: ChunkChatResponse =
-                            answerResult.data as ChunkChatResponse;
-                        if (
-                            answer.answerStatus === "Answered" ||
-                            answer.answerStatus === "PartiallyAnswered"
-                        ) {
-                            return createActionResult(
-                                `${answer.generatedText}`,
-                                { speak: true },
-                                [
-                                    // the web page
-                                    {
-                                        name: "WebPage",
-                                        type: ["WebPage"],
-                                        uniqueId: searchURL.toString(),
-                                    },
-                                ],
-                            );
-                        } else {
-                            return createActionResultFromTextDisplay(
-                                `No answer found for '${action.parameters.originalRequest}'.  Try navigating to a search result or trying another query.`,
-                            );
-                        }
-                    } else {
-                        return createActionResultFromError(
-                            `There was an error generating the answer: ${answerResult.message} `,
-                        );
-                    }
+                    });
+                }
                 default:
                     // Should never happen.
                     throw new Error(
@@ -1257,6 +1230,16 @@ async function executeBrowserAction(
                 }
             }
             break;
+        case "browser.lookupAndAnswer":
+            switch (action.actionName) {
+                case "lookupAndAnswerInternet":
+                    return await lookup(context, action);
+                default: {
+                    throw new Error(
+                        `Unknown action for lookupAndAnswer: ${(action as any).actionName}`,
+                    );
+                }
+            }
     }
     const webSocketEndpoint = context.sessionContext.agentContext.webSocket;
     const connector = context.sessionContext.agentContext.browserConnector;
@@ -1321,6 +1304,138 @@ async function executeBrowserAction(
         throw new Error("No websocket connection.");
     }
     return undefined;
+}
+
+/**
+ * Summarizes the search results and does entity extraction on it.
+ * @param context - The current context
+ * @param action - The search action
+ * @param pageUrl - The URL of the search page
+ * @param pageContents - The contents of the search page
+ * @returns - The action result
+ */
+async function summarizeSearchResults(
+    context: ActionContext<BrowserActionContext>,
+    action: Search,
+    pageUrl: URL,
+    pageContents: string,
+) {
+    displayStatus(
+        `Reading and summarizing search results, please stand by...`,
+        context,
+    );
+
+    const model = openai.createJsonChatModel("GPT_35_TURBO", [
+        "SearchPageSummary",
+    ]);
+    const answerResult = await summarize(
+        model,
+        pageContents,
+        4096 * 8,
+        (text: string) => {
+            //displayStatus(text, context);
+        },
+        true,
+    );
+
+    if (answerResult.success) {
+        const summaryResponse = answerResult.data as SummarizeResponse;
+        if (summaryResponse) {
+            // add the search results page as an entity
+            if (!summaryResponse.entities) {
+                summaryResponse.entities = [];
+            }
+
+            summaryResponse.entities.push({
+                name: pageUrl.toString(),
+                type: ["WebPage"],
+            });
+
+            return createActionResultFromTextDisplay(
+                summaryResponse.summary,
+                summaryResponse.summary,
+                summaryResponse.entities,
+            );
+        } else {
+            return createActionResultFromTextDisplay(
+                (answerResult.data as string[]).join("\n"),
+            );
+        }
+    }
+
+    return createActionResultFromTextDisplay(
+        `Opened new tab with query ${action.parameters.query}`,
+    );
+}
+
+async function lookup(
+    context: ActionContext<BrowserActionContext>,
+    action: LookupAndAnswerInternet,
+) {
+    // run a search for the lookup, wait for the page to load
+    displayStatus(
+        `Searching the web for '${action.parameters.internetLookups.join(" ")}'`,
+        context,
+    );
+
+    const searchURL: URL = await getActionBrowserControl(context).search(
+        action.parameters.internetLookups.join(" "),
+        action.parameters.sites,
+        context.sessionContext.agentContext.activeSearchProvider,
+        { waitForPageLoad: true },
+    );
+
+    // go get the page contents
+    const content = await getActionBrowserControl(context).getPageContents();
+
+    // now try to generate an answer from the page contents
+    displayStatus(
+        `Generating the answer for '${action.parameters.originalRequest}'`,
+        context,
+    );
+    const model = openai.createJsonChatModel("GPT_35_TURBO", [
+        "InternetLookupAnswerGenerator",
+    ]); // TODO: GPT_5_MINI/NANO?
+    const answerResult = await generateAnswer(
+        action.parameters.originalRequest,
+        content,
+        4096 * 4,
+        model,
+        1,
+        (text: string, result: ChunkChatResponse) => {
+            displayStatus(result.generatedText!, context);
+        },
+    );
+
+    if (answerResult.success) {
+        const answer: ChunkChatResponse =
+            answerResult.data as ChunkChatResponse;
+        if (
+            answer.answerStatus === "Answered" ||
+            answer.answerStatus === "PartiallyAnswered"
+        ) {
+            return createActionResult(
+                `${answer.generatedText}`,
+                { speak: true },
+                [
+                    {
+                        name: "WebPage",
+                        type: ["WebPage"],
+                        uniqueId: searchURL.toString(),
+                    },
+                    ...answer.entities,
+                ],
+            );
+        } else {
+            return createActionResultFromTextDisplay(
+                `No answer found for '${action.parameters.originalRequest}'.  Try navigating to a search result or trying another query.`,
+            );
+        }
+    } else {
+        return createActionResultFromError(
+            `There was an error generating the answer: ${answerResult.message} `,
+        );
+    }
 }
 
 async function handleTabIndexActions(

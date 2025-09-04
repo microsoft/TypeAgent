@@ -132,6 +132,15 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             const targetTab = await ensureActiveTab();
             await chrome.tabs.remove(targetTab.id!);
         },
+        closeAllWebPages: async () => {
+            let tab: chrome.tabs.Tab | undefined = undefined;
+            do {
+                tab = await chrome.tabs.getCurrent();
+                if (tab) {
+                    await chrome.tabs.remove(tab.id!);
+                }
+            } while (tab);
+        },
         switchTabs: async (
             tabDescription: string,
             tabIndex?: number,

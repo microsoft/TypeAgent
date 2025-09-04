@@ -3,17 +3,24 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, TYPE_CHECKING
 
-from ..aitools.vectorbase import ScoredInt, TextEmbeddingIndexSettings, VectorBase
+from typeagent.aitools.vectorbase import (
+    ScoredInt,
+    TextEmbeddingIndexSettings,
+    VectorBase,
+)
 
-from .collections import TermSet
-from .common import is_search_term_wildcard
-from .interfaces import (
+from typeagent.knowpro.collections import TermSet
+from typeagent.knowpro.common import is_search_term_wildcard
+from typeagent.knowpro.convsettings import RelatedTermIndexSettings
+from typeagent.knowpro.interfaces import (
     IConversation,
+    IMessage,
     ITermToRelatedTerms,
     ITermToRelatedTermsFuzzy,
     ITermToRelatedTermsIndex,
+    ITermToSemanticRefIndex,
     SearchTerm,
     Term,
     TermToRelatedTermsData,
@@ -21,15 +28,9 @@ from .interfaces import (
     TermsToRelatedTermsIndexData,
     TextEmbeddingIndexData,
 )
-from .query import CompiledSearchTerm, CompiledTermGroup
 
-
-@dataclass
-class RelatedTermIndexSettings:
-    embedding_index_settings: TextEmbeddingIndexSettings
-
-    def __init__(self, embedding_index_settings: TextEmbeddingIndexSettings):
-        self.embedding_index_settings = embedding_index_settings
+if TYPE_CHECKING:
+    from typeagent.knowpro.query import CompiledSearchTerm, CompiledTermGroup
 
 
 class TermToRelatedTermsMap(ITermToRelatedTerms):
@@ -37,24 +38,26 @@ class TermToRelatedTermsMap(ITermToRelatedTerms):
         # The inner dict represents a set of terms disregarding their weights.
         self.map: dict[str, dict[str, Term]] = {}
 
-    def add_related_term(self, text: str, related_terms: Term | list[Term]) -> None:
+    async def add_related_term(
+        self, text: str, related_terms: Term | list[Term]
+    ) -> None:
         if not isinstance(related_terms, list):
             related_terms = [related_terms]
         terms: dict[str, Term] = self.map.setdefault(text, {})
         for related in related_terms:
             terms.setdefault(related.text, related)
 
-    def lookup_term(self, text: str) -> list[Term] | None:
+    async def lookup_term(self, text: str) -> list[Term] | None:
         result = self.map.get(text)
         if result:
             return list(result.values())
         else:
             return None
 
-    def remove_term(self, text: str) -> None:
+    async def remove_term(self, text: str) -> None:
         self.map.pop(text, None)
 
-    def clear(self) -> None:
+    async def clear(self) -> None:
         self.map.clear()
 
     async def size(self) -> int:
@@ -63,7 +66,7 @@ class TermToRelatedTermsMap(ITermToRelatedTerms):
     async def is_empty(self) -> bool:
         return len(self.map) == 0
 
-    def serialize(self) -> TermToRelatedTermsData:
+    async def serialize(self) -> TermToRelatedTermsData:
         related_terms: list[TermsToRelatedTermsDataItem] = []
         for key, value in self.map.items():
             related_terms.append(
@@ -74,8 +77,8 @@ class TermToRelatedTermsMap(ITermToRelatedTerms):
             )
         return TermToRelatedTermsData(relatedTerms=related_terms)
 
-    def deserialize(self, data: TermToRelatedTermsData | None) -> None:
-        self.clear()
+    async def deserialize(self, data: TermToRelatedTermsData | None) -> None:
+        self.map.clear()
         if data is None:
             return
         related_terms_data = data.get("relatedTerms")
@@ -88,22 +91,27 @@ class TermToRelatedTermsMap(ITermToRelatedTerms):
                 Term(term_data["text"], weight=term_data.get("weight"))
                 for term_data in related_terms_data
             ]
-            self.add_related_term(term_text, related_terms)
+            await self.add_related_term(term_text, related_terms)
 
 
-async def build_related_terms_index(
-    conversation: IConversation,
+async def build_related_terms_index[
+    TMessage: IMessage,
+    TTermToSemanticRefIndex: ITermToSemanticRefIndex,
+](
+    conversation: IConversation[TMessage, TTermToSemanticRefIndex],
     settings: RelatedTermIndexSettings,
 ) -> None:
     csr = conversation.semantic_ref_index
+    assert csr is not None
     csi = conversation.secondary_indexes
     if csr is not None and csi is not None:
         if csi.term_to_related_terms_index is None:
             csi.term_to_related_terms_index = RelatedTermsIndex(settings)
         fuzzy_index = csi.term_to_related_terms_index.fuzzy_index
-        all_terms = await csr.get_terms()
-        if fuzzy_index and all_terms:
-            await fuzzy_index.add_terms(all_terms)
+        if fuzzy_index is not None:
+            all_terms = await csr.get_terms()
+            if all_terms:
+                await fuzzy_index.add_terms(all_terms)
 
 
 class RelatedTermsIndex(ITermToRelatedTermsIndex):
@@ -128,16 +136,16 @@ class RelatedTermsIndex(ITermToRelatedTermsIndex):
     def fuzzy_index(self) -> ITermToRelatedTermsFuzzy | None:
         return self._term_index
 
-    def serialize(self) -> TermsToRelatedTermsIndexData:
+    async def serialize(self) -> TermsToRelatedTermsIndexData:
         return TermsToRelatedTermsIndexData(
-            aliasData=self._alias_map.serialize(),
+            aliasData=await self._alias_map.serialize(),
             textEmbeddingData=self._term_index.serialize(),
         )
 
-    def deserialize(self, data: TermsToRelatedTermsIndexData) -> None:
-        self._alias_map.clear()
+    async def deserialize(self, data: TermsToRelatedTermsIndexData) -> None:
+        await self._alias_map.clear()
         self._term_index.clear()
-        self._alias_map.deserialize(data.get("aliasData"))
+        await self._alias_map.deserialize(data.get("aliasData"))
         text_embedding_data = data.get("textEmbeddingData")
         if text_embedding_data is not None:
             self._term_index.deserialize(text_embedding_data)
@@ -145,7 +153,7 @@ class RelatedTermsIndex(ITermToRelatedTermsIndex):
 
 async def resolve_related_terms(
     related_terms_index: ITermToRelatedTermsIndex,
-    compiled_terms: list[CompiledTermGroup],
+    compiled_terms: list["CompiledTermGroup"],
     ensure_single_occurrence: bool = True,
     should_resolve_fuzzy: Callable[[SearchTerm], bool] | None = None,
 ) -> None:
@@ -171,7 +179,7 @@ async def resolve_related_terms(
         term_text = search_term.term.text
         # Resolve any specific term to related term mappings
         if search_term.related_terms is None:
-            search_term.related_terms = related_terms_index.aliases.lookup_term(
+            search_term.related_terms = await related_terms_index.aliases.lookup_term(
                 term_text
             )
         # If no mappings to aliases, add to fuzzy retrieval list
@@ -201,7 +209,7 @@ async def resolve_related_terms(
 
 
 def dedupe_related_terms(
-    compiled_terms: list[CompiledSearchTerm],
+    compiled_terms: list["CompiledSearchTerm"],
     ensure_single_occurrence: bool,
 ) -> None:
     all_search_terms = TermSet()
@@ -282,6 +290,9 @@ class TermEmbeddingIndex(ITermEmbeddingIndex):
         if data is not None:
             self._texts = data.get("textItems", [])
             self._vectorbase.deserialize(data.get("embeddings"))
+
+    async def size(self) -> int:
+        return len(self._vectorbase)
 
     async def add_terms(self, texts: list[str]) -> None:
         await self._vectorbase.add_keys(texts)

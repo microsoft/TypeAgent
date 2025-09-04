@@ -233,6 +233,22 @@ importers:
         specifier: ^6.0.1
         version: 6.0.1
 
+  examples/debugDocGenerator:
+    dependencies:
+      common-utils:
+        specifier: workspace:*
+        version: link:../../packages/commonUtils
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+    devDependencies:
+      copyfiles:
+        specifier: ^2.4.1
+        version: 2.4.1
+      rimraf:
+        specifier: ^5.0.1
+        version: 5.0.10
+
   examples/docuProc:
     dependencies:
       aiclient:

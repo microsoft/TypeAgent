@@ -53,6 +53,9 @@ export function createExternalBrowserClient(
         closeWebPage: async () => {
             return rpc.invoke("closeWebPage");
         },
+        closeAllWebPages: async () => {
+            return rpc.invoke("closeAllWebPages");
+        },
         switchTabs: async (...args) => {
             return rpc.invoke("switchTabs", ...args);
         },

@@ -2,17 +2,23 @@
   [
     {
       "request": "Tell me what images are in our chat history.",
-      "match": "partial",
-      "action": {
-        "schemaName": "dispatcher.lookup",
-        "actionName": "lookupAndAnswer",
-        "parameters": {
-          "originalRequest": "Tell me what images are in our chat history.",
-          "question": "What images are in our chat history?",
-          "lookup": {
-            "source": "conversation"
+      "expected": {
+        "anyof": [
+          {
+            "action": {
+              "schemaName": "dispatcher.lookup",
+              "actionName": "lookupAndAnswer",
+              "parameters": {
+                "originalRequest": "Tell me what images are in our chat history.",
+                "question": "What images are in our chat history?",
+                "lookup": {
+                  "source": "conversation"
+                }
+              }
+            },
+            "partial": true
           }
-        }
+        ]      
       },
       "history": {
         "text": "There is a list of images in the chat history:\n - image\n - non-existent image\n - attachment__0.png",
@@ -36,7 +42,7 @@
     {
       "request": "show me attachment__0.png",
       "question": "show me attachment__0.png",
-      "action": {
+      "expected": {
         "schemaName": "chat",
         "actionName": "showImageFile",
         "parameters": {

@@ -28,7 +28,7 @@ type AssistantEntry = {
 
 type ChatHistoryEntry = UserEntry | AssistantEntry;
 
-type ChatHistoryInputAssistant = {
+export type ChatHistoryInputAssistant = {
     text: string;
     source: string;
     entities?: Entity[];
@@ -36,7 +36,7 @@ type ChatHistoryInputAssistant = {
     activityContext?: ActionResultActivityContext;
 };
 
-type ChatHistoryInputEntry = {
+export type ChatHistoryInputEntry = {
     user: string;
     assistant: ChatHistoryInputAssistant | ChatHistoryInputAssistant[];
 };
@@ -407,6 +407,7 @@ const assistantInputSchema = sc.obj({
                 name: sc.string(),
                 type: sc.array(sc.string()),
                 uniqueId: sc.optional(sc.string()),
+                sourceAppAgentName: sc.optional(sc.string()),
             }),
         ),
     ),

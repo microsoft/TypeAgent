@@ -46,8 +46,8 @@ from .interfaces import (
     Thread,
 )
 from .kplib import ConcreteEntity
-from .messageindex import IMessageTextEmbeddingIndex
-from .propindex import PropertyNames, lookup_property_in_property_index
+from ..storage.memory.messageindex import IMessageTextEmbeddingIndex
+from ..storage.memory.propindex import PropertyNames, lookup_property_in_property_index
 from .searchlib import create_property_search_term, create_tag_search_term_group
 
 
@@ -800,7 +800,7 @@ class TextRangesInDateRangeSelector(IQueryTextRangeSelector):
         text_ranges_in_scope = TextRangeCollection()
 
         if context.timestamp_index is not None:
-            text_ranges = context.timestamp_index.lookup_range(
+            text_ranges = await context.timestamp_index.lookup_range(
                 self.date_range_in_scope,
             )
             for time_range in text_ranges:

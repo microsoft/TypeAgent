@@ -1,0 +1,470 @@
+[
+  [
+    {
+      "request": "open the npr webpage",
+      "action": [
+        {
+          "schemaName": "browser",
+          "actionName": "openWebPage",
+          "parameters": {
+            "site": "npr",
+            "tab": "current"
+          }
+        }
+      ],
+      "history": [
+        {
+          "text": "Web page opened successfully.",
+          "source": "browser",
+          "entities": [
+            {
+              "sourceAppAgentName": "browser",
+              "name": "npr",
+              "type": [
+                "WebPage"
+              ],
+              "uniqueId": "https://www.npr.org/"
+            }
+          ],
+          "activityContext": {
+            "activityName": "browsingWebPage",
+            "description": "Browsing a web page",
+            "state": {
+              "site": "https://npr.org"
+            },
+            "activityEndAction": {
+              "actionName": "closeWebPage"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "request": "follow link speaker johnson",
+      "expected": {
+        "anyof": [
+          {
+            "action": {
+              "schemaName": "browser",
+              "actionName": "followLinkByText",
+              "parameters": {
+                "keywords": "speaker johnson"
+              }
+            },
+            "alternates": {
+              "openInNewTab": false
+            }
+          }
+        ]
+      },
+      "history": [
+        {
+          "text": "Navigated to link for 'speaker johnson'",
+          "source": "browser",
+          "entities": []
+        }
+      ]
+    },
+    {
+      "request": "back",
+      "expected": [
+        {
+          "schemaName": "browser",
+          "actionName": "goBack"
+        }
+      ],
+      "history": [
+        {
+          "text": "Action browser.goBack completed.",
+          "source": "browser",
+          "entities": []
+        }
+      ]
+    },
+    {
+      "request": "play Cruel Summer by Taylor Swift",
+      "expected": [
+        {
+          "schemaName": "player",
+          "actionName": "playTrack",
+          "parameters": {
+            "trackName": "Cruel Summer",
+            "artists": [
+              "Taylor Swift"
+            ]
+          }
+        }
+      ],
+      "history": [
+        {
+          "text": "Now playing: Cruel Summer from album Lover with artist Taylor Swift",
+          "source": "player",
+          "entities": [
+            {
+              "name": "Cruel Summer",
+              "type": [
+                "track",
+                "song"
+              ],
+              "uniqueId": "1BxfuPKGuaTgP7aM0Bbdwr"
+            },
+            {
+              "name": "Taylor Swift",
+              "type": [
+                "artist"
+              ],
+              "uniqueId": "06HL4z0CvFAxyc27GXpf02"
+            },
+            {
+              "name": "Lover",
+              "type": [
+                "album"
+              ],
+              "uniqueId": "1NAmidJlEaVgA3MpcPFYGq"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "request": "add ham to my grocery list",
+      "expected": [
+        {
+          "schemaName": "list",
+          "actionName": "addItems",
+          "parameters": {
+            "items": [
+              "ham"
+            ],
+            "listName": "grocery"
+          }
+        }
+      ],
+      "history": [
+        {
+          "text": "Added items: ham to list grocery",
+          "source": "list",
+          "entities": [
+            {
+              "name": "grocery",
+              "type": [
+                "list"
+              ]
+            },
+            {
+              "name": "ham",
+              "type": [
+                "item"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "request": "schedule lunch at 12:00 tomorrow",
+      "expected": { 
+        "anyof": [
+          {
+            "action": {
+              "schemaName": "calendar",
+              "actionName": "addEvent",
+              "parameters": {
+                "event": {
+                  "description": "lunch"
+                }
+              }
+            },
+            "partial": true
+          }
+        ]
+      },      
+      "comment": "Datetime translation not stable",
+      "history": [
+        {
+          "text": "Action calendar.addEvent failed: Invalid input: Day name could not be parsed.",
+          "source": "calendar"
+        }
+      ]
+    },
+    {
+      "request": "play Symphony No 5 by Beethoven",
+      "expected": [
+        {
+          "schemaName": "player",
+          "actionName": "playTrack",
+          "parameters": {
+            "trackName": "Symphony No 5",
+            "artists": [
+              "Beethoven"
+            ]
+          }
+        }
+      ],
+      "history": [
+        {
+          "text": "Updated the current track list with the numbered list of tracks on the screen",
+          "source": "player",
+          "entities": [
+            {
+              "name": "Symphony No. 5 in C Minor, Op. 67: I. Allegro con brio",
+              "type": [
+                "track",
+                "song"
+              ],
+              "uniqueId": "2ygeBLTP9uu3OW3VTulD8N"
+            },
+            {
+              "name": "Ludwig van Beethoven",
+              "type": [
+                "artist"
+              ],
+              "uniqueId": "2wOqMjp9TyABvtHdOSOTUS"
+            },
+            {
+              "name": "Wiener Philharmoniker",
+              "type": [
+                "artist"
+              ],
+              "uniqueId": "003f4bk13c6Q3gAUXv7dGJ"
+            },
+            {
+              "name": "Carlos Kleiber",
+              "type": [
+                "artist"
+              ],
+              "uniqueId": "6aL4ovuNuBg7rmrPjOTIUN"
+            },
+            {
+              "name": "Originals Beethoven Box",
+              "type": [
+                "album"
+              ],
+              "uniqueId": "1kiYP14ax8HLDP9lkwdPwb"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "request": "how much wood can a woodchuck chuck",
+      "expected": {
+        "anyof": [
+          "chat.generateResponse",
+          {
+            "action": {
+              "schemaName": "browser.lookupAndAnswer",
+              "actionName": "lookupAndAnswerInternet",
+              "parameters": {
+                "originalRequest": "how much wood can a woodchuck chuck",
+                "internetLookups": [
+                  "how much wood can a woodchuck chuck"
+                ]
+              }
+            }
+          }                    
+        ]
+      },
+      "history": [
+        {
+          "text": "A woodchuck can chuck approximately 700 pounds of wood per day, according to various humorous interpretations of the phrase. While woodchucks don't actually chuck wood, they can move around 35 cubic feet of dirt when digging out a burrow, which is roughly equivalent to the same weight.",
+          "source": "browser.lookupAndAnswer",
+          "entities": [
+            {
+              "name": "WebPage",
+              "type": [
+                "WebPage"
+              ],
+              "uniqueId": "https://www.bing.com/?q=how%20much%20wood%20can%20a%20woodchuck%20chuck"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "request": "add eggs to my grocery list",
+      "expected": [
+        {
+          "schemaName": "list",
+          "actionName": "addItems",
+          "parameters": {
+            "items": [
+              "eggs"
+            ],
+            "listName": "grocery"
+          },
+          "entities": {
+            "listName": {
+              "name": "grocery",
+              "type": [
+                "list"
+              ],
+              "sourceAppAgentName": "list"
+            }
+          }
+        }
+      ],
+      "history": [
+        {
+          "text": "Added items: eggs to list grocery",
+          "source": "list",
+          "entities": [
+            {
+              "name": "grocery",
+              "type": [
+                "list"
+              ],
+              "sourceAppAgentName": "list"
+            },
+            {
+              "name": "grocery",
+              "type": [
+                "list"
+              ]
+            },
+            {
+              "name": "eggs",
+              "type": [
+                "item"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "request": "who was president in 1837",
+      "expected": {
+        "anyof": [
+          {
+            "action": {
+              "schemaName": "browser.lookupAndAnswer",
+              "actionName": "lookupAndAnswerInternet",
+              "parameters": {
+                "originalRequest": "who was president in 1837",
+                "internetLookups": [
+                  "president in 1837"
+                ]
+              }
+            },
+            "alternates": {
+              "internetLookups.0": "president of the United States in 1837"
+            }            
+          }
+        ]
+      },
+      "history": [
+        {
+          "text": "Martin Van Buren was the eighth president of the United States, serving from 1837 to 1841.",
+          "source": "browser.lookupAndAnswer",
+          "entities": [
+            {
+              "name": "WebPage",
+              "type": [
+                "WebPage"
+              ],
+              "uniqueId": "https://www.bing.com/?q=president%20of%20the%20United%20States%20in%201837"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "request": "play Toccata and Fugue by Bach",
+      "expected": [
+        {
+          "schemaName": "player",
+          "actionName": "playTrack",
+          "parameters": {
+            "trackName": "Toccata and Fugue",
+            "artists": [
+              "Bach"
+            ]
+          }
+        }
+      ],
+      "history": [
+        {
+          "text": "Updated the current track list with the numbered list of tracks on the screen",
+          "source": "player",
+          "entities": [
+            {
+              "name": "Toccata and fugue - Phonk Version",
+              "type": [
+                "track",
+                "song"
+              ],
+              "uniqueId": "7Fk9PJ40VlOAXMro67rWay"
+            },
+            {
+              "name": "Opera Wave",
+              "type": [
+                "artist"
+              ],
+              "uniqueId": "4XZtA1u7uPNhDuvDjpMpF7"
+            },
+            {
+              "name": "Johann Sebastian Bach",
+              "type": [
+                "artist"
+              ],
+              "uniqueId": "5aIqB5nVVvmFsvSdExz408"
+            },
+            {
+              "name": "Toccata and fugue (Phonk Version)",
+              "type": [
+                "album"
+              ],
+              "uniqueId": "5JqrYhwQ3Y4XaTFJGWOIJB"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "request": "pause the music",
+      "expected": [
+        {
+          "schemaName": "player",
+          "actionName": "pause"
+        }
+      ],
+      "history": [
+        {
+          "text": "Now playing(paused): Toccata and fugue - Phonk Version from album Toccata and fugue (Phonk Version) with artists: Opera Wave, Johann Sebastian Bach\nActive device: CURTISM13 of type Computer\nVolume is 100%. ",
+          "source": "player",
+          "entities": [
+            {
+              "name": "Toccata and fugue - Phonk Version",
+              "type": [
+                "track"
+              ],
+              "uniqueId": "7Fk9PJ40VlOAXMro67rWay"
+            },
+            {
+              "name": "Opera Wave",
+              "type": [
+                "artist"
+              ],
+              "uniqueId": "4XZtA1u7uPNhDuvDjpMpF7"
+            },
+            {
+              "name": "Johann Sebastian Bach",
+              "type": [
+                "artist"
+              ],
+              "uniqueId": "5aIqB5nVVvmFsvSdExz408"
+            },
+            {
+              "name": "Toccata and fugue (Phonk Version)",
+              "type": [
+                "album"
+              ],
+              "uniqueId": "5JqrYhwQ3Y4XaTFJGWOIJB"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+]
