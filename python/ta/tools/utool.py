@@ -185,7 +185,7 @@ async def main():
     if args.verbose:
         utils.pretty_print(context, Fore.BLUE, Fore.RESET)
 
-    if args.question:
+    if args.question is not None:
         if args.verbose:
             print(
                 Fore.YELLOW
@@ -334,6 +334,8 @@ async def interactive_loop(context: ProcessingContext) -> None:
 
 
 async def process_query(context: ProcessingContext, query_text: str) -> float | None:
+    if not query_text.strip():
+        return  # Ignore blank query (like interactive mode)
     record = context.sr_index.get(query_text)
     debug_context = searchlang.LanguageSearchDebugContext()
     if context.debug1 == "skip" or context.debug2 == "skip":
@@ -615,7 +617,7 @@ def fill_in_debug_defaults(
 ) -> None:
     # In batch mode, defaults are diff, diff, diff, diff.
     # In interactive mode they are none, none, none, nice.
-    if args.question and args.batch:
+    if args.question is not None and args.batch:
         parser.exit(2, "Error: --question cannot be combined with --batch\n")
 
     if not args.batch:
