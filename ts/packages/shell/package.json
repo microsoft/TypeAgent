@@ -79,7 +79,7 @@
     "@types/debug": "^4.1.12",
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
-    "electron": "35.2.1",
+    "electron": "35.7.5",
     "electron-builder": "^26.0.16",
     "electron-vite": "^3.1.0",
     "less": "^4.2.0",
