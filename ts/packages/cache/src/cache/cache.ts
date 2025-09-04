@@ -13,6 +13,7 @@ import {
 import {
     SchemaInfoProvider,
     doCacheAction,
+    isValidActionSchemaFileHash,
 } from "../explanation/schemaInfoProvider.js";
 import { ConstructionStore, ConstructionStoreImpl } from "./store.js";
 import { ExplainerFactory } from "./factory.js";
@@ -63,6 +64,19 @@ export function getSchemaNamespaceKeys(
     );
 }
 
+function splitSchemaNamespaceKey(namespaceKey: string): {
+    schemaName: string;
+    hash: string | undefined;
+    activityName: string | undefined;
+} {
+    const [schemaName, hash, activityName] = namespaceKey.split(",");
+    return {
+        schemaName,
+        hash: hash !== "" ? hash : undefined,
+        activityName: activityName !== "" ? activityName : undefined,
+    };
+}
+
 export class AgentCache {
     private _constructionStore: ConstructionStoreImpl;
     private readonly explainWorkQueue: ExplainWorkQueue;
@@ -92,10 +106,13 @@ export class AgentCache {
 
         if (schemaInfoProvider) {
             this.namespaceKeyFilter = (namespaceKey) => {
-                const [schemaName, hash] = namespaceKey.split(",");
-                const fileHash =
-                    schemaInfoProvider.getActionSchemaFileHash(schemaName);
-                return fileHash === hash;
+                const { schemaName, hash } =
+                    splitSchemaNamespaceKey(namespaceKey);
+                return isValidActionSchemaFileHash(
+                    schemaInfoProvider,
+                    schemaName,
+                    hash,
+                );
             };
         }
     }

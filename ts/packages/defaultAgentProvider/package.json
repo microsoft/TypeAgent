@@ -33,8 +33,8 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.8.0",
-    "@modelcontextprotocol/server-filesystem": "2025.7.1",
+    "@modelcontextprotocol/sdk": "^1.17.5",
+    "@modelcontextprotocol/server-filesystem": "2025.8.21",
     "@typeagent/agent-sdk": "workspace:*",
     "action-schema": "workspace:*",
     "agent-cache": "workspace:*",

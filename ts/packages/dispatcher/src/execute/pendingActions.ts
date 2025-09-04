@@ -40,6 +40,7 @@ import { getObjectProperty } from "common-utils";
 import { ActionSchemaFile } from "../translation/actionConfigProvider.js";
 import { ActionSchemaEntityTypeDefinition } from "../../../actionSchema/dist/type.js";
 import { getActionParametersType } from "../translation/actionSchemaUtils.js";
+import { isPendingRequestAction } from "../translation/pendingRequest.js";
 
 const debugEntities = registerDebug("typeagent:dispatcher:actions:entities");
 
@@ -850,6 +851,10 @@ export async function toPendingActions(
     const pendingActions: PendingAction[] = [];
 
     for (const executableAction of actions) {
+        if (isPendingRequestAction(executableAction.action)) {
+            // Pending request action is an internal action.  It doesn't have any entities.
+            continue;
+        }
         const resolvedEntities = await resolveEntities(
             agents,
             executableAction.action,
