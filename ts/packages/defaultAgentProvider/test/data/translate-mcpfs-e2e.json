@@ -29,7 +29,7 @@
       "request": "read that file",
       "expected": {
         "schemaName": "mcpfilesystem",
-        "actionName": "read_file",
+        "actionName": "read_text_file",
         "parameters": { "path": "/data/hello.txt" }
       },
       "history": {
