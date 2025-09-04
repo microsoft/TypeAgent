@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
-    "better-sqlite3": "11.9.1",
+    "better-sqlite3": "12.2.0",
     "chalk": "^5.4.1",
     "common-utils": "workspace:*",
     "debug": "^4.4.0",
