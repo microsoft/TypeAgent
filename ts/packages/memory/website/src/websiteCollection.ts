@@ -505,11 +505,12 @@ export class WebsiteCollection
         eventHandler?: IndexingEventHandlers,
     ): Promise<IndexingResults> {
         const knowledge = website.getKnowledge();
-        const hasKnowledge = knowledge && 
-                           (knowledge.entities?.length > 0 ||
-                            knowledge.topics?.length > 0 ||
-                            knowledge.actions?.length > 0);
-        
+        const hasKnowledge =
+            knowledge &&
+            (knowledge.entities?.length > 0 ||
+                knowledge.topics?.length > 0 ||
+                knowledge.actions?.length > 0);
+
         let overrideSettings;
         if (hasKnowledge) {
             overrideSettings = {
@@ -517,14 +518,19 @@ export class WebsiteCollection
                 conversationSettings: {
                     ...this.settings.conversationSettings,
                     semanticRefIndexSettings: {
-                        ...this.settings.conversationSettings.semanticRefIndexSettings,
-                        autoExtractKnowledge: false
-                    }
-                }
+                        ...this.settings.conversationSettings
+                            .semanticRefIndexSettings,
+                        autoExtractKnowledge: false,
+                    },
+                },
             };
         }
-        
-        const result = await super.addDocPartToIndex(website, eventHandler, overrideSettings);
+
+        const result = await super.addDocPartToIndex(
+            website,
+            eventHandler,
+            overrideSettings,
+        );
 
         if (result && !this.hasErrors(result)) {
             const messageOrdinal = this.messages.length - 1;
