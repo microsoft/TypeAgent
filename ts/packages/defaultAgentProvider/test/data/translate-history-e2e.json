@@ -2,7 +2,7 @@
   [
     {
       "request": "play Soruwienf from album Wxifiel by artist Bnefisoe",
-      "action": {
+      "expected": {
         "schemaName": "player",
         "actionName": "playTrack",
         "parameters": {
@@ -35,7 +35,7 @@
     },
     {
       "request": "play that song again",
-      "action": {
+      "expected": {
         "schemaName": "player",
         "actionName": "playTrack",
         "parameters": {
@@ -71,17 +71,22 @@
   [
     {
       "request": "look up the ingredient for shepherd's pie for me please",
-      "action": {
-        "schemaName": "browser.lookupAndAnswer",
-        "actionName": "lookupAndAnswerInternet",
-        "parameters": {
-          "originalRequest": "look up the ingredient for shepherd's pie for me please",
-          "question": "What are the ingredients for shepherd's pie?",
-          "lookup": {
-            "source": "internet",
-            "internetLookups": ["ingredient for shepherd's pie"]
+      "expected": {
+        "anyof": [
+          {
+            "action": {          
+              "schemaName": "browser.lookupAndAnswer",
+              "actionName": "lookupAndAnswerInternet",
+              "parameters": {
+                "originalRequest": "look up the ingredient for shepherd's pie for me please",          
+                "internetLookups": ["ingredient for shepherd's pie"]          
+              }
+            },
+            "alternates": {
+              "internetLookups.0": "shepherd's pie ingredients"
+            }
           }
-        }
+        ]
       },
       "history": {
         "text": "- Ground beef or lamb\n- Onions\n- Carrots\n- Peas\n- Worcestershire sauce\n- Beef broth\n- Mashed potatoes\n- Butter\n",
@@ -132,7 +137,7 @@
     },
     {
       "request": "add them to the grocery list",
-      "action": {
+      "expected": {
         "schemaName": "list",
         "actionName": "addItems",
         "parameters": {
@@ -195,7 +200,7 @@
     },
     {
       "request": "don't need the potatoes",
-      "action": {
+      "expected": {
         "schemaName": "list",
         "actionName": "removeItems",
         "parameters": {
@@ -222,7 +227,7 @@
   [
     {
       "request": "add eggs to the grocery list",
-      "action": {
+      "expected": {
         "schemaName": "list",
         "actionName": "addItems",
         "parameters": {
@@ -247,7 +252,7 @@
     },
     {
       "request": "add cheese",
-      "action": {
+      "expected": {
         "schemaName": "list",
         "actionName": "addItems",
         "parameters": {

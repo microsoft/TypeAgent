@@ -172,7 +172,6 @@ function createMcpAppAgentRecord(
                     `Invalid app agent config ${appAgentName}: No tools found`,
                 );
             }
-
             schemaFile.content = convertSchema(tools);
 
             agent = {
