@@ -371,6 +371,35 @@ export async function triggerAndMaybeAcceptInlineSuggestion(
     }
 }
 
+export async function triggerCopilotThenRemovePromptComment(
+    editor: vscode.TextEditor,
+    commentLine: number,
+): Promise<void> {
+    // Trigger Copilot suggestion
+    await triggerAndMaybeAcceptInlineSuggestion({ autoAccept: true });
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    const doc = editor.document;
+
+    // Delete the comment line
+    if (commentLine < doc.lineCount) {
+        const lineRange = doc.lineAt(commentLine).range;
+        await editor.edit((editBuilder) => {
+            editBuilder.delete(lineRange);
+        });
+    }
+
+    // Move the cursor to the next non-empty line after Copilot suggestion
+    let newLine = Math.max(0, commentLine); // Account for shifted lines
+    while (newLine < doc.lineCount && doc.lineAt(newLine).isEmptyOrWhitespace) {
+        newLine++;
+    }
+
+    const newPos = new vscode.Position(newLine, 0);
+    editor.selection = new vscode.Selection(newPos, newPos);
+    editor.revealRange(new vscode.Range(newPos, newPos));
+}
+
 export function getIndentationString(doc: vscode.TextDocument): string {
     const editor = vscode.window.visibleTextEditors.find(
         (e) => e.document === doc,
@@ -404,6 +433,9 @@ export function resolvePosition(
         case "atCursor":
             return editor.selection.active;
 
+        case "atStartOfFile":
+            return new vscode.Position(0, 0);
+
         case "atEndOfFile":
             return new vscode.Position(doc.lineCount, 0);
 
@@ -413,22 +445,88 @@ export function resolvePosition(
         }
 
         case "beforeLine": {
-            const line = Math.max(0, target.line);
+            const line = Math.max(0, target.line - 1);
             return new vscode.Position(line, 0);
         }
 
-        case "insideFunction":
-            // This requires function parsing or symbol analysis, which you can implement later
-            console.warn(
-                "resolvePosition: 'insideFunction' is not yet supported.",
+        case "inSelection":
+            return editor.selection.start;
+
+        case "insideBlockComment": {
+            const text = doc.getText();
+            const lines = text.split("\n");
+
+            let startLine = -1;
+            let endLine = -1;
+
+            for (let i = 0; i < lines.length; i++) {
+                if (lines[i].includes("/*")) startLine = i;
+                if (lines[i].includes("*/") && startLine >= 0) {
+                    endLine = i;
+                    const commentBlock = lines
+                        .slice(startLine, endLine + 1)
+                        .join("\n");
+
+                    if (
+                        !target.containingText ||
+                        commentBlock.includes(target.containingText)
+                    ) {
+                        return new vscode.Position(endLine + 1, 0);
+                    }
+
+                    // Reset search
+                    startLine = -1;
+                    endLine = -1;
+                }
+            }
+
+            // Fallback: insert at cursor
+            return editor.selection.active;
+        }
+
+        case "insideFunction": {
+            const regex = buildFunctionRegex(target.name);
+            const text = doc.getText();
+            const match = regex.exec(text);
+
+            if (match) {
+                const matchOffset = match.index + match[0].length;
+                const pos = doc.positionAt(matchOffset);
+
+                // insert just after function declaration line
+                const functionLine = doc.lineAt(pos.line);
+                return new vscode.Position(functionLine.lineNumber + 1, 0);
+            }
+
+            // fallback: insert at cursor
+            return editor.selection.active;
+        }
+
+        case "insideClass": {
+            const classRegex = new RegExp(`\\bclass\\s+${target.name}\\b`);
+            const text = doc.getText();
+            const match = classRegex.exec(text);
+
+            if (match) {
+                const matchOffset = match.index + match[0].length;
+                const pos = doc.positionAt(matchOffset);
+                const classLine = doc.lineAt(pos.line);
+                return new vscode.Position(classLine.lineNumber + 1, 0);
+            }
+
+            return editor.selection.active;
+        }
+
+        case "inFile": {
+            // This is handled outside via resolveOrFallbackToFile
+            return resolvePosition(
+                editor,
+                target.fallback ?? { type: "atEndOfFile" },
             );
-            return undefined;
+        }
 
         default:
-            console.warn(
-                `resolvePosition: Unknown target type: ${(target as any).type}`,
-            );
-            return undefined;
+            return editor.selection.active;
     }
 }
 
@@ -438,6 +536,18 @@ type ActiveFileMeta = {
     isUntitled: boolean;
     isDirty: boolean;
 };
+
+function buildFunctionRegex(name: string): RegExp {
+    return new RegExp(
+        [
+            `\\bfunction\\s+${name}\\b`, // JS/TS
+            `\\b${name}\\s*\\([^)]*\\)\\s*{`, // JS/TS inline
+            `\\bdef\\s+${name}\\s*\\(`, // Python
+            `\\b${name}\\s*:\\s*function\\b`, // JS object-style
+        ].join("|"),
+        "i",
+    );
+}
 
 export function getActiveFileMetadata(): ActiveFileMeta | null {
     const editor = vscode.window.activeTextEditor;

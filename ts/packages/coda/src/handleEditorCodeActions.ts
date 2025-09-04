@@ -13,6 +13,7 @@ import {
     resolvePosition,
     showDocumentInEditor,
     triggerAndMaybeAcceptInlineSuggestion,
+    triggerCopilotThenRemovePromptComment,
     placeCursorAfterCurrentFunction,
     ensureSingleBlankLineAtCursor,
 } from "./helpers";
@@ -229,137 +230,6 @@ export async function handleSaveAllFilesAction(
     };
 }
 
-export async function handleCreateFunctionActionAlt(
-    action: any,
-): Promise<ActionResult> {
-    const {
-        functionDeclaration,
-        body,
-        docstring,
-        language,
-        file,
-        position = { type: "atCursor" },
-    } = action.parameters;
-
-    try {
-        const doc = await resolveOrFallbackToFile(file);
-        if (!doc) {
-            return {
-                handled: false,
-                message: "❌ Could not resolve target file.",
-            };
-        }
-
-        const editor = await showDocumentInEditor(doc);
-        if (!editor) {
-            return {
-                handled: false,
-                message: "❌ Could not open document in editor.",
-            };
-        }
-
-        const insertPos = resolvePosition(editor, position);
-        if (!insertPos) {
-            return {
-                handled: false,
-                message: "❌ Could not resolve insertion position.",
-            };
-        }
-
-        const indent = getIndentationString(doc);
-        const decl = ensureFunctionDeclarationClosure(
-            functionDeclaration,
-            language,
-        );
-
-        // Compute spacing before insertion (unchanged)
-        let prefixSpacing = "";
-        if (insertPos.line > 0) {
-            const prevLineText = doc.lineAt(insertPos.line - 1).text.trim();
-            if (prevLineText !== "") {
-                const prevLineIsBlockDecl =
-                    /^(export\s+)?(async\s+)?(function|class)\b/.test(
-                        prevLineText,
-                    );
-                prefixSpacing = prevLineIsBlockDecl ? "\n\n" : "\n";
-            }
-        }
-
-        const isBodyEmpty = body === undefined || body.trim() === "";
-        if (isBodyEmpty) {
-            const docComment = generateDocComment(docstring, language, indent);
-
-            const baseIndent = decl.match(/^\s*/)?.[0] ?? "";
-            const closingBrace = language === "python" ? "" : `${baseIndent}}`;
-
-            const snippetStr =
-                language === "python"
-                    ? // def ...:\n <doc>\n <indent>$0\n
-                      `${prefixSpacing}${decl}\n${docComment}${indent}$0\n`
-                    : // function ... {\n <doc>\n <indent>$0\n<closing brace>
-                      `${prefixSpacing}${decl}\n${docComment}${indent}$0\n${closingBrace}\n`;
-
-            await editor.insertSnippet(
-                new vscode.SnippetString(snippetStr),
-                insertPos,
-            );
-
-            if (await isCopilotEnabled()) {
-                await triggerAndMaybeAcceptInlineSuggestion({
-                    autoAccept: true,
-                });
-            }
-
-            // After insertion + copilot trigger/accept flow:
-            const anchorPos = insertPos; // where we started inserting
-
-            // Pass the funnction name so symbol detection is more accurate
-            await placeCursorAfterCurrentFunction(editor, anchorPos, {
-                functionName: action.parameters.name,
-            });
-
-            return {
-                handled: true,
-                message: "✅ Inserted function and triggered Copilot.",
-            };
-        }
-
-        // ---------- Non-empty body: keep original text-insert path ----------
-        let snippet = `${decl}\n`;
-        snippet += generateDocComment(docstring, language, indent);
-
-        const indentedBody = body
-            .split("\n")
-            .map((line: string) => (line.trim() ? indent + line : line))
-            .join("\n");
-        snippet += `${indentedBody}\n`;
-
-        // Only add closing brace when body is provided
-        snippet += getClosingBraceIfNeeded(language);
-
-        // Prepend spacing computed earlier
-        snippet = prefixSpacing + snippet;
-
-        await editor.edit((editBuilder) => {
-            editBuilder.insert(insertPos, snippet + "\n");
-        });
-
-        // Place cursor at start of body (best-effort)
-        const snippetLines = snippet.split("\n");
-        const lineOffset = snippetLines.length - 2;
-        const bodyLine = insertPos.line + lineOffset;
-        const bodyPos = new vscode.Position(bodyLine, indent.length);
-        editor.selection = new vscode.Selection(bodyPos, bodyPos);
-
-        return {
-            handled: true,
-            message: "✅ Inserted function and filled body.",
-        };
-    } catch (err: any) {
-        return { handled: false, message: `❌ Error: ${err.message}` };
-    }
-}
-
 export async function handleCreateFunctionAction(
     action: any,
 ): Promise<ActionResult> {
@@ -369,8 +239,10 @@ export async function handleCreateFunctionAction(
         docstring,
         language,
         file,
-        position = { type: "atCursor" },
+        position: rawPosition,
     } = action.parameters;
+
+    const position = rawPosition ?? { type: "atEndOfFile" };
 
     try {
         const doc = await resolveOrFallbackToFile(file);
@@ -506,6 +378,191 @@ export async function handleCreateFunctionAction(
     }
 }
 
+export function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function handleCreateCodeBlockAction(
+    action: any,
+): Promise<ActionResult> {
+    const {
+        language,
+        docstring,
+        declaration,
+        body,
+        codeSnippet,
+        file,
+        position = { type: "atCursor" },
+    } = action.parameters;
+
+    try {
+        const doc = await resolveOrFallbackToFile(file);
+        if (!doc) {
+            return {
+                handled: false,
+                message: "❌ Could not resolve target file.",
+            };
+        }
+
+        const editor = await showDocumentInEditor(doc);
+        if (!editor) {
+            return {
+                handled: false,
+                message: "❌ Could not open document in editor.",
+            };
+        }
+
+        const insertPos = resolvePosition(editor, position);
+        if (!insertPos) {
+            return {
+                handled: false,
+                message: "❌ Could not resolve insertion position.",
+            };
+        }
+
+        const indent = getIndentationString(doc);
+        const baseIndent = ""; // optional: extract from insertPos line
+        const innerIndent = baseIndent + indent;
+        const copilotAvailable = await isCopilotEnabled();
+
+        if (docstring) {
+            const comment = generateDocPromptLine(
+                docstring,
+                language,
+                innerIndent,
+            );
+            const snippet = `${comment}\n${innerIndent}$0`;
+
+            await editor.insertSnippet(
+                new vscode.SnippetString(snippet),
+                insertPos,
+            );
+
+            if (copilotAvailable) {
+                await triggerCopilotThenRemovePromptComment(
+                    editor,
+                    insertPos.line,
+                );
+            }
+
+            return {
+                handled: true,
+                message:
+                    "🧠 Inserted comment prompt" +
+                    (copilotAvailable ? " and triggered Copilot." : "."),
+            };
+        }
+
+        if (codeSnippet) {
+            const prompt = generateDocPromptLine(
+                docstring,
+                language,
+                innerIndent,
+            );
+            const snippet = `${prompt}\n${innerIndent}${codeSnippet.trim()}\n`;
+
+            await editor.insertSnippet(
+                new vscode.SnippetString(snippet),
+                insertPos,
+            );
+
+            if (copilotAvailable) {
+                await triggerAndMaybeAcceptInlineSuggestion({
+                    autoAccept: true,
+                });
+            }
+
+            return {
+                handled: true,
+                message:
+                    "✅ Inserted code snippet" +
+                    (copilotAvailable ? " with Copilot." : "."),
+            };
+        }
+
+        if (declaration) {
+            const decl = declaration.trim();
+            const docComment = docstring
+                ? generateDocComment(docstring, language, innerIndent)
+                : "";
+
+            let fullSnippet = `${decl}\n`;
+            if (docComment) fullSnippet += docComment;
+
+            if (body) {
+                const formattedBody = body
+                    .split("\n")
+                    .map((line: string) =>
+                        line.trim() ? innerIndent + line : "",
+                    )
+                    .join("\n");
+                fullSnippet += `${formattedBody}\n`;
+            } else if (copilotAvailable) {
+                fullSnippet += `${innerIndent}$0\n`;
+            } else {
+                fullSnippet += `${innerIndent}// TODO: implement\n`;
+            }
+
+            if (needsClosingBrace(language)) {
+                fullSnippet += "}\n";
+            }
+
+            await editor.insertSnippet(
+                new vscode.SnippetString(fullSnippet),
+                insertPos,
+            );
+
+            if (!body && copilotAvailable) {
+                await triggerAndMaybeAcceptInlineSuggestion({
+                    autoAccept: true,
+                });
+            }
+
+            return {
+                handled: true,
+                message: body
+                    ? "✅ Inserted structured block with body."
+                    : copilotAvailable
+                      ? "✅ Inserted block and triggered Copilot."
+                      : "✅ Inserted block with TODO placeholder.",
+            };
+        }
+
+        return {
+            handled: false,
+            message:
+                "❌ No usable codeSnippet, declaration, or docstring provided.",
+        };
+    } catch (err: any) {
+        return {
+            handled: false,
+            message: `❌ Error inserting code block: ${err.message}`,
+        };
+    }
+}
+
+function generateCopilotPrompt(
+    docstring: string | undefined,
+    language: string,
+    functionName?: string,
+): string {
+    if (docstring && functionName) {
+        return `Create a ${language} function called ${functionName} that ${docstring}`;
+    }
+
+    return docstring?.trim() || "Add code here";
+}
+
+function generateDocPromptLine(
+    docstring: string | undefined,
+    language: string,
+    indent = "",
+): string {
+    const trimmed = (docstring ?? "Add code here").trim();
+    if (language === "python") return `${indent}# ${trimmed}`;
+    return `${indent}// ${trimmed}`;
+}
+
 export async function handleEditorCodeActions(
     action: any,
 ): Promise<ActionResult> {
@@ -532,6 +589,10 @@ export async function handleEditorCodeActions(
 
         case "createFunction":
             actionResult = await handleCreateFunctionAction(action);
+            break;
+
+        case "createCodeBlock":
+            actionResult = await handleCreateCodeBlockAction(action);
             break;
 
         default:
