@@ -167,7 +167,7 @@ export default class ReplayCommand extends Command {
                     const result = await dispatcher.processCommand(entry.user);
                     steps.push({
                         request: entry.user,
-                        action: result?.actions,
+                        expected: result?.actions,
                         history: entry.assistant,
                     });
 

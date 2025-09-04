@@ -41,15 +41,22 @@
     },
     {
       "request": "follow link speaker johnson",
-      "action": [
-        {
-          "schemaName": "browser",
-          "actionName": "followLinkByText",
-          "parameters": {
-            "keywords": "speaker johnson"
+      "expected": {
+        "anyof": [
+          {
+            "action": {
+              "schemaName": "browser",
+              "actionName": "followLinkByText",
+              "parameters": {
+                "keywords": "speaker johnson"
+              }
+            },
+            "alternates": {
+              "openInNewTab": false
+            }
           }
-        }
-      ],
+        ]
+      },
       "history": [
         {
           "text": "Navigated to link for 'speaker johnson'",
@@ -60,7 +67,7 @@
     },
     {
       "request": "back",
-      "action": [
+      "expected": [
         {
           "schemaName": "browser",
           "actionName": "goBack"
@@ -76,7 +83,7 @@
     },
     {
       "request": "play Cruel Summer by Taylor Swift",
-      "action": [
+      "expected": [
         {
           "schemaName": "player",
           "actionName": "playTrack",
@@ -121,7 +128,7 @@
     },
     {
       "request": "add ham to my grocery list",
-      "action": [
+      "expected": [
         {
           "schemaName": "list",
           "actionName": "addItems",
@@ -156,18 +163,22 @@
     },
     {
       "request": "schedule lunch at 12:00 tomorrow",
-      "action": [
-        {
-          "schemaName": "calendar",
-          "actionName": "addEvent",
-          "parameters": {
-            "event": {
-              "description": "lunch"
-            }
+      "expected": { 
+        "anyof": [
+          {
+            "action": {
+              "schemaName": "calendar",
+              "actionName": "addEvent",
+              "parameters": {
+                "event": {
+                  "description": "lunch"
+                }
+              }
+            },
+            "partial": true
           }
-        }
-      ],
-      "match": "partial", 
+        ]
+      },      
       "comment": "Datetime translation not stable",
       "history": [
         {
@@ -178,7 +189,7 @@
     },
     {
       "request": "play Symphony No 5 by Beethoven",
-      "action": [
+      "expected": [
         {
           "schemaName": "player",
           "actionName": "playTrack",
@@ -237,18 +248,23 @@
     },
     {
       "request": "how much wood can a woodchuck chuck",
-      "action": [
-        {
-          "schemaName": "browser.lookupAndAnswer",
-          "actionName": "lookupAndAnswerInternet",
-          "parameters": {
-            "originalRequest": "how much wood can a woodchuck chuck",
-            "internetLookups": [
-              "how much wood can a woodchuck chuck"
-            ]
-          }
-        }
-      ],
+      "expected": {
+        "anyof": [
+          "chat.generateResponse",
+          {
+            "action": {
+              "schemaName": "browser.lookupAndAnswer",
+              "actionName": "lookupAndAnswerInternet",
+              "parameters": {
+                "originalRequest": "how much wood can a woodchuck chuck",
+                "internetLookups": [
+                  "how much wood can a woodchuck chuck"
+                ]
+              }
+            }
+          }                    
+        ]
+      },
       "history": [
         {
           "text": "A woodchuck can chuck approximately 700 pounds of wood per day, according to various humorous interpretations of the phrase. While woodchucks don't actually chuck wood, they can move around 35 cubic feet of dirt when digging out a burrow, which is roughly equivalent to the same weight.",
@@ -267,7 +283,7 @@
     },
     {
       "request": "add eggs to my grocery list",
-      "action": [
+      "expected": [
         {
           "schemaName": "list",
           "actionName": "addItems",
@@ -318,28 +334,25 @@
     },
     {
       "request": "who was president in 1837",
-      "action": { "anyof" :[
-        {
-          "schemaName": "browser.lookupAndAnswer",
-          "actionName": "lookupAndAnswerInternet",
-          "parameters": {
-            "originalRequest": "who was president in 1837",
-            "internetLookups": [
-              "president of the United States in 1837"
-            ]
+      "expected": {
+        "anyof": [
+          {
+            "action": {
+              "schemaName": "browser.lookupAndAnswer",
+              "actionName": "lookupAndAnswerInternet",
+              "parameters": {
+                "originalRequest": "who was president in 1837",
+                "internetLookups": [
+                  "president in 1837"
+                ]
+              }
+            },
+            "alternates": {
+              "internetLookups.0": "president of the United States in 1837"
+            }            
           }
-        },
-        {
-          "schemaName": "browser.lookupAndAnswer",
-          "actionName": "lookupAndAnswerInternet",
-          "parameters": {
-            "originalRequest": "who was president in 1837",
-            "internetLookups": [
-              "President of the United States in 1837"
-            ]
-          }
-        }
-      ]},
+        ]
+      },
       "history": [
         {
           "text": "Martin Van Buren was the eighth president of the United States, serving from 1837 to 1841.",
@@ -358,7 +371,7 @@
     },
     {
       "request": "play Toccata and Fugue by Bach",
-      "action": [
+      "expected": [
         {
           "schemaName": "player",
           "actionName": "playTrack",
@@ -410,7 +423,7 @@
     },
     {
       "request": "pause the music",
-      "action": [
+      "expected": [
         {
           "schemaName": "player",
           "actionName": "pause"

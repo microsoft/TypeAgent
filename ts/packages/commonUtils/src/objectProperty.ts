@@ -10,7 +10,7 @@ export function getObjectPropertyNames(obj: object) {
                 names.push(`${key}.${child}`);
             }
         } else if (typeof value === "function") {
-            throw new Error("Function is a valid value");
+            throw new Error("Function is not a valid value");
         } else {
             names.push(key);
         }
