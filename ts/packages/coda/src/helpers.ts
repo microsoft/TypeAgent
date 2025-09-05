@@ -411,6 +411,105 @@ export function getIndentationString(doc: vscode.TextDocument): string {
     return "\t";
 }
 
+export function getIndentUnit(doc: vscode.TextDocument): string {
+    const editor = vscode.window.visibleTextEditors.find(
+        (e) => e.document === doc,
+    );
+    const opts = editor?.options;
+    if (opts && opts.insertSpaces && typeof opts.tabSize === "number") {
+        return " ".repeat(Number(opts.tabSize));
+    }
+    return "\t";
+}
+
+export function getLineIndentation(
+    doc: vscode.TextDocument,
+    line: number,
+): string {
+    const text = doc.lineAt(line).text;
+    const match = text.match(/^(\s*)/);
+    return match ? match[1] : "";
+}
+
+export function getNearestIndentAbove(
+    doc: vscode.TextDocument,
+    line: number,
+    lookback = 8,
+): string {
+    for (let i = line; i >= 0 && i > line - lookback; i--) {
+        const text = doc.lineAt(i).text;
+        if (text.trim().length === 0) continue; // skip blank lines
+        return getLineIndentation(doc, i);
+    }
+    return "";
+}
+
+/**
+ * Get the configured indent unit for this document (respects per-file/language settings).
+ * If insertSpaces === true -> N spaces; if false -> tab; if "auto" -> fallback to surrounding style.
+ */
+export function getConfiguredIndentUnit(doc: vscode.TextDocument): string {
+    // Prefer the actual active editor options if available
+    const ed = vscode.window.visibleTextEditors.find((e) => e.document === doc);
+    let insertSpaces = ed?.options.insertSpaces as boolean | string | undefined;
+    let tabSize = ed?.options.tabSize as number | string | undefined;
+
+    // Fallback to configuration scoped to this document
+    const cfg = vscode.workspace.getConfiguration("editor", doc.uri);
+    if (insertSpaces === undefined || insertSpaces === "auto") {
+        insertSpaces = cfg.get<boolean | string>("insertSpaces");
+    }
+    if (tabSize === undefined || typeof tabSize === "string") {
+        tabSize = cfg.get<number>("tabSize");
+    }
+
+    // Normalize
+    const size = typeof tabSize === "number" && tabSize > 0 ? tabSize : 4;
+
+    if (insertSpaces === true) return " ".repeat(size);
+    if (insertSpaces === false) return "\t";
+
+    // insertSpaces === "auto" or unresolved -> return empty to signal "use local detection"
+    return "";
+}
+
+/**
+ * Determine indentation context at insertion:
+ * - baseIndent: indentation of the line where the block should start
+ * - unit: one indent level to use for inner lines
+ * Strategy:
+ *   1) Look at nearest non-empty line above to detect tabs vs spaces.
+ *   2) If ambiguous, fall back to document-scoped config.
+ */
+export function getIndentContext(
+    doc: vscode.TextDocument,
+    insertPos: vscode.Position,
+): { baseIndent: string; unit: string } {
+    // What the current line looks like
+    const currentLineIndent = getLineIndentation(doc, insertPos.line);
+
+    // Try to detect from nearby content
+    const nearest = getNearestIndentAbove(doc, insertPos.line);
+    if (nearest.includes("\t")) {
+        return { baseIndent: currentLineIndent, unit: "\t" };
+    }
+    if (nearest.replace(/\t/g, "").length > 0) {
+        // nearest contains spaces (and no tabs)
+        const cfgUnit = getConfiguredIndentUnit(doc);
+        const size = cfgUnit && cfgUnit !== "\t" ? cfgUnit.length : 4;
+        return { baseIndent: currentLineIndent, unit: " ".repeat(size) };
+    }
+
+    // Fall back to configuration
+    const cfgUnit = getConfiguredIndentUnit(doc);
+    if (cfgUnit) {
+        return { baseIndent: currentLineIndent, unit: cfgUnit };
+    }
+
+    // Last resort
+    return { baseIndent: currentLineIndent, unit: "    " };
+}
+
 export type CursorTarget =
     | { type: "atCursor" }
     | { type: "insideFunction"; name: string }
@@ -547,6 +646,28 @@ function buildFunctionRegex(name: string): RegExp {
         ].join("|"),
         "i",
     );
+}
+
+export function generateCopilotPrompt(
+    docstring: string | undefined,
+    language: string,
+    functionName?: string,
+): string {
+    if (docstring && functionName) {
+        return `Create a ${language} function called ${functionName} that ${docstring}`;
+    }
+
+    return docstring?.trim() || "Add code here";
+}
+
+export function generateDocPromptLine(
+    docstring: string | undefined,
+    language: string,
+    indent = "",
+): string {
+    const trimmed = (docstring ?? "Add code here").trim();
+    if (language === "python") return `${indent}# ${trimmed}`;
+    return `${indent}// ${trimmed}`;
 }
 
 export function getActiveFileMetadata(): ActiveFileMeta | null {
