@@ -65,6 +65,15 @@ export class MatchSet {
         // Case insensitive match
         // TODO: non-diacritic match
         this.matches = new Set(Array.from(matches).map((m) => m.toLowerCase()));
+
+        // Error checking
+        if (this.matches.has("")) {
+            throw new Error("Empty string match is not allowed");
+        }
+
+        if (this.matches.size === 0) {
+            throw new Error("Empty match set are not allowed");
+        }
     }
 
     public get fullName() {
@@ -139,30 +148,44 @@ export function getPropertyNameFromTransformInfo(
 
 export class MatchPart {
     constructor(
-        public readonly matchSet: MatchSet,
+        public readonly matchSet: MatchSet | undefined,
         public readonly optional: boolean,
         public readonly wildcardMode: WildcardMode,
         public readonly transformInfos: Readonly<TransformInfo>[] | undefined,
-    ) {}
+    ) {
+        if (wildcardMode && transformInfos === undefined) {
+            throw new Error("Wildcard part must be captured");
+        }
+        if (optional && transformInfos !== undefined) {
+            throw new Error("Optional part cannot be captured");
+        }
+        if (matchSet === undefined && wildcardMode === WildcardMode.Disabled) {
+            throw new Error(
+                "Match part must be wildcard if no matches is provided",
+            );
+        }
+    }
 
     public get capture() {
         return this.transformInfos !== undefined;
     }
 
     public get regExp() {
-        return this.matchSet.regExp;
+        return this.matchSet?.regExp;
     }
 
     public toString(verbose: boolean = false) {
-        return (
-            `<${verbose ? this.matchSet.fullName : this.matchSet.name}>` +
-            (this.optional ? "?" : "")
-        );
+        const name = this.matchSet
+            ? verbose
+                ? this.matchSet.fullName
+                : this.matchSet.name
+            : "wildcard";
+        return `<${name}>` + (this.optional ? "?" : "");
     }
 
     public toJSON(): MatchPartJSON {
         return {
-            matchSet: this.matchSet.fullName,
+            matchSet: this.matchSet?.fullName,
             optional: this.optional ? true : undefined,
             wildcardMode:
                 this.wildcardMode !== WildcardMode.Disabled
@@ -194,7 +217,7 @@ export class MatchPart {
     }
 
     public getCompletion(): Iterable<string> | undefined {
-        return this.matchSet.matches.values();
+        return this.matchSet?.matches.values();
     }
 }
 
@@ -212,17 +235,6 @@ export function createMatchPart(
     const optional = options?.optional ?? false;
     const wildcardMode = options?.wildcardMode ?? WildcardMode.Disabled;
     const transformInfos = options?.transformInfos;
-
-    // Error checking
-    if (wildcardMode && transformInfos === undefined) {
-        throw new Error("Wildcard part must be captured");
-    }
-    if (optional && transformInfos !== undefined) {
-        throw new Error("Optional part cannot be captured");
-    }
-    if (matches.some((m) => m === "")) {
-        throw new Error("Empty match is not allowed");
-    }
 
     // Add all the transform namespace and transformName to the match namespace
     // so that matches will have corresponding entry in the transforms

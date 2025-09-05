@@ -151,7 +151,9 @@ export class ConstructionCache {
         const mergedParts = construction.parts.map((p) =>
             isMatchPart(p)
                 ? new MatchPart(
-                      this.addMatchSet(p.matchSet, mergeMatchSets),
+                      p.matchSet
+                          ? this.addMatchSet(p.matchSet, mergeMatchSets)
+                          : undefined,
                       p.optional,
                       p.wildcardMode,
                       p.transformInfos,
@@ -271,7 +273,7 @@ export class ConstructionCache {
                     if (part.optional) {
                         continue;
                     }
-                    if (isMatchPart(part)) {
+                    if (isMatchPart(part) && part.matchSet) {
                         // For match parts, we can use the match set name as the prefix
                         for (const match of part.matchSet.matches.values()) {
                             prefix.add(match);

@@ -44,7 +44,7 @@ describe("construction cache", () => {
                 expect(isMatchPart(first.construction.parts[0])).toBe(true);
                 if (isMatchPart(first.construction.parts[0])) {
                     const matches =
-                        first.construction.parts[0].matchSet.matches;
+                        first.construction.parts[0].matchSet!.matches;
                     expect(Array.from(matches.values()).sort()).toEqual([
                         "a",
                         "b",
