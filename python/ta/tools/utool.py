@@ -200,7 +200,7 @@ async def main():
                 + f"Running in batch mode [{args.offset}:{args.offset + args.limit if args.limit else ''}]."
                 + Fore.RESET
             )
-        await batch_loop(context, args.offset, args.limit)
+        await batch_loop(context, args.offset, args.limit, args.skip_counters)
     else:
         if args.verbose:
             print(Fore.YELLOW + "Running in interactive mode." + Fore.RESET)
@@ -264,12 +264,19 @@ async def print_conversation_stats(c: IConversation, verbose: bool = True) -> No
             print(f"{await s.message_index.size()} message index entries.")
 
 
-async def batch_loop(context: ProcessingContext, offset: int, limit: int) -> None:
+async def batch_loop(
+    context: ProcessingContext, offset: int, limit: int, skip_counters: str
+) -> None:
+    skips = []
+    if skip_counters:
+        skips = [int(x) for x in skip_counters.split(",") if x.strip().isdigit()]
     if limit == 0:
         limit = len(context.ar_list) - offset
     sublist = context.ar_list[offset : offset + limit]
     all_scores = []
     for counter, qadata in enumerate(sublist, offset + 1):
+        if counter in skips:
+            continue
         question = qadata["question"]
         print("-" * 20, counter, question, "-" * 20)
         score = await process_query(context, question)
@@ -508,6 +515,12 @@ def make_arg_parser(description: str) -> argparse.ArgumentParser:
         type=str,
         default=default_srfile,
         help=f"Path to the Search_results.json file ({explain_sr})",
+    )
+    parser.add_argument(
+        "--skip-counters",
+        type=str,
+        default="",
+        help="List of comma-separated questions to skip",
     )
     parser.add_argument(
         "--sqlite-db",
