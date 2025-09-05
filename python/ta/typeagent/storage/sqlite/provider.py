@@ -211,7 +211,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
             cursor.execute("DELETE FROM SemanticRefIndex")
             cursor.execute("DELETE FROM SemanticRefs")
             cursor.execute("DELETE FROM Messages")
-            cursor.execute("DELETE FROM Conversations")
+            cursor.execute("DELETE FROM ConversationMetadata")
 
         # Clear in-memory indexes
         await self._message_text_index.clear()
@@ -249,18 +249,19 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         """Get conversation metadata."""
         cursor = self.db.cursor()
         cursor.execute(
-            "SELECT created_at, updated_at FROM Conversations WHERE conversation_id = ?",
-            (self.conversation_id,),
+            "SELECT name_tag, schema_version, created_at, updated_at, tags, extra FROM ConversationMetadata LIMIT 1"
         )
         row = cursor.fetchone()
         if row:
+            import json
+
             return ConversationMetadata(
-                name_tag=f"conversation_{self.conversation_id}",
-                schema_version="1.0",
-                created_at=row[0],
-                updated_at=row[1],
-                tags=[],
-                extra={},
+                name_tag=row[0],
+                schema_version=row[1],
+                created_at=row[2],
+                updated_at=row[3],
+                tags=json.loads(row[4]) if row[4] else [],
+                extra=json.loads(row[5]) if row[5] else {},
             )
         return None
 
@@ -268,14 +269,13 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         self, created_at: str | None = None, updated_at: str | None = None
     ) -> None:
         """Update conversation metadata."""
+        import json
+
         with self.db:
             cursor = self.db.cursor()
 
-            # Check if conversation exists
-            cursor.execute(
-                "SELECT 1 FROM Conversations WHERE conversation_id = ?",
-                (self.conversation_id,),
-            )
+            # Check if conversation metadata exists
+            cursor.execute("SELECT 1 FROM ConversationMetadata LIMIT 1")
 
             if cursor.fetchone():
                 # Update existing
@@ -289,16 +289,20 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
                     params.append(updated_at)
 
                 if updates:
-                    params.append(self.conversation_id)
                     cursor.execute(
-                        f"UPDATE Conversations SET {', '.join(updates)} WHERE conversation_id = ?",
+                        f"UPDATE ConversationMetadata SET {', '.join(updates)}",
                         params,
                     )
             else:
-                # Insert new
+                # Insert new with default values
+                name_tag = f"conversation_{self.conversation_id}"
+                schema_version = "1.0"
+                tags = json.dumps([])
+                extra = json.dumps({})
+
                 cursor.execute(
-                    "INSERT INTO Conversations (conversation_id, created_at, updated_at) VALUES (?, ?, ?)",
-                    (self.conversation_id, created_at, updated_at),
+                    "INSERT INTO ConversationMetadata (name_tag, schema_version, created_at, updated_at, tags, extra) VALUES (?, ?, ?, ?, ?, ?)",
+                    (name_tag, schema_version, created_at, updated_at, tags, extra),
                 )
 
     def get_db_version(self) -> int:
