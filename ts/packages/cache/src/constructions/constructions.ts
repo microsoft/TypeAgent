@@ -8,14 +8,9 @@ import {
     fromJsonActions,
 } from "../explanation/requestAction.js";
 import { MatchConfig, matchParts } from "./constructionMatch.js";
-import {
-    ParsePart,
-    ParsePartJSON,
-    createParsePartFromJSON,
-} from "./parsePart.js";
+import { ParsePart, createParsePartFromJSON } from "./parsePart.js";
 import {
     MatchPart,
-    MatchPartJSON,
     MatchSet,
     toTransformInfoKey,
     TransformInfo,
@@ -26,8 +21,13 @@ import {
     createActionProps,
     matchedValues,
 } from "./constructionValue.js";
+import {
+    ConstructionJSON,
+    ConstructionPartJSON,
+    ParsePartJSON,
+} from "./constructionJSONTypes.js";
 
-type ImplicitParameter = {
+export type ImplicitParameter = {
     paramName: string;
     paramValue: ParamValueType;
 };
@@ -320,18 +320,9 @@ export class Construction {
     }
 }
 
-type ConstructionPartJSON = MatchPartJSON | ParsePartJSON;
-
 function isParsePartJSON(part: ConstructionPartJSON): part is ParsePartJSON {
     return (part as any).parserName !== undefined;
 }
-
-export type ConstructionJSON = {
-    parts: ConstructionPartJSON[];
-    emptyArrayParameters?: string[];
-    implicitParameters?: ImplicitParameter[];
-    implicitActionName?: string;
-};
 
 export type MatchResult = {
     construction: Construction;
