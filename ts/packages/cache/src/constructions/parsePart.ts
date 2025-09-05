@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ParamSpec } from "action-schema";
+import { ParsePartJSON } from "./constructionJSONTypes.js";
 import { ConstructionPart, WildcardMode } from "./constructions.js";
 import { isMatchPart } from "./matchPart.js";
 import { PropertyParser, getPropertyParser } from "./propertyParser.js";
@@ -56,11 +56,6 @@ export class ParsePart implements ConstructionPart {
         return [this.propertyName];
     }
 }
-
-export type ParsePartJSON = {
-    propertyName: string;
-    parserName: ParamSpec;
-};
 
 export function createParsePart(
     propertyName: string,

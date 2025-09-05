@@ -2,28 +2,12 @@
 // Licensed under the MIT License.
 
 import { escapeMatch } from "../utils/regexp.js";
+import {
+    MatchPartJSON,
+    MatchSetJSON,
+    TransformInfoJSON,
+} from "./constructionJSONTypes.js";
 import { ConstructionPart, WildcardMode } from "./constructions.js";
-
-export type MatchSetJSON = {
-    matches: string[];
-    basename: string;
-    namespace?: string | undefined;
-    canBeMerged: boolean;
-    index: number;
-};
-
-export type TransformInfoJSON = {
-    readonly namespace: string;
-    readonly transformName: string;
-    readonly actionIndex?: number | undefined;
-};
-
-export type MatchPartJSON = {
-    matchSet: string;
-    optional: true | undefined;
-    wildcardMode: WildcardMode | undefined;
-    transformInfos?: TransformInfoJSON[] | undefined;
-};
 
 export type TransformInfo = {
     readonly namespace: string;
