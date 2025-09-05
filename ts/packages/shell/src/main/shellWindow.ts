@@ -121,7 +121,7 @@ export class ShellWindow {
         );
 
         setupDevicePermissions(mainWindow);
-        this.setupWebContents(mainWindow.webContents);
+        //this.setupWebContents(mainWindow.webContents);
 
         // Initialize browser view manager
         this.browserViewManager = new BrowserViewManager(mainWindow);
