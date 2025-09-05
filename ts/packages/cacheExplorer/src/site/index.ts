@@ -82,7 +82,7 @@ function selectMatchSets(newSelectedMatchSets: MatchSet[]) {
         if (show) {
             constructionView.elem.classList.remove("hidden");
             constructionView.partViews.forEach((partView) => {
-                if (isMatchPart(partView.part)) {
+                if (isMatchPart(partView.part) && partView.part.matchSet) {
                     if (selectedMatchSets.includes(partView.part.matchSet)) {
                         partView.elem.classList.add("selected");
                     } else {
@@ -197,11 +197,13 @@ function createConstructionView(cache: ConstructionCache, namespace: string) {
                   return { part: p, elem: partElem };
               });
               constructionElem.addEventListener("click", () => {
-                  selectMatchSets(
-                      construction.parts
-                          .filter(isMatchPart)
-                          .map((p) => p.matchSet),
-                  );
+                  const matchSets: MatchSet[] = [];
+                  for (const part of construction.parts) {
+                      if (isMatchPart(part) && part.matchSet) {
+                          matchSets.push(part.matchSet);
+                      }
+                  }
+                  selectMatchSets(matchSets);
               });
               constructionTable.appendChild(constructionElem);
               return { construction, elem: constructionElem, partViews };

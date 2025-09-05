@@ -43,7 +43,7 @@ export const enum WildcardMode {
 export type ConstructionPart = {
     readonly wildcardMode: WildcardMode;
     readonly capture: boolean;
-    readonly regExp: RegExp;
+    readonly regExp: RegExp | undefined; // wildcard may not have regExp
     readonly optional: boolean;
     equals(other: ConstructionPart): boolean;
 
@@ -283,11 +283,14 @@ export class Construction {
                 if (isParsePartJSON(part)) {
                     return createParsePartFromJSON(part);
                 }
-                const matchSet = allMatchSets.get(part.matchSet);
-                if (matchSet === undefined) {
-                    throw new Error(
-                        `Unable to resolve MatchSet ${part.matchSet}`,
-                    );
+                let matchSet: MatchSet | undefined = undefined;
+                if (part.matchSet) {
+                    matchSet = allMatchSets.get(part.matchSet);
+                    if (matchSet === undefined) {
+                        throw new Error(
+                            `Unable to resolve MatchSet ${part.matchSet}`,
+                        );
+                    }
                 }
                 const transformInfos = part.transformInfos?.map((info) => ({
                     ...info,

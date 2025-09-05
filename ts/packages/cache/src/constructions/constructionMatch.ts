@@ -153,12 +153,10 @@ function finishMatchParts(
 ) {
     while (state.matchedStart.length < parts.length) {
         const part = parts[state.matchedStart.length];
-        const m = matchRegExp(
-            state,
-            request,
-            part.regExp,
-            config.matchPartsCache,
-        );
+        const regExp = part.regExp;
+        const m = regExp
+            ? matchRegExp(state, request, regExp, config.matchPartsCache)
+            : undefined;
 
         if (m === undefined) {
             // No match
@@ -380,6 +378,11 @@ function backtrackPartNextMatch(
     part: ConstructionPart,
     matchPartsCache: MatchPartsCache | undefined,
 ) {
+    if (part.regExp === undefined) {
+        // Wildcard only part. No shorter match or skipping space/punctuation possible.
+        return undefined;
+    }
+
     // Check if the part has a shorter match
     const backtrackString = request.substring(0, lastEnd - 1);
     const backtrackMatch = matchRegExpAt(

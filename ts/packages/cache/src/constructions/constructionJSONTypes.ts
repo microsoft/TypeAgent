@@ -40,7 +40,9 @@ export type TransformInfoJSON = {
 // Represent match set part in a construction
 export type MatchPartJSON = {
     // The full name of the match set: `${basename}_${index}`
-    matchSet: string;
+    // If undefined, it means this part has only wildcard match (i.e. '.*')
+    matchSet: string | undefined;
+
     // Whether the part is optional
     optional?: true | undefined;
 
@@ -94,13 +96,16 @@ export type ConstructionCacheJSON = {
     }[];
 
     // Global transform table, referenced by transformInfo in MatchPartJSON
+    //
     transformNamespaces: {
+        // Corresponding to 'namespace' in TransformInfoJSON
         name: string;
         transforms: TransformsJSON;
     }[];
 };
 
 type TransformValueRecordJSON = {
+    // The value for the transform
     value: ParamValueType;
     count: number;
     conflicts?: [ParamValueType, number][] | undefined;
@@ -110,6 +115,8 @@ export type TransformRecordJSON =
     | TransformEntityRecord
     | TransformValueRecordJSON;
 export type TransformsJSON = {
+    // Corresponding to 'namespace' in transformName in TransformInfoJSON
     name: string;
+    // A list of "phrase" -> value mapping.
     transform: [string, TransformRecordJSON][];
 }[];
