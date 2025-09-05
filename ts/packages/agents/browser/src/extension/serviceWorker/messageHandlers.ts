@@ -10,6 +10,31 @@ import {
     getWebSocket,
 } from "./websocket";
 import { BrowserContentDownloader } from "./contentDownloader.js";
+import type { KnowledgeExtractionProgress } from "../interfaces/knowledgeExtraction.types";
+
+// Store active extraction callbacks
+const knowledgeExtractionCallbacks = new Map<
+    string,
+    (progress: KnowledgeExtractionProgress) => void
+>();
+
+/**
+ * Handle knowledge extraction progress updates from WebSocket
+ */
+export function handleKnowledgeExtractionProgress(
+    extractionId: string,
+    progress: KnowledgeExtractionProgress,
+) {
+    const callback = knowledgeExtractionCallbacks.get(extractionId);
+    if (callback) {
+        callback(progress);
+
+        // Cleanup on completion
+        if (progress.phase === "complete" || progress.phase === "error") {
+            knowledgeExtractionCallbacks.delete(extractionId);
+        }
+    }
+}
 
 /**
  * Handles messages from content scripts
@@ -306,6 +331,111 @@ export async function handleMessage(
             return {
                 error: "No browser tabs are currently open. Please open a browser tab to continue.",
             };
+        }
+
+        case "extractPageKnowledgeStreaming": {
+            const targetTab = await getActiveTab();
+            if (targetTab && message.streamingEnabled) {
+                const extractionId = message.extractionId;
+
+                const progressCallback = (
+                    progress: KnowledgeExtractionProgress,
+                ) => {
+                    try {
+                        chrome.runtime.sendMessage({
+                            type: "knowledgeExtractionProgress",
+                            extractionId,
+                            progress: progress,
+                        });
+                        /*
+                            .catch((error) => {
+                                // Handle case where no listeners are available
+                                console.log("No listeners for progress update:", error);
+                            })*/
+                    } catch (error) {
+                        console.error("Failed to send progress to UI:", error);
+                    }
+                };
+
+                // Register progress handler
+                knowledgeExtractionCallbacks.set(
+                    extractionId,
+                    progressCallback,
+                );
+
+                try {
+                    const htmlFragments = await getTabHTMLFragments(
+                        targetTab,
+                        false,
+                        false,
+                        true,
+                        false, // useTimestampIds
+                        true, // filterToReadingView - use reading view for knowledge extraction
+                        true, // keepMetaTags - preserve metadata for context
+                    );
+
+                    // Start extraction with streaming flag
+                    const knowledgeResult = await sendActionToAgent({
+                        actionName: "extractKnowledgeFromPageStreaming",
+                        parameters: {
+                            url: targetTab.url,
+                            title: targetTab.title,
+                            mode: message.mode || "content",
+                            extractionId: extractionId,
+                            htmlFragments: htmlFragments,
+                            extractionSettings: message.extractionSettings,
+                        },
+                    });
+
+                    return {
+                        success: true,
+                        extractionId: extractionId,
+                        finalData: knowledgeResult,
+                    };
+                } catch (error) {
+                    console.error(
+                        "Error in streaming knowledge extraction:",
+                        error,
+                    );
+
+                    // Send error progress update
+                    const errorProgress: KnowledgeExtractionProgress = {
+                        extractionId,
+                        phase: "error",
+                        totalItems: 1,
+                        processedItems: 0,
+                        errors: [
+                            {
+                                message:
+                                    (error as Error).message || String(error),
+                                timestamp: Date.now(),
+                            },
+                        ],
+                    };
+
+                    const callback =
+                        knowledgeExtractionCallbacks.get(extractionId);
+                    if (callback) {
+                        callback(errorProgress);
+                        knowledgeExtractionCallbacks.delete(extractionId);
+                    }
+
+                    return {
+                        error: "Failed to extract knowledge from page",
+                        extractionId: extractionId,
+                        success: false,
+                    };
+                }
+            } else {
+                // Return error if streaming was requested but cannot be performed
+                return {
+                    error: targetTab
+                        ? "Streaming mode is disabled"
+                        : "No browser tabs are currently open",
+                    extractionId: message.extractionId,
+                    success: false,
+                };
+            }
         }
 
         case "queryKnowledge": {

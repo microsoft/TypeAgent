@@ -396,6 +396,7 @@ async function processBrowserAgentMessage(
         }
 
         case "extractKnowledgeFromPage":
+        case "extractKnowledgeFromPageStreaming":
         case "indexWebPageContent":
         case "checkPageIndexStatus":
         case "getPageIndexedKnowledge":
