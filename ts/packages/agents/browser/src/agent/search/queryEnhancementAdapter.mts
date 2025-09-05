@@ -144,7 +144,7 @@ export class QueryEnhancementAdapter {
             `Analysis: intent=${analysis.intent.type}, content=${JSON.stringify(analysis.content)}`,
         );
 
-        // Remove temporal ranking terms that hurt semantic search
+        // Remove temporal ranking terms that hurt semantic search (now handled by date filters)
         if (analysis.intent.type === "find_latest") {
             optimizedQuery = optimizedQuery.replace(
                 /\b(most recently|latest|most recent)\b/gi,
@@ -162,6 +162,14 @@ export class QueryEnhancementAdapter {
         if (analysis.intent.type === "find_most_frequent") {
             optimizedQuery = optimizedQuery.replace(
                 /\b(most often|most visited|most frequently|frequently)\b/gi,
+                "",
+            );
+        }
+
+        // Remove temporal terms that are now handled by date filters
+        if (analysis.temporal) {
+            optimizedQuery = optimizedQuery.replace(
+                /\b(last week|last month|last year|this year|recently|in \d{4}|since \d{4}|before \d{4})\b/gi,
                 "",
             );
         }
@@ -248,13 +256,23 @@ export class QueryEnhancementAdapter {
             const { startDate, endDate } = this.queryAnalyzer.getTemporalDates(
                 analysis.temporal,
             );
-            if (startDate && endDate) {
+            if (startDate) {
                 enhanced.dateFrom = startDate.toISOString();
-                enhanced.dateTo = endDate.toISOString();
+                if (endDate) {
+                    enhanced.dateTo = endDate.toISOString();
+                }
                 debug(
-                    `Applied temporal filter: ${enhanced.dateFrom} to ${enhanced.dateTo}`,
+                    `Applied temporal filter: ${enhanced.dateFrom}${endDate ? ` to ${enhanced.dateTo}` : ""}`,
                 );
             }
+        }
+
+        // Add domain filtering directly to metadata
+        if (analysis.content?.domain) {
+            enhanced.metadata = {
+                ...enhanced.metadata,
+                domainFilter: analysis.content.domain,
+            };
         }
 
         // Store original query and analysis for debugging/logging

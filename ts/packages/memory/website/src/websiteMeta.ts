@@ -347,54 +347,6 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
             }
         }
 
-        // Enhanced temporal topics for LLM reasoning
-        if (this.bookmarkDate) {
-            const bookmarkDate = new Date(this.bookmarkDate);
-            const year = bookmarkDate.getFullYear();
-            const currentYear = new Date().getFullYear();
-
-            const potentialTopics = [
-                `bookmarked in ${year}`,
-                `${this.domain} bookmark from ${year}`,
-            ];
-
-            // Relative temporal topics
-            const yearsAgo = currentYear - year;
-            if (yearsAgo === 0) {
-                potentialTopics.push("recent bookmark", "new bookmark");
-            } else if (yearsAgo >= 3) {
-                potentialTopics.push("old bookmark", "early bookmark");
-            }
-
-            // Add only unique topics
-            const existingTopics = new Set(topics);
-            for (const topic of potentialTopics) {
-                if (!existingTopics.has(topic)) {
-                    topics.push(topic);
-                    existingTopics.add(topic);
-                }
-            }
-        }
-
-        if (this.visitDate) {
-            const visitDate = new Date(this.visitDate);
-            const year = visitDate.getFullYear();
-
-            const potentialTopics = [
-                `visited in ${year}`,
-                `${this.domain} visit from ${year}`,
-            ];
-
-            // Add only unique topics
-            const existingTopics = new Set(topics);
-            for (const topic of potentialTopics) {
-                if (!existingTopics.has(topic)) {
-                    topics.push(topic);
-                    existingTopics.add(topic);
-                }
-            }
-        }
-
         // Frequency-derived topics
         if (this.visitCount !== undefined) {
             let potentialTopics: string[] = [];
@@ -426,12 +378,6 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
                 `${this.pageType} site`,
                 `${this.pageType} website`,
             ];
-
-            // Category-specific temporal topics
-            if (this.bookmarkDate) {
-                const year = new Date(this.bookmarkDate).getFullYear();
-                potentialTopics.push(`${this.pageType} bookmark from ${year}`);
-            }
 
             // Add only unique topics
             const existingTopics = new Set(topics);
