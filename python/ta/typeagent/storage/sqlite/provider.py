@@ -230,21 +230,17 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         """Deserialize storage provider data."""
         # Deserialize term to semantic ref index
         if data.get("termToSemanticRefIndexData"):
-            self._term_to_semantic_ref_index.deserialize(
+            await self._term_to_semantic_ref_index.deserialize(
                 data["termToSemanticRefIndexData"]
             )
 
         # Deserialize related terms index
         if data.get("relatedTermsIndexData"):
-            await self._related_terms_index.deserialize(
-                data["relatedTermsIndexData"]
-            )
+            await self._related_terms_index.deserialize(data["relatedTermsIndexData"])
 
         # Deserialize message text index
         if data.get("messageIndexData"):
-            self._message_text_index.deserialize(
-                data["messageIndexData"]
-            )
+            await self._message_text_index.deserialize(data["messageIndexData"])
 
     def get_conversation_metadata(self) -> ConversationMetadata | None:
         """Get conversation metadata."""

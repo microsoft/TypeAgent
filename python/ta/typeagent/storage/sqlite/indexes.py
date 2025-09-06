@@ -95,7 +95,7 @@ class SqliteTermToSemanticRefIndex(interfaces.ITermToSemanticRefIndex):
         cursor = self.db.cursor()
         cursor.execute("DELETE FROM SemanticRefIndex")
 
-    def serialize(self) -> interfaces.TermToSemanticRefIndexData:
+    async def serialize(self) -> interfaces.TermToSemanticRefIndexData:
         """Serialize the index data for compatibility with in-memory version."""
         cursor = self.db.cursor()
         cursor.execute(
@@ -121,7 +121,7 @@ class SqliteTermToSemanticRefIndex(interfaces.ITermToSemanticRefIndex):
 
         return interfaces.TermToSemanticRefIndexData(items=items)
 
-    def deserialize(self, data: interfaces.TermToSemanticRefIndexData) -> None:
+    async def deserialize(self, data: interfaces.TermToSemanticRefIndexData) -> None:
         """Deserialize index data by populating the SQLite table."""
         cursor = self.db.cursor()
 
@@ -733,7 +733,7 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
         size = await self.size()
         return size == 0
 
-    def serialize(self) -> interfaces.MessageTextIndexData:
+    async def serialize(self) -> interfaces.MessageTextIndexData:
         """Serialize the message text index."""
         # Get all data from the MessageTextIndex table
         cursor = self.db.cursor()
@@ -783,7 +783,7 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
 
         return {}
 
-    def deserialize(self, data: interfaces.MessageTextIndexData) -> None:
+    async def deserialize(self, data: interfaces.MessageTextIndexData) -> None:
         """Deserialize message text index data."""
         cursor = self.db.cursor()
 

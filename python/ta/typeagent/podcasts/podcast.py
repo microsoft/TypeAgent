@@ -28,6 +28,7 @@ from ..knowpro.interfaces import (
     IMessageMetadata,
     ISemanticRefCollection,
     IStorageProvider,
+    ITermToSemanticRefIndex,
     MessageOrdinal,
     SemanticRef,
     Term,
@@ -146,13 +147,13 @@ class PodcastData(ConversationDataWithIndexes[PodcastMessageData]):
 
 
 @dataclass
-class Podcast(IConversation[PodcastMessage, semrefindex.TermToSemanticRefIndex]):
+class Podcast(IConversation[PodcastMessage, ITermToSemanticRefIndex]):
     settings: ConversationSettings
     name_tag: str
     messages: IMessageCollection[PodcastMessage]
     semantic_refs: ISemanticRefCollection
     tags: list[str]
-    semantic_ref_index: semrefindex.TermToSemanticRefIndex
+    semantic_ref_index: ITermToSemanticRefIndex
     secondary_indexes: IConversationSecondaryIndexes[PodcastMessage] | None
 
     @classmethod
@@ -162,7 +163,7 @@ class Podcast(IConversation[PodcastMessage, semrefindex.TermToSemanticRefIndex])
         name_tag: str | None = None,
         messages: IMessageCollection[PodcastMessage] | None = None,
         semantic_refs: ISemanticRefCollection | None = None,
-        semantic_ref_index: semrefindex.TermToSemanticRefIndex | None = None,
+        semantic_ref_index: ITermToSemanticRefIndex | None = None,
         tags: list[str] | None = None,
         secondary_indexes: IConversationSecondaryIndexes[PodcastMessage] | None = None,
     ) -> "Podcast":
@@ -174,7 +175,7 @@ class Podcast(IConversation[PodcastMessage, semrefindex.TermToSemanticRefIndex])
             messages or await storage_provider.get_message_collection(),
             semantic_refs or await storage_provider.get_semantic_ref_collection(),
             tags if tags is not None else [],
-            semantic_ref_index or await storage_provider.get_semantic_ref_index(),  # type: ignore
+            semantic_ref_index or await storage_provider.get_semantic_ref_index(),
             secondary_indexes
             or await secindex.ConversationSecondaryIndexes.create(
                 storage_provider, settings.related_term_index_settings
@@ -189,13 +190,11 @@ class Podcast(IConversation[PodcastMessage, semrefindex.TermToSemanticRefIndex])
         return self.secondary_indexes
 
     async def add_metadata_to_index(self) -> None:
-        if self.semantic_ref_index is not None:
-            assert self.semantic_refs is not None
-            await semrefindex.add_metadata_to_index(
-                self.messages,
-                self.semantic_refs,
-                self.semantic_ref_index,
-            )
+        await semrefindex.add_metadata_to_index(
+            self.messages,
+            self.semantic_refs,
+            self.semantic_ref_index,
+        )
 
     async def generate_timestamps(
         self, start_date: Datetime, length_minutes: float = 60.0
@@ -230,9 +229,7 @@ class Podcast(IConversation[PodcastMessage, semrefindex.TermToSemanticRefIndex])
                 else None
             ),
         )
-        # Set the rest only if they aren't None.
-        if self.semantic_ref_index is not None:
-            data["semanticIndexData"] = self.semantic_ref_index.serialize()
+        data["semanticIndexData"] = await self.semantic_ref_index.serialize()
 
         secondary_indexes = self._get_secondary_indexes()
         if secondary_indexes.term_to_related_terms_index is not None:
@@ -242,7 +239,7 @@ class Podcast(IConversation[PodcastMessage, semrefindex.TermToSemanticRefIndex])
         if secondary_indexes.threads:
             data["threadData"] = secondary_indexes.threads.serialize()
         if secondary_indexes.message_index is not None:
-            data["messageIndexData"] = secondary_indexes.message_index.serialize()
+            data["messageIndexData"] = await secondary_indexes.message_index.serialize()
         return data
 
     async def write_to_file(self, filename: str) -> None:
@@ -271,7 +268,7 @@ class Podcast(IConversation[PodcastMessage, semrefindex.TermToSemanticRefIndex])
 
         semantic_index_data = podcast_data.get("semanticIndexData")
         if semantic_index_data is not None:
-            self.semantic_ref_index.deserialize(semantic_index_data)
+            await self.semantic_ref_index.deserialize(semantic_index_data)
 
         related_terms_index_data = podcast_data.get("relatedTermsIndexData")
         if related_terms_index_data is not None:
@@ -308,7 +305,7 @@ class Podcast(IConversation[PodcastMessage, semrefindex.TermToSemanticRefIndex])
                 assert (
                     index_size == 0
                 ), "Message index must be empty before deserializing"
-            secondary_indexes.message_index.deserialize(message_index_data)
+            await secondary_indexes.message_index.deserialize(message_index_data)
 
         await self._build_transient_secondary_indexes(True)
 

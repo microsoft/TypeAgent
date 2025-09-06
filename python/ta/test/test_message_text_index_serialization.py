@@ -82,7 +82,7 @@ class TestMessageTextIndexSerialization:
         assert size == 3
 
         # Serialize the index
-        serialized_data = index.serialize()
+        serialized_data = await index.serialize()
 
         # Verify it's not just an empty dict (which was the previous bug)
         assert serialized_data != {}
@@ -139,7 +139,7 @@ class TestMessageTextIndexSerialization:
         assert await index.size() == 0
 
         # Deserialize the data
-        index.deserialize(test_data)
+        await index.deserialize(test_data)
 
         # Verify the data was restored
         size_after = await index.size()

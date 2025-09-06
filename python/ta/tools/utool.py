@@ -50,6 +50,7 @@ from typeagent.podcasts import podcast
 
 from typeagent.storage.memory.propindex import build_property_index
 from typeagent.storage.memory.reltermsindex import build_related_terms_index
+from typeagent.storage.sqlite.provider import SqliteStorageProvider
 from typeagent.storage.utils import create_storage_provider
 
 
@@ -662,40 +663,18 @@ async def load_podcast_index(
     dbname: str | None,
     verbose: bool = True,
 ) -> query.QueryEvalContext:
-    if dbname:
-        provider = await settings.get_storage_provider()
-        msgs = await provider.get_message_collection()
-        size = await msgs.size()
-        if size > 0:
-            if verbose:
-                print(
-                    f"Reusing existing conversation in {dbname!r} with {size} messages."
-                )
+    provider = await settings.get_storage_provider()
+    msgs = await provider.get_message_collection()
+    if await msgs.size() > 0:  # Sqlite provider with existing non-empty database
+        with utils.timelog(f"Reusing podcast db {dbname}"):
             conversation = await podcast.Podcast.create(settings)
-            # Only rebuild indexes if they're empty
-            if conversation.secondary_indexes:
-                # Rebuild property index if empty
-                if (
-                    conversation.secondary_indexes.property_to_semantic_ref_index
-                    and await conversation.secondary_indexes.property_to_semantic_ref_index.size()
-                    == 0
-                ):
-                    await build_property_index(conversation)
-
-                # Rebuild related terms fuzzy index if empty
-                ttri = conversation.secondary_indexes.term_to_related_terms_index
-                if ttri and ttri.fuzzy_index and await ttri.fuzzy_index.size() == 0:
-                    with utils.timelog("build_related_terms_index [1]"):
-                        await build_related_terms_index(
-                            conversation, settings.related_term_index_settings
-                        )
-            await print_conversation_stats(conversation, verbose)
-            return query.QueryEvalContext(conversation)
-
-    with utils.timelog(f"load podcast from {podcast_file_prefix!r}"):
-        conversation = await podcast.Podcast.read_from_file(
-            podcast_file_prefix, settings, dbname
-        )
+    else:
+        with utils.timelog(f"Loading podcast from {podcast_file_prefix!r}"):
+            conversation = await podcast.Podcast.read_from_file(
+                podcast_file_prefix, settings, dbname
+            )
+            if isinstance(provider, SqliteStorageProvider):
+                provider.db.commit()
 
     await print_conversation_stats(conversation, verbose)
 
