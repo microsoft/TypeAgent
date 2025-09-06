@@ -259,14 +259,11 @@ class Podcast(IConversation[PodcastMessage, semrefindex.TermToSemanticRefIndex])
 
         self.name_tag = podcast_data["nameTag"]
 
-        for message_data in podcast_data["messages"]:
-            msg = PodcastMessage.deserialize(message_data)
-            await self.messages.append(msg)
+        message_list = [PodcastMessage.deserialize(m) for m in podcast_data["messages"]]
+        await self.messages.extend(message_list)
 
         semantic_refs_data = podcast_data.get("semanticRefs")
         if semantic_refs_data is not None:
-            if self.semantic_refs is None:
-                self.semantic_refs = MemorySemanticRefCollection()
             semrefs = [SemanticRef.deserialize(r) for r in semantic_refs_data]
             await self.semantic_refs.extend(semrefs)
 
