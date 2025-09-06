@@ -123,13 +123,6 @@ class SqliteTermToSemanticRefIndex(interfaces.ITermToSemanticRefIndex):
 
     def deserialize(self, data: interfaces.TermToSemanticRefIndexData) -> None:
         """Deserialize index data by populating the SQLite table."""
-        # Use a single transaction for the entire operation
-        self._deserialize_in_transaction(data)
-
-    def _deserialize_in_transaction(
-        self, data: interfaces.TermToSemanticRefIndexData
-    ) -> None:
-        """Deserialize index data within an existing transaction."""
         cursor = self.db.cursor()
 
         # Clear existing data
@@ -792,13 +785,6 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
 
     def deserialize(self, data: interfaces.MessageTextIndexData) -> None:
         """Deserialize message text index data."""
-        # Use a single transaction for the entire operation
-        self._deserialize_in_transaction(data)
-
-    def _deserialize_in_transaction(
-        self, data: interfaces.MessageTextIndexData
-    ) -> None:
-        """Deserialize message text index data within an existing transaction."""
         cursor = self.db.cursor()
 
         # Clear existing data
@@ -975,25 +961,17 @@ class SqliteRelatedTermsAliases(interfaces.ITermToRelatedTerms):
 
     async def deserialize(self, data: interfaces.TermToRelatedTermsData | None) -> None:
         """Deserialize alias data."""
-        if data is None:
-            return
-        # Use a single transaction for the entire operation
-        await self._deserialize_in_transaction(data)
-
-    async def _deserialize_in_transaction(
-        self, data: interfaces.TermToRelatedTermsData | None
-    ) -> None:
-        """Deserialize alias data within an existing transaction."""
-        if data is None:
-            return
-
         cursor = self.db.cursor()
+
+        # Clear existing data
+        cursor.execute("DELETE FROM RelatedTermsAliases")
+
+        if data is None:
+            return
+
         related_terms = data.get("relatedTerms", [])
 
         if related_terms:
-            # Clear existing data
-            cursor.execute("DELETE FROM RelatedTermsAliases")
-
             # Prepare all insertion data for bulk operation
             insertion_data = []
             for item in related_terms:
@@ -1269,13 +1247,6 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
 
     async def deserialize(self, data: interfaces.TextEmbeddingIndexData) -> None:
         """Deserialize fuzzy index data from JSON into SQLite database."""
-        # Use a single transaction for the entire operation
-        await self._deserialize_in_transaction(data)
-
-    async def _deserialize_in_transaction(
-        self, data: interfaces.TextEmbeddingIndexData
-    ) -> None:
-        """Deserialize fuzzy index data within an existing transaction."""
         # Clear existing data
         cursor = self.db.cursor()
         cursor.execute("DELETE FROM RelatedTermsFuzzy")
@@ -1352,19 +1323,12 @@ class SqliteRelatedTermsIndex(interfaces.ITermToRelatedTermsIndex):
 
     async def deserialize(self, data: interfaces.TermsToRelatedTermsIndexData) -> None:
         """Deserialize related terms index data."""
-        # Use a single transaction for the entire operation
-        await self._deserialize_in_transaction(data)
-
-    async def _deserialize_in_transaction(
-        self, data: interfaces.TermsToRelatedTermsIndexData
-    ) -> None:
-        """Deserialize related terms index data within an existing transaction."""
         # Deserialize alias data
         alias_data = data.get("aliasData")
         if alias_data is not None:
-            await self._aliases._deserialize_in_transaction(alias_data)
+            await self._aliases.deserialize(alias_data)
 
         # Deserialize fuzzy index data
         text_embedding_data = data.get("textEmbeddingData")
         if text_embedding_data is not None:
-            await self._fuzzy_index._deserialize_in_transaction(text_embedding_data)
+            await self._fuzzy_index.deserialize(text_embedding_data)

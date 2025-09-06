@@ -271,14 +271,7 @@ class Podcast(IConversation[PodcastMessage, semrefindex.TermToSemanticRefIndex])
 
         semantic_index_data = podcast_data.get("semanticIndexData")
         if semantic_index_data is not None:
-            if self.semantic_ref_index is not None:
-                # Use the existing index and deserialize into it (for persistent storage)
-                self.semantic_ref_index.deserialize(semantic_index_data)
-            else:
-                # Direct construction for in-memory storage
-                self.semantic_ref_index = semrefindex.TermToSemanticRefIndex(  # type: ignore  # TODO
-                    semantic_index_data
-                )
+            self.semantic_ref_index.deserialize(semantic_index_data)
 
         related_terms_index_data = podcast_data.get("relatedTermsIndexData")
         if related_terms_index_data is not None:
