@@ -1,6 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+export type ExtractionMode = "basic" | "summary" | "content" | "full";
+
+export interface BrowserSettings {
+    autoIndexing: boolean;
+    indexingDelay: number;
+    extractionMode: ExtractionMode;
+}
+
 export type BrowserControlInvokeFunctions = {
     /**
      * open a new browser view with the specified URL.
@@ -46,7 +54,11 @@ export type BrowserControlInvokeFunctions = {
     readPage(): Promise<void>;
     stopReadPage(): Promise<void>;
     captureScreenshot(): Promise<string>;
-    getPageContents(): Promise<string>;
+    getPageTextContent(): Promise<string>;
+    
+    // Settings access methods
+    getAutoIndexSetting(): Promise<boolean>;
+    getBrowserSettings(): Promise<BrowserSettings>;
 };
 
 export type BrowserControlCallFunctions = {

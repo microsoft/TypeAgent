@@ -420,6 +420,11 @@ async function processBrowserAgentMessage(
             break;
         }
 
+        case "handlePageNavigation": {
+            await handlePageNavigation(context, data.params);
+            break;
+        }
+
         case "importWebsiteData":
         case "importWebsiteDataWithProgress":
         case "importHtmlFolder":
@@ -819,12 +824,171 @@ async function resolveWebPage(
     throw new Error(`Unable to find a URL for: '${site}'`);
 }
 
+// Helper functions for enhanced navigation with index integration
+async function checkKnowledgeInIndex(
+    url: string,
+    context: ActionContext<BrowserActionContext>,
+): Promise<any | null> {
+    try {
+        const websiteCollection =
+            context.sessionContext.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return null;
+        }
+
+        const websites = websiteCollection.messages.getAll();
+        const foundWebsite = websites.find(
+            (site: any) => site.metadata.url === url,
+        );
+
+        if (foundWebsite) {
+            const knowledge = foundWebsite.getKnowledge();
+            return knowledge || null;
+        }
+
+        return null;
+    } catch (error) {
+        console.log("No existing knowledge found in index for:", url);
+        return null;
+    }
+}
+
+async function saveKnowledgeToIndex(
+    url: string,
+    knowledge: any,
+    context: ActionContext<BrowserActionContext>,
+): Promise<void> {
+    try {
+        if (!knowledge || !url) {
+            return;
+        }
+
+        // Use the existing indexWebPageContent function with extracted knowledge
+        const parameters = {
+            url,
+            title: knowledge.title || "Extracted Page",
+            extractKnowledge: true,
+            timestamp: new Date().toISOString(),
+            extractedKnowledge: knowledge,
+        };
+
+        const result = await handleKnowledgeAction(
+            "indexWebPageContent",
+            parameters,
+            context.sessionContext,
+        );
+
+        if (result.indexed) {
+            console.log(
+                `Successfully indexed knowledge for ${url} (${result.entityCount} entities)`,
+            );
+        } else {
+            console.warn(`Failed to index knowledge for ${url}`);
+        }
+    } catch (error) {
+        console.error("Failed to save knowledge to index:", error);
+    }
+}
+
+async function performKnowledgeExtraction(
+    url: string,
+    context: ActionContext<BrowserActionContext>,
+    extractionMode: string,
+): Promise<any | null> {
+    try {
+        const browserControl = getActionBrowserControl(context);
+
+        // Get page contents
+        let title = "Unknown Page";
+        const htmlFragments =
+            await context.sessionContext.agentContext.browserConnector?.getHtmlFragments();
+        if (!htmlFragments) {
+            return null;
+        }
+
+        title = await browserControl.getPageUrl(); // Get actual URL as fallback title
+
+        // Use the existing streaming extraction function
+        const parameters = {
+            url,
+            title,
+            mode: extractionMode,
+            extractionId: `navigation-${Date.now()}`,
+            htmlFragments,
+        };
+
+        const extractionResult = await handleKnowledgeAction(
+            "extractKnowledgeFromPageStreaming",
+            parameters,
+            context.sessionContext,
+        );
+
+        if (extractionResult && extractionResult.knowledge) {
+            return extractionResult.knowledge;
+        }
+
+        return null;
+    } catch (error) {
+        console.error("Failed to extract knowledge:", error);
+        return null;
+    }
+}
+
+function createKnowledgeActionResult(
+    url: string,
+    knowledge: any,
+    context: ActionContext<BrowserActionContext>,
+): ActionResult {
+    let message = "Web page opened successfully";
+
+    if (knowledge) {
+        const entitiesCount = knowledge.entities?.length || 0;
+        const topicsCount = knowledge.keyTopics?.length || 0;
+        const actionsCount = knowledge.actions?.length || 0;
+
+        if (entitiesCount > 0 || topicsCount > 0 || actionsCount > 0) {
+            message += ` with knowledge extraction (${entitiesCount} entities, ${topicsCount} topics, ${actionsCount} actions).`;
+
+            // Display a success message with the knowledge summary
+            displaySuccess(
+                `Knowledge extracted and indexed: ${entitiesCount} entities, ${topicsCount} topics, ${actionsCount} actions`,
+                context,
+            );
+        } else {
+            message +=
+                " with knowledge extraction (no structured content found).";
+        }
+    } else {
+        message += " (existing knowledge loaded from index).";
+        displaySuccess("Loaded existing knowledge from index", context);
+    }
+
+    const result = createActionResult(message);
+
+    result.activityContext = {
+        activityName: "browsingWebPage",
+        description: "Browsing a web page with knowledge",
+        state: {
+            site: url,
+            hasKnowledge: true,
+            knowledgeSource: knowledge ? "extracted" : "cached",
+        },
+        activityEndAction: {
+            actionName: "closeAllWebPages",
+        },
+    };
+
+    return result;
+}
+
 async function openWebPage(
     context: ActionContext<BrowserActionContext>,
     action: TypeAgentAction<OpenWebPage>,
 ) {
     const browserControl = getActionBrowserControl(context);
 
+    // Phase 1: URL Resolution
     displayStatus(`Opening web page for ${action.parameters.site}.`, context);
     const url = (
         await resolveWebPage(
@@ -840,9 +1004,56 @@ async function openWebPage(
             context,
         );
     }
+
+    // Phase 2: Open Page
     await browserControl.openWebPage(url, {
         newTab: action.parameters.tab === "new",
     });
+
+    // Phase 3: Settings-Aware Knowledge Extraction
+    try {
+        const browserSettings = await browserControl.getBrowserSettings();
+
+        if (browserSettings.autoIndexing) {
+            // Check if knowledge already exists in index
+            const existingKnowledge = await checkKnowledgeInIndex(url, context);
+            if (existingKnowledge) {
+                return createKnowledgeActionResult(
+                    url,
+                    existingKnowledge,
+                    context,
+                );
+            }
+
+            // Wait for page to load based on indexingDelay
+            if (browserSettings.indexingDelay > 0) {
+                await new Promise((resolve) =>
+                    setTimeout(resolve, browserSettings.indexingDelay),
+                );
+            }
+
+            // Extract new knowledge and save to index
+            const knowledgeResult = await performKnowledgeExtraction(
+                url,
+                context,
+                browserSettings.extractionMode,
+            );
+
+            // Auto-save to index when extraction completes
+            if (knowledgeResult) {
+                await saveKnowledgeToIndex(url, knowledgeResult, context);
+            }
+
+            return createKnowledgeActionResult(url, knowledgeResult, context);
+        }
+    } catch (error) {
+        console.error(
+            "Knowledge extraction failed, falling back to basic navigation:",
+            error,
+        );
+    }
+
+    // Fallback to basic result if autoIndex disabled or error occurred
     const result = createActionResult("Web page opened successfully.");
 
     result.activityContext = {
@@ -1155,7 +1366,7 @@ async function executeBrowserAction(
                         pageUrl,
                         await getActionBrowserControl(
                             context,
-                        ).getPageContents(),
+                        ).getPageTextContent(),
                     );
                 case "readPage":
                     await getActionBrowserControl(context).readPage();
@@ -1387,7 +1598,7 @@ async function lookup(
     );
 
     // go get the page contents
-    const content = await getActionBrowserControl(context).getPageContents();
+    const content = await getActionBrowserControl(context).getPageTextContent();
 
     // now try to generate an answer from the page contents
     displayStatus(
@@ -1437,6 +1648,101 @@ async function lookup(
             `There was an error generating the answer: ${answerResult.message} `,
         );
     }
+}
+
+async function handlePageNavigation(
+    context: SessionContext<BrowserActionContext>,
+    params: { url: string; title: string; tabId?: number },
+): Promise<void> {
+    const { url, title } = params;
+
+    try {
+        const htmlFragments =
+            await context.agentContext.browserConnector?.getHtmlFragments();
+
+        if (htmlFragments) {
+            // Run basic knowledge extraction
+            const knowledgeResult = await handleKnowledgeAction(
+                "extractKnowledgeFromPage",
+                {
+                    url: url,
+                    title: title,
+                    htmlContent: htmlFragments,
+                    source: "navigation",
+                    mode: "basic",
+                },
+                context,
+            );
+
+            if (knowledgeResult && knowledgeResult.knowledge) {
+                // Send formatted result to host canvas via notify
+                context.notify(
+                    AppAgentEvent.Info,
+                    `Page loaded: ${title}\n${formatKnowledgeForNotification(knowledgeResult.knowledge)}`,
+                );
+
+                // Kick off streaming knowledge extraction in the background
+                setTimeout(async () => {
+                    try {
+                        await handleKnowledgeAction(
+                            "extractKnowledgeFromPageStreaming",
+                            {
+                                url: url,
+                                title: title,
+                                htmlContent: htmlFragments,
+                                source: "navigation",
+                                mode: "content",
+                            },
+                            context,
+                        );
+                    } catch (error) {
+                        debug(
+                            `Background streaming extraction failed for ${url}:`,
+                            error,
+                        );
+                    }
+                }, 100);
+            }
+        }
+    } catch (error) {
+        debug(`Navigation handler failed for ${url}:`, error);
+        context.notify(
+            AppAgentEvent.Error,
+            `Failed to extract knowledge for page: ${title}`,
+        );
+    }
+}
+
+function formatKnowledgeForNotification(knowledge: any): string {
+    const entities = knowledge.entities || [];
+    const keyTopics = knowledge.keyTopics || [];
+
+    let text = "";
+
+    if (entities.length > 0) {
+        const entityNames = entities
+            .slice(0, 5)
+            .map((e: any) => e.name || e)
+            .join(", ");
+        text += `Entities: ${entityNames}`;
+        if (entities.length > 5) {
+            text += ` (+${entities.length - 5} more)`;
+        }
+    }
+
+    if (keyTopics.length > 0) {
+        if (text) text += "\n";
+        const topicNames = keyTopics
+            .slice(0, 3)
+            .map((t: any) => t.name || t)
+            .join(", ");
+        text += `Topics: ${topicNames}`;
+        if (keyTopics.length > 3) {
+            text += ` (+${keyTopics.length - 3} more)`;
+        }
+    }
+
+    return text || "No entities or topics found";
 }
 
 async function handleTabIndexActions(
@@ -1800,7 +2106,10 @@ class OpenWebPageHandler implements CommandHandler {
             displayError(result.error, context);
             return;
         }
-        context.actionIO.setDisplay(result.displayContent);
+        // Display result message if available
+        if ((result as any).displayContent) {
+            context.actionIO.setDisplay((result as any).displayContent);
+        }
         // REVIEW: command doesn't set the activity context
     }
 }
@@ -1813,7 +2122,10 @@ class CloseWebPageHandler implements CommandHandlerNoParams {
             displayError(result.error, context);
             return;
         }
-        context.actionIO.setDisplay(result.displayContent);
+        // Display result message if available
+        if ((result as any).displayContent) {
+            context.actionIO.setDisplay((result as any).displayContent);
+        }
 
         // REVIEW: command doesn't clear the activity context
     }
