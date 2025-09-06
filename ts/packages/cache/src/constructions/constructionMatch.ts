@@ -165,9 +165,14 @@ function finishMatchParts(
                 state.matchedStart.push(-1);
                 continue;
             }
-            // For partial, report as matched if we matched all the text in the request
-            // even when not all the parted are matched yet.
-            return config.partial && state.matchedCurrent === request.length;
+
+            if (config.partial) {
+                // For partial, act as if we have matched all the parts, and breaking out of the loop to finish the match.
+                break;
+            }
+
+            // failed to finish match.
+            return false;
         }
 
         // Matched
