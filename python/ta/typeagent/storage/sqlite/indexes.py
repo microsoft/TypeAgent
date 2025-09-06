@@ -52,15 +52,14 @@ class SqliteTermToSemanticRefIndex(interfaces.ITermToSemanticRefIndex):
         else:
             semref_id = semantic_ref_ordinal
 
-        with self.db:
-            cursor = self.db.cursor()
-            cursor.execute(
-                """
-                INSERT OR IGNORE INTO SemanticRefIndex (term, semref_id)
-                VALUES (?, ?)
-                """,
-                (term, semref_id),
-            )
+        cursor = self.db.cursor()
+        cursor.execute(
+            """
+            INSERT OR IGNORE INTO SemanticRefIndex (term, semref_id)
+            VALUES (?, ?)
+            """,
+            (term, semref_id),
+        )
 
         return term
 
@@ -68,12 +67,11 @@ class SqliteTermToSemanticRefIndex(interfaces.ITermToSemanticRefIndex):
         self, term: str, semantic_ref_ordinal: interfaces.SemanticRefOrdinal
     ) -> None:
         term = self._prepare_term(term)
-        with self.db:
-            cursor = self.db.cursor()
-            cursor.execute(
-                "DELETE FROM SemanticRefIndex WHERE term = ? AND semref_id = ?",
-                (term, semantic_ref_ordinal),
-            )
+        cursor = self.db.cursor()
+        cursor.execute(
+            "DELETE FROM SemanticRefIndex WHERE term = ? AND semref_id = ?",
+            (term, semantic_ref_ordinal),
+        )
 
     async def lookup_term(
         self, term: str
@@ -94,9 +92,8 @@ class SqliteTermToSemanticRefIndex(interfaces.ITermToSemanticRefIndex):
 
     async def clear(self) -> None:
         """Clear all terms from the semantic ref index."""
-        with self.db:
-            cursor = self.db.cursor()
-            cursor.execute("DELETE FROM SemanticRefIndex")
+        cursor = self.db.cursor()
+        cursor.execute("DELETE FROM SemanticRefIndex")
 
     def serialize(self) -> interfaces.TermToSemanticRefIndexData:
         """Serialize the index data for compatibility with in-memory version."""
@@ -127,8 +124,7 @@ class SqliteTermToSemanticRefIndex(interfaces.ITermToSemanticRefIndex):
     def deserialize(self, data: interfaces.TermToSemanticRefIndexData) -> None:
         """Deserialize index data by populating the SQLite table."""
         # Use a single transaction for the entire operation
-        with self.db:
-            self._deserialize_in_transaction(data)
+        self._deserialize_in_transaction(data)
 
     def _deserialize_in_transaction(
         self, data: interfaces.TermToSemanticRefIndexData
@@ -213,20 +209,18 @@ class SqlitePropertyIndex(interfaces.IPropertyToSemanticRefIndex):
         if property_name.startswith("prop."):
             property_name = property_name[5:]
 
-        with self.db:
-            cursor = self.db.cursor()
-            cursor.execute(
-                """
-                INSERT INTO PropertyIndex (prop_name, value_str, score, semref_id)
-                VALUES (?, ?, ?, ?)
-                """,
-                (property_name, value, score, semref_id),
-            )
+        cursor = self.db.cursor()
+        cursor.execute(
+            """
+            INSERT INTO PropertyIndex (prop_name, value_str, score, semref_id)
+            VALUES (?, ?, ?, ?)
+            """,
+            (property_name, value, score, semref_id),
+        )
 
     async def clear(self) -> None:
-        with self.db:
-            cursor = self.db.cursor()
-            cursor.execute("DELETE FROM PropertyIndex")
+        cursor = self.db.cursor()
+        cursor.execute("DELETE FROM PropertyIndex")
 
     async def lookup_property(
         self,
@@ -261,21 +255,19 @@ class SqlitePropertyIndex(interfaces.IPropertyToSemanticRefIndex):
 
     async def remove_property(self, prop_name: str, semref_id: int) -> None:
         """Remove all properties for a specific property name and semantic ref."""
-        with self.db:
-            cursor = self.db.cursor()
-            cursor.execute(
-                "DELETE FROM PropertyIndex WHERE prop_name = ? AND semref_id = ?",
-                (prop_name, semref_id),
-            )
+        cursor = self.db.cursor()
+        cursor.execute(
+            "DELETE FROM PropertyIndex WHERE prop_name = ? AND semref_id = ?",
+            (prop_name, semref_id),
+        )
 
     async def remove_all_for_semref(self, semref_id: int) -> None:
         """Remove all properties for a specific semantic ref."""
-        with self.db:
-            cursor = self.db.cursor()
-            cursor.execute(
-                "DELETE FROM PropertyIndex WHERE semref_id = ?",
-                (semref_id,),
-            )
+        cursor = self.db.cursor()
+        cursor.execute(
+            "DELETE FROM PropertyIndex WHERE semref_id = ?",
+            (semref_id,),
+        )
 
 
 class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
@@ -303,13 +295,12 @@ class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
         self, message_ordinal: interfaces.MessageOrdinal, timestamp: str
     ) -> bool:
         """Add timestamp to Messages table start_timestamp column."""
-        with self.db:
-            cursor = self.db.cursor()
-            cursor.execute(
-                "UPDATE Messages SET start_timestamp = ? WHERE msg_id = ?",
-                (timestamp, message_ordinal),
-            )
-            return cursor.rowcount > 0
+        cursor = self.db.cursor()
+        cursor.execute(
+            "UPDATE Messages SET start_timestamp = ? WHERE msg_id = ?",
+            (timestamp, message_ordinal),
+        )
+        return cursor.rowcount > 0
 
     async def get_timestamp_ranges(
         self, start_timestamp: str, end_timestamp: str | None = None
@@ -358,13 +349,12 @@ class SqliteTimestampToTextRangeIndex(interfaces.ITimestampToTextRangeIndex):
         self, message_timestamps: list[tuple[interfaces.MessageOrdinal, str]]
     ) -> None:
         """Add multiple timestamps."""
-        with self.db:
-            cursor = self.db.cursor()
-            for message_ordinal, timestamp in message_timestamps:
-                cursor.execute(
-                    "UPDATE Messages SET start_timestamp = ? WHERE msg_id = ?",
-                    (timestamp, message_ordinal),
-                )
+        cursor = self.db.cursor()
+        for message_ordinal, timestamp in message_timestamps:
+            cursor.execute(
+                "UPDATE Messages SET start_timestamp = ? WHERE msg_id = ?",
+                (timestamp, message_ordinal),
+            )
 
     async def lookup_range(
         self, date_range: interfaces.DateRange
@@ -461,19 +451,18 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
             # Store in SQLite
             from ..sqlite.schema import serialize_embedding
 
-            with self.db:
-                cursor = self.db.cursor()
-                for (msg_id, chunk_ordinal, text), embedding in zip(
-                    text_chunks_to_embed, embeddings
-                ):
-                    cursor.execute(
-                        """
-                        INSERT OR REPLACE INTO MessageTextIndex
-                        (msg_id, chunk_ordinal, text_content, embedding)
-                        VALUES (?, ?, ?, ?)
-                        """,
-                        (msg_id, chunk_ordinal, text, serialize_embedding(embedding)),
-                    )
+            cursor = self.db.cursor()
+            for (msg_id, chunk_ordinal, text), embedding in zip(
+                text_chunks_to_embed, embeddings
+            ):
+                cursor.execute(
+                    """
+                    INSERT OR REPLACE INTO MessageTextIndex
+                    (msg_id, chunk_ordinal, text_content, embedding)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (msg_id, chunk_ordinal, text, serialize_embedding(embedding)),
+                )
 
             print(
                 f"DEBUG: Stored {len(text_chunks_to_embed)} text chunks with embeddings"
@@ -503,17 +492,16 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
                 text_chunks_to_embed.append((message_ordinal, chunk_ordinal, chunk))
 
         # Bulk insert text chunks (without embeddings yet)
-        with self.db:
-            cursor = self.db.cursor()
-            if text_insertion_data:
-                cursor.executemany(
-                    """
-                    INSERT OR REPLACE INTO MessageTextIndex
-                    (msg_id, chunk_ordinal, text_content, embedding)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    text_insertion_data,
-                )
+        cursor = self.db.cursor()
+        if text_insertion_data:
+            cursor.executemany(
+                """
+                INSERT OR REPLACE INTO MessageTextIndex
+                (msg_id, chunk_ordinal, text_content, embedding)
+                VALUES (?, ?, ?, ?)
+                """,
+                text_insertion_data,
+            )
 
         # Generate and store embeddings
         if text_chunks_to_embed:
@@ -532,17 +520,16 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
                 )
 
             # Bulk update embeddings
-            with self.db:
-                cursor = self.db.cursor()
-                if embedding_update_data:
-                    cursor.executemany(
-                        """
-                        UPDATE MessageTextIndex
-                        SET embedding = ?
-                        WHERE msg_id = ? AND chunk_ordinal = ?
-                        """,
-                        embedding_update_data,
-                    )
+            cursor = self.db.cursor()
+            if embedding_update_data:
+                cursor.executemany(
+                    """
+                    UPDATE MessageTextIndex
+                    SET embedding = ?
+                    WHERE msg_id = ? AND chunk_ordinal = ?
+                    """,
+                    embedding_update_data,
+                )
 
     async def add_messages(
         self,
@@ -806,8 +793,7 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
     def deserialize(self, data: interfaces.MessageTextIndexData) -> None:
         """Deserialize message text index data."""
         # Use a single transaction for the entire operation
-        with self.db:
-            self._deserialize_in_transaction(data)
+        self._deserialize_in_transaction(data)
 
     def _deserialize_in_transaction(
         self, data: interfaces.MessageTextIndexData
@@ -885,9 +871,8 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
 
     async def clear(self) -> None:
         """Clear the message text index."""
-        with self.db:
-            cursor = self.db.cursor()
-            cursor.execute("DELETE FROM MessageTextIndex")
+        cursor = self.db.cursor()
+        cursor.execute("DELETE FROM MessageTextIndex")
 
 
 # Related terms index implementations
@@ -914,24 +899,21 @@ class SqliteRelatedTermsAliases(interfaces.ITermToRelatedTerms):
         elif isinstance(related_terms, interfaces.Term):
             related_terms = [related_terms]
 
-        with self.db:
-            cursor = self.db.cursor()
-            # Add new aliases (use INSERT OR IGNORE to avoid duplicates)
-            for related_term in related_terms:
-                cursor.execute(
-                    "INSERT OR IGNORE INTO RelatedTermsAliases (term, alias) VALUES (?, ?)",
-                    (text, related_term.text),
-                )
+        cursor = self.db.cursor()
+        # Add new aliases (use INSERT OR IGNORE to avoid duplicates)
+        for related_term in related_terms:
+            cursor.execute(
+                "INSERT OR IGNORE INTO RelatedTermsAliases (term, alias) VALUES (?, ?)",
+                (text, related_term.text),
+            )
 
     async def remove_term(self, text: str) -> None:
-        with self.db:
-            cursor = self.db.cursor()
-            cursor.execute("DELETE FROM RelatedTermsAliases WHERE term = ?", (text,))
+        cursor = self.db.cursor()
+        cursor.execute("DELETE FROM RelatedTermsAliases WHERE term = ?", (text,))
 
     async def clear(self) -> None:
-        with self.db:
-            cursor = self.db.cursor()
-            cursor.execute("DELETE FROM RelatedTermsAliases")
+        cursor = self.db.cursor()
+        cursor.execute("DELETE FROM RelatedTermsAliases")
 
     async def get_related_terms(self, term: str) -> list[str] | None:
         cursor = self.db.cursor()
@@ -940,16 +922,15 @@ class SqliteRelatedTermsAliases(interfaces.ITermToRelatedTerms):
         return results if results else None
 
     async def set_related_terms(self, term: str, related_terms: list[str]) -> None:
-        with self.db:
-            cursor = self.db.cursor()
-            # Clear existing aliases for this term
-            cursor.execute("DELETE FROM RelatedTermsAliases WHERE term = ?", (term,))
-            # Add new aliases
-            for alias in related_terms:
-                cursor.execute(
-                    "INSERT INTO RelatedTermsAliases (term, alias) VALUES (?, ?)",
-                    (term, alias),
-                )
+        cursor = self.db.cursor()
+        # Clear existing aliases for this term
+        cursor.execute("DELETE FROM RelatedTermsAliases WHERE term = ?", (term,))
+        # Add new aliases
+        for alias in related_terms:
+            cursor.execute(
+                "INSERT INTO RelatedTermsAliases (term, alias) VALUES (?, ?)",
+                (term, alias),
+            )
 
     async def size(self) -> int:
         cursor = self.db.cursor()
@@ -997,8 +978,7 @@ class SqliteRelatedTermsAliases(interfaces.ITermToRelatedTerms):
         if data is None:
             return
         # Use a single transaction for the entire operation
-        with self.db:
-            await self._deserialize_in_transaction(data)
+        await self._deserialize_in_transaction(data)
 
     async def _deserialize_in_transaction(
         self, data: interfaces.TermToRelatedTermsData | None
@@ -1169,43 +1149,39 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         term_embed = await self._embedding_model.get_embedding(term)
         from .schema import serialize_embedding
 
-        with self.db:
-            cursor = self.db.cursor()
-            for rel in related_terms:
-                # Add related term to VectorBase if not present
-                if rel.text not in self._terms_to_ordinal:
-                    await self._vector_base.add_key(rel.text)
-                    ordinal = len(self._terms_list)
-                    self._terms_list.append(rel.text)
-                    self._terms_to_ordinal[rel.text] = ordinal
+        cursor = self.db.cursor()
+        for rel in related_terms:
+            # Add related term to VectorBase if not present
+            if rel.text not in self._terms_to_ordinal:
+                await self._vector_base.add_key(rel.text)
+                ordinal = len(self._terms_list)
+                self._terms_list.append(rel.text)
+                self._terms_to_ordinal[rel.text] = ordinal
 
-                # generate embedding for related term
-                rel_embed = await self._embedding_model.get_embedding(rel.text)
-                # use weight if provided
-                weight = rel.weight if rel.weight is not None else 1.0
-                cursor.execute(
-                    """
-                    INSERT OR REPLACE INTO RelatedTermsFuzzy
-                    (term, related_term, score, term_embedding, related_embedding)
-                    VALUES (?, ?, ?, ?, ?)
-                    """,
-                    (
-                        term,
-                        rel.text,
-                        weight,
-                        serialize_embedding(term_embed),
-                        serialize_embedding(rel_embed),
-                    ),
-                )
+            # generate embedding for related term
+            rel_embed = await self._embedding_model.get_embedding(rel.text)
+            # use weight if provided
+            weight = rel.weight if rel.weight is not None else 1.0
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO RelatedTermsFuzzy
+                (term, related_term, score, term_embedding, related_embedding)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    term,
+                    rel.text,
+                    weight,
+                    serialize_embedding(term_embed),
+                    serialize_embedding(rel_embed),
+                ),
+            )
 
     async def remove_term(self, term: str) -> None:
-        with self.db:
-            cursor = self.db.cursor()
-            cursor.execute("DELETE FROM RelatedTermsFuzzy WHERE term = ?", (term,))
-            # Also remove any entries where this term appears as a related_term
-            cursor.execute(
-                "DELETE FROM RelatedTermsFuzzy WHERE related_term = ?", (term,)
-            )
+        cursor = self.db.cursor()
+        cursor.execute("DELETE FROM RelatedTermsFuzzy WHERE term = ?", (term,))
+        # Also remove any entries where this term appears as a related_term
+        cursor.execute("DELETE FROM RelatedTermsFuzzy WHERE related_term = ?", (term,))
 
         # Clear VectorBase and local mappings - they will be rebuilt on next lookup
         self._vector_base.clear()
@@ -1213,9 +1189,8 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         self._terms_to_ordinal.clear()
 
     async def clear(self) -> None:
-        with self.db:
-            cursor = self.db.cursor()
-            cursor.execute("DELETE FROM RelatedTermsFuzzy")
+        cursor = self.db.cursor()
+        cursor.execute("DELETE FROM RelatedTermsFuzzy")
 
     async def size(self) -> int:
         cursor = self.db.cursor()
@@ -1231,28 +1206,27 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         """Add terms with self-related embeddings."""
         from .schema import serialize_embedding
 
-        with self.db:
-            cursor = self.db.cursor()
-            for text in texts:
-                # Add to VectorBase for fuzzy lookup if not already present
-                if text not in self._terms_to_ordinal:
-                    await self._vector_base.add_key(text)
-                    ordinal = len(self._terms_list)
-                    self._terms_list.append(text)
-                    self._terms_to_ordinal[text] = ordinal
+        cursor = self.db.cursor()
+        for text in texts:
+            # Add to VectorBase for fuzzy lookup if not already present
+            if text not in self._terms_to_ordinal:
+                await self._vector_base.add_key(text)
+                ordinal = len(self._terms_list)
+                self._terms_list.append(text)
+                self._terms_to_ordinal[text] = ordinal
 
-                # generate embedding for term and store in database
-                embed = await self._embedding_model.get_embedding(text)
-                serialized = serialize_embedding(embed)
-                # insert term as related to itself
-                cursor.execute(
-                    """
+            # generate embedding for term and store in database
+            embed = await self._embedding_model.get_embedding(text)
+            serialized = serialize_embedding(embed)
+            # insert term as related to itself
+            cursor.execute(
+                """
                     INSERT OR REPLACE INTO RelatedTermsFuzzy
                     (term, related_term, score, term_embedding, related_embedding)
                     VALUES (?, ?, 1.0, ?, ?)
                     """,
-                    (text, text, serialized, serialized),
-                )
+                (text, text, serialized, serialized),
+            )
 
     async def get_related_terms(
         self, term: str, max_matches: int | None = None, min_score: float | None = None
@@ -1296,8 +1270,7 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
     async def deserialize(self, data: interfaces.TextEmbeddingIndexData) -> None:
         """Deserialize fuzzy index data from JSON into SQLite database."""
         # Use a single transaction for the entire operation
-        with self.db:
-            await self._deserialize_in_transaction(data)
+        await self._deserialize_in_transaction(data)
 
     async def _deserialize_in_transaction(
         self, data: interfaces.TextEmbeddingIndexData
@@ -1380,8 +1353,7 @@ class SqliteRelatedTermsIndex(interfaces.ITermToRelatedTermsIndex):
     async def deserialize(self, data: interfaces.TermsToRelatedTermsIndexData) -> None:
         """Deserialize related terms index data."""
         # Use a single transaction for the entire operation
-        with self.db:
-            await self._deserialize_in_transaction(data)
+        await self._deserialize_in_transaction(data)
 
     async def _deserialize_in_transaction(
         self, data: interfaces.TermsToRelatedTermsIndexData

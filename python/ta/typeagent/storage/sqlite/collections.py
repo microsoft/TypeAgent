@@ -143,33 +143,32 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
         return results
 
     async def append(self, item: TMessage) -> None:
-        with self.db:
-            cursor = self.db.cursor()
+        cursor = self.db.cursor()
+        (
+            chunks_json,
+            chunk_uri,
+            start_timestamp,
+            tags_json,
+            metadata_json,
+            extra_json,
+        ) = self._serialize_message_to_row(item)
+        # Use the current size as the ID to maintain 0-based indexing like the old implementation
+        msg_id = await self.size()
+        cursor.execute(
+            """
+                INSERT INTO Messages (msg_id, chunks, chunk_uri, start_timestamp, tags, metadata, extra)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
             (
+                msg_id,
                 chunks_json,
                 chunk_uri,
                 start_timestamp,
                 tags_json,
                 metadata_json,
                 extra_json,
-            ) = self._serialize_message_to_row(item)
-            # Use the current size as the ID to maintain 0-based indexing like the old implementation
-            msg_id = await self.size()
-            cursor.execute(
-                """
-                INSERT INTO Messages (msg_id, chunks, chunk_uri, start_timestamp, tags, metadata, extra)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    msg_id,
-                    chunks_json,
-                    chunk_uri,
-                    start_timestamp,
-                    tags_json,
-                    metadata_json,
-                    extra_json,
-                ),
-            )
+            ),
+        )
 
         # Also add to message text index if available
         if self.message_text_index is not None:
@@ -207,16 +206,15 @@ class SqliteMessageCollection[TMessage: interfaces.IMessage](
             )
 
         # Bulk insert all messages
-        with self.db:
-            cursor = self.db.cursor()
-            if insertion_data:
-                cursor.executemany(
-                    """
-                    INSERT INTO Messages (msg_id, chunks, chunk_uri, start_timestamp, tags, metadata, extra)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    insertion_data,
-                )
+        cursor = self.db.cursor()
+        if insertion_data:
+            cursor.executemany(
+                """
+                INSERT INTO Messages (msg_id, chunks, chunk_uri, start_timestamp, tags, metadata, extra)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                insertion_data,
+            )
 
         # Also add to message text index if available
         if self.message_text_index is not None:
@@ -325,18 +323,17 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
         return results
 
     async def append(self, item: interfaces.SemanticRef) -> None:
-        with self.db:
-            cursor = self.db.cursor()
-            semref_id, range_json, knowledge_type, knowledge_json = (
-                self._serialize_semantic_ref_to_row(item)
-            )
-            cursor.execute(
-                """
+        cursor = self.db.cursor()
+        semref_id, range_json, knowledge_type, knowledge_json = (
+            self._serialize_semantic_ref_to_row(item)
+        )
+        cursor.execute(
+            """
                 INSERT INTO SemanticRefs (semref_id, range_json, knowledge_type, knowledge_json)
                 VALUES (?, ?, ?, ?)
                 """,
-                (semref_id, range_json, knowledge_type, knowledge_json),
-            )
+            (semref_id, range_json, knowledge_type, knowledge_json),
+        )
 
     async def extend(self, items: typing.Iterable[interfaces.SemanticRef]) -> None:
         items_list = list(items)
@@ -354,13 +351,12 @@ class SqliteSemanticRefCollection(interfaces.ISemanticRefCollection):
             )
 
         # Bulk insert all semantic refs
-        with self.db:
-            cursor = self.db.cursor()
-            if insertion_data:
-                cursor.executemany(
-                    """
-                    INSERT INTO SemanticRefs (semref_id, range_json, knowledge_type, knowledge_json)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    insertion_data,
-                )
+        cursor = self.db.cursor()
+        if insertion_data:
+            cursor.executemany(
+                """
+                INSERT INTO SemanticRefs (semref_id, range_json, knowledge_type, knowledge_json)
+                VALUES (?, ?, ?, ?)
+                """,
+                insertion_data,
+            )

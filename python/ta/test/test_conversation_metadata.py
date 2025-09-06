@@ -351,6 +351,7 @@ class TestConversationMetadata:
                 created_at="2024-01-01T12:00:00+00:00",
                 updated_at="2024-01-01T12:00:00+00:00",
             )
+            provider_alpha.db.commit()
 
             # Both providers should see the same metadata since it's the same DB
             alpha_metadata = provider_alpha.get_conversation_metadata()
@@ -551,11 +552,13 @@ class TestConversationMetadataEdgeCases:
                 created_at="2024-01-01T12:00:00+00:00",
                 updated_at="2024-01-01T12:00:00+00:00",
             )
+            provider1.db.commit()
 
             # Update from provider2 - should update the same metadata row
             provider2.update_conversation_metadata(
                 updated_at="2024-01-01T13:00:00+00:00"
             )
+            provider2.db.commit()
 
             # Both should see the latest state
             metadata1 = provider1.get_conversation_metadata()

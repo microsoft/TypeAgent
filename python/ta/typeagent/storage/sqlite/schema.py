@@ -222,19 +222,18 @@ def _create_default_metadata() -> ConversationMetadata:
 
 def init_db_schema(db: sqlite3.Connection) -> None:
     """Initialize the database schema with all required tables."""
-    with db:
-        cursor = db.cursor()
+    cursor = db.cursor()
 
-        # Create all tables
-        cursor.execute(CONVERSATION_METADATA_SCHEMA)
-        cursor.execute(MESSAGES_SCHEMA)
-        cursor.execute(SEMANTIC_REFS_SCHEMA)
-        cursor.execute(SEMANTIC_REF_INDEX_SCHEMA)
-        cursor.execute(MESSAGE_TEXT_INDEX_SCHEMA)
-        cursor.execute(PROPERTY_INDEX_SCHEMA)
-        cursor.execute(RELATED_TERMS_ALIASES_SCHEMA)
-        cursor.execute(RELATED_TERMS_FUZZY_SCHEMA)
-        cursor.execute(TIMESTAMP_INDEX_SCHEMA)
+    # Create all tables
+    cursor.execute(CONVERSATION_METADATA_SCHEMA)
+    cursor.execute(MESSAGES_SCHEMA)
+    cursor.execute(SEMANTIC_REFS_SCHEMA)
+    cursor.execute(SEMANTIC_REF_INDEX_SCHEMA)
+    cursor.execute(MESSAGE_TEXT_INDEX_SCHEMA)
+    cursor.execute(PROPERTY_INDEX_SCHEMA)
+    cursor.execute(RELATED_TERMS_ALIASES_SCHEMA)
+    cursor.execute(RELATED_TERMS_FUZZY_SCHEMA)
+    cursor.execute(TIMESTAMP_INDEX_SCHEMA)
 
 
 def get_db_schema_version(db: sqlite3.Connection) -> str:

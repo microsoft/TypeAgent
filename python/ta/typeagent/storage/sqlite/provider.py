@@ -3,8 +3,8 @@
 
 """SQLite storage provider implementation."""
 
+import json
 import sqlite3
-import typing
 
 from ...knowpro import interfaces
 from ...knowpro.convsettings import MessageTextIndexSettings, RelatedTermIndexSettings
@@ -120,15 +120,19 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
             await self._message_text_index.rebuild_from_all_messages()
 
     async def close(self) -> None:
-        """Close the database connection."""
+        """Close the database connection. COMMITS."""
         if hasattr(self, "db"):
+            self.db.commit()
             self.db.close()
+            del self.db
 
     def __del__(self) -> None:
-        """Ensure database is closed when object is deleted."""
+        """Ensure database is closed when object is deleted. ROLLS BACK."""
         # Can't use async in __del__, so close directly
         if hasattr(self, "db"):
+            self.db.rollback()
             self.db.close()
+            del self.db
 
     @property
     def messages(self) -> SqliteMessageCollection[TMessage]:
@@ -201,17 +205,16 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
 
     async def clear(self) -> None:
         """Clear all data from the storage provider."""
-        with self.db:
-            cursor = self.db.cursor()
-            # Clear in reverse dependency order
-            cursor.execute("DELETE FROM RelatedTermsFuzzy")
-            cursor.execute("DELETE FROM RelatedTermsAliases")
-            cursor.execute("DELETE FROM MessageTextIndex")
-            cursor.execute("DELETE FROM PropertyIndex")
-            cursor.execute("DELETE FROM SemanticRefIndex")
-            cursor.execute("DELETE FROM SemanticRefs")
-            cursor.execute("DELETE FROM Messages")
-            cursor.execute("DELETE FROM ConversationMetadata")
+        cursor = self.db.cursor()
+        # Clear in reverse dependency order
+        cursor.execute("DELETE FROM RelatedTermsFuzzy")
+        cursor.execute("DELETE FROM RelatedTermsAliases")
+        cursor.execute("DELETE FROM MessageTextIndex")
+        cursor.execute("DELETE FROM PropertyIndex")
+        cursor.execute("DELETE FROM SemanticRefIndex")
+        cursor.execute("DELETE FROM SemanticRefs")
+        cursor.execute("DELETE FROM Messages")
+        cursor.execute("DELETE FROM ConversationMetadata")
 
         # Clear in-memory indexes
         await self._message_text_index.clear()
@@ -225,25 +228,23 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
 
     async def deserialize(self, data: dict) -> None:
         """Deserialize storage provider data."""
-        # Use a single transaction for the entire deserialization operation
-        with self.db:
-            # Deserialize term to semantic ref index
-            if data.get("termToSemanticRefIndexData"):
-                self._term_to_semantic_ref_index._deserialize_in_transaction(
-                    data["termToSemanticRefIndexData"]
-                )
+        # Deserialize term to semantic ref index
+        if data.get("termToSemanticRefIndexData"):
+            self._term_to_semantic_ref_index._deserialize_in_transaction(
+                data["termToSemanticRefIndexData"]
+            )
 
-            # Deserialize related terms index
-            if data.get("relatedTermsIndexData"):
-                await self._related_terms_index._deserialize_in_transaction(
-                    data["relatedTermsIndexData"]
-                )
+        # Deserialize related terms index
+        if data.get("relatedTermsIndexData"):
+            await self._related_terms_index._deserialize_in_transaction(
+                data["relatedTermsIndexData"]
+            )
 
-            # Deserialize message text index
-            if data.get("messageIndexData"):
-                self._message_text_index._deserialize_in_transaction(
-                    data["messageIndexData"]
-                )
+        # Deserialize message text index
+        if data.get("messageIndexData"):
+            self._message_text_index._deserialize_in_transaction(
+                data["messageIndexData"]
+            )
 
     def get_conversation_metadata(self) -> ConversationMetadata | None:
         """Get conversation metadata."""
@@ -253,8 +254,6 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         )
         row = cursor.fetchone()
         if row:
-            import json
-
             return ConversationMetadata(
                 name_tag=row[0],
                 schema_version=row[1],
@@ -269,41 +268,38 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         self, created_at: str | None = None, updated_at: str | None = None
     ) -> None:
         """Update conversation metadata."""
-        import json
+        cursor = self.db.cursor()
 
-        with self.db:
-            cursor = self.db.cursor()
+        # Check if conversation metadata exists
+        cursor.execute("SELECT 1 FROM ConversationMetadata LIMIT 1")
 
-            # Check if conversation metadata exists
-            cursor.execute("SELECT 1 FROM ConversationMetadata LIMIT 1")
+        if cursor.fetchone():
+            # Update existing
+            updates = []
+            params = []
+            if created_at is not None:
+                updates.append("created_at = ?")
+                params.append(created_at)
+            if updated_at is not None:
+                updates.append("updated_at = ?")
+                params.append(updated_at)
 
-            if cursor.fetchone():
-                # Update existing
-                updates = []
-                params = []
-                if created_at is not None:
-                    updates.append("created_at = ?")
-                    params.append(created_at)
-                if updated_at is not None:
-                    updates.append("updated_at = ?")
-                    params.append(updated_at)
-
-                if updates:
-                    cursor.execute(
-                        f"UPDATE ConversationMetadata SET {', '.join(updates)}",
-                        params,
-                    )
-            else:
-                # Insert new with default values
-                name_tag = f"conversation_{self.conversation_id}"
-                schema_version = "1.0"
-                tags = json.dumps([])
-                extra = json.dumps({})
-
+            if updates:
                 cursor.execute(
-                    "INSERT INTO ConversationMetadata (name_tag, schema_version, created_at, updated_at, tags, extra) VALUES (?, ?, ?, ?, ?, ?)",
-                    (name_tag, schema_version, created_at, updated_at, tags, extra),
+                    f"UPDATE ConversationMetadata SET {', '.join(updates)}",
+                    params,
                 )
+        else:
+            # Insert new with default values
+            name_tag = f"conversation_{self.conversation_id}"
+            schema_version = "1.0"
+            tags = json.dumps([])
+            extra = json.dumps({})
+
+            cursor.execute(
+                "INSERT INTO ConversationMetadata (name_tag, schema_version, created_at, updated_at, tags, extra) VALUES (?, ?, ?, ?, ?, ?)",
+                (name_tag, schema_version, created_at, updated_at, tags, extra),
+            )
 
     def get_db_version(self) -> int:
         """Get the database schema version."""
