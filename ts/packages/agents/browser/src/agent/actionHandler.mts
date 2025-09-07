@@ -153,17 +153,6 @@ function deduplicateKnowledge(existing: any[], incoming: any[], keyField: string
     return [...existing, ...newItems];
 }
 
-function generateKnowledgeResultsHtml(knowledgeResult: any, entitiesCount: number, topicsCount: number, relationshipsCount: number): string {
-    return `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #d4edda; border-left: 4px solid #28a745; border-radius: 4px;">
-        <div style="font-weight: 600; color: #155724;">✅ Knowledge Extraction Complete</div>
-        <div style="font-size: 13px; color: #155724; margin-top: 4px;">
-            Found ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships
-        </div>
-        
-        ${generateDetailedKnowledgeCards(knowledgeResult)}
-    </div>`;
-}
 
 function generateDetailedKnowledgeCards(knowledgeResult: any): string {
     const entities = knowledgeResult.entities || [];
@@ -1442,52 +1431,19 @@ async function openWebPage(
             let knowledgeResult: any = null;
             try {
                 // Extract new knowledge and save to index with progress tracking
+                // Note: Progress display is now handled by the event-based system in performKnowledgeExtraction
                 knowledgeResult = await performKnowledgeExtraction(
                     url,
                     context,
                     browserSettings.extractionMode,
                 );
 
-                // Display extraction complete message with detailed results
-                if (knowledgeResult) {
-                    const entitiesCount = knowledgeResult.entities?.length || 0;
-                    const topicsCount = knowledgeResult.keyTopics?.length || 0;
-                    const relationshipsCount = knowledgeResult.relationships?.length || 0;
-
-                    context.actionIO.appendDisplay({
-                        type: "html",
-                        content: generateKnowledgeResultsHtml(knowledgeResult, entitiesCount, topicsCount, relationshipsCount)
-                    }, "block");
-                } else {
-                    context.actionIO.appendDisplay({
-                        type: "html",
-                        content: `
-                        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
-                            <div style="font-weight: 600; color: #856404;">⚠️ Knowledge Extraction Complete</div>
-                            <div style="font-size: 13px; color: #856404; margin-top: 4px;">No structured knowledge could be extracted from this page.</div>
-                        </div>`
-                    }, "block");
-                }
-
                 // Auto-save to index when extraction completes
                 if (knowledgeResult) {
                     await saveKnowledgeToIndex(url, knowledgeResult, context);
-                    context.actionIO.appendDisplay({
-                        type: "text",
-                        content: "💾 Knowledge saved to index for future reference."
-                    }, "block");
                 }
 
             } catch (extractionError) {
-                context.actionIO.appendDisplay({
-                    type: "html",
-                    content: `
-                    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #f8d7da; border-left: 4px solid #dc3545; border-radius: 4px;">
-                        <div style="font-weight: 600; color: #721c24;">❌ Knowledge Extraction Failed</div>
-                        <div style="font-size: 13px; color: #721c24; margin-top: 4px;">Error: ${extractionError}</div>
-                    </div>`
-                }, "block");
-                
                 console.error("Knowledge extraction failed:", extractionError);
                 knowledgeResult = null;
             }
