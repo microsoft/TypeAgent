@@ -133,6 +133,7 @@ interface ProgressState {
         | "content"
         | "basic"
         | "summary"
+        | "analyzing"
         | "extracting"
         | "complete"
         | "error";
