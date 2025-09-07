@@ -71,7 +71,7 @@ export class BrowserConnector {
             parameters: {
                 fullHTML: false,
                 downloadAsFile: false,
-                extractText: false,
+                extractText: true,
                 useTimestampIds: useTimestampIds,
             },
         };

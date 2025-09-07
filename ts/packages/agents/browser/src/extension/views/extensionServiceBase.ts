@@ -263,7 +263,6 @@ export abstract class ExtensionServiceBase {
                 extractionId,
             });
 
-            // Make sure we return the extractionId even if response is partial
             if (!response) {
                 return { extractionId, success: false };
             }

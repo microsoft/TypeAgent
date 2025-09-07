@@ -594,7 +594,7 @@ export class ShellWindow {
     /**
      * Resolve custom typeagent-browser protocol URLs
      */
-    private resolveCustomProtocolUrl(targetUrl: URL): URL {
+    public resolveCustomProtocolUrl(targetUrl: URL): URL {
         const browserExtensionUrls = (global as any).browserExtensionUrls;
         if (browserExtensionUrls) {
             // Map custom protocol to actual extension URL

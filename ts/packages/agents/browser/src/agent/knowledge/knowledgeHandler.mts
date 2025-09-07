@@ -7,6 +7,10 @@ import { BrowserActionContext } from "../browserActions.mjs";
 import { searchWebMemories } from "../searchWebMemories.mjs";
 import * as website from "website-memory";
 import {
+    knowledgeProgressEvents,
+    KnowledgeExtractionProgressEvent,
+} from "./knowledgeProgressEvents.mjs";
+import {
     KnowledgeExtractionResult,
     EnhancedKnowledgeExtractionResult,
     Entity,
@@ -40,7 +44,7 @@ import { DetailedKnowledgeStats } from "../browserKnowledgeSchema.js";
 /**
  * Knowledge extraction progress update helper function
  */
-function sendKnowledgeExtractionProgressViaWebSocket(
+export function sendKnowledgeExtractionProgressViaWebSocket(
     webSocket: WebSocket | undefined,
     extractionId: string,
     progress: KnowledgeExtractionProgress,
@@ -548,11 +552,13 @@ export async function extractKnowledgeFromPageStreaming(
             incrementalData: incrementalData || undefined,
         };
 
-        sendKnowledgeExtractionProgressViaWebSocket(
-            context.agentContext.webSocket,
-            extractionId,
-            progress,
-        );
+        const progressEvent: KnowledgeExtractionProgressEvent = {
+            ...progress,
+            timestamp: Date.now(),
+            url: parameters.url,
+            source: "navigation",
+        };
+        knowledgeProgressEvents.emitProgress(progressEvent);
 
         console.log("Knowledge extraction progress:", {
             extractionId,
