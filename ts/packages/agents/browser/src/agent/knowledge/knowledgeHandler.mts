@@ -560,14 +560,6 @@ export async function extractKnowledgeFromPageStreaming(
         };
         knowledgeProgressEvents.emitProgress(progressEvent);
 
-        /*
-        sendKnowledgeExtractionProgressViaWebSocket(
-            context.agentContext.webSocket,
-            extractionId,
-            progress,
-        );
-        */
-
         console.log("Knowledge extraction progress:", {
             extractionId,
             progress,
