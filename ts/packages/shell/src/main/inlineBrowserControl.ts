@@ -326,7 +326,8 @@ export function createInlineBrowserControl(
         },
         async getAutoIndexSetting(): Promise<boolean> {
             try {
-                let result = await shellWindow.mainWindow.webContents.executeJavaScript(`
+                const webContents = getActiveBrowserWebContents();
+                const result = await webContents.executeJavaScript(`
                     (async () => {
                         try {
                             const storage = await window.electronAPI.getStorage(['autoIndexing']);
@@ -337,8 +338,7 @@ export function createInlineBrowserControl(
                         }
                     })()
                 `);
-                // TODO: remove after integration testing
-                result = true;
+
                 return result;
             } catch (error) {
                 console.error("Failed to get autoIndex setting from storage:", error);
@@ -347,20 +347,30 @@ export function createInlineBrowserControl(
         },
         async getBrowserSettings() {
             try {
-                let result = await shellWindow.mainWindow.webContents.executeJavaScript(`
+                const webContents = getActiveBrowserWebContents();
+                const result = await webContents.executeJavaScript(`
                     (async () => {
                         try {
-                            const storage = await window.electronAPI.getStorage([
-                                'autoIndexing',
-                                'indexingDelay', 
-                                'extractionMode'
-                            ]);
-                            
-                            return {
-                                autoIndexing: storage.autoIndexing === true,
-                                indexingDelay: storage.indexingDelay || 3000,
-                                extractionMode: storage.extractionMode || 'content'
-                            };
+                            if (window.electronAPI) {
+                                const storage = await window.electronAPI.getStorage([
+                                    'autoIndexing',
+                                    'indexingDelay', 
+                                    'extractionMode'
+                                ]);
+                                
+                                return {
+                                    autoIndexing: storage.autoIndexing === true,
+                                    indexingDelay: storage.indexingDelay || 3000,
+                                    extractionMode: storage.extractionMode || 'content'
+                                };
+                            } else {
+                                console.error('electronAPI not available');
+                                return {
+                                    autoIndexing: false,
+                                    indexingDelay: 3000,
+                                    extractionMode: 'content'
+                                };
+                            }
                         } catch (error) {
                             console.error('Failed to get browser settings:', error);
                             return {
@@ -372,12 +382,6 @@ export function createInlineBrowserControl(
                     })()
                 `);
 
-                // TODO: remove after integration testing
-                result = {
-                                autoIndexing: true,
-                                indexingDelay: 3000,
-                                extractionMode: 'content'
-                            };
                 return result;
             } catch (error) {
                 console.error("Failed to get browser settings from storage:", error);

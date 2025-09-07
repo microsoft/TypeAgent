@@ -273,36 +273,6 @@ function generateDetailedKnowledgeCards(knowledgeResult: any): string {
     return html;
 }
 
-// Dynamic knowledge display HTML generation functions
-function getPhaseIcon(phase: string): string {
-    switch (phase) {
-        case "initializing": return "🔄";
-        case "content": return "📄";
-        case "basic": return "📋";
-        case "summary": return "📝";
-        case "analyzing": return "🔍";
-        case "extracting": return "🧠";
-        case "complete": return "✅";
-        case "error": return "❌";
-        default: return "⏳";
-    }
-}
-
-function getPhaseDescription(phase: string): string {
-    switch (phase) {
-        case "initializing": return "Initializing extraction";
-        case "content": return "Retrieving page content";
-        case "basic": return "Analyzing basic information";
-        case "summary": return "Generating summary";
-        case "analyzing": return "Analyzing entities and topics";
-        case "extracting": return "Extracting relationships";
-        case "complete": return "Extraction complete";
-        case "error": return "Extraction failed";
-        default: return "Processing";
-    }
-}
-
-
 function generateLiveKnowledgePreview(
     aggregatedKnowledge: { entities: any[]; topics: any[]; relationships: any[] }, 
     phase: string
@@ -391,13 +361,7 @@ function generateDynamicKnowledgeHtml(
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px;">
         <!-- Status Card -->
         <div style="margin: 8px 0; padding: 12px; background: #f8f9fa; border-left: 4px solid #007bff; border-radius: 4px; margin-bottom: 16px;">
-            <div style="display: flex; align-items: center;">
-                <div style="margin-right: 8px; font-size: 16px;">${getPhaseIcon(phase)}</div>
-                <div style="flex-grow: 1;">
-                    <div style="font-weight: 600; color: #495057;">Knowledge Extraction</div>
-                    <div style="font-size: 13px; color: #6c757d; margin-top: 2px;">${getPhaseDescription(phase)}</div>
-                </div>
-            </div>
+            
             ${currentItem ? `
             <div style="margin-top: 6px; font-size: 12px; color: #6c757d; font-style: italic;">
                 ${currentItem.length > 60 ? currentItem.substring(0, 60) + '...' : currentItem}
