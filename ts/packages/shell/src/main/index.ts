@@ -512,7 +512,7 @@ async function initialize() {
             : appPath,
         "node_modules/browser-typeagent/dist/electron",
     );
-    const extension = await session.defaultSession.loadExtension(
+    const extension = await session.defaultSession.extensions.loadExtension(
         browserExtensionPath,
         {
             allowFileAccess: true,

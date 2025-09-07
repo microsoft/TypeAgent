@@ -51,7 +51,11 @@ export function createInlineBrowserControl(
                     background: options?.newTab === true ? false : true,
                 });
             } else {
-                activeTab.webContentsView.webContents.loadURL(url);
+                let resolvedUrl = new URL(url);
+                if (resolvedUrl.protocol === "typeagent-browser:") {
+                    resolvedUrl = shellWindow.resolveCustomProtocolUrl(resolvedUrl);
+                }
+                activeTab.webContentsView.webContents.loadURL(resolvedUrl.toString());
             }
             return Promise.resolve();
         },
@@ -322,7 +326,7 @@ export function createInlineBrowserControl(
         },
         async getAutoIndexSetting(): Promise<boolean> {
             try {
-                const result = await shellWindow.mainWindow.webContents.executeJavaScript(`
+                let result = await shellWindow.mainWindow.webContents.executeJavaScript(`
                     (async () => {
                         try {
                             const storage = await window.electronAPI.getStorage(['autoIndexing']);
@@ -333,6 +337,8 @@ export function createInlineBrowserControl(
                         }
                     })()
                 `);
+                // TODO: remove after integration testing
+                result = true;
                 return result;
             } catch (error) {
                 console.error("Failed to get autoIndex setting from storage:", error);
@@ -341,7 +347,7 @@ export function createInlineBrowserControl(
         },
         async getBrowserSettings() {
             try {
-                const result = await shellWindow.mainWindow.webContents.executeJavaScript(`
+                let result = await shellWindow.mainWindow.webContents.executeJavaScript(`
                     (async () => {
                         try {
                             const storage = await window.electronAPI.getStorage([
@@ -365,6 +371,13 @@ export function createInlineBrowserControl(
                         }
                     })()
                 `);
+
+                // TODO: remove after integration testing
+                result = {
+                                autoIndexing: true,
+                                indexingDelay: 3000,
+                                extractionMode: 'content'
+                            };
                 return result;
             } catch (error) {
                 console.error("Failed to get browser settings from storage:", error);

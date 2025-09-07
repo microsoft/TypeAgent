@@ -53,6 +53,8 @@ import registerDebug from "debug";
 import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 import * as website from "website-memory";
 import { handleKnowledgeAction } from "./knowledge/knowledgeHandler.mjs";
+import { knowledgeProgressEvents, KnowledgeExtractionProgressEvent } from './knowledge/knowledgeProgressEvents.mjs';
+import { initializeWebSocketBridge } from './knowledge/knowledgeWebSocketBridge.mjs';
 import {
     searchWebMemories,
     SearchWebMemoriesResponse,
@@ -118,6 +120,110 @@ import {
 
 const debug = registerDebug("typeagent:browser:action");
 const debugWebSocket = registerDebug("typeagent:browser:ws");
+
+// Knowledge extraction progress tracking
+interface ActiveKnowledgeExtraction {
+    extractionId: string;
+    url?: string;
+    actionIO?: ActionIO;
+    aggregatedKnowledge: {
+        entities: any[];
+        topics: any[];
+        relationships: any[];
+    };
+    lastUpdateTime: number;
+}
+
+const activeKnowledgeExtractions = new Map<string, ActiveKnowledgeExtraction>();
+
+function deduplicateKnowledge(existing: any[], incoming: any[], keyField: string = 'name'): any[] {
+    if (!incoming || !Array.isArray(incoming)) return existing;
+    
+    const existingKeys = new Set(existing.map(item => {
+        if (typeof item === 'string') return item.toLowerCase();
+        return (item[keyField] || item.name || JSON.stringify(item)).toLowerCase();
+    }));
+    
+    const newItems = incoming.filter(item => {
+        const key = typeof item === 'string' ? item.toLowerCase() : 
+                   (item[keyField] || item.name || JSON.stringify(item)).toLowerCase();
+        return !existingKeys.has(key);
+    });
+    
+    return [...existing, ...newItems];
+}
+
+function generateKnowledgeResultsHtml(knowledgeResult: any, entitiesCount: number, topicsCount: number, relationshipsCount: number): string {
+    return `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #d4edda; border-left: 4px solid #28a745; border-radius: 4px;">
+        <div style="font-weight: 600; color: #155724;">✅ Knowledge Extraction Complete</div>
+        <div style="font-size: 13px; color: #155724; margin-top: 4px;">
+            Found ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships
+        </div>
+        
+        ${generateDetailedKnowledgeCards(knowledgeResult)}
+    </div>`;
+}
+
+function generateDetailedKnowledgeCards(knowledgeResult: any): string {
+    const entities = knowledgeResult.entities || [];
+    const topics = knowledgeResult.keyTopics || [];
+    const relationships = knowledgeResult.relationships || [];
+    
+    let html = '<div style="margin-top: 12px;">';
+    
+    // Entities section
+    if (entities.length > 0) {
+        html += `
+        <div style="margin-bottom: 12px;">
+            <div style="font-weight: 600; color: #495057; margin-bottom: 6px;">🏷️ Entities (${entities.length}):</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                ${entities.slice(0, 10).map((e: any) => {
+                    const name = e.name || e;
+                    const type = e.type ? ` (${e.type})` : '';
+                    const confidence = e.confidence ? ` ${Math.round(e.confidence * 100)}%` : '';
+                    return `<span style="background: #e3f2fd; color: #1976d2; padding: 2px 6px; border-radius: 12px; font-size: 12px;">${name}${type}${confidence}</span>`;
+                }).join('')}
+                ${entities.length > 10 ? `<span style="color: #6c757d; font-style: italic; font-size: 12px;">+${entities.length - 10} more</span>` : ''}
+            </div>
+        </div>`;
+    }
+    
+    // Topics section
+    if (topics.length > 0) {
+        html += `
+        <div style="margin-bottom: 12px;">
+            <div style="font-weight: 600; color: #495057; margin-bottom: 6px;">📋 Topics (${topics.length}):</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                ${topics.slice(0, 8).map((topic: any) => {
+                    const name = topic.name || topic;
+                    return `<span style="background: #fff3cd; color: #856404; padding: 2px 8px; border-radius: 12px; font-size: 12px; border: 1px solid #ffeaa7;">${name}</span>`;
+                }).join('')}
+                ${topics.length > 8 ? `<span style="color: #6c757d; font-style: italic; font-size: 12px;">+${topics.length - 8} more</span>` : ''}
+            </div>
+        </div>`;
+    }
+    
+    // Relationships section
+    if (relationships.length > 0) {
+        html += `
+        <div style="margin-bottom: 12px;">
+            <div style="font-weight: 600; color: #495057; margin-bottom: 6px;">🔗 Relationships (${relationships.length}):</div>
+            <div style="font-size: 13px; color: #6c757d;">
+                ${relationships.slice(0, 5).map((r: any) => {
+                    const source = r.source || r.from || 'Unknown';
+                    const target = r.target || r.to || 'Unknown';
+                    const relation = r.relationship || r.relation || 'relates to';
+                    return `<div style="margin: 2px 0;"><strong>${source}</strong> → <em>${relation}</em> → <strong>${target}</strong></div>`;
+                }).join('')}
+                ${relationships.length > 5 ? `<div style="font-style: italic;">+${relationships.length - 5} more relationships</div>` : ''}
+            </div>
+        </div>`;
+    }
+    
+    html += '</div>';
+    return html;
+}
 
 export function instantiate(): AppAgent {
     return {
@@ -253,6 +359,8 @@ async function updateBrowserContext(
                     );
                 }
             });
+
+            initializeWebSocketBridge(context);
         }
 
         // rehydrate cached settings
@@ -303,6 +411,133 @@ async function updateBrowserContext(
     }
 }
 
+async function handleKnowledgeExtractionProgress(
+    params: { extractionId: string; progress: any },
+    context: SessionContext<BrowserActionContext>
+) {
+    const { extractionId, progress } = params;
+    
+    console.log(`Knowledge Extraction 2 Progress [${extractionId}]:`, progress);
+    
+    // Get active extraction tracking (it should already exist)
+    let activeExtraction = activeKnowledgeExtractions.get(extractionId);
+    if (!activeExtraction) {
+        console.warn(`No active extraction found for ${extractionId}, progress will be logged but not displayed`);
+        return;
+    }
+    
+    // Update aggregated knowledge if incremental data is provided
+    if (progress.incrementalData) {
+        const data = progress.incrementalData;
+        
+        // Deduplicate and merge entities
+        if (data.entities && Array.isArray(data.entities)) {
+            activeExtraction.aggregatedKnowledge.entities = deduplicateKnowledge(
+                activeExtraction.aggregatedKnowledge.entities,
+                data.entities,
+                'name'
+            );
+        }
+        
+        // Deduplicate and merge topics
+        if (data.keyTopics && Array.isArray(data.keyTopics)) {
+            activeExtraction.aggregatedKnowledge.topics = deduplicateKnowledge(
+                activeExtraction.aggregatedKnowledge.topics,
+                data.keyTopics
+            );
+        }
+        
+        // Deduplicate and merge relationships
+        if (data.relationships && Array.isArray(data.relationships)) {
+            activeExtraction.aggregatedKnowledge.relationships = deduplicateKnowledge(
+                activeExtraction.aggregatedKnowledge.relationships,
+                data.relationships,
+                'source'
+            );
+        }
+    }
+    
+    // Generate phase-specific display message
+    const aggregated = activeExtraction.aggregatedKnowledge;
+    const entitiesCount = aggregated.entities.length;
+    const topicsCount = aggregated.topics.length;
+    const relationshipsCount = aggregated.relationships.length;
+    
+    let phaseIcon = "🔄";
+    let phaseName = "Processing";
+    let phaseColor = "#007bff";
+    let backgroundColor = "#f8f9fa";
+    
+    switch (progress.phase) {
+        case "content":
+            phaseIcon = "📄";
+            phaseName = "Content Analysis";
+            break;
+        case "basic":
+            phaseIcon = "🔍";
+            phaseName = "Basic Extraction";
+            break;
+        case "summary":
+            phaseIcon = "📝";
+            phaseName = "Summary Generation";
+            break;
+        case "analyzing":
+            phaseIcon = "🧠";
+            phaseName = "Deep Analysis";
+            break;
+        case "extracting":
+            phaseIcon = "⚡";
+            phaseName = "Knowledge Extraction";
+            break;
+        case "complete":
+            phaseIcon = "✅";
+            phaseName = "Extraction Complete";
+            phaseColor = "#28a745";
+            backgroundColor = "#d4edda";
+            break;
+        case "error":
+            phaseIcon = "❌";
+            phaseName = "Extraction Error";
+            phaseColor = "#dc3545";
+            backgroundColor = "#f8d7da";
+            break;
+    }
+    
+    // Create progress message with aggregated knowledge
+    const progressHtml = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: ${backgroundColor}; border-left: 4px solid ${phaseColor}; border-radius: 4px;">
+        <div style="font-weight: 600; color: ${phaseColor === '#28a745' ? '#155724' : phaseColor === '#dc3545' ? '#721c24' : '#495057'};">
+            ${phaseIcon} ${phaseName}
+        </div>
+        <div style="font-size: 13px; color: ${phaseColor === '#28a745' ? '#155724' : phaseColor === '#dc3545' ? '#721c24' : '#6c757d'}; margin-top: 4px;">
+            ${progress.currentItem || `Phase ${progress.processedItems}/${progress.totalItems}`}
+        </div>
+        <div style="font-size: 13px; color: ${phaseColor === '#28a745' ? '#155724' : phaseColor === '#dc3545' ? '#721c24' : '#6c757d'}; margin-top: 4px;">
+            Discovered so far: ${entitiesCount} entities, ${topicsCount} topics, ${relationshipsCount} relationships
+        </div>
+        ${(entitiesCount > 0 || topicsCount > 0 || relationshipsCount > 0) ? 
+            generateDetailedKnowledgeCards(aggregated) : ''
+        }
+    </div>`;
+    
+    // Append progress update to display
+    if (activeExtraction.actionIO) {
+        activeExtraction.actionIO.appendDisplay({
+            type: "html",
+            content: progressHtml
+        }, "block");
+    }
+    
+    // Clean up completed extractions after a delay
+    if (progress.phase === "complete" || progress.phase === "error") {
+        setTimeout(() => {
+            activeKnowledgeExtractions.delete(extractionId);
+        }, 30000); // Clean up after 30 seconds
+    }
+    
+    activeExtraction.lastUpdateTime = Date.now();
+}
+
 async function processBrowserAgentMessage(
     data: any,
     browserControls: BrowserControl,
@@ -310,6 +545,10 @@ async function processBrowserAgentMessage(
     webSocket: WebSocket,
 ) {
     switch (data.method) {
+        case "knowledgeExtractionProgress": {
+            await handleKnowledgeExtractionProgress(data.params, context);
+            break;
+        }
         case "enableSiteTranslator": {
             const targetTranslator = data.params.translator;
             if (targetTranslator == "browser.crossword") {
@@ -891,6 +1130,115 @@ async function saveKnowledgeToIndex(
     }
 }
 
+async function handleKnowledgeExtractionProgressFromEvent(
+    progress: KnowledgeExtractionProgressEvent,
+    activeExtraction: ActiveKnowledgeExtraction
+) {
+    console.log(`Knowledge Extraction Progress Event [${progress.extractionId}]:`, progress);
+    
+    // Update aggregated knowledge if incremental data is provided (existing logic)
+    if (progress.incrementalData) {
+        const data = progress.incrementalData;
+        
+        if (data.entities && Array.isArray(data.entities)) {
+            activeExtraction.aggregatedKnowledge.entities = deduplicateKnowledge(
+                activeExtraction.aggregatedKnowledge.entities,
+                data.entities,
+                'name'
+            );
+        }
+        
+        if (data.keyTopics && Array.isArray(data.keyTopics)) {
+            activeExtraction.aggregatedKnowledge.topics = deduplicateKnowledge(
+                activeExtraction.aggregatedKnowledge.topics,
+                data.keyTopics
+            );
+        }
+        
+        if (data.relationships && Array.isArray(data.relationships)) {
+            activeExtraction.aggregatedKnowledge.relationships = deduplicateKnowledge(
+                activeExtraction.aggregatedKnowledge.relationships,
+                data.relationships,
+                'source'
+            );
+        }
+    }
+    
+    // Generate and display progress HTML
+    const aggregated = activeExtraction.aggregatedKnowledge;
+    const entitiesCount = aggregated.entities.length;
+    const topicsCount = aggregated.topics.length;
+    const relationshipsCount = aggregated.relationships.length;
+    
+    // Generate phase-specific display message
+    let phaseIcon = "🔄";
+    let phaseName = "Processing";
+    let phaseColor = "#007bff";
+    let backgroundColor = "#f8f9fa";
+    
+    switch (progress.phase) {
+        case "content":
+            phaseIcon = "📄";
+            phaseName = "Content Analysis";
+            break;
+        case "basic":
+            phaseIcon = "🔍";
+            phaseName = "Basic Extraction";
+            break;
+        case "summary":
+            phaseIcon = "📝";
+            phaseName = "Summary Generation";
+            break;
+        case "analyzing":
+            phaseIcon = "🧠";
+            phaseName = "Deep Analysis";
+            break;
+        case "extracting":
+            phaseIcon = "⚡";
+            phaseName = "Knowledge Extraction";
+            break;
+        case "complete":
+            phaseIcon = "✅";
+            phaseName = "Extraction Complete";
+            phaseColor = "#28a745";
+            backgroundColor = "#d4edda";
+            break;
+        case "error":
+            phaseIcon = "❌";
+            phaseName = "Extraction Error";
+            phaseColor = "#dc3545";
+            backgroundColor = "#f8d7da";
+            break;
+    }
+    
+    // Create progress message with aggregated knowledge
+    const progressHtml = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: ${backgroundColor}; border-left: 4px solid ${phaseColor}; border-radius: 4px;">
+        <div style="font-weight: 600; color: ${phaseColor === '#28a745' ? '#155724' : phaseColor === '#dc3545' ? '#721c24' : '#495057'};">
+            ${phaseIcon} ${phaseName}
+        </div>
+        <div style="font-size: 13px; color: ${phaseColor === '#28a745' ? '#155724' : phaseColor === '#dc3545' ? '#721c24' : '#6c757d'}; margin-top: 4px;">
+            ${progress.currentItem || `Phase ${progress.processedItems}/${progress.totalItems}`}
+        </div>
+        <div style="font-size: 13px; color: ${phaseColor === '#28a745' ? '#155724' : phaseColor === '#dc3545' ? '#721c24' : '#6c757d'}; margin-top: 4px;">
+            Discovered so far: ${entitiesCount} entities, ${topicsCount} topics, ${relationshipsCount} relationships
+        </div>
+        ${(entitiesCount > 0 || topicsCount > 0 || relationshipsCount > 0) ? 
+            generateDetailedKnowledgeCards(aggregated) : ''
+        }
+    </div>`;
+    
+    // Append progress update to display
+    if (activeExtraction.actionIO) {
+        activeExtraction.actionIO.appendDisplay({
+            type: "html",
+            content: progressHtml
+        }, "block");
+    }
+    
+    activeExtraction.lastUpdateTime = Date.now();
+}
+
 async function performKnowledgeExtraction(
     url: string,
     context: ActionContext<BrowserActionContext>,
@@ -910,25 +1258,56 @@ async function performKnowledgeExtraction(
         title = await browserControl.getPageUrl(); // Get actual URL as fallback title
 
         // Use the existing streaming extraction function
+        const extractionId = `navigation-${Date.now()}`;
         const parameters = {
             url,
             title,
             mode: extractionMode,
-            extractionId: `navigation-${Date.now()}`,
+            extractionId,
             htmlFragments,
         };
 
-        const extractionResult = await handleKnowledgeAction(
-            "extractKnowledgeFromPageStreaming",
-            parameters,
-            context.sessionContext,
-        );
+        // Register the extraction for progress tracking
+        const activeExtraction: ActiveKnowledgeExtraction = {
+            extractionId,
+            url,
+            actionIO: context.actionIO,
+            aggregatedKnowledge: {
+                entities: [],
+                topics: [],
+                relationships: []
+            },
+            lastUpdateTime: Date.now()
+        };
+        activeKnowledgeExtractions.set(extractionId, activeExtraction);
 
-        if (extractionResult && extractionResult.knowledge) {
-            return extractionResult.knowledge;
+        // Subscribe to progress events for this extraction
+        const progressHandler = async (progress: KnowledgeExtractionProgressEvent) => {
+            await handleKnowledgeExtractionProgressFromEvent(progress, activeExtraction);
+        };
+        knowledgeProgressEvents.onProgressById(extractionId, progressHandler);
+
+        // Ensure cleanup after extraction completes
+        const cleanup = () => {
+            knowledgeProgressEvents.removeProgressListener(extractionId);
+            setTimeout(() => {
+                activeKnowledgeExtractions.delete(extractionId);
+            }, 30000);
+        };
+
+        try {
+            const extractionResult = await handleKnowledgeAction(
+                "extractKnowledgeFromPageStreaming",
+                parameters,
+                context.sessionContext,
+            );
+
+            cleanup();
+            return extractionResult?.knowledge || null;
+        } catch (error) {
+            cleanup();
+            throw error;
         }
-
-        return null;
     } catch (error) {
         console.error("Failed to extract knowledge:", error);
         return null;
@@ -1018,6 +1397,24 @@ async function openWebPage(
             // Check if knowledge already exists in index
             const existingKnowledge = await checkKnowledgeInIndex(url, context);
             if (existingKnowledge) {
+                // Display existing knowledge details
+                const entitiesCount = existingKnowledge.entities?.length || 0;
+                const topicsCount = existingKnowledge.keyTopics?.length || 0;
+                const relationshipsCount = existingKnowledge.relationships?.length || 0;
+
+                context.actionIO.appendDisplay({
+                    type: "html",
+                    content: `
+                    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #d1ecf1; border-left: 4px solid #17a2b8; border-radius: 4px;">
+                        <div style="font-weight: 600; color: #0c5460;">📖 Existing Knowledge Found</div>
+                        <div style="font-size: 13px; color: #0c5460; margin-top: 4px;">
+                            Loading ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships from index
+                        </div>
+                        
+                        ${generateDetailedKnowledgeCards(existingKnowledge)}
+                    </div>`
+                }, "block");
+
                 return createKnowledgeActionResult(
                     url,
                     existingKnowledge,
@@ -1032,16 +1429,67 @@ async function openWebPage(
                 );
             }
 
-            // Extract new knowledge and save to index
-            const knowledgeResult = await performKnowledgeExtraction(
-                url,
-                context,
-                browserSettings.extractionMode,
-            );
+            // Display extraction start message
+            context.actionIO.appendDisplay({
+                type: "html",
+                content: `
+                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #f8f9fa; border-left: 4px solid #007bff; border-radius: 4px;">
+                    <div style="font-weight: 600; color: #495057;">🧠 Starting Knowledge Extraction</div>
+                    <div style="font-size: 13px; color: #6c757d; margin-top: 4px;">Analyzing page content using ${browserSettings.extractionMode} mode...</div>
+                </div>`
+            }, "block");
 
-            // Auto-save to index when extraction completes
-            if (knowledgeResult) {
-                await saveKnowledgeToIndex(url, knowledgeResult, context);
+            let knowledgeResult: any = null;
+            try {
+                // Extract new knowledge and save to index with progress tracking
+                knowledgeResult = await performKnowledgeExtraction(
+                    url,
+                    context,
+                    browserSettings.extractionMode,
+                );
+
+                // Display extraction complete message with detailed results
+                if (knowledgeResult) {
+                    const entitiesCount = knowledgeResult.entities?.length || 0;
+                    const topicsCount = knowledgeResult.keyTopics?.length || 0;
+                    const relationshipsCount = knowledgeResult.relationships?.length || 0;
+
+                    context.actionIO.appendDisplay({
+                        type: "html",
+                        content: generateKnowledgeResultsHtml(knowledgeResult, entitiesCount, topicsCount, relationshipsCount)
+                    }, "block");
+                } else {
+                    context.actionIO.appendDisplay({
+                        type: "html",
+                        content: `
+                        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
+                            <div style="font-weight: 600; color: #856404;">⚠️ Knowledge Extraction Complete</div>
+                            <div style="font-size: 13px; color: #856404; margin-top: 4px;">No structured knowledge could be extracted from this page.</div>
+                        </div>`
+                    }, "block");
+                }
+
+                // Auto-save to index when extraction completes
+                if (knowledgeResult) {
+                    await saveKnowledgeToIndex(url, knowledgeResult, context);
+                    context.actionIO.appendDisplay({
+                        type: "text",
+                        content: "💾 Knowledge saved to index for future reference."
+                    }, "block");
+                }
+
+            } catch (extractionError) {
+                context.actionIO.appendDisplay({
+                    type: "html",
+                    content: `
+                    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #f8d7da; border-left: 4px solid #dc3545; border-radius: 4px;">
+                        <div style="font-weight: 600; color: #721c24;">❌ Knowledge Extraction Failed</div>
+                        <div style="font-size: 13px; color: #721c24; margin-top: 4px;">Error: ${extractionError}</div>
+                    </div>`
+                }, "block");
+                
+                console.error("Knowledge extraction failed:", extractionError);
+                knowledgeResult = null;
             }
 
             return createKnowledgeActionResult(url, knowledgeResult, context);
