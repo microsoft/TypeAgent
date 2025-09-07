@@ -55,7 +55,7 @@ export type BrowserControlInvokeFunctions = {
     stopReadPage(): Promise<void>;
     captureScreenshot(): Promise<string>;
     getPageTextContent(): Promise<string>;
-    
+
     // Settings access methods
     getAutoIndexSetting(): Promise<boolean>;
     getBrowserSettings(): Promise<BrowserSettings>;

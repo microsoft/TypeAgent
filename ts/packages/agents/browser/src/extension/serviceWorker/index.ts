@@ -81,7 +81,7 @@ function setupEventListeners(): void {
     chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
         if (changeInfo.status === "complete" && tab.active) {
             await toggleSiteTranslator(tab);
-            
+
             // Trigger navigation handler for page knowledge extraction
             if (tab.url && tab.title) {
                 try {
@@ -375,7 +375,11 @@ async function sendActionToTabIndex(action: any): Promise<string | undefined> {
 initialize();
 
 // Re-export functions that need to be accessible from other modules
-async function sendNavigationMessage(url: string, title: string, tabId?: number): Promise<void> {
+async function sendNavigationMessage(
+    url: string,
+    title: string,
+    tabId?: number,
+): Promise<void> {
     const webSocket = getWebSocket();
     if (!webSocket) {
         return;

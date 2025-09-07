@@ -55,8 +55,11 @@ import registerDebug from "debug";
 import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 import * as website from "website-memory";
 import { handleKnowledgeAction } from "./knowledge/knowledgeHandler.mjs";
-import { knowledgeProgressEvents, KnowledgeExtractionProgressEvent } from './knowledge/knowledgeProgressEvents.mjs';
-import { initializeWebSocketBridge } from './knowledge/knowledgeWebSocketBridge.mjs';
+import {
+    knowledgeProgressEvents,
+    KnowledgeExtractionProgressEvent,
+} from "./knowledge/knowledgeProgressEvents.mjs";
+import { initializeWebSocketBridge } from "./knowledge/knowledgeWebSocketBridge.mjs";
 import {
     searchWebMemories,
     SearchWebMemoriesResponse,
@@ -125,7 +128,14 @@ const debugWebSocket = registerDebug("typeagent:browser:ws");
 
 // Knowledge extraction progress tracking
 interface ProgressState {
-    phase: "initializing" | "content" | "basic" | "summary" | "analyzing" | "extracting" | "complete" | "error";
+    phase:
+        | "initializing"
+        | "content"
+        | "basic"
+        | "summary"
+        | "extracting"
+        | "complete"
+        | "error";
     percentage: number;
     currentItem?: string;
     startTime: number;
@@ -149,27 +159,43 @@ interface ActiveKnowledgeExtraction {
 
 const activeKnowledgeExtractions = new Map<string, ActiveKnowledgeExtraction>();
 
-function deduplicateKnowledge(existing: any[], incoming: any[], keyField: string = 'name'): any[] {
+function deduplicateKnowledge(
+    existing: any[],
+    incoming: any[],
+    keyField: string = "name",
+): any[] {
     if (!incoming || !Array.isArray(incoming)) return existing;
-    
-    const existingKeys = new Set(existing.map(item => {
-        if (typeof item === 'string') return item.toLowerCase();
-        return (item[keyField] || item.name || JSON.stringify(item)).toLowerCase();
-    }));
-    
-    const newItems = incoming.filter(item => {
-        const key = typeof item === 'string' ? item.toLowerCase() : 
-                   (item[keyField] || item.name || JSON.stringify(item)).toLowerCase();
+
+    const existingKeys = new Set(
+        existing.map((item) => {
+            if (typeof item === "string") return item.toLowerCase();
+            return (
+                item[keyField] ||
+                item.name ||
+                JSON.stringify(item)
+            ).toLowerCase();
+        }),
+    );
+
+    const newItems = incoming.filter((item) => {
+        const key =
+            typeof item === "string"
+                ? item.toLowerCase()
+                : (
+                      item[keyField] ||
+                      item.name ||
+                      JSON.stringify(item)
+                  ).toLowerCase();
         return !existingKeys.has(key);
     });
-    
+
     return [...existing, ...newItems];
 }
 
 // Helper function to update progress state in a consistent way
 function updateExtractionProgressState(
-    activeExtraction: ActiveKnowledgeExtraction, 
-    progress: any
+    activeExtraction: ActiveKnowledgeExtraction,
+    progress: any,
 ): void {
     if (!activeExtraction.progressState) {
         // Initialize progress state if it doesn't exist
@@ -178,108 +204,129 @@ function updateExtractionProgressState(
             percentage: 0,
             startTime: Date.now(),
             lastUpdate: Date.now(),
-            errors: []
+            errors: [],
         };
     }
 
     // Calculate percentage based on phase and processed items
     let percentage = 0;
     if (progress.totalItems && progress.totalItems > 0) {
-        percentage = Math.round((progress.processedItems / progress.totalItems) * 100);
+        percentage = Math.round(
+            (progress.processedItems / progress.totalItems) * 100,
+        );
     } else {
         // Fallback percentage based on phase
         const phasePercentages: Record<string, number> = {
-            "initializing": 5,
-            "content": 15,
-            "basic": 30,
-            "summary": 50,
-            "analyzing": 75,
-            "extracting": 90,
-            "complete": 100,
-            "error": 0
+            initializing: 5,
+            content: 15,
+            basic: 30,
+            summary: 50,
+            analyzing: 75,
+            extracting: 90,
+            complete: 100,
+            error: 0,
         };
         percentage = phasePercentages[progress.phase] || 50;
     }
 
     // Update progress state
     activeExtraction.progressState.phase = progress.phase || "analyzing";
-    activeExtraction.progressState.percentage = Math.min(100, Math.max(0, percentage));
+    activeExtraction.progressState.percentage = Math.min(
+        100,
+        Math.max(0, percentage),
+    );
     activeExtraction.progressState.currentItem = progress.currentItem;
     activeExtraction.progressState.lastUpdate = Date.now();
-    
+
     if (progress.errors && progress.errors.length > 0) {
         activeExtraction.progressState.errors = progress.errors;
     }
 }
 
-
 function generateDetailedKnowledgeCards(knowledgeResult: any): string {
     const entities = knowledgeResult.entities || [];
     const topics = knowledgeResult.keyTopics || [];
     const relationships = knowledgeResult.relationships || [];
-    
+
     let html = '<div style="margin-top: 12px;">';
-    
+
     // Entities section
     if (entities.length > 0) {
         html += `
         <div style="margin-bottom: 12px;">
             <div style="font-weight: 600; color: #495057; margin-bottom: 6px;">🏷️ Entities (${entities.length}):</div>
             <div style="display: flex; flex-wrap: wrap; gap: 4px;">
-                ${entities.slice(0, 10).map((e: any) => {
-                    const name = e.name || e;
-                    const type = e.type ? ` (${e.type})` : '';
-                    const confidence = e.confidence ? ` ${Math.round(e.confidence * 100)}%` : '';
-                    return `<span style="background: #e3f2fd; color: #1976d2; padding: 2px 6px; border-radius: 12px; font-size: 12px;">${name}${type}${confidence}</span>`;
-                }).join('')}
-                ${entities.length > 10 ? `<span style="color: #6c757d; font-style: italic; font-size: 12px;">+${entities.length - 10} more</span>` : ''}
+                ${entities
+                    .slice(0, 10)
+                    .map((e: any) => {
+                        const name = e.name || e;
+                        const type = e.type ? ` (${e.type})` : "";
+                        const confidence = e.confidence
+                            ? ` ${Math.round(e.confidence * 100)}%`
+                            : "";
+                        return `<span style="background: #e3f2fd; color: #1976d2; padding: 2px 6px; border-radius: 12px; font-size: 12px;">${name}${type}${confidence}</span>`;
+                    })
+                    .join("")}
+                ${entities.length > 10 ? `<span style="color: #6c757d; font-style: italic; font-size: 12px;">+${entities.length - 10} more</span>` : ""}
             </div>
         </div>`;
     }
-    
+
     // Topics section
     if (topics.length > 0) {
         html += `
         <div style="margin-bottom: 12px;">
             <div style="font-weight: 600; color: #495057; margin-bottom: 6px;">📋 Topics (${topics.length}):</div>
             <div style="display: flex; flex-wrap: wrap; gap: 4px;">
-                ${topics.slice(0, 8).map((topic: any) => {
-                    const name = topic.name || topic;
-                    return `<span style="background: #fff3cd; color: #856404; padding: 2px 8px; border-radius: 12px; font-size: 12px; border: 1px solid #ffeaa7;">${name}</span>`;
-                }).join('')}
-                ${topics.length > 8 ? `<span style="color: #6c757d; font-style: italic; font-size: 12px;">+${topics.length - 8} more</span>` : ''}
+                ${topics
+                    .slice(0, 8)
+                    .map((topic: any) => {
+                        const name = topic.name || topic;
+                        return `<span style="background: #fff3cd; color: #856404; padding: 2px 8px; border-radius: 12px; font-size: 12px; border: 1px solid #ffeaa7;">${name}</span>`;
+                    })
+                    .join("")}
+                ${topics.length > 8 ? `<span style="color: #6c757d; font-style: italic; font-size: 12px;">+${topics.length - 8} more</span>` : ""}
             </div>
         </div>`;
     }
-    
+
     // Relationships section
     if (relationships.length > 0) {
         html += `
         <div style="margin-bottom: 12px;">
             <div style="font-weight: 600; color: #495057; margin-bottom: 6px;">🔗 Relationships (${relationships.length}):</div>
             <div style="font-size: 13px; color: #6c757d;">
-                ${relationships.slice(0, 5).map((r: any) => {
-                    const source = r.source || r.from || 'Unknown';
-                    const target = r.target || r.to || 'Unknown';
-                    const relation = r.relationship || r.relation || 'relates to';
-                    return `<div style="margin: 2px 0;"><strong>${source}</strong> → <em>${relation}</em> → <strong>${target}</strong></div>`;
-                }).join('')}
-                ${relationships.length > 5 ? `<div style="font-style: italic;">+${relationships.length - 5} more relationships</div>` : ''}
+                ${relationships
+                    .slice(0, 5)
+                    .map((r: any) => {
+                        const source = r.source || r.from || "Unknown";
+                        const target = r.target || r.to || "Unknown";
+                        const relation =
+                            r.relationship || r.relation || "relates to";
+                        return `<div style="margin: 2px 0;"><strong>${source}</strong> → <em>${relation}</em> → <strong>${target}</strong></div>`;
+                    })
+                    .join("")}
+                ${relationships.length > 5 ? `<div style="font-style: italic;">+${relationships.length - 5} more relationships</div>` : ""}
             </div>
         </div>`;
     }
-    
-    html += '</div>';
+
+    html += "</div>";
     return html;
 }
 
 function generateLiveKnowledgePreview(
-    aggregatedKnowledge: { entities: any[]; topics: any[]; relationships: any[] }, 
-    phase: string
+    aggregatedKnowledge: {
+        entities: any[];
+        topics: any[];
+        relationships: any[];
+    },
+    phase: string,
 ): string {
     const { entities, topics, relationships } = aggregatedKnowledge;
-    const hasKnowledge = entities.length > 0 || topics.length > 0 || relationships.length > 0;
-    
+    const hasKnowledge =
+        entities.length > 0 || topics.length > 0 || relationships.length > 0;
+
     if (!hasKnowledge && phase !== "complete") {
         return `
         <div style="text-align: center; padding: 20px; color: #6c757d; font-style: italic;">
@@ -287,7 +334,7 @@ function generateLiveKnowledgePreview(
             <div style="font-size: 12px; margin-top: 4px;">Knowledge will appear as it's discovered</div>
         </div>`;
     }
-    
+
     return `
     <!-- Entities Section -->
     <div class="knowledge-section" style="margin-bottom: 16px;">
@@ -297,15 +344,21 @@ function generateLiveKnowledgePreview(
             <span style="background: #e3f2fd; color: #1976d2; padding: 2px 6px; border-radius: 10px; font-size: 11px; font-weight: bold; margin-left: 6px;">${entities.length}</span>
         </div>
         <div style="max-height: 120px; overflow-y: auto;">
-            ${entities.length === 0 ? 
-                `<div style="color: #6c757d; font-size: 12px; font-style: italic;">None discovered yet</div>` :
-                entities.slice(0, 15).map(entity => 
-                    `<span style="display: inline-block; background: #e3f2fd; color: #1976d2; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; margin: 2px;">${entity.name || entity}</span>`
-                ).join('')
+            ${
+                entities.length === 0
+                    ? `<div style="color: #6c757d; font-size: 12px; font-style: italic;">None discovered yet</div>`
+                    : entities
+                          .slice(0, 15)
+                          .map(
+                              (entity) =>
+                                  `<span style="display: inline-block; background: #e3f2fd; color: #1976d2; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; margin: 2px;">${entity.name || entity}</span>`,
+                          )
+                          .join("")
             }
-            ${entities.length > 15 ? 
-                `<div style="color: #6c757d; font-size: 11px; margin-top: 4px;">+${entities.length - 15} more...</div>` : 
-                ''
+            ${
+                entities.length > 15
+                    ? `<div style="color: #6c757d; font-size: 11px; margin-top: 4px;">+${entities.length - 15} more...</div>`
+                    : ""
             }
         </div>
     </div>
@@ -318,21 +371,29 @@ function generateLiveKnowledgePreview(
             <span style="background: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 10px; font-size: 11px; font-weight: bold; margin-left: 6px;">${topics.length}</span>
         </div>
         <div style="max-height: 120px; overflow-y: auto;">
-            ${topics.length === 0 ? 
-                `<div style="color: #6c757d; font-size: 12px; font-style: italic;">None discovered yet</div>` :
-                topics.slice(0, 12).map(topic => 
-                    `<span style="display: inline-block; background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; margin: 2px;">${topic.name || topic}</span>`
-                ).join('')
+            ${
+                topics.length === 0
+                    ? `<div style="color: #6c757d; font-size: 12px; font-style: italic;">None discovered yet</div>`
+                    : topics
+                          .slice(0, 12)
+                          .map(
+                              (topic) =>
+                                  `<span style="display: inline-block; background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; margin: 2px;">${topic.name || topic}</span>`,
+                          )
+                          .join("")
             }
-            ${topics.length > 12 ? 
-                `<div style="color: #6c757d; font-size: 11px; margin-top: 4px;">+${topics.length - 12} more...</div>` : 
-                ''
+            ${
+                topics.length > 12
+                    ? `<div style="color: #6c757d; font-size: 11px; margin-top: 4px;">+${topics.length - 12} more...</div>`
+                    : ""
             }
         </div>
     </div>
     
     <!-- Relationships Section -->
-    ${relationships.length > 0 ? `
+    ${
+        relationships.length > 0
+            ? `
     <div class="knowledge-section" style="margin-bottom: 16px;">
         <div style="display: flex; align-items: center; margin-bottom: 8px;">
             <span style="margin-right: 6px;">🔗</span>
@@ -340,42 +401,61 @@ function generateLiveKnowledgePreview(
             <span style="background: #e8f5e8; color: #2e7d2e; padding: 2px 6px; border-radius: 10px; font-size: 11px; font-weight: bold; margin-left: 6px;">${relationships.length}</span>
         </div>
         <div style="max-height: 80px; overflow-y: auto;">
-            ${relationships.slice(0, 5).map(rel => 
-                `<div style="font-size: 12px; color: #6c757d; margin: 2px 0; padding: 2px 0;">${rel.source || rel.from} → ${rel.target || rel.to}</div>`
-            ).join('')}
-            ${relationships.length > 5 ? 
-                `<div style="color: #6c757d; font-size: 11px;">+${relationships.length - 5} more relationships</div>` : 
-                ''
+            ${relationships
+                .slice(0, 5)
+                .map(
+                    (rel) =>
+                        `<div style="font-size: 12px; color: #6c757d; margin: 2px 0; padding: 2px 0;">${rel.source || rel.from} → ${rel.target || rel.to}</div>`,
+                )
+                .join("")}
+            ${
+                relationships.length > 5
+                    ? `<div style="color: #6c757d; font-size: 11px;">+${relationships.length - 5} more relationships</div>`
+                    : ""
             }
         </div>
-    </div>` : ''}`;
+    </div>`
+            : ""
+    }`;
 }
 
 function generateDynamicKnowledgeHtml(
-    progressState: ProgressState, 
-    aggregatedKnowledge: { entities: any[]; topics: any[]; relationships: any[] }
+    progressState: ProgressState,
+    aggregatedKnowledge: {
+        entities: any[];
+        topics: any[];
+        relationships: any[];
+    },
 ): string {
     const { phase, currentItem } = progressState;
-    
+
     return `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px;">
         <!-- Status Card -->
         <div style="margin: 8px 0; padding: 12px; background: #f8f9fa; border-left: 4px solid #007bff; border-radius: 4px; margin-bottom: 16px;">
             
-            ${currentItem ? `
+            ${
+                currentItem
+                    ? `
             <div style="margin-top: 6px; font-size: 12px; color: #6c757d; font-style: italic;">
-                ${currentItem.length > 60 ? currentItem.substring(0, 60) + '...' : currentItem}
-            </div>` : ''}
+                ${currentItem.length > 60 ? currentItem.substring(0, 60) + "..." : currentItem}
+            </div>`
+                    : ""
+            }
         </div>
 
         <!-- Live Knowledge Preview -->
         ${generateLiveKnowledgePreview(aggregatedKnowledge, phase)}
         
         
-        ${phase === "error" ? `
+        ${
+            phase === "error"
+                ? `
         <div style="background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 8px; padding: 12px; margin-top: 16px;">
             <div style="color: #721c24; font-weight: bold;">❌ Knowledge Extraction Failed</div>
-        </div>` : ''}
+        </div>`
+                : ""
+        }
     </div>`;
 }
 
@@ -383,37 +463,45 @@ function generateDynamicKnowledgeHtml(
 async function getDynamicDisplayImpl(
     type: DisplayType,
     dynamicDisplayId: string,
-    context: SessionContext<BrowserActionContext>
+    context: SessionContext<BrowserActionContext>,
 ): Promise<DynamicDisplay> {
     // Handle knowledge extraction dynamic displays
-    if (dynamicDisplayId.startsWith('knowledge-extraction-')) {
-        const extractionId = dynamicDisplayId.replace('knowledge-extraction-', '');
+    if (dynamicDisplayId.startsWith("knowledge-extraction-")) {
+        const extractionId = dynamicDisplayId.replace(
+            "knowledge-extraction-",
+            "",
+        );
         const activeExtraction = activeKnowledgeExtractions.get(extractionId);
-        
+
         if (!activeExtraction || !activeExtraction.progressState) {
             return {
-                content: { 
-                    type: "html", 
-                    content: `<div style="color: #6c757d; font-style: italic;">Knowledge extraction not found or not started</div>` 
+                content: {
+                    type: "html",
+                    content: `<div style="color: #6c757d; font-style: italic;">Knowledge extraction not found or not started</div>`,
                 },
-                nextRefreshMs: -1
+                nextRefreshMs: -1,
             };
         }
 
         const { progressState, aggregatedKnowledge } = activeExtraction;
-        
+
         // Generate rich, dynamic HTML content
-        const dynamicHtml = generateDynamicKnowledgeHtml(progressState, aggregatedKnowledge);
-        
+        const dynamicHtml = generateDynamicKnowledgeHtml(
+            progressState,
+            aggregatedKnowledge,
+        );
+
         // Determine if we should continue refreshing
-        const isComplete = progressState.phase === "complete" || progressState.phase === "error";
-        
+        const isComplete =
+            progressState.phase === "complete" ||
+            progressState.phase === "error";
+
         return {
             content: { type: "html", content: dynamicHtml },
-            nextRefreshMs: isComplete ? -1 : 1500 // Stop refreshing when complete, otherwise refresh every 1.5 seconds
+            nextRefreshMs: isComplete ? -1 : 1500, // Stop refreshing when complete, otherwise refresh every 1.5 seconds
         };
     }
-    
+
     throw new Error(`Unknown dynamic display ID: ${dynamicDisplayId}`);
 }
 
@@ -606,63 +694,67 @@ async function updateBrowserContext(
 
 async function handleKnowledgeExtractionProgress(
     params: { extractionId: string; progress: any },
-    context: SessionContext<BrowserActionContext>
+    context: SessionContext<BrowserActionContext>,
 ) {
     const { extractionId, progress } = params;
-    
+
     console.log(`Knowledge Extraction 2 Progress [${extractionId}]:`, progress);
-    
+
     // Get active extraction tracking (it should already exist)
     let activeExtraction = activeKnowledgeExtractions.get(extractionId);
     if (!activeExtraction) {
-        console.warn(`No active extraction found for ${extractionId}, progress will be logged but not displayed`);
+        console.warn(
+            `No active extraction found for ${extractionId}, progress will be logged but not displayed`,
+        );
         return;
     }
-    
+
     // Update aggregated knowledge if incremental data is provided
     if (progress.incrementalData) {
         const data = progress.incrementalData;
-        
+
         // Deduplicate and merge entities
         if (data.entities && Array.isArray(data.entities)) {
-            activeExtraction.aggregatedKnowledge.entities = deduplicateKnowledge(
-                activeExtraction.aggregatedKnowledge.entities,
-                data.entities,
-                'name'
-            );
+            activeExtraction.aggregatedKnowledge.entities =
+                deduplicateKnowledge(
+                    activeExtraction.aggregatedKnowledge.entities,
+                    data.entities,
+                    "name",
+                );
         }
-        
+
         // Deduplicate and merge topics
         if (data.keyTopics && Array.isArray(data.keyTopics)) {
             activeExtraction.aggregatedKnowledge.topics = deduplicateKnowledge(
                 activeExtraction.aggregatedKnowledge.topics,
-                data.keyTopics
+                data.keyTopics,
             );
         }
-        
+
         // Deduplicate and merge relationships
         if (data.relationships && Array.isArray(data.relationships)) {
-            activeExtraction.aggregatedKnowledge.relationships = deduplicateKnowledge(
-                activeExtraction.aggregatedKnowledge.relationships,
-                data.relationships,
-                'source'
-            );
+            activeExtraction.aggregatedKnowledge.relationships =
+                deduplicateKnowledge(
+                    activeExtraction.aggregatedKnowledge.relationships,
+                    data.relationships,
+                    "source",
+                );
         }
     }
-    
+
     // Update progress state using helper function
     updateExtractionProgressState(activeExtraction, progress);
-    
+
     // Note: Visual updates are now handled automatically by the dynamic display system
     // The getDynamicDisplay method will be called periodically to generate the HTML
-    
+
     // Clean up completed extractions after a delay
     if (progress.phase === "complete" || progress.phase === "error") {
         setTimeout(() => {
             activeKnowledgeExtractions.delete(extractionId);
         }, 30000); // Clean up after 30 seconds
     }
-    
+
     activeExtraction.lastUpdateTime = Date.now();
 }
 
@@ -1260,44 +1352,49 @@ async function saveKnowledgeToIndex(
 
 async function handleKnowledgeExtractionProgressFromEvent(
     progress: KnowledgeExtractionProgressEvent,
-    activeExtraction: ActiveKnowledgeExtraction
+    activeExtraction: ActiveKnowledgeExtraction,
 ) {
-    console.log(`Knowledge Extraction Progress Event [${progress.extractionId}]:`, progress);
-    
+    console.log(
+        `Knowledge Extraction Progress Event [${progress.extractionId}]:`,
+        progress,
+    );
+
     // Update aggregated knowledge if incremental data is provided (existing logic)
     if (progress.incrementalData) {
         const data = progress.incrementalData;
-        
+
         if (data.entities && Array.isArray(data.entities)) {
-            activeExtraction.aggregatedKnowledge.entities = deduplicateKnowledge(
-                activeExtraction.aggregatedKnowledge.entities,
-                data.entities,
-                'name'
-            );
+            activeExtraction.aggregatedKnowledge.entities =
+                deduplicateKnowledge(
+                    activeExtraction.aggregatedKnowledge.entities,
+                    data.entities,
+                    "name",
+                );
         }
-        
+
         if (data.keyTopics && Array.isArray(data.keyTopics)) {
             activeExtraction.aggregatedKnowledge.topics = deduplicateKnowledge(
                 activeExtraction.aggregatedKnowledge.topics,
-                data.keyTopics
+                data.keyTopics,
             );
         }
-        
+
         if (data.relationships && Array.isArray(data.relationships)) {
-            activeExtraction.aggregatedKnowledge.relationships = deduplicateKnowledge(
-                activeExtraction.aggregatedKnowledge.relationships,
-                data.relationships,
-                'source'
-            );
+            activeExtraction.aggregatedKnowledge.relationships =
+                deduplicateKnowledge(
+                    activeExtraction.aggregatedKnowledge.relationships,
+                    data.relationships,
+                    "source",
+                );
         }
     }
-    
+
     // Update progress state using helper function
     updateExtractionProgressState(activeExtraction, progress);
-    
+
     // Note: Visual updates are now handled automatically by the dynamic display system
     // The getDynamicDisplay method will be called periodically to generate the HTML
-    
+
     activeExtraction.lastUpdateTime = Date.now();
 }
 
@@ -1343,20 +1440,25 @@ async function performKnowledgeExtraction(
                 percentage: 0,
                 startTime: Date.now(),
                 lastUpdate: Date.now(),
-                errors: []
+                errors: [],
             },
             aggregatedKnowledge: {
                 entities: [],
                 topics: [],
-                relationships: []
+                relationships: [],
             },
-            lastUpdateTime: Date.now()
+            lastUpdateTime: Date.now(),
         };
         activeKnowledgeExtractions.set(extractionId, activeExtraction);
 
         // Subscribe to progress events for this extraction
-        const progressHandler = async (progress: KnowledgeExtractionProgressEvent) => {
-            await handleKnowledgeExtractionProgressFromEvent(progress, activeExtraction);
+        const progressHandler = async (
+            progress: KnowledgeExtractionProgressEvent,
+        ) => {
+            await handleKnowledgeExtractionProgressFromEvent(
+                progress,
+                activeExtraction,
+            );
         };
         knowledgeProgressEvents.onProgressById(extractionId, progressHandler);
 
@@ -1373,42 +1475,47 @@ async function performKnowledgeExtraction(
             "extractKnowledgeFromPageStreaming",
             parameters,
             context.sessionContext,
-        ).then(async (extractionResult) => {
-            // Update the final state when extraction completes
-            if (activeExtraction.progressState) {
-                activeExtraction.progressState.phase = "complete";
-                activeExtraction.progressState.percentage = 100;
-                activeExtraction.progressState.lastUpdate = Date.now();
-            }
-            
-            // Auto-save to index when extraction completes
-            const knowledge = extractionResult?.knowledge;
-            if (knowledge) {
-                try {
-                    await saveKnowledgeToIndex(url, knowledge, context);
-                } catch (saveError) {
-                    console.error("Failed to save knowledge to index:", saveError);
+        )
+            .then(async (extractionResult) => {
+                // Update the final state when extraction completes
+                if (activeExtraction.progressState) {
+                    activeExtraction.progressState.phase = "complete";
+                    activeExtraction.progressState.percentage = 100;
+                    activeExtraction.progressState.lastUpdate = Date.now();
                 }
-            }
-            
-            cleanup();
-            return knowledge || null;
-        }).catch((error) => {
-            // Handle errors by updating progress state
-            if (activeExtraction.progressState) {
-                activeExtraction.progressState.phase = "error";
-                activeExtraction.progressState.lastUpdate = Date.now();
-                activeExtraction.progressState.errors = [error.message];
-            }
-            cleanup();
-            console.error("Knowledge extraction failed:", error);
-        });
+
+                // Auto-save to index when extraction completes
+                const knowledge = extractionResult?.knowledge;
+                if (knowledge) {
+                    try {
+                        await saveKnowledgeToIndex(url, knowledge, context);
+                    } catch (saveError) {
+                        console.error(
+                            "Failed to save knowledge to index:",
+                            saveError,
+                        );
+                    }
+                }
+
+                cleanup();
+                return knowledge || null;
+            })
+            .catch((error) => {
+                // Handle errors by updating progress state
+                if (activeExtraction.progressState) {
+                    activeExtraction.progressState.phase = "error";
+                    activeExtraction.progressState.lastUpdate = Date.now();
+                    activeExtraction.progressState.errors = [error.message];
+                }
+                cleanup();
+                console.error("Knowledge extraction failed:", error);
+            });
 
         // Return immediately with the dynamic display information
         return {
             dynamicDisplayId,
             dynamicDisplayNextRefreshMs: 1500,
-            knowledge: null // No immediate knowledge, will be populated via progress events
+            knowledge: null, // No immediate knowledge, will be populated via progress events
         };
     } catch (error) {
         console.error("Failed to extract knowledge:", error);
@@ -1465,7 +1572,8 @@ function createKnowledgeActionResult(
     // Include dynamic display information if provided
     if (dynamicDisplayId) {
         result.dynamicDisplayId = dynamicDisplayId;
-        result.dynamicDisplayNextRefreshMs = dynamicDisplayNextRefreshMs || 1500;
+        result.dynamicDisplayNextRefreshMs =
+            dynamicDisplayNextRefreshMs || 1500;
     }
 
     return result;
@@ -1510,11 +1618,13 @@ async function openWebPage(
                 // Display existing knowledge details
                 const entitiesCount = existingKnowledge.entities?.length || 0;
                 const topicsCount = existingKnowledge.keyTopics?.length || 0;
-                const relationshipsCount = existingKnowledge.relationships?.length || 0;
+                const relationshipsCount =
+                    existingKnowledge.relationships?.length || 0;
 
-                context.actionIO.appendDisplay({
-                    type: "html",
-                    content: `
+                context.actionIO.appendDisplay(
+                    {
+                        type: "html",
+                        content: `
                     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #d1ecf1; border-left: 4px solid #17a2b8; border-radius: 4px;">
                         <div style="font-weight: 600; color: #0c5460;">📖 Existing Knowledge Found</div>
                         <div style="font-size: 13px; color: #0c5460; margin-top: 4px;">
@@ -1522,8 +1632,10 @@ async function openWebPage(
                         </div>
                         
                         ${generateDetailedKnowledgeCards(existingKnowledge)}
-                    </div>`
-                }, "block");
+                    </div>`,
+                    },
+                    "block",
+                );
 
                 return createKnowledgeActionResult(
                     url,
@@ -1553,17 +1665,16 @@ async function openWebPage(
                 // Return immediately with dynamic display information for real-time progress
                 if (extractionInfo && extractionInfo.dynamicDisplayId) {
                     return createKnowledgeActionResult(
-                        url, 
-                        extractionInfo.knowledge, 
-                        context, 
+                        url,
+                        extractionInfo.knowledge,
+                        context,
                         extractionInfo.dynamicDisplayId,
-                        extractionInfo.dynamicDisplayNextRefreshMs
+                        extractionInfo.dynamicDisplayNextRefreshMs,
                     );
                 }
 
                 // Fallback in case extraction didn't return expected format
                 return createKnowledgeActionResult(url, null, context);
-
             } catch (extractionError) {
                 console.error("Knowledge extraction failed:", extractionError);
                 return createKnowledgeActionResult(url, null, context);

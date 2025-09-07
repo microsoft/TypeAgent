@@ -6,7 +6,10 @@ import { WebSocket } from "ws";
 import { BrowserActionContext } from "../browserActions.mjs";
 import { searchWebMemories } from "../searchWebMemories.mjs";
 import * as website from "website-memory";
-import { knowledgeProgressEvents, KnowledgeExtractionProgressEvent } from './knowledgeProgressEvents.mjs';
+import {
+    knowledgeProgressEvents,
+    KnowledgeExtractionProgressEvent,
+} from "./knowledgeProgressEvents.mjs";
 import {
     KnowledgeExtractionResult,
     EnhancedKnowledgeExtractionResult,
@@ -553,7 +556,7 @@ export async function extractKnowledgeFromPageStreaming(
             ...progress,
             timestamp: Date.now(),
             url: parameters.url,
-            source: 'navigation',
+            source: "navigation",
         };
         knowledgeProgressEvents.emitProgress(progressEvent);
 
@@ -564,7 +567,7 @@ export async function extractKnowledgeFromPageStreaming(
             progress,
         );
         */
-       
+
         console.log("Knowledge extraction progress:", {
             extractionId,
             progress,

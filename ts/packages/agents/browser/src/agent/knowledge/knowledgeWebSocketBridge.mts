@@ -1,10 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { knowledgeProgressEvents, KnowledgeExtractionProgressEvent } from './knowledgeProgressEvents.mjs';
-import { sendKnowledgeExtractionProgressViaWebSocket } from './knowledgeHandler.mjs';
-import { SessionContext } from '@typeagent/agent-sdk';
-import { BrowserActionContext } from '../browserActions.mjs';
+import {
+    knowledgeProgressEvents,
+    KnowledgeExtractionProgressEvent,
+} from "./knowledgeProgressEvents.mjs";
+import { sendKnowledgeExtractionProgressViaWebSocket } from "./knowledgeHandler.mjs";
+import { SessionContext } from "@typeagent/agent-sdk";
+import { BrowserActionContext } from "../browserActions.mjs";
 
 export class KnowledgeWebSocketBridge {
     private context: SessionContext<BrowserActionContext>;
@@ -16,12 +19,16 @@ export class KnowledgeWebSocketBridge {
 
     private setupEventListeners() {
         // Subscribe to all progress events and forward via WebSocket
-        knowledgeProgressEvents.onProgress((progress: KnowledgeExtractionProgressEvent) => {
-            this.forwardProgressToWebSocket(progress);
-        });
+        knowledgeProgressEvents.onProgress(
+            (progress: KnowledgeExtractionProgressEvent) => {
+                this.forwardProgressToWebSocket(progress);
+            },
+        );
     }
 
-    private forwardProgressToWebSocket(progress: KnowledgeExtractionProgressEvent) {
+    private forwardProgressToWebSocket(
+        progress: KnowledgeExtractionProgressEvent,
+    ) {
         // Convert event format back to original WebSocket format
         const websocketProgress = {
             extractionId: progress.extractionId,
@@ -47,7 +54,7 @@ export class KnowledgeWebSocketBridge {
     }
 
     enableForPhases(phases: string[]) {
-        phases.forEach(phase => {
+        phases.forEach((phase) => {
             knowledgeProgressEvents.onPhase(phase as any, (progress) => {
                 this.forwardProgressToWebSocket(progress);
             });
@@ -55,10 +62,11 @@ export class KnowledgeWebSocketBridge {
     }
 }
 
-
 let webSocketBridge: KnowledgeWebSocketBridge | null = null;
 
-export function initializeWebSocketBridge(context: SessionContext<BrowserActionContext>) {
+export function initializeWebSocketBridge(
+    context: SessionContext<BrowserActionContext>,
+) {
     webSocketBridge = new KnowledgeWebSocketBridge(context);
     return webSocketBridge;
 }

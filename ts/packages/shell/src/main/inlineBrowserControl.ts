@@ -53,9 +53,12 @@ export function createInlineBrowserControl(
             } else {
                 let resolvedUrl = new URL(url);
                 if (resolvedUrl.protocol === "typeagent-browser:") {
-                    resolvedUrl = shellWindow.resolveCustomProtocolUrl(resolvedUrl);
+                    resolvedUrl =
+                        shellWindow.resolveCustomProtocolUrl(resolvedUrl);
                 }
-                activeTab.webContentsView.webContents.loadURL(resolvedUrl.toString());
+                activeTab.webContentsView.webContents.loadURL(
+                    resolvedUrl.toString(),
+                );
             }
             return Promise.resolve();
         },
@@ -341,7 +344,10 @@ export function createInlineBrowserControl(
 
                 return result;
             } catch (error) {
-                console.error("Failed to get autoIndex setting from storage:", error);
+                console.error(
+                    "Failed to get autoIndex setting from storage:",
+                    error,
+                );
                 return false;
             }
         },
@@ -384,11 +390,14 @@ export function createInlineBrowserControl(
 
                 return result;
             } catch (error) {
-                console.error("Failed to get browser settings from storage:", error);
+                console.error(
+                    "Failed to get browser settings from storage:",
+                    error,
+                );
                 return {
                     autoIndexing: false,
                     indexingDelay: 3000,
-                    extractionMode: "content"
+                    extractionMode: "content",
                 };
             }
         },

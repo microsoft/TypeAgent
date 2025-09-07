@@ -310,19 +310,22 @@ contextBridge.exposeInMainWorld("electronAPI", {
         try {
             return await ipcRenderer.invoke("extension-storage-get", keys);
         } catch (error) {
-            console.error('Failed to get storage:', error);
+            console.error("Failed to get storage:", error);
             return {};
         }
     },
 
     setStorage: async (items: Record<string, any>) => {
         try {
-            const result = await ipcRenderer.invoke("extension-storage-set", items);
+            const result = await ipcRenderer.invoke(
+                "extension-storage-set",
+                items,
+            );
             if (!result.success) {
                 throw new Error(result.error || "Failed to set storage");
             }
         } catch (error) {
-            console.error('Failed to set storage:', error);
+            console.error("Failed to set storage:", error);
             throw error;
         }
     },

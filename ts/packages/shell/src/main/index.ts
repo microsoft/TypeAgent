@@ -642,7 +642,6 @@ async function initialize() {
         }
     });
 
-
     // Direct WebSocket connection check via browserIPC
     ipcMain.handle("check-websocket-connection", async () => {
         try {
@@ -664,15 +663,18 @@ async function initialize() {
         }
     });
 
-    ipcMain.handle("extension-storage-set", async (_, items: Record<string, any>) => {
-        try {
-            extensionStorage.set(items);
-            return { success: true };
-        } catch (error) {
-            debugShellError("Error setting extension storage:", error);
-            return { success: false, error: (error as Error).message };
-        }
-    });
+    ipcMain.handle(
+        "extension-storage-set",
+        async (_, items: Record<string, any>) => {
+            try {
+                extensionStorage.set(items);
+                return { success: true };
+            } catch (error) {
+                debugShellError("Error setting extension storage:", error);
+                return { success: false, error: (error as Error).message };
+            }
+        },
+    );
 
     ipcMain.handle("extension-storage-remove", async (_, keys: string[]) => {
         try {

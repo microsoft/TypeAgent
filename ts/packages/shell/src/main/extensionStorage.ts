@@ -25,7 +25,7 @@ function getExtensionStoragePath(instanceDir: string) {
 
 export class ExtensionStorageManager {
     private readonly storage: ExtensionStorageData;
-    
+
     constructor(private readonly instanceDir: string) {
         const storagePath = getExtensionStoragePath(instanceDir);
         debugShell(
@@ -34,7 +34,7 @@ export class ExtensionStorageManager {
         );
 
         this.storage = { ...defaultExtensionStorage };
-        
+
         if (existsSync(storagePath)) {
             try {
                 const existingStorage = JSON.parse(
@@ -69,7 +69,7 @@ export class ExtensionStorageManager {
                 hasChanges = true;
             }
         }
-        
+
         if (hasChanges) {
             this.save();
         }
@@ -83,7 +83,7 @@ export class ExtensionStorageManager {
                 hasChanges = true;
             }
         }
-        
+
         if (hasChanges) {
             this.save();
         }

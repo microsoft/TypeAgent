@@ -630,7 +630,10 @@ class WebsiteLibraryPanelFullPage {
 
         const saveBtn = document.getElementById("saveSettingsBtn");
         if (saveBtn) {
-            saveBtn.addEventListener("click", async () => await this.saveUserPreferences());
+            saveBtn.addEventListener(
+                "click",
+                async () => await this.saveUserPreferences(),
+            );
         }
 
         const modal = document.getElementById("settingsModal");
@@ -705,7 +708,9 @@ class WebsiteLibraryPanelFullPage {
                 await this.saveAutoIndexSetting(autoExtractKnowledge.checked);
             } catch (error) {
                 console.error("Failed to save auto-index setting:", error);
-                notificationManager.showError("Failed to save auto-indexing setting");
+                notificationManager.showError(
+                    "Failed to save auto-indexing setting",
+                );
                 return;
             }
         }
