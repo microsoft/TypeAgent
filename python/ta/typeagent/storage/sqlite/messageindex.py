@@ -3,14 +3,22 @@
 
 """SQLite-based message text index implementation."""
 
+import json
 import sqlite3
 import typing
 
-from ...aitools.embeddings import NormalizedEmbedding
+import numpy as np
+
+from ...aitools.embeddings import NormalizedEmbedding, NormalizedEmbeddings
+from ...aitools.vectorbase import VectorBase
+
 from ...knowpro.convsettings import MessageTextIndexSettings
 from ...knowpro import interfaces
 from ...knowpro.textlocindex import ScoredTextLocation
+
 from ...storage.memory.messageindex import IMessageTextEmbeddingIndex
+
+from .schema import deserialize_embedding, serialize_embedding
 
 
 class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
@@ -25,116 +33,51 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
         self.db = db
         self.settings = settings
         self._message_collection = message_collection
-        # Use the embedding model from settings
-        self._embedding_model = settings.embedding_index_settings.embedding_model
-
-    async def build_embeddings_from_messages(
-        self, message_ordinal_pairs: list[tuple[int, interfaces.IMessage]]
-    ) -> None:
-        """Build embeddings for the given list of (ordinal, message) pairs."""
-        print(
-            f"DEBUG: build_embeddings_from_messages() called with {len(message_ordinal_pairs)} messages"
-        )
-        if not message_ordinal_pairs:
-            return
-
-        # Collect all text chunks that need embeddings
-        text_chunks_to_embed = []
-        for message_ordinal, message in message_ordinal_pairs:
-            for chunk_ordinal, chunk in enumerate(message.text_chunks):
-                text_chunks_to_embed.append((message_ordinal, chunk_ordinal, chunk))
-
-        if text_chunks_to_embed:
-            print(
-                f"DEBUG: Generating embeddings for {len(text_chunks_to_embed)} text chunks"
-            )
-
-            # Generate embeddings in batch for efficiency
-            texts = [chunk for _, _, chunk in text_chunks_to_embed]
-            embeddings = await self._embedding_model.get_embeddings(texts)
-
-            # Store in SQLite
-            from ..sqlite.schema import serialize_embedding
-
+        self._vectorbase = VectorBase(settings=settings.embedding_index_settings)
+        if self._size():
             cursor = self.db.cursor()
-            for (msg_id, chunk_ordinal, text), embedding in zip(
-                text_chunks_to_embed, embeddings
-            ):
-                cursor.execute(
-                    """
-                    INSERT OR REPLACE INTO MessageTextIndex
-                    (msg_id, chunk_ordinal, text_content, embedding)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    (msg_id, chunk_ordinal, text, serialize_embedding(embedding)),
-                )
-
-            print(
-                f"DEBUG: Stored {len(text_chunks_to_embed)} text chunks with embeddings"
-            )
+            cursor.execute("SELECT embedding FROM MessageTextIndex")
+            for row in cursor.fetchall():
+                self._vectorbase.add_embedding(None, deserialize_embedding(row[0]))
 
     async def size(self) -> int:
+        return self._size()
+
+    def _size(self) -> int:
         cursor = self.db.cursor()
         cursor.execute("SELECT COUNT(*) FROM MessageTextIndex")
         return cursor.fetchone()[0]
 
     async def add_messages_starting_at(
         self,
-        start_ordinal: int,
+        start_message_ordinal: int,
         messages: list[interfaces.IMessage],
     ) -> None:
         """Add messages to the text index starting at the given ordinal."""
-        text_chunks_to_embed = []
+        chunks_to_embed: list[tuple[int, int, str]] = []
+        for msg_ord, message in enumerate(messages, start_message_ordinal):
+            for chunk_ord, chunk in enumerate(message.text_chunks):
+                chunks_to_embed.append((msg_ord, chunk_ord, chunk))
 
-        # Prepare all text chunk data for bulk insertion
-        text_insertion_data = []
-        for i, message in enumerate(messages):
-            message_ordinal = start_ordinal + i
-            for chunk_ordinal, chunk in enumerate(message.text_chunks):
-                text_insertion_data.append(
-                    (message_ordinal, chunk_ordinal, chunk, None)
-                )
-                text_chunks_to_embed.append((message_ordinal, chunk_ordinal, chunk))
+        embeddings = await self._vectorbase.get_embeddings(
+            [chunk for _, _, chunk in chunks_to_embed], cache=False
+        )
+
+        insertion_data: list[tuple[int, int, bytes]] = []
+        for (msg_ord, chunk_ord, _), embedding in zip(chunks_to_embed, embeddings):
+            insertion_data.append((msg_ord, chunk_ord, serialize_embedding(embedding)))
 
         # Bulk insert text chunks (without embeddings yet)
         cursor = self.db.cursor()
-        if text_insertion_data:
+        if insertion_data:
             cursor.executemany(
                 """
-                INSERT OR REPLACE INTO MessageTextIndex
-                (msg_id, chunk_ordinal, text_content, embedding)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO MessageTextIndex
+                (msg_id, chunk_ordinal, embedding)
+                VALUES (?, ?, ?)
                 """,
-                text_insertion_data,
+                insertion_data,
             )
-
-        # Generate and store embeddings
-        if text_chunks_to_embed:
-            texts = [chunk for _, _, chunk in text_chunks_to_embed]
-            embeddings = await self._embedding_model.get_embeddings(texts)
-
-            from ..sqlite.schema import serialize_embedding
-
-            # Prepare embedding update data for bulk operation
-            embedding_update_data = []
-            for (msg_id, chunk_ordinal, text), embedding in zip(
-                text_chunks_to_embed, embeddings
-            ):
-                embedding_update_data.append(
-                    (serialize_embedding(embedding), msg_id, chunk_ordinal)
-                )
-
-            # Bulk update embeddings
-            cursor = self.db.cursor()
-            if embedding_update_data:
-                cursor.executemany(
-                    """
-                    UPDATE MessageTextIndex
-                    SET embedding = ?
-                    WHERE msg_id = ? AND chunk_ordinal = ?
-                    """,
-                    embedding_update_data,
-                )
 
     async def add_messages(
         self,
@@ -146,10 +89,7 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
             return
 
         # Get the current collection size to determine starting ordinal
-        if self._message_collection is not None:
-            start_ordinal = await self._message_collection.size() - len(message_list)
-        else:
-            start_ordinal = 0
+        start_ordinal = await self.size()
 
         await self.add_messages_starting_at(start_ordinal, message_list)
 
@@ -158,15 +98,13 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
         if self._message_collection is None:
             return
 
-        print("DEBUG: Rebuilding message text index from all messages...")
-
         # Clear existing index
         await self.clear()
 
         # Add all messages with their ordinals
-        message_list = []
-        async for message in self._message_collection:
-            message_list.append(message)
+        message_list = await self._message_collection.get_slice(
+            0, await self._message_collection.size()
+        )
 
         if message_list:
             await self.add_messages_starting_at(0, message_list)
@@ -176,18 +114,15 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
     async def lookup_text(
         self, text: str, max_matches: int | None = None, min_score: float | None = None
     ) -> list[ScoredTextLocation]:
-        """Look up text using embeddings stored in SQLite."""
+        """Look up text using VectorBase."""
         # Generate embedding for the search text
-        search_embedding = await self._embedding_model.get_embedding(text)
+        search_embedding = await self._vectorbase.get_embedding(text)
 
         # Get all stored embeddings and compute similarity
         cursor = self.db.cursor()
         cursor.execute(
             "SELECT msg_id, chunk_ordinal, embedding FROM MessageTextIndex WHERE embedding IS NOT NULL"
         )
-
-        from ..sqlite.schema import deserialize_embedding
-        import numpy as np
 
         scored_locations = []
         for row in cursor.fetchall():
@@ -271,9 +206,9 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
 
         return filtered_matches
 
-    async def generate_embedding(self, text: str) -> NormalizedEmbedding:
-        """Generate an embedding for the given text."""
-        return await self._embedding_model.get_embedding(text)
+    # async def generate_embedding(self, text: str) -> NormalizedEmbedding:
+    #     """Generate an embedding for the given text."""
+    #     return await self._vectorbase.get_embedding(text)
 
     def lookup_by_embedding(
         self,
@@ -351,7 +286,7 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
         cursor = self.db.cursor()
         cursor.execute(
             """
-            SELECT msg_id, chunk_ordinal, text_content, embedding
+            SELECT msg_id, chunk_ordinal, embedding
             FROM MessageTextIndex
             ORDER BY msg_id, chunk_ordinal
         """
@@ -364,7 +299,7 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
         from ..sqlite.schema import deserialize_embedding
         from ...knowpro.interfaces import TextLocationData, TextToTextLocationIndexData
 
-        for msg_id, chunk_ordinal, text_content, embedding_blob in cursor.fetchall():
+        for msg_id, chunk_ordinal, embedding_blob in cursor.fetchall():
             # Create text location data
             text_location = TextLocationData(
                 messageOrdinal=msg_id, chunkOrdinal=chunk_ordinal
@@ -408,64 +343,35 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
             return
 
         text_locations = index_data.get("textLocations", [])
-        embeddings = index_data.get("embeddings")
-
         if not text_locations:
             return
 
-        # Prepare data for insertion
-        from ..sqlite.schema import serialize_embedding
-
-        # Get all unique message IDs and load their chunks in one query
-        message_ids = set(location["messageOrdinal"] for location in text_locations)
-        message_chunks = {}
-
-        if message_ids:
-            placeholders = ",".join("?" * len(message_ids))
-            cursor.execute(
-                f"SELECT msg_id, chunks FROM Messages WHERE msg_id IN ({placeholders})",
-                list(message_ids),
-            )
-
-            for msg_id, chunks_json in cursor.fetchall():
-                if chunks_json:
-                    import json
-
-                    chunks = json.loads(chunks_json)
-                    message_chunks[msg_id] = chunks
+        embeddings = index_data.get("embeddings")
+        if embeddings is None:
+            return
 
         # Prepare all insertion data for bulk operation
-        insertion_data = []
-        for i, text_location in enumerate(text_locations):
+        insertion_data: list[tuple[int, int, bytes]] = []
+        for text_location, embedding in zip(text_locations, embeddings, strict=True):
             msg_id = text_location["messageOrdinal"]
             chunk_ordinal = text_location["chunkOrdinal"]
-
-            # Get the text content from our cached chunks
-            chunks = message_chunks.get(msg_id, [])
-            if chunk_ordinal < len(chunks):
-                text_content = chunks[chunk_ordinal]
-            else:
-                continue  # Skip if chunk doesn't exist
-
-            # Get embedding if available
-            embedding_blob = None
-            if embeddings is not None and i < len(embeddings):
-                embedding = embeddings[i]
-                if embedding is not None:
-                    embedding_blob = serialize_embedding(embedding)
-
-            insertion_data.append((msg_id, chunk_ordinal, text_content, embedding_blob))
+            assert embedding is not None
+            embedding_blob = serialize_embedding(embedding)
+            insertion_data.append((msg_id, chunk_ordinal, embedding_blob))
 
         # Bulk insert all the data
         if insertion_data:
             cursor.executemany(
                 """
                 INSERT INTO MessageTextIndex
-                (msg_id, chunk_ordinal, text_content, embedding)
-                VALUES (?, ?, ?, ?)
+                (msg_id, chunk_ordinal, embedding)
+                VALUES (?, ?, ?)
                 """,
                 insertion_data,
             )
+
+        # Update VectorBase
+        self._vectorbase.add_embeddings(embeddings)
 
     async def clear(self) -> None:
         """Clear the message text index."""

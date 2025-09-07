@@ -86,13 +86,13 @@ class MessageTextIndex(IMessageTextEmbeddingIndex):
 
     async def add_messages_starting_at(
         self,
-        start_ordinal: int,
+        start_message_ordinal: int,
         messages: list[IMessage],
     ) -> None:
         """Add messages to the index starting at the given ordinal."""
         all_chunks: list[tuple[str, TextLocation]] = []
         for idx, message in enumerate(messages):
-            msg_ord = start_ordinal + idx
+            msg_ord = start_message_ordinal + idx
             for chunk_ord, chunk in enumerate(message.text_chunks):
                 all_chunks.append((chunk, TextLocation(msg_ord, chunk_ord)))
         await self.text_location_index.add_text_locations(all_chunks)

@@ -10,6 +10,8 @@ import typing
 import numpy as np
 from numpy.typing import NDArray
 
+from ...aitools.embeddings import NormalizedEmbedding
+
 # Constants
 CONVERSATION_SCHEMA_VERSION = "0.1"
 
@@ -73,8 +75,7 @@ MESSAGE_TEXT_INDEX_SCHEMA = """
 CREATE TABLE IF NOT EXISTS MessageTextIndex (
     msg_id INTEGER NOT NULL,
     chunk_ordinal INTEGER NOT NULL,
-    text_content TEXT NOT NULL,           -- The text content for this chunk
-    embedding BLOB NULL,                  -- Serialized embedding (numpy array as bytes)
+    embedding BLOB NOT NULL,        -- Serialized embedding (numpy array as bytes)
 
     PRIMARY KEY (msg_id, chunk_ordinal),
     FOREIGN KEY (msg_id) REFERENCES Messages(msg_id) ON DELETE CASCADE
@@ -172,35 +173,30 @@ class ConversationMetadata:
     extra: dict[str, typing.Any]
 
 
-def _datetime_to_utc_string(dt: datetime) -> str:
-    """Convert datetime to UTC ISO string. Assumes local timezone if naive."""
-    if dt.tzinfo is None:
-        # Assume local timezone
-        dt = dt.replace(tzinfo=datetime.now().astimezone().tzinfo)
-    return dt.astimezone(timezone.utc).isoformat()
-
-
-def _string_to_utc_datetime(s: str) -> datetime:
-    """Convert ISO string to UTC datetime."""
-    return datetime.fromisoformat(s).replace(tzinfo=timezone.utc)
-
-
 @typing.overload
-def serialize_embedding(embedding: NDArray[np.float32]) -> bytes: ...
+def serialize_embedding(embedding: NormalizedEmbedding) -> bytes: ...
 
 
 @typing.overload
 def serialize_embedding(embedding: None) -> None: ...
 
 
-def serialize_embedding(embedding: NDArray[np.float32] | None) -> bytes | None:
+def serialize_embedding(embedding: NormalizedEmbedding | None) -> bytes | None:
     """Serialize a numpy embedding array to bytes for SQLite storage."""
     if embedding is None:
         return None
     return embedding.tobytes()
 
 
-def deserialize_embedding(blob: bytes | None) -> NDArray[np.float32] | None:
+@typing.overload
+def deserialize_embedding(blob: bytes) -> NormalizedEmbedding: ...
+
+
+@typing.overload
+def deserialize_embedding(blob: None) -> None: ...
+
+
+def deserialize_embedding(blob: bytes | None) -> NormalizedEmbedding | None:
     """Deserialize bytes back to numpy embedding array."""
     if blob is None:
         return None

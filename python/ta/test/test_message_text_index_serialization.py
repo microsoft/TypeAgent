@@ -3,6 +3,8 @@
 import pytest
 import sqlite3
 
+import numpy as np
+
 from typeagent.storage.sqlite.messageindex import SqliteMessageTextIndex
 from typeagent.storage.sqlite.schema import init_db_schema
 from typeagent.knowpro.convsettings import (
@@ -59,21 +61,24 @@ class TestMessageTextIndexSerialization:
         cursor = sqlite_db.cursor()
         cursor.execute(
             """
-            INSERT INTO MessageTextIndex (msg_id, chunk_ordinal, text_content, embedding)
-            VALUES (1, 0, 'First test message', NULL)
-            """
+            INSERT INTO MessageTextIndex (msg_id, chunk_ordinal, embedding)
+            VALUES (1, 0, ?)
+            """,
+            [np.array([0.1, 0.2, 0.3], dtype=np.float32).tobytes()],
         )
         cursor.execute(
             """
-            INSERT INTO MessageTextIndex (msg_id, chunk_ordinal, text_content, embedding)
-            VALUES (1, 1, 'Second chunk', NULL)
-            """
+            INSERT INTO MessageTextIndex (msg_id, chunk_ordinal, embedding)
+            VALUES (1, 1, ?)
+            """,
+            [np.array([0.4, 0.5, 0.6], dtype=np.float32).tobytes()],
         )
         cursor.execute(
             """
-            INSERT INTO MessageTextIndex (msg_id, chunk_ordinal, text_content, embedding)
-            VALUES (2, 0, 'Another message', NULL)
-            """
+            INSERT INTO MessageTextIndex (msg_id, chunk_ordinal, embedding)
+            VALUES (2, 0, ?)
+            """,
+            [np.array([0.7, 0.8, 0.9], dtype=np.float32).tobytes()],
         )
         sqlite_db.commit()
 
@@ -131,7 +136,10 @@ class TestMessageTextIndexSerialization:
                     {"messageOrdinal": 1, "chunkOrdinal": 1},
                     {"messageOrdinal": 2, "chunkOrdinal": 0},
                 ],
-                embeddings=None,
+                embeddings=np.array(
+                    [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]],
+                    dtype=np.float32,
+                ),
             )
         }
 
@@ -148,14 +156,14 @@ class TestMessageTextIndexSerialization:
         # Verify the actual data in the database
         cursor = sqlite_db.cursor()
         cursor.execute(
-            "SELECT msg_id, chunk_ordinal, text_content FROM MessageTextIndex ORDER BY msg_id, chunk_ordinal"
+            "SELECT msg_id, chunk_ordinal FROM MessageTextIndex ORDER BY msg_id, chunk_ordinal"
         )
 
         rows = cursor.fetchall()
         expected_rows = [
-            (1, 0, "First test message"),
-            (1, 1, "Second chunk"),
-            (2, 0, "Another message"),
+            (1, 0),
+            (1, 1),
+            (2, 0),
         ]
 
         assert rows == expected_rows

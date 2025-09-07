@@ -175,6 +175,8 @@ class AsyncEmbeddingModel:
             result = np.array(fake_data, dtype=np.float32)
             return result
         else:
+            # TODO: Split in batches of 2048 inputs if too long;
+            # or smaller if inputs are large.
             data = (
                 await self.async_client.embeddings.create(
                     input=input,

@@ -108,7 +108,7 @@ class SqliteStorageProvider[TMessage: interfaces.IMessage](
         self._message_collection.set_message_text_index(self._message_text_index)
 
     async def initialize(self) -> None:
-        """Async initialization - rebuild indexes if needed."""
+        """Async initialization - rebuild indexes if needed."""  # TODO: SHOULD NEVER BE NEEDED
         # If there are existing messages but no embeddings, rebuild the embeddings
         # This handles the case where an existing database is loaded
         existing_messages = await self._message_collection.size()

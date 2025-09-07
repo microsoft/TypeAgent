@@ -502,7 +502,7 @@ class IMessageTextIndex[TMessage: IMessage](Protocol):
 
     async def add_messages_starting_at(
         self,
-        start_ordinal: int,
+        start_message_ordinal: int,
         messages: list[TMessage],
     ) -> None: ...
 
