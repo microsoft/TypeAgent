@@ -23,10 +23,10 @@ from typeagent.knowpro.interfaces import (
     TermsToRelatedTermsDataItem,
     TermToRelatedTermsData,
 )
-from typeagent.storage.sqlite.indexes import (
-    SqliteTermToSemanticRefIndex,
-    SqlitePropertyIndex,
-    SqliteTimestampToTextRangeIndex,
+from typeagent.storage.sqlite.semrefindex import SqliteTermToSemanticRefIndex
+from typeagent.storage.sqlite.propindex import SqlitePropertyIndex
+from typeagent.storage.sqlite.timestampindex import SqliteTimestampToTextRangeIndex
+from typeagent.storage.sqlite.reltermsindex import (
     SqliteRelatedTermsAliases,
     SqliteRelatedTermsFuzzy,
     SqliteRelatedTermsIndex,

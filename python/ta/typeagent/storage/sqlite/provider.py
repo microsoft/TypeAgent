@@ -9,13 +9,11 @@ import sqlite3
 from ...knowpro import interfaces
 from ...knowpro.convsettings import MessageTextIndexSettings, RelatedTermIndexSettings
 from .collections import SqliteMessageCollection, SqliteSemanticRefCollection
-from .indexes import (
-    SqliteMessageTextIndex,
-    SqlitePropertyIndex,
-    SqliteRelatedTermsIndex,
-    SqliteTermToSemanticRefIndex,
-    SqliteTimestampToTextRangeIndex,
-)
+from .messageindex import SqliteMessageTextIndex
+from .propindex import SqlitePropertyIndex
+from .reltermsindex import SqliteRelatedTermsIndex
+from .semrefindex import SqliteTermToSemanticRefIndex
+from .timestampindex import SqliteTimestampToTextRangeIndex
 from .schema import (
     CONVERSATIONS_SCHEMA,
     MESSAGE_TEXT_INDEX_SCHEMA,

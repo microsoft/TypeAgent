@@ -20,13 +20,13 @@ from typeagent.knowpro.interfaces import (
     Topic,
     Term,
 )
-from typeagent.storage.sqlite.indexes import (
-    SqliteTermToSemanticRefIndex,
-    SqlitePropertyIndex,
+from typeagent.storage.sqlite.semrefindex import SqliteTermToSemanticRefIndex
+from typeagent.storage.sqlite.propindex import SqlitePropertyIndex
+from typeagent.storage.sqlite.reltermsindex import (
     SqliteRelatedTermsAliases,
     SqliteRelatedTermsFuzzy,
-    SqliteMessageTextIndex,
 )
+from typeagent.storage.sqlite.messageindex import SqliteMessageTextIndex
 from typeagent.storage.sqlite.schema import init_db_schema
 from typeagent.knowpro.convsettings import MessageTextIndexSettings
 

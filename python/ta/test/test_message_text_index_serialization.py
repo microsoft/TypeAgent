@@ -3,7 +3,7 @@
 import pytest
 import sqlite3
 
-from typeagent.storage.sqlite.indexes import SqliteMessageTextIndex
+from typeagent.storage.sqlite.messageindex import SqliteMessageTextIndex
 from typeagent.storage.sqlite.schema import init_db_schema
 from typeagent.knowpro.convsettings import (
     MessageTextIndexSettings,
