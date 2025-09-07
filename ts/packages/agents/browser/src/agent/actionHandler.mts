@@ -10,6 +10,8 @@ import {
     AppAgent,
     AppAgentEvent,
     AppAgentInitSettings,
+    DisplayType,
+    DynamicDisplay,
     ParsedCommandParams,
     ResolveEntityResult,
     SessionContext,
@@ -122,10 +124,21 @@ const debug = registerDebug("typeagent:browser:action");
 const debugWebSocket = registerDebug("typeagent:browser:ws");
 
 // Knowledge extraction progress tracking
+interface ProgressState {
+    phase: "initializing" | "content" | "basic" | "summary" | "analyzing" | "extracting" | "complete" | "error";
+    percentage: number;
+    currentItem?: string;
+    startTime: number;
+    lastUpdate: number;
+    errors?: any[];
+}
+
 interface ActiveKnowledgeExtraction {
     extractionId: string;
     url?: string;
     actionIO?: ActionIO;
+    dynamicDisplayId?: string; // NEW: For dynamic display tracking
+    progressState?: ProgressState; // NEW: Enhanced progress tracking
     aggregatedKnowledge: {
         entities: any[];
         topics: any[];
@@ -151,6 +164,52 @@ function deduplicateKnowledge(existing: any[], incoming: any[], keyField: string
     });
     
     return [...existing, ...newItems];
+}
+
+// Helper function to update progress state in a consistent way
+function updateExtractionProgressState(
+    activeExtraction: ActiveKnowledgeExtraction, 
+    progress: any
+): void {
+    if (!activeExtraction.progressState) {
+        // Initialize progress state if it doesn't exist
+        activeExtraction.progressState = {
+            phase: "initializing",
+            percentage: 0,
+            startTime: Date.now(),
+            lastUpdate: Date.now(),
+            errors: []
+        };
+    }
+
+    // Calculate percentage based on phase and processed items
+    let percentage = 0;
+    if (progress.totalItems && progress.totalItems > 0) {
+        percentage = Math.round((progress.processedItems / progress.totalItems) * 100);
+    } else {
+        // Fallback percentage based on phase
+        const phasePercentages: Record<string, number> = {
+            "initializing": 5,
+            "content": 15,
+            "basic": 30,
+            "summary": 50,
+            "analyzing": 75,
+            "extracting": 90,
+            "complete": 100,
+            "error": 0
+        };
+        percentage = phasePercentages[progress.phase] || 50;
+    }
+
+    // Update progress state
+    activeExtraction.progressState.phase = progress.phase || "analyzing";
+    activeExtraction.progressState.percentage = Math.min(100, Math.max(0, percentage));
+    activeExtraction.progressState.currentItem = progress.currentItem;
+    activeExtraction.progressState.lastUpdate = Date.now();
+    
+    if (progress.errors && progress.errors.length > 0) {
+        activeExtraction.progressState.errors = progress.errors;
+    }
 }
 
 
@@ -214,12 +273,193 @@ function generateDetailedKnowledgeCards(knowledgeResult: any): string {
     return html;
 }
 
+// Dynamic knowledge display HTML generation functions
+function getPhaseIcon(phase: string): string {
+    switch (phase) {
+        case "initializing": return "🔄";
+        case "content": return "📄";
+        case "basic": return "📋";
+        case "summary": return "📝";
+        case "analyzing": return "🔍";
+        case "extracting": return "🧠";
+        case "complete": return "✅";
+        case "error": return "❌";
+        default: return "⏳";
+    }
+}
+
+function getPhaseDescription(phase: string): string {
+    switch (phase) {
+        case "initializing": return "Initializing extraction";
+        case "content": return "Retrieving page content";
+        case "basic": return "Analyzing basic information";
+        case "summary": return "Generating summary";
+        case "analyzing": return "Analyzing entities and topics";
+        case "extracting": return "Extracting relationships";
+        case "complete": return "Extraction complete";
+        case "error": return "Extraction failed";
+        default: return "Processing";
+    }
+}
+
+
+function generateLiveKnowledgePreview(
+    aggregatedKnowledge: { entities: any[]; topics: any[]; relationships: any[] }, 
+    phase: string
+): string {
+    const { entities, topics, relationships } = aggregatedKnowledge;
+    const hasKnowledge = entities.length > 0 || topics.length > 0 || relationships.length > 0;
+    
+    if (!hasKnowledge && phase !== "complete") {
+        return `
+        <div style="text-align: center; padding: 20px; color: #6c757d; font-style: italic;">
+            <div style="font-size: 14px;">Analyzing page content...</div>
+            <div style="font-size: 12px; margin-top: 4px;">Knowledge will appear as it's discovered</div>
+        </div>`;
+    }
+    
+    return `
+    <!-- Entities Section -->
+    <div class="knowledge-section" style="margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; margin-bottom: 8px;">
+            <span style="margin-right: 6px;">🏷️</span>
+            <span style="font-weight: 600; color: #495057; font-size: 14px;">Entities</span>
+            <span style="background: #e3f2fd; color: #1976d2; padding: 2px 6px; border-radius: 10px; font-size: 11px; font-weight: bold; margin-left: 6px;">${entities.length}</span>
+        </div>
+        <div style="max-height: 120px; overflow-y: auto;">
+            ${entities.length === 0 ? 
+                `<div style="color: #6c757d; font-size: 12px; font-style: italic;">None discovered yet</div>` :
+                entities.slice(0, 15).map(entity => 
+                    `<span style="display: inline-block; background: #e3f2fd; color: #1976d2; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; margin: 2px;">${entity.name || entity}</span>`
+                ).join('')
+            }
+            ${entities.length > 15 ? 
+                `<div style="color: #6c757d; font-size: 11px; margin-top: 4px;">+${entities.length - 15} more...</div>` : 
+                ''
+            }
+        </div>
+    </div>
+        
+    <!-- Topics Section -->
+    <div class="knowledge-section" style="margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; margin-bottom: 8px;">
+            <span style="margin-right: 6px;">📋</span>
+            <span style="font-weight: 600; color: #495057; font-size: 14px;">Topics</span>
+            <span style="background: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 10px; font-size: 11px; font-weight: bold; margin-left: 6px;">${topics.length}</span>
+        </div>
+        <div style="max-height: 120px; overflow-y: auto;">
+            ${topics.length === 0 ? 
+                `<div style="color: #6c757d; font-size: 12px; font-style: italic;">None discovered yet</div>` :
+                topics.slice(0, 12).map(topic => 
+                    `<span style="display: inline-block; background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; margin: 2px;">${topic.name || topic}</span>`
+                ).join('')
+            }
+            ${topics.length > 12 ? 
+                `<div style="color: #6c757d; font-size: 11px; margin-top: 4px;">+${topics.length - 12} more...</div>` : 
+                ''
+            }
+        </div>
+    </div>
+    
+    <!-- Relationships Section -->
+    ${relationships.length > 0 ? `
+    <div class="knowledge-section" style="margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; margin-bottom: 8px;">
+            <span style="margin-right: 6px;">🔗</span>
+            <span style="font-weight: 600; color: #495057; font-size: 14px;">Relationships</span>
+            <span style="background: #e8f5e8; color: #2e7d2e; padding: 2px 6px; border-radius: 10px; font-size: 11px; font-weight: bold; margin-left: 6px;">${relationships.length}</span>
+        </div>
+        <div style="max-height: 80px; overflow-y: auto;">
+            ${relationships.slice(0, 5).map(rel => 
+                `<div style="font-size: 12px; color: #6c757d; margin: 2px 0; padding: 2px 0;">${rel.source || rel.from} → ${rel.target || rel.to}</div>`
+            ).join('')}
+            ${relationships.length > 5 ? 
+                `<div style="color: #6c757d; font-size: 11px;">+${relationships.length - 5} more relationships</div>` : 
+                ''
+            }
+        </div>
+    </div>` : ''}`;
+}
+
+function generateDynamicKnowledgeHtml(
+    progressState: ProgressState, 
+    aggregatedKnowledge: { entities: any[]; topics: any[]; relationships: any[] }
+): string {
+    const { phase, currentItem } = progressState;
+    
+    return `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px;">
+        <!-- Status Card -->
+        <div style="margin: 8px 0; padding: 12px; background: #f8f9fa; border-left: 4px solid #007bff; border-radius: 4px; margin-bottom: 16px;">
+            <div style="display: flex; align-items: center;">
+                <div style="margin-right: 8px; font-size: 16px;">${getPhaseIcon(phase)}</div>
+                <div style="flex-grow: 1;">
+                    <div style="font-weight: 600; color: #495057;">Knowledge Extraction</div>
+                    <div style="font-size: 13px; color: #6c757d; margin-top: 2px;">${getPhaseDescription(phase)}</div>
+                </div>
+            </div>
+            ${currentItem ? `
+            <div style="margin-top: 6px; font-size: 12px; color: #6c757d; font-style: italic;">
+                ${currentItem.length > 60 ? currentItem.substring(0, 60) + '...' : currentItem}
+            </div>` : ''}
+        </div>
+
+        <!-- Live Knowledge Preview -->
+        ${generateLiveKnowledgePreview(aggregatedKnowledge, phase)}
+        
+        
+        ${phase === "error" ? `
+        <div style="background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 8px; padding: 12px; margin-top: 16px;">
+            <div style="color: #721c24; font-weight: bold;">❌ Knowledge Extraction Failed</div>
+        </div>` : ''}
+    </div>`;
+}
+
+// getDynamicDisplay implementation for browser agent
+async function getDynamicDisplayImpl(
+    type: DisplayType,
+    dynamicDisplayId: string,
+    context: SessionContext<BrowserActionContext>
+): Promise<DynamicDisplay> {
+    // Handle knowledge extraction dynamic displays
+    if (dynamicDisplayId.startsWith('knowledge-extraction-')) {
+        const extractionId = dynamicDisplayId.replace('knowledge-extraction-', '');
+        const activeExtraction = activeKnowledgeExtractions.get(extractionId);
+        
+        if (!activeExtraction || !activeExtraction.progressState) {
+            return {
+                content: { 
+                    type: "html", 
+                    content: `<div style="color: #6c757d; font-style: italic;">Knowledge extraction not found or not started</div>` 
+                },
+                nextRefreshMs: -1
+            };
+        }
+
+        const { progressState, aggregatedKnowledge } = activeExtraction;
+        
+        // Generate rich, dynamic HTML content
+        const dynamicHtml = generateDynamicKnowledgeHtml(progressState, aggregatedKnowledge);
+        
+        // Determine if we should continue refreshing
+        const isComplete = progressState.phase === "complete" || progressState.phase === "error";
+        
+        return {
+            content: { type: "html", content: dynamicHtml },
+            nextRefreshMs: isComplete ? -1 : 1500 // Stop refreshing when complete, otherwise refresh every 1.5 seconds
+        };
+    }
+    
+    throw new Error(`Unknown dynamic display ID: ${dynamicDisplayId}`);
+}
+
 export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeBrowserContext,
         updateAgentContext: updateBrowserContext,
         executeAction: executeBrowserAction,
         resolveEntity,
+        getDynamicDisplay: getDynamicDisplayImpl,
         ...getCommandInterface(handlers),
     };
 }
@@ -446,76 +686,11 @@ async function handleKnowledgeExtractionProgress(
         }
     }
     
-    // Generate phase-specific display message
-    const aggregated = activeExtraction.aggregatedKnowledge;
-    const entitiesCount = aggregated.entities.length;
-    const topicsCount = aggregated.topics.length;
-    const relationshipsCount = aggregated.relationships.length;
+    // Update progress state using helper function
+    updateExtractionProgressState(activeExtraction, progress);
     
-    let phaseIcon = "🔄";
-    let phaseName = "Processing";
-    let phaseColor = "#007bff";
-    let backgroundColor = "#f8f9fa";
-    
-    switch (progress.phase) {
-        case "content":
-            phaseIcon = "📄";
-            phaseName = "Content Analysis";
-            break;
-        case "basic":
-            phaseIcon = "🔍";
-            phaseName = "Basic Extraction";
-            break;
-        case "summary":
-            phaseIcon = "📝";
-            phaseName = "Summary Generation";
-            break;
-        case "analyzing":
-            phaseIcon = "🧠";
-            phaseName = "Deep Analysis";
-            break;
-        case "extracting":
-            phaseIcon = "⚡";
-            phaseName = "Knowledge Extraction";
-            break;
-        case "complete":
-            phaseIcon = "✅";
-            phaseName = "Extraction Complete";
-            phaseColor = "#28a745";
-            backgroundColor = "#d4edda";
-            break;
-        case "error":
-            phaseIcon = "❌";
-            phaseName = "Extraction Error";
-            phaseColor = "#dc3545";
-            backgroundColor = "#f8d7da";
-            break;
-    }
-    
-    // Create progress message with aggregated knowledge
-    const progressHtml = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: ${backgroundColor}; border-left: 4px solid ${phaseColor}; border-radius: 4px;">
-        <div style="font-weight: 600; color: ${phaseColor === '#28a745' ? '#155724' : phaseColor === '#dc3545' ? '#721c24' : '#495057'};">
-            ${phaseIcon} ${phaseName}
-        </div>
-        <div style="font-size: 13px; color: ${phaseColor === '#28a745' ? '#155724' : phaseColor === '#dc3545' ? '#721c24' : '#6c757d'}; margin-top: 4px;">
-            ${progress.currentItem || `Phase ${progress.processedItems}/${progress.totalItems}`}
-        </div>
-        <div style="font-size: 13px; color: ${phaseColor === '#28a745' ? '#155724' : phaseColor === '#dc3545' ? '#721c24' : '#6c757d'}; margin-top: 4px;">
-            Discovered so far: ${entitiesCount} entities, ${topicsCount} topics, ${relationshipsCount} relationships
-        </div>
-        ${(entitiesCount > 0 || topicsCount > 0 || relationshipsCount > 0) ? 
-            generateDetailedKnowledgeCards(aggregated) : ''
-        }
-    </div>`;
-    
-    // Append progress update to display
-    if (activeExtraction.actionIO) {
-        activeExtraction.actionIO.appendDisplay({
-            type: "html",
-            content: progressHtml
-        }, "block");
-    }
+    // Note: Visual updates are now handled automatically by the dynamic display system
+    // The getDynamicDisplay method will be called periodically to generate the HTML
     
     // Clean up completed extractions after a delay
     if (progress.phase === "complete" || progress.phase === "error") {
@@ -1153,77 +1328,11 @@ async function handleKnowledgeExtractionProgressFromEvent(
         }
     }
     
-    // Generate and display progress HTML
-    const aggregated = activeExtraction.aggregatedKnowledge;
-    const entitiesCount = aggregated.entities.length;
-    const topicsCount = aggregated.topics.length;
-    const relationshipsCount = aggregated.relationships.length;
+    // Update progress state using helper function
+    updateExtractionProgressState(activeExtraction, progress);
     
-    // Generate phase-specific display message
-    let phaseIcon = "🔄";
-    let phaseName = "Processing";
-    let phaseColor = "#007bff";
-    let backgroundColor = "#f8f9fa";
-    
-    switch (progress.phase) {
-        case "content":
-            phaseIcon = "📄";
-            phaseName = "Content Analysis";
-            break;
-        case "basic":
-            phaseIcon = "🔍";
-            phaseName = "Basic Extraction";
-            break;
-        case "summary":
-            phaseIcon = "📝";
-            phaseName = "Summary Generation";
-            break;
-        case "analyzing":
-            phaseIcon = "🧠";
-            phaseName = "Deep Analysis";
-            break;
-        case "extracting":
-            phaseIcon = "⚡";
-            phaseName = "Knowledge Extraction";
-            break;
-        case "complete":
-            phaseIcon = "✅";
-            phaseName = "Extraction Complete";
-            phaseColor = "#28a745";
-            backgroundColor = "#d4edda";
-            break;
-        case "error":
-            phaseIcon = "❌";
-            phaseName = "Extraction Error";
-            phaseColor = "#dc3545";
-            backgroundColor = "#f8d7da";
-            break;
-    }
-    
-    // Create progress message with aggregated knowledge
-    const progressHtml = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: ${backgroundColor}; border-left: 4px solid ${phaseColor}; border-radius: 4px;">
-        <div style="font-weight: 600; color: ${phaseColor === '#28a745' ? '#155724' : phaseColor === '#dc3545' ? '#721c24' : '#495057'};">
-            ${phaseIcon} ${phaseName}
-        </div>
-        <div style="font-size: 13px; color: ${phaseColor === '#28a745' ? '#155724' : phaseColor === '#dc3545' ? '#721c24' : '#6c757d'}; margin-top: 4px;">
-            ${progress.currentItem || `Phase ${progress.processedItems}/${progress.totalItems}`}
-        </div>
-        <div style="font-size: 13px; color: ${phaseColor === '#28a745' ? '#155724' : phaseColor === '#dc3545' ? '#721c24' : '#6c757d'}; margin-top: 4px;">
-            Discovered so far: ${entitiesCount} entities, ${topicsCount} topics, ${relationshipsCount} relationships
-        </div>
-        ${(entitiesCount > 0 || topicsCount > 0 || relationshipsCount > 0) ? 
-            generateDetailedKnowledgeCards(aggregated) : ''
-        }
-    </div>`;
-    
-    // Append progress update to display
-    if (activeExtraction.actionIO) {
-        activeExtraction.actionIO.appendDisplay({
-            type: "html",
-            content: progressHtml
-        }, "block");
-    }
+    // Note: Visual updates are now handled automatically by the dynamic display system
+    // The getDynamicDisplay method will be called periodically to generate the HTML
     
     activeExtraction.lastUpdateTime = Date.now();
 }
@@ -1256,11 +1365,22 @@ async function performKnowledgeExtraction(
             htmlFragments,
         };
 
-        // Register the extraction for progress tracking
+        // Set up dynamic display ID for real-time progress updates
+        const dynamicDisplayId = `knowledge-extraction-${extractionId}`;
+
+        // Register the extraction for progress tracking with enhanced state
         const activeExtraction: ActiveKnowledgeExtraction = {
             extractionId,
             url,
             actionIO: context.actionIO,
+            dynamicDisplayId,
+            progressState: {
+                phase: "initializing",
+                percentage: 0,
+                startTime: Date.now(),
+                lastUpdate: Date.now(),
+                errors: []
+            },
             aggregatedKnowledge: {
                 entities: [],
                 topics: [],
@@ -1284,19 +1404,48 @@ async function performKnowledgeExtraction(
             }, 30000);
         };
 
-        try {
-            const extractionResult = await handleKnowledgeAction(
-                "extractKnowledgeFromPageStreaming",
-                parameters,
-                context.sessionContext,
-            );
+        // Start the extraction process without awaiting (background processing)
+        handleKnowledgeAction(
+            "extractKnowledgeFromPageStreaming",
+            parameters,
+            context.sessionContext,
+        ).then(async (extractionResult) => {
+            // Update the final state when extraction completes
+            if (activeExtraction.progressState) {
+                activeExtraction.progressState.phase = "complete";
+                activeExtraction.progressState.percentage = 100;
+                activeExtraction.progressState.lastUpdate = Date.now();
+            }
+            
+            // Auto-save to index when extraction completes
+            const knowledge = extractionResult?.knowledge;
+            if (knowledge) {
+                try {
+                    await saveKnowledgeToIndex(url, knowledge, context);
+                } catch (saveError) {
+                    console.error("Failed to save knowledge to index:", saveError);
+                }
+            }
+            
+            cleanup();
+            return knowledge || null;
+        }).catch((error) => {
+            // Handle errors by updating progress state
+            if (activeExtraction.progressState) {
+                activeExtraction.progressState.phase = "error";
+                activeExtraction.progressState.lastUpdate = Date.now();
+                activeExtraction.progressState.errors = [error.message];
+            }
+            cleanup();
+            console.error("Knowledge extraction failed:", error);
+        });
 
-            cleanup();
-            return extractionResult?.knowledge || null;
-        } catch (error) {
-            cleanup();
-            throw error;
-        }
+        // Return immediately with the dynamic display information
+        return {
+            dynamicDisplayId,
+            dynamicDisplayNextRefreshMs: 1500,
+            knowledge: null // No immediate knowledge, will be populated via progress events
+        };
     } catch (error) {
         console.error("Failed to extract knowledge:", error);
         return null;
@@ -1307,6 +1456,8 @@ function createKnowledgeActionResult(
     url: string,
     knowledge: any,
     context: ActionContext<BrowserActionContext>,
+    dynamicDisplayId?: string,
+    dynamicDisplayNextRefreshMs?: number,
 ): ActionResult {
     let message = "Web page opened successfully";
 
@@ -1346,6 +1497,12 @@ function createKnowledgeActionResult(
             actionName: "closeAllWebPages",
         },
     };
+
+    // Include dynamic display information if provided
+    if (dynamicDisplayId) {
+        result.dynamicDisplayId = dynamicDisplayId;
+        result.dynamicDisplayNextRefreshMs = dynamicDisplayNextRefreshMs || 1500;
+    }
 
     return result;
 }
@@ -1418,37 +1575,35 @@ async function openWebPage(
                 );
             }
 
-            // Display extraction start message
-            context.actionIO.appendDisplay({
-                type: "html",
-                content: `
-                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #f8f9fa; border-left: 4px solid #007bff; border-radius: 4px;">
-                    <div style="font-weight: 600; color: #495057;">🧠 Starting Knowledge Extraction</div>
-                    <div style="font-size: 13px; color: #6c757d; margin-top: 4px;">Analyzing page content using ${browserSettings.extractionMode} mode...</div>
-                </div>`
-            }, "block");
+            // Note: Initial status is now shown in the dynamic display
 
-            let knowledgeResult: any = null;
             try {
                 // Extract new knowledge and save to index with progress tracking
                 // Note: Progress display is now handled by the event-based system in performKnowledgeExtraction
-                knowledgeResult = await performKnowledgeExtraction(
+                const extractionInfo = await performKnowledgeExtraction(
                     url,
                     context,
                     browserSettings.extractionMode,
                 );
 
-                // Auto-save to index when extraction completes
-                if (knowledgeResult) {
-                    await saveKnowledgeToIndex(url, knowledgeResult, context);
+                // Return immediately with dynamic display information for real-time progress
+                if (extractionInfo && extractionInfo.dynamicDisplayId) {
+                    return createKnowledgeActionResult(
+                        url, 
+                        extractionInfo.knowledge, 
+                        context, 
+                        extractionInfo.dynamicDisplayId,
+                        extractionInfo.dynamicDisplayNextRefreshMs
+                    );
                 }
+
+                // Fallback in case extraction didn't return expected format
+                return createKnowledgeActionResult(url, null, context);
 
             } catch (extractionError) {
                 console.error("Knowledge extraction failed:", extractionError);
-                knowledgeResult = null;
+                return createKnowledgeActionResult(url, null, context);
             }
-
-            return createKnowledgeActionResult(url, knowledgeResult, context);
         }
     } catch (error) {
         console.error(
