@@ -123,12 +123,9 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
         self, text: str, max_matches: int | None = None, min_score: float | None = None
     ) -> list[ScoredTextLocation]:
         """Look up text using VectorBase."""
-        # Use VectorBase for efficient fuzzy lookup
-        fuzzy_results: list[ScoredInt] = await self._vectorbase.fuzzy_lookup(
+        fuzzy_results = await self._vectorbase.fuzzy_lookup(
             text, max_hits=max_matches, min_score=min_score
         )
-
-        # Convert to scored text locations using common helper
         return self._vectorbase_lookup_to_scored_locations(fuzzy_results)
 
     def _vectorbase_lookup_to_scored_locations(
@@ -140,13 +137,10 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
         if not fuzzy_results:
             return []
 
-        # Get corresponding database entries using optimized query
+        # Fetch the rows corresponding to fuzzy_results
         cursor = self.db.cursor()
-
-        # Extract index positions and build query placeholders
         index_positions = [scored_int.item for scored_int in fuzzy_results]
         placeholders = ",".join("?" * len(index_positions))
-
         cursor.execute(
             f"""
             SELECT msg_id, chunk_ordinal, index_position
@@ -156,7 +150,6 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
             """,
             index_positions,
         )
-
         rows = cursor.fetchall()
 
         # Create a mapping from index_position to (msg_id, chunk_ordinal)
@@ -219,10 +212,7 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
         threshold_score: float | None = None,
     ) -> list[interfaces.ScoredMessageOrdinal]:
         """Look up messages by text content."""
-        # Use lookup_text to find text locations
         scored_locations = await self.lookup_text(message_text, None, threshold_score)
-
-        # Convert to message ordinals using common helper
         return self._scored_locations_to_message_ordinals(scored_locations, max_matches)
 
     async def lookup_messages_in_subset(
@@ -260,17 +250,12 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
         predicate: typing.Callable[[interfaces.MessageOrdinal], bool] | None = None,
     ) -> list[interfaces.ScoredMessageOrdinal]:
         """Look up messages by embedding using optimized VectorBase similarity search."""
-        # Get fuzzy results using the provided embedding
-        fuzzy_results: list[ScoredInt] = self._vectorbase.fuzzy_lookup_embedding(
+        fuzzy_results = self._vectorbase.fuzzy_lookup_embedding(
             text_embedding, max_hits=max_matches, min_score=threshold_score
         )
-
-        # Convert to scored text locations using common helper (with predicate filter)
         scored_locations = self._vectorbase_lookup_to_scored_locations(
             fuzzy_results, predicate
         )
-
-        # Convert to message ordinals using common helper
         return self._scored_locations_to_message_ordinals(scored_locations, max_matches)
 
     def lookup_in_subset_by_embedding(
@@ -281,7 +266,6 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
         threshold_score: float | None = None,
     ) -> list[interfaces.ScoredMessageOrdinal]:
         """Look up messages in a subset by embedding (synchronous version)."""
-        # Use the predicate version to filter by ordinals
         ordinals_set = set(ordinals_to_search)
         return self.lookup_by_embedding(
             text_embedding,
