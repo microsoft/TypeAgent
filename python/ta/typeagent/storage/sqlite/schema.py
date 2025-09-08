@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import typing
 import numpy as np
-from numpy.typing import NDArray
 
 from ...aitools.embeddings import NormalizedEmbedding
 

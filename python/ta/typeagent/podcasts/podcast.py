@@ -385,10 +385,7 @@ class Podcast(IConversation[PodcastMessage, ITermToSemanticRefIndex]):
     async def _add_synonyms(self) -> None:
         secondary_indexes = self._get_secondary_indexes()
         assert secondary_indexes.term_to_related_terms_index is not None
-        aliases = cast(
-            TermToRelatedTermsMap,
-            secondary_indexes.term_to_related_terms_index.aliases,
-        )
+        aliases = secondary_indexes.term_to_related_terms_index.aliases
         synonym_file = os.path.join(os.path.dirname(__file__), "podcastVerbs.json")
         with open(synonym_file) as f:
             data: list[dict] = json.load(f)
@@ -399,27 +396,22 @@ class Podcast(IConversation[PodcastMessage, ITermToSemanticRefIndex]):
                 if text and synonyms:
                     related_term = Term(text=text.lower())
                     for synonym in synonyms:
-                        await aliases.add_related_term(
-                            synonym.lower(),
-                            related_term,
-                        )
+                        await aliases.add_related_term(synonym.lower(), related_term)
 
     async def _collect_participant_aliases(self) -> dict[str, set[str]]:
 
         aliases: dict[str, set[str]] = {}
 
         def collect_name(participant_name: str | None):
-            if participant_name:
-                participant_name = participant_name.lower()
-                parsed_name = split_participant_name(participant_name)
-                if parsed_name and parsed_name.first_name and parsed_name.last_name:
-                    # If participant_name is a full name, associate first_name with the full name.
-                    aliases.setdefault(parsed_name.first_name, set()).add(
-                        participant_name
-                    )
-                    aliases.setdefault(participant_name, set()).add(
-                        parsed_name.first_name
-                    )
+            if not participant_name:
+                return
+            participant_name = participant_name.lower()
+            parsed_name = split_participant_name(participant_name)
+            if parsed_name and parsed_name.first_name and parsed_name.last_name:
+                # If participant_name is a full name, associate first_name with the full name.
+                aliases.setdefault(parsed_name.first_name, set()).add(participant_name)
+                # And also the reverse.
+                aliases.setdefault(participant_name, set()).add(parsed_name.first_name)
 
         async for message in self.messages:
             collect_name(message.metadata.speaker)

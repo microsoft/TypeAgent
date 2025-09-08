@@ -27,9 +27,7 @@ class SqliteRelatedTermsAliases(interfaces.ITermToRelatedTerms):
         self, text: str, related_terms: interfaces.Term | list[interfaces.Term]
     ) -> None:
         # Convert single Term to list
-        if isinstance(related_terms, str):
-            related_terms = [interfaces.Term(related_terms)]
-        elif isinstance(related_terms, interfaces.Term):
+        if isinstance(related_terms, interfaces.Term):
             related_terms = [related_terms]
 
         cursor = self.db.cursor()
