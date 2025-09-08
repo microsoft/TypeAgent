@@ -110,6 +110,7 @@ import {
 import {
     BrowserActionContext,
     getActionBrowserControl,
+    getBrowserControl,
     saveSettings,
 } from "./browserActions.mjs";
 import {
@@ -1580,6 +1581,51 @@ function createKnowledgeActionResult(
     return result;
 }
 
+/**
+ * Determines whether knowledge extraction should run for the current page
+ * based on auto-indexing settings and URL validation
+ */
+async function shouldRunKnowledgeExtraction(
+    url: string,
+    context:
+        | ActionContext<BrowserActionContext>
+        | SessionContext<BrowserActionContext>,
+): Promise<boolean> {
+    try {
+        // Check if auto-indexing is enabled
+        const browserControl =
+            "actionIO" in context
+                ? getActionBrowserControl(
+                      context as ActionContext<BrowserActionContext>,
+                  )
+                : getBrowserControl(context.agentContext);
+
+        const browserSettings = await browserControl.getBrowserSettings();
+        if (!browserSettings.autoIndexing) {
+            return false;
+        }
+
+        let parsedUrl: URL;
+        try {
+            parsedUrl = new URL(url);
+        } catch {
+            return false;
+        }
+
+        const validProtocols = ["http:", "https:"];
+        if (!validProtocols.includes(parsedUrl.protocol)) {
+            return false;
+        }
+
+        // TODO: Add domain filtering to skip indexing for specific user-configured domains
+
+        return true;
+    } catch (error) {
+        debug("Error checking if knowledge extraction should run:", error);
+        return false;
+    }
+}
+
 async function openWebPage(
     context: ActionContext<BrowserActionContext>,
     action: TypeAgentAction<OpenWebPage>,
@@ -1610,9 +1656,9 @@ async function openWebPage(
 
     // Phase 3: Settings-Aware Knowledge Extraction
     try {
-        const browserSettings = await browserControl.getBrowserSettings();
+        if (await shouldRunKnowledgeExtraction(url, context)) {
+            const browserSettings = await browserControl.getBrowserSettings();
 
-        if (browserSettings.autoIndexing) {
             // Check if knowledge already exists in index
             const existingKnowledge = await checkKnowledgeInIndex(url, context);
             if (existingKnowledge) {
