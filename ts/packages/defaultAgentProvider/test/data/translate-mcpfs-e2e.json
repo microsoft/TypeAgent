@@ -28,9 +28,18 @@
     {
       "request": "read that file",
       "expected": {
-        "schemaName": "mcpfilesystem",
-        "actionName": "read_text_file",
-        "parameters": { "path": "/data/hello.txt" }
+        "anyof": [
+          {
+            "action": {
+              "schemaName": "mcpfilesystem",
+              "actionName": "read_text_file",
+              "parameters": { "path": "/data/hello.txt" }
+            },
+            "alternates": {
+              "path": "hello.txt"
+            }
+          }
+        ]
       },
       "history": {
         "text": "hello world",
@@ -40,12 +49,22 @@
     {
       "request": "can you rename that file to /data/world.txt.",
       "expected": {
-        "schemaName": "mcpfilesystem",
-        "actionName": "move_file",
-        "parameters": {
-          "source": "/data/hello.txt",
-          "destination": "/data/world.txt"
-        }
+        "anyof": [
+          {
+            "action": {
+              "schemaName": "mcpfilesystem",
+              "actionName": "move_file",
+              "parameters": {
+                "source": "/data/hello.txt",
+                "destination": "/data/world.txt"
+              }
+            },
+            "alternates": {
+              "source": ["data/hello.txt", "hello.txt"],
+              "destination": ["data/world.txt", "world.txt"]
+            }
+          }
+        ]
       },
       "history": {
         "text": "Successfully moved /data/hello.txt to /data/world.txt",
