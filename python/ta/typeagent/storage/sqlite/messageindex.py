@@ -240,20 +240,6 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
         predicate: typing.Callable[[interfaces.MessageOrdinal], bool] | None = None,
     ) -> list[interfaces.ScoredMessageOrdinal]:
         """Look up messages by embedding using optimized VectorBase similarity search."""
-        # # Ensure index positions are populated for existing data
-        # import asyncio
-        # loop = asyncio.get_event_loop()
-        # if loop.is_running():
-        #     # If we're in an async context, we need to handle this differently
-        #     # For now, we'll use the old approach if index positions aren't populated
-        #     cursor = self.db.cursor()
-        #     cursor.execute("SELECT COUNT(*) FROM MessageTextIndex WHERE index_position IS NULL")
-        #     missing_count = cursor.fetchone()[0]
-        #     if missing_count > 0:
-        #         # Fall back to the old approach
-        #         return self._lookup_by_embedding_fallback(
-        #             text_embedding, max_matches, threshold_score, predicate
-        #         )
 
         # Get fuzzy results using the provided embedding
         fuzzy_results: list[ScoredInt] = self._vectorbase.fuzzy_lookup_embedding(
@@ -312,53 +298,6 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
         result.sort(key=lambda x: x.score, reverse=True)
 
         # Apply max_matches limit to final results
-        if max_matches is not None:
-            result = result[:max_matches]
-
-        return result
-
-    def _lookup_by_embedding_fallback(
-        self,
-        text_embedding: NormalizedEmbedding,
-        max_matches: int | None = None,
-        threshold_score: float | None = None,
-        predicate: typing.Callable[[interfaces.MessageOrdinal], bool] | None = None,
-    ) -> list[interfaces.ScoredMessageOrdinal]:
-        """Fallback lookup by embedding using the old approach when index positions aren't populated."""
-        # Get all stored embeddings and compute similarity
-        cursor = self.db.cursor()
-        cursor.execute(
-            "SELECT msg_id, chunk_ordinal, embedding FROM MessageTextIndex WHERE embedding IS NOT NULL"
-        )
-
-        from ..sqlite.schema import deserialize_embedding
-
-        message_scores: dict[int, float] = {}
-        for row in cursor.fetchall():
-            msg_id, chunk_ordinal, embedding_blob = row
-            if embedding_blob and (predicate is None or predicate(msg_id)):
-                stored_embedding = deserialize_embedding(embedding_blob)
-                if stored_embedding is not None:
-                    # Compute cosine similarity
-                    similarity = np.dot(text_embedding, stored_embedding)
-
-                    if threshold_score is None or similarity >= threshold_score:
-                        if msg_id not in message_scores:
-                            message_scores[msg_id] = similarity
-                        else:
-                            # Take the best score for this message
-                            message_scores[msg_id] = max(
-                                message_scores[msg_id], similarity
-                            )
-
-        # Convert to list and sort by score
-        result = [
-            interfaces.ScoredMessageOrdinal(msg_ordinal, score)
-            for msg_ordinal, score in message_scores.items()
-        ]
-        result.sort(key=lambda x: x.score, reverse=True)
-
-        # Apply max_matches limit
         if max_matches is not None:
             result = result[:max_matches]
 
