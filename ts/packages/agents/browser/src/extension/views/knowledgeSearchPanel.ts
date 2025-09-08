@@ -983,7 +983,7 @@ export class KnowledgeSearchPanel {
             if (knowledge.entityCount > 0) {
                 badges.push(`
                     <span class="knowledge-badge entities" title="${knowledge.entityCount} entities extracted">
-                        <i class="bi bi-diagram-2"></i>
+                        <i class="bi bi-tags"></i>
                         ${knowledge.entityCount}
                     </span>
                 `);
@@ -991,7 +991,7 @@ export class KnowledgeSearchPanel {
             if (knowledge.topicCount > 0) {
                 badges.push(`
                     <span class="knowledge-badge topics" title="${knowledge.topicCount} topics identified">
-                        <i class="bi bi-tags"></i>
+                        <i class="bi bi-bookmark"></i>
                         ${knowledge.topicCount}
                     </span>
                 `);

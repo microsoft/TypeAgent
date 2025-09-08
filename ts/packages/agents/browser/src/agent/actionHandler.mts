@@ -223,7 +223,7 @@ function generateDetailedKnowledgeCards(knowledgeResult: any): string {
     if (entities.length > 0) {
         html += `
         <div style="margin-bottom: 12px;">
-            <div style="font-weight: 600; color: #495057; margin-bottom: 6px;">🏷️ Entities (${entities.length}):</div>
+            <div style="font-weight: 600; color: #495057; margin-bottom: 6px;"><i class="bi bi-tags"></i> Entities (${entities.length}):</div>
             <div style="display: flex; flex-wrap: wrap; gap: 4px;">
                 ${entities
                     .slice(0, 10)
@@ -245,7 +245,7 @@ function generateDetailedKnowledgeCards(knowledgeResult: any): string {
     if (topics.length > 0) {
         html += `
         <div style="margin-bottom: 12px;">
-            <div style="font-weight: 600; color: #495057; margin-bottom: 6px;">📋 Topics (${topics.length}):</div>
+            <div style="font-weight: 600; color: #495057; margin-bottom: 6px;"><i class="bi bi-bookmark"></i> Topics (${topics.length}):</div>
             <div style="display: flex; flex-wrap: wrap; gap: 4px;">
                 ${topics
                     .slice(0, 8)
@@ -263,7 +263,7 @@ function generateDetailedKnowledgeCards(knowledgeResult: any): string {
     if (relationships.length > 0) {
         html += `
         <div style="margin-bottom: 12px;">
-            <div style="font-weight: 600; color: #495057; margin-bottom: 6px;">🔗 Relationships (${relationships.length}):</div>
+            <div style="font-weight: 600; color: #495057; margin-bottom: 6px;"><i class="bi bi-diagram-3"></i> Relationships (${relationships.length}):</div>
             <div style="font-size: 13px; color: #6c757d;">
                 ${relationships
                     .slice(0, 5)
@@ -308,7 +308,7 @@ function generateLiveKnowledgePreview(
     <!-- Entities Section -->
     <div class="knowledge-section" style="margin-bottom: 16px;">
         <div style="display: flex; align-items: center; margin-bottom: 8px;">
-            <span style="margin-right: 6px;">🏷️</span>
+            <i class="bi bi-tags" style="margin-right: 6px;"></i>
             <span style="font-weight: 600; color: #495057; font-size: 14px;">Entities</span>
             <span style="background: #e3f2fd; color: #1976d2; padding: 2px 6px; border-radius: 10px; font-size: 11px; font-weight: bold; margin-left: 6px;">${entities.length}</span>
         </div>
@@ -335,7 +335,7 @@ function generateLiveKnowledgePreview(
     <!-- Topics Section -->
     <div class="knowledge-section" style="margin-bottom: 16px;">
         <div style="display: flex; align-items: center; margin-bottom: 8px;">
-            <span style="margin-right: 6px;">📋</span>
+            <i class="bi bi-bookmark" style="margin-right: 6px;"></i>
             <span style="font-weight: 600; color: #495057; font-size: 14px;">Topics</span>
             <span style="background: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 10px; font-size: 11px; font-weight: bold; margin-left: 6px;">${topics.length}</span>
         </div>
@@ -365,7 +365,7 @@ function generateLiveKnowledgePreview(
             ? `
     <div class="knowledge-section" style="margin-bottom: 16px;">
         <div style="display: flex; align-items: center; margin-bottom: 8px;">
-            <span style="margin-right: 6px;">🔗</span>
+            <i class="bi bi-diagram-3" style="margin-right: 6px;"></i>
             <span style="font-weight: 600; color: #495057; font-size: 14px;">Relationships</span>
             <span style="background: #e8f5e8; color: #2e7d2e; padding: 2px 6px; border-radius: 10px; font-size: 11px; font-weight: bold; margin-left: 6px;">${relationships.length}</span>
         </div>

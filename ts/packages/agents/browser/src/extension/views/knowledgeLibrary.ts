@@ -226,18 +226,16 @@ class WebsiteLibraryPanelFullPage {
     private updateConnectionStatus() {
         const statusElement = document.getElementById("connectionStatus");
         if (statusElement) {
-            const indicator = statusElement.querySelector(".status-indicator");
-            const text = statusElement.querySelector("span:last-child");
-
-            if (indicator && text) {
-                if (this.isConnected) {
-                    indicator.className = "status-indicator status-connected";
-                    text.textContent = "Connected";
-                } else {
-                    indicator.className =
-                        "status-indicator status-disconnected";
-                    text.textContent = "Disconnected";
-                }
+            if (this.isConnected) {
+                // Hide connection status when connected
+                statusElement.style.display = "none";
+            } else {
+                // Show disconnection warning
+                statusElement.style.display = "flex";
+                statusElement.innerHTML = `
+                    <span class="status-indicator status-disconnected"></span>
+                    <span class="text-warning">Disconnected</span>
+                `;
             }
         }
     }
