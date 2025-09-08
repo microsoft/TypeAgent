@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS MessageTextIndex (
     msg_id INTEGER NOT NULL,
     chunk_ordinal INTEGER NOT NULL,
     embedding BLOB NOT NULL,        -- Serialized embedding (numpy array as bytes)
+    index_position INTEGER,         -- Position in VectorBase index for fast lookup
 
     PRIMARY KEY (msg_id, chunk_ordinal),
     FOREIGN KEY (msg_id) REFERENCES Messages(msg_id) ON DELETE CASCADE
@@ -84,6 +85,10 @@ CREATE TABLE IF NOT EXISTS MessageTextIndex (
 
 MESSAGE_TEXT_INDEX_MESSAGE_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_message_text_index_message ON MessageTextIndex(msg_id, chunk_ordinal);
+"""
+
+MESSAGE_TEXT_INDEX_POSITION_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_message_text_index_position ON MessageTextIndex(index_position);
 """
 
 PROPERTY_INDEX_SCHEMA = """
@@ -230,6 +235,11 @@ def init_db_schema(db: sqlite3.Connection) -> None:
     cursor.execute(RELATED_TERMS_ALIASES_SCHEMA)
     cursor.execute(RELATED_TERMS_FUZZY_SCHEMA)
     cursor.execute(TIMESTAMP_INDEX_SCHEMA)
+
+    # Create additional indexes
+    cursor.execute(SEMANTIC_REF_INDEX_TERM_INDEX)
+    cursor.execute(MESSAGE_TEXT_INDEX_MESSAGE_INDEX)
+    cursor.execute(MESSAGE_TEXT_INDEX_POSITION_INDEX)
 
 
 def get_db_schema_version(db: sqlite3.Connection) -> str:

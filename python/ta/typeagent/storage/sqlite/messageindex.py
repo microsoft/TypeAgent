@@ -9,11 +9,12 @@ import typing
 
 import numpy as np
 
-from ...aitools.embeddings import NormalizedEmbedding, NormalizedEmbeddings
-from ...aitools.vectorbase import VectorBase
+from ...aitools.embeddings import NormalizedEmbedding
+from ...aitools.vectorbase import ScoredInt, VectorBase
 
 from ...knowpro.convsettings import MessageTextIndexSettings
 from ...knowpro import interfaces
+from ...knowpro.interfaces import TextLocationData, TextToTextLocationIndexData
 from ...knowpro.textlocindex import ScoredTextLocation
 
 from ...storage.memory.messageindex import IMessageTextEmbeddingIndex
@@ -63,9 +64,16 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
             [chunk for _, _, chunk in chunks_to_embed], cache=False
         )
 
-        insertion_data: list[tuple[int, int, bytes]] = []
-        for (msg_ord, chunk_ord, _), embedding in zip(chunks_to_embed, embeddings):
-            insertion_data.append((msg_ord, chunk_ord, serialize_embedding(embedding)))
+        insertion_data: list[tuple[int, int, bytes, int]] = []
+        for idx, ((msg_ord, chunk_ord, _), embedding) in enumerate(
+            zip(chunks_to_embed, embeddings)
+        ):
+            # Get the current VectorBase size to determine the index position
+            current_size = len(self._vectorbase)
+            index_position = current_size + idx
+            insertion_data.append(
+                (msg_ord, chunk_ord, serialize_embedding(embedding), index_position)
+            )
 
         # Bulk insert text chunks (without embeddings yet)
         cursor = self.db.cursor()
@@ -73,8 +81,8 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
             cursor.executemany(
                 """
                 INSERT INTO MessageTextIndex
-                (msg_id, chunk_ordinal, embedding)
-                VALUES (?, ?, ?)
+                (msg_id, chunk_ordinal, embedding, index_position)
+                VALUES (?, ?, ?, ?)
                 """,
                 insertion_data,
             )
@@ -115,39 +123,53 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
         self, text: str, max_matches: int | None = None, min_score: float | None = None
     ) -> list[ScoredTextLocation]:
         """Look up text using VectorBase."""
-        # Generate embedding for the search text
-        search_embedding = await self._vectorbase.get_embedding(text)
 
-        # Get all stored embeddings and compute similarity
-        cursor = self.db.cursor()
-        cursor.execute(
-            "SELECT msg_id, chunk_ordinal, embedding FROM MessageTextIndex WHERE embedding IS NOT NULL"
+        # Use VectorBase for efficient fuzzy lookup
+
+        fuzzy_results: list[ScoredInt] = await self._vectorbase.fuzzy_lookup(
+            text, max_hits=max_matches, min_score=min_score
         )
 
+        if not fuzzy_results:
+            return []
+
+        # Get corresponding database entries using a single WHERE IN query
+        cursor = self.db.cursor()
+
+        # Extract index positions and build query placeholders
+        index_positions = [scored_int.item for scored_int in fuzzy_results]
+        placeholders = ",".join("?" * len(index_positions))
+
+        cursor.execute(
+            f"""
+            SELECT msg_id, chunk_ordinal, index_position
+            FROM MessageTextIndex
+            WHERE index_position IN ({placeholders})
+            ORDER BY index_position
+            """,
+            index_positions,
+        )
+
+        rows = cursor.fetchall()
+
+        # Create a mapping from index_position to (msg_id, chunk_ordinal)
+        position_to_location = {
+            index_position: (msg_id, chunk_ordinal)
+            for msg_id, chunk_ordinal, index_position in rows
+        }
+
+        # Build scored locations in the same order as fuzzy_results
         scored_locations = []
-        for row in cursor.fetchall():
-            msg_id, chunk_ordinal, embedding_blob = row
-            if embedding_blob:
-                stored_embedding = deserialize_embedding(embedding_blob)
-                if stored_embedding is not None:
-                    # Compute cosine similarity
-                    similarity = np.dot(search_embedding, stored_embedding)
-
-                    if min_score is None or similarity >= min_score:
-                        text_location = interfaces.TextLocation(
-                            message_ordinal=msg_id,
-                            chunk_ordinal=chunk_ordinal,
-                        )
-                        scored_locations.append(
-                            ScoredTextLocation(text_location, similarity)
-                        )
-
-        # Sort by score (highest first)
-        scored_locations.sort(key=lambda x: x.score, reverse=True)
-
-        # Apply max_matches limit
-        if max_matches is not None:
-            scored_locations = scored_locations[:max_matches]
+        for scored_int in fuzzy_results:
+            if scored_int.item in position_to_location:
+                msg_id, chunk_ordinal = position_to_location[scored_int.item]
+                text_location = interfaces.TextLocation(
+                    message_ordinal=msg_id,
+                    chunk_ordinal=chunk_ordinal,
+                )
+                scored_locations.append(
+                    ScoredTextLocation(text_location, scored_int.score)
+                )
 
         return scored_locations
 
@@ -206,9 +228,9 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
 
         return filtered_matches
 
-    # async def generate_embedding(self, text: str) -> NormalizedEmbedding:
-    #     """Generate an embedding for the given text."""
-    #     return await self._vectorbase.get_embedding(text)
+    async def generate_embedding(self, text: str) -> NormalizedEmbedding:
+        """Generate an embedding for the given text."""
+        return await self._vectorbase.get_embedding(text)
 
     def lookup_by_embedding(
         self,
@@ -217,7 +239,92 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
         threshold_score: float | None = None,
         predicate: typing.Callable[[interfaces.MessageOrdinal], bool] | None = None,
     ) -> list[interfaces.ScoredMessageOrdinal]:
-        """Look up messages by embedding (synchronous version)."""
+        """Look up messages by embedding using optimized VectorBase similarity search."""
+        # # Ensure index positions are populated for existing data
+        # import asyncio
+        # loop = asyncio.get_event_loop()
+        # if loop.is_running():
+        #     # If we're in an async context, we need to handle this differently
+        #     # For now, we'll use the old approach if index positions aren't populated
+        #     cursor = self.db.cursor()
+        #     cursor.execute("SELECT COUNT(*) FROM MessageTextIndex WHERE index_position IS NULL")
+        #     missing_count = cursor.fetchone()[0]
+        #     if missing_count > 0:
+        #         # Fall back to the old approach
+        #         return self._lookup_by_embedding_fallback(
+        #             text_embedding, max_matches, threshold_score, predicate
+        #         )
+
+        # Get fuzzy results using the provided embedding
+        fuzzy_results: list[ScoredInt] = self._vectorbase.fuzzy_lookup_embedding(
+            text_embedding, max_hits=max_matches, min_score=threshold_score
+        )
+
+        if not fuzzy_results:
+            return []
+
+        # Get corresponding database entries using optimized query
+        cursor = self.db.cursor()
+
+        # Extract index positions and build query placeholders
+        index_positions = [scored_int.item for scored_int in fuzzy_results]
+        placeholders = ",".join("?" * len(index_positions))
+
+        cursor.execute(
+            f"""
+            SELECT msg_id, chunk_ordinal, index_position
+            FROM MessageTextIndex
+            WHERE index_position IN ({placeholders})
+            ORDER BY index_position
+            """,
+            index_positions,
+        )
+
+        rows = cursor.fetchall()
+
+        # Create a mapping from index_position to (msg_id, chunk_ordinal)
+        position_to_location = {
+            index_position: (msg_id, chunk_ordinal)
+            for msg_id, chunk_ordinal, index_position in rows
+        }
+
+        # Build message scores, applying predicate filter
+        message_scores: dict[int, float] = {}
+        for scored_int in fuzzy_results:
+            if scored_int.item in position_to_location:
+                msg_id, chunk_ordinal = position_to_location[scored_int.item]
+
+                # Apply predicate filter if provided
+                if predicate is None or predicate(msg_id):
+                    if msg_id not in message_scores:
+                        message_scores[msg_id] = scored_int.score
+                    else:
+                        # Take the best score for this message
+                        message_scores[msg_id] = max(
+                            message_scores[msg_id], scored_int.score
+                        )
+
+        # Convert to list and sort by score
+        result = [
+            interfaces.ScoredMessageOrdinal(msg_ordinal, score)
+            for msg_ordinal, score in message_scores.items()
+        ]
+        result.sort(key=lambda x: x.score, reverse=True)
+
+        # Apply max_matches limit to final results
+        if max_matches is not None:
+            result = result[:max_matches]
+
+        return result
+
+    def _lookup_by_embedding_fallback(
+        self,
+        text_embedding: NormalizedEmbedding,
+        max_matches: int | None = None,
+        threshold_score: float | None = None,
+        predicate: typing.Callable[[interfaces.MessageOrdinal], bool] | None = None,
+    ) -> list[interfaces.ScoredMessageOrdinal]:
+        """Fallback lookup by embedding using the old approach when index positions aren't populated."""
         # Get all stored embeddings and compute similarity
         cursor = self.db.cursor()
         cursor.execute(
@@ -225,7 +332,6 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
         )
 
         from ..sqlite.schema import deserialize_embedding
-        import numpy as np
 
         message_scores: dict[int, float] = {}
         for row in cursor.fetchall():
@@ -297,7 +403,6 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
         embeddings_list = []
 
         from ..sqlite.schema import deserialize_embedding
-        from ...knowpro.interfaces import TextLocationData, TextToTextLocationIndexData
 
         for msg_id, chunk_ordinal, embedding_blob in cursor.fetchall():
             # Create text location data
@@ -315,8 +420,6 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
 
         if text_locations:
             # Convert embeddings to numpy array if we have any
-            import numpy as np
-
             valid_embeddings = [e for e in embeddings_list if e is not None]
             if valid_embeddings:
                 embeddings_array = np.array(valid_embeddings, dtype=np.float32)
@@ -351,21 +454,28 @@ class SqliteMessageTextIndex(IMessageTextEmbeddingIndex):
             return
 
         # Prepare all insertion data for bulk operation
-        insertion_data: list[tuple[int, int, bytes]] = []
-        for text_location, embedding in zip(text_locations, embeddings, strict=True):
+        insertion_data: list[tuple[int, int, bytes, int]] = []
+        for idx, (text_location, embedding) in enumerate(
+            zip(text_locations, embeddings, strict=True)
+        ):
             msg_id = text_location["messageOrdinal"]
             chunk_ordinal = text_location["chunkOrdinal"]
             assert embedding is not None
             embedding_blob = serialize_embedding(embedding)
-            insertion_data.append((msg_id, chunk_ordinal, embedding_blob))
+            # Get the current VectorBase size to determine the index position
+            current_size = len(self._vectorbase)
+            index_position = current_size + idx
+            insertion_data.append(
+                (msg_id, chunk_ordinal, embedding_blob, index_position)
+            )
 
         # Bulk insert all the data
         if insertion_data:
             cursor.executemany(
                 """
                 INSERT INTO MessageTextIndex
-                (msg_id, chunk_ordinal, embedding)
-                VALUES (?, ?, ?)
+                (msg_id, chunk_ordinal, embedding, index_position)
+                VALUES (?, ?, ?, ?)
                 """,
                 insertion_data,
             )
