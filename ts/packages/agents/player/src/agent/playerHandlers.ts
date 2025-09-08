@@ -29,7 +29,7 @@ import { PlayerActions } from "./playerSchema.js";
 import registerDebug from "debug";
 import { resolveMusicDeviceEntity } from "../devices.js";
 import { getUserDevices } from "../endpoints.js";
-import { getUserDataCompletions } from "../userData.js";
+import { addUserDataStrings, getUserDataCompletions } from "../userData.js";
 
 const debugSpotify = registerDebug("typeagent:spotify");
 
@@ -184,6 +184,18 @@ async function validateTrack(
     album: string | undefined,
     context: IClientContext,
 ) {
+    if (artists === undefined && album === undefined) {
+        const data = context.userData?.data;
+        if (data && data.tracks) {
+            if (data.nameMap === undefined) {
+                addUserDataStrings(data);
+            }
+            // if user data has exact match return true
+            if (data.nameMap!.get(trackName.toLocaleLowerCase())) {
+                return true;
+            }
+        }
+    }
     const resolvedArtists = artists
         ? await resolveArtists(artists, context)
         : [];
@@ -254,6 +266,20 @@ async function validateAlbum(
 }
 
 async function validateArtist(artistName: string, context: IClientContext) {
+    // if user data has exact match return true
+    const userData = context.userData;
+    if (userData && userData.data) {
+        const artists = userData.data.artists;
+        if (artists) {
+            if (!userData.data.nameMap) {
+                addUserDataStrings(userData.data);
+            }
+            if (userData.data.nameMap!.get(artistName.toLocaleLowerCase())) {
+                return true;
+            }
+        }
+    }
+
     const data = await searchArtists(artistName, context);
 
     if (data && data.artists && data.artists.items.length > 0) {

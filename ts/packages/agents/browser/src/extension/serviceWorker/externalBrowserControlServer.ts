@@ -11,6 +11,7 @@ import { createRpc } from "agent-rpc/rpc";
 import {
     BrowserControlCallFunctions,
     BrowserControlInvokeFunctions,
+    BrowserSettings,
 } from "../../common/browserControl.mjs";
 import { showBadgeBusy, showBadgeHealthy } from "./ui";
 import { createContentScriptRpcClient } from "../../common/contentScriptRpc/client.mjs";
@@ -131,6 +132,15 @@ export function createExternalBrowserServer(channel: RpcChannel) {
         closeWebPage: async () => {
             const targetTab = await ensureActiveTab();
             await chrome.tabs.remove(targetTab.id!);
+        },
+        closeAllWebPages: async () => {
+            let tab: chrome.tabs.Tab | undefined = undefined;
+            do {
+                tab = await chrome.tabs.getCurrent();
+                if (tab) {
+                    await chrome.tabs.remove(tab.id!);
+                }
+            } while (tab);
         },
         switchTabs: async (
             tabDescription: string,
@@ -332,7 +342,7 @@ export function createExternalBrowserServer(channel: RpcChannel) {
                 quality: 100,
             });
         },
-        getPageContents: async (): Promise<string> => {
+        getPageTextContent: async (): Promise<string> => {
             const targetTab = await getActiveTab();
             const article = await chrome.tabs.sendMessage(targetTab?.id!, {
                 type: "read_page_content",
@@ -347,6 +357,37 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             }
 
             throw new Error("No formatted text found.");
+        },
+        getAutoIndexSetting: async (): Promise<boolean> => {
+            try {
+                const result = await chrome.storage.sync.get(["autoIndexing"]);
+                return result.autoIndexing === true;
+            } catch (error) {
+                console.error("Failed to get autoIndex setting:", error);
+                return false;
+            }
+        },
+        getBrowserSettings: async () => {
+            try {
+                const result = await chrome.storage.sync.get([
+                    "autoIndexing",
+                    "indexingDelay",
+                    "extractionMode",
+                ]);
+
+                return {
+                    autoIndexing: result.autoIndexing === true,
+                    indexingDelay: result.indexingDelay || 3000,
+                    extractionMode: result.extractionMode || "content",
+                };
+            } catch (error) {
+                console.error("Failed to get browser settings:", error);
+                return {
+                    autoIndexing: false,
+                    indexingDelay: 3000,
+                    extractionMode: "content",
+                };
+            }
         },
     };
     const callFunctions: BrowserControlCallFunctions = {

@@ -55,6 +55,7 @@ import {
 } from "./commands/update.js";
 import { createInlineBrowserControl } from "./inlineBrowserControl.js";
 import { BrowserControl } from "browser-typeagent/agent/types";
+import { ExtensionStorageManager } from "./extensionStorage.js";
 
 debugShell("App name", app.getName());
 debugShell("App version", app.getVersion());
@@ -512,7 +513,7 @@ async function initialize() {
             : appPath,
         "node_modules/browser-typeagent/dist/electron",
     );
-    const extension = await session.defaultSession.loadExtension(
+    const extension = await session.defaultSession.extensions.loadExtension(
         browserExtensionPath,
         {
             allowFileAccess: true,
@@ -528,6 +529,7 @@ async function initialize() {
     };
 
     const shellSettings = new ShellSettingManager(instanceDir);
+    const extensionStorage = new ExtensionStorageManager(instanceDir);
     const settings = shellSettings.user;
     const dataDir = getShellDataDir(instanceDir);
     const chatHistory: string = path.join(dataDir, "chat_history.html");
@@ -640,29 +642,6 @@ async function initialize() {
         }
     });
 
-    // Storage handlers (simple local storage simulation)
-    const extensionStorage = new Map<string, any>();
-
-    ipcMain.handle("extension-storage-get", async (_, keys: string[]) => {
-        const result: Record<string, any> = {};
-        for (const key of keys) {
-            if (extensionStorage.has(key)) {
-                result[key] = extensionStorage.get(key);
-            }
-        }
-        return result;
-    });
-
-    ipcMain.handle(
-        "extension-storage-set",
-        async (_, items: Record<string, any>) => {
-            for (const [key, value] of Object.entries(items)) {
-                extensionStorage.set(key, value);
-            }
-            return { success: true };
-        },
-    );
-
     // Direct WebSocket connection check via browserIPC
     ipcMain.handle("check-websocket-connection", async () => {
         try {
@@ -671,6 +650,39 @@ async function initialize() {
             return { connected };
         } catch (error) {
             return { connected: false };
+        }
+    });
+
+    // Extension storage IPC handlers
+    ipcMain.handle("extension-storage-get", async (_, keys: string[]) => {
+        try {
+            return extensionStorage.get(keys);
+        } catch (error) {
+            debugShellError("Error getting extension storage:", error);
+            return {};
+        }
+    });
+
+    ipcMain.handle(
+        "extension-storage-set",
+        async (_, items: Record<string, any>) => {
+            try {
+                extensionStorage.set(items);
+                return { success: true };
+            } catch (error) {
+                debugShellError("Error setting extension storage:", error);
+                return { success: false, error: (error as Error).message };
+            }
+        },
+    );
+
+    ipcMain.handle("extension-storage-remove", async (_, keys: string[]) => {
+        try {
+            extensionStorage.remove(keys);
+            return { success: true };
+        } catch (error) {
+            debugShellError("Error removing extension storage:", error);
+            return { success: false, error: (error as Error).message };
         }
     });
 

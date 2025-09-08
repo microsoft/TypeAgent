@@ -3,7 +3,7 @@
     { "request": "@config schema mcpfilesystem" },
     {
       "request": "can you list all allowed directories",
-      "action": {
+      "expected": {
         "schemaName": "mcpfilesystem",
         "actionName": "list_allowed_directories",
         "parameters": {}
@@ -15,7 +15,7 @@
     },
     {
       "request": "show me the files in that directory",
-      "action": {
+      "expected": {
         "schemaName": "mcpfilesystem",
         "actionName": "list_directory",
         "parameters": { "path": "/data" }
@@ -27,9 +27,9 @@
     },
     {
       "request": "read that file",
-      "action": {
+      "expected": {
         "schemaName": "mcpfilesystem",
-        "actionName": "read_file",
+        "actionName": "read_text_file",
         "parameters": { "path": "/data/hello.txt" }
       },
       "history": {
@@ -39,7 +39,7 @@
     },
     {
       "request": "can you rename that file to /data/world.txt.",
-      "action": {
+      "expected": {
         "schemaName": "mcpfilesystem",
         "actionName": "move_file",
         "parameters": {
@@ -54,7 +54,7 @@
     },
     {
       "request": "list the files in that directory",
-      "action": {
+      "expected": {
         "schemaName": "mcpfilesystem",
         "actionName": "list_directory",
         "parameters": { "path": "/data" }

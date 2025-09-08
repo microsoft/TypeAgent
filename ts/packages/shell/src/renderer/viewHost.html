@@ -400,6 +400,10 @@
       ipcRenderer.on("browser-navigation-updated", (_, navigationState) => {
         updateNavigationState(navigationState);
       });
+
+      ipcRenderer.on("browser-tab-closed", (_, tabId) => {
+        document.querySelector(`div.tab[data-tab-id="${tabId}"]`)?.remove();
+      });
     </script>
   </body>
 </html>

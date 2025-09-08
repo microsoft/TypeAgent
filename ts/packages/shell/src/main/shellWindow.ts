@@ -121,7 +121,7 @@ export class ShellWindow {
         );
 
         setupDevicePermissions(mainWindow);
-        this.setupWebContents(mainWindow.webContents);
+        //this.setupWebContents(mainWindow.webContents);
 
         // Initialize browser view manager
         this.browserViewManager = new BrowserViewManager(mainWindow);
@@ -141,6 +141,15 @@ export class ShellWindow {
             if (activeTab && activeTab.id === tabId) {
                 this.chatView.webContents.focus();
                 this.chatView.webContents.send("focus-chat-input");
+            }
+        });
+
+        this.browserViewManager.setTabClosedCallback((tabId: string) => {
+            this.mainWindow.webContents.send("browser-tab-closed", tabId);
+
+            // Update layout if no tabs left
+            if (!this.hasBrowserTabs()) {
+                this.setWindowSize(this.getWindowPositionState());
             }
         });
 
@@ -585,7 +594,7 @@ export class ShellWindow {
     /**
      * Resolve custom typeagent-browser protocol URLs
      */
-    private resolveCustomProtocolUrl(targetUrl: URL): URL {
+    public resolveCustomProtocolUrl(targetUrl: URL): URL {
         const browserExtensionUrls = (global as any).browserExtensionUrls;
         if (browserExtensionUrls) {
             // Map custom protocol to actual extension URL

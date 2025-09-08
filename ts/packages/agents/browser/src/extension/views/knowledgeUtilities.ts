@@ -23,6 +23,10 @@ import {
     EntityMatch,
 } from "./extensionServiceBase";
 import type { ProgressCallback } from "../interfaces/websiteImport.types";
+import type {
+    KnowledgeProgressCallback,
+    KnowledgeExtractionProgress,
+} from "../interfaces/knowledgeExtraction.types";
 
 // ===================================================================
 // INTERFACES AND TYPES
@@ -192,6 +196,10 @@ export class NotificationManager {
 
 export class ChromeExtensionService extends ExtensionServiceBase {
     private importProgressCallbacks: Map<string, ProgressCallback> = new Map();
+    private extractionProgressCallbacks: Map<
+        string,
+        KnowledgeProgressCallback
+    > = new Map();
     // Override getCurrentTab with Chrome-specific implementation
     protected async getCurrentTabImpl(): Promise<chrome.tabs.Tab | null> {
         try {
@@ -471,6 +479,35 @@ export class ChromeExtensionService extends ExtensionServiceBase {
         (callback as any)._messageListener = messageListener;
     }
 
+    protected onExtractionProgressImpl(
+        extractionId: string,
+        callback: KnowledgeProgressCallback,
+    ): void {
+        this.extractionProgressCallbacks.set(extractionId, callback);
+
+        const messageListener = (message: any) => {
+            if (
+                message.type === "knowledgeExtractionProgress" &&
+                message.progress?.extractionId === extractionId
+            ) {
+                callback(message.progress);
+
+                // Cleanup on completion
+                if (
+                    message.progress.phase === "complete" ||
+                    message.progress.phase === "error"
+                ) {
+                    this.extractionProgressCallbacks.delete(extractionId);
+                    chrome.runtime.onMessage.removeListener(messageListener);
+                }
+            }
+        };
+
+        chrome.runtime.onMessage.addListener(messageListener);
+
+        (callback as any)._messageListener = messageListener;
+    }
+
     // Implement abstract sendMessage method
     protected async sendMessage<T>(message: any): Promise<T> {
         if (typeof chrome !== "undefined" && chrome.runtime) {
@@ -495,6 +532,10 @@ export class ChromeExtensionService extends ExtensionServiceBase {
 
 export class ElectronExtensionService extends ExtensionServiceBase {
     private importProgressCallbacks: Map<string, ProgressCallback> = new Map();
+    private extractionProgressCallbacks: Map<
+        string,
+        KnowledgeProgressCallback
+    > = new Map();
     // Override getAnalyticsData to add success wrapper
     async getAnalyticsData(options?: {
         timeRange?: string;
@@ -799,6 +840,37 @@ export class ElectronExtensionService extends ExtensionServiceBase {
 
         (callback as any)._progressHandler = progressHandler;
         (callback as any)._importId = importId;
+    }
+
+    protected onExtractionProgressImpl(
+        extractionId: string,
+        callback: KnowledgeProgressCallback,
+    ): void {
+        this.extractionProgressCallbacks.set(extractionId, callback);
+
+        const progressHandler = (progress: any) => {
+            if (progress.extractionId === extractionId) {
+                callback(progress.progress);
+
+                // Cleanup on completion
+                if (
+                    progress.progress?.phase === "complete" ||
+                    progress.progress?.phase === "error"
+                ) {
+                    this.extractionProgressCallbacks.delete(extractionId);
+                }
+            }
+        };
+
+        if ((window as any).electronAPI?.registerExtractionProgressCallback) {
+            (window as any).electronAPI.registerExtractionProgressCallback(
+                extractionId,
+                progressHandler,
+            );
+        }
+
+        (callback as any)._progressHandler = progressHandler;
+        (callback as any)._extractionId = extractionId;
     }
 
     // Implement abstract sendMessage method with message transformation

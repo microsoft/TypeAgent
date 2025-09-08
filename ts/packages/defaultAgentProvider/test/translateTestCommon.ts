@@ -8,13 +8,65 @@ import { getPackageFilePath } from "../src/utils/getPackageFilePath.js";
 import { getDefaultAppAgentProviders } from "../src/defaultAgentProviders.js";
 import { CommandResult, createDispatcher, Dispatcher } from "agent-dispatcher";
 import { ChatHistoryInputAssistant } from "agent-dispatcher/internal";
-import { FullAction } from "agent-cache";
+import {
+    FullAction,
+    normalizeParamValue,
+    ParamValueType,
+    splitFullActionName,
+} from "agent-cache";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { InstanceConfigProvider } from "../src/utils/config.js";
+import { setObjectProperty } from "common-utils";
+import chalk from "chalk";
+import { normalizeAction } from "./constructionCacheTestCommon.js";
 
-type ActionMatch = string | string[] | FullAction | FullAction[];
+type SimpleActionMatch = string | FullAction;
+
+type ActionMatchWithAlternates = {
+    action: FullAction;
+    partial?: boolean;
+    alternates?: Record<string, ParamValueType | ParamValueType[]>;
+};
+
+type OneActionMatch = SimpleActionMatch | ActionMatchWithAlternates;
+type AnyOfActionMatch = {
+    anyof: OneActionMatch[];
+};
+
+type ActionMatch = SimpleActionMatch | AnyOfActionMatch;
+
+function isActionMatchWithAlternates(
+    a: OneActionMatch,
+): a is ActionMatchWithAlternates {
+    return typeof a === "object" && "action" in a;
+}
+
+function isAnyOfActionMatch(a: ActionMatch): a is AnyOfActionMatch {
+    return typeof a === "object" && "anyof" in a;
+}
+
+function toActionMatchWithAlternates(
+    match: OneActionMatch,
+): ActionMatchWithAlternates {
+    return isActionMatchWithAlternates(match)
+        ? match
+        : typeof match === "string"
+          ? { action: splitFullActionName(match), partial: true }
+          : { action: match };
+}
+function normalizeActionMatches(
+    match: ActionMatch | ActionMatch[],
+): ActionMatchWithAlternates[][] {
+    const actionMatches = Array.isArray(match) ? match : [match];
+    return actionMatches.map((m) =>
+        isAnyOfActionMatch(m)
+            ? m.anyof.map(toActionMatchWithAlternates)
+            : [toActionMatchWithAlternates(m)],
+    );
+}
+
 export type TranslateTestStep = {
     // Input
     request: string;
@@ -22,13 +74,7 @@ export type TranslateTestStep = {
 
     // Output
     // If not specified, translation is not checked, only whether validate whether it can be translated.
-    action?:
-        | ActionMatch
-        | {
-              anyof: ActionMatch[];
-          }
-        | undefined;
-    match?: "exact" | "partial"; // default to "exact"
+    expected?: ActionMatch | ActionMatch[] | undefined;
 
     // Execution result:
     // History insertion after translation (if any)
@@ -39,6 +85,7 @@ export type TranslateTestEntry = TranslateTestStep | TranslateTestStep[];
 export type TranslateTestFile = TranslateTestEntry[];
 
 const repeat = 5;
+const concurrency = 5;
 const embeddingCacheDir = path.join(os.tmpdir(), ".typeagent", "cache");
 export async function defineTranslateTest(
     name: string,
@@ -69,17 +116,51 @@ export async function defineTranslateTest(
     );
     describe(`${name} action stability`, () => {
         let dispatchers: Dispatcher[] = [];
+        let dispatcherP: Promise<void> | undefined;
+        let dispatcherDone: (() => void) | undefined;
+        async function acquireDispatcher() {
+            while (dispatchers.length === 0) {
+                if (dispatcherP === undefined) {
+                    dispatcherP = new Promise<void>((resolve) => {
+                        dispatcherDone = resolve;
+                    });
+                }
+                await dispatcherP;
+            }
+            return dispatchers.pop()!;
+        }
+        function releaseDispatcher(d: Dispatcher) {
+            dispatchers.push(d);
+            const done = dispatcherDone;
+            dispatcherDone = undefined;
+            dispatcherP = undefined;
+            done?.();
+        }
+        async function runOnDispatcher(
+            fn: (dispatcher: Dispatcher) => Promise<void>,
+        ) {
+            const d = await acquireDispatcher();
+            try {
+                await fn(d);
+            } finally {
+                releaseDispatcher(d);
+            }
+        }
+
         async function runOnDispatchers(
             fn: (dispatcher: Dispatcher) => Promise<void>,
         ) {
-            const p = dispatchers.map(fn);
+            const p: Promise<void>[] = [];
+            for (let i = 0; i < repeat; i++) {
+                p.push(runOnDispatcher(fn));
+            }
             // Make sure all promise finished before checking the result
             await Promise.allSettled(p);
             // Propagate any errors
             return Promise.all(p);
         }
         beforeAll(async () => {
-            for (let i = 0; i < repeat; i++) {
+            for (let i = 0; i < Math.min(concurrency, repeat); i++) {
                 dispatchers.push(
                     await createDispatcher("cli test translate", {
                         appAgentProviders: defaultAppAgentProviders,
@@ -98,17 +179,23 @@ export async function defineTranslateTest(
         });
         describe.each(inputsWithName)(`${name} %p`, (_, test) => {
             const steps = Array.isArray(test) ? test : [test];
-            it.each(steps)("step $#: $request", async (step) => {
-                await runOnDispatchers(async (dispatcher) => {
-                    await setupOneStep(steps, step, dispatcher);
-                    const result = await runOneStep(step, dispatcher);
-                    validateCommandResult(step, result);
-                });
-            });
+            it.each(steps)(
+                "step $#: $request",
+                async (step) => {
+                    await runOnDispatchers(async (dispatcher) => {
+                        await setupOneStep(steps, step, dispatcher);
+                        const result = await runOneStep(step, dispatcher);
+                        validateCommandResult(step, result);
+                    });
+                },
+                6000 * repeat,
+            );
         });
         afterAll(async () => {
-            await runOnDispatchers((d) => d.close());
+            const p = dispatchers.map((d) => d.close());
+            await Promise.allSettled(p);
             dispatchers = [];
+            await Promise.all(p);
         });
     });
 }
@@ -145,7 +232,6 @@ async function setupOneStep(
 
 async function runOneStep(step: TranslateTestStep, dispatcher: Dispatcher) {
     const { request, attachments } = step;
-
     return await dispatcher.processCommand(request, undefined, attachments);
 }
 
@@ -153,57 +239,129 @@ function validateCommandResult(
     step: TranslateTestStep,
     result?: CommandResult,
 ) {
-    const { request, action, match } = step;
+    const { request, expected } = step;
     if (result?.hasError) {
         throw new Error(`Request '${request}' failed: ${result.exception}`);
     }
 
-    if (action !== undefined) {
-        const actions = result?.actions;
-        expect(actions).toBeDefined();
+    if (expected !== undefined) {
+        const actionMatches = normalizeActionMatches(expected);
+        const actions = result?.actions!;
+        if (actions === undefined) {
+            throw new Error(
+                `Request '${request}' did not return any actions, expected ${JSON.stringify(expected)}`,
+            );
+        }
+        expect(actions).toHaveLength(actionMatches.length);
 
-        if (
-            !Array.isArray(action) &&
-            typeof action === "object" &&
-            "anyof" in action
-        ) {
-            for (const expected of action.anyof) {
-                try {
-                    validateExpectedActions(expected, actions!, match);
-                } catch {
-                    continue;
-                }
-            }
-        } else {
-            validateExpectedActions(action, actions!, match);
+        for (let i = 0; i < actionMatches.length; i++) {
+            const actionMatch = actionMatches[i];
+            const action = actions[i];
+            validateExpectedAction(actionMatch, action);
         }
     }
 }
 
-function validateExpectedActions(
-    expected: ActionMatch,
-    actions: FullAction[],
-    match?: "exact" | "partial",
-) {
-    const expectedValues = Array.isArray(expected) ? expected : [expected];
-    expect(actions).toHaveLength(expectedValues.length);
+type PossibleMatch = {
+    action: FullAction;
+    partial: boolean;
+};
 
-    for (let i = 0; i < expectedValues.length; i++) {
-        const action = actions![i];
-        const expected = expectedValues[i];
-        if (typeof expected === "string") {
-            const actualFullActionName = `${action.schemaName}.${action.actionName}`;
-            if (match === "partial") {
-                expect(actualFullActionName).toContain(expected);
-            } else {
-                expect(actualFullActionName).toBe(expected);
-            }
-        } else {
-            if (match === "partial") {
-                expect(action).toMatchObject(expected);
-            } else {
-                expect(action).toEqual(expected);
-            }
+function expandAlternates(
+    expectedMatch: ActionMatchWithAlternates,
+): { action: FullAction; partial: boolean }[] {
+    const expandedActions = [
+        {
+            action: structuredClone(expectedMatch.action),
+            partial: expectedMatch.partial === true,
+        },
+    ];
+    normalizeAction(expandedActions[0].action);
+    if (expectedMatch.alternates !== undefined) {
+        for (const [name, v] of Object.entries(expectedMatch.alternates)) {
+            const values = Array.isArray(v) ? v : [v];
+            expandedActions.push(
+                ...values.flatMap((v) =>
+                    expandedActions.map((a) => {
+                        const n = structuredClone(a);
+                        setObjectProperty(
+                            n.action,
+                            "parameters",
+                            name,
+                            normalizeParamValue(v),
+                        );
+                        return n;
+                    }),
+                ),
+            );
         }
     }
+    return expandedActions;
+}
+
+function checkPossibleMatch(action: FullAction, possibleMatch: PossibleMatch) {
+    if (possibleMatch.partial) {
+        expect(action).toMatchObject(possibleMatch.action);
+    } else {
+        expect(action).toEqual(possibleMatch.action);
+    }
+}
+
+function validateExpectedAction(
+    match: ActionMatchWithAlternates[],
+    action: FullAction,
+) {
+    const filtered = match.filter(
+        (em) =>
+            em.action.schemaName === action.schemaName &&
+            em.action.actionName === action.actionName,
+    );
+    if (filtered.length === 0) {
+        throw new Error(
+            [
+                "Action does not match any of the expected actions",
+                ,
+                chalk.red(
+                    `Received: ${action.schemaName}.${action.actionName}`,
+                ),
+                chalk.green(
+                    `Expected: ${JSON.stringify(
+                        match.map(
+                            (e) =>
+                                `${e.action.schemaName}.${e.action.actionName}`,
+                        ),
+                        null,
+                        2,
+                    )}`,
+                ),
+            ].join("\n"),
+        );
+    }
+
+    const possibleMatches = filtered.flatMap(expandAlternates);
+    const normalizedAction = structuredClone(action);
+    normalizeAction(normalizedAction);
+    if (possibleMatches.length === 1) {
+        checkPossibleMatch(normalizedAction, possibleMatches[0]);
+        return;
+    }
+
+    const errors: string[] = [];
+    for (const possibleMatch of possibleMatches) {
+        try {
+            checkPossibleMatch(normalizedAction, possibleMatch);
+            return;
+        } catch (e: any) {
+            errors.push(e.message);
+        }
+    }
+
+    throw new Error(
+        [
+            "Error: No matches found",
+            ,
+            chalk.green(`Expected: ${JSON.stringify(possibleMatches)}`),
+            chalk.red(`Received: ${JSON.stringify(normalizedAction, null, 2)}`),
+        ].join("\n"),
+    );
 }

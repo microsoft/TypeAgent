@@ -10,9 +10,13 @@ import {
 } from "../explanation/requestAction.js";
 
 import registerDebug from "debug";
+import {
+    TransformRecordJSON,
+    TransformsJSON,
+} from "./constructionJSONTypes.js";
 const debugConstConflict = registerDebug("typeagent:const:conflict");
 
-type TransformEntityRecord = { entityTypes: string[] };
+export type TransformEntityRecord = { entityTypes: string[] };
 type TransformValueRecord = {
     value: ParamValueType;
     count: number;
@@ -22,22 +26,10 @@ type TransformValueRecord = {
 type TransformRecord = TransformEntityRecord | TransformValueRecord;
 
 function isTransformEntityRecord(
-    record: Readonly<TransformRecord | TransformValueRecordJSON>,
+    record: Readonly<TransformRecord | TransformRecordJSON>,
 ): record is Readonly<TransformEntityRecord> {
     return (record as TransformEntityRecord).entityTypes !== undefined;
 }
-
-type TransformValueRecordJSON = {
-    value: ParamValueType;
-    count: number;
-    conflicts?: [ParamValueType, number][] | undefined;
-};
-
-type TransformRecordJSON = TransformEntityRecord | TransformValueRecordJSON;
-export type TransformsJSON = {
-    name: string;
-    transform: [string, TransformRecordJSON][];
-}[];
 
 export class Transforms {
     // paramName -> (text -> value)

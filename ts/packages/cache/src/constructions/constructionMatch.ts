@@ -153,12 +153,10 @@ function finishMatchParts(
 ) {
     while (state.matchedStart.length < parts.length) {
         const part = parts[state.matchedStart.length];
-        const m = matchRegExp(
-            state,
-            request,
-            part.regExp,
-            config.matchPartsCache,
-        );
+        const regExp = part.regExp;
+        const m = regExp
+            ? matchRegExp(state, request, regExp, config.matchPartsCache)
+            : undefined;
 
         if (m === undefined) {
             // No match
@@ -167,9 +165,14 @@ function finishMatchParts(
                 state.matchedStart.push(-1);
                 continue;
             }
-            // For partial, report as matched if we matched all the text in the request
-            // even when not all the parted are matched yet.
-            return config.partial && state.matchedCurrent === request.length;
+
+            if (config.partial) {
+                // For partial, act as if we have matched all the parts, and breaking out of the loop to finish the match.
+                break;
+            }
+
+            // failed to finish match.
+            return false;
         }
 
         // Matched
@@ -380,6 +383,11 @@ function backtrackPartNextMatch(
     part: ConstructionPart,
     matchPartsCache: MatchPartsCache | undefined,
 ) {
+    if (part.regExp === undefined) {
+        // Wildcard only part. No shorter match or skipping space/punctuation possible.
+        return undefined;
+    }
+
     // Check if the part has a shorter match
     const backtrackString = request.substring(0, lastEnd - 1);
     const backtrackMatch = matchRegExpAt(

@@ -305,13 +305,29 @@ contextBridge.exposeInMainWorld("electronAPI", {
         return ipcRenderer.invoke("browser-extension-message", message);
     },
 
-    // Storage API for extension compatibility
+    // Storage API using main process persistence
     getStorage: async (keys: string[]) => {
-        return ipcRenderer.invoke("extension-storage-get", keys);
+        try {
+            return await ipcRenderer.invoke("extension-storage-get", keys);
+        } catch (error) {
+            console.error("Failed to get storage:", error);
+            return {};
+        }
     },
 
     setStorage: async (items: Record<string, any>) => {
-        return ipcRenderer.invoke("extension-storage-set", items);
+        try {
+            const result = await ipcRenderer.invoke(
+                "extension-storage-set",
+                items,
+            );
+            if (!result.success) {
+                throw new Error(result.error || "Failed to set storage");
+            }
+        } catch (error) {
+            console.error("Failed to set storage:", error);
+            throw error;
+        }
     },
 
     // Direct WebSocket connection check

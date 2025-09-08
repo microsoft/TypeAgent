@@ -2,13 +2,9 @@
 // Licensed under the MIT License.
 
 import { HistoryContext } from "../explanation/requestAction.js";
-import {
-    Construction,
-    ConstructionJSON,
-    MatchResult,
-} from "./constructions.js";
-import { MatchPart, MatchSet, MatchSetJSON, isMatchPart } from "./matchPart.js";
-import { Transforms, TransformsJSON } from "./transforms.js";
+import { Construction, MatchResult } from "./constructions.js";
+import { MatchPart, MatchSet, isMatchPart } from "./matchPart.js";
+import { Transforms } from "./transforms.js";
 
 import registerDebug from "debug";
 import {
@@ -16,6 +12,10 @@ import {
     createMatchPartsCache,
     getMatchPartsCacheStats,
 } from "./constructionMatch.js";
+import {
+    ConstructionCacheJSON,
+    constructionCacheJSONVersion,
+} from "./constructionJSONTypes.js";
 const debugConst = registerDebug("typeagent:const");
 const debugConstMatchStat = registerDebug("typeagent:const:match:stat");
 
@@ -41,21 +41,6 @@ type AddConstructionResult =
           added: false;
           existing: Construction[];
       };
-
-const constructionCacheJSONVersion = 3;
-type ConstructionCacheJSON = {
-    version: number;
-    explainerName: string;
-    matchSets: MatchSetJSON[];
-    constructionNamespaces: {
-        name: string;
-        constructions: ConstructionJSON[];
-    }[];
-    transformNamespaces: {
-        name: string;
-        transforms: TransformsJSON;
-    }[];
-};
 
 type Constructions = {
     constructions: Construction[];
@@ -166,7 +151,9 @@ export class ConstructionCache {
         const mergedParts = construction.parts.map((p) =>
             isMatchPart(p)
                 ? new MatchPart(
-                      this.addMatchSet(p.matchSet, mergeMatchSets),
+                      p.matchSet
+                          ? this.addMatchSet(p.matchSet, mergeMatchSets)
+                          : undefined,
                       p.optional,
                       p.wildcardMode,
                       p.transformInfos,
@@ -286,7 +273,7 @@ export class ConstructionCache {
                     if (part.optional) {
                         continue;
                     }
-                    if (isMatchPart(part)) {
+                    if (isMatchPart(part) && part.matchSet) {
                         // For match parts, we can use the match set name as the prefix
                         for (const match of part.matchSet.matches.values()) {
                             prefix.add(match);

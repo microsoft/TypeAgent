@@ -169,6 +169,27 @@ export async function ensureWebsocketConnected(): Promise<
                 return;
             }
 
+            if (data.method === "knowledgeExtractionProgress") {
+                // Handle knowledge extraction progress updates from the agent
+                if (data.source === "browserAgent" && data.params) {
+                    // Forward progress update directly to the registered callback
+                    try {
+                        const { handleKnowledgeExtractionProgress } =
+                            await import("./messageHandlers");
+                        handleKnowledgeExtractionProgress(
+                            data.params.extractionId,
+                            data.params.progress,
+                        );
+                    } catch (error) {
+                        console.error(
+                            "Failed to handle knowledge extraction progress:",
+                            error,
+                        );
+                    }
+                }
+                return;
+            }
+
             if (data.method && data.method.indexOf("/") > 0) {
                 const [schema, actionName] = data.method?.split("/");
 

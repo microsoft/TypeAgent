@@ -13,7 +13,7 @@
     "browsingWebPage": "shared"
   },
   "schema": {
-    "description": "Browser agent that allows you control an existing browser window and perform actions such as opening a new tab, closing a tab, scrolling, zooming and navigating to a specific URL.",
+    "description": "Browser agent that allows you control browser windows and perform actions such as web browsing (opening, closing, reading pages), opening a new tab, closing a tab, scrolling, zooming and navigating to a specific URL.",
     "schemaFile": "./actionsSchema.mts",
     "schemaType": {
       "action": "BrowserActions",

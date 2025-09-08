@@ -29,7 +29,7 @@
   },
   "dependencies": {
     "aiclient": "workspace:*",
-    "better-sqlite3": "11.9.1",
+    "better-sqlite3": "12.2.0",
     "cheerio": "^1.0.0",
     "common-utils": "workspace:*",
     "conversation-memory": "workspace:*",

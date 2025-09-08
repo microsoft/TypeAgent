@@ -29,7 +29,7 @@
   "dependencies": {
     "@elastic/elasticsearch": "^8.17.0",
     "aiclient": "workspace:*",
-    "better-sqlite3": "11.9.1",
+    "better-sqlite3": "12.2.0",
     "debug": "^4.4.0",
     "knowledge-processor": "workspace:*",
     "typeagent": "workspace:*",

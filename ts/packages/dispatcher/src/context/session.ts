@@ -106,7 +106,7 @@ export type DispatcherConfig = {
         multiple: MultipleActionConfig;
         history: {
             enabled: boolean;
-            limit: number;
+            limit: number; // number of entities,
         };
         schema: {
             generation: {
@@ -215,7 +215,7 @@ const defaultSessionConfig: SessionConfig = {
     },
     execution: {
         history: true,
-        activity: true,
+        activity: false, // TODO: experimental.
         memory: {
             legacy: true, // use the new memory behavior
         },

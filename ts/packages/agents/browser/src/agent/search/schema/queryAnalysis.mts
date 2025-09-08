@@ -51,13 +51,7 @@ export interface ContentClassification {
         | "blog"
         | "reference"
         | "other";
-    domain?:
-        | "github.com"
-        | "stackoverflow.com"
-        | "reddit.com"
-        | "medium.com"
-        | "news_domain"
-        | "other";
+    domain?: string; // the target domain e.g. "github.com". Only provide it if we have high confidence in the value.
     subject?: string; // e.g., "machine learning", "car reviews", "transformers"
 }
 

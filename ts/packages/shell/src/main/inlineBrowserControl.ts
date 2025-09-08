@@ -51,7 +51,14 @@ export function createInlineBrowserControl(
                     background: options?.newTab === true ? false : true,
                 });
             } else {
-                activeTab.webContentsView.webContents.loadURL(url);
+                let resolvedUrl = new URL(url);
+                if (resolvedUrl.protocol === "typeagent-browser:") {
+                    resolvedUrl =
+                        shellWindow.resolveCustomProtocolUrl(resolvedUrl);
+                }
+                activeTab.webContentsView.webContents.loadURL(
+                    resolvedUrl.toString(),
+                );
             }
             return Promise.resolve();
         },
@@ -67,6 +74,11 @@ export function createInlineBrowserControl(
             if (!shellWindow.closeBrowserTab(activeBrowserView.id)) {
                 throw new Error("Failed to close active browser tab.");
             }
+        },
+        async closeAllWebPages() {
+            shellWindow.getAllBrowserTabs().forEach((tab) => {
+                shellWindow.closeBrowserTab(tab.id);
+            });
         },
         async switchTabs(
             tabDescription: string,
@@ -311,9 +323,83 @@ export function createInlineBrowserControl(
             const image = await webContents.capturePage();
             return `data:image/png;base64,${image.toPNG().toString("base64")}`;
         },
-        async getPageContents(): Promise<string> {
+        async getPageTextContent(): Promise<string> {
             const webContents = getActiveBrowserWebContents();
             return webContents.executeJavaScript("document.body.innerText");
+        },
+        async getAutoIndexSetting(): Promise<boolean> {
+            try {
+                const webContents = getActiveBrowserWebContents();
+                const result = await webContents.executeJavaScript(`
+                    (async () => {
+                        try {
+                            const storage = await window.electronAPI.getStorage(['autoIndexing']);
+                            return storage.autoIndexing === true;
+                        } catch (error) {
+                            console.error('Failed to get autoIndex setting:', error);
+                            return false;
+                        }
+                    })()
+                `);
+
+                return result;
+            } catch (error) {
+                console.error(
+                    "Failed to get autoIndex setting from storage:",
+                    error,
+                );
+                return false;
+            }
+        },
+        async getBrowserSettings() {
+            try {
+                const webContents = getActiveBrowserWebContents();
+                const result = await webContents.executeJavaScript(`
+                    (async () => {
+                        try {
+                            if (window.electronAPI) {
+                                const storage = await window.electronAPI.getStorage([
+                                    'autoIndexing',
+                                    'indexingDelay', 
+                                    'extractionMode'
+                                ]);
+                                
+                                return {
+                                    autoIndexing: storage.autoIndexing === true,
+                                    indexingDelay: storage.indexingDelay || 3000,
+                                    extractionMode: storage.extractionMode || 'content'
+                                };
+                            } else {
+                                console.error('electronAPI not available');
+                                return {
+                                    autoIndexing: false,
+                                    indexingDelay: 3000,
+                                    extractionMode: 'content'
+                                };
+                            }
+                        } catch (error) {
+                            console.error('Failed to get browser settings:', error);
+                            return {
+                                autoIndexing: false,
+                                indexingDelay: 3000,
+                                extractionMode: 'content'
+                            };
+                        }
+                    })()
+                `);
+
+                return result;
+            } catch (error) {
+                console.error(
+                    "Failed to get browser settings from storage:",
+                    error,
+                );
+                return {
+                    autoIndexing: false,
+                    indexingDelay: 3000,
+                    extractionMode: "content",
+                };
+            }
         },
     };
 }

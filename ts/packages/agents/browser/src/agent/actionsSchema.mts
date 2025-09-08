@@ -5,6 +5,7 @@ export type DisabledBrowserActions = Search | SearchWebMemories;
 export type BrowserActions =
     | OpenWebPage
     | CloseWebPage
+    | CloseAllWebPages
     | ChangeTabs
     | GoBack
     | GoForward
@@ -65,6 +66,11 @@ export type ChangeTabs = {
 // Close the current web site view
 export type CloseWebPage = {
     actionName: "closeWebPage";
+};
+
+// Close all web page views
+export type CloseAllWebPages = {
+    actionName: "closeAllWebPages";
 };
 
 export type GoBack = {

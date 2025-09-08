@@ -12,6 +12,11 @@ import type {
     ImportResult,
     ProgressCallback,
 } from "../interfaces/websiteImport.types";
+import type {
+    KnowledgeExtractionProgress,
+    KnowledgeProgressCallback,
+    KnowledgeExtractionResult,
+} from "../interfaces/knowledgeExtraction.types";
 
 // ===================================================================
 // INTERFACE DEFINITIONS
@@ -241,6 +246,37 @@ export abstract class ExtensionServiceBase {
         });
     }
 
+    async extractPageKnowledgeStreaming(
+        url: string,
+        mode: string,
+        extractionSettings: any,
+        streamingEnabled: boolean = true,
+        extractionId: string,
+    ): Promise<any> {
+        try {
+            const response = await this.sendMessage({
+                type: "extractPageKnowledgeStreaming",
+                url,
+                mode,
+                extractionSettings,
+                streamingEnabled,
+                extractionId,
+            });
+
+            if (!response) {
+                return { extractionId, success: false };
+            }
+
+            return response;
+        } catch (error) {
+            return {
+                extractionId,
+                success: false,
+                error: (error as Error).message || String(error),
+            };
+        }
+    }
+
     async queryKnowledge(parameters: any): Promise<any> {
         return this.sendMessage({
             type: "queryKnowledge",
@@ -467,6 +503,13 @@ export abstract class ExtensionServiceBase {
         this.onImportProgressImpl(importId, callback);
     }
 
+    onExtractionProgress(
+        extractionId: string,
+        callback: KnowledgeProgressCallback,
+    ): void {
+        this.onExtractionProgressImpl(extractionId, callback);
+    }
+
     // Macro methods
     async getMacrosForUrl(
         url: string,
@@ -527,6 +570,15 @@ export abstract class ExtensionServiceBase {
     protected abstract onImportProgressImpl(
         importId: string,
         callback: ProgressCallback,
+    ): void;
+
+    /**
+     * Environment-specific knowledge extraction progress tracking
+     * Concrete classes must implement this method
+     */
+    protected abstract onExtractionProgressImpl(
+        extractionId: string,
+        callback: KnowledgeProgressCallback,
     ): void;
 
     // ===================================================================

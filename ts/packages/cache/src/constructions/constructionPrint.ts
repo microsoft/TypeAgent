@@ -17,12 +17,12 @@ import {
 } from "./constructionValue.js";
 import { normalizeParamString } from "../explanation/requestAction.js";
 
-export function getMatchPartNames(parts: ConstructionPart[], verbose: boolean) {
+export function getPartNames(parts: ConstructionPart[], verbose: boolean) {
     const counts = new Map<string, number>();
     const needFullName = new Map<string, boolean>();
     if (!verbose) {
         parts.forEach((p) => {
-            if (isMatchPart(p)) {
+            if (isMatchPart(p) && p.matchSet) {
                 const name = p.matchSet.name;
                 needFullName.set(name, needFullName.has(name));
             }
@@ -32,10 +32,14 @@ export function getMatchPartNames(parts: ConstructionPart[], verbose: boolean) {
         parts.map((p) => {
             let name: string;
             if (isMatchPart(p)) {
-                name =
-                    verbose || needFullName.get(p.matchSet.name)
-                        ? p.matchSet.fullName
-                        : p.matchSet.name;
+                if (p.matchSet) {
+                    name =
+                        verbose || needFullName.get(p.matchSet.name)
+                            ? p.matchSet.fullName
+                            : p.matchSet.name;
+                } else {
+                    name = "wildcard";
+                }
             } else if (isParsePart(p)) {
                 name = p.toString();
             } else {
@@ -72,7 +76,7 @@ function filterConstruction(construction: Construction, options: PrintOptions) {
         if (
             !normalizedMatches.every((m) =>
                 construction.parts.some((p) => {
-                    if (isMatchPart(p)) {
+                    if (isMatchPart(p) && p.matchSet) {
                         for (const e of p.matchSet.matches.values()) {
                             if (e.includes(m)) {
                                 return true;
@@ -95,7 +99,9 @@ function filterConstruction(construction: Construction, options: PrintOptions) {
             !options.part.every((p) =>
                 construction.parts.some((c) => {
                     if (isMatchPart(c)) {
-                        return c.matchSet.fullName.includes(p);
+                        if (c.matchSet !== undefined) {
+                            return c.matchSet.fullName.includes(p);
+                        }
                     } else if (isParsePart(c)) {
                         return c.toString().includes(p);
                     }
@@ -130,13 +136,14 @@ export function printConstructionCache(
                 if (
                     !normalizedMatches.every((m) =>
                         construction.parts.some((p) => {
-                            if (isMatchPart(p)) {
+                            if (isMatchPart(p) && p.matchSet) {
                                 for (const e of p.matchSet.matches.values()) {
                                     if (e.includes(m)) {
                                         return true;
                                     }
                                 }
                             }
+                            return false;
                         }),
                     )
                 ) {
@@ -153,11 +160,13 @@ export function printConstructionCache(
                 )}`,
             );
             const symbolicValues: string[] = [];
-            const names = getMatchPartNames(construction.parts, verbose);
+            const names = getPartNames(construction.parts, verbose);
             const columns: string[][] = construction.parts.map((p) => {
                 const name = names.get(p)!;
                 if (isMatchPart(p)) {
-                    const matches = Array.from(p.matchSet.matches.values());
+                    const matches = p.matchSet
+                        ? Array.from(p.matchSet.matches.values())
+                        : [];
                     if (p.wildcardMode !== WildcardMode.Disabled) {
                         matches.unshift(".*");
                     }

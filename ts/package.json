@@ -41,8 +41,8 @@
     "shell:start:package": "pnpm -C packages/shell run start:package",
     "shell:test": "npx --prefix packages/shell playwright test simple.spec.ts",
     "test": "pnpm run test:local && pnpm run test:live",
-    "test:live": "pnpm -r --no-sort --stream --workspace-concurrency=1 run test:live",
-    "test:local": "pnpm -r --no-sort --stream --workspace-concurrency=1 run test:local"
+    "test:live": "pnpm -r ---no-bail  -no-sort --stream --workspace-concurrency=1 run test:live",
+    "test:local": "pnpm -r --no-bail --no-sort --stream --workspace-concurrency=1 run test:local"
   },
   "devDependencies": {
     "@fluidframework/build-tools": "^0.57.0",

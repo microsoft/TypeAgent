@@ -42,6 +42,7 @@ export interface PlayRandomAction {
     };
 }
 
+// Play a specific track
 export interface PlayTrackAction {
     actionName: "playTrack";
     parameters: {
@@ -51,6 +52,7 @@ export interface PlayTrackAction {
     };
 }
 
+// Play a specific album
 export interface PlayAlbumAction {
     actionName: "playAlbum";
     parameters: {
@@ -134,6 +136,7 @@ export interface SetDefaultDeviceAction {
 export interface SelectDeviceAction {
     actionName: "selectDevice";
     parameters: {
+        // device name such as "bedroom", "living room", "whole house", "office computer", etc.
         deviceName: MusicDevice;
     };
 }
