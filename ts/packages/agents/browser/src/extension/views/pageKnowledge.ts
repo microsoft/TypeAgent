@@ -1724,14 +1724,14 @@ class KnowledgePanel {
             progressText.textContent = `${progress.processedItems} of ${progress.totalItems} items processed`;
         }
 
-        // Merge and display incremental knowledge data
+        // Update display with latest aggregated knowledge data
         if (progress.incrementalData) {
-            const newData = this.mergeKnowledgeData(
+            const newData = this.updateKnowledgeData(
                 this.streamingState.currentData,
                 progress.incrementalData,
             );
 
-            // Update UI with new items (animated)
+            // Update UI with latest aggregated results
             this.updateKnowledgeDisplay(
                 this.streamingState.currentData,
                 newData,
@@ -1753,67 +1753,26 @@ class KnowledgePanel {
         }
     }
 
-    private mergeKnowledgeData(
+    private updateKnowledgeData(
         existing: KnowledgeData,
         incoming: Partial<any>, // Using any to avoid type conflicts with incremental data
     ): KnowledgeData {
         const merged = { ...existing };
 
-        // Deduplicate entities by name, keeping most comprehensive version
+        // Replace entities entirely with latest aggregated results
+        // Incoming data now contains fully aggregated results, not incremental updates
         if (incoming.entities) {
-            // Create a map to track entities by name (case-insensitive)
-            const entityMap = new Map<string, any>();
-
-            // Add existing entities to map
-            existing.entities.forEach((entity) => {
-                const key = entity.name.toLowerCase();
-                entityMap.set(key, entity);
-            });
-
-            // Update with new entities - prefer entities with more data
-            incoming.entities.forEach((entity: any) => {
-                const key = entity.name.toLowerCase();
-                const existingEntity = entityMap.get(key);
-
-                // Keep the entity with more comprehensive data
-                if (
-                    !existingEntity ||
-                    (entity.description && !existingEntity.description) ||
-                    (entity.confidence &&
-                        (!existingEntity.confidence ||
-                            entity.confidence > existingEntity.confidence))
-                ) {
-                    entityMap.set(key, entity);
-                }
-            });
-
-            // Convert map back to array
-            merged.entities = Array.from(entityMap.values());
+            merged.entities = incoming.entities;
         }
 
-        // Deduplicate relationships by from-relationship-to combination
+        // Replace relationships entirely with latest aggregated results
         if (incoming.relationships) {
-            const existingRels = new Set(
-                existing.relationships.map(
-                    (r) => `${r.from}:${r.relationship}:${r.to}`,
-                ),
-            );
-
-            const newRels = incoming.relationships.filter(
-                (r: any) =>
-                    !existingRels.has(`${r.from}:${r.relationship}:${r.to}`),
-            );
-
-            merged.relationships = [...existing.relationships, ...newRels];
+            merged.relationships = incoming.relationships;
         }
 
-        // Deduplicate topics
+        // Replace topics entirely with latest aggregated results
         if (incoming.keyTopics) {
-            const existingTopics = new Set(existing.keyTopics);
-            const newTopics = incoming.keyTopics.filter(
-                (t: any) => !existingTopics.has(t),
-            );
-            merged.keyTopics = [...existing.keyTopics, ...newTopics];
+            merged.keyTopics = incoming.keyTopics;
         }
 
         // Update summary (replace, not merge)
