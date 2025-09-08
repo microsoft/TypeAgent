@@ -34,7 +34,7 @@ export type OpenWebPage = {
     actionName: "openWebPage";
     parameters: {
         // Name/Description/search terms of the site to open
-        // Do NOT put URL here unless the user request specified the URL.
+        // Do NOT convert user requested site into URL.
         site:
             | "paleobiodb"
             | "crossword"

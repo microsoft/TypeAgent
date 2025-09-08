@@ -36,7 +36,7 @@
               "parameters": { "path": "/data/hello.txt" }
             },
             "alternates": {
-              "path": "hello.txt"
+              "path": ["data/hello.txt", "hello.txt"]
             }
           }
         ]

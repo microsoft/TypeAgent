@@ -18,5 +18,16 @@
         }
       ]
     }
+  },
+  {
+    "request": "Open the website https://microsoft.com",
+    "expected": {
+      "schemaName": "browser",
+      "actionName": "openWebPage",
+      "parameters": {
+        "site": "https://microsoft.com",
+        "tab": "current"
+      }
+    }
   }
 ]
