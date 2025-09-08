@@ -27,7 +27,7 @@ const project = new AIProjectClient(
 
 const limit = parseInt(
     process.argv[process.argv.indexOf("--limit") + 1],
-    10_000
+    20_000
 );
 
 // go get top websites and keywords from Moz
