@@ -111,6 +111,7 @@ import {
 import {
     BrowserActionContext,
     getActionBrowserControl,
+    getBrowserControl,
     saveSettings,
 } from "./browserActions.mjs";
 import {
@@ -160,39 +161,6 @@ interface ActiveKnowledgeExtraction {
 }
 
 const activeKnowledgeExtractions = new Map<string, ActiveKnowledgeExtraction>();
-
-function deduplicateKnowledge(
-    existing: any[],
-    incoming: any[],
-    keyField: string = "name",
-): any[] {
-    if (!incoming || !Array.isArray(incoming)) return existing;
-
-    const existingKeys = new Set(
-        existing.map((item) => {
-            if (typeof item === "string") return item.toLowerCase();
-            return (
-                item[keyField] ||
-                item.name ||
-                JSON.stringify(item)
-            ).toLowerCase();
-        }),
-    );
-
-    const newItems = incoming.filter((item) => {
-        const key =
-            typeof item === "string"
-                ? item.toLowerCase()
-                : (
-                      item[keyField] ||
-                      item.name ||
-                      JSON.stringify(item)
-                  ).toLowerCase();
-        return !existingKeys.has(key);
-    });
-
-    return [...existing, ...newItems];
-}
 
 // Helper function to update progress state in a consistent way
 function updateExtractionProgressState(
@@ -256,7 +224,7 @@ function generateDetailedKnowledgeCards(knowledgeResult: any): string {
     if (entities.length > 0) {
         html += `
         <div style="margin-bottom: 12px;">
-            <div style="font-weight: 600; color: #495057; margin-bottom: 6px;">🏷️ Entities (${entities.length}):</div>
+            <div style="font-weight: 600; color: #495057; margin-bottom: 6px;"><i class="bi bi-tags"></i> Entities (${entities.length}):</div>
             <div style="display: flex; flex-wrap: wrap; gap: 4px;">
                 ${entities
                     .slice(0, 10)
@@ -278,7 +246,7 @@ function generateDetailedKnowledgeCards(knowledgeResult: any): string {
     if (topics.length > 0) {
         html += `
         <div style="margin-bottom: 12px;">
-            <div style="font-weight: 600; color: #495057; margin-bottom: 6px;">📋 Topics (${topics.length}):</div>
+            <div style="font-weight: 600; color: #495057; margin-bottom: 6px;"><i class="bi bi-bookmark"></i> Topics (${topics.length}):</div>
             <div style="display: flex; flex-wrap: wrap; gap: 4px;">
                 ${topics
                     .slice(0, 8)
@@ -296,7 +264,7 @@ function generateDetailedKnowledgeCards(knowledgeResult: any): string {
     if (relationships.length > 0) {
         html += `
         <div style="margin-bottom: 12px;">
-            <div style="font-weight: 600; color: #495057; margin-bottom: 6px;">🔗 Relationships (${relationships.length}):</div>
+            <div style="font-weight: 600; color: #495057; margin-bottom: 6px;"><i class="bi bi-diagram-3"></i> Relationships (${relationships.length}):</div>
             <div style="font-size: 13px; color: #6c757d;">
                 ${relationships
                     .slice(0, 5)
@@ -341,7 +309,7 @@ function generateLiveKnowledgePreview(
     <!-- Entities Section -->
     <div class="knowledge-section" style="margin-bottom: 16px;">
         <div style="display: flex; align-items: center; margin-bottom: 8px;">
-            <span style="margin-right: 6px;">🏷️</span>
+            <i class="bi bi-tags" style="margin-right: 6px;"></i>
             <span style="font-weight: 600; color: #495057; font-size: 14px;">Entities</span>
             <span style="background: #e3f2fd; color: #1976d2; padding: 2px 6px; border-radius: 10px; font-size: 11px; font-weight: bold; margin-left: 6px;">${entities.length}</span>
         </div>
@@ -368,7 +336,7 @@ function generateLiveKnowledgePreview(
     <!-- Topics Section -->
     <div class="knowledge-section" style="margin-bottom: 16px;">
         <div style="display: flex; align-items: center; margin-bottom: 8px;">
-            <span style="margin-right: 6px;">📋</span>
+            <i class="bi bi-bookmark" style="margin-right: 6px;"></i>
             <span style="font-weight: 600; color: #495057; font-size: 14px;">Topics</span>
             <span style="background: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 10px; font-size: 11px; font-weight: bold; margin-left: 6px;">${topics.length}</span>
         </div>
@@ -398,7 +366,7 @@ function generateLiveKnowledgePreview(
             ? `
     <div class="knowledge-section" style="margin-bottom: 16px;">
         <div style="display: flex; align-items: center; margin-bottom: 8px;">
-            <span style="margin-right: 6px;">🔗</span>
+            <i class="bi bi-diagram-3" style="margin-right: 6px;"></i>
             <span style="font-weight: 600; color: #495057; font-size: 14px;">Relationships</span>
             <span style="background: #e8f5e8; color: #2e7d2e; padding: 2px 6px; border-radius: 10px; font-size: 11px; font-weight: bold; margin-left: 6px;">${relationships.length}</span>
         </div>
@@ -713,36 +681,25 @@ async function handleKnowledgeExtractionProgress(
         return;
     }
 
-    // Update aggregated knowledge if incremental data is provided
+    // Replace aggregated knowledge with the latest results
+    // Messages now contain fully aggregated results, not incremental updates
     if (progress.incrementalData) {
         const data = progress.incrementalData;
 
-        // Deduplicate and merge entities
+        // Replace entities entirely with latest aggregated results
         if (data.entities && Array.isArray(data.entities)) {
-            activeExtraction.aggregatedKnowledge.entities =
-                deduplicateKnowledge(
-                    activeExtraction.aggregatedKnowledge.entities,
-                    data.entities,
-                    "name",
-                );
+            activeExtraction.aggregatedKnowledge.entities = data.entities;
         }
 
-        // Deduplicate and merge topics
+        // Replace topics entirely with latest aggregated results
         if (data.keyTopics && Array.isArray(data.keyTopics)) {
-            activeExtraction.aggregatedKnowledge.topics = deduplicateKnowledge(
-                activeExtraction.aggregatedKnowledge.topics,
-                data.keyTopics,
-            );
+            activeExtraction.aggregatedKnowledge.topics = data.keyTopics;
         }
 
-        // Deduplicate and merge relationships
+        // Replace relationships entirely with latest aggregated results
         if (data.relationships && Array.isArray(data.relationships)) {
             activeExtraction.aggregatedKnowledge.relationships =
-                deduplicateKnowledge(
-                    activeExtraction.aggregatedKnowledge.relationships,
-                    data.relationships,
-                    "source",
-                );
+                data.relationships;
         }
     }
 
@@ -1363,33 +1320,25 @@ async function handleKnowledgeExtractionProgressFromEvent(
         progress,
     );
 
-    // Update aggregated knowledge if incremental data is provided (existing logic)
+    // Replace aggregated knowledge with the latest results
+    // Messages now contain fully aggregated results, not incremental updates
     if (progress.incrementalData) {
         const data = progress.incrementalData;
 
+        // Replace entities entirely with latest aggregated results
         if (data.entities && Array.isArray(data.entities)) {
-            activeExtraction.aggregatedKnowledge.entities =
-                deduplicateKnowledge(
-                    activeExtraction.aggregatedKnowledge.entities,
-                    data.entities,
-                    "name",
-                );
+            activeExtraction.aggregatedKnowledge.entities = data.entities;
         }
 
+        // Replace topics entirely with latest aggregated results
         if (data.keyTopics && Array.isArray(data.keyTopics)) {
-            activeExtraction.aggregatedKnowledge.topics = deduplicateKnowledge(
-                activeExtraction.aggregatedKnowledge.topics,
-                data.keyTopics,
-            );
+            activeExtraction.aggregatedKnowledge.topics = data.keyTopics;
         }
 
+        // Replace relationships entirely with latest aggregated results
         if (data.relationships && Array.isArray(data.relationships)) {
             activeExtraction.aggregatedKnowledge.relationships =
-                deduplicateKnowledge(
-                    activeExtraction.aggregatedKnowledge.relationships,
-                    data.relationships,
-                    "source",
-                );
+                data.relationships;
         }
     }
 
@@ -1583,6 +1532,51 @@ function createKnowledgeActionResult(
     return result;
 }
 
+/**
+ * Determines whether knowledge extraction should run for the current page
+ * based on auto-indexing settings and URL validation
+ */
+async function shouldRunKnowledgeExtraction(
+    url: string,
+    context:
+        | ActionContext<BrowserActionContext>
+        | SessionContext<BrowserActionContext>,
+): Promise<boolean> {
+    try {
+        // Check if auto-indexing is enabled
+        const browserControl =
+            "actionIO" in context
+                ? getActionBrowserControl(
+                      context as ActionContext<BrowserActionContext>,
+                  )
+                : getBrowserControl(context.agentContext);
+
+        const browserSettings = await browserControl.getBrowserSettings();
+        if (!browserSettings.autoIndexing) {
+            return false;
+        }
+
+        let parsedUrl: URL;
+        try {
+            parsedUrl = new URL(url);
+        } catch {
+            return false;
+        }
+
+        const validProtocols = ["http:", "https:"];
+        if (!validProtocols.includes(parsedUrl.protocol)) {
+            return false;
+        }
+
+        // TODO: Add domain filtering to skip indexing for specific user-configured domains
+
+        return true;
+    } catch (error) {
+        debug("Error checking if knowledge extraction should run:", error);
+        return false;
+    }
+}
+
 async function openWebPage(
     context: ActionContext<BrowserActionContext>,
     action: TypeAgentAction<OpenWebPage>,
@@ -1613,9 +1607,9 @@ async function openWebPage(
 
     // Phase 3: Settings-Aware Knowledge Extraction
     try {
-        const browserSettings = await browserControl.getBrowserSettings();
+        if (await shouldRunKnowledgeExtraction(url, context)) {
+            const browserSettings = await browserControl.getBrowserSettings();
 
-        if (browserSettings.autoIndexing) {
             // Check if knowledge already exists in index
             const existingKnowledge = await checkKnowledgeInIndex(url, context);
             if (existingKnowledge) {

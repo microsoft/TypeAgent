@@ -138,12 +138,24 @@ class KnowledgePanel {
 
         this.setupEventListeners();
         this.setupStreamingListeners();
+        this.setupButtonIcons(); // Set up button icons after DOM is ready
         await this.loadCurrentPageInfo();
         await this.loadAutoIndexSetting();
         await this.checkConnectionStatus();
         this.setupConnectionStatusListener();
         await this.loadFreshKnowledge();
         await this.loadExtractionSettings();
+    }
+
+    private setupButtonIcons() {
+        // Change the extract button to use a refresh icon
+        const extractButton = document.getElementById(
+            "extractKnowledge",
+        ) as HTMLButtonElement;
+        if (extractButton) {
+            extractButton.innerHTML =
+                '<i class="bi bi-arrow-clockwise me-2"></i>Refresh';
+        }
     }
 
     private setupEventListeners() {
@@ -321,6 +333,23 @@ class KnowledgePanel {
                 "autoIndexToggle",
             ) as HTMLInputElement;
             toggle.checked = enabled;
+
+            // Hide the auto-index toggle as per requirements
+            const toggleContainer = toggle.closest(
+                ".form-check, .toggle-container, .auto-index-section",
+            );
+            if (toggleContainer) {
+                (toggleContainer as HTMLElement).style.display = "none";
+            } else {
+                // Fallback: hide the toggle itself and its label
+                toggle.style.display = "none";
+                const label = document.querySelector(
+                    'label[for="autoIndexToggle"]',
+                );
+                if (label) {
+                    (label as HTMLElement).style.display = "none";
+                }
+            }
         } catch (error) {
             console.error("Error loading auto-index setting:", error);
         }
@@ -447,8 +476,9 @@ class KnowledgePanel {
             // Brief delay to show error state
             await new Promise((resolve) => setTimeout(resolve, 1000));
         } finally {
-            // Restore original button state
-            button.innerHTML = originalContent;
+            // Restore refresh icon button state
+            button.innerHTML =
+                '<i class="bi bi-arrow-clockwise me-2"></i>Refresh';
             button.disabled = false;
             button.classList.remove("btn-warning", "btn-success", "btn-danger");
             button.classList.add("btn-primary");
@@ -1094,19 +1124,16 @@ class KnowledgePanel {
 
     private updateConnectionStatus() {
         const statusElement = document.getElementById("connectionStatus")!;
-        const indicator = statusElement.querySelector(".status-indicator")!;
 
         if (this.isConnected) {
-            indicator.className = "status-indicator status-connected";
-            statusElement.innerHTML = `
-                <span class="status-indicator status-connected"></span>
-                Connected to TypeAgent
-            `;
+            // Hide connection status when connected
+            statusElement.style.display = "none";
         } else {
-            indicator.className = "status-indicator status-disconnected";
+            // Show disconnection warning
+            statusElement.style.display = "block";
             statusElement.innerHTML = `
                 <span class="status-indicator status-disconnected"></span>
-                Disconnected from TypeAgent
+                <span class="text-warning">Disconnected from TypeAgent</span>
             `;
         }
     }
@@ -1152,6 +1179,9 @@ class KnowledgePanel {
             } else {
                 this.showNotIndexedState();
                 this.disableSaveButton();
+
+                // Auto-start extraction if no saved knowledge exists
+                this.extractKnowledge();
             }
         } catch (error) {
             console.error("Error loading fresh knowledge:", error);
@@ -1724,14 +1754,14 @@ class KnowledgePanel {
             progressText.textContent = `${progress.processedItems} of ${progress.totalItems} items processed`;
         }
 
-        // Merge and display incremental knowledge data
+        // Update display with latest aggregated knowledge data
         if (progress.incrementalData) {
-            const newData = this.mergeKnowledgeData(
+            const newData = this.updateKnowledgeData(
                 this.streamingState.currentData,
                 progress.incrementalData,
             );
 
-            // Update UI with new items (animated)
+            // Update UI with latest aggregated results
             this.updateKnowledgeDisplay(
                 this.streamingState.currentData,
                 newData,
@@ -1753,67 +1783,26 @@ class KnowledgePanel {
         }
     }
 
-    private mergeKnowledgeData(
+    private updateKnowledgeData(
         existing: KnowledgeData,
         incoming: Partial<any>, // Using any to avoid type conflicts with incremental data
     ): KnowledgeData {
         const merged = { ...existing };
 
-        // Deduplicate entities by name, keeping most comprehensive version
+        // Replace entities entirely with latest aggregated results
+        // Incoming data now contains fully aggregated results, not incremental updates
         if (incoming.entities) {
-            // Create a map to track entities by name (case-insensitive)
-            const entityMap = new Map<string, any>();
-
-            // Add existing entities to map
-            existing.entities.forEach((entity) => {
-                const key = entity.name.toLowerCase();
-                entityMap.set(key, entity);
-            });
-
-            // Update with new entities - prefer entities with more data
-            incoming.entities.forEach((entity: any) => {
-                const key = entity.name.toLowerCase();
-                const existingEntity = entityMap.get(key);
-
-                // Keep the entity with more comprehensive data
-                if (
-                    !existingEntity ||
-                    (entity.description && !existingEntity.description) ||
-                    (entity.confidence &&
-                        (!existingEntity.confidence ||
-                            entity.confidence > existingEntity.confidence))
-                ) {
-                    entityMap.set(key, entity);
-                }
-            });
-
-            // Convert map back to array
-            merged.entities = Array.from(entityMap.values());
+            merged.entities = incoming.entities;
         }
 
-        // Deduplicate relationships by from-relationship-to combination
+        // Replace relationships entirely with latest aggregated results
         if (incoming.relationships) {
-            const existingRels = new Set(
-                existing.relationships.map(
-                    (r) => `${r.from}:${r.relationship}:${r.to}`,
-                ),
-            );
-
-            const newRels = incoming.relationships.filter(
-                (r: any) =>
-                    !existingRels.has(`${r.from}:${r.relationship}:${r.to}`),
-            );
-
-            merged.relationships = [...existing.relationships, ...newRels];
+            merged.relationships = incoming.relationships;
         }
 
-        // Deduplicate topics
+        // Replace topics entirely with latest aggregated results
         if (incoming.keyTopics) {
-            const existingTopics = new Set(existing.keyTopics);
-            const newTopics = incoming.keyTopics.filter(
-                (t: any) => !existingTopics.has(t),
-            );
-            merged.keyTopics = [...existing.keyTopics, ...newTopics];
+            merged.keyTopics = incoming.keyTopics;
         }
 
         // Update summary (replace, not merge)

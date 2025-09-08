@@ -110,23 +110,19 @@ class ActionDiscoveryPanel {
 
     private async updateConnectionStatus() {
         const statusElement = document.getElementById("connectionStatus")!;
-        const indicator = statusElement.querySelector(".status-indicator")!;
 
         try {
             const response = await chrome.runtime.sendMessage({ type: "ping" });
             this.connectionStatus.connected = true;
-
-            indicator.className = "status-indicator status-connected";
-            statusElement.innerHTML = `
-                <span class="status-indicator status-connected"></span>
-                Connected to TypeAgent
-            `;
+            // Hide connection status when connected
+            statusElement.style.display = "none";
         } catch (error) {
             this.connectionStatus.connected = false;
-            indicator.className = "status-indicator status-idle";
+            // Show disconnection warning
+            statusElement.style.display = "block";
             statusElement.innerHTML = `
                 <span class="status-indicator status-idle"></span>
-                Connection unavailable
+                <span class="text-warning">Connection unavailable</span>
             `;
         }
     }
@@ -135,11 +131,25 @@ class ActionDiscoveryPanel {
         try {
             const settings = await chrome.storage.local.get(["autoDiscovery"]);
             autoDiscoveryEnabled = settings.autoDiscovery || false;
-            (
-                document.getElementById(
-                    "autoDiscoveryToggle",
-                ) as HTMLInputElement
-            ).checked = autoDiscoveryEnabled;
+            const toggle = document.getElementById(
+                "autoDiscoveryToggle",
+            ) as HTMLInputElement;
+            toggle.checked = autoDiscoveryEnabled;
+
+            const toggleContainer = toggle.closest(
+                ".form-check, .toggle-container, .auto-discovery-section",
+            );
+            if (toggleContainer) {
+                (toggleContainer as HTMLElement).style.display = "none";
+            } else {
+                toggle.style.display = "none";
+                const label = document.querySelector(
+                    'label[for="autoDiscoveryToggle"]',
+                );
+                if (label) {
+                    (label as HTMLElement).style.display = "none";
+                }
+            }
         } catch (error) {
             console.error("Error loading auto-discovery settings:", error);
         }
