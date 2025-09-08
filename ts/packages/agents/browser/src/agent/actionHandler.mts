@@ -161,39 +161,6 @@ interface ActiveKnowledgeExtraction {
 
 const activeKnowledgeExtractions = new Map<string, ActiveKnowledgeExtraction>();
 
-function deduplicateKnowledge(
-    existing: any[],
-    incoming: any[],
-    keyField: string = "name",
-): any[] {
-    if (!incoming || !Array.isArray(incoming)) return existing;
-
-    const existingKeys = new Set(
-        existing.map((item) => {
-            if (typeof item === "string") return item.toLowerCase();
-            return (
-                item[keyField] ||
-                item.name ||
-                JSON.stringify(item)
-            ).toLowerCase();
-        }),
-    );
-
-    const newItems = incoming.filter((item) => {
-        const key =
-            typeof item === "string"
-                ? item.toLowerCase()
-                : (
-                      item[keyField] ||
-                      item.name ||
-                      JSON.stringify(item)
-                  ).toLowerCase();
-        return !existingKeys.has(key);
-    });
-
-    return [...existing, ...newItems];
-}
-
 // Helper function to update progress state in a consistent way
 function updateExtractionProgressState(
     activeExtraction: ActiveKnowledgeExtraction,
@@ -711,36 +678,25 @@ async function handleKnowledgeExtractionProgress(
         return;
     }
 
-    // Update aggregated knowledge if incremental data is provided
+    // Replace aggregated knowledge with the latest results
+    // Messages now contain fully aggregated results, not incremental updates
     if (progress.incrementalData) {
         const data = progress.incrementalData;
 
-        // Deduplicate and merge entities
+        // Replace entities entirely with latest aggregated results
         if (data.entities && Array.isArray(data.entities)) {
-            activeExtraction.aggregatedKnowledge.entities =
-                deduplicateKnowledge(
-                    activeExtraction.aggregatedKnowledge.entities,
-                    data.entities,
-                    "name",
-                );
+            activeExtraction.aggregatedKnowledge.entities = data.entities;
         }
 
-        // Deduplicate and merge topics
+        // Replace topics entirely with latest aggregated results
         if (data.keyTopics && Array.isArray(data.keyTopics)) {
-            activeExtraction.aggregatedKnowledge.topics = deduplicateKnowledge(
-                activeExtraction.aggregatedKnowledge.topics,
-                data.keyTopics,
-            );
+            activeExtraction.aggregatedKnowledge.topics = data.keyTopics;
         }
 
-        // Deduplicate and merge relationships
+        // Replace relationships entirely with latest aggregated results
         if (data.relationships && Array.isArray(data.relationships)) {
             activeExtraction.aggregatedKnowledge.relationships =
-                deduplicateKnowledge(
-                    activeExtraction.aggregatedKnowledge.relationships,
-                    data.relationships,
-                    "source",
-                );
+                data.relationships;
         }
     }
 
@@ -1361,33 +1317,25 @@ async function handleKnowledgeExtractionProgressFromEvent(
         progress,
     );
 
-    // Update aggregated knowledge if incremental data is provided (existing logic)
+    // Replace aggregated knowledge with the latest results
+    // Messages now contain fully aggregated results, not incremental updates
     if (progress.incrementalData) {
         const data = progress.incrementalData;
 
+        // Replace entities entirely with latest aggregated results
         if (data.entities && Array.isArray(data.entities)) {
-            activeExtraction.aggregatedKnowledge.entities =
-                deduplicateKnowledge(
-                    activeExtraction.aggregatedKnowledge.entities,
-                    data.entities,
-                    "name",
-                );
+            activeExtraction.aggregatedKnowledge.entities = data.entities;
         }
 
+        // Replace topics entirely with latest aggregated results
         if (data.keyTopics && Array.isArray(data.keyTopics)) {
-            activeExtraction.aggregatedKnowledge.topics = deduplicateKnowledge(
-                activeExtraction.aggregatedKnowledge.topics,
-                data.keyTopics,
-            );
+            activeExtraction.aggregatedKnowledge.topics = data.keyTopics;
         }
 
+        // Replace relationships entirely with latest aggregated results
         if (data.relationships && Array.isArray(data.relationships)) {
             activeExtraction.aggregatedKnowledge.relationships =
-                deduplicateKnowledge(
-                    activeExtraction.aggregatedKnowledge.relationships,
-                    data.relationships,
-                    "source",
-                );
+                data.relationships;
         }
     }
 

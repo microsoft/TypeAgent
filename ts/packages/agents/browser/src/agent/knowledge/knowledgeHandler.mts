@@ -651,15 +651,26 @@ export async function extractKnowledgeFromPageStreaming(
             );
             const summaryData = aggregateExtractionResults(summaryResults);
 
-            // Merge summary data
+            // Replace with LLM-based summary data
             aggregatedResults.summary = summaryData.summary;
-            if (summaryData.keyTopics) {
-                aggregatedResults.keyTopics = [
-                    ...new Set([
-                        ...aggregatedResults.keyTopics,
-                        ...summaryData.keyTopics,
-                    ]),
-                ];
+
+            // Replace topics with summary extraction results if available
+            // Summary extraction provides higher-fidelity topics than basic extraction
+            if (summaryData.keyTopics && summaryData.keyTopics.length > 0) {
+                aggregatedResults.keyTopics = summaryData.keyTopics;
+            }
+
+            // If summary extraction provides entities, replace basic ones
+            if (summaryData.entities && summaryData.entities.length > 0) {
+                aggregatedResults.entities = summaryData.entities;
+            }
+
+            // If summary extraction provides relationships, replace basic ones
+            if (
+                summaryData.relationships &&
+                summaryData.relationships.length > 0
+            ) {
+                aggregatedResults.relationships = summaryData.relationships;
             }
 
             await sendProgressUpdate(
@@ -709,63 +720,26 @@ export async function extractKnowledgeFromPageStreaming(
                 sampleContentResult: contentResults[0], // Sample to inspect structure
             });
 
-            // Merge content data - content extraction takes precedence over basic
-            // Create a map to track entities by name (case-insensitive)
-            const entityMap = new Map<string, any>();
+            // Replace basic extraction with LLM-based content extraction
+            // LLM extraction provides higher-fidelity knowledge than rule-based basic extraction
+            if (contentData.entities && contentData.entities.length > 0) {
+                // Replace entities entirely with content extraction results
+                aggregatedResults.entities = contentData.entities;
+            }
 
-            // Add existing entities to map (from basic phase)
-            aggregatedResults.entities.forEach((entity: any) => {
-                const key = entity.name.toLowerCase();
-                entityMap.set(key, entity);
-            });
+            // Replace topics with content extraction results
+            if (contentData.keyTopics && contentData.keyTopics.length > 0) {
+                // Replace topics entirely with content extraction results
+                aggregatedResults.keyTopics = contentData.keyTopics;
+            }
 
-            // Track new entities for incremental updates
-            const newEntities: any[] = [];
-
-            // Update with content extraction entities - always prefer content over basic
-            // Content extraction provides more comprehensive entity data
-            contentData.entities.forEach((entity: any) => {
-                const key = entity.name.toLowerCase();
-                const existing = entityMap.get(key);
-
-                // Always replace with content extraction data (more comprehensive than basic)
-                entityMap.set(key, entity);
-                if (!existing) {
-                    newEntities.push(entity);
-                }
-            });
-
-            // Convert map back to array
-            aggregatedResults.entities = Array.from(entityMap.values());
-
-            // Merge topics
-            aggregatedResults.keyTopics = [
-                ...new Set([
-                    ...aggregatedResults.keyTopics,
-                    ...contentData.keyTopics,
-                ]),
-            ];
-
-            // Include basic relationships in content mode
+            // Replace relationships with content extraction results
             if (
                 contentData.relationships &&
                 contentData.relationships.length > 0
             ) {
-                const existingRelKeys = new Set(
-                    aggregatedResults.relationships.map(
-                        (r: any) => `${r.from}:${r.relationship}:${r.to}`,
-                    ),
-                );
-                const newRelationships = contentData.relationships.filter(
-                    (r: any) =>
-                        !existingRelKeys.has(
-                            `${r.from}:${r.relationship}:${r.to}`,
-                        ),
-                );
-                aggregatedResults.relationships = [
-                    ...aggregatedResults.relationships,
-                    ...newRelationships,
-                ];
+                // Replace relationships entirely with content extraction results
+                aggregatedResults.relationships = contentData.relationships;
             }
 
             // Merge content actions (these are saved as "actions" in the index)
@@ -803,20 +777,21 @@ export async function extractKnowledgeFromPageStreaming(
             );
             const fullData = aggregateExtractionResults(fullResults);
 
-            // Merge relationships
-            const existingRelKeys = new Set(
-                aggregatedResults.relationships.map(
-                    (r: any) => `${r.from}:${r.relationship}:${r.to}`,
-                ),
-            );
-            const newRelationships = fullData.relationships.filter(
-                (r: any) =>
-                    !existingRelKeys.has(`${r.from}:${r.relationship}:${r.to}`),
-            );
-            aggregatedResults.relationships = [
-                ...aggregatedResults.relationships,
-                ...newRelationships,
-            ];
+            // Replace with full extraction results - highest fidelity LLM extraction
+            // Full extraction provides the most comprehensive relationship analysis
+            if (fullData.relationships && fullData.relationships.length > 0) {
+                aggregatedResults.relationships = fullData.relationships;
+            }
+
+            // If full extraction provides entities, replace previous ones
+            if (fullData.entities && fullData.entities.length > 0) {
+                aggregatedResults.entities = fullData.entities;
+            }
+
+            // If full extraction provides topics, replace previous ones
+            if (fullData.keyTopics && fullData.keyTopics.length > 0) {
+                aggregatedResults.keyTopics = fullData.keyTopics;
+            }
 
             // Merge content actions from full extraction if present
             if (fullData.contentActions && fullData.contentActions.length > 0) {
