@@ -15,15 +15,15 @@ import {
 //const debug = registerDebug("typeagent:azure-ai-foundry:aliasKeywordExtractor");
 
 export type openPhrases = {
-  urls: SearchResult[];
-  searchQueryRun: string;
-}
+    urls: SearchResult[];
+    searchQueryRun: string;
+};
 
 export type SearchResult = {
-  pageTitle: string;
-  pageUrl: string;
-  openPhrases: string[];
-}
+    pageTitle: string;
+    pageUrl: string;
+    openPhrases: string[];
+};
 
 /*
  * Attempts to retrive the URL resolution agent from the AI project and creates it if necessary
@@ -90,7 +90,7 @@ type SearchResult = {
 export async function createOpenPhrasesForDomain(
     domain: string,
     groundingConfig: bingWithGrounding.ApiSettings,
-    project: AIProjectClient
+    project: AIProjectClient,
 ): Promise<openPhrases | undefined | null> {
     const agent = await ensureOpenPhraseGeneratorAgent(
         groundingConfig,
@@ -110,11 +110,7 @@ export async function createOpenPhrasesForDomain(
         const thread = await project.agents.threads.create();
 
         // add the request to the thread
-        await project.agents.messages.create(
-                            thread.id,
-                            "user",
-                            domain,
-                        );        
+        await project.agents.messages.create(thread.id, "user", domain);
 
         // Create run
         const run = await project.agents.runs.createAndPoll(
@@ -144,12 +140,9 @@ export async function createOpenPhrasesForDomain(
         if (run.status === "completed") {
             if (run.completedAt) {
                 // Retrieve messages
-                const messages = await project.agents.messages.list(
-                    thread.id,
-                    {
-                        order: "asc",
-                    },
-                );
+                const messages = await project.agents.messages.list(thread.id, {
+                    order: "asc",
+                });
 
                 // accumulate assistant messages
                 for await (const m of messages) {
@@ -166,9 +159,7 @@ export async function createOpenPhrasesForDomain(
                             txt = txt
                                 .replaceAll("```json", "")
                                 .replaceAll("```", "");
-                            retVal = JSON.parse(
-                                txt,
-                            ) as openPhrases;
+                            retVal = JSON.parse(txt) as openPhrases;
                         }
                     }
                 }

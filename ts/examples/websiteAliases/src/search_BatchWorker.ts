@@ -9,11 +9,23 @@ import { AIProjectClient } from "@azure/ai-projects";
 import { DefaultAzureCredential } from "@azure/identity";
 import { isPageAvailable } from "./common.js";
 
-async function processDomain(domain: string, groundingConfig: bingWithGrounding.ApiSettings, project: AIProjectClient) {
-
+async function processDomain(
+    domain: string,
+    groundingConfig: bingWithGrounding.ApiSettings,
+    project: AIProjectClient,
+) {
     try {
-        const phrases: openPhraseGeneratorAgent.openPhrases | undefined | null = await openPhraseGeneratorAgent.createOpenPhrasesForDomain(domain, groundingConfig, project);
-        console.log(chalk.green(`Successfully processed domain ${domain} - Found ${phrases?.urls.length} urls`));
+        const phrases: openPhraseGeneratorAgent.openPhrases | undefined | null =
+            await openPhraseGeneratorAgent.createOpenPhrasesForDomain(
+                domain,
+                groundingConfig,
+                project,
+            );
+        console.log(
+            chalk.green(
+                `Successfully processed domain ${domain} - Found ${phrases?.urls.length} urls`,
+            ),
+        );
 
         // make sure the that URLs we got back are accessible
         // phrases?.urls.forEach(async (sr: openPhraseGeneratorAgent.SearchResult) => {
@@ -24,12 +36,16 @@ async function processDomain(domain: string, groundingConfig: bingWithGrounding.
         // });
 
         if (phrases?.urls) {
-            const availableUrls = await Promise.all(phrases?.urls.filter(async (sr: openPhraseGeneratorAgent.SearchResult) => {
-                return await isPageAvailable(sr.pageUrl);
-            }));
+            const availableUrls = await Promise.all(
+                phrases?.urls.filter(
+                    async (sr: openPhraseGeneratorAgent.SearchResult) => {
+                        return await isPageAvailable(sr.pageUrl);
+                    },
+                ),
+            );
 
             phrases.urls = availableUrls;
-        }        
+        }
 
         // send the result to the parent
         parentPort?.postMessage({
@@ -38,14 +54,19 @@ async function processDomain(domain: string, groundingConfig: bingWithGrounding.
             domain: domain,
         });
     } catch (error: any) {
-        console.error(chalk.red(`Error processing domain ${domain}: ${error.message}`));
-        parentPort?.postMessage({ success: false, domain: domain,error: error.message });
+        console.error(
+            chalk.red(`Error processing domain ${domain}: ${error.message}`),
+        );
+        parentPort?.postMessage({
+            success: false,
+            domain: domain,
+            error: error.message,
+        });
     }
 }
 
 // This script expects workerData to contain { domains, modulePath }
 (async () => {
-
     // Load environment variables from .env file
     const envPath = new URL("../../../.env", import.meta.url);
     dotenv.config({ path: envPath });
@@ -59,4 +80,3 @@ async function processDomain(domain: string, groundingConfig: bingWithGrounding.
 
     await processDomain(workerData.domain, groundingConfig, project);
 })();
-

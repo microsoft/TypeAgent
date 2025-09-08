@@ -60,11 +60,10 @@ export async function isPageAvailable(url: string): Promise<boolean> {
     // HTTPS
     do {
         try {
-
             if (!url.startsWith("http") || !url.startsWith("https")) {
                 url = `https://${url}`;
             }
-            
+
             const httpsResponse = await fetch(`${url}`);
             const httpsStatus = httpsResponse.status;
 

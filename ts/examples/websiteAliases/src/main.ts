@@ -27,7 +27,7 @@ const project = new AIProjectClient(
 
 const limit = parseInt(
     process.argv[process.argv.indexOf("--limit") + 1],
-    20_000
+    20_000,
 );
 
 // go get top websites and keywords from Moz
@@ -35,17 +35,17 @@ if (process.argv.includes("--pageContent")) {
     console.log("Website search keyword extractor selected.");
     const ee = new pageContentKeywordExtractor(project, groundingConfig);
     await ee.extract();
-// } else if (process.argv.includes("--topN")) {
-//     // go get top NNN sites from CloudFlare
-//     console.log("Top N sites extractor selected.");
+    // } else if (process.argv.includes("--topN")) {
+    //     // go get top NNN sites from CloudFlare
+    //     console.log("Top N sites extractor selected.");
 
-//     const topNExtractor = new topNDomainsExtractor(topN);
+    //     const topNExtractor = new topNDomainsExtractor(topN);
 
-//     if (process.argv.includes("--summary")) {
-//         await topNExtractor.summarize();
-//     } else {
-//         await topNExtractor.index(process.argv.includes("--clear"));
-//     }
+    //     if (process.argv.includes("--summary")) {
+    //         await topNExtractor.summarize();
+    //     } else {
+    //         await topNExtractor.index(process.argv.includes("--clear"));
+    //     }
 } else {
     // search engine based phrase generation
     console.log("Search results phrase generator selected.");
@@ -58,5 +58,5 @@ if (process.argv.includes("--pageContent")) {
         await searchResultsExtractor.compact();
     } else {
         await searchResultsExtractor.index(process.argv.includes("--clear"));
-    }    
+    }
 }

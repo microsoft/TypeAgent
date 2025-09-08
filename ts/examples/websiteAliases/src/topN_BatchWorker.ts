@@ -32,7 +32,9 @@ async function processDomains(domains: string[]) {
             chalk.blue(`Processing domains: ${filteredDomains.join(", ")}`),
         );
         try {
-            const response = await getTypeChatResponse(filteredDomains.join("\n"));
+            const response = await getTypeChatResponse(
+                filteredDomains.join("\n"),
+            );
             if (response.success) {
                 parentPort?.postMessage({
                     success: true,
@@ -45,9 +47,7 @@ async function processDomains(domains: string[]) {
             parentPort?.postMessage({ success: false, error: err.message });
         }
     } else {
-       console.log(
-            chalk.cyan(`NO DOMAINS FOR PROCESSING!`),
-        );
+        console.log(chalk.cyan(`NO DOMAINS FOR PROCESSING!`));
         parentPort?.postMessage({ success: true, domains: [] });
     }
 }

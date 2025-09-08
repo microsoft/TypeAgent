@@ -63,6 +63,6 @@ export function apiSettingsFromEnv(
         openPhraseGeneratorAgentId: getEnvSetting(
             env,
             EnvVars.AZURE_FOUNDRY_AGENT_ID_OPEN_PHRASE_GENERATOR,
-        )
+        ),
     };
 }

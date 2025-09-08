@@ -16,9 +16,8 @@ import { openPhraseGeneratorAgent, urlResolverCache } from "azure-ai-foundry";
 
 type cachedUrls_compact = {
     domains: {
-        [key: string]: { 
-        }
-    }
+        [key: string]: {};
+    };
     phrases: {
         [key: string]: number[];
     };
@@ -32,11 +31,16 @@ export class searchResultsPhraseGenerator {
         "https://radar.cloudflare.com/charts/LargerTopDomainsTable/attachment?id=1257&top=";
     private limit: number = 20000;
     private dataFile: string = `examples/websiteAliases/data/top1Milliondomains.csv`;
-    private outputCacheFile: string = "examples/websiteAliases/cache/phrases.json";
-    private outputPath: string = path.join(path.dirname(path.dirname(fileURLToPath(import.meta.url))), "cache");
-    private cache: urlResolverCache.UrlResolverCache = new urlResolverCache.UrlResolverCache();
+    private outputCacheFile: string =
+        "examples/websiteAliases/cache/phrases.json";
+    private outputPath: string = path.join(
+        path.dirname(path.dirname(fileURLToPath(import.meta.url))),
+        "cache",
+    );
+    private cache: urlResolverCache.UrlResolverCache =
+        new urlResolverCache.UrlResolverCache();
 
-    constructor(limit: number,) {
+    constructor(limit: number) {
         if (limit && limit > 0) {
             this.limit = limit;
         }
@@ -81,12 +85,11 @@ export class searchResultsPhraseGenerator {
         const fileContent = readFileSync(this.dataFile, "utf-8");
         const lines = fileContent.split("\n").slice(1);
 
-        const stop: number = this.limit <= 0 ? lines.length : this.limit; 
+        const stop: number = this.limit <= 0 ? lines.length : this.limit;
         const batchSize = 1;
         const batchCount = Math.ceil(stop / batchSize);
         let batchNumber = 0;
         const batchPromises: Promise<void>[] = [];
-        
 
         console.log(
             `Found ${lines.length} domains. Stopping at ${stop}. Processing in ${batchCount} batches of ${batchSize} domains each.`,
@@ -97,14 +100,13 @@ export class searchResultsPhraseGenerator {
             "./search_BatchWorker.js",
         );
 
-        
         for (let i = 0; i < stop; i++) {
             const columns = lines[i].split(",");
-            let domain = lines[i].replaceAll("\"", "");
+            let domain = lines[i].replaceAll('"', "");
 
             // get the domain from the 2nd column if we have one
             if (columns.length === 3) {
-                domain = columns[1].trim().replaceAll("\"", "");
+                domain = columns[1].trim().replaceAll('"', "");
             }
 
             // skip empty domains or domains that are already processed
@@ -123,18 +125,14 @@ export class searchResultsPhraseGenerator {
             const batchPromise = new Promise<void>((resolve) => {
                 worker.on("message", async (msg) => {
                     if (msg.success) {
-                        console.log(
-                            chalk.grey(`Worker processed: ${domain}`),
-                        );
+                        console.log(chalk.grey(`Worker processed: ${domain}`));
 
                         // merge the results into the index
                         this.mergeResults(msg.phrases);
 
                         resolve();
                     } else {
-                        console.error(
-                            chalk.red(`Worker failed: ${msg.error}`),
-                        );
+                        console.error(chalk.red(`Worker failed: ${msg.error}`));
                         resolve();
                     }
 
@@ -145,9 +143,7 @@ export class searchResultsPhraseGenerator {
                     };
                 });
                 worker.on("error", (err) => {
-                    console.error(
-                        chalk.red(`Worker error: ${err.message}`),
-                    );
+                    console.error(chalk.red(`Worker error: ${err.message}`));
                     resolve();
                 });
             });
@@ -156,10 +152,7 @@ export class searchResultsPhraseGenerator {
             batchPromises.push(batchPromise);
 
             // wait for all of the promises to complete once the batch size is full, then continue
-            if (
-                batchPromises.length >= batchSize ||
-                i >= stop - 1
-            ) {
+            if (batchPromises.length >= batchSize || i >= stop - 1) {
                 await Promise.all(batchPromises);
 
                 // reset the batch promises
@@ -168,7 +161,11 @@ export class searchResultsPhraseGenerator {
                 // bump the batch number
                 batchNumber++;
 
-                console.log(chalk.bgBlueBright(`Batch ${batchNumber} of ${batchCount} completed.`));
+                console.log(
+                    chalk.bgBlueBright(
+                        `Batch ${batchNumber} of ${batchCount} completed.`,
+                    ),
+                );
 
                 // periodically save the output file so we don't have to start from scratch if we restart
                 this.cache.save();
@@ -190,7 +187,6 @@ export class searchResultsPhraseGenerator {
      * @param batchDomains - The domains processed in this batch
      */
     private mergeResults(phrases: openPhraseGeneratorAgent.openPhrases) {
-
         if (!phrases?.urls) {
             return;
         }
@@ -204,7 +200,6 @@ export class searchResultsPhraseGenerator {
 
             // merge the aliases with existing keywords
             element.openPhrases.forEach((alias) => {
-
                 // just in case it starts with "open", remove it
                 if (alias.toLowerCase().startsWith("open ")) {
                     alias = alias.slice(5);
@@ -230,7 +225,7 @@ export class searchResultsPhraseGenerator {
             });
 
             // record domain stats
-            this.cache.urls[element.pageUrl] = { 
+            this.cache.urls[element.pageUrl] = {
                 title: element.pageTitle,
                 phrases: element.openPhrases,
             };
@@ -254,7 +249,8 @@ export class searchResultsPhraseGenerator {
         let domainsWithMaxUrlCount: string[] = [];
 
         for (const [domain, stats] of Object.entries(this.cache.domains)) {
-            const dd: urlResolverCache.domainData = stats as urlResolverCache.domainData;
+            const dd: urlResolverCache.domainData =
+                stats as urlResolverCache.domainData;
             if (dd.urlsFound < minUrlsPerDomain) {
                 minUrlsPerDomain = dd.urlsFound;
             }
@@ -263,23 +259,30 @@ export class searchResultsPhraseGenerator {
                 maxUrlsPerDomain = dd.urlsFound;
                 domainsWithMaxUrlCount.push(domain);
             }
-            
+
             count++;
             avgUrlsPerDomain += dd.urlsFound;
         }
 
         console.log(chalk.white(`Number of domains processed: ${count}`));
-        console.log(chalk.green(`Minimum URLs per domain: ${minUrlsPerDomain}`));
-        console.log(chalk.yellow(`Maximum URLs per domain: ${maxUrlsPerDomain}`));
-        console.log(chalk.cyan(`Average URLs per domain: ${avgUrlsPerDomain / count}`));
+        console.log(
+            chalk.green(`Minimum URLs per domain: ${minUrlsPerDomain}`),
+        );
+        console.log(
+            chalk.yellow(`Maximum URLs per domain: ${maxUrlsPerDomain}`),
+        );
+        console.log(
+            chalk.cyan(`Average URLs per domain: ${avgUrlsPerDomain / count}`),
+        );
 
         let totalPhraseCount = 0;
         let minPhraseCount = Number.MAX_SAFE_INTEGER;
         let maxPhraseCount = Number.MIN_SAFE_INTEGER;
         let urlsWithMaxPhraseCount: string[] = [];
-        
+
         for (const [url, info] of Object.entries(this.cache.urls)) {
-            const ii: urlResolverCache.urlData = info as urlResolverCache.urlData;
+            const ii: urlResolverCache.urlData =
+                info as urlResolverCache.urlData;
             const phraseCount = ii.phrases?.length ?? 0;
             totalPhraseCount += phraseCount;
 
@@ -296,26 +299,35 @@ export class searchResultsPhraseGenerator {
         }
 
         const numUrlsIndexed = Object.keys(this.cache.urls).length;
-        const avgPhrasesPerDomain = numUrlsIndexed > 0 ? totalPhraseCount / numUrlsIndexed : 0;
+        const avgPhrasesPerDomain =
+            numUrlsIndexed > 0 ? totalPhraseCount / numUrlsIndexed : 0;
 
         console.log(chalk.green(`Number of URLs indexed: ${numUrlsIndexed}`));
-        console.log(chalk.yellow(`Average phrases per domain: ${avgPhrasesPerDomain}`));
+        console.log(
+            chalk.yellow(`Average phrases per domain: ${avgPhrasesPerDomain}`),
+        );
         console.log(chalk.cyan(`Minimum phrase count: ${minPhraseCount}`));
         console.log(chalk.magenta(`Maximum phrase count: ${maxPhraseCount}`));
-        console.log(chalk.blueBright(`Number of domains with max phrase count: ${urlsWithMaxPhraseCount.length}`));
+        console.log(
+            chalk.blueBright(
+                `Number of domains with max phrase count: ${urlsWithMaxPhraseCount.length}`,
+            ),
+        );
         //console.log(chalk.blue(`Urls with max phrase count: ${urlsWithMaxPhraseCount.join(", ")}`));
-        console.log(chalk.yellowBright(`${this.cache.urls.length} URLs INDEXED!`));
-
+        console.log(
+            chalk.yellowBright(`${this.cache.urls.length} URLs INDEXED!`),
+        );
     }
 
     /**
      * Compact the output file
      */
     public compact() {
-
         // do we have a compressable file?
         if (!existsSync(this.outputCacheFile)) {
-            console.error(`Output file ${this.outputCacheFile} does not exist.`);
+            console.error(
+                `Output file ${this.outputCacheFile} does not exist.`,
+            );
             return;
         }
 
@@ -327,12 +339,12 @@ export class searchResultsPhraseGenerator {
         const compressed: cachedUrls_compact = {
             domains: this.cache.domains,
             phrases: {},
-        };     
+        };
 
         console.log(chalk.blueBright("Indexing Domains"));
         const domainMap: Map<string, any> = new Map<string, any>();
-        for(const [domain] of Object.entries(this.cache.domains)) {
-            domainMap.set(domain, { });
+        for (const [domain] of Object.entries(this.cache.domains)) {
+            domainMap.set(domain, {});
         }
 
         // collapse URLs into domains
@@ -343,7 +355,7 @@ export class searchResultsPhraseGenerator {
 
             // crate the domain entry for this URL if we need to
             if (!domainMap.has(domain)) {
-                domainMap.set(domain, { });
+                domainMap.set(domain, {});
             }
 
             // move the URL into the domain
@@ -392,19 +404,19 @@ export class searchResultsPhraseGenerator {
             const ids: string[] = [];
             urls.forEach((url: string) => {
                 ids.push(`${urlToIdMap.get(url)}`);
-            })
+            });
             small.push(`${phrase}\t${ids.join("\t")}`);
         });
 
-        writeFileSync(this.outputCacheFile.replace(".json", ".compact.tsv"), small.join("\n"));
-
+        writeFileSync(
+            this.outputCacheFile.replace(".json", ".compact.tsv"),
+            small.join("\n"),
+        );
 
         console.log(chalk.redBright("Writing compressed file."));
         writeFileSync(
             this.outputCacheFile.replace(".json", ".compact.json"),
             JSON.stringify(compressed, null, 2),
         );
-
-
     }
 }
