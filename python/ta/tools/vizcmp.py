@@ -107,6 +107,7 @@ def main():
             good_counters.append(counter)
 
     print_footer(all_files)
+    good_counters.sort()
     print(f"--skip-counters={','.join(str(x) for x in good_counters)}")
 
 
