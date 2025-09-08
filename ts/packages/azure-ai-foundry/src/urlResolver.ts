@@ -485,11 +485,11 @@ export function resolveURLByKeyword(
     if (!keyWordsToSites) {
         const phrasesToSites = JSON.parse(
             readFileSync(
-                "../../examples/websiteAliases/phrases_to_sites.json",
+                "../../examples/websiteAliases/cache/phrases.json",
                 "utf-8",
             ),
         );
-        keyWordsToSites = phrasesToSites.phrases;
+        keyWordsToSites = phrasesToSites;
     }
 
     // prepend https:// to any URLs that don't already have a protocol specified
