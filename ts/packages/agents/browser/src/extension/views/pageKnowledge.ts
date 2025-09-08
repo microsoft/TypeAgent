@@ -138,12 +138,24 @@ class KnowledgePanel {
 
         this.setupEventListeners();
         this.setupStreamingListeners();
+        this.setupButtonIcons(); // Set up button icons after DOM is ready
         await this.loadCurrentPageInfo();
         await this.loadAutoIndexSetting();
         await this.checkConnectionStatus();
         this.setupConnectionStatusListener();
         await this.loadFreshKnowledge();
         await this.loadExtractionSettings();
+    }
+
+    private setupButtonIcons() {
+        // Change the extract button to use a refresh icon
+        const extractButton = document.getElementById(
+            "extractKnowledge",
+        ) as HTMLButtonElement;
+        if (extractButton) {
+            extractButton.innerHTML =
+                '<i class="bi bi-arrow-clockwise me-2"></i>Refresh';
+        }
     }
 
     private setupEventListeners() {
@@ -321,6 +333,23 @@ class KnowledgePanel {
                 "autoIndexToggle",
             ) as HTMLInputElement;
             toggle.checked = enabled;
+
+            // Hide the auto-index toggle as per requirements
+            const toggleContainer = toggle.closest(
+                ".form-check, .toggle-container, .auto-index-section",
+            );
+            if (toggleContainer) {
+                (toggleContainer as HTMLElement).style.display = "none";
+            } else {
+                // Fallback: hide the toggle itself and its label
+                toggle.style.display = "none";
+                const label = document.querySelector(
+                    'label[for="autoIndexToggle"]',
+                );
+                if (label) {
+                    (label as HTMLElement).style.display = "none";
+                }
+            }
         } catch (error) {
             console.error("Error loading auto-index setting:", error);
         }
@@ -447,8 +476,9 @@ class KnowledgePanel {
             // Brief delay to show error state
             await new Promise((resolve) => setTimeout(resolve, 1000));
         } finally {
-            // Restore original button state
-            button.innerHTML = originalContent;
+            // Restore refresh icon button state
+            button.innerHTML =
+                '<i class="bi bi-arrow-clockwise me-2"></i>Refresh';
             button.disabled = false;
             button.classList.remove("btn-warning", "btn-success", "btn-danger");
             button.classList.add("btn-primary");
@@ -1094,19 +1124,16 @@ class KnowledgePanel {
 
     private updateConnectionStatus() {
         const statusElement = document.getElementById("connectionStatus")!;
-        const indicator = statusElement.querySelector(".status-indicator")!;
 
         if (this.isConnected) {
-            indicator.className = "status-indicator status-connected";
-            statusElement.innerHTML = `
-                <span class="status-indicator status-connected"></span>
-                Connected to TypeAgent
-            `;
+            // Hide connection status when connected
+            statusElement.style.display = "none";
         } else {
-            indicator.className = "status-indicator status-disconnected";
+            // Show disconnection warning
+            statusElement.style.display = "block";
             statusElement.innerHTML = `
                 <span class="status-indicator status-disconnected"></span>
-                Disconnected from TypeAgent
+                <span class="text-warning">Disconnected from TypeAgent</span>
             `;
         }
     }
@@ -1152,6 +1179,9 @@ class KnowledgePanel {
             } else {
                 this.showNotIndexedState();
                 this.disableSaveButton();
+
+                // Auto-start extraction if no saved knowledge exists
+                this.extractKnowledge();
             }
         } catch (error) {
             console.error("Error loading fresh knowledge:", error);
