@@ -571,7 +571,7 @@ export class KnowledgeAnalyticsPanel {
         if (!recentEntities || recentEntities.length === 0) {
             container.innerHTML = `
                 <div class="empty-message">
-                    <i class="bi bi-diagram-2"></i>
+                    <i class="bi bi-tags"></i>
                     <span>No recent entities extracted</span>
                 </div>
             `;
@@ -584,7 +584,7 @@ export class KnowledgeAnalyticsPanel {
                 (entity) => `
             <div class="entity-pill clickable" data-entity-name="${this.escapeHtml(entity.name || "Unknown Entity")}" title="Click to view in Entity Graph">
                 <div class="pill-icon">
-                    <i class="bi bi-diagram-2"></i>
+                    <i class="bi bi-tags"></i>
                 </div>
                 <div class="pill-content">
                     <div class="pill-name">${this.escapeHtml(entity.name || "Unknown Entity")}</div>
@@ -618,7 +618,7 @@ export class KnowledgeAnalyticsPanel {
         if (!recentTopics || recentTopics.length === 0) {
             container.innerHTML = `
                 <div class="empty-message">
-                    <i class="bi bi-tags"></i>
+                    <i class="bi bi-bookmark"></i>
                     <span>No recent topics identified</span>
                 </div>
             `;
@@ -631,7 +631,7 @@ export class KnowledgeAnalyticsPanel {
                 (topic) => `
             <div class="topic-pill clickable" data-topic-name="${this.escapeHtml(topic.name || topic.topic || "Unknown Topic")}" title="Click to view in Entity Graph">
                 <div class="pill-icon">
-                    <i class="bi bi-tags"></i>
+                    <i class="bi bi-bookmark"></i>
                 </div>
                 <div class="pill-content">
                     <div class="pill-name">${this.escapeHtml(topic.name || topic.topic || "Unknown Topic")}</div>
