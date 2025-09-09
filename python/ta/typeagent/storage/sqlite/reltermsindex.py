@@ -149,31 +149,13 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         self._terms_list: list[str] = []
         self._terms_to_ordinal: dict[str, int] = {}
 
-    async def _populate_vector_base_from_db(self) -> None:
-        """Populate VectorBase and terms mapping from existing database."""
-        if self._terms_list:  # Already populated
-            return
-
-        cursor = self.db.cursor()
-        cursor.execute("SELECT DISTINCT term FROM RelatedTermsFuzzy ORDER BY term")
-        terms = [row[0] for row in cursor.fetchall()]
-
-        if terms:
-            # Add all terms to VectorBase in one batch for efficiency
-            await self._vector_base.add_keys(terms)
-
-            # Update our local mappings
-            self._terms_list = terms
-            self._terms_to_ordinal = {term: i for i, term in enumerate(terms)}
-
     async def lookup_term(
         self,
         text: str,
         max_hits: int | None = None,
         min_score: float | None = None,
     ) -> list[interfaces.Term]:
-        # Ensure VectorBase is populated from database
-        await self._populate_vector_base_from_db()
+        """Look up similar terms using fuzzy matching."""
 
         # Use VectorBase for fuzzy embedding search instead of manual similarity calculation
         try:

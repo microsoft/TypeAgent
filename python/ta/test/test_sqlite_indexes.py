@@ -8,7 +8,6 @@ import tempfile
 import os
 from typing import Generator
 import pytest
-import pytest_asyncio
 
 from typeagent.aitools.embeddings import AsyncEmbeddingModel
 from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
@@ -19,9 +18,6 @@ from typeagent.knowpro.interfaces import (
     TextRange,
     Topic,
     Term,
-    TermData,
-    TermsToRelatedTermsDataItem,
-    TermToRelatedTermsData,
 )
 from typeagent.storage.sqlite.semrefindex import SqliteTermToSemanticRefIndex
 from typeagent.storage.sqlite.propindex import SqlitePropertyIndex
