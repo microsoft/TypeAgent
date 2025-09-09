@@ -58,7 +58,7 @@ export class PartialCompletion {
     ) {
         this.searchMenu = new SearchMenu((item) => {
             this.handleSelect(item);
-        }, false);
+        });
         document.addEventListener("selectionchange", () => {
             debug("Partial completion update on selection changed");
             this.update(false);
@@ -177,37 +177,17 @@ export class PartialCompletion {
             return false;
         }
 
-        this.updateSearchMenuPrefix(prefix);
+        const position = this.getSearchMenuPosition(prefix);
+        if (position !== undefined) {
+            this.searchMenu.updatePrefix(prefix, position);
+        } else {
+            this.searchMenu.hide();
+        }
 
         // If the search menu is still matching continue to use it (return true).
 
         // Otherwise, space are delimiters, then we refresh the completions (return false) when we have trailing spaces,
         return this.searchMenu.isActive() || prefix.trimEnd() === prefix;
-    }
-
-    private updateSearchMenuPrefix(prefix: string) {
-        if (this.searchMenu.numChoices === 0) {
-            // No need to update if there is no choices.
-            return;
-        }
-        const items = this.searchMenu.completePrefix(prefix);
-        const showMenu =
-            items.length !== 0 &&
-            (items.length !== 1 || items[0].matchText !== prefix);
-
-        if (showMenu) {
-            debug(
-                `Partial completion prefix updated: '${prefix}' with ${items.length} items`,
-            );
-            this.showCompletionMenu(prefix);
-        } else {
-            debug(
-                items.length === 0
-                    ? `Partial completion skipped: No current completions match for '${prefix}'`
-                    : `Partial completion skipped: Completion already matched uniquely for '${prefix}'`,
-            );
-            this.cancelCompletionMenu();
-        }
     }
 
     // Updating completions information with input
@@ -276,24 +256,14 @@ export class PartialCompletion {
             });
     }
 
-    private showCompletionMenu(completionPrefix: string) {
-        if (completionPrefix === undefined) {
-            // This should not happen.
-            debugError(`Partial completion prefix not found`);
-            return;
-        }
-
-        if (this.searchMenu.isActive() && completionPrefix !== "") {
-            return;
-        }
+    private getSearchMenuPosition(prefix: string) {
         // The menu is not active or completion prefix is empty (i.e. need to move the menu).
         const textEntry = this.input.getTextEntry();
         let x: number;
         if (textEntry.childNodes.length === 0) {
             x = textEntry.getBoundingClientRect().left;
         } else {
-            const offset =
-                this.getCurrentInput().length - completionPrefix.length;
+            const offset = this.getCurrentInput().length - prefix.length;
             const leaf = getLeafNode(textEntry, offset);
             if (leaf === undefined) {
                 debugError(
@@ -311,17 +281,13 @@ export class PartialCompletion {
             }
             x = rects[0].left;
         }
-        const leftBound = this.container.getBoundingClientRect().left;
-        this.searchMenu.getContainer().style.left = `${x - leftBound}px`;
-        if (!this.searchMenu.isActive()) {
-            this.container.appendChild(this.searchMenu.getContainer());
-        }
+
+        const { top } = this.container.getBoundingClientRect();
+        return { left: x, bottom: top };
     }
 
     private cancelCompletionMenu() {
-        if (this.searchMenu.isActive()) {
-            this.container.removeChild(this.searchMenu.getContainer());
-        }
+        this.searchMenu.hide();
     }
 
     private handleSelect(item: SearchMenuItem) {
@@ -390,19 +356,10 @@ export class PartialCompletion {
             event.preventDefault();
             return true;
         }
-        const prefix = this.getCompletionPrefix(
-            this.getCurrentInputForCompletion(),
-        );
-        if (prefix === undefined) {
-            // This should not happen.
-            debugError(`Partial completion prefix not found`);
-            this.cancelCompletionMenu();
-            return false;
-        }
-        return this.searchMenu.handleSpecialKeys(event, prefix);
+        return this.searchMenu.handleSpecialKeys(event);
     }
 
     public handleMouseWheel(event: WheelEvent) {
-        this.searchMenu.handleMouseWheel(event.deltaY!!);
+        this.searchMenu.handleMouseWheel(event.deltaY);
     }
 }
