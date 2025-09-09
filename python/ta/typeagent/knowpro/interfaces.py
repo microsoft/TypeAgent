@@ -18,9 +18,9 @@ from typing import (
     runtime_checkable,
 )
 
-import typechat
 from pydantic.dataclasses import dataclass
 from pydantic import Field, AliasChoices
+import typechat
 
 from ..aitools.embeddings import NormalizedEmbeddings
 from . import kplib
