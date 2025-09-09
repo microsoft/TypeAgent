@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
 """Test for MessageTextIndex serialization to ensure it's no longer a no-op."""
 
 import pytest
