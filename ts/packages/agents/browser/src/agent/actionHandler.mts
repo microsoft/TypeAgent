@@ -89,6 +89,7 @@ import {
     importHtmlFolderFromSession,
     getWebsiteStats,
 } from "./websiteMemory.mjs";
+import { initializeImportWebSocketHandler } from "./import/importWebSocketHandler.mjs";
 import { CrosswordActions } from "./crossword/schema/userActions.mjs";
 import { InstacartActions } from "./instacart/schema/userActions.mjs";
 import { ShoppingActions } from "./commerce/schema/userActions.mjs";
@@ -611,6 +612,8 @@ async function updateBrowserContext(
             });
 
             initializeWebSocketBridge(context);
+            initializeImportWebSocketHandler(context);
+            console.log("Import progress event system initialized");
         }
 
         // rehydrate cached settings
@@ -2445,38 +2448,6 @@ async function handleTabIndexActions(
 /**
  * Progress update helper function
  */
-function sendProgressUpdateViaWebSocket(
-    webSocket: WebSocket | undefined,
-    importId: string,
-    progress: any,
-) {
-    try {
-        if (webSocket && webSocket.readyState === WebSocket.OPEN) {
-            // Send progress update message via WebSocket
-            const progressMessage = {
-                method: "importProgress",
-                params: {
-                    importId: importId,
-                    progress: progress,
-                },
-                source: "browserAgent",
-            };
-
-            webSocket.send(JSON.stringify(progressMessage));
-            debug(
-                `Progress Update [${importId}] sent via WebSocket:`,
-                progress,
-            );
-        } else {
-            debug(
-                `Progress Update [${importId}] (WebSocket not available):`,
-                progress,
-            );
-        }
-    } catch (error) {
-        console.error("Failed to send progress update via WebSocket:", error);
-    }
-}
 
 /**
  * Setup IPC communication with view service for action retrieval
@@ -2770,209 +2741,16 @@ async function handleWebsiteAction(
             return await importWebsiteDataFromSession(parameters, context);
 
         case "importWebsiteDataWithProgress":
-            // Create progress callback using JSON parsing instead of regex
-            const progressCallback = (message: string) => {
-                debug("Progress message received:", message);
+            const importId = parameters.importId || `website-${Date.now()}`;
+            parameters.importId = importId;
 
-                let current = 0,
-                    total = 0,
-                    item = "",
-                    phase = "processing";
-
-                // Check if message contains structured JSON progress data
-                if (message.includes("PROGRESS_JSON:")) {
-                    try {
-                        const jsonStart =
-                            message.indexOf("PROGRESS_JSON:") +
-                            "PROGRESS_JSON:".length;
-                        const jsonStr = message.substring(jsonStart);
-                        const progressData = JSON.parse(jsonStr);
-
-                        debug("Parsed JSON progress data:", progressData);
-
-                        current = progressData.current || 0;
-                        total = progressData.total || 0;
-                        item = progressData.description || "";
-                        phase = progressData.phase || "processing";
-                    } catch (error) {
-                        console.error(
-                            "Failed to parse JSON progress data:",
-                            error,
-                        );
-                        debug("Raw message:", message);
-
-                        // Fallback to simple message handling
-                        item = message;
-                        total = parameters.totalItems || 0;
-
-                        // Try to determine phase from message content
-                        if (
-                            message.toLowerCase().includes("complete") ||
-                            message.toLowerCase().includes("finished")
-                        ) {
-                            phase = "complete";
-                        } else if (
-                            message.toLowerCase().includes("starting") ||
-                            message.toLowerCase().includes("initializing")
-                        ) {
-                            phase = "initializing";
-                        }
-                    }
-                } else {
-                    // Fallback for non-JSON messages
-                    debug("Non-JSON message, using as description");
-                    item = message;
-                    total = parameters.totalItems || 0;
-
-                    // Try to determine phase from message content
-                    if (
-                        message.toLowerCase().includes("complete") ||
-                        message.toLowerCase().includes("finished")
-                    ) {
-                        phase = "complete";
-                    } else if (
-                        message.toLowerCase().includes("starting") ||
-                        message.toLowerCase().includes("initializing")
-                    ) {
-                        phase = "initializing";
-                    }
-                }
-
-                const structuredProgress = {
-                    phase: phase,
-                    totalItems: total || parameters.totalItems || 0,
-                    processedItems: current || 0,
-                    currentItem: item,
-                    importId: parameters.importId,
-                    errors: [],
-                };
-
-                debug("Sending structured progress:", structuredProgress);
-
-                // Send structured progress update via WebSocket
-                sendProgressUpdateViaWebSocket(
-                    context.agentContext.webSocket,
-                    parameters.importId,
-                    structuredProgress,
-                );
-            };
-
-            return await importWebsiteDataFromSession(
-                parameters,
-                context,
-                progressCallback,
-            );
+            return await importWebsiteDataFromSession(parameters, context);
 
         case "importHtmlFolder":
-            // Create progress callback similar to importWebsiteDataWithProgress
-            const folderProgressCallback = (message: string) => {
-                // Extract progress info from message if possible
-                let current = 0,
-                    total = 0,
-                    item = "";
-                let phase:
-                    | "counting"
-                    | "initializing"
-                    | "fetching"
-                    | "processing"
-                    | "extracting"
-                    | "complete"
-                    | "error" = "processing";
+            const folderId = parameters.importId || `folder-${Date.now()}`;
+            parameters.importId = folderId;
 
-                // Handle JSON progress format from logStructuredProgress
-                if (message.includes("PROGRESS_JSON:")) {
-                    try {
-                        const jsonStart =
-                            message.indexOf("PROGRESS_JSON:") +
-                            "PROGRESS_JSON:".length;
-                        const progressData = JSON.parse(
-                            message.substring(jsonStart),
-                        );
-
-                        current = progressData.current ?? 0;
-                        total = progressData.total ?? 0;
-                        item = progressData.description ?? "";
-                        phase = progressData.phase ?? "processing";
-
-                        debug("Parsed JSON progress data:", progressData);
-                        debug(
-                            "Extracted values - current:",
-                            current,
-                            "total:",
-                            total,
-                            "item:",
-                            item,
-                        );
-                    } catch (error) {
-                        console.warn("Failed to parse JSON progress:", error);
-                        // Fall back to regex parsing
-                    }
-                } else {
-                    // Existing regex logic for other message formats
-                    // Updated regex to match format: "X/Y files processed (Z%): description"
-                    const progressMatch = message.match(
-                        /(\d+)\/(\d+)\s+files\s+processed.*?:\s*(.+)/,
-                    );
-
-                    if (progressMatch) {
-                        current = parseInt(progressMatch[1]);
-                        total = parseInt(progressMatch[2]);
-                        item = progressMatch[3];
-
-                        // Determine phase based on progress
-                        if (current === 0) {
-                            phase = "initializing";
-                        } else if (current === total) {
-                            phase = "complete";
-                        } else {
-                            phase = "processing";
-                        }
-                    } else {
-                        // Fallback: try to extract just the description for other message types
-                        item = message;
-
-                        // Determine phase from message content
-                        if (
-                            message.includes("complete") ||
-                            message.includes("finished")
-                        ) {
-                            phase = "complete";
-                        } else if (
-                            message.includes("Found") ||
-                            message.includes("Starting")
-                        ) {
-                            phase = "initializing";
-                        } else if (message.startsWith("Processing:")) {
-                            phase = "processing";
-                            // For individual file processing, preserve any previously known total
-                            total = parameters.totalItems || 0;
-                        }
-                    }
-                }
-
-                // Create progress data matching ImportProgress interface
-                const progressData = {
-                    phase,
-                    totalItems: total,
-                    processedItems: current,
-                    currentItem: item,
-                    importId: parameters.importId,
-                    errors: [],
-                };
-
-                // Send structured progress update via WebSocket
-                sendProgressUpdateViaWebSocket(
-                    context.agentContext.webSocket,
-                    parameters.importId,
-                    progressData,
-                );
-            };
-
-            return await importHtmlFolderFromSession(
-                parameters,
-                context,
-                folderProgressCallback,
-            );
+            return await importHtmlFolderFromSession(parameters, context);
 
         case "searchWebMemories":
             return await searchWebMemories(parameters, context);

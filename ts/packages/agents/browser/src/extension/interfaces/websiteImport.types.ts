@@ -46,6 +46,13 @@ export interface ImportProgress {
     currentItem?: string;
     estimatedTimeRemaining?: number;
     errors: ImportError[];
+    summary?: ImportSummary;
+    itemDetails?: {
+        url?: string;
+        title?: string;
+        filename?: string;
+        currentAction?: string;
+    };
 }
 
 // Extended progress for folder imports
