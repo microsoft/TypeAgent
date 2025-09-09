@@ -4,10 +4,18 @@
 
 ## Now
 
+- Switch to (agents.md)[https://agents.md]
+
+- Vendor TypeChat
+
+- Start practicing PyPI releases
+
+- Scrutinize sqlite/reltermsindex.py
+- Unify tests for storage APIs
 - Review the new storage code more carefully, adding notes here
 - Conversation id in conversation metadata table feels wrong
 - Conversation metadata isn't written -- needs a separate call
-- Improve test coverage for search, searchlang, query
+- Improve test coverage for search, searchlang, query, sqlite
 - Reduce code size
 - Make coding style more uniform (e.g. docstrings)
 - Document the highest-level API
