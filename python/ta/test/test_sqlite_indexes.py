@@ -317,14 +317,6 @@ class TestSqliteRelatedTermsFuzzy:
             for text in result_texts
         )
 
-        # Test related terms
-        await index.add_related_term(
-            "AI", [Term("artificial intelligence", 0.9), Term("machine learning", 0.8)]
-        )
-        related = await index.get_related_terms("AI", max_matches=10)
-        assert related is not None
-        assert len(related) == 2
-
     @pytest.mark.asyncio
     async def test_fuzzy_deserialize(
         self,

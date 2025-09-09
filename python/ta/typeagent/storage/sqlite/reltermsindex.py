@@ -255,48 +255,6 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
 
         return results
 
-    async def add_related_term(
-        self, term: str, related_terms: list[interfaces.Term]
-    ) -> None:
-        """Add related terms with embeddings to the fuzzy index."""
-        # generate embedding for the main term and add to VectorBase if not present
-        if term not in self._terms_to_ordinal:
-            await self._vector_base.add_key(term)
-            ordinal = len(self._terms_list)
-            self._terms_list.append(term)
-            self._terms_to_ordinal[term] = ordinal
-
-        term_embed = await self._embedding_model.get_embedding(term)
-        from .schema import serialize_embedding
-
-        cursor = self.db.cursor()
-        for rel in related_terms:
-            # Add related term to VectorBase if not present
-            if rel.text not in self._terms_to_ordinal:
-                await self._vector_base.add_key(rel.text)
-                ordinal = len(self._terms_list)
-                self._terms_list.append(rel.text)
-                self._terms_to_ordinal[rel.text] = ordinal
-
-            # generate embedding for related term
-            rel_embed = await self._embedding_model.get_embedding(rel.text)
-            # use weight if provided
-            weight = rel.weight if rel.weight is not None else 1.0
-            cursor.execute(
-                """
-                INSERT OR REPLACE INTO RelatedTermsFuzzy
-                (term, related_term, score, term_embedding, related_embedding)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    term,
-                    rel.text,
-                    weight,
-                    serialize_embedding(term_embed),
-                    serialize_embedding(rel_embed),
-                ),
-            )
-
     async def remove_term(self, term: str) -> None:
         cursor = self.db.cursor()
         cursor.execute("DELETE FROM RelatedTermsFuzzy WHERE term = ?", (term,))
@@ -456,9 +414,7 @@ class SqliteRelatedTermsIndex(interfaces.ITermToRelatedTermsIndex):
         return self._fuzzy_index
 
     async def serialize(self) -> interfaces.TermsToRelatedTermsIndexData:
-        """Serialize is not needed for SQLite-backed implementation."""
-        # Return empty data since persistence is handled by SQLite
-        return interfaces.TermsToRelatedTermsIndexData()
+        raise NotImplementedError("TODO")
 
     async def deserialize(self, data: interfaces.TermsToRelatedTermsIndexData) -> None:
         """Deserialize related terms index data."""
