@@ -4,10 +4,6 @@
 
 ## Now
 
-- **The "optimizations" have really screwed things up. Need to roll back some and start over.
-  I will do this manually rather than asking the agent to optimize my code.**
-- Speed up loading indexes and collections from serialized (JSON-ish) data.
-- Speed up loading indexes when populating fresh db from JSON
 - Review the new storage code more carefully, adding notes here
 - Conversation id in conversation metadata table feels wrong
 - Conversation metadata isn't written -- needs a separate call
@@ -18,6 +14,13 @@
 
 ## Also
 
+- The aliases part of the related terms index is hard to understand because the
+  relationship between term and alias feels reversed:
+  We have dozens of aliases for "say", and these all show up as entries
+  like (term="talk", alias="say"), (term="discuss", alias="say"), etc.
+  My feeling (from the unix shell alias command) is that the term is "say"
+  and the alias is "talk", "discuss", etc.
+  (Not sure if the same is true for the fuzzy index, but I am confused there too.)
 - Make (de)serialize methods async in interfaces.py if they might execute SQL statements
 
 ## Knowledge extraction pipeline
