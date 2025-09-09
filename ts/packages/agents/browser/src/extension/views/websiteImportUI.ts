@@ -186,19 +186,26 @@ export class WebsiteImportUI {
             console.log(
                 "✅ Import phase complete - transitioning to completion UI",
             );
-            
+
             // Use actual summary data if available, otherwise use defaults
             const summaryData = (progress as any).summary || {};
-            
+
             const result: ImportResult = {
                 success: true,
                 importId: progress.importId || "",
-                itemCount: progress.processedItems || summaryData.successfullyImported || 0,
+                itemCount:
+                    progress.processedItems ||
+                    summaryData.successfullyImported ||
+                    0,
                 duration: 0,
                 errors: progress.errors || [],
                 summary: {
-                    totalProcessed: summaryData.totalProcessed || progress.totalItems || 0,
-                    successfullyImported: summaryData.successfullyImported || progress.processedItems || 0,
+                    totalProcessed:
+                        summaryData.totalProcessed || progress.totalItems || 0,
+                    successfullyImported:
+                        summaryData.successfullyImported ||
+                        progress.processedItems ||
+                        0,
                     knowledgeExtracted: summaryData.knowledgeExtracted || 0,
                     entitiesFound: summaryData.entitiesFound || 0,
                     topicsIdentified: summaryData.topicsIdentified || 0,
@@ -260,31 +267,34 @@ export class WebsiteImportUI {
         // Update status message
         if (statusElement) {
             let newMessage = "";
-            
+
             const itemDetails = (progress as any).itemDetails;
             if (itemDetails) {
                 if (itemDetails.url) {
                     try {
                         const url = new URL(itemDetails.url);
-                        newMessage = url.hostname + url.pathname.substring(0, 30);
+                        newMessage =
+                            url.hostname + url.pathname.substring(0, 30);
                     } catch {
-                        newMessage = itemDetails.url.length > 60
-                            ? itemDetails.url.substring(0, 60) + "..."
-                            : itemDetails.url;
+                        newMessage =
+                            itemDetails.url.length > 60
+                                ? itemDetails.url.substring(0, 60) + "..."
+                                : itemDetails.url;
                     }
                 } else if (itemDetails.title) {
-                    newMessage = itemDetails.title.length > 60 
-                        ? itemDetails.title.substring(0, 60) + "..." 
-                        : itemDetails.title;
+                    newMessage =
+                        itemDetails.title.length > 60
+                            ? itemDetails.title.substring(0, 60) + "..."
+                            : itemDetails.title;
                 } else if (itemDetails.filename) {
                     newMessage = itemDetails.filename;
                 }
-                
+
                 if (itemDetails.currentAction && newMessage) {
                     newMessage += ` (${itemDetails.currentAction})`;
                 }
             }
-            
+
             if (!newMessage && progress.currentItem) {
                 const truncatedItem =
                     progress.currentItem.length > 60
@@ -292,7 +302,7 @@ export class WebsiteImportUI {
                         : progress.currentItem;
                 newMessage = truncatedItem;
             }
-            
+
             if (!newMessage) {
                 const phaseMessages: Record<string, string> = {
                     counting: "Counting items...",

@@ -89,7 +89,7 @@ import {
     importHtmlFolderFromSession,
     getWebsiteStats,
 } from "./websiteMemory.mjs";
-import { initializeImportWebSocketHandler } from './import/importWebSocketHandler.mjs';
+import { initializeImportWebSocketHandler } from "./import/importWebSocketHandler.mjs";
 import { CrosswordActions } from "./crossword/schema/userActions.mjs";
 import { InstacartActions } from "./instacart/schema/userActions.mjs";
 import { ShoppingActions } from "./commerce/schema/userActions.mjs";
@@ -613,7 +613,7 @@ async function updateBrowserContext(
 
             initializeWebSocketBridge(context);
             initializeImportWebSocketHandler(context);
-            console.log('Import progress event system initialized');
+            console.log("Import progress event system initialized");
         }
 
         // rehydrate cached settings
@@ -2798,7 +2798,6 @@ async function handleWebsiteAction(
             throw new Error(`Unknown website action: ${actionName}`);
     }
 }
-
 
 async function handleMacroStoreAction(
     actionName: string,

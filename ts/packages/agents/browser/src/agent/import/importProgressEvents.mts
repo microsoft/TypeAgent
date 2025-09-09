@@ -1,12 +1,19 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { EventEmitter } from 'node:events';
+import { EventEmitter } from "node:events";
 
 export interface ImportProgressEvent {
     importId: string;
-    type: 'websiteImport' | 'htmlFolderImport';
-    phase: 'initializing' | 'counting' | 'fetching' | 'processing' | 'extracting' | 'complete' | 'error';
+    type: "websiteImport" | "htmlFolderImport";
+    phase:
+        | "initializing"
+        | "counting"
+        | "fetching"
+        | "processing"
+        | "extracting"
+        | "complete"
+        | "error";
     current: number;
     total: number;
     description: string;
@@ -15,7 +22,7 @@ export interface ImportProgressEvent {
     folderPath?: string;
     errors?: Array<{ message: string; timestamp: number }>;
     incrementalData?: any;
-    source: 'website' | 'folder' | 'api';
+    source: "website" | "folder" | "api";
     summary?: {
         totalProcessed: number;
         successfullyImported: number;
@@ -33,25 +40,34 @@ export interface ImportProgressEvent {
 
 export class ImportProgressEventEmitter extends EventEmitter {
     emitProgress(progress: ImportProgressEvent): void {
-        this.emit('importProgress', progress);
+        this.emit("importProgress", progress);
         this.emit(`progress:${progress.importId}`, progress);
         this.emit(`phase:${progress.phase}`, progress);
         this.emit(`type:${progress.type}`, progress);
     }
 
     onProgress(listener: (progress: ImportProgressEvent) => void): void {
-        this.on('importProgress', listener);
+        this.on("importProgress", listener);
     }
 
-    onProgressById(importId: string, listener: (progress: ImportProgressEvent) => void): void {
+    onProgressById(
+        importId: string,
+        listener: (progress: ImportProgressEvent) => void,
+    ): void {
         this.on(`progress:${importId}`, listener);
     }
 
-    onPhase(phase: ImportProgressEvent['phase'], listener: (progress: ImportProgressEvent) => void): void {
+    onPhase(
+        phase: ImportProgressEvent["phase"],
+        listener: (progress: ImportProgressEvent) => void,
+    ): void {
         this.on(`phase:${phase}`, listener);
     }
 
-    onType(type: ImportProgressEvent['type'], listener: (progress: ImportProgressEvent) => void): void {
+    onType(
+        type: ImportProgressEvent["type"],
+        listener: (progress: ImportProgressEvent) => void,
+    ): void {
         this.on(`type:${type}`, listener);
     }
 

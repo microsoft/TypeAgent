@@ -21,7 +21,10 @@ import * as website from "website-memory";
 import * as kpLib from "knowledge-processor";
 import { openai as ai } from "aiclient";
 import registerDebug from "debug";
-import { importProgressEvents, ImportProgressEvent } from './import/importProgressEvents.mjs';
+import {
+    importProgressEvents,
+    ImportProgressEvent,
+} from "./import/importProgressEvents.mjs";
 
 function logStructuredProgress(
     current: number,
@@ -30,7 +33,7 @@ function logStructuredProgress(
     phase: string = "processing",
     importContext?: {
         importId: string;
-        type: 'websiteImport' | 'htmlFolderImport';
+        type: "websiteImport" | "htmlFolderImport";
         url?: string;
         folderPath?: string;
     },
@@ -48,20 +51,23 @@ function logStructuredProgress(
         title?: string;
         filename?: string;
         currentAction?: string;
-    }
+    },
 ) {
     if (importContext) {
         const progressEvent: ImportProgressEvent = {
             importId: importContext.importId,
             type: importContext.type,
-            phase: phase as ImportProgressEvent['phase'],
+            phase: phase as ImportProgressEvent["phase"],
             current,
             total,
             description,
             timestamp: Date.now(),
-            source: importContext.type === 'websiteImport' ? 'website' : 'folder',
+            source:
+                importContext.type === "websiteImport" ? "website" : "folder",
             ...(importContext.url && { url: importContext.url }),
-            ...(importContext.folderPath && { folderPath: importContext.folderPath }),
+            ...(importContext.folderPath && {
+                folderPath: importContext.folderPath,
+            }),
             ...(summary && { summary }),
             ...(itemDetails && { itemDetails }),
         };
@@ -200,16 +206,19 @@ export async function resolveURLWithHistory(
  * Import website data from browser history or bookmarks
  */
 export async function importWebsiteDataFromSession(
-    parameters: ImportWebsiteData["parameters"] & { importId?: string; url?: string },
+    parameters: ImportWebsiteData["parameters"] & {
+        importId?: string;
+        url?: string;
+    },
     context: SessionContext<BrowserActionContext>,
 ) {
     const importContext: {
         importId: string;
-        type: 'websiteImport';
+        type: "websiteImport";
         url?: string;
     } = {
         importId: parameters.importId || `website-${Date.now()}`,
-        type: 'websiteImport' as const,
+        type: "websiteImport" as const,
         ...(parameters.url && { url: parameters.url }),
     };
 
@@ -224,7 +233,7 @@ export async function importWebsiteDataFromSession(
             maxConcurrent,
             contentTimeout,
         } = parameters;
-        
+
         logStructuredProgress(
             0,
             0,
@@ -253,12 +262,12 @@ export async function importWebsiteDataFromSession(
             item: string,
         ) => {
             const itemDetails: { url?: string; title?: string } = {};
-            if (item.startsWith('http')) {
+            if (item.startsWith("http")) {
                 itemDetails.url = item;
             } else {
                 itemDetails.title = item;
             }
-            
+
             logStructuredProgress(
                 current,
                 total,
@@ -266,7 +275,7 @@ export async function importWebsiteDataFromSession(
                 "processing",
                 importContext,
                 undefined,
-                itemDetails
+                itemDetails,
             );
         };
 
@@ -394,11 +403,12 @@ export async function importWebsiteDataFromSession(
                         progress.processed <= progress.total * 0.6
                             ? "fetching"
                             : "extracting";
-                    const currentAction = progress.processed <= progress.total * 0.6 
-                        ? "fetching content" 
-                        : "analyzing";
+                    const currentAction =
+                        progress.processed <= progress.total * 0.6
+                            ? "fetching content"
+                            : "analyzing";
                     const description = `Processing items (${progress.percentage}%)`;
-                    
+
                     logStructuredProgress(
                         progress.processed,
                         progress.total,
@@ -408,7 +418,7 @@ export async function importWebsiteDataFromSession(
                         undefined,
                         {
                             currentAction,
-                        }
+                        },
                     );
                 };
 
@@ -498,14 +508,14 @@ export async function importWebsiteDataFromSession(
                 if (website.knowledge.entities?.length > 0) {
                     totalEntities += website.knowledge.entities.length;
                 }
-                
-                // Collect unique topics  
+
+                // Collect unique topics
                 if (website.knowledge.topics?.length > 0) {
                     website.knowledge.topics.forEach((topic: string) => {
                         uniqueTopics.add(topic.toLowerCase().trim());
                     });
                 }
-                
+
                 // Count actions
                 if (website.knowledge.actions?.length > 0) {
                     totalActions += website.knowledge.actions.length;
@@ -583,13 +593,13 @@ export async function importHtmlFolderFromSession(
 ): Promise<any> {
     const importContext = {
         importId: parameters.importId || `folder-${Date.now()}`,
-        type: 'htmlFolderImport' as const,
+        type: "htmlFolderImport" as const,
         folderPath: parameters.folderPath,
     };
 
     const startTime = Date.now();
 
-        const { folderPath, options = {}, importId } = parameters;
+    const { folderPath, options = {}, importId } = parameters;
 
     try {
         logStructuredProgress(
@@ -687,15 +697,17 @@ export async function importHtmlFolderFromSession(
             const batch = batches[batchIndex];
 
             const firstFileInBatch = batch[0];
-            const batchFilename = firstFileInBatch ? firstFileInBatch.split(/[\\/]/).pop() : undefined;
-            
+            const batchFilename = firstFileInBatch
+                ? firstFileInBatch.split(/[\\/]/).pop()
+                : undefined;
+
             const itemDetails: { filename?: string; currentAction?: string } = {
                 currentAction: `batch ${batchIndex + 1}/${batches.length}`,
             };
             if (batchFilename) {
                 itemDetails.filename = batchFilename;
             }
-            
+
             logStructuredProgress(
                 totalProcessedFiles,
                 htmlFiles.length,
@@ -703,7 +715,7 @@ export async function importHtmlFolderFromSession(
                 "processing",
                 importContext,
                 undefined,
-                itemDetails
+                itemDetails,
             );
 
             // Read and prepare batch data
@@ -734,7 +746,6 @@ export async function importHtmlFolderFromSession(
 
                 for (const item of batchData) {
                     try {
-
                         // Try HTML processing first
                         const enhancedResult = await processHtmlFolder(
                             item.html,
@@ -880,19 +891,25 @@ export async function importHtmlFolderFromSession(
             if (data.extractionResult?.knowledge) {
                 // Count entities
                 if (data.extractionResult.knowledge.entities?.length > 0) {
-                    totalEntities += data.extractionResult.knowledge.entities.length;
+                    totalEntities +=
+                        data.extractionResult.knowledge.entities.length;
                 }
-                
+
                 // Collect unique topics
                 if (data.extractionResult.knowledge.topics?.length > 0) {
-                    data.extractionResult.knowledge.topics.forEach((topic: string) => {
-                        uniqueTopics.add(topic.toLowerCase().trim());
-                    });
+                    data.extractionResult.knowledge.topics.forEach(
+                        (topic: string) => {
+                            uniqueTopics.add(topic.toLowerCase().trim());
+                        },
+                    );
                 }
             }
-            
+
             // Count detected actions
-            if (data.extractionResult?.detectedActions && data.extractionResult.detectedActions.length > 0) {
+            if (
+                data.extractionResult?.detectedActions &&
+                data.extractionResult.detectedActions.length > 0
+            ) {
                 totalActions += data.extractionResult.detectedActions.length;
             }
         });
@@ -901,8 +918,7 @@ export async function importHtmlFolderFromSession(
             totalFiles: htmlFiles.length,
             totalProcessed: htmlFiles.length,
             successfullyImported: successCount,
-            knowledgeExtracted:
-                options?.mode !== "basic" ? successCount : 0,
+            knowledgeExtracted: options?.mode !== "basic" ? successCount : 0,
             entitiesFound: totalEntities,
             topicsIdentified: uniqueTopics.size,
             actionsDetected: totalActions,
