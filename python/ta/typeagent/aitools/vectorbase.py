@@ -120,7 +120,7 @@ class VectorBase:
         scored_ordinals.sort(key=lambda x: x.score, reverse=True)
         return scored_ordinals[:max_hits]
 
-    # TODO: Make this and fizzy_lookup_embedding() more similar.
+    # TODO: Make this and fuzzy_lookup_embedding() more similar.
     def fuzzy_lookup_embedding_in_subset(
         self,
         embedding: NormalizedEmbedding,

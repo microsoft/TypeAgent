@@ -157,84 +157,23 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
     ) -> list[interfaces.Term]:
         """Look up similar terms using fuzzy matching."""
 
-        # Use VectorBase for fuzzy embedding search instead of manual similarity calculation
-        try:
-            # Search for similar terms using VectorBase
-            similar_results = await self._vector_base.fuzzy_lookup(
-                text, max_hits=max_hits, min_score=min_score or 0.7
-            )
-
-            # Convert VectorBase results to Term objects
-            results = []
-            for scored_int in similar_results:
-                # Get the term text from our ordinal mapping
-                if scored_int.item < len(self._terms_list):
-                    term_text = self._terms_list[scored_int.item]
-
-                    # Skip exact self-match
-                    if term_text == text and abs(scored_int.score - 1.0) < 0.001:
-                        continue
-
-                    results.append(interfaces.Term(term_text, scored_int.score))
-
-            return results
-
-        except Exception:
-            # Fallback to direct database query if VectorBase fails
-            return await self._lookup_term_fallback(text, max_hits, min_score)
-
-    async def _lookup_term_fallback(
-        self,
-        text: str,
-        max_hits: int | None = None,
-        min_score: float | None = None,
-    ) -> list[interfaces.Term]:
-        """Fallback method using direct embedding comparison."""
-        # Generate embedding for query text
-        query_embedding = await self._embedding_model.get_embedding(text)
-        if query_embedding is None:
-            return []
-
-        # Get all stored terms and their embeddings
-        cursor = self.db.cursor()
-        cursor.execute(
-            "SELECT DISTINCT term, term_embedding FROM RelatedTermsFuzzy WHERE term_embedding IS NOT NULL"
+        # Search for similar terms using VectorBase
+        similar_results = await self._vector_base.fuzzy_lookup(
+            text, max_hits=max_hits, min_score=min_score or 0.7
         )
 
+        # Convert VectorBase results to Term objects
         results = []
-        from .schema import deserialize_embedding
-        import numpy as np
+        for scored_int in similar_results:
+            # Get the term text from our ordinal mapping
+            if scored_int.item < len(self._terms_list):
+                term_text = self._terms_list[scored_int.item]
 
-        for term, embedding_blob in cursor.fetchall():
-            if embedding_blob is None:
-                continue
+                # Skip exact self-match
+                if term_text == text and abs(scored_int.score - 1.0) < 0.001:
+                    continue
 
-            # Deserialize the stored embedding
-            stored_embedding = deserialize_embedding(embedding_blob)
-            if stored_embedding is None:
-                continue
-
-            # Compute cosine similarity
-            similarity = np.dot(query_embedding, stored_embedding) / (
-                np.linalg.norm(query_embedding) * np.linalg.norm(stored_embedding)
-            )
-
-            # Skip if below minimum score threshold
-            if min_score is not None and similarity < min_score:
-                continue
-
-            # Skip exact self-match (similarity 1.0 with identical text)
-            if term == text and abs(similarity - 1.0) < 0.001:
-                continue
-
-            results.append(interfaces.Term(term, float(similarity)))
-
-        # Sort by similarity score descending
-        results.sort(key=lambda x: x.weight, reverse=True)
-
-        # Apply max_hits limit
-        if max_hits is not None:
-            results = results[:max_hits]
+                results.append(interfaces.Term(term_text, scored_int.score))
 
         return results
 
