@@ -178,15 +178,19 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         return results
 
     async def remove_term(self, term: str) -> None:
-        cursor = self.db.cursor()
-        cursor.execute("DELETE FROM RelatedTermsFuzzy WHERE term = ?", (term,))
-        # Also remove any entries where this term appears as a related_term
-        cursor.execute("DELETE FROM RelatedTermsFuzzy WHERE related_term = ?", (term,))
+        raise NotImplementedError(
+            "TODO: Removal from VectorBase, _terms_list, _terms_to_ordinal"
+        )
+        # cursor = self.db.cursor()
+        # cursor.execute("DELETE FROM RelatedTermsFuzzy WHERE term = ?", (term,))
+        # # Also remove any entries where this term appears as a related_term
+        # cursor.execute("DELETE FROM RelatedTermsFuzzy WHERE related_term = ?", (term,))
 
         # Clear VectorBase and local mappings - they will be rebuilt on next lookup
-        self._vector_base.clear()
-        self._terms_list.clear()
-        self._terms_to_ordinal.clear()
+        # NO THEY WON'T
+        # self._vector_base.clear()
+        # self._terms_list.clear()
+        # self._terms_to_ordinal.clear()
 
     async def clear(self) -> None:
         cursor = self.db.cursor()
