@@ -245,7 +245,7 @@ export class ShellWindow {
         } else {
             contentLoadP.push(
                 chatView.webContents.loadFile(
-                    path.join(__dirname, "../renderer/index.html"),
+                    path.join(__dirname, "../renderer/chatView.html"),
                 ),
             );
         }
@@ -1040,7 +1040,7 @@ function createMainWindow(bounds: Electron.Rectangle) {
 function createChatView(state: ShellWindowState) {
     const chatView = new WebContentsView({
         webPreferences: {
-            preload: path.join(__dirname, "../preload/index.mjs"),
+            preload: path.join(__dirname, "../preload/chatView.mjs"),
             sandbox: false,
             zoomFactor: state.zoomLevel,
         },

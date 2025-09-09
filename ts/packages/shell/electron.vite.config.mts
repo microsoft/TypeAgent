@@ -17,7 +17,7 @@ export default defineConfig({
             sourcemap: true,
             rollupOptions: {
                 input: {
-                    index: resolve(__dirname, "src/preload/index.ts"),
+                    chatView: resolve(__dirname, "src/preload/chatView.ts"),
                     main: resolve(__dirname, "./src/preload/main.ts"),
                 },
             },
@@ -28,7 +28,7 @@ export default defineConfig({
             sourcemap: true,
             rollupOptions: {
                 input: {
-                    index: resolve(__dirname, "src/renderer/index.html"),
+                    chatView: resolve(__dirname, "src/renderer/chatView.html"),
                     viewHost: resolve(__dirname, "src/renderer/viewHost.html"),
                     newTab: resolve(__dirname, "src/renderer/newTab.html"),
                 },
