@@ -186,22 +186,26 @@ export class WebsiteImportUI {
             console.log(
                 "✅ Import phase complete - transitioning to completion UI",
             );
-            const mockResult: ImportResult = {
+            
+            // Use actual summary data if available, otherwise use defaults
+            const summaryData = (progress as any).summary || {};
+            
+            const result: ImportResult = {
                 success: true,
                 importId: progress.importId || "",
-                itemCount: progress.processedItems || 0,
+                itemCount: progress.processedItems || summaryData.successfullyImported || 0,
                 duration: 0,
                 errors: progress.errors || [],
                 summary: {
-                    totalProcessed: progress.totalItems || 0,
-                    successfullyImported: progress.processedItems || 0,
-                    knowledgeExtracted: 0,
-                    entitiesFound: 0,
-                    topicsIdentified: 0,
-                    actionsDetected: 0,
+                    totalProcessed: summaryData.totalProcessed || progress.totalItems || 0,
+                    successfullyImported: summaryData.successfullyImported || progress.processedItems || 0,
+                    knowledgeExtracted: summaryData.knowledgeExtracted || 0,
+                    entitiesFound: summaryData.entitiesFound || 0,
+                    topicsIdentified: summaryData.topicsIdentified || 0,
+                    actionsDetected: summaryData.actionsDetected || 0,
                 },
             };
-            this.showImportComplete(mockResult);
+            this.showImportComplete(result);
             return;
         }
 
@@ -255,42 +259,55 @@ export class WebsiteImportUI {
 
         // Update status message
         if (statusElement) {
-            const phaseMessages: Record<string, string> = {
-                counting: "Counting items to import...",
-                initializing: "Preparing import...",
-                fetching: "Fetching browser data...",
-                processing: "Processing items...",
-                extracting: "Extracting content...",
-                complete: "Import complete!",
-                error: "Import failed",
-            };
-
-            let newMessage = phaseMessages[progress.phase] || progress.phase;
-
-            // Use currentItem as primary message if it's more specific than the phase message
-            if (progress.currentItem) {
-                const truncatedItem =
-                    progress.currentItem.length > 50
-                        ? progress.currentItem.substring(0, 50) + "..."
-                        : progress.currentItem;
-
-                // If currentItem contains percentage or detailed info, use it as the main message
-                if (
-                    truncatedItem.includes("%") ||
-                    truncatedItem.includes("Fetching content") ||
-                    truncatedItem.includes("Processing") ||
-                    truncatedItem.includes("Extracting")
-                ) {
-                    newMessage = truncatedItem;
-                } else {
-                    // Otherwise append as additional context
-                    newMessage += ` (${truncatedItem})`;
+            let newMessage = "";
+            
+            const itemDetails = (progress as any).itemDetails;
+            if (itemDetails) {
+                if (itemDetails.url) {
+                    try {
+                        const url = new URL(itemDetails.url);
+                        newMessage = url.hostname + url.pathname.substring(0, 30);
+                    } catch {
+                        newMessage = itemDetails.url.length > 60
+                            ? itemDetails.url.substring(0, 60) + "..."
+                            : itemDetails.url;
+                    }
+                } else if (itemDetails.title) {
+                    newMessage = itemDetails.title.length > 60 
+                        ? itemDetails.title.substring(0, 60) + "..." 
+                        : itemDetails.title;
+                } else if (itemDetails.filename) {
+                    newMessage = itemDetails.filename;
                 }
+                
+                if (itemDetails.currentAction && newMessage) {
+                    newMessage += ` (${itemDetails.currentAction})`;
+                }
+            }
+            
+            if (!newMessage && progress.currentItem) {
+                const truncatedItem =
+                    progress.currentItem.length > 60
+                        ? progress.currentItem.substring(0, 60) + "..."
+                        : progress.currentItem;
+                newMessage = truncatedItem;
+            }
+            
+            if (!newMessage) {
+                const phaseMessages: Record<string, string> = {
+                    counting: "Counting items...",
+                    initializing: "Preparing...",
+                    fetching: "Fetching data...",
+                    processing: "Processing...",
+                    extracting: "Extracting...",
+                    complete: "Complete!",
+                    error: "Failed",
+                };
+                newMessage = phaseMessages[progress.phase] || progress.phase;
             }
 
             console.log("📝 Status message:", newMessage);
 
-            // Animate text update
             statusElement.classList.add("status-updating");
             statusElement.textContent = newMessage;
 
@@ -421,12 +438,12 @@ export class WebsiteImportUI {
                                     <small class="text-muted">Imported</small>
                                 </div>
                                 <div class="col-3">
-                                    <div class="h6 mb-1">${result.summary.knowledgeExtracted}</div>
-                                    <small class="text-muted">Knowledge</small>
-                                </div>
-                                <div class="col-3">
                                     <div class="h6 mb-1">${result.summary.entitiesFound}</div>
                                     <small class="text-muted">Entities</small>
+                                </div>
+                                <div class="col-3">
+                                    <div class="h6 mb-1">${result.summary.topicsIdentified}</div>
+                                    <small class="text-muted">Topics</small>
                                 </div>
                             </div>
                         </div>

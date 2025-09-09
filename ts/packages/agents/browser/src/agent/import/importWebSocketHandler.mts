@@ -26,11 +26,23 @@ export class ImportWebSocketHandler {
             if (webSocket && webSocket.readyState === WebSocket.OPEN) {
                 const websocketProgress = {
                     type: "importProgress",
-                    current: progress.current,
-                    total: progress.total,
-                    item: progress.description,
+                    totalItems: progress.total,
+                    processedItems: progress.current,
+                    currentItem: progress.description,
                     phase: progress.phase,
                     timestamp: progress.timestamp,
+                    importId: progress.importId,
+                    errors: progress.errors || [],
+                    ...(progress.summary && { 
+                        summary: {
+                            totalProcessed: progress.summary.totalProcessed,
+                            successfullyImported: progress.summary.successfullyImported,
+                            entitiesFound: progress.summary.entitiesFound,
+                            topicsIdentified: progress.summary.topicsIdentified,
+                            actionsDetected: progress.summary.actionsDetected,
+                        }
+                    }),
+                    ...(progress.itemDetails && { itemDetails: progress.itemDetails }),
                 };
 
                 const progressMessage = {

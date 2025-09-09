@@ -16,6 +16,19 @@ export interface ImportProgressEvent {
     errors?: Array<{ message: string; timestamp: number }>;
     incrementalData?: any;
     source: 'website' | 'folder' | 'api';
+    summary?: {
+        totalProcessed: number;
+        successfullyImported: number;
+        entitiesFound: number;
+        topicsIdentified: number;
+        actionsDetected: number;
+    };
+    itemDetails?: {
+        url?: string;
+        title?: string;
+        filename?: string;
+        currentAction?: string;
+    };
 }
 
 export class ImportProgressEventEmitter extends EventEmitter {
