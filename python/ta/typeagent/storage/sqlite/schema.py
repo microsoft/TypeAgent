@@ -136,7 +136,6 @@ CREATE TABLE IF NOT EXISTS RelatedTermsFuzzy (
     related_term TEXT NOT NULL,
     score REAL NOT NULL DEFAULT 1.0,
     term_embedding BLOB NULL,             -- Serialized embedding for the term
-    related_embedding BLOB NULL,          -- Serialized embedding for the related term
 
     PRIMARY KEY (term, related_term)
 );

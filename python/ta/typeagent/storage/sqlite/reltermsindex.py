@@ -137,9 +137,10 @@ class SqliteRelatedTermsAliases(interfaces.ITermToRelatedTerms):
 class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
     """SQLite-backed implementation of fuzzy term relationships with persistent embeddings."""
 
+    # TODO: Require settings to be passed in so embedding_model doesn't need to be.
     def __init__(self, db: sqlite3.Connection, embedding_model: AsyncEmbeddingModel):
         self.db = db
-        # Create a persistent VectorBase for caching and fuzzy matching
+        # Create a VectorBase for caching and fuzzy matching
         self._embedding_settings = TextEmbeddingIndexSettings(embedding_model)
         self._vector_base = VectorBase(self._embedding_settings)
         # Keep reference to embedding model for direct access if needed
@@ -293,17 +294,17 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
                 self._terms_list.append(text)
                 self._terms_to_ordinal[text] = ordinal
 
-            # generate embedding for term and store in database
+            # Generate embedding for term and store in database
             embed = await self._embedding_model.get_embedding(text)
             serialized = serialize_embedding(embed)
-            # insert term as related to itself
+            # Insert term as related to itself, only storing term_embedding once
             cursor.execute(
                 """
                     INSERT OR REPLACE INTO RelatedTermsFuzzy
-                    (term, related_term, score, term_embedding, related_embedding)
-                    VALUES (?, ?, 1.0, ?, ?)
+                    (term, related_term, score, term_embedding)
+                    VALUES (?, ?, 1.0, ?)
                     """,
-                (text, text, serialized, serialized),
+                (text, text, serialized),
             )
 
     async def get_related_terms(
@@ -375,10 +376,8 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
                 embedding = self._vector_base.get_embedding_at(i)
                 if embedding is not None:
                     serialized_embedding = serialize_embedding(embedding)
-                    # Insert as self-referential entry
-                    insertion_data.append(
-                        (text, text, 1.0, serialized_embedding, serialized_embedding)
-                    )
+                    # Insert as self-referential entry with only term_embedding
+                    insertion_data.append((text, text, 1.0, serialized_embedding))
                     # Update local mappings
                     self._terms_list.append(text)
                     self._terms_to_ordinal[text] = len(self._terms_to_ordinal)
@@ -388,8 +387,8 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
             cursor.executemany(
                 """
                 INSERT OR REPLACE INTO RelatedTermsFuzzy
-                (term, related_term, score, term_embedding, related_embedding)
-                VALUES (?, ?, ?, ?, ?)
+                (term, related_term, score, term_embedding)
+                VALUES (?, ?, ?, ?)
                 """,
                 insertion_data,
             )
