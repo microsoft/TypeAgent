@@ -130,7 +130,7 @@ class AsyncEmbeddingModel:
     def add_embedding(self, key: str, embedding: NormalizedEmbedding) -> None:
         existing = self._embedding_cache.get(key)
         if existing is not None:
-            assert existing == embedding
+            assert np.array_equal(existing, embedding)
         else:
             self._embedding_cache[key] = embedding
 
