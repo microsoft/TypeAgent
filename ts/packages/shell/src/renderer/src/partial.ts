@@ -224,17 +224,45 @@ export class PartialCompletion {
                 this.current = partial;
                 this.space = result.space;
 
-                const completions = result.completions.flatMap((group) => {
-                    return group.completions.map((choice, index) => {
-                        return {
+                const completions: SearchMenuItem[] = [];
+                const sortedGroups = result.completions.filter((g) => g.sorted);
+                let sortedGroupIndex = 0;
+                let maxSortedGroups = 0;
+                for (const group of sortedGroups) {
+                    let index = 0;
+                    maxSortedGroups = Math.max(
+                        maxSortedGroups,
+                        group.completions.length,
+                    );
+
+                    for (const choice of group.completions) {
+                        completions.push({
                             matchText: choice,
                             selectedText: choice,
-                            sortIndex: index,
+                            sortIndex:
+                                sortedGroups.length * index + sortedGroupIndex,
                             needQuotes: group.needQuotes,
                             emojiChar: group.emojiChar,
-                        };
-                    });
-                });
+                        });
+                        index++;
+                    }
+                    sortedGroupIndex++;
+                }
+                let baseIndex = sortedGroups.length * maxSortedGroups;
+                for (const group of result.completions) {
+                    if (!group.sorted) {
+                        const sorted = [...group.completions].sort();
+                        for (const choice of sorted) {
+                            completions.push({
+                                matchText: choice,
+                                selectedText: choice,
+                                sortIndex: baseIndex++,
+                                needQuotes: group.needQuotes,
+                                emojiChar: group.emojiChar,
+                            });
+                        }
+                    }
+                }
 
                 if (completions.length === 0) {
                     debug(
