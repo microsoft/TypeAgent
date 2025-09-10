@@ -26,6 +26,7 @@ import { ShellWindow } from "./shellWindow.js";
 import { getObjectProperty, getObjectPropertyNames } from "common-utils";
 import { installAndRestart, updateHandlerTable } from "./commands/update.js";
 import { isProd } from "./index.js";
+import { ShellWindowState } from "./shellSettings.js";
 
 export type ShellContext = {
     shellWindow: ShellWindow;
@@ -79,6 +80,61 @@ class ShellShowRawSettingsCommandHandler implements CommandHandlerNoParams {
         };
         printConfig(agentContext.shellWindow.getUserSettings());
         context.actionIO.setDisplay(message.join("\n"));
+    }
+}
+
+class ShellShowWindowCommandHandler implements CommandHandlerNoParams {
+    public readonly description = "Shows the shell window settings";
+    public async run(context: ActionContext<ShellContext>) {
+        const agentContext = context.sessionContext.agentContext;
+        const message: string[] = [];
+        const printConfig = (options: any, prefix: number = 2) => {
+            for (const [key, value] of Object.entries(options)) {
+                const name = `${" ".repeat(prefix)}${key.padEnd(20 - prefix)}:`;
+                if (typeof value === "object") {
+                    message.push(name);
+                    printConfig(value, prefix + 2);
+                } else if (typeof value === "function") {
+                } else {
+                    message.push(`${name} ${value}`);
+                }
+            }
+        };
+        printConfig(agentContext.shellWindow.getWindowState());
+        context.actionIO.setDisplay(message.join("\n"));
+    }
+}
+
+class ShellSetWindowSizeCommandHandler implements CommandHandler {
+    public readonly description = "Sets the shell window size";
+    public readonly parameters = {
+            args: {
+                x: {
+                    description: "The new x position for the window",
+                },
+                y: {
+                    description: "The new y position for the window",
+                },
+                width: {
+                    description: "The new width for the window",
+                },
+                height: {
+                    description: "The new height for the window",
+                },
+            },
+        } as const;    
+    public async run(context: ActionContext<ShellContext>, params: ParsedCommandParams<typeof this.parameters>) {
+        const agentContext = context.sessionContext.agentContext;
+        const windowState: ShellWindowState = agentContext.shellWindow.getWindowState();
+
+        windowState.x = Number.parseInt(params.args.x ?? windowState.x);
+        windowState.y = Number.parseInt(params.args.y ?? windowState.y);
+        windowState.chatWidth = Number.parseInt(params.args.width ?? windowState.chatWidth);
+        windowState.chatHeight = Number.parseInt(params.args.height ?? windowState.chatHeight);
+
+        agentContext.shellWindow.setWindowState(windowState);
+
+        context.actionIO.setDisplay("Updated window size/position.");
     }
 }
 
@@ -202,6 +258,7 @@ const handlers: CommandHandlerTable = {
                 help: new ShellShowHelpCommandHandler(),
                 metrics: new ShellShowMetricsCommandHandler(),
                 raw: new ShellShowRawSettingsCommandHandler(),
+                window: new ShellShowWindowCommandHandler(),
             },
         },
         set: new ShellSetSettingCommandHandler(),
@@ -227,6 +284,7 @@ const handlers: CommandHandlerTable = {
                 installAndRestart();
             },
         },
+        setWindowState: new ShellSetWindowSizeCommandHandler(),
     },
 };
 

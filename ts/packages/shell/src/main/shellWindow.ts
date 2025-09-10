@@ -428,7 +428,7 @@ export class ShellWindow {
             y: addContent ? bounds.y - this.contentHeight : bounds.y,
         };
     }
-    private getWindowState(): ShellWindowState {
+    public getWindowState(): ShellWindowState {
         // Get browser tabs state for saving
         const browserTabs = this.browserViewManager.getAllBrowserTabs();
         const activeBrowserView =
@@ -462,6 +462,15 @@ export class ShellWindow {
             browserTabsJson: browserTabsJson,
             activeBrowserTabId: activeBrowserView?.id,
         };
+    }
+
+    public setWindowState(settings: ShellWindowState) {
+        this.mainWindow.setBounds({
+            x: settings.x,
+            y: settings.y,
+            width: settings.windowWidth,
+            height: settings.windowHeight,
+        });
     }
 
     private sendUserSettingChanged() {

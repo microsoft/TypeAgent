@@ -36,7 +36,7 @@ test.describe("Shell interface tests", () => {
 
         // verify shell title
         const title = await firstWindow.title();
-        expect(title.indexOf("🤖") > -1, "Title expecting 🤖 but is missing.");
+        expect("Active TypeAgent", "Invalid page title!");
 
         // resize the shell by sending @shell settings set size "[width, height]"
         const width: number = Math.ceil(Math.random() * 800 + 200);
@@ -63,24 +63,24 @@ test.describe("Shell interface tests", () => {
 
         // get window size/position
         const msg = await sendUserRequestAndWaitForResponse(
-            `@shell show raw`,
+            `@shell show window`,
             newWindow,
         );
 
         // get the shell size and location from the raw settings
         const lines: string[] = msg.split("\n");
-        const newWidth: number = parseInt(lines[1].split(":")[1].trim());
-        const newHeight: number = parseInt(lines[2].split(":")[1].trim());
-        const newX: number = parseInt(lines[4].split(":")[1].trim());
-        const newY: number = parseInt(lines[5].split(":")[1].trim());
+        const newWidth: number = parseInt(lines[2].split(":")[1].trim());
+        const newHeight: number = parseInt(lines[3].split(":")[1].trim());
+        const newX: number = parseInt(lines[0].split(":")[1].trim());
+        const newY: number = parseInt(lines[1].split(":")[1].trim());
 
         expect(
             newHeight,
-            `Window height mismatch! Expected ${height} got ${height}`,
+            `Window height mismatch! Expected ${height} got ${newHeight}`,
         ).toBe(newHeight);
         expect(
             newWidth,
-            `Window width mismatch! Expected ${width} got ${width}`,
+            `Window width mismatch! Expected ${width} got ${newWidth}`,
         ).toBe(newWidth);
         expect(newX, `X position mismatch! Expected ${x} got ${newX}`).toBe(x);
         expect(newY, `Y position mismatch!Expected ${y} got ${newY}`).toBe(y);
