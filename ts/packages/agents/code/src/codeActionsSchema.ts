@@ -5,8 +5,7 @@ export type CodeActions =
     | ChangeColorThemeAction
     | SplitEditorAction
     | ChangeEditorLayoutAction
-    | NewFileAction
-    | AddCodeSnippetAction;
+    | NewFileAction;
 
 export type CodeActivity = LaunchVSCodeAction;
 
@@ -83,14 +82,5 @@ export type NewFileAction = {
         // arxiv. If the user asks to create a python file with code to merge two arrays of strings
         // the content field should be filled with the python function to merge the arrays
         content: string;
-    };
-};
-
-// Add a code snippet to the current file
-export type AddCodeSnippetAction = {
-    actionName: "addCodeSnippet";
-    parameters: {
-        snippet: string; // Code snippet to add
-        language: string; // Programming language of the snippet
     };
 };
