@@ -9,6 +9,10 @@ import {
     EventManager,
 } from "./knowledgeUtilities";
 import { conversation as kpLib } from "knowledge-processor";
+import type {
+    KnowledgeExtractionProgress,
+    KnowledgeProgressCallback,
+} from "../interfaces/knowledgeExtraction.types";
 
 interface KnowledgeData {
     entities: Entity[];
@@ -112,6 +116,14 @@ class KnowledgePanel {
     private aiModelAvailable: boolean = false;
     private connectionStatusCallback?: (connected: boolean) => void;
 
+    // Streaming-related properties
+    private streamingEnabled: boolean = false;
+    private currentExtractionId: string | null = null;
+    private streamingState: {
+        startTime: number;
+        currentData: KnowledgeData;
+    } | null = null;
+
     constructor() {
         this.extractionSettings = {
             mode: "content",
@@ -125,12 +137,25 @@ class KnowledgePanel {
         await this.checkAIModelAvailability();
 
         this.setupEventListeners();
+        this.setupStreamingListeners();
+        this.setupButtonIcons(); // Set up button icons after DOM is ready
         await this.loadCurrentPageInfo();
         await this.loadAutoIndexSetting();
         await this.checkConnectionStatus();
         this.setupConnectionStatusListener();
         await this.loadFreshKnowledge();
         await this.loadExtractionSettings();
+    }
+
+    private setupButtonIcons() {
+        // Change the extract button to use a refresh icon
+        const extractButton = document.getElementById(
+            "extractKnowledge",
+        ) as HTMLButtonElement;
+        if (extractButton) {
+            extractButton.innerHTML =
+                '<i class="bi bi-arrow-clockwise me-2"></i>Refresh';
+        }
     }
 
     private setupEventListeners() {
@@ -308,6 +333,23 @@ class KnowledgePanel {
                 "autoIndexToggle",
             ) as HTMLInputElement;
             toggle.checked = enabled;
+
+            // Hide the auto-index toggle as per requirements
+            const toggleContainer = toggle.closest(
+                ".form-check, .toggle-container, .auto-index-section",
+            );
+            if (toggleContainer) {
+                (toggleContainer as HTMLElement).style.display = "none";
+            } else {
+                // Fallback: hide the toggle itself and its label
+                toggle.style.display = "none";
+                const label = document.querySelector(
+                    'label[for="autoIndexToggle"]',
+                );
+                if (label) {
+                    (label as HTMLElement).style.display = "none";
+                }
+            }
         } catch (error) {
             console.error("Error loading auto-index setting:", error);
         }
@@ -350,7 +392,7 @@ class KnowledgePanel {
         button.classList.add("btn-warning");
         button.classList.remove("btn-primary");
 
-        this.showKnowledgeLoading();
+        this.showStreamingProgress();
 
         try {
             // Validate mode selection before extraction with defensive check
@@ -371,69 +413,42 @@ class KnowledgePanel {
 
             const startTime = Date.now();
 
-            const response = await extensionService.extractPageKnowledge(
-                this.currentUrl,
-                this.extractionSettings.mode,
-                this.extractionSettings,
-            );
+            // Initialize streaming state
+            this.streamingState = {
+                startTime,
+                currentData: {
+                    entities: [],
+                    relationships: [],
+                    keyTopics: [],
+                    summary: "",
+                    contentActions: [],
+                    detectedActions: [],
+                    actionSummary: undefined,
+                    contentMetrics: { readingTime: 0, wordCount: 0 },
+                },
+            };
 
-            const processingTime = Date.now() - startTime;
+            // Use streaming API
+            const extractionId = `extraction_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            this.currentExtractionId = extractionId;
 
-            this.knowledgeData = response.knowledge;
-            this.extractedKnowledgeData = response.knowledge;
-            if (this.knowledgeData) {
-                // Check for insufficient content case
-                const isInsufficientContent = this.checkInsufficientContent(
-                    this.knowledgeData,
+            const response =
+                await extensionService.extractPageKnowledgeStreaming(
+                    this.currentUrl,
+                    this.extractionSettings.mode,
+                    this.extractionSettings,
+                    true,
+                    extractionId,
                 );
 
-                if (isInsufficientContent) {
-                    // Show error state for insufficient content
-                    button.innerHTML =
-                        '<i class="bi bi-exclamation-triangle me-2"></i>Insufficient Content';
-                    button.classList.remove("btn-warning");
-                    button.classList.add("btn-warning");
-
-                    this.showInsufficientContentError();
-
-                    notificationManager.showEnhancedNotification(
-                        "warning",
-                        "Insufficient Content",
-                        "This page doesn't have enough content to extract meaningful knowledge or its content is not available. Try refreshing the page.",
-                        "bi-exclamation-triangle",
-                    );
-
-                    // Brief delay to show warning state
-                    await new Promise((resolve) => setTimeout(resolve, 2000));
-                    return; // Don't render empty knowledge modules
-                }
-
-                // Show success state briefly
-                button.innerHTML =
-                    '<i class="bi bi-check-circle me-2"></i>Extracted!';
-                button.classList.remove("btn-warning");
-                button.classList.add("btn-success");
-
-                await this.renderKnowledgeResults(this.knowledgeData);
-
-                this.enableSaveButton();
-
-                // Show detailed success notification
-                const entityCount = this.knowledgeData.entities?.length || 0;
-                const topicCount = this.knowledgeData.keyTopics?.length || 0;
-                const relationshipCount =
-                    this.knowledgeData.relationships?.length || 0;
-
-                notificationManager.showEnhancedNotification(
-                    "success",
-                    "Knowledge Extracted Successfully!",
-                    `Found ${entityCount} entities, ${topicCount} topics, ${relationshipCount} relationships using ${this.extractionSettings.mode} mode in ${Math.round(processingTime / 1000)}s`,
-                    "bi-brain",
+            if (!response) {
+                throw new Error(
+                    response?.error || "Failed to start streaming extraction",
                 );
-
-                // Brief delay to show success state
-                await new Promise((resolve) => setTimeout(resolve, 1500));
             }
+
+            // Exit early for streaming - completion will be handled by streaming callbacks
+            return;
         } catch (error) {
             console.error("Error extracting knowledge:", error);
 
@@ -461,8 +476,9 @@ class KnowledgePanel {
             // Brief delay to show error state
             await new Promise((resolve) => setTimeout(resolve, 1000));
         } finally {
-            // Restore original button state
-            button.innerHTML = originalContent;
+            // Restore refresh icon button state
+            button.innerHTML =
+                '<i class="bi bi-arrow-clockwise me-2"></i>Refresh';
             button.disabled = false;
             button.classList.remove("btn-warning", "btn-success", "btn-danger");
             button.classList.add("btn-primary");
@@ -1108,19 +1124,16 @@ class KnowledgePanel {
 
     private updateConnectionStatus() {
         const statusElement = document.getElementById("connectionStatus")!;
-        const indicator = statusElement.querySelector(".status-indicator")!;
 
         if (this.isConnected) {
-            indicator.className = "status-indicator status-connected";
-            statusElement.innerHTML = `
-                <span class="status-indicator status-connected"></span>
-                Connected to TypeAgent
-            `;
+            // Hide connection status when connected
+            statusElement.style.display = "none";
         } else {
-            indicator.className = "status-indicator status-disconnected";
+            // Show disconnection warning
+            statusElement.style.display = "block";
             statusElement.innerHTML = `
                 <span class="status-indicator status-disconnected"></span>
-                Disconnected from TypeAgent
+                <span class="text-warning">Disconnected from TypeAgent</span>
             `;
         }
     }
@@ -1166,6 +1179,9 @@ class KnowledgePanel {
             } else {
                 this.showNotIndexedState();
                 this.disableSaveButton();
+
+                // Auto-start extraction if no saved knowledge exists
+                this.extractKnowledge();
             }
         } catch (error) {
             console.error("Error loading fresh knowledge:", error);
@@ -1645,6 +1661,273 @@ class KnowledgePanel {
         } catch (error) {
             console.warn("Could not save extraction settings:", error);
         }
+    }
+
+    // ===================================================================
+    // STREAMING KNOWLEDGE EXTRACTION METHODS
+    // ===================================================================
+
+    private setupStreamingListeners() {
+        chrome.runtime.onMessage.addListener(
+            (message, sender, sendResponse) => {
+                if (message.type === "knowledgeExtractionProgress") {
+                    this.updateExtractionProgress(message.progress);
+                } else if (message.type === "knowledgeExtractionComplete") {
+                    this.handleExtractionComplete(message);
+                }
+            },
+        );
+    }
+
+    public updateExtractionProgress(
+        progress: KnowledgeExtractionProgress,
+    ): void {
+        if (
+            !this.streamingState ||
+            this.currentExtractionId !== progress.extractionId
+        ) {
+            return;
+        }
+
+        // Update progress elements similar to websiteImportUI
+        const progressBar = document.querySelector(
+            "#knowledgeProgressBar",
+        ) as HTMLElement;
+        const statusElement = document.querySelector("#knowledgeStatusMessage");
+        const progressText = document.querySelector("#knowledgeProgressText");
+
+        // Update status message with phase-based messages (like import phases)
+        if (statusElement) {
+            const phaseMessages: Record<string, string> = {
+                content: "Retrieving page content...",
+                basic: "Analyzing basic information...",
+                summary: "Generating summary...",
+                analyzing: "Analyzing entities and topics...",
+                extracting: "Extracting relationships...",
+                complete: "Knowledge extraction complete!",
+                error: "Extraction failed",
+            };
+
+            let newMessage = phaseMessages[progress.phase] || progress.phase;
+
+            // Use currentItem for specific details (like import UI)
+            if (progress.currentItem) {
+                const truncatedItem =
+                    progress.currentItem.length > 50
+                        ? progress.currentItem.substring(0, 50) + "..."
+                        : progress.currentItem;
+                // newMessage += ` (${truncatedItem})`;
+            }
+
+            // Animate status updates like import UI
+            statusElement.classList.add("status-updating");
+            statusElement.textContent = newMessage;
+
+            setTimeout(() => {
+                statusElement.classList.remove("status-updating");
+            }, 200);
+        }
+
+        // Update progress bar with smooth animation (like import UI)
+        if (progressBar && progress.totalItems > 0) {
+            const percentage = Math.round(
+                (progress.processedItems / progress.totalItems) * 100,
+            );
+
+            progressBar.style.transition = "width 0.3s ease-in-out";
+            progressBar.style.width = `${Math.max(0, Math.min(100, percentage))}%`;
+            progressBar.setAttribute("aria-valuenow", percentage.toString());
+
+            // Add pulse effect for active phases
+            if (
+                progress.phase === "analyzing" ||
+                progress.phase === "extracting"
+            ) {
+                progressBar.classList.add("progress-pulse");
+            } else {
+                progressBar.classList.remove("progress-pulse");
+            }
+        }
+
+        // Update progress text
+        if (progressText && progress.totalItems > 0) {
+            progressText.textContent = `${progress.processedItems} of ${progress.totalItems} items processed`;
+        }
+
+        // Update display with latest aggregated knowledge data
+        if (progress.incrementalData) {
+            const newData = this.updateKnowledgeData(
+                this.streamingState.currentData,
+                progress.incrementalData,
+            );
+
+            // Update UI with latest aggregated results
+            this.updateKnowledgeDisplay(
+                this.streamingState.currentData,
+                newData,
+            );
+
+            this.streamingState.currentData = newData;
+        }
+
+        // Handle completion
+        if (progress.phase === "complete") {
+            // Store the final extracted data for saving
+            if (this.streamingState && this.streamingState.currentData) {
+                this.extractedKnowledgeData = this.streamingState.currentData;
+                this.knowledgeData = this.streamingState.currentData;
+            }
+            this.completeStreaming();
+        } else if (progress.phase === "error") {
+            this.handleExtractionError(progress.errors);
+        }
+    }
+
+    private updateKnowledgeData(
+        existing: KnowledgeData,
+        incoming: Partial<any>, // Using any to avoid type conflicts with incremental data
+    ): KnowledgeData {
+        const merged = { ...existing };
+
+        // Replace entities entirely with latest aggregated results
+        // Incoming data now contains fully aggregated results, not incremental updates
+        if (incoming.entities) {
+            merged.entities = incoming.entities;
+        }
+
+        // Replace relationships entirely with latest aggregated results
+        if (incoming.relationships) {
+            merged.relationships = incoming.relationships;
+        }
+
+        // Replace topics entirely with latest aggregated results
+        if (incoming.keyTopics) {
+            merged.keyTopics = incoming.keyTopics;
+        }
+
+        // Update summary (replace, not merge)
+        if (incoming.summary) {
+            merged.summary = incoming.summary;
+        }
+
+        // Update other fields
+        if (incoming.contentActions) {
+            merged.contentActions = incoming.contentActions;
+        }
+        if (incoming.detectedActions) {
+            merged.detectedActions = incoming.detectedActions;
+        }
+        if (incoming.actionSummary) {
+            merged.actionSummary = incoming.actionSummary;
+        }
+        if (incoming.contentMetrics) {
+            merged.contentMetrics = incoming.contentMetrics;
+        }
+
+        return merged;
+    }
+
+    private updateKnowledgeDisplay(
+        oldData: KnowledgeData,
+        newData: KnowledgeData,
+    ): void {
+        // For now, just re-render the entire knowledge data
+        // TODO: Implement proper incremental animation updates
+        this.renderKnowledgeResults(newData);
+    }
+
+    private completeStreaming(): void {
+        this.streamingState = null;
+        this.currentExtractionId = null;
+
+        // Hide progress indicators
+        const progressContainer = document.querySelector("#extractionProgress");
+        if (progressContainer) {
+            progressContainer.classList.add("d-none");
+        }
+
+        // Enable save button if we have knowledge data
+        if (this.extractedKnowledgeData) {
+            this.enableSaveButton();
+        }
+    }
+
+    private handleExtractionError(errors: any[]): void {
+        console.error("Knowledge extraction errors:", errors);
+        this.streamingState = null;
+        this.currentExtractionId = null;
+
+        // Hide progress indicators
+        const progressContainer = document.querySelector("#extractionProgress");
+        if (progressContainer) {
+            progressContainer.classList.add("d-none");
+        }
+
+        // Show error notification
+        const errorMessage =
+            errors.length > 0 ? errors[0].message : "Unknown error occurred";
+        notificationManager.showError("Extraction Failed", errorMessage);
+    }
+
+    private handleExtractionComplete(message: any): void {
+        if (message.extractionId === this.currentExtractionId) {
+            this.extractedKnowledgeData = message.finalData;
+            this.knowledgeData = message.finalData;
+
+            if (this.knowledgeData) {
+                this.renderKnowledgeResults(this.knowledgeData);
+            }
+
+            this.completeStreaming();
+        }
+    }
+
+    private showStreamingProgress(): void {
+        // Show progress indicator
+        const progressContainer = document.querySelector("#extractionProgress");
+        if (progressContainer) {
+            progressContainer.classList.remove("d-none");
+        }
+
+        // Reset progress elements
+        const progressBar = document.querySelector(
+            "#knowledgeProgressBar",
+        ) as HTMLElement;
+        const statusElement = document.querySelector("#knowledgeStatusMessage");
+        const progressText = document.querySelector("#knowledgeProgressText");
+
+        if (progressBar) {
+            progressBar.style.width = "0%";
+            progressBar.setAttribute("aria-valuenow", "0");
+        }
+
+        if (statusElement) {
+            statusElement.textContent = "Initializing extraction...";
+        }
+
+        if (progressText) {
+            progressText.textContent = "0 of 0 items processed";
+        }
+
+        // Hide regular knowledge loading state
+        this.hideKnowledgeLoading();
+    }
+
+    private hideKnowledgeLoading(): void {
+        const knowledgeSection = document.getElementById("knowledgeSection");
+        if (knowledgeSection) {
+            knowledgeSection.classList.add("d-none");
+        }
+    }
+
+    private hideStreamingProgress(): void {
+        const progressContainer = document.querySelector("#extractionProgress");
+        if (progressContainer) {
+            progressContainer.classList.add("d-none");
+        }
+        // Reset streaming state
+        this.streamingState = null;
+        this.currentExtractionId = null;
     }
 }
 

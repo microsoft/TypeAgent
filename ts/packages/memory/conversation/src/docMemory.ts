@@ -198,15 +198,17 @@ export class DocMemory
     public async addDocPartToIndex(
         docPart: DocPart,
         eventHandler?: kp.IndexingEventHandlers,
+        overrideSettings?: DocMemorySettings,
     ): Promise<kp.IndexingResults> {
         this.beginIndexing();
         try {
             this.messages.append(docPart);
             const messageOrdinal = this.messages.length - 1;
 
+            const settings = overrideSettings || this.settings;
             const result = await kp.addToConversationIndex(
                 this,
-                this.settings.conversationSettings,
+                settings.conversationSettings,
                 messageOrdinal,
                 this.semanticRefs.length,
                 eventHandler,

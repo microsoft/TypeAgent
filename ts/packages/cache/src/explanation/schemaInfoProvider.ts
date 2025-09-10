@@ -57,14 +57,38 @@ export function getNamespaceForCache(
     return schemaName;
 }
 
+export function isValidActionSchemaFileHash(
+    provider: SchemaInfoProvider,
+    schemaName: string,
+    hash: string | undefined,
+) {
+    if (hash === undefined) {
+        return false;
+    }
+
+    try {
+        const fileHash = provider.getActionSchemaFileHash(schemaName);
+        return fileHash === hash;
+    } catch {
+        // Schema not found
+        return false;
+    }
+}
+
 export type SchemaInfoProvider = {
+    // Throws if schemaName or actionName not found
     getActionParamSpec: (
         schemaName: string,
         actionName: string,
         paramName: string,
     ) => ParamSpec | undefined;
 
+    // Throws if schemaName or actionName not found
     getActionCacheEnabled: (schemaName: string, actionName: string) => boolean;
+
+    // Throws if schemaName not found
     getActionNamespace: (schemaName: string) => boolean | undefined; // default to false
+
+    // Throws if schemaName not found
     getActionSchemaFileHash: (schemaName: string) => string;
 };

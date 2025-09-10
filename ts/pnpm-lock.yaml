@@ -49,8 +49,8 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/agentSdk
       better-sqlite3:
-        specifier: 11.9.1
-        version: 11.9.1
+        specifier: 12.2.0
+        version: 12.2.0
       typeagent:
         specifier: workspace:*
         version: link:../../../packages/typeagent
@@ -80,8 +80,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/aiclient
       better-sqlite3:
-        specifier: 11.9.1
-        version: 11.9.1
+        specifier: 12.2.0
+        version: 12.2.0
       chalk:
         specifier: ^5.4.1
         version: 5.4.1
@@ -399,8 +399,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/aiclient
       better-sqlite3:
-        specifier: 11.9.1
-        version: 11.9.1
+        specifier: 12.2.0
+        version: 12.2.0
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
@@ -1197,7 +1197,7 @@ importers:
         version: 5.4.5
       vite:
         specifier: ^6.3.4
-        version: 6.3.5(@types/node@20.17.47)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0)
+        version: 6.3.5(@types/node@20.17.47)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0)
 
   packages/agents/calendar:
     dependencies:
@@ -1285,8 +1285,8 @@ importers:
         specifier: workspace:*
         version: link:../../agentSdk
       better-sqlite3:
-        specifier: 11.9.1
-        version: 11.9.1
+        specifier: 12.2.0
+        version: 12.2.0
       chalk:
         specifier: ^5.4.1
         version: 5.4.1
@@ -1650,7 +1650,7 @@ importers:
         version: 5.4.5
       vite:
         specifier: ^6.3.4
-        version: 6.3.5(@types/node@22.15.18)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0)
+        version: 6.3.5(@types/node@22.15.18)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0)
 
   packages/agents/montage:
     dependencies:
@@ -1839,8 +1839,8 @@ importers:
         specifier: workspace:*
         version: link:../../aiclient
       better-sqlite3:
-        specifier: 11.9.1
-        version: 11.9.1
+        specifier: 12.2.0
+        version: 12.2.0
       code-processor:
         specifier: workspace:*
         version: link:../../codeProcessor
@@ -2433,11 +2433,11 @@ importers:
   packages/defaultAgentProvider:
     dependencies:
       '@modelcontextprotocol/sdk':
-        specifier: ^1.8.0
-        version: 1.11.3
+        specifier: ^1.17.5
+        version: 1.17.5
       '@modelcontextprotocol/server-filesystem':
-        specifier: 2025.7.1
-        version: 2025.7.1(zod@3.24.4)
+        specifier: 2025.8.21
+        version: 2025.8.21(zod@3.24.4)
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
@@ -2995,8 +2995,8 @@ importers:
         specifier: workspace:*
         version: link:../../aiclient
       better-sqlite3:
-        specifier: 11.9.1
-        version: 11.9.1
+        specifier: 12.2.0
+        version: 12.2.0
       common-utils:
         specifier: workspace:*
         version: link:../../commonUtils
@@ -3056,8 +3056,8 @@ importers:
         specifier: workspace:*
         version: link:../../aiclient
       better-sqlite3:
-        specifier: 11.9.1
-        version: 11.9.1
+        specifier: 12.2.0
+        version: 12.2.0
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
@@ -3108,8 +3108,8 @@ importers:
         specifier: workspace:*
         version: link:../../aiclient
       better-sqlite3:
-        specifier: 11.9.1
-        version: 11.9.1
+        specifier: 12.2.0
+        version: 12.2.0
       cheerio:
         specifier: ^1.0.0
         version: 1.1.0
@@ -3219,7 +3219,7 @@ importers:
         version: 1.5.13
       '@electron-toolkit/preload':
         specifier: ^3.0.2
-        version: 3.0.2(electron@35.2.1)
+        version: 3.0.2(electron@37.4.0)
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
@@ -3294,14 +3294,14 @@ importers:
         specifier: ^7.0.3
         version: 7.0.3
       electron:
-        specifier: 35.2.1
-        version: 35.2.1
+        specifier: ^37.4.0
+        version: 37.4.0
       electron-builder:
-        specifier: ^26.0.16
-        version: 26.0.16(electron-builder-squirrel-windows@26.0.16)
+        specifier: ^26.0.20
+        version: 26.0.20(electron-builder-squirrel-windows@26.0.20)
       electron-vite:
         specifier: ^3.1.0
-        version: 3.1.0(vite@6.3.5(@types/node@20.17.47)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0))
+        version: 3.1.0(vite@6.3.5(@types/node@20.17.47)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0))
       less:
         specifier: ^4.2.0
         version: 4.3.0
@@ -3319,7 +3319,7 @@ importers:
         version: 5.4.5
       vite:
         specifier: ^6.3.4
-        version: 6.3.5(@types/node@20.17.47)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0)
+        version: 6.3.5(@types/node@20.17.47)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0)
 
   packages/telemetry:
     dependencies:
@@ -4626,6 +4626,14 @@ packages:
       '@types/node':
         optional: true
 
+  '@isaacs/balanced-match@4.0.1':
+    resolution: {integrity: sha512-yzMTt9lEb8Gv7zRioUilSglI0c0smZ9k5D65677DLWLtWJaXIS3CqcGyUFByYKlnUj6TkjLVs54fBl6+TiGQDQ==}
+    engines: {node: 20 || >=22}
+
+  '@isaacs/brace-expansion@5.0.0':
+    resolution: {integrity: sha512-ZT55BDLV0yv0RBm2czMiZ+SqCGO7AvmOM3G/w2xhVPH+te0aKgFjmBvGlL1dH+ql2tgGO3MVrbb3jCKyvpgnxA==}
+    engines: {node: 20 || >=22}
+
   '@isaacs/cliui@8.0.2':
     resolution: {integrity: sha512-O8jcjabXaleOG9DQ0+ARXWZBTfnP4WNAqzuiJK7ll44AmxGKv/J2M4TPjxjY3znBCfvBXFzucm1twdyFybFqEA==}
     engines: {node: '>=12'}
@@ -4934,20 +4942,16 @@ packages:
   '@milkdown/utils@7.13.1':
     resolution: {integrity: sha512-4ct/ovL0h/0kuLFligLdZgt3qtWbNZEHnIKO321qvkaGLx1HmzbMpiL6V8tq7iDqNKeoqAzFb/2vnUeYGv1Ndw==}
 
-  '@modelcontextprotocol/sdk@1.11.3':
-    resolution: {integrity: sha512-rmOWVRUbUJD7iSvJugjUbFZshTAuJ48MXoZ80Osx1GM0K/H1w7rSEvmw8m6vdWxNASgtaHIhAgre4H/E9GJiYQ==}
-    engines: {node: '>=18'}
-
   '@modelcontextprotocol/sdk@1.12.1':
     resolution: {integrity: sha512-KG1CZhZfWg+u8pxeM/mByJDScJSrjjxLc8fwQqbsS8xCjBmQfMNEBTotYdNanKekepnfRI85GtgQlctLFpcYPw==}
     engines: {node: '>=18'}
 
-  '@modelcontextprotocol/sdk@1.13.3':
-    resolution: {integrity: sha512-bGwA78F/U5G2jrnsdRkPY3IwIwZeWUEfb5o764b79lb0rJmMT76TLwKhdNZOWakOQtedYefwIR4emisEMvInKA==}
+  '@modelcontextprotocol/sdk@1.17.5':
+    resolution: {integrity: sha512-QakrKIGniGuRVfWBdMsDea/dx1PNE739QJ7gCM41s9q+qaCYTHCdsIBXQVVXry3mfWAiaM9kT22Hyz53Uw8mfg==}
     engines: {node: '>=18'}
 
-  '@modelcontextprotocol/server-filesystem@2025.7.1':
-    resolution: {integrity: sha512-mGXxYX8l4EWQPgh/1pLZI2baKifPy4+WUx1jJ572TsCbe/Bs7S8f7z0Dp9aRlpcLEMr/Qp+Rp1m3NXNsgdKUmg==}
+  '@modelcontextprotocol/server-filesystem@2025.8.21':
+    resolution: {integrity: sha512-Kk+E+lAuAQPLhrJlrsboEdwTBxWU0DYfsuELIuP3Nvfn8Kvd72BU6KVjhEa5EjbC4YckQDCxH9VJK47x6psxow==}
     hasBin: true
 
   '@mongodb-js/saslprep@1.2.2':
@@ -6517,12 +6521,12 @@ packages:
   app-builder-bin@5.0.0-alpha.12:
     resolution: {integrity: sha512-j87o0j6LqPL3QRr8yid6c+Tt5gC7xNfYo6uQIQkorAC6MpeayVMZrEDzKmJJ/Hlv7EnOQpaRm53k6ktDYZyB6w==}
 
-  app-builder-lib@26.0.16:
-    resolution: {integrity: sha512-IEsVD9SWt7YbjJEdYNuhwkdzhNCRZr5YPu1cQUP12kVT/k3EbvSg6QVpBBsd9agVqUaEflvGfl9svTo+Yt7lFQ==}
+  app-builder-lib@26.0.20:
+    resolution: {integrity: sha512-MNEcm1M2+SAENsH2nxAAPt5qrGT4VwZNuvLC+GuwmcSDhDPWjrzsRPfx8/D0Juz446jVtTfAOguagv5EEssaaw==}
     engines: {node: '>=14.0.0'}
     peerDependencies:
-      dmg-builder: 26.0.16
-      electron-builder-squirrel-windows: 26.0.16
+      dmg-builder: 26.0.20
+      electron-builder-squirrel-windows: 26.0.20
 
   archiver-utils@2.1.0:
     resolution: {integrity: sha512-bEL/yUb/fNNiNTuUz979Z0Yg5L+LzLxGJz8x79lYmR54fmTIb6ob/hNQgkQnIUDWIFjZVQwl9Xs356I6BAMHfw==}
@@ -6695,8 +6699,9 @@ packages:
   bent@7.3.12:
     resolution: {integrity: sha512-T3yrKnVGB63zRuoco/7Ybl7BwwGZR0lceoVG5XmQyMIH9s19SV5m+a8qam4if0zQuAmOQTyPTPmsQBdAorGK3w==}
 
-  better-sqlite3@11.9.1:
-    resolution: {integrity: sha512-Ba0KR+Fzxh2jDRhdg6TSH0SJGzb8C0aBY4hR8w8madIdIzzC6Y1+kx5qR6eS1Z+Gy20h6ZU28aeyg0z1VIrShQ==}
+  better-sqlite3@12.2.0:
+    resolution: {integrity: sha512-eGbYq2CT+tos1fBwLQ/tkBt9J5M3JEHjku4hbvQUePCckkvVf14xWj+1m7dGoK81M/fOjFT7yM9UMeKT/+vFLQ==}
+    engines: {node: 20.x || 22.x || 23.x || 24.x}
 
   binary-extensions@2.2.0:
     resolution: {integrity: sha512-jDctJ/IVQbZoJykoeHbhXpOlNBqGNcwXJKJog42E5HDPUwQTSdjCHdihjj0DlnheQ7blbT6dHOafNAiS8ooQKA==}
@@ -6796,12 +6801,12 @@ packages:
     resolution: {integrity: sha512-2/egrNDDnRaxVwK3A+cJq6UOlqOdedGA7JPqCeJjN2Zjk1/QB/6QUi3b714ScIGS7HafFXTyzJEOr5b44I3kvQ==}
     engines: {node: '>=12.0.0'}
 
-  builder-util-runtime@9.3.2:
-    resolution: {integrity: sha512-7QDXJ1FwT6d9ZhG4kuObUUPY8/ENBS/Ky26O4hR5vbeoRGavgekS2Jxv+8sCn/v23aPGU2DXRWEeJuijN2ooYA==}
+  builder-util-runtime@9.4.0:
+    resolution: {integrity: sha512-omkpaKbutPYqC0nwLEeGq540xND1YPhfVzwT6CFyCFzxhNDt/X+fykr17Yo3jxiuwI3zaAnY/1tKFoRN+FeHhg==}
     engines: {node: '>=12.0.0'}
 
-  builder-util@26.0.16:
-    resolution: {integrity: sha512-VmhoCiQumRiuWPqng6a1p3LphHzYYLhI8UbjvLxb6f9IunF9YABv9yDZKu6jMpg1s6J0wka5NH0hH1PDrZ3fIw==}
+  builder-util@26.0.20:
+    resolution: {integrity: sha512-LxT2Q7dcNMdJ34Y7IrTWvkSL0UHMqs76ZjbDSmhuC8vpC9DZfWYzLtOHUFHmZ67Cx8/8mNWFmXG8QJ/e+itc0A==}
 
   bundle-name@4.1.0:
     resolution: {integrity: sha512-tjwM5exMg6BGRI+kNmTntNsvdZS1X8BFYS6tnJ2hdH0kVxM6/eVZ2xy+FqStSWvYmtfFMDLIxurorHwDKfDz5Q==}
@@ -7153,9 +7158,6 @@ packages:
 
   confbox@0.2.2:
     resolution: {integrity: sha512-1NB+BKqhtNipMsov4xI/NnhCKp9XG9NamYp5PVm9klAT0fsrNPjaFICsCFhNhwZJKNh7zB/3q8qXz0E9oaMNtQ==}
-
-  config-file-ts@0.2.8-rc1:
-    resolution: {integrity: sha512-GtNECbVI82bT4RiDIzBSVuTKoSHufnU7Ce7/42bkWZJZFLjmDF2WBpVsvRkhKCfKBnTBb3qZrBwPpFBU/Myvhg==}
 
   connect-history-api-fallback@2.0.0:
     resolution: {integrity: sha512-U73+6lQFmfiNPrYbXqr6kZ1i1wiRqXnp2nhMsINseWXO8lDau0LGEffJ8kQi4EjLZympVgRdvqjAgiZ1tgzDDA==}
@@ -7666,8 +7668,8 @@ packages:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
 
-  dmg-builder@26.0.16:
-    resolution: {integrity: sha512-xRBGHKPHNgFdqHuo584RkIDDvMwl1gEPcXvZ4FSKHjE6Zb5+8gXG+Vak7E7VF5FUI/O9JoRQA2rG4mOJFoMocQ==}
+  dmg-builder@26.0.20:
+    resolution: {integrity: sha512-8iiV/TMGoMqor9/54M/B5zRhyRsyTo2OUv/LalKGlKCZQ/0P96obvl5dQQg56AUlbVGzbMlu7hycLvpNXhqabA==}
 
   dmg-license@1.0.11:
     resolution: {integrity: sha512-ZdzmqwKmECOWJpqefloC5OJy1+WZBBse5+MR88z9g9Zn4VY+WYUkAyojmhzJckH5YbbZGcYIuGAkY5/Ys5OM2Q==}
@@ -7748,16 +7750,16 @@ packages:
     engines: {node: '>=0.10.0'}
     hasBin: true
 
-  electron-builder-squirrel-windows@26.0.16:
-    resolution: {integrity: sha512-6Q2r4hz1PpYBMy12nHIYyyH0rOl0i9aP8+EPesKBwfnRjlniYJ3aRRsAcjGdPeVGezh+c7AXaJgoud4nSaPHGQ==}
+  electron-builder-squirrel-windows@26.0.20:
+    resolution: {integrity: sha512-NIXplPdsDqWtUW5EKVKGJT7ikgzsa6PYfPuCs6Dc1fXsBI/450l7F2x+1gyTQ2cUp4+DVrcom0sXHfCBo36PrQ==}
 
-  electron-builder@26.0.16:
-    resolution: {integrity: sha512-nGL/mfmTr+LdZ/jZA3/JzeGgi64jtwGNfwmJUVec//PLvqhFBhpnxbdMkwZAN9msOsZ8qqHbN9X/uy4gpBqZVA==}
+  electron-builder@26.0.20:
+    resolution: {integrity: sha512-lntLb4ZuQ4UPVlOiWZKO+NhHlNf0T6Bn+6ZLo+wxTuhazKJSXycmIP6tp/xNZvE+0ApF0SizAgY4sLHZtrTJgw==}
     engines: {node: '>=14.0.0'}
     hasBin: true
 
-  electron-publish@26.0.16:
-    resolution: {integrity: sha512-NaibIXacWUCexnXw7ar3ZB/+ok+2WWHmH9WX6k2m7ax1o224+qpfO7mc+LbWbwNi+sMbwuyrHzY01fcg8Wv/pA==}
+  electron-publish@26.0.20:
+    resolution: {integrity: sha512-2OAcMmawYZCxRSGnGMkyWOYAPLS2ZEL2F886fkilYojy1lFXLdRCkcyQVD5GV2KeEjNBsuhcvz9pddWcYT9JMw==}
 
   electron-to-chromium@1.5.155:
     resolution: {integrity: sha512-ps5KcGGmwL8VaeJlvlDlu4fORQpv3+GIcF5I3f9tUKUlJ/wsysh6HU8P5L1XWRYeXfA0oJd4PyM8ds8zTFf6Ng==}
@@ -7780,8 +7782,8 @@ packages:
     resolution: {integrity: sha512-bO3y10YikuUwUuDUQRM4KfwNkKhnpVO7IPdbsrejwN9/AABJzzTQ4GeHwyzNSrVO+tEH3/Np255a3sVZpZDjvg==}
     engines: {node: '>=8.0.0'}
 
-  electron@35.2.1:
-    resolution: {integrity: sha512-LO4xXLpzkPPUVLvAbdHMlW7N9Z+Qqz+7QsmSWXluTIQMeJk+v7o36nUTZghyA2I1s//tlMvuaCtle6Qo2W0Ktg==}
+  electron@37.4.0:
+    resolution: {integrity: sha512-HhsSdWowE5ODOeWNc/323Ug2C52mq/TqNBG+4uMeOA3G2dMXNc/nfyi0RYu1rJEgiaJLEjtHveeZZaYRYFsFCQ==}
     engines: {node: '>= 12.20.55'}
     hasBin: true
 
@@ -8850,6 +8852,10 @@ packages:
   isexe@2.0.0:
     resolution: {integrity: sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==}
 
+  isexe@3.1.1:
+    resolution: {integrity: sha512-LpB/54B+/2J5hqQ7imZHfdU31OlgQqx7ZicVlkm9kzg9/w8GKLEcFfJl/t7DCEDueOyBAD6zCCwTO6Fzs0NoEQ==}
+    engines: {node: '>=16'}
+
   isobject@3.0.1:
     resolution: {integrity: sha512-WhB9zCku7EGTj/HQQRz5aUQEUeoQZH2bWcltRErOpymJ4boYE6wL9Tbr23krRPSZ+C5zqNSrSw+Cc7sZZ4b7vg==}
     engines: {node: '>=0.10.0'}
@@ -9052,6 +9058,10 @@ packages:
     peerDependenciesMeta:
       node-notifier:
         optional: true
+
+  jiti@2.5.1:
+    resolution: {integrity: sha512-twQoecYPiVA5K/h6SxtORw/Bs3ar+mLUtoPSc7iMXzQzK8d7eJ/R09wmTwAjiamETn1cXYPGfNnu7DMoHgu12w==}
+    hasBin: true
 
   jju@1.4.0:
     resolution: {integrity: sha512-8wb9Yw966OSxApiCt0K3yNJL8pnNeIv+OEq2YMidz4FKP6nonSRoOXc80iXY4JaN2FC11B9qsNmDsm+ZOfMROA==}
@@ -9737,6 +9747,10 @@ packages:
     resolution: {integrity: sha512-ethXTt3SGGR+95gudmqJ1eNhRO7eGEGIgYA9vnPatK4/etz2MEVDno5GMCibdMTuBMyElzIlgxMna3K94XDIDQ==}
     engines: {node: 20 || >=22}
 
+  minimatch@10.0.3:
+    resolution: {integrity: sha512-IPZ167aShDZZUMdRk66cyQAW3qr0WzbHkPdMYa8bzZhlHhO3jALbKdxcaak7W9FfT2rZNpQuUu4Od7ILEpXSaw==}
+    engines: {node: 20 || >=22}
+
   minimatch@3.1.2:
     resolution: {integrity: sha512-J7p63hRiAjw1NDEww1W7i37+ByIrOWO5XQQAzZ3VOcL0PNybwpfmV/N05zFAzwQ9USyEcX6t3UO+K5aqBQOIHw==}
 
@@ -9942,8 +9956,8 @@ packages:
   no-case@3.0.4:
     resolution: {integrity: sha512-fgAN3jGAh+RoxUGZHTSOLJIqUc2wmoBwGR4tbpNAKmmovFoWq0OdRkb0VkldReO2a2iBT/OEulG9XSUc10r3zg==}
 
-  node-abi@3.74.0:
-    resolution: {integrity: sha512-c5XK0MjkGBrQPGYG24GBADZud0NCbznxNx0ZkS+ebUTrmV1qTDxPxSL8zEAPURXSbLRWVexxmP4986BziahL5w==}
+  node-abi@3.77.0:
+    resolution: {integrity: sha512-DSmt0OEcLoK4i3NuscSbGjOf3bqiDEutejqENSplMSFA/gmB8mkED9G4pKWnPl7MDU4rSHebKPHeitpDfyH0cQ==}
     engines: {node: '>=10'}
 
   node-addon-api@1.7.2:
@@ -12051,6 +12065,11 @@ packages:
     engines: {node: '>= 8'}
     hasBin: true
 
+  which@5.0.0:
+    resolution: {integrity: sha512-JEdGzHwwkrbWoGOlIHqQ5gtprKGOenpDHpxE9zVR1bWbOtYRyPPHMe9FaP6x61CmNaTThSkb0DAJte5jD+DmzQ==}
+    engines: {node: ^18.17.0 || >=20.5.0}
+    hasBin: true
+
   widest-line@3.1.0:
     resolution: {integrity: sha512-NsmoXalsWVDMGupxZ5R08ka9flZjjiLvHVAWYOKtiKM8ujtZWr9cRffak+uSE48+Ob8ObalXpwyeUiyDD6QFgg==}
     engines: {node: '>=8'}
@@ -13633,9 +13652,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@electron-toolkit/preload@3.0.2(electron@35.2.1)':
+  '@electron-toolkit/preload@3.0.2(electron@37.4.0)':
     dependencies:
-      electron: 35.2.1
+      electron: 37.4.0
 
   '@electron-toolkit/tsconfig@1.0.1(@types/node@20.17.47)':
     dependencies:
@@ -13711,7 +13730,7 @@ snapshots:
       detect-libc: 2.0.3
       fs-extra: 10.1.0
       got: 11.8.6
-      node-abi: 3.74.0
+      node-abi: 3.77.0
       node-api-version: 0.2.1
       ora: 5.4.1
       read-binary-file-arch: 1.0.6
@@ -13728,7 +13747,7 @@ snapshots:
       '@malept/cross-spawn-promise': 2.0.0
       debug: 4.4.1(supports-color@8.1.1)
       dir-compare: 4.2.0
-      fs-extra: 11.3.0
+      fs-extra: 11.3.1
       minimatch: 9.0.5
       plist: 3.1.0
     transitivePeerDependencies:
@@ -14118,6 +14137,12 @@ snapshots:
   '@inquirer/type@3.0.8(@types/node@20.17.47)':
     optionalDependencies:
       '@types/node': 20.17.47
+
+  '@isaacs/balanced-match@4.0.1': {}
+
+  '@isaacs/brace-expansion@5.0.0':
+    dependencies:
+      '@isaacs/balanced-match': 4.0.1
 
   '@isaacs/cliui@8.0.2':
     dependencies:
@@ -14842,21 +14867,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@modelcontextprotocol/sdk@1.11.3':
-    dependencies:
-      content-type: 1.0.5
-      cors: 2.8.5
-      cross-spawn: 7.0.6
-      eventsource: 3.0.6
-      express: 5.1.0
-      express-rate-limit: 7.5.0(express@5.1.0)
-      pkce-challenge: 5.0.0
-      raw-body: 3.0.0
-      zod: 3.24.4
-      zod-to-json-schema: 3.24.5(zod@3.24.4)
-    transitivePeerDependencies:
-      - supports-color
-
   '@modelcontextprotocol/sdk@1.12.1':
     dependencies:
       ajv: 6.12.6
@@ -14873,7 +14883,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@modelcontextprotocol/sdk@1.13.3':
+  '@modelcontextprotocol/sdk@1.17.5':
     dependencies:
       ajv: 6.12.6
       content-type: 1.0.5
@@ -14890,9 +14900,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@modelcontextprotocol/server-filesystem@2025.7.1(zod@3.24.4)':
+  '@modelcontextprotocol/server-filesystem@2025.8.21(zod@3.24.4)':
     dependencies:
-      '@modelcontextprotocol/sdk': 1.13.3
+      '@modelcontextprotocol/sdk': 1.17.5
       diff: 5.2.0
       glob: 10.4.5
       minimatch: 10.0.1
@@ -16813,7 +16823,7 @@ snapshots:
 
   app-builder-bin@5.0.0-alpha.12: {}
 
-  app-builder-lib@26.0.16(dmg-builder@26.0.16)(electron-builder-squirrel-windows@26.0.16):
+  app-builder-lib@26.0.20(dmg-builder@26.0.20)(electron-builder-squirrel-windows@26.0.20):
     dependencies:
       '@develar/schema-utils': 2.6.5
       '@electron/asar': 3.4.1
@@ -16825,31 +16835,32 @@ snapshots:
       '@malept/flatpak-bundler': 0.4.0
       '@types/fs-extra': 9.0.13
       async-exit-hook: 2.0.1
-      builder-util: 26.0.16
-      builder-util-runtime: 9.3.2
+      builder-util: 26.0.20
+      builder-util-runtime: 9.4.0
       chromium-pickle-js: 0.2.0
       ci-info: 4.2.0
-      config-file-ts: 0.2.8-rc1
       debug: 4.4.1(supports-color@8.1.1)
-      dmg-builder: 26.0.16(electron-builder-squirrel-windows@26.0.16)
+      dmg-builder: 26.0.20(electron-builder-squirrel-windows@26.0.20)
       dotenv: 16.5.0
       dotenv-expand: 11.0.7
       ejs: 3.1.10
-      electron-builder-squirrel-windows: 26.0.16(dmg-builder@26.0.16)
-      electron-publish: 26.0.16
+      electron-builder-squirrel-windows: 26.0.20(dmg-builder@26.0.20)
+      electron-publish: 26.0.20
       fs-extra: 10.1.0
       hosted-git-info: 4.1.0
       isbinaryfile: 5.0.0
+      jiti: 2.5.1
       js-yaml: 4.1.0
       json5: 2.2.3
       lazy-val: 1.0.5
-      minimatch: 10.0.1
+      minimatch: 10.0.3
       plist: 3.1.0
       resedit: 1.7.2
       semver: 7.7.2
       tar: 6.2.1
       temp-file: 3.4.0
       tiny-async-pool: 1.3.0
+      which: 5.0.0
     transitivePeerDependencies:
       - bluebird
       - supports-color
@@ -17049,7 +17060,7 @@ snapshots:
       caseless: 0.12.0
       is-stream: 2.0.1
 
-  better-sqlite3@11.9.1:
+  better-sqlite3@12.2.0:
     dependencies:
       bindings: 1.5.0
       prebuild-install: 7.1.3
@@ -17179,19 +17190,19 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  builder-util-runtime@9.3.2:
+  builder-util-runtime@9.4.0:
     dependencies:
       debug: 4.4.1(supports-color@8.1.1)
       sax: 1.3.0
     transitivePeerDependencies:
       - supports-color
 
-  builder-util@26.0.16:
+  builder-util@26.0.20:
     dependencies:
       7zip-bin: 5.2.0
       '@types/debug': 4.1.12
       app-builder-bin: 5.0.0-alpha.12
-      builder-util-runtime: 9.3.2
+      builder-util-runtime: 9.4.0
       chalk: 4.1.2
       ci-info: 4.2.0
       cross-spawn: 7.0.6
@@ -17616,11 +17627,6 @@ snapshots:
   confbox@0.1.8: {}
 
   confbox@0.2.2: {}
-
-  config-file-ts@0.2.8-rc1:
-    dependencies:
-      glob: 10.4.5
-      typescript: 5.4.5
 
   connect-history-api-fallback@2.0.0: {}
 
@@ -18156,11 +18162,10 @@ snapshots:
     dependencies:
       path-type: 4.0.0
 
-  dmg-builder@26.0.16(electron-builder-squirrel-windows@26.0.16):
+  dmg-builder@26.0.20(electron-builder-squirrel-windows@26.0.20):
     dependencies:
-      app-builder-lib: 26.0.16(dmg-builder@26.0.16)(electron-builder-squirrel-windows@26.0.16)
-      builder-util: 26.0.16
-      builder-util-runtime: 9.3.2
+      app-builder-lib: 26.0.20(dmg-builder@26.0.20)(electron-builder-squirrel-windows@26.0.20)
+      builder-util: 26.0.20
       fs-extra: 10.1.0
       iconv-lite: 0.6.3
       js-yaml: 4.1.0
@@ -18272,24 +18277,24 @@ snapshots:
     dependencies:
       jake: 10.8.7
 
-  electron-builder-squirrel-windows@26.0.16(dmg-builder@26.0.16):
+  electron-builder-squirrel-windows@26.0.20(dmg-builder@26.0.20):
     dependencies:
-      app-builder-lib: 26.0.16(dmg-builder@26.0.16)(electron-builder-squirrel-windows@26.0.16)
-      builder-util: 26.0.16
+      app-builder-lib: 26.0.20(dmg-builder@26.0.20)(electron-builder-squirrel-windows@26.0.20)
+      builder-util: 26.0.20
       electron-winstaller: 5.4.0
     transitivePeerDependencies:
       - bluebird
       - dmg-builder
       - supports-color
 
-  electron-builder@26.0.16(electron-builder-squirrel-windows@26.0.16):
+  electron-builder@26.0.20(electron-builder-squirrel-windows@26.0.20):
     dependencies:
-      app-builder-lib: 26.0.16(dmg-builder@26.0.16)(electron-builder-squirrel-windows@26.0.16)
-      builder-util: 26.0.16
-      builder-util-runtime: 9.3.2
+      app-builder-lib: 26.0.20(dmg-builder@26.0.20)(electron-builder-squirrel-windows@26.0.20)
+      builder-util: 26.0.20
+      builder-util-runtime: 9.4.0
       chalk: 4.1.2
       ci-info: 4.2.0
-      dmg-builder: 26.0.16(electron-builder-squirrel-windows@26.0.16)
+      dmg-builder: 26.0.20(electron-builder-squirrel-windows@26.0.20)
       fs-extra: 10.1.0
       lazy-val: 1.0.5
       simple-update-notifier: 2.0.0
@@ -18299,11 +18304,11 @@ snapshots:
       - electron-builder-squirrel-windows
       - supports-color
 
-  electron-publish@26.0.16:
+  electron-publish@26.0.20:
     dependencies:
       '@types/fs-extra': 9.0.13
-      builder-util: 26.0.16
-      builder-util-runtime: 9.3.2
+      builder-util: 26.0.20
+      builder-util-runtime: 9.4.0
       chalk: 4.1.2
       form-data: 4.0.4
       fs-extra: 10.1.0
@@ -18327,7 +18332,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  electron-vite@3.1.0(vite@6.3.5(@types/node@20.17.47)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0)):
+  electron-vite@3.1.0(vite@6.3.5(@types/node@20.17.47)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0)):
     dependencies:
       '@babel/core': 7.26.10
       '@babel/plugin-transform-arrow-functions': 7.25.9(@babel/core@7.26.10)
@@ -18335,7 +18340,7 @@ snapshots:
       esbuild: 0.25.4
       magic-string: 0.30.17
       picocolors: 1.1.1
-      vite: 6.3.5(@types/node@20.17.47)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0)
+      vite: 6.3.5(@types/node@20.17.47)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0)
     transitivePeerDependencies:
       - supports-color
 
@@ -18351,7 +18356,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  electron@35.2.1:
+  electron@37.4.0:
     dependencies:
       '@electron/get': 2.0.3
       '@types/node': 22.15.18
@@ -18860,7 +18865,6 @@ snapshots:
       graceful-fs: 4.2.11
       jsonfile: 6.2.0
       universalify: 2.0.1
-    optional: true
 
   fs-extra@7.0.1:
     dependencies:
@@ -18878,7 +18882,7 @@ snapshots:
     dependencies:
       at-least-node: 1.0.0
       graceful-fs: 4.2.11
-      jsonfile: 6.1.0
+      jsonfile: 6.2.0
       universalify: 2.0.1
 
   fs-minipass@2.1.0:
@@ -19541,6 +19545,8 @@ snapshots:
 
   isexe@2.0.0: {}
 
+  isexe@3.1.1: {}
+
   isobject@3.0.1: {}
 
   isomorphic-ws@5.0.0(ws@8.18.2):
@@ -20046,6 +20052,8 @@ snapshots:
       - supports-color
       - ts-node
 
+  jiti@2.5.1: {}
+
   jju@1.4.0: {}
 
   jose@5.10.0: {}
@@ -20163,7 +20171,6 @@ snapshots:
       universalify: 2.0.1
     optionalDependencies:
       graceful-fs: 4.2.11
-    optional: true
 
   jsonpath@1.1.1:
     dependencies:
@@ -21020,6 +21027,10 @@ snapshots:
     dependencies:
       brace-expansion: 2.0.2
 
+  minimatch@10.0.3:
+    dependencies:
+      '@isaacs/brace-expansion': 5.0.0
+
   minimatch@3.1.2:
     dependencies:
       brace-expansion: 1.1.12
@@ -21201,7 +21212,7 @@ snapshots:
       lower-case: 2.0.2
       tslib: 2.8.1
 
-  node-abi@3.74.0:
+  node-abi@3.77.0:
     dependencies:
       semver: 7.7.2
 
@@ -21651,7 +21662,7 @@ snapshots:
       minimist: 1.2.8
       mkdirp-classic: 0.5.3
       napi-build-utils: 2.0.0
-      node-abi: 3.74.0
+      node-abi: 3.77.0
       pump: 3.0.2
       rc: 1.2.8
       simple-get: 4.0.1
@@ -23390,7 +23401,7 @@ snapshots:
       '@types/unist': 3.0.3
       vfile-message: 4.0.2
 
-  vite@6.3.5(@types/node@20.17.47)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0):
+  vite@6.3.5(@types/node@20.17.47)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0):
     dependencies:
       esbuild: 0.25.4
       fdir: 6.4.4(picomatch@4.0.2)
@@ -23401,11 +23412,12 @@ snapshots:
     optionalDependencies:
       '@types/node': 20.17.47
       fsevents: 2.3.3
+      jiti: 2.5.1
       less: 4.3.0
       terser: 5.39.2
       yaml: 2.7.0
 
-  vite@6.3.5(@types/node@22.15.18)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0):
+  vite@6.3.5(@types/node@22.15.18)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0):
     dependencies:
       esbuild: 0.25.4
       fdir: 6.4.4(picomatch@4.0.2)
@@ -23416,6 +23428,7 @@ snapshots:
     optionalDependencies:
       '@types/node': 22.15.18
       fsevents: 2.3.3
+      jiti: 2.5.1
       less: 4.3.0
       terser: 5.39.2
       yaml: 2.7.0
@@ -23670,6 +23683,10 @@ snapshots:
   which@2.0.2:
     dependencies:
       isexe: 2.0.0
+
+  which@5.0.0:
+    dependencies:
+      isexe: 3.1.1
 
   widest-line@3.1.0:
     dependencies:

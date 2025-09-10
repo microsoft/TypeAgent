@@ -215,7 +215,7 @@ const defaultSessionConfig: SessionConfig = {
     },
     execution: {
         history: true,
-        activity: true, // TODO: experimental.
+        activity: false, // TODO: experimental.
         memory: {
             legacy: true, // use the new memory behavior
         },

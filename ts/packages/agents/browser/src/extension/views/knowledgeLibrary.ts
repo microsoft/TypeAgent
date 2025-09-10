@@ -48,7 +48,6 @@ interface LibraryStats {
 
 interface UserPreferences {
     viewMode: string;
-    autoExtractKnowledge: boolean;
     showConfidenceScores: boolean;
     enableNotifications: boolean;
     theme: "light" | "dark" | "auto";
@@ -227,18 +226,16 @@ class WebsiteLibraryPanelFullPage {
     private updateConnectionStatus() {
         const statusElement = document.getElementById("connectionStatus");
         if (statusElement) {
-            const indicator = statusElement.querySelector(".status-indicator");
-            const text = statusElement.querySelector("span:last-child");
-
-            if (indicator && text) {
-                if (this.isConnected) {
-                    indicator.className = "status-indicator status-connected";
-                    text.textContent = "Connected";
-                } else {
-                    indicator.className =
-                        "status-indicator status-disconnected";
-                    text.textContent = "Disconnected";
-                }
+            if (this.isConnected) {
+                // Hide connection status when connected
+                statusElement.style.display = "none";
+            } else {
+                // Show disconnection warning
+                statusElement.style.display = "flex";
+                statusElement.innerHTML = `
+                    <span class="status-indicator status-disconnected"></span>
+                    <span class="text-warning">Disconnected</span>
+                `;
             }
         }
     }
@@ -399,8 +396,8 @@ class WebsiteLibraryPanelFullPage {
     private setupEventListeners() {
         const settingsButton = document.getElementById("settingsButton");
         if (settingsButton) {
-            settingsButton.addEventListener("click", () => {
-                this.showSettings();
+            settingsButton.addEventListener("click", async () => {
+                await this.showSettings();
             });
         }
 
@@ -560,12 +557,12 @@ class WebsiteLibraryPanelFullPage {
         );
     }
 
-    public showSettings() {
-        this.createEnhancedSettingsModal();
+    public async showSettings() {
+        await this.createEnhancedSettingsModal();
     }
 
     // Settings management
-    private createEnhancedSettingsModal() {
+    private async createEnhancedSettingsModal() {
         const existingModal = document.getElementById("settingsModal");
         if (existingModal) {
             existingModal.remove();
@@ -627,11 +624,14 @@ class WebsiteLibraryPanelFullPage {
 
         document.body.insertAdjacentHTML("beforeend", modalHtml);
 
-        this.populateSettingsModal();
+        await this.populateSettingsModal();
 
         const saveBtn = document.getElementById("saveSettingsBtn");
         if (saveBtn) {
-            saveBtn.addEventListener("click", () => this.saveUserPreferences());
+            saveBtn.addEventListener(
+                "click",
+                async () => await this.saveUserPreferences(),
+            );
         }
 
         const modal = document.getElementById("settingsModal");
@@ -641,7 +641,7 @@ class WebsiteLibraryPanelFullPage {
         }
     }
 
-    private populateSettingsModal() {
+    private async populateSettingsModal() {
         const prefs = this.userPreferences;
 
         const defaultViewMode = document.getElementById(
@@ -658,15 +658,35 @@ class WebsiteLibraryPanelFullPage {
         ) as HTMLInputElement;
 
         if (defaultViewMode) defaultViewMode.value = prefs.viewMode;
-        if (autoExtractKnowledge)
-            autoExtractKnowledge.checked = prefs.autoExtractKnowledge;
+        if (autoExtractKnowledge) {
+            autoExtractKnowledge.checked = await this.loadAutoIndexSetting();
+        }
         if (showConfidenceScores)
             showConfidenceScores.checked = prefs.showConfidenceScores;
         if (enableNotifications)
             enableNotifications.checked = prefs.enableNotifications;
     }
 
-    private saveUserPreferences() {
+    // Auto-indexing setting helpers using ExtensionService
+    private async loadAutoIndexSetting(): Promise<boolean> {
+        try {
+            return await extensionService.getAutoIndexSetting();
+        } catch (error) {
+            console.error("Failed to load auto-index setting:", error);
+            return false;
+        }
+    }
+
+    private async saveAutoIndexSetting(enabled: boolean): Promise<void> {
+        try {
+            await extensionService.setAutoIndexSetting(enabled);
+        } catch (error) {
+            console.error("Failed to save auto-index setting:", error);
+            throw error;
+        }
+    }
+
+    private async saveUserPreferences() {
         const defaultViewMode = document.getElementById(
             "defaultViewMode",
         ) as HTMLSelectElement;
@@ -680,9 +700,22 @@ class WebsiteLibraryPanelFullPage {
             "enableNotifications",
         ) as HTMLInputElement;
 
+        // Handle auto-indexing separately via ExtensionService
+        if (autoExtractKnowledge) {
+            try {
+                await this.saveAutoIndexSetting(autoExtractKnowledge.checked);
+            } catch (error) {
+                console.error("Failed to save auto-index setting:", error);
+                notificationManager.showError(
+                    "Failed to save auto-indexing setting",
+                );
+                return;
+            }
+        }
+
+        // Save other preferences to localStorage
         this.userPreferences = {
             viewMode: defaultViewMode?.value || "list",
-            autoExtractKnowledge: autoExtractKnowledge?.checked || false,
             showConfidenceScores: showConfidenceScores?.checked || true,
             enableNotifications: enableNotifications?.checked || true,
             theme: this.userPreferences.theme,
@@ -728,7 +761,6 @@ class WebsiteLibraryPanelFullPage {
 
         return {
             viewMode: "list",
-            autoExtractKnowledge: false,
             showConfidenceScores: true,
             enableNotifications: true,
             theme: "light",

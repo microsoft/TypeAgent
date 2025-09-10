@@ -456,7 +456,7 @@ function addPolitePrefixParts(
         if (!part.optional) {
             hasPoliteSuffix = false;
             seenNonOptional = true;
-        } else if (isMatchPart(part) && part.matchSet.name === "politeness") {
+        } else if (isMatchPart(part) && part.matchSet?.name === "politeness") {
             if (!seenNonOptional) {
                 hasPolitePrefix = true;
             } else {

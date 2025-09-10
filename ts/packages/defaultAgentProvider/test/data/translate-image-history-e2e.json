@@ -7,13 +7,10 @@
           {
             "action": {
               "schemaName": "dispatcher.lookup",
-              "actionName": "lookupAndAnswer",
+              "actionName": "lookupAndAnswerConversation",
               "parameters": {
                 "originalRequest": "Tell me what images are in our chat history.",
-                "question": "What images are in our chat history?",
-                "lookup": {
-                  "source": "conversation"
-                }
+                "question": "What images are in our chat history?"
               }
             },
             "partial": true

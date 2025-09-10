@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import chalk from "chalk";
 import { exec } from "node:child_process";
 
 export const keywordSiteMapFile: string =
@@ -45,4 +46,96 @@ export async function closeChrome(): Promise<void> {
 
 export function getRandomDelay(min: number, max: number): number {
     return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+/**
+ * Checks if a page is available by making a request.
+ * @param url - The URL to check
+ * @returns True if there was a semi-valid response from the server, false otherwise
+ */
+export async function isPageAvailable(url: string): Promise<boolean> {
+    let retryCount = 0;
+    const MAX_RETRIES = 3;
+
+    // HTTPS
+    do {
+        try {
+            if (!url.startsWith("http") || !url.startsWith("https")) {
+                url = `https://${url}`;
+            }
+
+            const httpsResponse = await fetch(`${url}`);
+            const httpsStatus = httpsResponse.status;
+
+            if (httpsResponse.ok || httpsStatus === 400) {
+                return true;
+            }
+
+            const httpsText = await httpsResponse.text();
+            console.log(
+                `HTTPS ${chalk.red(httpsStatus)}\n${chalk.red(httpsText.substring(0, 20))}`,
+            );
+
+            break;
+        } catch (error: any) {
+            console.error(
+                chalk.red(
+                    `Error checking page availability ${url}: ${error?.message}`,
+                ),
+            );
+
+            // name not found
+            if (
+                error.cause.code === "ENOTFOUND" ||
+                error.cause.code === "UND_ERR_CONNECT_TIMEOUT"
+            ) {
+                break;
+            }
+
+            await new Promise((resolve) => setTimeout(resolve, 500));
+        } finally {
+            retryCount++;
+        }
+    } while (retryCount < MAX_RETRIES);
+
+    retryCount = 0;
+
+    // fallback to HTTP
+    do {
+        try {
+            const httpResponse = await fetch(`http://${url}`);
+            const status = httpResponse.status;
+
+            if (httpResponse.ok || status === 400) {
+                return true;
+            }
+
+            const r = await httpResponse.text();
+            console.log(
+                `HTTP ${chalk.red(status)}\n${chalk.red(r.substring(0, 20))}`,
+            );
+
+            break;
+        } catch (error: any) {
+            console.error(
+                chalk.red(
+                    `Error checking page availability ${url}: ${error?.message}`,
+                ),
+            );
+
+            // name not found
+            if (
+                error.cause.code === "ENOTFOUND" ||
+                error.cause.code === "UND_ERR_CONNECT_TIMEOUT"
+            ) {
+                break;
+            }
+
+            await new Promise((resolve) => setTimeout(resolve, 500));
+        } finally {
+            retryCount++;
+        }
+    } while (retryCount < MAX_RETRIES);
+
+    return false;
 }

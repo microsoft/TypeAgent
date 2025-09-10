@@ -2,15 +2,37 @@
 // Licensed under the MIT License.
 
 import { SessionContext } from "@typeagent/agent-sdk";
+import { WebSocket } from "ws";
 import { BrowserActionContext } from "../browserActions.mjs";
 import { searchWebMemories } from "../searchWebMemories.mjs";
 import * as website from "website-memory";
+import {
+    knowledgeProgressEvents,
+    KnowledgeExtractionProgressEvent,
+} from "./knowledgeProgressEvents.mjs";
 import {
     KnowledgeExtractionResult,
     EnhancedKnowledgeExtractionResult,
     Entity,
     Relationship,
 } from "./schema/knowledgeExtraction.mjs";
+// TODO: Move this to common and use the same schema in extension and agent
+interface KnowledgeExtractionProgress {
+    extractionId: string;
+    phase:
+        | "content"
+        | "basic"
+        | "summary"
+        | "analyzing"
+        | "extracting"
+        | "complete"
+        | "error";
+    totalItems: number;
+    processedItems: number;
+    currentItem: string | undefined;
+    errors: Array<{ message: string; timestamp: number }>;
+    incrementalData: any | undefined;
+}
 import {
     ExtractionMode,
     ExtractionInput,
@@ -18,6 +40,45 @@ import {
 } from "website-memory";
 import { BrowserKnowledgeExtractor } from "./browserKnowledgeExtractor.mjs";
 import { DetailedKnowledgeStats } from "../browserKnowledgeSchema.js";
+
+/**
+ * Knowledge extraction progress update helper function
+ */
+export function sendKnowledgeExtractionProgressViaWebSocket(
+    webSocket: WebSocket | undefined,
+    extractionId: string,
+    progress: KnowledgeExtractionProgress,
+) {
+    try {
+        if (webSocket && webSocket.readyState === WebSocket.OPEN) {
+            // Send progress update message via WebSocket
+            const progressMessage = {
+                method: "knowledgeExtractionProgress",
+                params: {
+                    extractionId: extractionId,
+                    progress: progress,
+                },
+                source: "browserAgent",
+            };
+
+            webSocket.send(JSON.stringify(progressMessage));
+            console.log(
+                `Knowledge Extraction Progress [${extractionId}] sent via WebSocket:`,
+                progress,
+            );
+        } else {
+            console.log(
+                `Knowledge Extraction Progress [${extractionId}] (WebSocket not available):`,
+                progress,
+            );
+        }
+    } catch (error) {
+        console.error(
+            `Failed to send knowledge extraction progress [${extractionId}]:`,
+            error,
+        );
+    }
+}
 
 // Analytics Data Response Interface
 interface AnalyticsDataResponse {
@@ -204,13 +265,43 @@ function aggregateExtractionResults(results: any[]): {
         }
     }
 
-    // Deduplicate entities by name and type
-    const uniqueEntities = allEntities.filter(
-        (entity, index, arr) =>
-            arr.findIndex(
-                (e) => e.name === entity.name && e.type === entity.type,
-            ) === index,
-    );
+    // Deduplicate entities by name, keeping the most comprehensive version
+    const entityMap = new Map<string, Entity>();
+
+    allEntities.forEach((entity) => {
+        const key = entity.name.toLowerCase();
+        const existing = entityMap.get(key);
+
+        // Keep the entity with more comprehensive data
+        // Prefer entities with: description, higher confidence, or more properties
+        if (!existing) {
+            entityMap.set(key, entity);
+        } else {
+            const existingScore =
+                (existing.description ? 2 : 0) +
+                (existing.confidence || 0) +
+                Object.keys(existing).length * 0.1;
+            const newScore =
+                (entity.description ? 2 : 0) +
+                (entity.confidence || 0) +
+                Object.keys(entity).length * 0.1;
+
+            if (newScore > existingScore) {
+                // Merge the best of both entities
+                entityMap.set(key, {
+                    ...existing,
+                    ...entity,
+                    // Keep the best confidence
+                    confidence: Math.max(
+                        existing.confidence || 0,
+                        entity.confidence || 0,
+                    ),
+                });
+            }
+        }
+    });
+
+    const uniqueEntities = Array.from(entityMap.values());
 
     // Deduplicate relationships
     const uniqueRelationships = allRelationships.filter(
@@ -312,6 +403,9 @@ export async function handleKnowledgeAction(
     switch (actionName) {
         case "extractKnowledgeFromPage":
             return await extractKnowledgeFromPage(parameters, context);
+
+        case "extractKnowledgeFromPageStreaming":
+            return await extractKnowledgeFromPageStreaming(parameters, context);
 
         case "indexWebPageContent":
             return await indexWebPageContent(parameters, context);
@@ -423,6 +517,374 @@ export async function extractKnowledgeFromPage(
         console.error("Error extracting knowledge from fragments:", error);
         throw error;
     }
+}
+
+export async function extractKnowledgeFromPageStreaming(
+    parameters: {
+        url: string;
+        title: string;
+        mode: string;
+        extractionId: string;
+        htmlFragments: any[];
+        extractionSettings?: any;
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<EnhancedKnowledgeExtractionResult> {
+    const { url, mode, extractionId, htmlFragments } = parameters;
+    const extractionMode = mode as ExtractionMode;
+    const totalPhases = getPhaseCount(extractionMode);
+    let processedItems = 0;
+    const startTime = Date.now();
+
+    const sendProgressUpdate = async (
+        phase: KnowledgeExtractionProgress["phase"],
+        currentItem?: string,
+        incrementalData?: Partial<any>,
+    ) => {
+        processedItems++;
+        const progress: KnowledgeExtractionProgress = {
+            extractionId,
+            phase,
+            totalItems: totalPhases,
+            processedItems,
+            currentItem: currentItem || undefined,
+            errors: [],
+            incrementalData: incrementalData || undefined,
+        };
+
+        const progressEvent: KnowledgeExtractionProgressEvent = {
+            ...progress,
+            timestamp: Date.now(),
+            url: parameters.url,
+            source: "navigation",
+        };
+        knowledgeProgressEvents.emitProgress(progressEvent);
+
+        console.log("Knowledge extraction progress:", {
+            extractionId,
+            progress,
+        });
+    };
+
+    try {
+        const extractionInputs = createExtractionInputsFromFragments(
+            htmlFragments,
+            url,
+            parameters.title,
+            "direct",
+        );
+
+        if (extractionInputs.length === 0) {
+            await sendProgressUpdate(
+                "error",
+                "Insufficient content to extract knowledge",
+            );
+            return {
+                entities: [],
+                relationships: [],
+                keyTopics: [],
+                suggestedQuestions: [],
+                summary: "Insufficient content to extract knowledge.",
+                contentMetrics: { readingTime: 0, wordCount: 0 },
+            };
+        }
+
+        // Phase 1: Content retrieval feedback
+        await sendProgressUpdate(
+            "content",
+            "Analyzing page structure and content",
+            {
+                contentMetrics: extractContentMetrics(extractionInputs),
+                url,
+                title: parameters.title,
+            },
+        );
+
+        const extractor = new BrowserKnowledgeExtractor(context);
+
+        // Phase 2: Basic extraction
+        await sendProgressUpdate("basic", "Processing basic page information");
+
+        let aggregatedResults: any = {
+            entities: [],
+            relationships: [],
+            keyTopics: [],
+            suggestedQuestions: [],
+            summary: "",
+            contentActions: [],
+            contentMetrics: { readingTime: 0, wordCount: 0 },
+        };
+
+        // Always extract basic info regardless of mode
+        if (
+            extractionMode === "basic" ||
+            shouldIncludeMode("basic", extractionMode)
+        ) {
+            const basicResults = await extractor.extractBatch(
+                extractionInputs,
+                "basic",
+                // Progress callback for batch processing
+                (progress) => {
+                    console.log("Basic extraction progress:", progress);
+                },
+            );
+            aggregatedResults = aggregateExtractionResults(basicResults);
+
+            await sendProgressUpdate(
+                "basic",
+                "Basic analysis complete",
+                aggregatedResults,
+            );
+        }
+
+        // Phase 3: Summary mode (if enabled)
+        if (shouldIncludeMode("summary", extractionMode)) {
+            await sendProgressUpdate("summary", "Generating content summary");
+
+            const summaryResults = await extractor.extractBatch(
+                extractionInputs,
+                "summary",
+                // Progress callback for batch processing
+                (progress) => {
+                    console.log("Summary extraction progress:", progress);
+                },
+            );
+            const summaryData = aggregateExtractionResults(summaryResults);
+
+            // Replace with LLM-based summary data
+            aggregatedResults.summary = summaryData.summary;
+
+            // Replace topics with summary extraction results if available
+            // Summary extraction provides higher-fidelity topics than basic extraction
+            if (summaryData.keyTopics && summaryData.keyTopics.length > 0) {
+                aggregatedResults.keyTopics = summaryData.keyTopics;
+            }
+
+            // If summary extraction provides entities, replace basic ones
+            if (summaryData.entities && summaryData.entities.length > 0) {
+                aggregatedResults.entities = summaryData.entities;
+            }
+
+            // If summary extraction provides relationships, replace basic ones
+            if (
+                summaryData.relationships &&
+                summaryData.relationships.length > 0
+            ) {
+                aggregatedResults.relationships = summaryData.relationships;
+            }
+
+            await sendProgressUpdate(
+                "summary",
+                "Summary analysis complete",
+                aggregatedResults, // Send the full aggregated results, not just summary/topics
+            );
+        }
+
+        // Phase 4: Content analysis (if enabled)
+        if (shouldIncludeMode("content", extractionMode)) {
+            await sendProgressUpdate(
+                "analyzing",
+                "Discovering entities and topics",
+            );
+
+            const contentResults = await extractor.extractBatch(
+                extractionInputs,
+                "content",
+                // Progress callback for batch processing
+                (progress) => {
+                    console.log("Content extraction progress:", progress);
+                    // Send incremental updates if we have partial results
+                    if (
+                        progress.processed > 0 &&
+                        progress.processed % 2 === 0
+                    ) {
+                        const partialData = aggregateExtractionResults(
+                            contentResults.slice(0, progress.processed),
+                        );
+                        sendProgressUpdate(
+                            "analyzing",
+                            `Processing item ${progress.processed} of ${progress.total}`,
+                            partialData,
+                        );
+                    }
+                },
+            );
+            const contentData = aggregateExtractionResults(contentResults);
+
+            console.log("Content extraction debug:", {
+                contentResultsCount: contentResults.length,
+                contentDataEntities: contentData.entities?.length || 0,
+                contentDataRelationships:
+                    contentData.relationships?.length || 0,
+                contentDataTopics: contentData.keyTopics?.length || 0,
+                sampleContentResult: contentResults[0], // Sample to inspect structure
+            });
+
+            // Replace basic extraction with LLM-based content extraction
+            // LLM extraction provides higher-fidelity knowledge than rule-based basic extraction
+            if (contentData.entities && contentData.entities.length > 0) {
+                // Replace entities entirely with content extraction results
+                aggregatedResults.entities = contentData.entities;
+            }
+
+            // Replace topics with content extraction results
+            if (contentData.keyTopics && contentData.keyTopics.length > 0) {
+                // Replace topics entirely with content extraction results
+                aggregatedResults.keyTopics = contentData.keyTopics;
+            }
+
+            // Replace relationships with content extraction results
+            if (
+                contentData.relationships &&
+                contentData.relationships.length > 0
+            ) {
+                // Replace relationships entirely with content extraction results
+                aggregatedResults.relationships = contentData.relationships;
+            }
+
+            // Merge content actions (these are saved as "actions" in the index)
+            if (
+                contentData.contentActions &&
+                contentData.contentActions.length > 0
+            ) {
+                aggregatedResults.contentActions = [
+                    ...(aggregatedResults.contentActions || []),
+                    ...contentData.contentActions,
+                ];
+            }
+
+            await sendProgressUpdate(
+                "analyzing",
+                "Discovered entities and topics",
+                aggregatedResults, // Send full accumulated results
+            );
+        }
+
+        // Phase 5: Full extraction with relationships (if enabled)
+        if (shouldIncludeMode("full", extractionMode)) {
+            await sendProgressUpdate(
+                "extracting",
+                "Analyzing entity relationships",
+            );
+
+            const fullResults = await extractor.extractBatch(
+                extractionInputs,
+                "full",
+                // Progress callback for batch processing
+                (progress) => {
+                    console.log("Full extraction progress:", progress);
+                },
+            );
+            const fullData = aggregateExtractionResults(fullResults);
+
+            // Replace with full extraction results - highest fidelity LLM extraction
+            // Full extraction provides the most comprehensive relationship analysis
+            if (fullData.relationships && fullData.relationships.length > 0) {
+                aggregatedResults.relationships = fullData.relationships;
+            }
+
+            // If full extraction provides entities, replace previous ones
+            if (fullData.entities && fullData.entities.length > 0) {
+                aggregatedResults.entities = fullData.entities;
+            }
+
+            // If full extraction provides topics, replace previous ones
+            if (fullData.keyTopics && fullData.keyTopics.length > 0) {
+                aggregatedResults.keyTopics = fullData.keyTopics;
+            }
+
+            // Merge content actions from full extraction if present
+            if (fullData.contentActions && fullData.contentActions.length > 0) {
+                aggregatedResults.contentActions = [
+                    ...(aggregatedResults.contentActions || []),
+                    ...fullData.contentActions,
+                ];
+            }
+
+            await sendProgressUpdate(
+                "extracting",
+                "Analyzed entity relationships",
+                aggregatedResults, // Send full accumulated results
+            );
+        }
+
+        // Final completion
+        await sendProgressUpdate(
+            "complete",
+            "Knowledge extraction completed successfully",
+            aggregatedResults,
+        );
+
+        console.log("Knowledge extraction complete:", {
+            extractionId,
+            finalData: aggregatedResults,
+            totalTime: Date.now() - startTime,
+        });
+
+        return aggregatedResults;
+    } catch (error) {
+        console.error("Error in streaming knowledge extraction:", error);
+
+        // Send error progress update via WebSocket
+        const errorProgress: KnowledgeExtractionProgress = {
+            extractionId,
+            phase: "error",
+            totalItems: totalPhases,
+            processedItems,
+            currentItem: undefined,
+            errors: [
+                {
+                    message: (error as Error).message || String(error),
+                    timestamp: Date.now(),
+                },
+            ],
+            incrementalData: undefined,
+        };
+
+        sendKnowledgeExtractionProgressViaWebSocket(
+            context.agentContext.webSocket,
+            extractionId,
+            errorProgress,
+        );
+
+        throw error;
+    }
+}
+
+function getPhaseCount(mode: ExtractionMode): number {
+    switch (mode) {
+        case "basic":
+            return 2; // content + basic
+        case "summary":
+            return 3; // content + basic + summary
+        case "content":
+            return 4; // content + basic + summary + content
+        case "full":
+            return 5; // content + basic + summary + content + full
+        default:
+            return 4;
+    }
+}
+
+function shouldIncludeMode(
+    checkMode: ExtractionMode,
+    actualMode: ExtractionMode,
+): boolean {
+    const modeOrder = ["basic", "summary", "content", "full"];
+    const checkIndex = modeOrder.indexOf(checkMode);
+    const actualIndex = modeOrder.indexOf(actualMode);
+    return actualIndex >= checkIndex;
+}
+
+function extractContentMetrics(extractionInputs: ExtractionInput[]) {
+    const totalWordCount = extractionInputs.reduce((sum, input) => {
+        return sum + (input.textContent?.split(/\s+/).length || 0);
+    }, 0);
+
+    return {
+        wordCount: totalWordCount,
+        readingTime: Math.ceil(totalWordCount / 200), // 200 words per minute
+    };
 }
 
 export async function indexWebPageContent(

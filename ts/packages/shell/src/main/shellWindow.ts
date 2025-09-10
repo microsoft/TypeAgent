@@ -121,7 +121,7 @@ export class ShellWindow {
         );
 
         setupDevicePermissions(mainWindow);
-        this.setupWebContents(mainWindow.webContents);
+        //this.setupWebContents(mainWindow.webContents);
 
         // Initialize browser view manager
         this.browserViewManager = new BrowserViewManager(mainWindow);
@@ -245,7 +245,7 @@ export class ShellWindow {
         } else {
             contentLoadP.push(
                 chatView.webContents.loadFile(
-                    path.join(__dirname, "../renderer/index.html"),
+                    path.join(__dirname, "../renderer/chatView.html"),
                 ),
             );
         }
@@ -594,7 +594,7 @@ export class ShellWindow {
     /**
      * Resolve custom typeagent-browser protocol URLs
      */
-    private resolveCustomProtocolUrl(targetUrl: URL): URL {
+    public resolveCustomProtocolUrl(targetUrl: URL): URL {
         const browserExtensionUrls = (global as any).browserExtensionUrls;
         if (browserExtensionUrls) {
             // Map custom protocol to actual extension URL
@@ -1040,7 +1040,7 @@ function createMainWindow(bounds: Electron.Rectangle) {
 function createChatView(state: ShellWindowState) {
     const chatView = new WebContentsView({
         webPreferences: {
-            preload: path.join(__dirname, "../preload/index.mjs"),
+            preload: path.join(__dirname, "../preload/chatView.mjs"),
             sandbox: false,
             zoomFactor: state.zoomLevel,
         },

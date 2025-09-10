@@ -1,0 +1,8 @@
+[
+    [
+        {
+            "request": "what did I tell you about my favorite color?",
+            "expected": "dispatcher.lookup.lookupAndAnswerConversation" 
+        }
+    ]
+]

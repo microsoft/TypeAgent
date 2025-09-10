@@ -31,7 +31,7 @@ import { lookupAndAnswer } from "../../search/search.js";
 import {
     LookupAction,
     LookupActivity,
-    LookupAndAnswerAction,
+    LookupAndAnswerConversation,
 } from "./schema/lookupActionSchema.js";
 import { translateRequest } from "../../translation/translateRequest.js";
 import { ActivityActions } from "./schema/activityActionSchema.js";
@@ -77,7 +77,7 @@ async function executeDispatcherAction(
             break;
         case "dispatcher.lookup":
             switch (action.actionName) {
-                case "lookupAndAnswer":
+                case "lookupAndAnswerConversation":
                     return lookupAndAnswer(action, context);
                 case "startLookup":
                     const location =
@@ -172,12 +172,12 @@ async function clarifyWithLookup(
     if (!result.success) {
         return undefined;
     }
-    const lookupAction = result.data as LookupAndAnswerAction;
-    if (lookupAction.actionName !== "lookupAndAnswer") {
+    const lookupAction = result.data as LookupAndAnswerConversation;
+    if (lookupAction.actionName !== "lookupAndAnswerConversation") {
         return undefined;
     }
     const lookupResult = await lookupAndAnswer(
-        lookupAction as LookupAndAnswerAction,
+        lookupAction as LookupAndAnswerConversation,
         context,
     );
 

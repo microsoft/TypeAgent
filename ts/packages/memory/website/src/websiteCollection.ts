@@ -481,6 +481,7 @@ export class WebsiteCollection
     ): Promise<IndexingResults> {
         const result = await super.buildIndex(eventHandler);
 
+        this.cleanupSyntheticTopics();
         this.addMetadataToIndex();
         this.addMetadataToDataFrames();
 
@@ -504,7 +505,33 @@ export class WebsiteCollection
         website: WebsiteDocPart,
         eventHandler?: IndexingEventHandlers,
     ): Promise<IndexingResults> {
-        const result = await super.addDocPartToIndex(website, eventHandler);
+        const knowledge = website.getKnowledge();
+        const hasKnowledge =
+            knowledge &&
+            (knowledge.entities?.length > 0 ||
+                knowledge.topics?.length > 0 ||
+                knowledge.actions?.length > 0);
+
+        let overrideSettings;
+        if (hasKnowledge) {
+            overrideSettings = {
+                ...this.settings,
+                conversationSettings: {
+                    ...this.settings.conversationSettings,
+                    semanticRefIndexSettings: {
+                        ...this.settings.conversationSettings
+                            .semanticRefIndexSettings,
+                        autoExtractKnowledge: false,
+                    },
+                },
+            };
+        }
+
+        const result = await super.addDocPartToIndex(
+            website,
+            eventHandler,
+            overrideSettings,
+        );
 
         if (result && !this.hasErrors(result)) {
             const messageOrdinal = this.messages.length - 1;
@@ -605,6 +632,68 @@ export class WebsiteCollection
                 (row: dataFrame.DataFrameRow) =>
                     row.sourceRef?.range?.start?.messageOrdinal !==
                     messageOrdinal,
+            );
+        }
+    }
+
+    /**
+     * Clean up synthetic temporal topics from existing knowledge
+     * Removes topics like "bookmarked in YYYY", "visited in YYYY", etc.
+     */
+    private cleanupSyntheticTopics(): void {
+        if (!this.messages || this.messages.length === 0) {
+            return;
+        }
+
+        const syntheticTopicPatterns = [
+            /^bookmarked in \d{4}$/i,
+            /^visited in \d{4}$/i,
+            /^.* bookmark from \d{4}$/i,
+            /^.* visit from \d{4}$/i,
+            /^recent bookmark$/i,
+            /^new bookmark$/i,
+            /^old bookmark$/i,
+            /^early bookmark$/i,
+            /^.* bookmark from \d{4}$/i,
+            /^frequently visited site$/i,
+            /^rarely visited site$/i,
+            /^infrequent visit$/i,
+            /^popular domain$/i,
+            /^often visited$/i,
+        ];
+
+        let cleanedCount = 0;
+
+        for (let i = 0; i < this.messages.length; i++) {
+            const websitePart = this.messages.get(i) as WebsiteDocPart;
+            const knowledge = websitePart.getKnowledge();
+
+            if (knowledge && knowledge.topics) {
+                const originalTopicCount = knowledge.topics.length;
+
+                knowledge.topics = knowledge.topics.filter((topic: string) => {
+                    for (const pattern of syntheticTopicPatterns) {
+                        if (pattern.test(topic)) {
+                            return false;
+                        }
+                    }
+                    return true;
+                });
+
+                const removedCount =
+                    originalTopicCount - knowledge.topics.length;
+                if (removedCount > 0) {
+                    cleanedCount += removedCount;
+                    console.log(
+                        `[WebsiteCollection] Cleaned ${removedCount} synthetic topics from ${websitePart.url}`,
+                    );
+                }
+            }
+        }
+
+        if (cleanedCount > 0) {
+            console.log(
+                `[WebsiteCollection] Total cleanup: removed ${cleanedCount} synthetic temporal topics`,
             );
         }
     }
@@ -955,6 +1044,7 @@ export class WebsiteCollection
         type?: string,
         facetName?: string,
         facetValue?: string,
+        when?: any,
     ): Promise<WebsiteDocPart[]> {
         const results: WebsiteDocPart[] = [];
         const kp = await import("knowpro");
@@ -969,12 +1059,15 @@ export class WebsiteCollection
                 false, // exactMatch
             );
 
-            const when = { knowledgeType: "entity" as const };
+            const whenFilter = {
+                knowledgeType: "entity" as const,
+                ...when,
+            };
 
             const searchResult = await kp.searchConversationKnowledge(
                 this,
                 searchTermGroup,
-                when,
+                whenFilter,
                 { maxKnowledgeMatches: 50 },
             );
 
@@ -1055,17 +1148,21 @@ export class WebsiteCollection
 
     public async searchByActions(
         actionTypes: string[],
+        when?: any,
     ): Promise<WebsiteDocPart[]> {
         const kp = await import("knowpro");
         // Use topic search since actions are often categorized as topics
         const searchTermGroup = kp.createTopicSearchTermGroup(actionTypes);
 
-        const when = { knowledgeType: "action" as const };
+        const whenFilter = {
+            knowledgeType: "action" as const,
+            ...when,
+        };
 
         const searchResult = await kp.searchConversationKnowledge(
             this,
             searchTermGroup,
-            when,
+            whenFilter,
             { maxKnowledgeMatches: 50 },
         );
 
@@ -1323,6 +1420,7 @@ export class WebsiteCollection
                 query.entityType,
                 query.facetName,
                 query.facetValue,
+                query.when,
             );
             entityResults.forEach((r) => {
                 const key = r.url || `${r.timestamp}_${Math.random()}`;
