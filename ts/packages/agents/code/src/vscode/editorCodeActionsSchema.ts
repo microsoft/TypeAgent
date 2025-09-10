@@ -134,11 +134,17 @@ export type EditorActionCreateCodeBlock = {
     };
 };
 
+export type ProblemTarget =
+    | { type: "first" }
+    | { type: "next" }
+    | { type: "cursor"; position: CursorTarget }
+    | { type: "indexInFile"; index: number; file?: FileTarget };
+
 export type EditorActionFixProblem = {
     actionName: "fixProblem";
     parameters: {
-        // "first", "next", "all" – or specific location
-        target: "first" | "next" | "all" | CursorTarget;
+        // Which problem to fix (e.g., "first", "next", "atCursor", or "second problem in file")
+        target: ProblemTarget;
         // Optional context hint from the agent (parsed from user request)
         hint?: string;
         // File scope (defaults to active editor)
