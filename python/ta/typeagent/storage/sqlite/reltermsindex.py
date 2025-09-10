@@ -147,7 +147,7 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         self._embedding_model = embedding_model
         # Maintain our own list of terms to map ordinals back to keys
         self._terms_list: list[str] = []
-        self._terms_to_ordinal: dict[str, int] = {}
+        self._added_terms: set[str] = set()
 
     async def lookup_term(
         self,
@@ -213,11 +213,10 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         cursor = self.db.cursor()
         for text in texts:
             # Add to VectorBase for fuzzy lookup if not already present
-            if text not in self._terms_to_ordinal:
+            if text not in self._added_terms:
                 await self._vector_base.add_key(text)
-                ordinal = len(self._terms_list)
                 self._terms_list.append(text)
-                self._terms_to_ordinal[text] = ordinal
+                self._added_terms.add(text)
 
             # Generate embedding for term and store in database
             embed = await self._embedding_model.get_embedding(text)
@@ -279,7 +278,7 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
 
         # Clear local mappings
         self._terms_list.clear()
-        self._terms_to_ordinal.clear()
+        self._added_terms.clear()
 
         # Get text items and embeddings from the data
         text_items = data.get("textItems")
@@ -305,7 +304,7 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
                     insertion_data.append((text, text, 1.0, serialized_embedding))
                     # Update local mappings
                     self._terms_list.append(text)
-                    self._terms_to_ordinal[text] = len(self._terms_to_ordinal)
+                    self._added_terms.add(text)
 
         # Bulk insert all the data
         if insertion_data:
