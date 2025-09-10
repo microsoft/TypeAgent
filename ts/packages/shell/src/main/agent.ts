@@ -122,7 +122,7 @@ class ShellSetSettingCommandHandler implements CommandHandler {
                     name,
                     completions: getObjectPropertyNames(
                         context.agentContext.shellWindow.getUserSettings(),
-                    ).sort(),
+                    ),
                 });
             }
 

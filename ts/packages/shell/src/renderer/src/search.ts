@@ -20,40 +20,36 @@ function normalizeMatchText(text: string): string {
         .toLowerCase();
 }
 
-export class SearchMenu {
-    private searchContainer: HTMLDivElement;
-    private scrollBar: HTMLDivElement;
-    private scrollBarIndicator: HTMLDivElement;
-    private searchInput: HTMLInputElement | undefined = undefined;
+type SearchMenuPosition = {
+    left: number;
+    bottom: number;
+};
+
+interface SearchMenuUI {
+    setPosition(position: SearchMenuPosition): void;
+    setItems(prefix: string, items: SearchMenuItem[]): void;
+    adjustSelection(deltaY: number): void;
+    selectCompletion(): void;
+    close(): void;
+}
+
+class SearchMenuUIImpl implements SearchMenuUI {
+    private readonly searchContainer: HTMLDivElement;
+    private readonly scrollBar: HTMLDivElement;
+    private readonly scrollBarIndicator: HTMLDivElement;
     private completions: HTMLUListElement | undefined;
-    private trie: TST<SearchMenuItem> = new TST<SearchMenuItem>();
     private selected: number = -1;
-    private onCompletion: (item: SearchMenuItem) => void;
     private items: SearchMenuItem[] = [];
     private prefix: string = "";
-    visibleItemsCount: number = 15;
-    top: number = 0;
+    private top: number = 0;
 
     constructor(
-        onCompletion: (item: SearchMenuItem) => void,
-        provideInput = true,
-        placeholder = "Search...",
-        visibleItems = 15,
+        private readonly onCompletion: (item: SearchMenuItem) => void,
+        private readonly visibleItemsCount = 15,
     ) {
         this.onCompletion = onCompletion;
         this.searchContainer = document.createElement("div");
         this.searchContainer.className = "autocomplete-container";
-        this.visibleItemsCount = visibleItems;
-        if (provideInput) {
-            this.searchInput = document.createElement("input");
-            this.searchInput.className = "search-input";
-            this.searchInput.placeholder = placeholder;
-            this.searchInput.addEventListener("input", (event) => {
-                const input = event.target as HTMLInputElement;
-                this.completePrefix(input.value);
-            });
-            this.searchContainer.appendChild(this.searchInput);
-        }
 
         this.searchContainer.onfocus = () => {
             console.log("Search container Focus");
@@ -65,7 +61,7 @@ export class SearchMenu {
 
         this.searchContainer.onwheel = (event) => {
             console.log(`SearchContainer onwheel deltaY ${event.deltaY} `);
-            this.handleMouseWheel(event.deltaY);
+            this.adjustSelection(event.deltaY);
         };
 
         this.scrollBar = document.createElement("div");
@@ -76,81 +72,29 @@ export class SearchMenu {
         );
         this.scrollBar.appendChild(this.scrollBarIndicator);
         this.searchContainer.append(this.scrollBar);
+
+        document.body.appendChild(this.searchContainer);
     }
 
-    public getContainer() {
-        return this.searchContainer;
+    public setPosition(position: SearchMenuPosition) {
+        const height = document.documentElement.clientHeight;
+        this.searchContainer.style.left = `${position.left}px`;
+        this.searchContainer.style.bottom = `${height - position.bottom}px`;
     }
 
-    public isActive() {
-        return this.searchContainer.parentElement !== null;
+    public close() {
+        this.searchContainer.remove();
     }
 
-    public selectCompletion(index: number) {
+    public selectCompletion() {
+        const index = this.selected;
         if (index >= 0 && index < this.items.length) {
             this.onCompletion(this.items[index]);
         }
     }
 
-    public handleSpecialKeys(event: KeyboardEvent, prefix: string) {
-        if (this.completions) {
-            this.prefix = prefix;
-            if (event.key === "ArrowDown") {
-                if (this.selected < this.items.length - 1) {
-                    this.selected++;
-                    this.updateDisplay();
-                }
-                event.preventDefault();
-                return true;
-            } else if (event.key === "ArrowUp") {
-                if (this.selected > 0) {
-                    this.selected--;
-                    this.updateDisplay();
-                }
-                event.preventDefault();
-                return true;
-            } else if (event.key === "Enter" || event.key === "Tab") {
-                if (this.selected >= 0 && this.selected < this.items.length) {
-                    this.selectCompletion(this.selected);
-                    event.preventDefault();
-                }
-                return true;
-            }
-        }
-        return false;
-    }
-
-    public setChoices(choices: SearchMenuItem[]) {
-        this.trie.init();
-        for (const choice of choices) {
-            // choices are sorted in priority order so prefer first norm text
-            const normText = normalizeMatchText(choice.matchText);
-            if (!this.trie.get(normText)) {
-                this.trie.insert(normText, choice);
-            }
-        }
-    }
-
-    public get numChoices() {
-        return this.trie.size();
-    }
-
-    public focus() {
-        setTimeout(() => {
-            if (this.searchInput) {
-                this.searchInput.focus();
-            }
-        }, 0);
-    }
-
-    public completePrefix(prefix: string) {
-        const items = this.trie.dataWithPrefix(normalizeMatchText(prefix));
-        this.replaceItems(prefix, items);
-        return items;
-    }
-
     // add completions to the search menu
-    public replaceItems(prefix: string, items: SearchMenuItem[]) {
+    public setItems(prefix: string, items: SearchMenuItem[]) {
         this.prefix = prefix;
         this.items = items;
         this.selected = 0;
@@ -158,17 +102,7 @@ export class SearchMenu {
         this.updateDisplay();
     }
 
-    // add legend to top of the search menu, with minimum
-    public addLegend(legend: string) {
-        const legendDiv = document.createElement("div");
-        legendDiv.className = "search-legend";
-        legendDiv.innerText =
-            legend + "Use ↑ and ↓ to navigate, Enter to select";
-        // prepend the legend to the search container
-        this.searchContainer.prepend(legendDiv);
-    }
-
-    public handleMouseWheel(deltaY: number) {
+    public adjustSelection(deltaY: number) {
         if (deltaY > 0 && this.selected < this.items.length - 1) {
             this.selected++;
         } else if (deltaY < 0 && this.selected > 0) {
@@ -178,7 +112,7 @@ export class SearchMenu {
         this.updateDisplay();
     }
 
-    public updateDisplay() {
+    private updateDisplay() {
         if (this.completions) {
             this.searchContainer.removeChild(this.completions);
             this.completions = undefined;
@@ -251,11 +185,106 @@ export class SearchMenu {
     /**
      * Sets the offset and size of the scrollbar indicator
      */
-    setScrollBarPosition() {
+    private setScrollBarPosition() {
         const heightPercentage = this.visibleItemsCount / this.items.length;
         this.scrollBarIndicator.style.height = `${this.searchContainer.scrollHeight * heightPercentage}px`;
 
         const offsetPercentage = this.top / this.items.length;
         this.scrollBarIndicator.style.top = `${this.searchContainer.scrollHeight * offsetPercentage}px`;
+    }
+}
+
+export class SearchMenu {
+    private searchMenuUI: SearchMenuUI | undefined;
+    private trie: TST<SearchMenuItem> = new TST<SearchMenuItem>();
+    private prefix: string | undefined;
+    constructor(
+        private readonly onCompletion: (item: SearchMenuItem) => void,
+        private readonly visibleItems: number = 15,
+    ) {}
+
+    public isActive() {
+        return this.searchMenuUI !== undefined;
+    }
+
+    public setChoices(choices: SearchMenuItem[]) {
+        this.prefix = undefined;
+        this.trie.init();
+        for (const choice of choices) {
+            // choices are sorted in priority order so prefer first norm text
+            const normText = normalizeMatchText(choice.matchText);
+            if (!this.trie.get(normText)) {
+                this.trie.insert(normText, choice);
+            }
+        }
+    }
+
+    public numChoices() {
+        return this.trie.size();
+    }
+
+    public updatePrefix(prefix: string, position: SearchMenuPosition) {
+        if (this.numChoices() === 0) {
+            return;
+        }
+
+        if (this.prefix === prefix && this.searchMenuUI !== undefined) {
+            // No need to update existing searchMenuUI, just update the position.
+            this.searchMenuUI.setPosition(position);
+            return;
+        }
+
+        this.prefix = prefix;
+        const items = this.trie.dataWithPrefix(normalizeMatchText(prefix));
+        const showMenu =
+            items.length !== 0 &&
+            (items.length !== 1 || items[0].matchText !== prefix);
+
+        if (showMenu) {
+            if (this.searchMenuUI === undefined) {
+                this.searchMenuUI = new SearchMenuUIImpl(
+                    this.onCompletion,
+                    this.visibleItems,
+                );
+            }
+            this.searchMenuUI.setItems(prefix, items);
+            this.searchMenuUI.setPosition(position);
+        } else {
+            this.hide();
+        }
+    }
+
+    public hide() {
+        if (this.searchMenuUI) {
+            this.searchMenuUI.close();
+            this.searchMenuUI = undefined;
+        }
+    }
+    public handleMouseWheel(deltaY: number) {
+        this.searchMenuUI?.adjustSelection(deltaY);
+    }
+
+    public handleSpecialKeys(event: KeyboardEvent) {
+        if (this.searchMenuUI === undefined) {
+            return false;
+        }
+        if (event.key === "ArrowDown") {
+            this.searchMenuUI.adjustSelection(1);
+            event.preventDefault();
+            return true;
+        }
+        if (event.key === "ArrowUp") {
+            this.searchMenuUI.adjustSelection(-1);
+            event.preventDefault();
+            return true;
+        }
+
+        if (event.key === "Enter" || event.key === "Tab") {
+            this.searchMenuUI.selectCompletion();
+            event.preventDefault();
+            return true;
+        }
+
+        return false;
     }
 }

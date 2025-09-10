@@ -54,6 +54,7 @@ export type CompletionGroup = {
     completions: string[]; // The list of completions in the group
     needQuotes?: boolean; // If true, the completion should be quoted if it has spaces.
     emojiChar?: string | undefined; // Optional icon for the completion category
+    sorted?: boolean; // If true, the completions are already sorted. Default is false, and the completions sorted alphabetically.
 };
 
 export interface AppAgentCommandInterface {

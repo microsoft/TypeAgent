@@ -475,6 +475,14 @@ class FieldScalar extends FieldBase {
         }
     }
 
+    private getSearchMenuPosition() {
+        if (this.editUI === undefined) {
+            return undefined;
+        }
+        const rect = this.editUI.div.getBoundingClientRect();
+        return { left: rect.left, bottom: rect.top };
+    }
+
     private createSearchMenu(
         input: HTMLInputElement,
         choices: SearchMenuItem[],
@@ -482,7 +490,7 @@ class FieldScalar extends FieldBase {
         const searchMenu = new SearchMenu((item) => {
             input.value = item.matchText;
             this.data.setEditing(this.getNextScalarField());
-        }, false);
+        });
         searchMenu.setChoices(choices);
         input.addEventListener("input", () => {
             this.updateSearchMenu();
@@ -511,9 +519,7 @@ class FieldScalar extends FieldBase {
 
     private cancelSearchMenu() {
         const searchMenu = this.editUI?.searchMenu;
-        if (searchMenu?.isActive()) {
-            searchMenu.getContainer().remove();
-        }
+        searchMenu?.hide();
     }
 
     private updateSearchMenu() {
@@ -526,17 +532,13 @@ class FieldScalar extends FieldBase {
         }
 
         const value = this.editUI.input.value;
-        const items = searchMenu.completePrefix(value);
-        if (
-            items.length !== 0 &&
-            (items.length !== 1 || items[0].matchText !== value)
-        ) {
-            if (!searchMenu.isActive()) {
-                this.editUI.div.appendChild(searchMenu.getContainer());
-            }
-        } else {
-            this.cancelSearchMenu();
+
+        const position = this.getSearchMenuPosition();
+        if (position === undefined) {
+            searchMenu.hide();
+            return;
         }
+        searchMenu.updatePrefix(value, position);
     }
     private handleSearchMenuKeys(event: KeyboardEvent): boolean {
         if (this.editUI === undefined) {
@@ -554,7 +556,7 @@ class FieldScalar extends FieldBase {
             event.preventDefault();
             return true;
         }
-        if (searchMenu.handleSpecialKeys(event, this.editUI.input.value)) {
+        if (searchMenu.handleSpecialKeys(event)) {
             event.preventDefault();
             return true;
         }
