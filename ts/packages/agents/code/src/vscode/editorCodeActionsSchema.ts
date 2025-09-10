@@ -125,11 +125,24 @@ export type EditorActionCreateCodeBlock = {
         // Used to guide how much the agent or Copilot should infer.
         isPartial?: boolean;
         // Optional target file where the code should be inserted.
+        // Only emit the file if specified by the user.
         // If omitted, defaults to the active editor.
         file?: FileTarget;
         // Position in the file where the code block should be inserted.
         // Defaults to { type: "atCursor" }.
         position?: CursorTarget;
+    };
+};
+
+export type EditorActionFixProblem = {
+    actionName: "fixProblem";
+    parameters: {
+        // "first", "next", "all" – or specific location
+        target: "first" | "next" | "all" | CursorTarget;
+        // Optional context hint from the agent (parsed from user request)
+        hint?: string;
+        // File scope (defaults to active editor)
+        file?: FileTarget;
     };
 };
 

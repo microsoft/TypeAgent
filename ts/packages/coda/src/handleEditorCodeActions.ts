@@ -10,8 +10,9 @@ import {
     isCopilotEnabled,
     getIndentationString,
     generateDocPromptLine,
-    getIndentContext,
-    getLineIndentation,
+    //getIndentContext,
+    //getLineIndentation,
+    getIndentContextSmart,
     resolveOrFallbackToFile,
     resolvePosition,
     showDocumentInEditor,
@@ -577,20 +578,14 @@ export async function handleCreateCodeBlockAction(
             };
         }
 
-        // --- Indentation & cursor context ---
-        const lineIndent = getLineIndentation(doc, insertPos.line); // actual leading ws of line
-        const atLineStart = insertPos.character <= lineIndent.length;
+        const { baseIndent, innerIndent, atLineStart } = getIndentContextSmart(
+            doc,
+            insertPos,
+            language,
+        );
 
-        // If cursor is mid-line, begin our snippet on a new line first.
-        // This avoids cramming code after existing text and keeps voice-first flow clean.
-        let prefixNewlineIfMidLine = "";
-        if (!atLineStart) {
-            prefixNewlineIfMidLine = "\n";
-            // keep insertPos as-is; we prepend \n in the snippet to move to a fresh line
-        }
-
-        const { baseIndent, unit } = getIndentContext(doc, insertPos);
-        let innerIndent = baseIndent + unit;
+        // If cursor in mid-line, start on a new line:
+        const prefixNewlineIfMidLine = atLineStart ? "" : "\n";
 
         // --- Spacing above the block (1 or 2 blank lines) ---
         let prefixSpacing = "";

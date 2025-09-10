@@ -426,9 +426,24 @@ export function getLineIndentation(
     doc: vscode.TextDocument,
     line: number,
 ): string {
-    const text = doc.lineAt(line).text;
-    const match = text.match(/^(\s*)/);
-    return match ? match[1] : "";
+    const safe = Math.max(0, Math.min(line, doc.lineCount - 1));
+    const text = doc.lineAt(safe).text;
+    const m = text.match(/^(\s*)/);
+    return m ? m[1] : "";
+}
+
+/** First non-empty line above `line`, returns { index, text, indent } or null. */
+export function getPrevNonEmptyLineInfo(
+    doc: vscode.TextDocument,
+    line: number,
+) {
+    for (let i = line - 1; i >= 0; i--) {
+        const text = doc.lineAt(i).text;
+        if (text.trim().length > 0) {
+            return { index: i, text, indent: getLineIndentation(doc, i) };
+        }
+    }
+    return null;
 }
 
 export function getNearestIndentAbove(
@@ -448,13 +463,16 @@ export function getNearestIndentAbove(
  * Get the configured indent unit for this document (respects per-file/language settings).
  * If insertSpaces === true -> N spaces; if false -> tab; if "auto" -> fallback to surrounding style.
  */
-export function getConfiguredIndentUnit(doc: vscode.TextDocument): string {
+export function getConfiguredIndentUnit(
+    doc: vscode.TextDocument,
+    pos?: vscode.Position, // optional: if cursor is at line start
+): string {
     // Prefer the actual active editor options if available
     const ed = vscode.window.visibleTextEditors.find((e) => e.document === doc);
     let insertSpaces = ed?.options.insertSpaces as boolean | string | undefined;
     let tabSize = ed?.options.tabSize as number | string | undefined;
 
-    // Fallback to configuration scoped to this document
+    // VS Code config fallback
     const cfg = vscode.workspace.getConfiguration("editor", doc.uri);
     if (insertSpaces === undefined || insertSpaces === "auto") {
         insertSpaces = cfg.get<boolean | string>("insertSpaces");
@@ -465,6 +483,16 @@ export function getConfiguredIndentUnit(doc: vscode.TextDocument): string {
 
     // Normalize
     const size = typeof tabSize === "number" && tabSize > 0 ? tabSize : 4;
+
+    // If at the start of a line, let caller decide → return ""
+    if (pos) {
+        const currentLine = doc.lineAt(pos.line);
+        const currentIndent = currentLine.text.match(/^\s*/)?.[0] ?? "";
+        const atLineStart = pos.character <= currentIndent.length;
+        if (atLineStart) {
+            return "";
+        }
+    }
 
     if (insertSpaces === true) return " ".repeat(size);
     if (insertSpaces === false) return "\t";
@@ -510,6 +538,99 @@ export function getIndentContext(
     return { baseIndent: currentLineIndent, unit: "    " };
 }
 
+/**
+ * Compute semantic indentation at an insertion point.
+ * - baseIndent: where the declaration line should start.
+ * - innerIndent: one level deeper (for the first body line).
+ *
+ * Rules:
+ * - If cursor is mid-line, don't change baseIndent (caller can prepend "\n").
+ * - If cursor is at column 0 on an empty/whitespace line:
+ *     • Use nearest non-empty line's indent as base
+ *     • If that line ends with "{" (TS/JS) or ":" (Py), increase one level
+ *     • If the current or prev line starts with "}", decrease one level (TS/JS)
+ * - If we can't infer unit from content, fallback to configured unit (spaces or tab).
+ */
+export function getIndentContextSmart(
+    doc: vscode.TextDocument,
+    pos: vscode.Position,
+    language: string,
+): { baseIndent: string; innerIndent: string; atLineStart: boolean } {
+    const currentLine = doc.lineAt(pos.line);
+    const currentIndent = getLineIndentation(doc, pos.line);
+    const atLineStart = pos.character <= currentIndent.length;
+
+    let unit = getConfiguredIndentUnit(doc, pos);
+    if (!unit && pos.character > 0) {
+        for (let i = pos.line; i >= 0; i--) {
+            const text = doc.lineAt(i).text;
+            const indentMatch = text.match(/^\s+/);
+            if (indentMatch) {
+                const indent = indentMatch[0];
+                if (indent.includes("\t")) {
+                    unit = "\t"; // tabs detected
+                } else {
+                    // assume a run of spaces = one indent level
+                    const size = Math.min(indent.length, 8);
+                    unit = " ".repeat(size || 4);
+                }
+                break;
+            }
+        }
+    }
+
+    if (unit === undefined && pos.character > 0) {
+        unit = "\t"; // or " ".repeat(4)
+    }
+
+    // Start from the current line's indent.
+    let baseIndent = currentIndent;
+
+    // Heuristics only if we're at line start
+    if (atLineStart) {
+        const prev = getPrevNonEmptyLineInfo(doc, pos.line);
+        if (prev) {
+            const prevTrim = prev.text.trimEnd();
+            baseIndent = prev.indent;
+
+            const isJsTs =
+                language.toLowerCase().includes("typescript") ||
+                language.toLowerCase().includes("javascript");
+            const isPy = language.toLowerCase().includes("python");
+
+            // Increase indent after block open
+            let increaseIndent = false;
+            if (
+                (isJsTs && /\{\s*$/.test(prevTrim)) ||
+                (isPy && /:\s*$/.test(prevTrim))
+            ) {
+                increaseIndent = true;
+            }
+
+            // If the current line starts with a closing brace, dedent one (TS/JS)
+            const currTrim = currentLine.text.trimLeft();
+            if (isJsTs && /^\}/.test(currTrim)) {
+                // remove one unit from base if present
+                baseIndent = baseIndent.endsWith(unit)
+                    ? baseIndent.slice(0, baseIndent.length - unit.length)
+                    : baseIndent;
+            }
+
+            if (increaseIndent) {
+                baseIndent += unit !== "" ? unit : "\t";
+            }
+        } else {
+            // Top of file: use whatever indent the line has (likely "")
+            baseIndent = currentIndent;
+        }
+    }
+
+    //const innerIndent = baseIndent + unit; // content line sits one level deeper
+    const innerIndent =
+        unit !== undefined && unit !== "" ? baseIndent + unit : baseIndent;
+    return { baseIndent, innerIndent, atLineStart };
+}
+
 export type CursorTarget =
     | { type: "atCursor" }
     | { type: "insideFunction"; name: string }
@@ -535,11 +656,14 @@ export function resolvePosition(
         case "atStartOfFile":
             return new vscode.Position(0, 0);
 
-        case "atEndOfFile":
-            return new vscode.Position(doc.lineCount, 0);
+        case "atEndOfFile": {
+            //return new vscode.Position(doc.lineCount, 0);
+            const lastLine = Math.max(0, doc.lineCount - 1);
+            return new vscode.Position(lastLine, Number.MAX_SAFE_INTEGER);
+        }
 
         case "afterLine": {
-            const line = Math.min(target.line + 1, doc.lineCount);
+            const line = Math.min(target.line + 1, doc.lineCount - 1);
             return new vscode.Position(line, 0);
         }
 
