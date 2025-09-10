@@ -72,13 +72,13 @@ jobs:
         working-directory: ts
         run: |
           npm run build
+      - name: Lint
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        working-directory: ts
+        run: |
+          npm run lint          
       - name: Test
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
         run: |
           npm run test:local
-      - name: Lint
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
-        working-directory: ts
-        run: |
-          npm run lint
