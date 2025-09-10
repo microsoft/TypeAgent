@@ -21,6 +21,7 @@ packages/knowPro/test/data
 packages/knowPro/test/data/**/*.json
 packages/knowPro/test/data
 packages/memory/conversation/test/data
+packages/examples/websiteAliases/cache/*.json
 
 # Test result
 packages/shell/test-results/*
