@@ -10,7 +10,8 @@ import {
 } from "@typeagent/agent-sdk";
 import { Dispatcher, TemplateData, TemplateEditConfig } from "agent-dispatcher";
 import { getObjectProperty, setObjectProperty } from "common-utils";
-import { SearchMenu, SearchMenuItem } from "./search";
+import { SearchMenu } from "./search";
+import { SearchMenuItem } from "./searchMenuUI/searchMenuUI";
 
 function cloneTemplateData(
     templateData: TemplateData | TemplateData[],

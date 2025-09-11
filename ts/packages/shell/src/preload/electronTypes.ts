@@ -32,6 +32,25 @@ export type ClientActions =
 
 // end duplicate type section
 
+export type SearchMenuPosition = {
+    left: number;
+    bottom: number;
+};
+
+export type SearchMenuItem = {
+    matchText: string;
+    emojiChar?: string;
+    sortIndex?: number;
+    selectedText: string;
+    needQuotes?: boolean; // default is true, and will add quote to the selectedText if it has spaces.
+};
+
+export type SearchMenuUIUpdateData = {
+    position?: SearchMenuPosition;
+    prefix?: string;
+    items?: SearchMenuItem[];
+};
+
 // Functions that are called from the renderer process to the main process.
 export interface ClientAPI {
     registerClient: (client: Client) => void;
@@ -42,6 +61,19 @@ export interface ClientAPI {
     saveSettings: (settings: ShellUserSettings) => void;
     openImageFile: () => void;
     openFolder: (path: string) => void;
+
+    searchMenuUpdate(
+        id: number,
+        data: {
+            position?: SearchMenuPosition;
+            prefix?: string;
+            items?: SearchMenuItem[];
+            visibleItemsCount?: number;
+        },
+    ): void;
+    searchMenuAdjustSelection(id: number, deltaY: number): void;
+    searchMenuSelectCompletion(id: number): void;
+    searchMenuClose(id: number): void;
 }
 
 // Functions that are called from the main process to the renderer process.
@@ -54,6 +86,8 @@ export interface Client {
     fileSelected(fileName: string, fileContent: string): void;
     listen(token: SpeechToken | undefined, useLocalWhisper: boolean): void;
     focusInput(): void;
+
+    searchMenuCompletion(id: number, item: SearchMenuItem);
 }
 
 export interface ElectronWindowFields {

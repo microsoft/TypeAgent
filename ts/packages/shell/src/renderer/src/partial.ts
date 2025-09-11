@@ -2,7 +2,8 @@
 // Licensed under the MIT License.
 
 import { CommandCompletionResult, Dispatcher } from "agent-dispatcher";
-import { SearchMenu, SearchMenuItem } from "./search";
+import { SearchMenu } from "./search";
+import { SearchMenuItem } from "./searchMenuUI/searchMenuUI";
 
 import registerDebug from "debug";
 import { ExpandableTextarea } from "./chatInput";
