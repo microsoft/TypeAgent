@@ -56,6 +56,10 @@ function registerClient(client: Client) {
         client.focusInput();
     });
 
+    ipcRenderer.on("search-menu-completion", (_event, id: number, item) => {
+        client.searchMenuCompletion(id, item);
+    });
+
     // Signal the main process that the client has been registered
     ipcRenderer.send("dom ready");
 }
@@ -82,6 +86,19 @@ const api: ClientAPI = {
     },
     openFolder: (path: string) => {
         ipcRenderer.send("open-folder", path);
+    },
+
+    searchMenuUpdate: (id: number, data) => {
+        ipcRenderer.send("search-menu-update", id, data);
+    },
+    searchMenuAdjustSelection: (id: number, deltaY: number) => {
+        ipcRenderer.send("search-menu-adjust-selection", id, deltaY);
+    },
+    searchMenuSelectCompletion: (id: number) => {
+        ipcRenderer.send("search-menu-select-completion", id);
+    },
+    searchMenuClose: (id: number) => {
+        ipcRenderer.send("search-menu-close", id);
     },
 };
 

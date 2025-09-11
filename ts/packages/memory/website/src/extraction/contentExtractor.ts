@@ -16,6 +16,7 @@ import {
     EXTRACTION_MODE_CONFIGS,
     AIModelRequiredError,
     AIExtractionFailedError,
+    ChunkProgressInfo,
 } from "./types.js";
 import registerDebug from "debug";
 const debug = registerDebug("typeagent:browser:indexing");
@@ -80,12 +81,21 @@ export class ContentExtractor {
     }
 
     /**
+     * Get the AI model manager instance
+     */
+    public getAIModelManager(): AIModelManager | undefined {
+        return this.aiModelManager;
+    }
+
+    /**
      * Extract content using the specified extraction mode
      * This is the main new API that consolidates all extraction logic
      */
     async extract(
         content: ExtractionInput,
         mode: ExtractionMode = "content",
+        chunkProgressCallback?: (chunkInfo: ChunkProgressInfo) => Promise<void>,
+        maxConcurrent?: number,
     ): Promise<ExtractionResult> {
         const startTime = Date.now();
         const modeConfig = EXTRACTION_MODE_CONFIGS[mode];
@@ -125,11 +135,12 @@ export class ContentExtractor {
                 mode,
             );
 
-            // Extract knowledge using automatic strategy
             const knowledge = await this.extractKnowledgeByMode(
                 content,
                 extractedContent,
                 mode,
+                chunkProgressCallback,
+                maxConcurrent,
             );
 
             // Calculate quality metrics
@@ -283,6 +294,8 @@ export class ContentExtractor {
         content: ExtractionInput,
         extractedContent: any,
         mode: ExtractionMode,
+        chunkProgressCallback?: (chunkInfo: ChunkProgressInfo) => Promise<void>,
+        maxConcurrent?: number,
     ): Promise<kpLib.KnowledgeResponse> {
         if (!this.aiModelManager) {
             // Basic knowledge extraction without AI
@@ -293,7 +306,12 @@ export class ContentExtractor {
             content,
             extractedContent,
         );
-        return await this.aiModelManager.extractKnowledge(textContent, mode);
+        return await this.aiModelManager.extractKnowledge(
+            textContent,
+            mode,
+            chunkProgressCallback,
+            maxConcurrent,
+        );
     }
 
     /**

@@ -29,19 +29,19 @@ import registerDebug from "debug";
 const debugShellWindow = registerDebug("typeagent:shell:window");
 const debugShellWindowError = registerDebug("typeagent:shell:window:error");
 
-const userAgent =
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0";
 const isMac = process.platform === "darwin";
 const isLinux = process.platform === "linux";
 function setupResizeHandler(mainWindow: BrowserWindow, handler: () => void) {
     let scheduleHandler: (() => void) | undefined;
+    let timeout: NodeJS.Timeout | undefined;
     mainWindow.on("resize", handler);
     if (isLinux) {
         // Workaround for electron bug where getContentSize isn't updated when "resize" event is fired
         // https://github.com/electron/electron/issues/42586
         scheduleHandler = () => {
             debugShellWindow("Scheduled Maximize/Unmaximize update");
-            setTimeout(() => {
+            timeout = setTimeout(() => {
+                timeout = undefined;
                 debugShellWindow(
                     "Running scheduled Maximize/Unmaximize update",
                 );
@@ -54,6 +54,7 @@ function setupResizeHandler(mainWindow: BrowserWindow, handler: () => void) {
 
     // Clean up function for close
     return () => {
+        clearTimeout(timeout);
         mainWindow.removeListener("resize", handler);
         if (scheduleHandler !== undefined) {
             mainWindow.removeListener("maximize", scheduleHandler);
@@ -70,6 +71,7 @@ export class ShellWindow {
 
     public readonly mainWindow: BrowserWindow;
     public readonly chatView: WebContentsView;
+    private readonly overlayWebContentsViews: Set<WebContentsView> = new Set();
 
     private verticalLayout: boolean;
     private contentVisible: boolean = false;
@@ -100,6 +102,33 @@ export class ShellWindow {
         return activeBrowserView.webContentsView;
     }
 
+    public updateOverlayWebContentsView(
+        view: WebContentsView,
+        position?: { left: number; bottom: number },
+    ) {
+        if (position) {
+            this.overlayWebContentsViews.add(view);
+            this.mainWindow.contentView.addChildView(view);
+            const chatBounds = this.chatView.getBounds();
+            const current = view.getBounds();
+            const zoomFactor = this.chatView.webContents.zoomFactor;
+            const left = chatBounds.x + position.left * zoomFactor;
+            const bottom = chatBounds.y + position.bottom * zoomFactor;
+
+            const newBounds = {
+                x: left,
+                y: bottom - current.height,
+                width: current.width,
+                height: current.height,
+            };
+            view.webContents.setZoomFactor(zoomFactor);
+            view.setBounds(newBounds);
+        } else {
+            this.overlayWebContentsViews.delete(view);
+            this.mainWindow.contentView.removeChildView(view);
+        }
+    }
+
     constructor(private readonly settings: ShellSettingManager) {
         if (ShellWindow.instance !== undefined) {
             throw new Error("ShellWindow already created");
@@ -121,10 +150,9 @@ export class ShellWindow {
         );
 
         setupDevicePermissions(mainWindow);
-        //this.setupWebContents(mainWindow.webContents);
 
         // Initialize browser view manager
-        this.browserViewManager = new BrowserViewManager(mainWindow);
+        this.browserViewManager = new BrowserViewManager(this);
 
         // Set up event callbacks for browser view manager
         this.browserViewManager.setTabUpdateCallback(() => {
@@ -172,7 +200,10 @@ export class ShellWindow {
         });
 
         const chatView = createChatView(state);
-        this.setupWebContents(chatView.webContents);
+        this.setupZoomHandlers(chatView.webContents, (zoomFactor) => {
+            this.updateZoomInTitle(zoomFactor);
+        });
+
         mainWindow.contentView.addChildView(chatView);
 
         this.mainWindow = mainWindow;
@@ -290,7 +321,7 @@ export class ShellWindow {
         mainWindow.show();
 
         // Main window shouldn't zoom, otherwise the divider position won't be correct.  Setting it here just to make sure.
-        this.setZoomLevel(1, mainWindow.webContents);
+        this.setZoomFactor(1, mainWindow.webContents);
 
         const states = this.settings.window;
         if (states.devTools) {
@@ -346,11 +377,6 @@ export class ShellWindow {
             this.chatView.webContents.focus();
             this.chatView.webContents.send("focus-chat-input");
         });
-    }
-
-    private setupWebContents(webContents: WebContents) {
-        this.setupZoomHandlers(webContents);
-        webContents.setUserAgent(userAgent);
     }
 
     private installHandler(name: string, handler: (event: any) => void) {
@@ -701,6 +727,11 @@ export class ShellWindow {
             waitForPageLoad: options?.waitForPageLoad,
         });
 
+        // Re-add overlay views so they are on top
+        for (const views of this.overlayWebContentsViews) {
+            this.mainWindow.contentView.addChildView(views);
+        }
+
         // setup zoom handlers for the new browser tab
         this.setupZoomHandlers(
             this.browserViewManager.getBrowserTab(tabId)?.webContentsView
@@ -947,7 +978,10 @@ export class ShellWindow {
     // ================================================================
     // Zoom Handler
     // ================================================================
-    private setupZoomHandlers(webContents: WebContents | undefined) {
+    private setupZoomHandlers(
+        webContents: WebContents | undefined,
+        onZoomChanged?: (zoomFactor: number) => void,
+    ) {
         if (!webContents) return;
 
         webContents.on("before-input-event", (_event, input) => {
@@ -960,11 +994,11 @@ export class ShellWindow {
                     input.key === "+" ||
                     input.key === "="
                 ) {
-                    this.zoomIn(webContents);
+                    this.zoomIn(webContents, onZoomChanged);
                 } else if (input.key === "-" || input.key === "NumpadMinus") {
-                    this.zoomOut(webContents);
+                    this.zoomOut(webContents, onZoomChanged);
                 } else if (input.key === "0") {
-                    this.setZoomLevel(1, webContents);
+                    this.setZoomFactor(1, webContents, onZoomChanged);
                 }
             }
         });
@@ -972,26 +1006,44 @@ export class ShellWindow {
         // Register mouse wheel as well.
         webContents.on("zoom-changed", (_event, zoomDirection) => {
             if (zoomDirection === "in") {
-                this.zoomIn(webContents);
+                this.zoomIn(webContents, onZoomChanged);
             } else {
-                this.zoomOut(webContents);
+                this.zoomOut(webContents, onZoomChanged);
             }
         });
     }
 
-    private zoomIn(webContents: WebContents) {
-        this.setZoomLevel(webContents.zoomFactor + 0.1, webContents);
+    private zoomIn(
+        webContents: WebContents,
+        onZoomChanged?: (zoomFactor: number) => void,
+    ) {
+        this.setZoomFactor(
+            webContents.zoomFactor + 0.1,
+            webContents,
+            onZoomChanged,
+        );
     }
 
-    private zoomOut(webContents: WebContents) {
-        this.setZoomLevel(webContents.zoomFactor - 0.1, webContents);
+    private zoomOut(
+        webContents: WebContents,
+        onZoomChanged?: (zoomFactor: number) => void,
+    ) {
+        this.setZoomFactor(
+            webContents.zoomFactor - 0.1,
+            webContents,
+            onZoomChanged,
+        );
     }
 
     /**
-     * Sets the zoom level for the active window/tab.
+     * Sets the zoom factor for the active window/tab.
      * @param zoomFactor - The zoom factor to set for the active window/tab
      */
-    public setZoomLevel(zoomFactor: number, webContents: WebContents) {
+    public setZoomFactor(
+        zoomFactor: number,
+        webContents: WebContents,
+        onZoomChanged?: (zoomFactor: number) => void,
+    ) {
         // limit zoom factor to reasonable numbers
         if (zoomFactor < 0.1) {
             zoomFactor = 0.1;
@@ -1000,9 +1052,7 @@ export class ShellWindow {
         }
 
         webContents.zoomFactor = zoomFactor;
-
-        // only update the zoom in the title for the zoom factor of the main (chat) window
-        this.updateZoomInTitle(this.chatView.webContents.zoomFactor);
+        onZoomChanged?.(zoomFactor);
     }
 
     /**
@@ -1033,7 +1083,7 @@ function createMainWindow(bounds: Electron.Rectangle) {
         show: false,
         autoHideMenuBar: true,
         webPreferences: {
-            preload: path.join(__dirname, "../preload/main.mjs"),
+            preload: path.join(__dirname, "../preload/expose.mjs"),
             sandbox: false,
             zoomFactor: 1,
         },

@@ -183,6 +183,13 @@ export class ChatView {
             onMouseWheel,
         });
         this.inputContainer = this.chatInput.getInputContainer();
+
+        // Track zoom changes to adjust search menu position
+        const resizeObserver = new ResizeObserver(() => {
+            this.partialCompletion?.update(false);
+        });
+        resizeObserver.observe(this.inputContainer);
+
         this.topDiv.appendChild(this.messageDiv);
 
         // Add the input div at the bottom so it's always visible

@@ -1,7 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { SpeechToken } from "../../preload/electronTypes.js";
+import { SpeechToken } from "../../preload/electronTypes";
+export type { SpeechToken };
 import { getClientAPI } from "./main";
 
 // globally share a token cache

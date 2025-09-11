@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { SpeechToken } from "../../preload/electronTypes";
 import {
     iconMicrophone,
     iconMicrophoneListening,
@@ -12,7 +11,7 @@ import {
 } from "./icon";
 import { getClientAPI } from "./main";
 import { needSpeechToken, recognizeOnce } from "./speech";
-import { getSpeechToken } from "./speechToken";
+import { getSpeechToken, SpeechToken } from "./speechToken";
 import { uint8ArrayToBase64 } from "common-utils";
 
 export interface ExpandableTextareaHandlers {
