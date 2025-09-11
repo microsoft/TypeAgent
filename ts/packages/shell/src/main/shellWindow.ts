@@ -471,6 +471,10 @@ export class ShellWindow {
             width: settings.windowWidth,
             height: settings.windowHeight,
         });
+
+        this.setZoomLevel(settings.zoomLevel, this.chatView.webContents);
+
+        this.settings.save(this.getWindowState());
     }
 
     private sendUserSettingChanged() {
@@ -1015,6 +1019,9 @@ export class ShellWindow {
         const zoomTitle =
             zoomFactor === 1 ? "" : ` Zoom: ${Math.round(zoomFactor * 100)}%`;
         this.mainWindow.setTitle(`${summary}${zoomTitle}`);
+
+        // Update the page title to match the window title as well for backwards compat with Playwright tests
+        this.chatView.webContents.executeJavaScript(`document.title = '${summary}${zoomTitle}';`);
     }
 }
 

@@ -129,12 +129,33 @@ class ShellSetWindowSizeCommandHandler implements CommandHandler {
 
         windowState.x = Number.parseInt(params.args.x ?? windowState.x);
         windowState.y = Number.parseInt(params.args.y ?? windowState.y);
-        windowState.chatWidth = Number.parseInt(params.args.width ?? windowState.chatWidth);
-        windowState.chatHeight = Number.parseInt(params.args.height ?? windowState.chatHeight);
+        windowState.windowWidth = Number.parseInt(params.args.width ?? windowState.windowWidth);
+        windowState.windowHeight = Number.parseInt(params.args.height ?? windowState.windowHeight);
 
         agentContext.shellWindow.setWindowState(windowState);
 
         context.actionIO.setDisplay("Updated window size/position.");
+    }
+}
+
+class ShellSetZoomLevelCommandHandler implements CommandHandler {
+    public readonly description = "Sets the shell zoom level";
+    public readonly parameters = {
+            args: {
+                zoom: {
+                    description: "The zoom level to set in percent (i.e. 100% is normal size, 50% is half size).",
+                },
+            },
+        } as const;    
+    public async run(context: ActionContext<ShellContext>, params: ParsedCommandParams<typeof this.parameters>) {
+        const agentContext = context.sessionContext.agentContext;
+        const windowState: ShellWindowState = agentContext.shellWindow.getWindowState();
+
+        windowState.zoomLevel = Number.parseInt(params.args.zoom) / 100;
+
+        agentContext.shellWindow.setWindowState(windowState);
+
+        context.actionIO.setDisplay("Updated zoom level.");
     }
 }
 
@@ -285,6 +306,7 @@ const handlers: CommandHandlerTable = {
             },
         },
         setWindowState: new ShellSetWindowSizeCommandHandler(),
+        setWindowZoomLevel: new ShellSetZoomLevelCommandHandler(),
     },
 };
 
