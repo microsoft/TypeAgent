@@ -10,7 +10,7 @@ on:
   push:
     branches: ["main"]
   pull_request:
-    branches: ["main", "dev/robgruen/ci"]
+    branches: ["main"]
   merge_group:
     branches: ["main"]
 
