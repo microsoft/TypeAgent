@@ -1,11 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { loadLocalWebContents } from "./utils.js";
 import { ipcMain, WebContents, WebContentsView } from "electron";
 import { ShellWindow } from "./shellWindow.js";
 import type { SearchMenuUIUpdateData } from "../preload/electronTypes.js";
 import path from "node:path";
-
 import registerDebug from "debug";
 const debug = registerDebug("typeagent:shell:searchMenuUI");
 const debugError = registerDebug("typeagent:shell:searchMenuUI:error");
@@ -33,8 +33,9 @@ async function createSearchMenuUIView(_zoomFactor: number) {
     };
     ipcMain.on("search-menu-ready", onReady);
     try {
-        await searchMenuView.webContents.loadFile(
-            path.join(__dirname, "../renderer/searchMenuView.html"),
+        await loadLocalWebContents(
+            searchMenuView.webContents,
+            "searchMenuView.html",
         );
     } catch (err) {
         p.reject(err);
