@@ -18,7 +18,7 @@ import {
     ShellSettingManager,
     BrowserTabState,
 } from "./shellSettings.js";
-import { isProd } from "./index.js";
+import { loadLocalWebContents } from "./utils.js";
 import { BrowserAgentIpc } from "./browserIpc.js";
 import {
     BrowserViewManager,
@@ -265,25 +265,12 @@ export class ShellWindow {
         });
 
         const contentLoadP: Promise<void>[] = [];
-        // HMR for renderer base on electron-vite cli.
-        // Load the remote URL for development or the local html file for production.
-        if (!isProd && process.env["ELECTRON_RENDERER_URL"]) {
-            contentLoadP.push(
-                chatView.webContents.loadURL(
-                    process.env["ELECTRON_RENDERER_URL"],
-                ),
-            );
-        } else {
-            contentLoadP.push(
-                chatView.webContents.loadFile(
-                    path.join(__dirname, "../renderer/chatView.html"),
-                ),
-            );
-        }
         contentLoadP.push(
-            mainWindow.webContents.loadFile(
-                path.join(__dirname, "../renderer/viewHost.html"),
-            ),
+            loadLocalWebContents(chatView.webContents, "chatView.html"),
+        );
+
+        contentLoadP.push(
+            loadLocalWebContents(mainWindow.webContents, "viewHost.html"),
         );
         this.contentLoadP = contentLoadP;
         ShellWindow.instance = this;

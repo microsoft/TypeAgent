@@ -5,6 +5,7 @@ import { WebContentsView } from "electron";
 import path from "node:path";
 import registerDebug from "debug";
 import { ShellWindow } from "./shellWindow.js";
+import { loadLocalWebContents } from "./utils.js";
 
 const debug = registerDebug("typeagent:shell:browserViewManager");
 
@@ -103,9 +104,7 @@ export class BrowserViewManager {
         // Load the URL or show new tab page
         if (options.url === "about:blank") {
             // Load the new tab HTML file
-            webContentsView.webContents.loadFile(
-                path.join(__dirname, "../renderer/newTab.html"),
-            );
+            loadLocalWebContents(webContentsView.webContents, "newTab.html");
         } else {
             if (options.waitForPageLoad) {
                 await webContentsView.webContents.loadURL(options.url);
