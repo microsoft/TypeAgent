@@ -31,5 +31,5 @@ packages/shell/playwright-report/*
 # Eval sources
 packages/agents/spelunker/evals/eval-*/source
 
-# Generated files
+# Generated cache files
 examples/websiteAliases/cache
