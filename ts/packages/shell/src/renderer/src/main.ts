@@ -9,7 +9,8 @@ import {
     SpeechToken,
     ShellUserSettings,
     Client,
-} from "../../preload/electronTypes.js";
+    SearchMenuItem,
+} from "../../preload/electronTypes";
 import { ChatView } from "./chatView";
 import { TabView } from "./tabView";
 import { getSpeechToken, setSpeechToken } from "./speechToken";
@@ -23,6 +24,11 @@ import * as jose from "jose";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
 import { ClientIO, Dispatcher } from "agent-dispatcher";
 import { swapContent } from "./setContent";
+import { remoteSearchMenuUIOnCompletion } from "./searchMenuUI/remoteSearchMenuUI";
+
+export function isElectron(): boolean {
+    return globalThis.api !== undefined;
+}
 
 export function getClientAPI(): ClientAPI {
     if (globalThis.api !== undefined) {
@@ -320,6 +326,9 @@ function registerClient(
         },
         focusInput(): void {
             chatView.chatInput.focus();
+        },
+        searchMenuCompletion(id: number, item: SearchMenuItem) {
+            remoteSearchMenuUIOnCompletion(id, item);
         },
     };
 
