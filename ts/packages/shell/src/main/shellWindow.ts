@@ -107,7 +107,6 @@ export class ShellWindow {
         position?: { left: number; bottom: number },
     ) {
         if (position) {
-            console.log("what");
             this.overlayWebContentsViews.add(view);
             this.mainWindow.contentView.addChildView(view);
             const chatBounds = this.chatView.getBounds();
