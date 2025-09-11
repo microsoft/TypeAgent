@@ -1030,7 +1030,7 @@ export class ShellWindow {
     ) {
         this.setZoomFactor(
             webContents.zoomFactor - 0.1,
-            webContents, 
+            webContents,
             onZoomChanged,
         );
     }
