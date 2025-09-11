@@ -8,6 +8,7 @@ import {
     EXTRACTION_MODE_CONFIGS,
     AIModelRequiredError,
     AIExtractionFailedError,
+    ChunkProgressInfo,
 } from "./types.js";
 
 /**
@@ -20,6 +21,13 @@ export class AIModelManager {
     private cacheTTL: number = 3600000; // 1 hour
 
     constructor(private knowledgeExtractor?: kpLib.KnowledgeExtractor) {}
+
+    public estimateChunkCount(content: string, maxChunkSize: number): number {
+        if (content.length <= maxChunkSize) {
+            return 1;
+        }
+        return Math.ceil(content.length / (maxChunkSize * 0.8));
+    }
 
     /**
      * Validates AI availability for the given mode
@@ -41,28 +49,48 @@ export class AIModelManager {
     async extractKnowledge(
         content: string,
         mode: ExtractionMode,
+        chunkProgressCallback?: (chunkInfo: ChunkProgressInfo) => Promise<void>,
+        maxConcurrent?: number,
     ): Promise<kpLib.KnowledgeResponse> {
         const modeConfig = EXTRACTION_MODE_CONFIGS[mode];
 
-        // Route to appropriate strategy based on mode
         if (modeConfig.knowledgeStrategy === "basic") {
+            if (chunkProgressCallback) {
+                await chunkProgressCallback({
+                    itemUrl: "",
+                    itemIndex: 0,
+                    chunkIndex: 0,
+                    totalChunksInItem: 1,
+                    globalChunkIndex: 0,
+                    totalChunksGlobal: 1,
+                });
+            }
             return this.extractBasicKnowledge(content);
         } else {
-            // Try cache first for AI extractions
             const cacheKey = this.getCacheKey(content, mode);
             const cached = this.getFromCache(cacheKey);
             if (cached) {
+                if (chunkProgressCallback) {
+                    await chunkProgressCallback({
+                        itemUrl: "",
+                        itemIndex: 0,
+                        chunkIndex: 0,
+                        totalChunksInItem: 1,
+                        globalChunkIndex: 0,
+                        totalChunksGlobal: 1,
+                    });
+                }
                 return cached;
             }
 
-            // Hybrid strategy: basic + AI with chunking (strict - no fallbacks)
             const result = await this.extractHybridKnowledgeStrict(
                 content,
                 modeConfig,
                 mode,
+                chunkProgressCallback,
+                maxConcurrent,
             );
 
-            // Cache the result
             this.putInCache(cacheKey, result);
             return result;
         }
@@ -137,6 +165,8 @@ export class AIModelManager {
         content: string,
         modeConfig: any,
         mode: ExtractionMode,
+        chunkProgressCallback?: (chunkInfo: ChunkProgressInfo) => Promise<void>,
+        maxConcurrent?: number,
     ): Promise<kpLib.KnowledgeResponse> {
         try {
             // Get AI knowledge with chunking (required - no fallbacks)
@@ -147,6 +177,8 @@ export class AIModelManager {
             const aiKnowledge = await this.extractChunkedAIKnowledge(
                 content,
                 modeConfig.defaultChunkSize,
+                chunkProgressCallback,
+                maxConcurrent,
             );
 
             if (!aiKnowledge) {
@@ -166,13 +198,26 @@ export class AIModelManager {
     private async extractChunkedAIKnowledge(
         content: string,
         maxChunkSize: number,
+        chunkProgressCallback?: (chunkInfo: ChunkProgressInfo) => Promise<void>,
+        maxConcurrent: number = 3,
     ): Promise<kpLib.KnowledgeResponse> {
         if (!this.knowledgeExtractor) {
             throw new Error("Knowledge extractor not available");
         }
 
-        // If content is small enough, process directly
         if (content.length <= maxChunkSize) {
+            if (chunkProgressCallback) {
+                await chunkProgressCallback({
+                    itemUrl: "",
+                    itemIndex: 0,
+                    chunkIndex: 0,
+                    totalChunksInItem: 1,
+                    globalChunkIndex: 0,
+                    totalChunksGlobal: 1,
+                    chunkContent: content.substring(0, 100),
+                });
+            }
+
             const result = await this.knowledgeExtractor.extract(content);
             if (!result) {
                 throw new Error("Knowledge extractor returned undefined");
@@ -184,30 +229,63 @@ export class AIModelManager {
         const chunks = this.intelligentChunking(content, maxChunkSize);
         const chunkResults: kpLib.KnowledgeResponse[] = [];
 
-        // Process chunks with some concurrency (but not too much to avoid overwhelming AI)
-        const maxConcurrent = 3;
         for (let i = 0; i < chunks.length; i += maxConcurrent) {
             const batch = chunks.slice(i, i + maxConcurrent);
-            const batchPromises = batch.map((chunk) =>
-                this.knowledgeExtractor!.extract(chunk),
+
+            const batchPromises = batch.map((chunk, batchIndex) =>
+                this.knowledgeExtractor!.extract(chunk)
+                    .then((result) => ({
+                        success: true,
+                        result,
+                        chunk,
+                        chunkIndex: i + batchIndex,
+                    }))
+                    .catch((error) => ({
+                        success: false,
+                        error,
+                        chunk,
+                        chunkIndex: i + batchIndex,
+                    })),
             );
 
-            const batchResults = await Promise.allSettled(batchPromises);
+            for (const promise of batchPromises) {
+                const outcome = await promise;
 
-            batchResults.forEach((result, index) => {
-                if (result.status === "fulfilled" && result.value) {
-                    chunkResults.push(result.value);
-                } else {
+                if (outcome.success && "result" in outcome && outcome.result) {
+                    chunkResults.push(outcome.result);
+
+                    if (chunkProgressCallback) {
+                        await chunkProgressCallback({
+                            itemUrl: "",
+                            itemIndex: 0,
+                            chunkIndex: outcome.chunkIndex,
+                            totalChunksInItem: chunks.length,
+                            globalChunkIndex: 0,
+                            totalChunksGlobal: 1,
+                            chunkContent: outcome.chunk.substring(0, 100),
+                            chunkResult: outcome.result,
+                        });
+                    }
+                } else if (!outcome.success && "error" in outcome) {
                     console.warn(
-                        `Chunk ${i + index} extraction failed:`,
-                        result.status === "rejected"
-                            ? result.reason
-                            : "undefined result",
+                        `Chunk ${outcome.chunkIndex} extraction failed:`,
+                        outcome.error,
                     );
-                }
-            });
 
-            // Small delay between batches to be respectful to AI service
+                    if (chunkProgressCallback) {
+                        await chunkProgressCallback({
+                            itemUrl: "",
+                            itemIndex: 0,
+                            chunkIndex: outcome.chunkIndex,
+                            totalChunksInItem: chunks.length,
+                            globalChunkIndex: 0,
+                            totalChunksGlobal: 1,
+                            chunkContent: outcome.chunk.substring(0, 100),
+                        });
+                    }
+                }
+            }
+
             if (i + maxConcurrent < chunks.length) {
                 await new Promise((resolve) => setTimeout(resolve, 100));
             }
