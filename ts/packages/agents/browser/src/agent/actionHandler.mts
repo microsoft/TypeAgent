@@ -215,8 +215,24 @@ function updateExtractionProgressState(
 
 function generateDetailedKnowledgeCards(knowledgeResult: any): string {
     const entities = knowledgeResult.entities || [];
-    const topics = knowledgeResult.keyTopics || [];
-    const relationships = knowledgeResult.relationships || [];
+    const topics = knowledgeResult.topics || [];
+    let relationships = knowledgeResult.relationships || [];
+
+    if (relationships.length === 0 && knowledgeResult.actions) {
+        relationships =
+            knowledgeResult.actions?.map(
+                (action: {
+                    subjectEntityName: any;
+                    verbs: any[];
+                    objectEntityName: any;
+                }) => ({
+                    from: action.subjectEntityName || "unknown",
+                    relationship: action.verbs?.join(", ") || "related to",
+                    to: action.objectEntityName || "unknown",
+                    confidence: 0.8,
+                }),
+            ) || [];
+    }
 
     let html = '<div style="margin-top: 12px;">';
 
@@ -373,10 +389,13 @@ function generateLiveKnowledgePreview(
         <div style="max-height: 80px; overflow-y: auto;">
             ${relationships
                 .slice(0, 5)
-                .map(
-                    (rel) =>
-                        `<div style="font-size: 12px; color: #6c757d; margin: 2px 0; padding: 2px 0;">${rel.source || rel.from} → ${rel.target || rel.to}</div>`,
-                )
+                .map((r: any) => {
+                    const source = r.source || r.from || "Unknown";
+                    const target = r.target || r.to || "Unknown";
+                    const relation =
+                        r.relationship || r.relation || "relates to";
+                    return `<div style="font-size: 12px; color: #6c757d; margin: 2px 0; padding: 2px 0;"><strong>${source}</strong> → <em>${relation}</em> → <strong>${target}</strong></div>`;
+                })
                 .join("")}
             ${
                 relationships.length > 5
@@ -1315,7 +1334,7 @@ async function handleKnowledgeExtractionProgressFromEvent(
     progress: KnowledgeExtractionProgressEvent,
     activeExtraction: ActiveKnowledgeExtraction,
 ) {
-    console.log(
+    debug(
         `Knowledge Extraction Progress Event [${progress.extractionId}]:`,
         progress,
     );
@@ -1494,17 +1513,18 @@ function createKnowledgeActionResult(
             message += ` with knowledge extraction (${entitiesCount} entities, ${topicsCount} topics, ${actionsCount} actions).`;
 
             // Display a success message with the knowledge summary
-            displaySuccess(
+            /* displaySuccess(
                 `Knowledge extracted and indexed: ${entitiesCount} entities, ${topicsCount} topics, ${actionsCount} actions`,
                 context,
             );
+            */
         } else {
             message +=
                 " with knowledge extraction (no structured content found).";
         }
     } else {
         message += " (existing knowledge loaded from index).";
-        displaySuccess("Loaded existing knowledge from index", context);
+        // displaySuccess("Loaded existing knowledge from index", context);
     }
 
     const result = createActionResult(message);
@@ -1615,7 +1635,7 @@ async function openWebPage(
             if (existingKnowledge) {
                 // Display existing knowledge details
                 const entitiesCount = existingKnowledge.entities?.length || 0;
-                const topicsCount = existingKnowledge.keyTopics?.length || 0;
+                const topicsCount = existingKnowledge.topics?.length || 0;
                 const relationshipsCount =
                     existingKnowledge.relationships?.length || 0;
 
@@ -1628,9 +1648,9 @@ async function openWebPage(
                         <div style="font-size: 13px; color: #0c5460; margin-top: 4px;">
                             Loading ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships from index
                         </div>
-                        
-                        ${generateDetailedKnowledgeCards(existingKnowledge)}
-                    </div>`,
+                    </div>    
+                    ${generateDetailedKnowledgeCards(existingKnowledge)}
+                    `,
                     },
                     "block",
                 );
@@ -2293,48 +2313,27 @@ async function handlePageNavigation(
             await context.agentContext.browserConnector?.getHtmlFragments();
 
         if (htmlFragments) {
-            // Run basic knowledge extraction
-            const knowledgeResult = await handleKnowledgeAction(
-                "extractKnowledgeFromPage",
-                {
-                    url: url,
-                    title: title,
-                    htmlContent: htmlFragments,
-                    source: "navigation",
-                    mode: "basic",
-                },
-                context,
-            );
-
-            if (knowledgeResult && knowledgeResult.knowledge) {
-                // Send formatted result to host canvas via notify
-                context.notify(
-                    AppAgentEvent.Info,
-                    `Page loaded: ${title}\n${formatKnowledgeForNotification(knowledgeResult.knowledge)}`,
-                );
-
-                // Kick off streaming knowledge extraction in the background
-                setTimeout(async () => {
-                    try {
-                        await handleKnowledgeAction(
-                            "extractKnowledgeFromPageStreaming",
-                            {
-                                url: url,
-                                title: title,
-                                htmlContent: htmlFragments,
-                                source: "navigation",
-                                mode: "content",
-                            },
-                            context,
-                        );
-                    } catch (error) {
-                        debug(
-                            `Background streaming extraction failed for ${url}:`,
-                            error,
-                        );
-                    }
-                }, 100);
-            }
+            // Kick off streaming knowledge extraction in the background
+            setTimeout(async () => {
+                try {
+                    await handleKnowledgeAction(
+                        "extractKnowledgeFromPageStreaming",
+                        {
+                            url: url,
+                            title: title,
+                            htmlContent: htmlFragments,
+                            source: "navigation",
+                            mode: "content",
+                        },
+                        context,
+                    );
+                } catch (error) {
+                    debug(
+                        `Background streaming extraction failed for ${url}:`,
+                        error,
+                    );
+                }
+            }, 10);
         }
     } catch (error) {
         debug(`Navigation handler failed for ${url}:`, error);
@@ -2343,38 +2342,6 @@ async function handlePageNavigation(
             `Failed to extract knowledge for page: ${title}`,
         );
     }
-}
-
-function formatKnowledgeForNotification(knowledge: any): string {
-    const entities = knowledge.entities || [];
-    const keyTopics = knowledge.keyTopics || [];
-
-    let text = "";
-
-    if (entities.length > 0) {
-        const entityNames = entities
-            .slice(0, 5)
-            .map((e: any) => e.name || e)
-            .join(", ");
-        text += `Entities: ${entityNames}`;
-        if (entities.length > 5) {
-            text += ` (+${entities.length - 5} more)`;
-        }
-    }
-
-    if (keyTopics.length > 0) {
-        if (text) text += "\n";
-        const topicNames = keyTopics
-            .slice(0, 3)
-            .map((t: any) => t.name || t)
-            .join(", ");
-        text += `Topics: ${topicNames}`;
-        if (keyTopics.length > 3) {
-            text += ` (+${keyTopics.length - 3} more)`;
-        }
-    }
-
-    return text || "No entities or topics found";
 }
 
 async function handleTabIndexActions(

@@ -232,59 +232,67 @@ export class AIModelManager {
         for (let i = 0; i < chunks.length; i += maxConcurrent) {
             const batch = chunks.slice(i, i + maxConcurrent);
 
-            const batchPromises = batch.map((chunk, batchIndex) =>
-                this.knowledgeExtractor!.extract(chunk)
-                    .then((result) => ({
-                        success: true,
-                        result,
-                        chunk,
-                        chunkIndex: i + batchIndex,
-                    }))
-                    .catch((error) => ({
-                        success: false,
-                        error,
-                        chunk,
-                        chunkIndex: i + batchIndex,
-                    })),
-            );
+            const batchPromises = batch.map((chunk, batchIndex) => {
+                const chunkIndex = i + batchIndex;
 
-            for (const promise of batchPromises) {
-                const outcome = await promise;
+                return this.knowledgeExtractor!.extract(chunk)
+                    .then(async (result) => {
+                        const outcome = {
+                            success: true,
+                            result,
+                            chunk,
+                            chunkIndex,
+                        };
 
-                if (outcome.success && "result" in outcome && outcome.result) {
-                    chunkResults.push(outcome.result);
+                        // Report progress immediately when this chunk completes
+                        if (result) {
+                            chunkResults.push(result);
+                        }
+                        if (chunkProgressCallback) {
+                            await chunkProgressCallback({
+                                itemUrl: "",
+                                itemIndex: 0,
+                                chunkIndex: outcome.chunkIndex,
+                                totalChunksInItem: chunks.length,
+                                globalChunkIndex: 0,
+                                totalChunksGlobal: 1,
+                                chunkContent: outcome.chunk.substring(0, 100),
+                                chunkResult: outcome.result,
+                            });
+                        }
 
-                    if (chunkProgressCallback) {
-                        await chunkProgressCallback({
-                            itemUrl: "",
-                            itemIndex: 0,
-                            chunkIndex: outcome.chunkIndex,
-                            totalChunksInItem: chunks.length,
-                            globalChunkIndex: 0,
-                            totalChunksGlobal: 1,
-                            chunkContent: outcome.chunk.substring(0, 100),
-                            chunkResult: outcome.result,
-                        });
-                    }
-                } else if (!outcome.success && "error" in outcome) {
-                    console.warn(
-                        `Chunk ${outcome.chunkIndex} extraction failed:`,
-                        outcome.error,
-                    );
+                        return outcome;
+                    })
+                    .catch(async (error) => {
+                        const outcome = {
+                            success: false,
+                            error,
+                            chunk,
+                            chunkIndex,
+                        };
 
-                    if (chunkProgressCallback) {
-                        await chunkProgressCallback({
-                            itemUrl: "",
-                            itemIndex: 0,
-                            chunkIndex: outcome.chunkIndex,
-                            totalChunksInItem: chunks.length,
-                            globalChunkIndex: 0,
-                            totalChunksGlobal: 1,
-                            chunkContent: outcome.chunk.substring(0, 100),
-                        });
-                    }
-                }
-            }
+                        console.warn(
+                            `Chunk ${outcome.chunkIndex} extraction failed:`,
+                            error,
+                        );
+                        if (chunkProgressCallback) {
+                            await chunkProgressCallback({
+                                itemUrl: "",
+                                itemIndex: 0,
+                                chunkIndex: outcome.chunkIndex,
+                                totalChunksInItem: chunks.length,
+                                globalChunkIndex: 0,
+                                totalChunksGlobal: 1,
+                                chunkContent: outcome.chunk.substring(0, 100),
+                            });
+                        }
+
+                        return outcome;
+                    });
+            });
+
+            // Wait for all promises to complete, but progress is already reported
+            await Promise.allSettled(batchPromises);
 
             if (i + maxConcurrent < chunks.length) {
                 await new Promise((resolve) => setTimeout(resolve, 100));
