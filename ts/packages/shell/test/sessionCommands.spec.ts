@@ -13,6 +13,7 @@ import {
     getLastAgentMessage,
     sendUserRequest,
     sendUserRequestAndWaitForCompletion,
+    sendUserRequestFast,
     startShell,
     waitForAgentMessage,
 } from "./testHelper";
@@ -138,6 +139,9 @@ test.describe("@session Commands", () => {
 
         // launch the app
         const mainWindow: Page = await startShell();
+
+        // clear the history so we don't have two confirmation dialogs in the chat view
+        sendUserRequestFast(`@clear`, mainWindow);
 
         // reset
         let msg = await sendUserRequestAndWaitForCompletion(

@@ -441,7 +441,7 @@ export class ShellWindow {
             y: addContent ? bounds.y - this.contentHeight : bounds.y,
         };
     }
-    private getWindowState(): ShellWindowState {
+    public getWindowState(): ShellWindowState {
         // Get browser tabs state for saving
         const browserTabs = this.browserViewManager.getAllBrowserTabs();
         const activeBrowserView =
@@ -475,6 +475,19 @@ export class ShellWindow {
             browserTabsJson: browserTabsJson,
             activeBrowserTabId: activeBrowserView?.id,
         };
+    }
+
+    public setWindowState(settings: ShellWindowState) {
+        this.mainWindow.setBounds({
+            x: settings.x,
+            y: settings.y,
+            width: settings.windowWidth,
+            height: settings.windowHeight,
+        });
+
+        this.setZoomFactor(settings.zoomLevel, this.chatView.webContents);
+
+        this.settings.save(this.getWindowState());
     }
 
     private sendUserSettingChanged() {
@@ -1043,6 +1056,11 @@ export class ShellWindow {
         const zoomTitle =
             zoomFactor === 1 ? "" : ` Zoom: ${Math.round(zoomFactor * 100)}%`;
         this.mainWindow.setTitle(`${summary}${zoomTitle}`);
+
+        // Update the page title to match the window title as well for backwards compat with Playwright tests
+        this.chatView.webContents.executeJavaScript(
+            `document.title = '${summary}${zoomTitle}';`,
+        );
     }
 }
 
