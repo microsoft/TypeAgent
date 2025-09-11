@@ -106,5 +106,77 @@
       "Id": null,
       "Type": null
     }
+  },
+  {
+    "subscription": null,
+    "scope": null,
+    "roleName": "Azure AI Developer",
+    "properties": {
+      "PrincipalId": null,
+      "RoleDefinitionId": null,
+      "RequestType": "SelfActivate",
+      "LinkedRoleEligibilityScheduleId": null,
+      "ScheduleInfo": {
+        "StartDateTime": "2024-08-05T21:46:23.3021078-07:00",
+        "Expiration": {
+          "Type": "AfterDuration",
+          "EndDateTime": null,
+          "Duration": "PT8H"
+        },
+        "Condition": null,
+        "ConditionVersion": null
+      },
+      "TargetRoleAssignmentScheduleId": null,
+      "TargetRoleAssignmentScheduleInstanceId": null,
+      "Scope": null,
+      "Status": null,
+      "ApprovalId": null,
+      "TicketInfo": null,
+      "Justification": "elevation via elevate.js",
+      "RequestorId": null,
+      "CreatedOn": "0001-01-01T00:00:00",
+      "Condition": null,
+      "ConditionVersion": null,
+      "ExpandedProperties": null,
+      "Name": null,
+      "Id": null,
+      "Type": null
+    }
+  },
+  {
+    "subscription": null,
+    "scope": null,
+    "roleName": "Cognitive Services Speech User",
+    "properties": {
+      "PrincipalId": null,
+      "RoleDefinitionId": null,
+      "RequestType": "SelfActivate",
+      "LinkedRoleEligibilityScheduleId": null,
+      "ScheduleInfo": {
+        "StartDateTime": "2024-08-05T21:46:23.3021078-07:00",
+        "Expiration": {
+          "Type": "AfterDuration",
+          "EndDateTime": null,
+          "Duration": "PT8H"
+        },
+        "Condition": null,
+        "ConditionVersion": null
+      },
+      "TargetRoleAssignmentScheduleId": null,
+      "TargetRoleAssignmentScheduleInstanceId": null,
+      "Scope": null,
+      "Status": null,
+      "ApprovalId": null,
+      "TicketInfo": null,
+      "Justification": "elevation via elevate.js",
+      "RequestorId": null,
+      "CreatedOn": "0001-01-01T00:00:00",
+      "Condition": null,
+      "ConditionVersion": null,
+      "ExpandedProperties": null,
+      "Name": null,
+      "Id": null,
+      "Type": null
+    }
   }
 ]

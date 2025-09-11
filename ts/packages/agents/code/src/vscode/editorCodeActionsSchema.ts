@@ -3,6 +3,7 @@
 
 export type EditorCodeActions =
     | EditorActionCreateFunction
+    | EditorActionCreateCodeBlock
     | EditorActionInsertComment
     | EditorActionGenerateWithCopilot
     | EditorActionRepairWithCopilot
@@ -99,6 +100,49 @@ export type EditorActionCreateFunction = {
         file?: FileTarget;
         // Optional: where in the file to insert the function. Defaults to current cursor location if not provided.
         position?: CursorTarget;
+    };
+};
+
+export type EditorActionCreateCodeBlock = {
+    actionName: "createCodeBlock";
+    parameters: {
+        language: string;
+        // A short natural language prompt or description of what the code block should do.
+        // Used for generating context-aware completions (e.g., via Copilot).
+        // Example: "Loop over x in descending order"
+        docstring?: string;
+        // The starting line of a structured code block, such as a for-loop, if-statement, etc.
+        // Example: "for (let i = 0; i < arr.length; i++) {"
+        declaration?: string;
+        // Optional body of the code block, excluding the closing brace.
+        // Can be omitted if Copilot or the agent will generate it.
+        body?: string;
+        // A short or one-liner code expression to insert directly or use as a Copilot prompt.
+        // Example: "const total = prices.reduce(...)"
+        // If provided, takes precedence over declaration/body.
+        codeSnippet?: string;
+        // True if the request is partial or uncertain (e.g., from speech).
+        // Used to guide how much the agent or Copilot should infer.
+        isPartial?: boolean;
+        // Optional target file where the code should be inserted.
+        // Only emit the file if specified by the user.
+        // If omitted, defaults to the active editor.
+        file?: FileTarget;
+        // Position in the file where the code block should be inserted.
+        // Defaults to { type: "atCursor" }.
+        position?: CursorTarget;
+    };
+};
+
+export type EditorActionFixProblem = {
+    actionName: "fixProblem";
+    parameters: {
+        // "first", "next", "all" – or specific location
+        target: "first" | "next" | "all" | CursorTarget;
+        // Optional context hint from the agent (parsed from user request)
+        hint?: string;
+        // File scope (defaults to active editor)
+        file?: FileTarget;
     };
 };
 
