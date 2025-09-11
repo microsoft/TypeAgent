@@ -235,6 +235,22 @@ export interface BatchProgress {
     currentItem: string;
     errors: number;
     mode: ExtractionMode;
+    intermediateResults?: ExtractionResult[];
+    currentItemChunk?: number;
+    currentItemTotalChunks?: number;
+    itemsCompleted?: number;
+    totalItems?: number;
+}
+
+export interface ChunkProgressInfo {
+    itemUrl: string;
+    itemIndex: number;
+    chunkIndex: number;
+    totalChunksInItem: number;
+    globalChunkIndex: number;
+    totalChunksGlobal: number;
+    chunkContent?: string;
+    chunkResult?: any;
 }
 
 /**
