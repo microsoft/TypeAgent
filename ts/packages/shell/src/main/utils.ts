@@ -12,6 +12,7 @@ export function loadLocalWebContents(
     // HMR for renderer base on electron-vite cli.
     // Load the remote URL for development or the local html file for production.
     if (!isProd && process.env["ELECTRON_RENDERER_URL"]) {
+        const loadUrl = `${process.env["ELECTRON_RENDERER_URL"]}/${filePath}`;
         // HMR
         const p = Promise.withResolvers<void>();
         const navListener = (
@@ -20,6 +21,9 @@ export function loadLocalWebContents(
             httpResponseCode: number,
             httpStatusText: string,
         ) => {
+            if (url !== loadUrl) {
+                return;
+            }
             if (httpResponseCode === 200) {
                 p.resolve();
             } else {
@@ -33,11 +37,9 @@ export function loadLocalWebContents(
         };
         webContents.addListener("did-navigate", navListener);
 
-        webContents
-            .loadURL(`${process.env["ELECTRON_RENDERER_URL"]}/${filePath}`)
-            .catch((err) => {
-                p.reject(err);
-            });
+        webContents.loadURL(loadUrl).catch((err) => {
+            p.reject(err);
+        });
         return p.promise;
     }
     return webContents.loadFile(path.join(__dirname, "../renderer", filePath));
