@@ -116,7 +116,7 @@
     "ts-jest": "^29.3.2",
     "ts-loader": "^9.5.1",
     "typescript": "~5.4.5",
-    "vite": "^6.3.4"
+    "vite": "^6.3.6"
   },
   "fluidBuild": {
     "tasks": {

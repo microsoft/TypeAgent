@@ -142,6 +142,56 @@ export class BrowserKnowledgeExtractor {
         }
     }
 
+    async extractBatchWithEvents(
+        contents: ExtractionInput[],
+        mode: ExtractionMode = "content",
+        progressListener: (progress: any) => Promise<void>,
+        maxConcurrent?: number,
+    ): Promise<any[]> {
+        return new Promise((resolve, reject) => {
+            const progressQueue: Promise<void>[] = [];
+            let isProcessing = false;
+
+            const handleProgress = async (progress: any) => {
+                const progressPromise = progressListener(progress);
+                progressQueue.push(progressPromise);
+
+                if (!isProcessing) {
+                    isProcessing = true;
+                    while (progressQueue.length > 0) {
+                        const promise = progressQueue.shift()!;
+                        await promise;
+                    }
+                    isProcessing = false;
+                }
+            };
+
+            this.batchProcessor.on("progress", handleProgress);
+
+            this.batchProcessor.on("complete", async (results: any[]) => {
+                await Promise.all(progressQueue);
+                this.batchProcessor.removeAllListeners();
+
+                try {
+                    if (mode === "full") {
+                        await this.enhanceWithActionDetection(
+                            results,
+                            contents,
+                            mode,
+                        );
+                    }
+                    resolve(results);
+                } catch (error) {
+                    reject(error);
+                }
+            });
+
+            this.batchProcessor
+                .processBatchWithEvents(contents, mode, maxConcurrent)
+                .catch(reject);
+        });
+    }
+
     /**
      * Enhance extraction results with action detection from discovery agent
      */
