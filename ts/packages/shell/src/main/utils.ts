@@ -13,9 +13,32 @@ export function loadLocalWebContents(
     // Load the remote URL for development or the local html file for production.
     if (!isProd && process.env["ELECTRON_RENDERER_URL"]) {
         // HMR
-        return webContents.loadURL(
-            `${process.env["ELECTRON_RENDERER_URL"]}/${filePath}`,
-        );
+        const p = Promise.withResolvers<void>();
+        const navListener = (
+            _: Electron.Event,
+            url: string,
+            httpResponseCode: number,
+            httpStatusText: string,
+        ) => {
+            if (httpResponseCode === 200) {
+                p.resolve();
+            } else {
+                p.reject(
+                    new Error(
+                        `Failed to load URL: ${url}, status: ${httpResponseCode} ${httpStatusText}`,
+                    ),
+                );
+            }
+            webContents.removeListener("did-navigate", navListener);
+        };
+        webContents.addListener("did-navigate", navListener);
+
+        webContents
+            .loadURL(`${process.env["ELECTRON_RENDERER_URL"]}/${filePath}`)
+            .catch((err) => {
+                p.reject(err);
+            });
+        return p.promise;
     }
     return webContents.loadFile(path.join(__dirname, "../renderer", filePath));
 }
