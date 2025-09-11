@@ -108,29 +108,37 @@ class ShellShowWindowCommandHandler implements CommandHandlerNoParams {
 class ShellSetWindowSizeCommandHandler implements CommandHandler {
     public readonly description = "Sets the shell window size";
     public readonly parameters = {
-            args: {
-                x: {
-                    description: "The new x position for the window",
-                },
-                y: {
-                    description: "The new y position for the window",
-                },
-                width: {
-                    description: "The new width for the window",
-                },
-                height: {
-                    description: "The new height for the window",
-                },
+        args: {
+            x: {
+                description: "The new x position for the window",
             },
-        } as const;    
-    public async run(context: ActionContext<ShellContext>, params: ParsedCommandParams<typeof this.parameters>) {
+            y: {
+                description: "The new y position for the window",
+            },
+            width: {
+                description: "The new width for the window",
+            },
+            height: {
+                description: "The new height for the window",
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<ShellContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
         const agentContext = context.sessionContext.agentContext;
-        const windowState: ShellWindowState = agentContext.shellWindow.getWindowState();
+        const windowState: ShellWindowState =
+            agentContext.shellWindow.getWindowState();
 
         windowState.x = Number.parseInt(params.args.x ?? windowState.x);
         windowState.y = Number.parseInt(params.args.y ?? windowState.y);
-        windowState.windowWidth = Number.parseInt(params.args.width ?? windowState.windowWidth);
-        windowState.windowHeight = Number.parseInt(params.args.height ?? windowState.windowHeight);
+        windowState.windowWidth = Number.parseInt(
+            params.args.width ?? windowState.windowWidth,
+        );
+        windowState.windowHeight = Number.parseInt(
+            params.args.height ?? windowState.windowHeight,
+        );
 
         agentContext.shellWindow.setWindowState(windowState);
 
@@ -141,15 +149,20 @@ class ShellSetWindowSizeCommandHandler implements CommandHandler {
 class ShellSetZoomLevelCommandHandler implements CommandHandler {
     public readonly description = "Sets the shell zoom level";
     public readonly parameters = {
-            args: {
-                zoom: {
-                    description: "The zoom level to set in percent (i.e. 100% is normal size, 50% is half size).",
-                },
+        args: {
+            zoom: {
+                description:
+                    "The zoom level to set in percent (i.e. 100% is normal size, 50% is half size).",
             },
-        } as const;    
-    public async run(context: ActionContext<ShellContext>, params: ParsedCommandParams<typeof this.parameters>) {
+        },
+    } as const;
+    public async run(
+        context: ActionContext<ShellContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
         const agentContext = context.sessionContext.agentContext;
-        const windowState: ShellWindowState = agentContext.shellWindow.getWindowState();
+        const windowState: ShellWindowState =
+            agentContext.shellWindow.getWindowState();
 
         windowState.zoomLevel = Number.parseInt(params.args.zoom) / 100;
 

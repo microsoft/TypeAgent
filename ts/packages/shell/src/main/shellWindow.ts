@@ -1021,7 +1021,9 @@ export class ShellWindow {
         this.mainWindow.setTitle(`${summary}${zoomTitle}`);
 
         // Update the page title to match the window title as well for backwards compat with Playwright tests
-        this.chatView.webContents.executeJavaScript(`document.title = '${summary}${zoomTitle}';`);
+        this.chatView.webContents.executeJavaScript(
+            `document.title = '${summary}${zoomTitle}';`,
+        );
     }
 }
 

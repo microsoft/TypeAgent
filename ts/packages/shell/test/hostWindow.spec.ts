@@ -77,8 +77,12 @@ test.describe("Shell interface tests", () => {
             newWidth,
             `Window width mismatch! Expected ${width} got ${newWidth}`,
         ).toBe(newWidth);
-        expect(newX, `X position mismatch! Expected ${x} got ${newX}`).toBe(x + 8);
-        expect(newY, `Y position mismatch!Expected ${y} got ${newY}`).toBe(y + 31);
+        expect(newX, `X position mismatch! Expected ${x} got ${newX}`).toBe(
+            x + 8,
+        );
+        expect(newY, `Y position mismatch!Expected ${y} got ${newY}`).toBe(
+            y + 31,
+        );
 
         // close the application
         await exitApplication(newWindow);
@@ -117,7 +121,9 @@ test.describe("Shell interface tests", () => {
         let title = await page.title();
 
         // get zoom level out of title
-        let subTitle: string | undefined = title.match(/\d+%/) ? title.match(/\d+%/)![0] : undefined;
+        let subTitle: string | undefined = title.match(/\d+%/)
+            ? title.match(/\d+%/)![0]
+            : undefined;
         if (subTitle === undefined) {
             expect(
                 subTitle,
@@ -126,7 +132,7 @@ test.describe("Shell interface tests", () => {
         } else {
             let zoomLevel: number = parseInt(
                 subTitle.substring(0, subTitle.length - 1),
-            );            
+            );
             expect(
                 zoomLevel,
                 `Unexpected zoomLevel, expected ${level}, got ${zoomLevel}`,
