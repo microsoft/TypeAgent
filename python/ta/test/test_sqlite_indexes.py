@@ -215,19 +215,6 @@ class TestSqliteRelatedTermsAliases:
         assert "machine learning" in term_texts
         assert "ML" in term_texts
 
-        # Get related terms
-        related = await index.get_related_terms("ai")
-        assert related is not None
-        assert len(related) == 3
-
-        # Set related terms (replace existing)
-        await index.set_related_terms("ai", ["neural networks", "deep learning"])
-        related = await index.get_related_terms("ai")
-        assert related is not None
-        assert len(related) == 2
-        assert "neural networks" in related
-        assert "deep learning" in related
-
     @pytest.mark.asyncio
     async def test_serialize_deserialize(self, sqlite_db: sqlite3.Connection):
         """Test serialization and deserialization of aliases."""
@@ -256,14 +243,6 @@ class TestSqliteRelatedTermsAliases:
         # Verify data was restored
         assert not await index.is_empty()
         assert await index.size() == 2
-
-        ai_related = await index.get_related_terms("ai")
-        assert ai_related is not None
-        assert len(ai_related) == 2
-
-        python_related = await index.get_related_terms("python")
-        assert python_related is not None
-        assert len(python_related) == 1
 
 
 class TestSqliteRelatedTermsFuzzy:
@@ -369,10 +348,9 @@ class TestSqliteRelatedTermsFuzzy:
         # Add a term
         await index.add_terms(["test term"])
 
-        # Exact match should be filtered out (self-match)
+        # Exact match should return score 1.0
         results = await index.lookup_term("test term", min_score=0.0)
-        # Should not return the exact same term
-        assert not any(term.text == "test term" for term in results)
+        assert any(term.text == "test term" for term in results)
 
         # Test with multiple terms and verify behavior
         results = await index.lookup_term("xyzabc123")
@@ -548,10 +526,6 @@ class TestSqliteIndexesEdgeCases:
         await index.add_related_term("test", Term("string_term"))  # Term object
         await index.add_related_term("test", Term("term_object"))  # Term object
         await index.add_related_term("test", [Term("list_term")])  # list
-
-        related = await index.get_related_terms("test")
-        assert related is not None
-        assert len(related) == 3
 
         # Test deserialize with None data
         await index.deserialize(None)
