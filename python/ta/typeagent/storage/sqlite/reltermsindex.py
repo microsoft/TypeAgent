@@ -46,12 +46,6 @@ class SqliteRelatedTermsAliases(interfaces.ITermToRelatedTerms):
         cursor = self.db.cursor()
         cursor.execute("DELETE FROM RelatedTermsAliases")
 
-    async def get_related_terms(self, term: str) -> list[str] | None:
-        cursor = self.db.cursor()
-        cursor.execute("SELECT alias FROM RelatedTermsAliases WHERE term = ?", (term,))
-        results = [row[0] for row in cursor.fetchall()]
-        return results if results else None
-
     async def set_related_terms(self, term: str, related_terms: list[str]) -> None:
         cursor = self.db.cursor()
         # Clear existing aliases for this term
@@ -143,11 +137,9 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         # Create a VectorBase for caching and fuzzy matching
         self._embedding_settings = TextEmbeddingIndexSettings(embedding_model)
         self._vector_base = VectorBase(self._embedding_settings)
-        # Keep reference to embedding model for direct access if needed
-        self._embedding_model = embedding_model
         # Maintain our own list of terms to map ordinals back to keys
-        self._terms_list: list[str] = []
-        self._terms_to_ordinal: dict[str, int] = {}
+        self._terms_list: list[str] = []  # TODO: Use the database instead?
+        self._added_terms: set[str] = set()  # TODO: Ditto?
 
     async def lookup_term(
         self,
@@ -157,97 +149,33 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
     ) -> list[interfaces.Term]:
         """Look up similar terms using fuzzy matching."""
 
-        # Use VectorBase for fuzzy embedding search instead of manual similarity calculation
-        try:
-            # Search for similar terms using VectorBase
-            similar_results = await self._vector_base.fuzzy_lookup(
-                text, max_hits=max_hits, min_score=min_score or 0.7
-            )
-
-            # Convert VectorBase results to Term objects
-            results = []
-            for scored_int in similar_results:
-                # Get the term text from our ordinal mapping
-                if scored_int.item < len(self._terms_list):
-                    term_text = self._terms_list[scored_int.item]
-
-                    # Skip exact self-match
-                    if term_text == text and abs(scored_int.score - 1.0) < 0.001:
-                        continue
-
-                    results.append(interfaces.Term(term_text, scored_int.score))
-
-            return results
-
-        except Exception:
-            # Fallback to direct database query if VectorBase fails
-            return await self._lookup_term_fallback(text, max_hits, min_score)
-
-    async def _lookup_term_fallback(
-        self,
-        text: str,
-        max_hits: int | None = None,
-        min_score: float | None = None,
-    ) -> list[interfaces.Term]:
-        """Fallback method using direct embedding comparison."""
-        # Generate embedding for query text
-        query_embedding = await self._embedding_model.get_embedding(text)
-        if query_embedding is None:
-            return []
-
-        # Get all stored terms and their embeddings
-        cursor = self.db.cursor()
-        cursor.execute(
-            "SELECT DISTINCT term, term_embedding FROM RelatedTermsFuzzy WHERE term_embedding IS NOT NULL"
+        # Search for similar terms using VectorBase
+        similar_results = await self._vector_base.fuzzy_lookup(
+            text, max_hits=max_hits, min_score=min_score or 0.7
         )
 
+        # Convert VectorBase results to Term objects
         results = []
-        from .schema import deserialize_embedding
-        import numpy as np
-
-        for term, embedding_blob in cursor.fetchall():
-            if embedding_blob is None:
-                continue
-
-            # Deserialize the stored embedding
-            stored_embedding = deserialize_embedding(embedding_blob)
-            if stored_embedding is None:
-                continue
-
-            # Compute cosine similarity
-            similarity = np.dot(query_embedding, stored_embedding) / (
-                np.linalg.norm(query_embedding) * np.linalg.norm(stored_embedding)
-            )
-
-            # Skip if below minimum score threshold
-            if min_score is not None and similarity < min_score:
-                continue
-
-            # Skip exact self-match (similarity 1.0 with identical text)
-            if term == text and abs(similarity - 1.0) < 0.001:
-                continue
-
-            results.append(interfaces.Term(term, float(similarity)))
-
-        # Sort by similarity score descending
-        results.sort(key=lambda x: x.weight, reverse=True)
-
-        # Apply max_hits limit
-        if max_hits is not None:
-            results = results[:max_hits]
+        for scored_int in similar_results:
+            # Get the term text from the list of terms  # TODO: Use the database instead?
+            if scored_int.item < len(self._terms_list):
+                term_text = self._terms_list[scored_int.item]
+                results.append(interfaces.Term(term_text, scored_int.score))
 
         return results
 
     async def remove_term(self, term: str) -> None:
-        cursor = self.db.cursor()
-        cursor.execute("DELETE FROM RelatedTermsFuzzy WHERE term = ?", (term,))
-        # Also remove any entries where this term appears as a related_term
-        cursor.execute("DELETE FROM RelatedTermsFuzzy WHERE related_term = ?", (term,))
+        raise NotImplementedError(
+            "TODO: Removal from VectorBase, _terms_list, _terms_to_ordinal"
+        )
+        # cursor = self.db.cursor()
+        # cursor.execute("DELETE FROM RelatedTermsFuzzy WHERE term = ?", (term,))
 
         # Clear VectorBase and local mappings - they will be rebuilt on next lookup
-        self._vector_base.clear()
-        self._terms_list.clear()
-        self._terms_to_ordinal.clear()
+        # NO THEY WON'T
+        # self._vector_base.clear()
+        # self._terms_list.clear()
+        # self._terms_to_ordinal.clear()
 
     async def clear(self) -> None:
         cursor = self.db.cursor()
@@ -255,65 +183,40 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
 
     async def size(self) -> int:
         cursor = self.db.cursor()
-        cursor.execute("SELECT COUNT(DISTINCT term) FROM RelatedTermsFuzzy")
+        cursor.execute("SELECT COUNT(term) FROM RelatedTermsFuzzy")
         return cursor.fetchone()[0]
 
     async def get_terms(self) -> list[str]:
         cursor = self.db.cursor()
-        cursor.execute("SELECT DISTINCT term FROM RelatedTermsFuzzy ORDER BY term")
+        cursor.execute("SELECT term FROM RelatedTermsFuzzy ORDER BY term")
         return [row[0] for row in cursor.fetchall()]
 
     async def add_terms(self, texts: list[str]) -> None:
-        """Add terms with self-related embeddings."""
+        """Add terms."""
         from .schema import serialize_embedding
 
         cursor = self.db.cursor()
         for text in texts:
+            if text in self._added_terms:
+                continue
+
             # Add to VectorBase for fuzzy lookup if not already present
-            if text not in self._terms_to_ordinal:
-                await self._vector_base.add_key(text)
-                ordinal = len(self._terms_list)
-                self._terms_list.append(text)
-                self._terms_to_ordinal[text] = ordinal
+            await self._vector_base.add_key(text)
+            self._terms_list.append(text)
+            self._added_terms.add(text)
 
             # Generate embedding for term and store in database
-            embed = await self._embedding_model.get_embedding(text)
-            serialized = serialize_embedding(embed)
+            embedding = await self._vector_base.get_embedding(text)  # Cached
+            serialized_embedding = serialize_embedding(embedding)
             # Insert term as related to itself, only storing term_embedding once
             cursor.execute(
                 """
                     INSERT OR REPLACE INTO RelatedTermsFuzzy
-                    (term, related_term, score, term_embedding)
-                    VALUES (?, ?, 1.0, ?)
+                    (term, term_embedding)
+                    VALUES (?, ?)
                     """,
-                (text, text, serialized),
+                (text, serialized_embedding),
             )
-
-    async def get_related_terms(
-        self, term: str, max_matches: int | None = None, min_score: float | None = None
-    ) -> list[interfaces.Term] | None:
-        cursor = self.db.cursor()
-
-        query = "SELECT related_term, score FROM RelatedTermsFuzzy WHERE term = ?"
-        params: list[typing.Any] = [term]
-
-        if min_score is not None:
-            query += " AND score >= ?"
-            params.append(min_score)
-
-        query += " ORDER BY score DESC"
-
-        if max_matches is not None:
-            query += " LIMIT ?"
-            params.append(max_matches)
-
-        cursor.execute(query, params)
-
-        results = [
-            interfaces.Term(related_term, score)
-            for related_term, score in cursor.fetchall()
-        ]
-        return results if results else None
 
     async def lookup_terms(
         self,
@@ -322,6 +225,7 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         min_score: float | None = None,
     ) -> list[list[interfaces.Term]]:
         """Look up multiple terms at once."""
+        # TODO: Some kind of batching?
         results = []
         for text in texts:
             term_results = await self.lookup_term(text, max_hits, min_score)
@@ -336,7 +240,7 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
 
         # Clear local mappings
         self._terms_list.clear()
-        self._terms_to_ordinal.clear()
+        self._added_terms.clear()
 
         # Get text items and embeddings from the data
         text_items = data.get("textItems")
@@ -359,18 +263,18 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
                 if embedding is not None:
                     serialized_embedding = serialize_embedding(embedding)
                     # Insert as self-referential entry with only term_embedding
-                    insertion_data.append((text, text, 1.0, serialized_embedding))
+                    insertion_data.append((text, serialized_embedding))
                     # Update local mappings
                     self._terms_list.append(text)
-                    self._terms_to_ordinal[text] = len(self._terms_to_ordinal)
+                    self._added_terms.add(text)
 
         # Bulk insert all the data
         if insertion_data:
             cursor.executemany(
                 """
                 INSERT OR REPLACE INTO RelatedTermsFuzzy
-                (term, related_term, score, term_embedding)
-                VALUES (?, ?, ?, ?)
+                (term, term_embedding)
+                VALUES (?,?)
                 """,
                 insertion_data,
             )
