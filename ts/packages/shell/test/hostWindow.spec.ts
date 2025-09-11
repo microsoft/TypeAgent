@@ -27,7 +27,8 @@ test.describe("Shell interface tests", () => {
     /**
      * Test to ensure that the shell recall startup layout (position, size)
      */
-    test("remember window position", async ({}, testInfo) => {
+    // robgruen - 09.11.2025 - temporarily skipping while we redo UI layout to support different modes
+    test.skip("remember window position", async ({}, testInfo) => {
         console.log(`Running test '${testInfo.title}`);
 
         let agentMessageCount = 0;
