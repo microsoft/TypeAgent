@@ -498,7 +498,7 @@ export class ShellWindow {
             height: settings.windowHeight,
         });
 
-        this.setZoomLevel(settings.zoomLevel, this.chatView.webContents);
+        this.setZoomFactor(settings.zoomLevel, this.chatView.webContents);
 
         this.settings.save(this.getWindowState());
     }
@@ -1030,7 +1030,7 @@ export class ShellWindow {
     ) {
         this.setZoomFactor(
             webContents.zoomFactor - 0.1,
-            webContents,
+            webContents, 
             onZoomChanged,
         );
     }
