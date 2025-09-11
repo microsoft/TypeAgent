@@ -20,7 +20,6 @@ export function remoteSearchMenuUIOnCompletion(
     }
 }
 
-
 export class RemoteSearchMenuUI implements SearchMenuUI {
     private readonly id: number = remoteSearchMenuUINextId++;
     private closed: boolean = false;
