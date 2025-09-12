@@ -101,6 +101,16 @@ export class BrowserViewManager {
         // Add to main window but don't show yet
         this.shellWindow.mainWindow.contentView.addChildView(webContentsView);
 
+        // wire up loaded event handlers for the webContents so we can show errors
+        webContentsView.webContents.on("did-fail-load", (_, errorCode, errorDesc) => {
+            debug(
+                `Tab ${tabId} failed to load URL ${options.url}: [${errorCode}] ${errorDesc}`,
+            );
+
+            webContentsView.webContents.executeJavaScript(`document.body.innerHTML = "There was an error loading '${options.url}'.<br />
+                Error Details: <br />${errorCode} - ${errorDesc}"`);
+        });
+
         // Load the URL or show new tab page
         if (options.url === "about:blank") {
             // Load the new tab HTML file
