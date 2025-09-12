@@ -25,6 +25,7 @@ export type BrowserActions =
     | ChangeSearchProvider
     | SearchImageAction;
 
+// Preseve the protocol that the user supplied
 export type WebPage = string;
 export type WebSearchResult = string;
 export type BrowserEntities = WebPage | WebSearchResult;
