@@ -5,7 +5,6 @@ import { conversation as kpLib } from "knowledge-processor";
 import * as cheerio from "cheerio";
 import DOMPurify from "dompurify";
 import { JSDOM } from "jsdom";
-import { AIModelManager } from "./aiModelManager.js";
 import { HtmlFetcher } from "../htmlFetcher.js";
 import {
     ExtractionMode,
@@ -26,7 +25,7 @@ const debug = registerDebug("typeagent:browser:indexing");
  * Provides unified content extraction with automatic AI usage and knowledge extraction
  */
 export class ContentExtractor {
-    private aiModelManager?: AIModelManager;
+    private knowledgeExtractor?: kpLib.KnowledgeExtractor;
     private extractionConfig?: ExtractionConfig;
     private htmlFetcher: HtmlFetcher;
 
@@ -37,6 +36,9 @@ export class ContentExtractor {
     ) {
         // Initialize HTML fetcher
         this.htmlFetcher = new HtmlFetcher();
+        if (inputConfig?.knowledgeExtractor) {
+            this.knowledgeExtractor = inputConfig.knowledgeExtractor;
+        }
 
         if (inputConfig && inputConfig?.mode) {
             // Create a clean config object with only defined values
@@ -61,15 +63,6 @@ export class ContentExtractor {
                     inputConfig.enableCrossChunkMerging;
 
             this.extractionConfig = cleanConfig;
-
-            const modeConfig = EXTRACTION_MODE_CONFIGS[inputConfig.mode];
-
-            // Create AI model manager if AI is needed for this mode
-            if (modeConfig.usesAI && inputConfig.knowledgeExtractor) {
-                this.aiModelManager = new AIModelManager(
-                    inputConfig.knowledgeExtractor,
-                );
-            }
         }
     }
 
@@ -81,10 +74,13 @@ export class ContentExtractor {
     }
 
     /**
-     * Get the AI model manager instance
+     * Estimate the number of chunks for given content
      */
-    public getAIModelManager(): AIModelManager | undefined {
-        return this.aiModelManager;
+    public estimateChunkCount(content: string, maxChunkSize: number): number {
+        if (content.length <= maxChunkSize) {
+            return 1;
+        }
+        return Math.ceil(content.length / (maxChunkSize * 0.8));
     }
 
     /**
@@ -122,11 +118,8 @@ export class ContentExtractor {
             }
 
             // Validate AI availability for AI-powered modes
-            if (modeConfig.usesAI) {
-                if (!this.aiModelManager) {
-                    throw new AIModelRequiredError(mode);
-                }
-                this.aiModelManager.validateAvailability(mode);
+            if (modeConfig.usesAI && !this.knowledgeExtractor) {
+                throw new AIModelRequiredError(mode);
             }
 
             // Extract content based on mode
@@ -297,72 +290,152 @@ export class ContentExtractor {
         chunkProgressCallback?: (chunkInfo: ChunkProgressInfo) => Promise<void>,
         maxConcurrent?: number,
     ): Promise<kpLib.KnowledgeResponse> {
-        if (!this.aiModelManager) {
-            // Basic knowledge extraction without AI
-            return this.extractBasicKnowledgeLocal(content, extractedContent);
+        const modeConfig = EXTRACTION_MODE_CONFIGS[mode];
+
+        if (modeConfig.knowledgeStrategy === "basic") {
+            if (chunkProgressCallback) {
+                await chunkProgressCallback({
+                    itemUrl: content.url,
+                    itemIndex: 0,
+                    chunkIndex: 0,
+                    totalChunksInItem: 1,
+                    globalChunkIndex: 0,
+                    totalChunksGlobal: 1,
+                });
+            }
+            return this.extractBasicKnowledge(content, extractedContent);
+        }
+
+        if (!this.knowledgeExtractor) {
+            return this.extractBasicKnowledge(content, extractedContent);
         }
 
         const textContent = this.prepareTextForKnowledge(
             content,
             extractedContent,
         );
-        return await this.aiModelManager.extractKnowledge(
-            textContent,
-            mode,
-            chunkProgressCallback,
-            maxConcurrent,
-        );
+
+        try {
+            const result = await this.extractChunkedAIKnowledge(
+                textContent,
+                modeConfig.defaultChunkSize,
+                chunkProgressCallback,
+                maxConcurrent || modeConfig.defaultConcurrentExtractions,
+                content.url,
+            );
+            return result;
+        } catch (error) {
+            throw new AIExtractionFailedError(mode, error as Error);
+        }
     }
 
     /**
      * Extract basic knowledge without AI
      */
-    private extractBasicKnowledgeLocal(
+    private extractBasicKnowledge(
         content: ExtractionInput,
         extractedContent: any,
     ): kpLib.KnowledgeResponse {
+        const knowledge: kpLib.KnowledgeResponse = {
+            topics: [],
+            entities: [],
+            actions: [],
+            inverseActions: [],
+        };
+
         const title =
             content.title || extractedContent.pageContent?.title || "";
         const headings = extractedContent.pageContent?.headings || [];
+        const textContent =
+            extractedContent.pageContent?.mainContent ||
+            content.textContent ||
+            "";
 
-        // Create basic entities from title and headings
-        const entities: any[] = [];
+        // Create entities from title and headings
         if (title) {
-            entities.push({
+            knowledge.entities.push({
                 name: title,
-                type: "title",
-                description: `Title of the webpage: ${title}`,
+                type: ["title"],
+                facets: [
+                    { name: "source", value: "title_extraction" },
+                    { name: "confidence", value: 0.8 },
+                ],
             });
         }
 
-        headings.forEach((heading: any, index: number) => {
+        headings.forEach((heading: any) => {
             if (heading.text && heading.text.length > 3) {
-                entities.push({
+                knowledge.entities.push({
                     name: heading.text,
-                    type: "heading",
-                    description: `Section heading (level ${heading.level}): ${heading.text}`,
+                    type: ["heading"],
+                    facets: [
+                        { name: "source", value: "heading_extraction" },
+                        { name: "confidence", value: 0.7 },
+                        { name: "level", value: heading.level || 1 },
+                    ],
                 });
             }
         });
 
-        // Create basic topics from URL domain
-        const topics: any[] = [];
-        try {
-            const domain = new URL(content.url).hostname.replace("www.", "");
-            topics.push({
-                name: domain,
-                confidence: 0.5,
-            });
-        } catch {
-            // Invalid URL, skip domain topic
+        // Extract topics from text patterns
+        if (textContent) {
+            const lines = textContent
+                .split("\n")
+                .map((line: string) => line.trim())
+                .filter((line: string) => line.length > 0);
+
+            const potentialTitles = lines.filter(
+                (line: string) =>
+                    line.length > 5 &&
+                    line.length < 100 &&
+                    !line.includes(".") &&
+                    line.charAt(0) === line.charAt(0).toUpperCase(),
+            );
+
+            knowledge.topics.push(...potentialTitles.slice(0, 10));
+
+            // Extract entities from capitalized words
+            const words = textContent.split(/\s+/);
+            const capitalizedWords = words.filter(
+                (word: string) =>
+                    word.length > 2 &&
+                    word.charAt(0) === word.charAt(0).toUpperCase() &&
+                    /^[A-Za-z]+$/.test(word),
+            );
+
+            const uniqueCapitalizedWords = [...new Set(capitalizedWords)].slice(
+                0,
+                5,
+            ) as string[];
+            for (const word of uniqueCapitalizedWords) {
+                knowledge.entities.push({
+                    name: word,
+                    type: ["concept"],
+                    facets: [
+                        { name: "source", value: "text_analysis" },
+                        { name: "confidence", value: 0.3 },
+                    ],
+                });
+            }
         }
 
-        return {
-            entities: entities.slice(0, 10), // Limit to 10 entities
-            topics: topics,
-            actions: [],
-            inverseActions: [],
-        };
+        // Add domain-based topics
+        if (content.url) {
+            try {
+                const domain = new URL(content.url).hostname.replace(
+                    "www.",
+                    "",
+                );
+                knowledge.topics.push(domain);
+            } catch {
+                // Invalid URL, skip domain topic
+            }
+        }
+
+        // Limit entities to prevent overwhelming the response
+        knowledge.entities = knowledge.entities.slice(0, 15);
+
+        return knowledge;
     }
 
     /**
@@ -488,7 +561,7 @@ export class ContentExtractor {
     public isConfiguredForMode(mode: ExtractionMode): boolean {
         const modeConfig = EXTRACTION_MODE_CONFIGS[mode];
         if (modeConfig.usesAI) {
-            return !!this.aiModelManager;
+            return !!this.knowledgeExtractor;
         }
         return true; // Basic mode always works
     }
@@ -568,5 +641,235 @@ export class ContentExtractor {
                 links: [],
             };
         }
+    }
+
+    /**
+     * Extract knowledge from content using AI with intelligent chunking
+     */
+    private async extractChunkedAIKnowledge(
+        content: string,
+        maxChunkSize: number,
+        chunkProgressCallback?: (chunkInfo: ChunkProgressInfo) => Promise<void>,
+        maxConcurrent: number = 3,
+        itemUrl: string = "",
+    ): Promise<kpLib.KnowledgeResponse> {
+        if (!this.knowledgeExtractor) {
+            throw new Error("Knowledge extractor not available");
+        }
+
+        if (content.length <= maxChunkSize) {
+            if (chunkProgressCallback) {
+                await chunkProgressCallback({
+                    itemUrl,
+                    itemIndex: 0,
+                    chunkIndex: 0,
+                    totalChunksInItem: 1,
+                    globalChunkIndex: 0,
+                    totalChunksGlobal: 1,
+                    chunkContent: content.substring(0, 100),
+                });
+            }
+
+            const result = await this.knowledgeExtractor.extract(content);
+            if (!result) {
+                throw new Error("Knowledge extractor returned undefined");
+            }
+            return result;
+        }
+
+        const chunks = this.intelligentChunking(content, maxChunkSize);
+        const chunkResults: kpLib.KnowledgeResponse[] = [];
+
+        for (let i = 0; i < chunks.length; i += maxConcurrent) {
+            const batch = chunks.slice(i, i + maxConcurrent);
+
+            const batchPromises = batch.map((chunk, batchIndex) => {
+                const chunkIndex = i + batchIndex;
+
+                return this.knowledgeExtractor!.extract(chunk)
+                    .then(async (result) => {
+                        const outcome = {
+                            success: true,
+                            result,
+                            chunk,
+                            chunkIndex,
+                        };
+
+                        if (result) {
+                            chunkResults.push(result);
+                        }
+                        if (chunkProgressCallback) {
+                            await chunkProgressCallback({
+                                itemUrl,
+                                itemIndex: 0,
+                                chunkIndex: outcome.chunkIndex,
+                                totalChunksInItem: chunks.length,
+                                globalChunkIndex: 0,
+                                totalChunksGlobal: 1,
+                                chunkContent: outcome.chunk.substring(0, 100),
+                                chunkResult: outcome.result,
+                            });
+                        }
+
+                        return outcome;
+                    })
+                    .catch(async (error) => {
+                        const outcome = {
+                            success: false,
+                            error,
+                            chunk,
+                            chunkIndex,
+                        };
+
+                        console.warn(
+                            `Chunk ${outcome.chunkIndex} extraction failed:`,
+                            error,
+                        );
+                        if (chunkProgressCallback) {
+                            await chunkProgressCallback({
+                                itemUrl,
+                                itemIndex: 0,
+                                chunkIndex: outcome.chunkIndex,
+                                totalChunksInItem: chunks.length,
+                                globalChunkIndex: 0,
+                                totalChunksGlobal: 1,
+                                chunkContent: outcome.chunk.substring(0, 100),
+                            });
+                        }
+
+                        return outcome;
+                    });
+            });
+
+            await Promise.allSettled(batchPromises);
+
+            if (i + maxConcurrent < chunks.length) {
+                await new Promise((resolve) => setTimeout(resolve, 100));
+            }
+        }
+
+        return this.aggregateChunkResults(chunkResults);
+    }
+
+    /**
+     * Intelligently chunk content preserving sentence/paragraph boundaries
+     */
+    private intelligentChunking(
+        content: string,
+        maxChunkSize: number,
+    ): string[] {
+        const chunks: string[] = [];
+        const paragraphs = content
+            .split(/\n\s*\n/)
+            .filter((p) => p.trim().length > 0);
+
+        let currentChunk = "";
+
+        for (const paragraph of paragraphs) {
+            if (currentChunk.length + paragraph.length <= maxChunkSize) {
+                currentChunk += (currentChunk ? "\n\n" : "") + paragraph;
+            } else {
+                if (currentChunk) {
+                    chunks.push(currentChunk);
+                    currentChunk = "";
+                }
+
+                if (paragraph.length > maxChunkSize) {
+                    const sentences = paragraph
+                        .split(/[.!?]+/)
+                        .filter((s) => s.trim().length > 0);
+
+                    for (const sentence of sentences) {
+                        if (
+                            currentChunk.length + sentence.length <=
+                            maxChunkSize
+                        ) {
+                            currentChunk +=
+                                (currentChunk ? ". " : "") + sentence.trim();
+                        } else {
+                            if (currentChunk) {
+                                chunks.push(currentChunk + ".");
+                                currentChunk = "";
+                            }
+
+                            if (sentence.length > maxChunkSize) {
+                                chunks.push(
+                                    sentence.substring(0, maxChunkSize - 3) +
+                                        "...",
+                                );
+                            } else {
+                                currentChunk = sentence.trim();
+                            }
+                        }
+                    }
+                } else {
+                    currentChunk = paragraph;
+                }
+            }
+        }
+
+        if (currentChunk) {
+            chunks.push(currentChunk);
+        }
+
+        return chunks;
+    }
+
+    /**
+     * Aggregate knowledge results from multiple chunks
+     */
+    private aggregateChunkResults(
+        chunkResults: kpLib.KnowledgeResponse[],
+    ): kpLib.KnowledgeResponse {
+        const aggregated: kpLib.KnowledgeResponse = {
+            topics: [],
+            entities: [],
+            actions: [],
+            inverseActions: [],
+        };
+
+        const topicCounts = new Map<string, number>();
+        const entityMap = new Map<
+            string,
+            { entity: kpLib.ConcreteEntity; count: number }
+        >();
+        const allActions: kpLib.Action[] = [];
+
+        chunkResults.forEach((result) => {
+            result.topics.forEach((topic) => {
+                const normalized = topic.toLowerCase();
+                topicCounts.set(
+                    normalized,
+                    (topicCounts.get(normalized) || 0) + 1,
+                );
+            });
+
+            result.entities.forEach((entity) => {
+                const normalized = entity.name.toLowerCase();
+                const existing = entityMap.get(normalized);
+                if (existing) {
+                    existing.count++;
+                } else {
+                    entityMap.set(normalized, { entity, count: 1 });
+                }
+            });
+
+            allActions.push(...(result.actions || []));
+        });
+
+        aggregated.topics = Array.from(topicCounts.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 20)
+            .map(([topic]) => topic);
+
+        aggregated.entities = Array.from(entityMap.values())
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 30)
+            .map((item) => item.entity);
+
+        aggregated.actions = allActions.slice(0, 15);
+        aggregated.inverseActions = [];
+
+        return aggregated;
     }
 }
