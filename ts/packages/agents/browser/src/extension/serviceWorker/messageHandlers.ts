@@ -26,7 +26,7 @@ export function handleKnowledgeExtractionProgress(
     progress: KnowledgeExtractionProgress,
 ) {
     const callback = knowledgeExtractionCallbacks.get(extractionId);
-    if (callback) {
+    if (typeof callback === "function") {
         callback(progress);
 
         // Cleanup on completion
