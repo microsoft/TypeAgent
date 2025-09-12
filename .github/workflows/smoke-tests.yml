@@ -66,12 +66,7 @@ jobs:
         run: |
           git config --global core.autocrlf false
 
-      - if: ${{ github.event_name != 'pull_request_target'}}
-        uses: actions/checkout@v4
-	with:
-    		ref: ${{ github.event.pull_request.head.sha }} # This is dangerous without the first access check
-
-      - if: ${{ github.event_name == 'pull_request_target'}}
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
