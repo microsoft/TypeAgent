@@ -46,7 +46,7 @@ export type OpenWebPage = {
             | "annotationsLibrary"
             | "knowledgeLibrary"
             | "macrosLibrary"
-            | WebPage;
+            | WebPage; // If the user didn't provide a protocol, assume http otherwise, preserve the protocol the user supplied.
         // Enum indicating if the page to open in the new tab or the current tab.
         // Default value is "current"
         tab: "new" | "current" | "existing";
