@@ -77,12 +77,14 @@ export class BatchProcessor extends EventEmitter {
                     // IDENTICAL processing for all modes - unified logic
                     const extractionOptions: any = { processingMode };
                     if (processingMode === "realtime") {
-                        extractionOptions.chunkProgressCallback = async (chunkInfo: ChunkProgressInfo) => {
+                        extractionOptions.chunkProgressCallback = async (
+                            chunkInfo: ChunkProgressInfo,
+                        ) => {
                             // Real-time streaming events for WebSocket
                             this.emit("chunkProgress", chunkInfo);
                         };
                     }
-                    
+
                     const result = await this.contentExtractor.extract(
                         item,
                         mode,

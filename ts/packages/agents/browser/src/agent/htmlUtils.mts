@@ -187,11 +187,12 @@ export async function processHtmlContent(
                         ?.map((link: any) => link.href)
                         .filter(Boolean) || [],
                 images: result.pageContent.images || [],
-                actions: result.detectedActions?.map((action: any) => ({
-                    type: action.type as "form" | "button" | "link",
-                    action: action.element,
-                    text: action.text,
-                })) || [],
+                actions:
+                    result.detectedActions?.map((action: any) => ({
+                        type: action.type as "form" | "button" | "link",
+                        action: action.element,
+                        text: action.text,
+                    })) || [],
             },
         };
 
@@ -331,11 +332,12 @@ export async function processHtmlContentEnhanced(
                         ?.map((link: any) => link.href)
                         .filter(Boolean) || [],
                 images: extractionResult.pageContent.images || [],
-                actions: extractionResult.detectedActions?.map((action: any) => ({
-                    type: action.type as "form" | "button" | "link",
-                    action: action.element,
-                    text: action.text,
-                })) || [],
+                actions:
+                    extractionResult.detectedActions?.map((action: any) => ({
+                        type: action.type as "form" | "button" | "link",
+                        action: action.element,
+                        text: action.text,
+                    })) || [],
             },
         };
 

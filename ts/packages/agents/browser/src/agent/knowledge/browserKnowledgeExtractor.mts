@@ -120,7 +120,7 @@ export class BrowserKnowledgeExtractor {
             if (progressCallback) {
                 options.progressCallback = progressCallback;
             }
-            
+
             const extractionResults = await this.batchProcessor.processBatch(
                 contents,
                 mode,

@@ -320,8 +320,7 @@ export class BrowserIndexingService {
 
             // Add processing metadata
             (website.metadata as any).extractionMode = extractionMode;
-            (website.metadata as any).processingTime =
-                result.processingTime;
+            (website.metadata as any).processingTime = result.processingTime;
             (website.metadata as any).aiProcessingUsed =
                 result.aiProcessingUsed;
 
