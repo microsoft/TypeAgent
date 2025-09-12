@@ -338,10 +338,7 @@ export class BatchProcessor extends EventEmitter {
             return item.htmlFragments.map((f) => f.text || "").join("\n");
         }
         if (item.htmlContent) {
-            return item.htmlContent
-                .replace(/<[^>]*>/g, "")
-                .replace(/\s+/g, " ")
-                .trim();
+            return item.htmlContent.replace(/\s+/g, " ").trim();
         }
         return item.title || "";
     }
