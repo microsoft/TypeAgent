@@ -25,43 +25,6 @@ import { MessageGroup } from "./messageGroup";
 import { SettingsView } from "./settingsView";
 import { uint8ArrayToBase64 } from "common-utils";
 
-export function getSelectionXCoord() {
-    let sel = window.getSelection();
-    let x = 0;
-    if (sel) {
-        if (sel.rangeCount) {
-            let range = sel.getRangeAt(0).cloneRange();
-            if (range.getClientRects) {
-                range.collapse(true);
-                let rects = range.getClientRects();
-                if (rects.length > 0) {
-                    const rect = rects[0];
-                    x = rect.left;
-                }
-            }
-            // Fall back to inserting a temporary element
-            if (x == 0) {
-                var span = document.createElement("span");
-                if (span.getClientRects) {
-                    // Ensure span has dimensions and position by
-                    // adding a zero-width space character
-                    span.appendChild(document.createTextNode("\u200b"));
-                    range.insertNode(span);
-                    const rect = span.getClientRects()[0];
-                    x = rect.left;
-                    var spanParent = span.parentNode;
-                    if (spanParent) {
-                        spanParent.removeChild(span);
-                        // Glue any broken text nodes back together
-                        spanParent.normalize();
-                    }
-                }
-            }
-        }
-    }
-    return x;
-}
-
 const DynamicDisplayMinRefreshIntervalMs = 15;
 export class ChatView {
     private readonly topDiv: HTMLDivElement;

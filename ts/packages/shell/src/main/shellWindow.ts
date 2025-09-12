@@ -63,6 +63,7 @@ function setupResizeHandler(mainWindow: BrowserWindow, handler: () => void) {
     };
 }
 
+type BottomAlignedPosition = { left: number; bottom: number };
 export class ShellWindow {
     public static getInstance(): ShellWindow | undefined {
         return this.instance;
@@ -71,7 +72,10 @@ export class ShellWindow {
 
     public readonly mainWindow: BrowserWindow;
     public readonly chatView: WebContentsView;
-    private readonly overlayWebContentsViews: Set<WebContentsView> = new Set();
+    private readonly overlayWebContentsViews: Map<
+        WebContentsView,
+        BottomAlignedPosition
+    > = new Map();
 
     private verticalLayout: boolean;
     private contentVisible: boolean = false;
@@ -102,27 +106,34 @@ export class ShellWindow {
         return activeBrowserView.webContentsView;
     }
 
+    private setOverlayWebContentsViewBounds(
+        view: WebContentsView,
+        position: BottomAlignedPosition,
+    ) {
+        const chatBounds = this.chatView.getBounds();
+        const current = view.getBounds();
+        const zoomFactor = this.chatView.webContents.zoomFactor;
+        const left = chatBounds.x + position.left * zoomFactor;
+        const bottom = chatBounds.y + position.bottom * zoomFactor;
+
+        const newBounds = {
+            x: left,
+            y: bottom - current.height,
+            width: current.width,
+            height: current.height,
+        };
+        view.webContents.setZoomFactor(zoomFactor);
+        view.setBounds(newBounds);
+    }
+
     public updateOverlayWebContentsView(
         view: WebContentsView,
-        position?: { left: number; bottom: number },
+        position?: BottomAlignedPosition,
     ) {
         if (position) {
-            this.overlayWebContentsViews.add(view);
+            this.overlayWebContentsViews.set(view, position);
             this.mainWindow.contentView.addChildView(view);
-            const chatBounds = this.chatView.getBounds();
-            const current = view.getBounds();
-            const zoomFactor = this.chatView.webContents.zoomFactor;
-            const left = chatBounds.x + position.left * zoomFactor;
-            const bottom = chatBounds.y + position.bottom * zoomFactor;
-
-            const newBounds = {
-                x: left,
-                y: bottom - current.height,
-                width: current.width,
-                height: current.height,
-            };
-            view.webContents.setZoomFactor(zoomFactor);
-            view.setBounds(newBounds);
+            this.setOverlayWebContentsViewBounds(view, position);
         } else {
             this.overlayWebContentsViews.delete(view);
             this.mainWindow.contentView.removeChildView(view);
@@ -508,6 +519,7 @@ export class ShellWindow {
         const { width, height } = bounds;
 
         let dividerPos = -1;
+        let chatViewBounds: Electron.Rectangle;
         if (verticalLayout) {
             this.windowWidth = width;
             let chatHeight = this.chatHeight;
@@ -541,16 +553,12 @@ export class ShellWindow {
                 this.browserViewManager.setBounds(browserViewBounds);
             }
 
-            const chatViewBounds = {
+            chatViewBounds = {
                 x: 0,
                 y: height - chatHeight,
                 width,
                 height: chatHeight,
             };
-            debugShellWindow(
-                `Chat view bounds: ${JSON.stringify(chatViewBounds)}`,
-            );
-            this.chatView.setBounds(chatViewBounds);
         } else {
             this.windowHeight = height;
             let chatWidth = this.chatWidth;
@@ -582,17 +590,18 @@ export class ShellWindow {
                 this.browserViewManager.setBounds(browserViewBounds);
             }
 
-            const chatViewBounds = {
+            chatViewBounds = {
                 x: 0,
                 y: 0,
                 width: chatWidth,
                 height: height,
             };
+        }
+        debugShellWindow(`Chat view bounds: ${JSON.stringify(chatViewBounds)}`);
+        this.chatView.setBounds(chatViewBounds);
 
-            debugShellWindow(
-                `Chat view bounds: ${JSON.stringify(chatViewBounds)}`,
-            );
-            this.chatView.setBounds(chatViewBounds);
+        for (const [view, position] of this.overlayWebContentsViews.entries()) {
+            this.setOverlayWebContentsViewBounds(view, position);
         }
 
         const dividerLayout = {
@@ -715,7 +724,7 @@ export class ShellWindow {
         });
 
         // Re-add overlay views so they are on top
-        for (const views of this.overlayWebContentsViews) {
+        for (const views of this.overlayWebContentsViews.keys()) {
             this.mainWindow.contentView.addChildView(views);
         }
 
