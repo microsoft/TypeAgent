@@ -313,37 +313,33 @@ export class BrowserIndexingService {
                 extractionMode,
             );
 
-            if (result.success) {
-                // Update website with extracted knowledge
-                if (result.knowledge) {
-                    website.knowledge = result.knowledge;
-                }
-
-                // Add processing metadata
-                (website.metadata as any).extractionMode = extractionMode;
-                (website.metadata as any).processingTime =
-                    result.processingTime;
-                (website.metadata as any).aiProcessingUsed =
-                    result.aiProcessingUsed;
-
-                // Add quality metrics if available
-                if (result.qualityMetrics) {
-                    (website.metadata as any).qualityScore =
-                        this.calculateQualityScore(result.qualityMetrics);
-                }
-
-                // Add summary data if enhanced with summarization
-                if ((result as any).summaryData) {
-                    (website as any).summaryData = (result as any).summaryData;
-                    (website.metadata as any).enhancedWithSummary = true;
-                }
-
-                debug(
-                    `Successfully processed ${website.metadata.url} (AI: ${result.aiProcessingUsed})`,
-                );
-            } else {
-                debug(`${website.metadata.url}: ${result.error}`);
+            // Update website with extracted knowledge
+            if (result.knowledge) {
+                website.knowledge = result.knowledge;
             }
+
+            // Add processing metadata
+            (website.metadata as any).extractionMode = extractionMode;
+            (website.metadata as any).processingTime =
+                result.processingTime;
+            (website.metadata as any).aiProcessingUsed =
+                result.aiProcessingUsed;
+
+            // Add quality metrics if available
+            if (result.qualityMetrics) {
+                (website.metadata as any).qualityScore =
+                    this.calculateQualityScore(result.qualityMetrics);
+            }
+
+            // Add summary data if enhanced with summarization
+            if ((result as any).summaryData) {
+                (website as any).summaryData = (result as any).summaryData;
+                (website.metadata as any).enhancedWithSummary = true;
+            }
+
+            debug(
+                `Successfully processed ${website.metadata.url} (AI: ${result.aiProcessingUsed})`,
+            );
         } catch (error) {
             debug(
                 `❌ KNOWLEDGE EXTRACTION ERROR: ${website.metadata.url}:`,

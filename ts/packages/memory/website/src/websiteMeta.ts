@@ -9,7 +9,7 @@ import {
     StructuredDataCollection,
     ActionInfo,
 } from "./extraction/types.js";
-import { websiteToTextChunks } from "./chunkingUtils.js";
+import { splitLargeTextIntoChunks } from "knowledge-processor";
 import { DetectedAction, ActionSummary } from "./extraction/types.js";
 
 export interface WebsiteVisitInfo {
@@ -562,21 +562,41 @@ export class Website implements kp.IMessage {
         this.deletionInfo = deletionInfo;
         this.timestamp = metadata.visitDate || metadata.bookmarkDate;
 
-        if (isNew) {
-            const chunks = websiteToTextChunks(
-                pageContent,
-                metadata.title,
-                metadata.url,
-                2000, // Default chunk size, can be made configurable
-            );
-            pageContent = chunks;
-        }
-
         if (Array.isArray(pageContent)) {
             this.textChunks = pageContent;
         } else {
             this.textChunks = [pageContent];
         }
+    }
+
+    static createWithProcessedContent(
+        metadata: WebsiteMeta,
+        processedContent: string,
+        tags: string[] = [],
+        knowledge?: kpLib.KnowledgeResponse | undefined,
+        deletionInfo?: kp.DeletionInfo | undefined,
+    ): Website {
+        let content = "";
+        if (metadata.title) {
+            content += `Title: ${metadata.title}\n`;
+        }
+        if (metadata.url) {
+            content += `URL: ${metadata.url}\n\n`;
+        }
+        content += processedContent;
+
+        const chunks = Array.from(
+            splitLargeTextIntoChunks(content, 2000, true),
+        );
+
+        return new Website(
+            metadata,
+            chunks,
+            tags,
+            knowledge,
+            deletionInfo,
+            false,
+        );
     }
 
     public getKnowledge(): kpLib.KnowledgeResponse | undefined {

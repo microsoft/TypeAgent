@@ -17,6 +17,11 @@ import {
     ChunkProgressInfo,
 } from "./types.js";
 
+export interface BatchProcessorOptions {
+    processingMode?: "realtime" | "batch";
+    progressCallback?: (progress: BatchProgress) => void;
+}
+
 export interface BatchProcessorEvents {
     progress: (progress: BatchProgress) => void;
     chunkProgress: (chunkInfo: ChunkProgressInfo) => void;
@@ -38,16 +43,18 @@ export class BatchProcessor extends EventEmitter {
     }
 
     /**
-     * Process a batch of extraction inputs with progress tracking
+     * Process a batch of extraction inputs with unified processing
+     * Uses identical logic for all modes, only progress event publishing differs
      */
     async processBatch(
         items: ExtractionInput[],
         mode: ExtractionMode,
-        progressCallback?: (progress: BatchProgress) => void,
+        options: BatchProcessorOptions = {},
     ): Promise<ExtractionResult[]> {
         const modeConfig = EXTRACTION_MODE_CONFIGS[mode];
         const totalItems = items.length;
         let processedItems = 0;
+        const { processingMode = "batch", progressCallback } = options;
 
         this.results = [];
         this.errors = [];
@@ -67,12 +74,31 @@ export class BatchProcessor extends EventEmitter {
 
             const batchPromises = batch.map(async (item) => {
                 try {
+                    // IDENTICAL processing for all modes - unified logic
+                    const extractionOptions: any = { processingMode };
+                    if (processingMode === "realtime") {
+                        extractionOptions.chunkProgressCallback = async (chunkInfo: ChunkProgressInfo) => {
+                            // Real-time streaming events for WebSocket
+                            this.emit("chunkProgress", chunkInfo);
+                        };
+                    }
+                    
                     const result = await this.contentExtractor.extract(
                         item,
                         mode,
+                        extractionOptions,
                     );
                     this.results.push(result);
                     processedItems++;
+
+                    // ONLY difference: how progress events are published
+                    if (processingMode === "realtime") {
+                        // Real-time: WebSocket streaming events already sent during extraction
+                        this.emit("itemComplete", result, processedItems - 1);
+                    } else {
+                        // Batch: Traditional batch progress events
+                        this.emit("itemComplete", result, processedItems - 1);
+                    }
 
                     if (progressCallback) {
                         progressCallback({
@@ -136,7 +162,6 @@ export class BatchProcessor extends EventEmitter {
     async processBatchWithEvents(
         items: ExtractionInput[],
         mode: ExtractionMode,
-        maxConcurrent?: number,
     ): Promise<ExtractionResult[]> {
         const modeConfig = EXTRACTION_MODE_CONFIGS[mode];
         let globalProcessedChunks = 0;
@@ -185,10 +210,11 @@ export class BatchProcessor extends EventEmitter {
                 let itemProcessedChunks = 0;
 
                 return this.contentExtractor
-                    .extract(
-                        item,
-                        mode,
-                        async (chunkInfo: ChunkProgressInfo) => {
+                    .extract(item, mode, {
+                        processingMode: "realtime", // Always use realtime for streaming events
+                        chunkProgressCallback: async (
+                            chunkInfo: ChunkProgressInfo,
+                        ) => {
                             itemProcessedChunks++;
                             globalProcessedChunks++;
 
@@ -252,8 +278,7 @@ export class BatchProcessor extends EventEmitter {
                             this.emit("progress", progress);
                             this.emit("chunkProgress", enrichedChunkInfo);
                         },
-                        maxConcurrent,
-                    )
+                    })
                     .then((result) => ({
                         success: true,
                         result,
@@ -351,7 +376,11 @@ export class BatchProcessor extends EventEmitter {
         mode: ExtractionMode,
         progressCallback?: (progress: BatchProgress) => void,
     ): Promise<WebsiteDocPart[]> {
-        const results = await this.processBatch(items, mode, progressCallback);
+        const options: BatchProcessorOptions = {};
+        if (progressCallback) {
+            options.progressCallback = progressCallback;
+        }
+        const results = await this.processBatch(items, mode, options);
         return results.map((result) => this.convertToWebsiteDocPart(result));
     }
 
@@ -568,8 +597,9 @@ export class BatchProcessor extends EventEmitter {
                 });
             }
 
-            if (result?.actions) {
-                allActions.push(...result.actions);
+            // Use detectedActions instead of legacy actions property
+            if (result?.detectedActions) {
+                allActions.push(...result.detectedActions);
             }
         });
 

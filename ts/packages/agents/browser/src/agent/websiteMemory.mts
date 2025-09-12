@@ -425,7 +425,10 @@ export async function importWebsiteDataFromSession(
                 const enhancedResults = await batchProcessor.processBatch(
                     contentInputs,
                     extractionMode,
-                    enhancedProgressCallback,
+                    {
+                        processingMode: "batch", // Website memory uses batch mode
+                        progressCallback: enhancedProgressCallback,
+                    },
                 );
 
                 // Apply results back to websites
