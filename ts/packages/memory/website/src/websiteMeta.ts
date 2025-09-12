@@ -626,10 +626,25 @@ export function importWebsiteVisit(
 ): Website {
     const meta = new WebsiteMeta(visitInfo);
     const knowledge = meta.getKnowledge(); // Extract knowledge from metadata
-    return new Website(
-        meta,
-        pageContent || visitInfo.description || "",
-        [],
-        knowledge,
-    );
+
+    const content = pageContent || visitInfo.description || "";
+
+    // For bookmarks and basic imports, add title/URL formatting like the old websiteToTextChunks behavior
+    if (!pageContent) {
+        let formattedContent = "";
+        if (visitInfo.title) {
+            formattedContent += `Title: ${visitInfo.title}\n`;
+        }
+        if (visitInfo.url) {
+            formattedContent += `URL: ${visitInfo.url}\n\n`;
+        }
+        formattedContent += content;
+
+        const chunks = Array.from(
+            splitLargeTextIntoChunks(formattedContent, 2000, true),
+        );
+        return new Website(meta, chunks, [], knowledge, undefined, false);
+    }
+
+    return new Website(meta, content, [], knowledge);
 }
