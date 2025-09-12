@@ -4,11 +4,12 @@
 """SQLite-based related terms index implementations."""
 
 import sqlite3
-import typing
 
 from ...aitools.embeddings import AsyncEmbeddingModel
 from ...aitools.vectorbase import TextEmbeddingIndexSettings, VectorBase
 from ...knowpro import interfaces
+
+from .schema import serialize_embedding
 
 
 class SqliteRelatedTermsAliases(interfaces.ITermToRelatedTerms):
@@ -75,9 +76,7 @@ class SqliteRelatedTermsAliases(interfaces.ITermToRelatedTerms):
     async def serialize(self) -> interfaces.TermToRelatedTermsData:
         """Serialize the aliases data."""
         cursor = self.db.cursor()
-        cursor.execute(
-            "SELECT term, alias FROM RelatedTermsAliases ORDER BY term, alias"
-        )
+        cursor.execute("SELECT term, alias FROM RelatedTermsAliases ORDER BY term, alias")
 
         # Group by term
         term_to_aliases: dict[str, list[str]] = {}
@@ -175,7 +174,7 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         # NO THEY WON'T
         # self._vector_base.clear()
         # self._terms_list.clear()
-        # self._terms_to_ordinal.clear()
+        # self._added_terms.clear()
 
     async def clear(self) -> None:
         cursor = self.db.cursor()
@@ -193,14 +192,12 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
 
     async def add_terms(self, texts: list[str]) -> None:
         """Add terms."""
-        from .schema import serialize_embedding
-
         cursor = self.db.cursor()
         for text in texts:
             if text in self._added_terms:
                 continue
 
-            # Add to VectorBase for fuzzy lookup if not already present
+            # Add to VectorBase for fuzzy lookup
             await self._vector_base.add_key(text)
             self._terms_list.append(text)
             self._added_terms.add(text)
@@ -211,10 +208,10 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
             # Insert term as related to itself, only storing term_embedding once
             cursor.execute(
                 """
-                    INSERT OR REPLACE INTO RelatedTermsFuzzy
-                    (term, term_embedding)
-                    VALUES (?, ?)
-                    """,
+                INSERT OR REPLACE INTO RelatedTermsFuzzy
+                (term, term_embedding)
+                VALUES (?, ?)
+                """,
                 (text, serialized_embedding),
             )
 
