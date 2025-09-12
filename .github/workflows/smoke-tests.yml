@@ -41,6 +41,23 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     steps:
+
+      - name: Get User Permission
+        id: checkAccess
+        uses: actions-cool/check-user-permission@v2
+        with:
+          require: write
+          username: ${{ github.triggering_actor }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check User Permission
+        if: steps.checkAccess.outputs.require-result == 'false'
+        run: |
+          echo "${{ github.triggering_actor }} does not have permissions on this repo."
+          echo "Current permission level is ${{ steps.checkAccess.outputs.user-permission }}"
+          echo "Job originally triggered by ${{ github.actor }}"
+          exit 1
+
       - if: runner.os == 'Linux'
         run: |
           sudo apt install libsecret-1-0
@@ -51,6 +68,8 @@ jobs:
 
       - if: ${{ github.event_name != 'pull_request_target'}}
         uses: actions/checkout@v4
+	with:
+    		ref: ${{ github.event.pull_request.head.sha }} # This is dangerous without the first access check
 
       - if: ${{ github.event_name == 'pull_request_target'}}
         uses: actions/checkout@v4
