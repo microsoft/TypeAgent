@@ -26,7 +26,6 @@ export * from "./tables.js";
 export * from "./websiteMeta.js";
 
 export {
-    AIModelManager,
     BatchProcessor,
     ContentExtractor,
     ExtractionConfig,

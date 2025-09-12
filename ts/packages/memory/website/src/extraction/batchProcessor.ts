@@ -156,12 +156,13 @@ export class BatchProcessor extends EventEmitter {
         }
 
         const itemChunkCounts: number[] = [];
-        if (modeConfig.usesAI && this.contentExtractor.getAIModelManager()) {
-            const aiManager = this.contentExtractor.getAIModelManager()!;
-
+        if (
+            modeConfig.usesAI &&
+            this.contentExtractor.isConfiguredForMode(mode)
+        ) {
             for (const item of items) {
                 const textContent = this.prepareTextContentForEstimation(item);
-                const chunkCount = aiManager.estimateChunkCount(
+                const chunkCount = this.contentExtractor.estimateChunkCount(
                     textContent,
                     modeConfig.defaultChunkSize,
                 );
