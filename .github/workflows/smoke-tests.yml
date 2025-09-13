@@ -44,7 +44,7 @@ jobs:
     steps:  
 
       # The following two steps (permissions checks) ensure that only users with write access can run this workflow on a PR (except the merge queue bot)
-      # For PRs from forks we check the permissions of the user that triggered the workflow (github.triggering_actor)
+      # PRs from forks we check the permissions of the user that triggered the workflow (github.triggering_actor)
       # This means that if a user without write access opens a PR from a fork, they cannot run this workflow
       # Users with write access can still run this workflow on a PR from a fork
       # For PRs from the same repo, we allow the workflow to run as normal
