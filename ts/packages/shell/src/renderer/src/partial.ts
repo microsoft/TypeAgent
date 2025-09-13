@@ -180,6 +180,9 @@ export class PartialCompletion {
 
         const position = this.getSearchMenuPosition(prefix);
         if (position !== undefined) {
+            debug(
+                `Partial completion update: '${prefix}' @ ${JSON.stringify(position)}`,
+            );
             this.searchMenu.updatePrefix(prefix, position);
         } else {
             this.searchMenu.hide();
@@ -312,7 +315,7 @@ export class PartialCompletion {
         }
 
         const { top } = this.container.getBoundingClientRect();
-        return { left: x, bottom: top };
+        return { left: x, bottom: window.innerHeight - top };
     }
 
     private cancelCompletionMenu() {

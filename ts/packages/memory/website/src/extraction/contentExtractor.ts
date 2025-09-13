@@ -1,7 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { conversation as kpLib } from "knowledge-processor";
+import {
+    conversation as kpLib,
+    splitLargeTextIntoChunks,
+} from "knowledge-processor";
 import * as cheerio from "cheerio";
 import DOMPurify from "dompurify";
 import { JSDOM } from "jsdom";
@@ -11,11 +14,15 @@ import {
     ExtractionConfig,
     ExtractionInput,
     ExtractionResult,
+    ExtractionOptions,
     ExtractionQualityMetrics,
     EXTRACTION_MODE_CONFIGS,
     AIModelRequiredError,
     AIExtractionFailedError,
     ChunkProgressInfo,
+    EntityFacet,
+    TopicCorrelation,
+    TemporalContext,
 } from "./types.js";
 import registerDebug from "debug";
 const debug = registerDebug("typeagent:browser:indexing");
@@ -84,17 +91,17 @@ export class ContentExtractor {
     }
 
     /**
-     * Extract content using the specified extraction mode
-     * This is the main new API that consolidates all extraction logic
+     * Extract content using the specified extraction mode with unified processing
+     * This is the main API that consolidates all extraction logic with rich metadata
      */
     async extract(
         content: ExtractionInput,
         mode: ExtractionMode = "content",
-        chunkProgressCallback?: (chunkInfo: ChunkProgressInfo) => Promise<void>,
-        maxConcurrent?: number,
+        options: ExtractionOptions = {},
     ): Promise<ExtractionResult> {
         const startTime = Date.now();
         const modeConfig = EXTRACTION_MODE_CONFIGS[mode];
+        const { processingMode = "batch", chunkProgressCallback } = options;
 
         try {
             // Fetch HTML if needed and not provided
@@ -133,7 +140,6 @@ export class ContentExtractor {
                 extractedContent,
                 mode,
                 chunkProgressCallback,
-                maxConcurrent,
             );
 
             // Calculate quality metrics
@@ -145,16 +151,6 @@ export class ContentExtractor {
             );
 
             const processingTime = Date.now() - startTime;
-
-            // Convert DetectedAction[] to ActionInfo[] for legacy compatibility
-            const actions = extractedContent.detectedActions?.map(
-                (da: any) => ({
-                    type: da.actionType as "form" | "button" | "link",
-                    action: da.selector,
-                    method: da.method,
-                    text: da.description,
-                }),
-            );
 
             // Create action summary from detected actions
             let actionSummary;
@@ -191,19 +187,37 @@ export class ContentExtractor {
                 };
             }
 
+            // Generate rich metadata for all extractions
+            const extractionTimestamp = new Date();
+            const entityFacets = await this.generateEntityFacets(
+                knowledge,
+                extractedContent,
+            );
+            const topicCorrelations = await this.generateTopicCorrelations(
+                knowledge,
+                extractedContent,
+            );
+            const temporalContext = await this.generateTemporalContext(
+                extractedContent,
+                extractionTimestamp,
+            );
+
             return {
                 ...extractedContent,
                 knowledge,
                 qualityMetrics,
+                // Rich metadata fields (always included)
+                entityFacets,
+                topicCorrelations,
+                temporalContext,
+                // Processing metadata
                 extractionMode: mode,
                 aiProcessingUsed: modeConfig.usesAI,
+                processingMode,
+                extractionTimestamp,
                 source: content.source,
                 timestamp: new Date().toISOString(),
                 processingTime,
-                // Compatibility properties
-                success: true,
-                extractionTime: processingTime,
-                actions,
                 actionSummary,
             };
         } catch (error) {
@@ -288,7 +302,6 @@ export class ContentExtractor {
         extractedContent: any,
         mode: ExtractionMode,
         chunkProgressCallback?: (chunkInfo: ChunkProgressInfo) => Promise<void>,
-        maxConcurrent?: number,
     ): Promise<kpLib.KnowledgeResponse> {
         const modeConfig = EXTRACTION_MODE_CONFIGS[mode];
 
@@ -320,7 +333,7 @@ export class ContentExtractor {
                 textContent,
                 modeConfig.defaultChunkSize,
                 chunkProgressCallback,
-                maxConcurrent || modeConfig.defaultConcurrentExtractions,
+                modeConfig.defaultConcurrentExtractions,
                 content.url,
             );
             return result;
@@ -752,67 +765,16 @@ export class ContentExtractor {
     }
 
     /**
-     * Intelligently chunk content preserving sentence/paragraph boundaries
+     * Intelligently chunk content using knowledge-processor's semantic-aware chunking
      */
     private intelligentChunking(
         content: string,
         maxChunkSize: number,
+        preserveStructure: boolean = true,
     ): string[] {
-        const chunks: string[] = [];
-        const paragraphs = content
-            .split(/\n\s*\n/)
-            .filter((p) => p.trim().length > 0);
-
-        let currentChunk = "";
-
-        for (const paragraph of paragraphs) {
-            if (currentChunk.length + paragraph.length <= maxChunkSize) {
-                currentChunk += (currentChunk ? "\n\n" : "") + paragraph;
-            } else {
-                if (currentChunk) {
-                    chunks.push(currentChunk);
-                    currentChunk = "";
-                }
-
-                if (paragraph.length > maxChunkSize) {
-                    const sentences = paragraph
-                        .split(/[.!?]+/)
-                        .filter((s) => s.trim().length > 0);
-
-                    for (const sentence of sentences) {
-                        if (
-                            currentChunk.length + sentence.length <=
-                            maxChunkSize
-                        ) {
-                            currentChunk +=
-                                (currentChunk ? ". " : "") + sentence.trim();
-                        } else {
-                            if (currentChunk) {
-                                chunks.push(currentChunk + ".");
-                                currentChunk = "";
-                            }
-
-                            if (sentence.length > maxChunkSize) {
-                                chunks.push(
-                                    sentence.substring(0, maxChunkSize - 3) +
-                                        "...",
-                                );
-                            } else {
-                                currentChunk = sentence.trim();
-                            }
-                        }
-                    }
-                } else {
-                    currentChunk = paragraph;
-                }
-            }
-        }
-
-        if (currentChunk) {
-            chunks.push(currentChunk);
-        }
-
-        return chunks;
+        return Array.from(
+            splitLargeTextIntoChunks(content, maxChunkSize, preserveStructure),
+        );
     }
 
     /**
@@ -871,5 +833,95 @@ export class ContentExtractor {
         aggregated.inverseActions = [];
 
         return aggregated;
+    }
+
+    /**
+     * Generate entity facets from knowledge and content
+     */
+    private async generateEntityFacets(
+        knowledge: kpLib.KnowledgeResponse,
+        extractedContent: any,
+    ): Promise<Map<string, EntityFacet[]>> {
+        const entityFacets = new Map<string, EntityFacet[]>();
+
+        // Process entities from knowledge response
+        if (knowledge.entities) {
+            for (const entity of knowledge.entities) {
+                const entityType =
+                    typeof entity === "string" ? "generic" : "specific";
+                const entityName =
+                    typeof entity === "string" ? entity : String(entity);
+
+                const facet: EntityFacet = {
+                    entityName,
+                    entityType,
+                    attributes: {},
+                    confidence: 0.8,
+                };
+
+                const existing = entityFacets.get(entityName) || [];
+                existing.push(facet);
+                entityFacets.set(entityName, existing);
+            }
+        }
+
+        return entityFacets;
+    }
+
+    /**
+     * Generate topic correlations from knowledge
+     */
+    private async generateTopicCorrelations(
+        knowledge: kpLib.KnowledgeResponse,
+        extractedContent: any,
+    ): Promise<TopicCorrelation[]> {
+        const correlations: TopicCorrelation[] = [];
+
+        // Process topics from knowledge response
+        if (knowledge.topics && knowledge.topics.length > 0) {
+            for (let i = 0; i < knowledge.topics.length; i++) {
+                const topic = knowledge.topics[i];
+                const relatedTopics = knowledge.topics
+                    .filter((_, index) => index !== i)
+                    .slice(0, 3);
+
+                correlations.push({
+                    topic: typeof topic === "string" ? topic : String(topic),
+                    relatedTopics: relatedTopics.map((t) =>
+                        typeof t === "string" ? t : String(t),
+                    ),
+                    strength: 0.7,
+                    context: extractedContent.pageContent?.title || "Unknown",
+                });
+            }
+        }
+
+        return correlations;
+    }
+
+    /**
+     * Generate temporal context for extraction
+     */
+    private async generateTemporalContext(
+        extractedContent: any,
+        extractionTimestamp: Date,
+    ): Promise<TemporalContext> {
+        const timeReferences: string[] = [];
+
+        // Extract potential time references from content
+        if (extractedContent.pageContent?.mainContent) {
+            const timeRegex =
+                /\b(\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4}|january|february|march|april|may|june|july|august|september|october|november|december)\b/gi;
+            const matches =
+                extractedContent.pageContent.mainContent.match(timeRegex);
+            if (matches) {
+                timeReferences.push(...matches.slice(0, 5));
+            }
+        }
+
+        return {
+            extractionDate: extractionTimestamp,
+            timeReferences,
+        };
     }
 }
