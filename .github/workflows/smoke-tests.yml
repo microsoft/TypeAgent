@@ -49,7 +49,7 @@ jobs:
       # Users with write access can still run this workflow on a PR from a fork
       # For PRs from the same repo, we allow the workflow to run as normal
       - name: Get User Permission
-        if: ${{ github.event_name == 'pull_request_target'  }}
+        if: ${{ github.event_name == 'pull_request'  }}
         id: checkAccess
         uses: actions-cool/check-user-permission@v2
         with:
