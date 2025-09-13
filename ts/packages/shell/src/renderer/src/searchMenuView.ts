@@ -22,7 +22,7 @@ ipcRenderer.on("search-menu-update", (_event, data) => {
     searchMenuUI.update(data);
 
     const elm = document.body.children[0] as HTMLElement;
-    // 2px border all around.
+    // 2px outline all around.
     ipcRenderer.send("search-menu-size", {
         width: elm.offsetWidth + 4,
         height: elm.offsetHeight + 4,
@@ -32,6 +32,7 @@ ipcRenderer.on("search-menu-update", (_event, data) => {
 ipcRenderer.on("search-menu-close", () => {
     debug("search-menu-close");
     searchMenuUI?.close();
+    searchMenuUI = undefined;
 });
 
 ipcRenderer.on("search-menu-adjust-selection", (_, deltaY) => {

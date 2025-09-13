@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export * from "./chunkingUtils.js";
-
 // Core types and interfaces (keep for external compatibility)
 export {
     ExtractionMode,
@@ -26,7 +24,6 @@ export * from "./tables.js";
 export * from "./websiteMeta.js";
 
 export {
-    AIModelManager,
     BatchProcessor,
     ContentExtractor,
     ExtractionConfig,
@@ -41,4 +38,8 @@ export {
     getEffectiveConfig,
     ActionSummary,
     DetectedAction,
+    EntityFacet,
+    TopicCorrelation,
+    TemporalContext,
+    ExtractionOptions,
 } from "./extraction/index.js";

@@ -88,9 +88,8 @@ export class LocalSearchMenuUI implements SearchMenuUI {
     }
 
     private setPosition(position: SearchMenuPosition) {
-        const height = document.documentElement.offsetHeight;
         this.searchContainer.style.left = `${position.left}px`;
-        this.searchContainer.style.bottom = `${height - position.bottom}px`;
+        this.searchContainer.style.bottom = `${position.bottom}px`;
     }
 
     public adjustSelection(deltaY: number) {

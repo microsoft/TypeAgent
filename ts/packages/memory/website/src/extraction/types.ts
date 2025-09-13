@@ -184,32 +184,65 @@ export interface ExtractionInput {
 }
 
 /**
- * Extraction result interface with compatibility properties
+ * Options for extraction operations
+ */
+export interface ExtractionOptions {
+    processingMode?: "realtime" | "batch";
+    chunkProgressCallback?: (chunkInfo: ChunkProgressInfo) => Promise<void>;
+}
+
+/**
+ * Rich metadata types for unified processing
+ */
+export interface EntityFacet {
+    entityName: string;
+    entityType: string;
+    attributes: Record<string, any>;
+    confidence: number;
+}
+
+export interface TopicCorrelation {
+    topic: string;
+    relatedTopics: string[];
+    strength: number;
+    context: string;
+}
+
+export interface TemporalContext {
+    extractionDate: Date;
+    contentDate?: Date;
+    lastModified?: Date;
+    timeReferences: string[];
+}
+
+/**
+ * Extraction result interface with rich metadata included for all extractions
  */
 export interface ExtractionResult {
     // Content extraction results (varies by mode)
     pageContent?: PageContent;
     metaTags?: MetaTagCollection;
     detectedActions?: DetectedAction[]; // Only when mode supports actions
+    structuredData?: StructuredDataCollection; // Structured data extracted from page
+    actionSummary?: ActionSummary; // Summary of detected actions
 
     // Knowledge extraction results (automatic based on mode)
     knowledge: kpLib.KnowledgeResponse; // Always present, method varies by mode
     qualityMetrics: ExtractionQualityMetrics;
 
+    // Rich metadata fields (always included for all extractions)
+    entityFacets: Map<string, EntityFacet[]>;
+    topicCorrelations: TopicCorrelation[];
+    temporalContext: TemporalContext;
+
     // Processing metadata
     extractionMode: ExtractionMode;
     aiProcessingUsed: boolean; // True for content/actions/full
+    processingMode: "realtime" | "batch";
+    extractionTimestamp: Date;
     source: string;
     timestamp: string;
     processingTime: number;
-
-    // Compatibility properties for migration from EnhancedContent
-    success: boolean; // Always true for successful extractions
-    error?: string; // Error message if extraction failed
-    extractionTime: number; // Alias for processingTime
-    actions?: ActionInfo[]; // Computed from detectedActions for legacy compatibility
-    structuredData?: StructuredDataCollection; // Structured data extracted from page
-    actionSummary?: ActionSummary; // Summary of detected actions
 }
 
 /**

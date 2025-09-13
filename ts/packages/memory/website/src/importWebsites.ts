@@ -538,7 +538,9 @@ async function enhanceWithContent(
                     timestamp: new Date().toISOString(),
                 };
 
-                const result = await extractor.extract(input, extractionMode);
+                const result = await extractor.extract(input, extractionMode, {
+                    processingMode: "batch", // Storage pipeline uses batch mode
+                });
 
                 // Create enhanced website with content and knowledge
                 return createWebsiteWithKnowledge(website, result);
@@ -624,8 +626,19 @@ function createWebsiteWithKnowledge(
         enhancedVisitInfo.metaTags = extractionResult.metaTags;
     if (extractionResult.structuredData)
         enhancedVisitInfo.structuredData = extractionResult.structuredData;
-    if (extractionResult.actions)
-        enhancedVisitInfo.extractedActions = extractionResult.actions;
+    // Compute actions from detectedActions (replacing legacy .actions property)
+    if (
+        extractionResult.detectedActions &&
+        extractionResult.detectedActions.length > 0
+    ) {
+        enhancedVisitInfo.extractedActions =
+            extractionResult.detectedActions.map((da: any) => ({
+                type: da.actionType as "form" | "button" | "link",
+                action: da.selector,
+                method: da.method,
+                text: da.description,
+            }));
+    }
 
     // Action detection data
     if (extractionResult.detectedActions)
@@ -647,14 +660,17 @@ function createWebsiteWithKnowledge(
         finalKnowledge = meta.getKnowledge();
     }
 
-    // Create website with enhanced knowledge
-    const enhancedWebsite = new Website(
+    // TODO: Utilize rich metadata from unified processing
+    // extractionResult.entityFacets, topicCorrelations, temporalContext
+    // These could be stored in WebsiteMeta or used to enhance finalKnowledge
+
+    // Create website with enhanced knowledge and proper chunking
+    const enhancedWebsite = Website.createWithProcessedContent(
         meta,
         mainText,
         [],
         finalKnowledge,
         undefined,
-        true,
     );
 
     return enhancedWebsite;

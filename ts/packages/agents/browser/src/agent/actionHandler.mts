@@ -632,7 +632,7 @@ async function updateBrowserContext(
 
             initializeWebSocketBridge(context);
             initializeImportWebSocketHandler(context);
-            console.log("Import progress event system initialized");
+            debug("Import progress event system initialized");
         }
 
         // rehydrate cached settings

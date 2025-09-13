@@ -64,6 +64,11 @@ function setupResizeHandler(mainWindow: BrowserWindow, handler: () => void) {
 }
 
 type BottomAlignedPosition = { left: number; bottom: number };
+type OverlayData = BottomAlignedPosition & {
+    width: number;
+    height: number;
+};
+
 export class ShellWindow {
     public static getInstance(): ShellWindow | undefined {
         return this.instance;
@@ -74,7 +79,7 @@ export class ShellWindow {
     public readonly chatView: WebContentsView;
     private readonly overlayWebContentsViews: Map<
         WebContentsView,
-        BottomAlignedPosition
+        OverlayData
     > = new Map();
 
     private verticalLayout: boolean;
@@ -106,34 +111,67 @@ export class ShellWindow {
         return activeBrowserView.webContentsView;
     }
 
+    private updateOverlayWebContentsViewBounds() {
+        for (const [view, data] of this.overlayWebContentsViews.entries()) {
+            this.setOverlayWebContentsViewBounds(view, data);
+        }
+    }
+
     private setOverlayWebContentsViewBounds(
         view: WebContentsView,
-        position: BottomAlignedPosition,
+        data: OverlayData,
     ) {
         const chatBounds = this.chatView.getBounds();
-        const current = view.getBounds();
         const zoomFactor = this.chatView.webContents.zoomFactor;
-        const left = chatBounds.x + position.left * zoomFactor;
-        const bottom = chatBounds.y + position.bottom * zoomFactor;
-
+        const left = chatBounds.x + data.left * zoomFactor;
+        const bottom =
+            chatBounds.y + chatBounds.height - data.bottom * zoomFactor;
+        const width = data.width * zoomFactor;
+        const height = data.height * zoomFactor;
         const newBounds = {
             x: left,
-            y: bottom - current.height,
-            width: current.width,
-            height: current.height,
+            y: bottom - height,
+            width,
+            height,
         };
-        view.webContents.setZoomFactor(zoomFactor);
         view.setBounds(newBounds);
+        view.webContents.setZoomFactor(zoomFactor);
     }
 
     public updateOverlayWebContentsView(
         view: WebContentsView,
-        position?: BottomAlignedPosition,
+        update?: Partial<OverlayData>,
     ) {
-        if (position) {
-            this.overlayWebContentsViews.set(view, position);
-            this.mainWindow.contentView.addChildView(view);
-            this.setOverlayWebContentsViewBounds(view, position);
+        if (update) {
+            let data = this.overlayWebContentsViews.get(view);
+            if (data === undefined) {
+                this.mainWindow.contentView.addChildView(view);
+                const bounds = view.getBounds();
+                data = {
+                    left: 0,
+                    bottom: 0,
+                    width: bounds.width,
+                    height: bounds.height,
+                };
+
+                this.overlayWebContentsViews.set(view, data);
+            }
+
+            if (update.left) {
+                data.left = update.left;
+            }
+            if (update.bottom) {
+                data.bottom = update.bottom;
+            }
+
+            if (update.width) {
+                data.width = update.width;
+            }
+            if (update.height) {
+                data.height = update.height;
+            }
+
+            this.setOverlayWebContentsViewBounds(view, data);
         } else {
             this.overlayWebContentsViews.delete(view);
             this.mainWindow.contentView.removeChildView(view);
@@ -212,6 +250,7 @@ export class ShellWindow {
 
         const chatView = createChatView(state);
         this.setupZoomHandlers(chatView.webContents, (zoomFactor) => {
+            this.updateOverlayWebContentsViewBounds();
             this.updateZoomInTitle(zoomFactor);
         });
 
@@ -600,9 +639,7 @@ export class ShellWindow {
         debugShellWindow(`Chat view bounds: ${JSON.stringify(chatViewBounds)}`);
         this.chatView.setBounds(chatViewBounds);
 
-        for (const [view, position] of this.overlayWebContentsViews.entries()) {
-            this.setOverlayWebContentsViewBounds(view, position);
-        }
+        this.updateOverlayWebContentsViewBounds();
 
         const dividerLayout = {
             verticalLayout,
@@ -1041,10 +1078,10 @@ export class ShellWindow {
         onZoomChanged?: (zoomFactor: number) => void,
     ) {
         // limit zoom factor to reasonable numbers
-        if (zoomFactor < 0.1) {
-            zoomFactor = 0.1;
-        } else if (zoomFactor > 10) {
-            zoomFactor = 10;
+        if (zoomFactor < 0.25) {
+            zoomFactor = 0.25;
+        } else if (zoomFactor > 5) {
+            zoomFactor = 5;
         }
 
         webContents.zoomFactor = zoomFactor;

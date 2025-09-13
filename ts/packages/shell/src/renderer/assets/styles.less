@@ -11,6 +11,7 @@ body {
   height: 100%;
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   font-size: 14px;
+  overflow: hidden;
 }
 
 .dark-mode {
@@ -22,7 +23,6 @@ body {
 
   .chat-container {
     background-color: #222;
-
     .scroll_enabled {
       background-color: #222;
     }
@@ -195,6 +195,8 @@ body {
   display: flex;
   flex-direction: column;
   height: 100%;
+  bottom: 0px;
+  position: absolute;
   background-color: @chat-bg;
 }
 

@@ -9,7 +9,7 @@ import {
     StructuredDataCollection,
     ActionInfo,
 } from "./extraction/types.js";
-import { websiteToTextChunks } from "./chunkingUtils.js";
+import { splitLargeTextIntoChunks } from "knowledge-processor";
 import { DetectedAction, ActionSummary } from "./extraction/types.js";
 
 export interface WebsiteVisitInfo {
@@ -562,21 +562,41 @@ export class Website implements kp.IMessage {
         this.deletionInfo = deletionInfo;
         this.timestamp = metadata.visitDate || metadata.bookmarkDate;
 
-        if (isNew) {
-            const chunks = websiteToTextChunks(
-                pageContent,
-                metadata.title,
-                metadata.url,
-                2000, // Default chunk size, can be made configurable
-            );
-            pageContent = chunks;
-        }
-
         if (Array.isArray(pageContent)) {
             this.textChunks = pageContent;
         } else {
             this.textChunks = [pageContent];
         }
+    }
+
+    static createWithProcessedContent(
+        metadata: WebsiteMeta,
+        processedContent: string,
+        tags: string[] = [],
+        knowledge?: kpLib.KnowledgeResponse | undefined,
+        deletionInfo?: kp.DeletionInfo | undefined,
+    ): Website {
+        let content = "";
+        if (metadata.title) {
+            content += `Title: ${metadata.title}\n`;
+        }
+        if (metadata.url) {
+            content += `URL: ${metadata.url}\n\n`;
+        }
+        content += processedContent;
+
+        const chunks = Array.from(
+            splitLargeTextIntoChunks(content, 2000, true),
+        );
+
+        return new Website(
+            metadata,
+            chunks,
+            tags,
+            knowledge,
+            deletionInfo,
+            false,
+        );
     }
 
     public getKnowledge(): kpLib.KnowledgeResponse | undefined {
@@ -606,10 +626,25 @@ export function importWebsiteVisit(
 ): Website {
     const meta = new WebsiteMeta(visitInfo);
     const knowledge = meta.getKnowledge(); // Extract knowledge from metadata
-    return new Website(
-        meta,
-        pageContent || visitInfo.description || "",
-        [],
-        knowledge,
-    );
+
+    const content = pageContent || visitInfo.description || "";
+
+    // For bookmarks and basic imports, add title/URL formatting like the old websiteToTextChunks behavior
+    if (!pageContent) {
+        let formattedContent = "";
+        if (visitInfo.title) {
+            formattedContent += `Title: ${visitInfo.title}\n`;
+        }
+        if (visitInfo.url) {
+            formattedContent += `URL: ${visitInfo.url}\n\n`;
+        }
+        formattedContent += content;
+
+        const chunks = Array.from(
+            splitLargeTextIntoChunks(formattedContent, 2000, true),
+        );
+        return new Website(meta, chunks, [], knowledge, undefined, false);
+    }
+
+    return new Website(meta, content, [], knowledge);
 }

@@ -84,7 +84,6 @@ export class IndexingKnowledgeExtractor {
 
             // Update processing time
             result.processingTime = Date.now() - startTime;
-            result.extractionTime = result.processingTime;
 
             debug(
                 `Knowledge extraction completed in ${result.processingTime}ms`,
@@ -92,27 +91,7 @@ export class IndexingKnowledgeExtractor {
             return result;
         } catch (error) {
             console.error("Knowledge extraction failed:", error);
-
-            // Return basic result with error information
-            return {
-                success: false,
-                knowledge: {} as any,
-                extractionMode: mode,
-                aiProcessingUsed: false,
-                source: content.url || "unknown",
-                timestamp: new Date().toISOString(),
-                processingTime: Date.now() - startTime,
-                extractionTime: Date.now() - startTime,
-                error: error instanceof Error ? error.message : "Unknown error",
-                qualityMetrics: {
-                    confidence: 0,
-                    entityCount: 0,
-                    topicCount: 0,
-                    actionCount: 0,
-                    extractionTime: Date.now() - startTime,
-                    knowledgeStrategy: "basic" as const,
-                },
-            };
+            throw error;
         }
     }
 

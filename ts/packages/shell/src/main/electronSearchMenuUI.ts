@@ -132,14 +132,6 @@ export function initializeSearchMenuUI(shellWindow: ShellWindow) {
         }
         const view = await searchMenuViewP;
         debug(`search-menu-size: ${id} ${JSON.stringify(size)}`);
-        const bounds = view.getBounds();
-        const zoomFactor = view.webContents.getZoomFactor();
-        const bottom = bounds.y + bounds.height;
-        view.setBounds({
-            x: bounds.x,
-            y: bottom - size.height * zoomFactor,
-            width: size.width * zoomFactor,
-            height: size.height * zoomFactor,
-        });
+        shellWindow.updateOverlayWebContentsView(view, size);
     });
 }

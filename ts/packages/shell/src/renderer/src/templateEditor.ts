@@ -481,7 +481,7 @@ class FieldScalar extends FieldBase {
             return undefined;
         }
         const rect = this.editUI.div.getBoundingClientRect();
-        return { left: rect.left, bottom: rect.top };
+        return { left: rect.left, bottom: window.innerHeight - rect.top };
     }
 
     private createSearchMenu(
