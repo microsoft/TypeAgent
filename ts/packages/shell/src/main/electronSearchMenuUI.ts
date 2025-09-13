@@ -63,10 +63,7 @@ export function initializeSearchMenuUI(shellWindow: ShellWindow) {
             debug(`search-menu-update: ${id} ${JSON.stringify(data)}`);
             searchMenuIds.set(searchMenuView.webContents, id);
             if (data.position) {
-                shellWindow.updateOverlayWebContentsView(
-                    searchMenuView,
-                    data.position,
-                );
+                shellWindow.updateOverlay(searchMenuView, data.position);
                 data.position = undefined;
             }
             if (data.prefix !== undefined || data.items !== undefined) {
@@ -105,7 +102,7 @@ export function initializeSearchMenuUI(shellWindow: ShellWindow) {
         (id: number, searchMenuView: WebContentsView) => {
             searchMenuUIs.delete(id);
             // Update with no position to remove
-            shellWindow.updateOverlayWebContentsView(searchMenuView);
+            shellWindow.updateOverlay(searchMenuView);
         },
     );
 
@@ -132,6 +129,6 @@ export function initializeSearchMenuUI(shellWindow: ShellWindow) {
         }
         const view = await searchMenuViewP;
         debug(`search-menu-size: ${id} ${JSON.stringify(size)}`);
-        shellWindow.updateOverlayWebContentsView(view, size);
+        shellWindow.updateOverlay(view, size);
     });
 }
