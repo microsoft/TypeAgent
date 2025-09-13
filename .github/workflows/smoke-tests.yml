@@ -43,120 +43,120 @@ jobs:
 
     steps:  
 
-    # The following two steps (permissions checks) ensure that only users with write access can run this workflow on a PR (except the merge queue bot)
-    # For PRs from forks we check the permissions of the user that triggered the workflow (github.triggering_actor)
-    # This means that if a user without write access opens a PR from a fork, they cannot run this workflow
-    # Users with write access can still run this workflow on a PR from a fork
-    # For PRs from the same repo, we allow the workflow to run as normal
-    - name: Get User Permission
-      if: ${{ github.event_name == 'pull_request_target' && github.triggering_actor != 'github-merge-queue[bot]' }}
-      id: checkAccess
-      uses: actions-cool/check-user-permission@v2
-      with:
-        require: write
-        username: ${{ github.triggering_actor }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    - name: Check User Permission
-      if: ${{ github.event_name == 'pull_request_target' && github.triggering_actor != 'github-merge-queue[bot]' && steps.checkAccess.outputs.require-result == 'false' }}
-      run: |
-        echo "${{ github.triggering_actor }} does not have permissions on this repo."
-        echo "Current permission level is ${{ steps.checkAccess.outputs.user-permission }}"
-        echo "Job originally triggered by ${{ github.actor }}"
-        exit 1
+      # The following two steps (permissions checks) ensure that only users with write access can run this workflow on a PR (except the merge queue bot)
+      # For PRs from forks we check the permissions of the user that triggered the workflow (github.triggering_actor)
+      # This means that if a user without write access opens a PR from a fork, they cannot run this workflow
+      # Users with write access can still run this workflow on a PR from a fork
+      # For PRs from the same repo, we allow the workflow to run as normal
+      - name: Get User Permission
+        if: ${{ github.event_name == 'pull_request_target'  }}
+        id: checkAccess
+        uses: actions-cool/check-user-permission@v2
+        with:
+          require: write
+          username: ${{ github.triggering_actor }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check User Permission
+        if: ${{ github.event_name == 'pull_request_target' && github.triggering_actor != 'github-merge-queue[bot]' && steps.checkAccess.outputs.require-result == 'false' }}
+        run: |
+          echo "${{ github.triggering_actor }} does not have permissions on this repo."
+          echo "Current permission level is ${{ steps.checkAccess.outputs.user-permission }}"
+          echo "Job originally triggered by ${{ github.actor }}"
+          exit 1
 
-    - if: runner.os == 'Linux'
-      run: |
-        sudo apt install libsecret-1-0
+      - if: runner.os == 'Linux'
+        run: |
+          sudo apt install libsecret-1-0
 
-    - name: Setup Git LF
-      run: |
-        git config --global core.autocrlf false
+      - name: Setup Git LF
+        run: |
+          git config --global core.autocrlf false
 
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        ref: ${{ github.event.pull_request.head.sha }}
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
 
-    - uses: dorny/paths-filter@v3
-      id: filter
-      continue-on-error: true
-      with:
-        filters: |
-          ts:
-            - "ts/**"
-            - ".github/workflows/build-ts.yml"
+      - uses: dorny/paths-filter@v3
+        id: filter
+        continue-on-error: true
+        with:
+          filters: |
+            ts:
+              - "ts/**"
+              - ".github/workflows/build-ts.yml"
 
-    - uses: pnpm/action-setup@v4
-      name: Install pnpm
-      with:
-        package_json_file: ts/package.json
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          package_json_file: ts/package.json
 
-    - uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.version }}
-        cache: "pnpm"
-        cache-dependency-path: ts/pnpm-lock.yaml
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.version }}
+          cache: "pnpm"
+          cache-dependency-path: ts/pnpm-lock.yaml
 
-    - name: Install dependencies
-      working-directory: ts
-      run: |
-        pnpm install --frozen-lockfile --strict-peer-dependencies
+      - name: Install dependencies
+        working-directory: ts
+        run: |
+          pnpm install --frozen-lockfile --strict-peer-dependencies
 
-    - name: Install Playwright Browsers
-      run: pnpm exec playwright install --with-deps
-      working-directory: ts/packages/shell
+      - name: Install Playwright Browsers
+        run: pnpm exec playwright install --with-deps
+        working-directory: ts/packages/shell
 
-    - name: Build
-      working-directory: ts
-      run: |
-        npm run build
+      - name: Build
+        working-directory: ts
+        run: |
+          npm run build
 
-    - name: Login to Azure
-      uses: azure/login@v2.2.0
-      with:
-        client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_5B0D2D6BA40F4710B45721D2112356DD }}
-        tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_39BB903136F14B6EAD8F53A8AB78E3AA }}
-        subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_F36C1F2C4B2C49CA8DD5C52FAB98FA30 }}
+      - name: Login to Azure
+        uses: azure/login@v2.2.0
+        with:
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_5B0D2D6BA40F4710B45721D2112356DD }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_39BB903136F14B6EAD8F53A8AB78E3AA }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_F36C1F2C4B2C49CA8DD5C52FAB98FA30 }}
 
-    - name: Get Keys
-      run: |
-        node tools/scripts/getKeys.mjs --vault build-pipeline-kv
-      working-directory: ts
+      - name: Get Keys
+        run: |
+          node tools/scripts/getKeys.mjs --vault build-pipeline-kv
+        working-directory: ts
 
-    - name: Test CLI - smoke
-      run: |
-        npm run start:dev 'prompt' 'why is the sky blue'
-      working-directory: ts/packages/cli
-      continue-on-error: true
+      - name: Test CLI - smoke
+        run: |
+          npm run start:dev 'prompt' 'why is the sky blue'
+        working-directory: ts/packages/cli
+        continue-on-error: true
 
-    - name: Shell Tests - smoke (windows)
-      if: ${{ runner.os == 'windows' }}
-      timeout-minutes: 60
-      run: |
-        npm run shell:smoke
-      working-directory: ts/packages/shell
-      continue-on-error: true
+      - name: Shell Tests - smoke (windows)
+        if: ${{ runner.os == 'windows' }}
+        timeout-minutes: 60
+        run: |
+          npm run shell:smoke
+        working-directory: ts/packages/shell
+        continue-on-error: true
 
-    - name: Shell Tests - smoke (linux)
-      if: ${{ runner.os == 'Linux' }}
-      timeout-minutes: 60
-      run: |
-        Xvfb :99 -screen 0 1600x1200x24 & export DISPLAY=:99
-        npm run shell:smoke
-      working-directory: ts/packages/shell
-      continue-on-error: true
+      - name: Shell Tests - smoke (linux)
+        if: ${{ runner.os == 'Linux' }}
+        timeout-minutes: 60
+        run: |
+          Xvfb :99 -screen 0 1600x1200x24 & export DISPLAY=:99
+          npm run shell:smoke
+        working-directory: ts/packages/shell
+        continue-on-error: true
 
-    - name: Live Tests
-      if: ${{ runner.os == 'windows' }}
-      timeout-minutes: 60
-      run: |
-        npm run test:live
-      working-directory: ts
-      continue-on-error: true
+      - name: Live Tests
+        if: ${{ runner.os == 'windows' }}
+        timeout-minutes: 60
+        run: |
+          npm run test:live
+        working-directory: ts
+        continue-on-error: true
 
-    - name: Clean up Keys
-      run: |
-        rm ./.env
-      working-directory: ts
-      if: always()
+      - name: Clean up Keys
+        run: |
+          rm ./.env
+        working-directory: ts
+        if: always()
