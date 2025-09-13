@@ -117,9 +117,15 @@ export class BrowserViewManager {
             loadLocalWebContents(webContentsView.webContents, "newTab.html");
         } else {
             if (options.waitForPageLoad) {
-                await webContentsView.webContents.loadURL(options.url);
+                await webContentsView.webContents.loadURL(options.url).catch((err) => {
+                    debug(`Error loading URL ${webContentsView.webContents.getURL()} in tab ${tabId}:`, err);
+                    webContentsView.webContents.executeJavaScript(`document.body.innerHTML = "There was an error loading '${webContentsView.webContents.getURL()}'.<br />: ${err}"`);
+                });
             } else {
-                webContentsView.webContents.loadURL(options.url);
+                webContentsView.webContents.loadURL(options.url).catch((err) => {
+                    debug(`Error loading URL ${webContentsView.webContents.getURL()} in tab ${tabId}:`, err);
+                    webContentsView.webContents.executeJavaScript(`document.body.innerHTML = "There was an error loading '${webContentsView.webContents.getURL()}'.<br />: ${err}"`);
+                });
             }
         }
 

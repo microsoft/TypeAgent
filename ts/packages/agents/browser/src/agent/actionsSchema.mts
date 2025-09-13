@@ -25,16 +25,21 @@ export type BrowserActions =
     | ChangeSearchProvider
     | SearchImageAction;
 
-export type WebPage = string;
+    
 export type WebSearchResult = string;
-export type BrowserEntities = WebPage | WebSearchResult;
+export type BrowserEntities = WebPageMoniker | WebSearchResult;
+
+// A web site name OR search terms for a specific web page.
+// Do NOT convert search terms into a URL.
+// If the user supplies a protocol with any URL (https://, ftp://, typeagent-browser://, etc.), use it as is.
+// Fully qualified domain names provided by the user are assumed to have HTTP as the protocol.
+export type WebPageMoniker = string;
 
 // show/open/display web page in the current view.
 export type OpenWebPage = {
     actionName: "openWebPage";
     parameters: {
         // Name/Description/search terms of the site to open
-        // Do NOT convert user requested site into URL.
         site:
             | "paleobiodb"
             | "crossword"
@@ -46,7 +51,7 @@ export type OpenWebPage = {
             | "annotationsLibrary"
             | "knowledgeLibrary"
             | "macrosLibrary"
-            | WebPage; // If the user didn't provide a protocol, assume http otherwise, preserve the protocol the user supplied.
+            | WebPageMoniker;
         // Enum indicating if the page to open in the new tab or the current tab.
         // Default value is "current"
         tab: "new" | "current" | "existing";
