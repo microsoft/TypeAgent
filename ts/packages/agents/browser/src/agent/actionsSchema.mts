@@ -25,7 +25,6 @@ export type BrowserActions =
     | ChangeSearchProvider
     | SearchImageAction;
 
-    
 export type WebSearchResult = string;
 export type BrowserEntities = WebPageMoniker | WebSearchResult;
 
