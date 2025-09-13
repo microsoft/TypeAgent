@@ -29,5 +29,71 @@
         "tab": "current"
       }
     }
-  }
+  },
+  {
+    "request": "Open http://www.jsbach.net",
+    "expected": {
+      "schemaName": "browser",
+      "actionName": "openWebPage",
+      "parameters": {
+        "site": "http://www.jsbach.net",
+        "tab": "current"
+      }
+    }
+  },
+  {
+    "request": "Open https://www.jsbach.net",
+    "expected": {
+      "schemaName": "browser",
+      "actionName": "openWebPage",
+      "parameters": {
+        "site": "https://www.jsbach.net",
+        "tab": "current"
+      }
+    }
+  },
+    {
+    "request": "Open ftp://www.jsbach.net",
+    "expected": {
+      "schemaName": "browser",
+      "actionName": "openWebPage",
+      "parameters": {
+        "site": "ftp://www.jsbach.net",
+        "tab": "current"
+      }
+    }
+  }, 
+  {
+    "request": "Open jsbach.net",
+    "expected": {
+      "schemaName": "browser",
+      "actionName": "openWebPage",
+      "parameters": {
+        "site": "http://jsbach.net",
+        "tab": "current"
+      }
+    }
+  }, 
+  {
+    "request": "Open typeagent-browser://views/knowledgeLibrary.html",
+    "expected": {
+      "schemaName": "browser",
+      "actionName": "openWebPage",
+      "parameters": {
+        "site": "typeagent-browser://views/knowledgeLibrary.html",
+        "tab": "current"
+      }
+    }
+  },
+{
+    "request": "Open paleobiodb",
+    "expected": {
+      "schemaName": "browser",
+      "actionName": "openWebPage",
+      "parameters": {
+        "site": "paleobiodb",
+        "tab": "current"
+      }
+    }
+  }  
 ]
