@@ -115,6 +115,10 @@ export class BrowserViewManager {
             },
         );
 
+        webContentsView.webContents.on("focus", () => {
+            this.shellWindow.setOverlayVisibility(false);
+        });
+
         // Load the URL or show new tab page
         if (options.url === "about:blank") {
             // Load the new tab HTML file
