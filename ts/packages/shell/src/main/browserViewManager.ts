@@ -102,14 +102,18 @@ export class BrowserViewManager {
         this.shellWindow.mainWindow.contentView.addChildView(webContentsView);
 
         // wire up loaded event handlers for the webContents so we can show errors
-        webContentsView.webContents.on("did-fail-load", (_, errorCode, errorDesc) => {
-            debug(
-                `Tab ${tabId} failed to load URL ${options.url}: [${errorCode}] ${errorDesc}`,
-            );
+        webContentsView.webContents.on(
+            "did-fail-load",
+            (_, errorCode, errorDesc) => {
+                debug(
+                    `Tab ${tabId} failed to load URL ${options.url}: [${errorCode}] ${errorDesc}`,
+                );
 
-            webContentsView.webContents.executeJavaScript(`document.body.innerHTML = "There was an error loading '${options.url}'.<br />
+                webContentsView.webContents
+                    .executeJavaScript(`document.body.innerHTML = "There was an error loading '${options.url}'.<br />
                 Error Details: <br />${errorCode} - ${errorDesc}"`);
-        });
+            },
+        );
 
         // Load the URL or show new tab page
         if (options.url === "about:blank") {
@@ -117,15 +121,29 @@ export class BrowserViewManager {
             loadLocalWebContents(webContentsView.webContents, "newTab.html");
         } else {
             if (options.waitForPageLoad) {
-                await webContentsView.webContents.loadURL(options.url).catch((err) => {
-                    debug(`Error loading URL ${webContentsView.webContents.getURL()} in tab ${tabId}:`, err);
-                    webContentsView.webContents.executeJavaScript(`document.body.innerHTML = "There was an error loading '${webContentsView.webContents.getURL()}'.<br />: ${err}"`);
-                });
+                await webContentsView.webContents
+                    .loadURL(options.url)
+                    .catch((err) => {
+                        debug(
+                            `Error loading URL ${webContentsView.webContents.getURL()} in tab ${tabId}:`,
+                            err,
+                        );
+                        webContentsView.webContents.executeJavaScript(
+                            `document.body.innerHTML = "There was an error loading '${webContentsView.webContents.getURL()}'.<br />: ${err}"`,
+                        );
+                    });
             } else {
-                webContentsView.webContents.loadURL(options.url).catch((err) => {
-                    debug(`Error loading URL ${webContentsView.webContents.getURL()} in tab ${tabId}:`, err);
-                    webContentsView.webContents.executeJavaScript(`document.body.innerHTML = "There was an error loading '${webContentsView.webContents.getURL()}'.<br />: ${err}"`);
-                });
+                webContentsView.webContents
+                    .loadURL(options.url)
+                    .catch((err) => {
+                        debug(
+                            `Error loading URL ${webContentsView.webContents.getURL()} in tab ${tabId}:`,
+                            err,
+                        );
+                        webContentsView.webContents.executeJavaScript(
+                            `document.body.innerHTML = "There was an error loading '${webContentsView.webContents.getURL()}'.<br />: ${err}"`,
+                        );
+                    });
             }
         }
 
