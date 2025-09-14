@@ -4,13 +4,14 @@
 """Tests for SQLite index implementations with real embeddings."""
 
 import sqlite3
-import tempfile
-import os
 from typing import Generator
+
 import pytest
 
 from typeagent.aitools.embeddings import AsyncEmbeddingModel
 from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
+
+from typeagent.knowpro.convsettings import MessageTextIndexSettings
 from typeagent.knowpro import interfaces
 from typeagent.knowpro.interfaces import (
     SemanticRef,
@@ -19,17 +20,17 @@ from typeagent.knowpro.interfaces import (
     Topic,
     Term,
 )
-from typeagent.storage.sqlite.semrefindex import SqliteTermToSemanticRefIndex
+
+from typeagent.storage.sqlite.messageindex import SqliteMessageTextIndex
 from typeagent.storage.sqlite.propindex import SqlitePropertyIndex
-from typeagent.storage.sqlite.timestampindex import SqliteTimestampToTextRangeIndex
 from typeagent.storage.sqlite.reltermsindex import (
     SqliteRelatedTermsAliases,
     SqliteRelatedTermsFuzzy,
     SqliteRelatedTermsIndex,
 )
 from typeagent.storage.sqlite.schema import init_db_schema
-from typeagent.storage.sqlite.messageindex import SqliteMessageTextIndex
-from typeagent.knowpro.convsettings import MessageTextIndexSettings
+from typeagent.storage.sqlite.semrefindex import SqliteTermToSemanticRefIndex
+from typeagent.storage.sqlite.timestampindex import SqliteTimestampToTextRangeIndex
 
 from fixtures import needs_auth, embedding_model, temp_db_path
 
@@ -470,19 +471,24 @@ class TestSqliteIndexesEdgeCases:
     async def test_term_index_edge_cases(self, sqlite_db: sqlite3.Connection):
         """Test edge cases in term index."""
         index = SqliteTermToSemanticRefIndex(sqlite_db)
+        assert await index.size() == 0
 
         # Test with None/empty lookups
         results = await index.lookup_term("")
         assert results == []
+        assert await index.size() == 0
 
         # Test removing terms
         await index.add_term("remove_test", 1)
+        assert await index.size() == 1
         await index.remove_term("remove_test", 1)
         results = await index.lookup_term("remove_test")
         assert results == []
+        assert await index.size() == 0
 
         # Test clearing
         await index.add_term("clear_test", 2)
+        assert await index.size() == 1
         await index.clear()
         assert await index.size() == 0
 
@@ -497,6 +503,9 @@ class TestSqliteIndexesEdgeCases:
 
         # Test removal operations
         await index.add_property("test_prop", "test_value", 1)
+        results = await index.lookup_property("test_prop", "test_value")
+        assert results is not None
+        assert len(results) == 1
         await index.remove_property("test_prop", 1)
         results = await index.lookup_property("test_prop", "test_value")
         assert results is None
@@ -505,7 +514,6 @@ class TestSqliteIndexesEdgeCases:
         await index.add_property("prop1", "val1", 2)
         await index.add_property("prop2", "val2", 2)
         await index.remove_all_for_semref(2)
-
         results1 = await index.lookup_property("prop1", "val1")
         results2 = await index.lookup_property("prop2", "val2")
         assert results1 is None
