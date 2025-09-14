@@ -146,10 +146,11 @@ type ShreddedMessage = tuple[
     str | None, str | None, str | None, str | None, str | None, str | None
 ]
 type ShreddedSemanticRef = tuple[int, str, str, str]
+
 type ShreddedMessageText = tuple[int, int, str, bytes | None]
 type ShreddedPropertyIndex = tuple[str, str, float, int]
 type ShreddedRelatedTermsAlias = tuple[str, str]
-type ShreddedRelatedTermsFuzzy = tuple[str, str, float, bytes | None, bytes | None]
+type ShreddedRelatedTermsFuzzy = tuple[str, float, bytes]
 
 
 @dataclass
