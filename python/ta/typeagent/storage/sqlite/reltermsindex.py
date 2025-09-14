@@ -5,11 +5,11 @@
 
 import sqlite3
 
-from ...aitools.embeddings import AsyncEmbeddingModel
+from ...aitools.embeddings import AsyncEmbeddingModel, NormalizedEmbeddings
 from ...aitools.vectorbase import TextEmbeddingIndexSettings, VectorBase
 from ...knowpro import interfaces
 
-from .schema import serialize_embedding
+from .schema import serialize_embedding, deserialize_embedding
 
 
 class SqliteRelatedTermsAliases(interfaces.ITermToRelatedTerms):
@@ -76,7 +76,9 @@ class SqliteRelatedTermsAliases(interfaces.ITermToRelatedTerms):
     async def serialize(self) -> interfaces.TermToRelatedTermsData:
         """Serialize the aliases data."""
         cursor = self.db.cursor()
-        cursor.execute("SELECT term, alias FROM RelatedTermsAliases ORDER BY term, alias")
+        cursor.execute(
+            "SELECT term, alias FROM RelatedTermsAliases ORDER BY term, alias"
+        )
 
         # Group by term
         term_to_aliases: dict[str, list[str]] = {}
@@ -139,6 +141,20 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         # Maintain our own list of terms to map ordinals back to keys
         self._terms_list: list[str] = []  # TODO: Use the database instead?
         self._added_terms: set[str] = set()  # TODO: Ditto?
+        # If items exist in the db, copy them into the VectorBase, terms list, and added terms
+        if self._size() > 0:
+            cursor = self.db.cursor()
+            cursor.execute(
+                "SELECT term, term_embedding FROM RelatedTermsFuzzy ORDER BY term"
+            )
+            rows = cursor.fetchall()
+            for term, blob in rows:
+                assert blob is not None, term
+                embedding: NormalizedEmbeddings = deserialize_embedding(blob)
+                # Add to VectorBase at the correct ordinal
+                self._vector_base.add_embedding(term, embedding)
+                self._terms_list.append(term)
+                self._added_terms.add(term)
 
     async def lookup_term(
         self,
@@ -150,7 +166,7 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
 
         # Search for similar terms using VectorBase
         similar_results = await self._vector_base.fuzzy_lookup(
-            text, max_hits=max_hits, min_score=min_score or 0.7
+            text, max_hits=max_hits, min_score=min_score
         )
 
         # Convert VectorBase results to Term objects
@@ -181,6 +197,9 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
         cursor.execute("DELETE FROM RelatedTermsFuzzy")
 
     async def size(self) -> int:
+        return self._size()
+
+    def _size(self) -> int:
         cursor = self.db.cursor()
         cursor.execute("SELECT COUNT(term) FROM RelatedTermsFuzzy")
         return cursor.fetchone()[0]
