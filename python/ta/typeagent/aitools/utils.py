@@ -88,12 +88,14 @@ def load_dotenv() -> None:
             break  # Reached filesystem root ('/').
         cur_dir = parent_dir
 
+    env_path = None
     for path in paths:
         # Filter out non-existing paths.
         if os.path.exists(path):
             env_path = path
             break
-    dotenv.load_dotenv(env_path)
+    if env_path:
+        dotenv.load_dotenv(env_path)
 
 
 def create_translator[T](
