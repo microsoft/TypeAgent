@@ -18,7 +18,7 @@ export default defineConfig({
             rollupOptions: {
                 input: {
                     chatView: resolve(__dirname, "src/preload/chatView.ts"),
-                    main: resolve(__dirname, "./src/preload/main.ts"),
+                    expose: resolve(__dirname, "./src/preload/expose.ts"),
                 },
             },
         },
@@ -30,6 +30,10 @@ export default defineConfig({
                 input: {
                     chatView: resolve(__dirname, "src/renderer/chatView.html"),
                     viewHost: resolve(__dirname, "src/renderer/viewHost.html"),
+                    searchMenuView: resolve(
+                        __dirname,
+                        "src/renderer/searchMenuView.html",
+                    ),
                     newTab: resolve(__dirname, "src/renderer/newTab.html"),
                 },
             },

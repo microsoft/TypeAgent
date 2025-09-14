@@ -234,7 +234,6 @@ export async function sendUserRequestAndWaitForCompletion(
     prompt: string,
     page: Page,
 ): Promise<string> {
-    // TODO: implement
     const locators: Locator[] = await page
         .locator(".chat-message-agent .chat-message-content")
         .all();

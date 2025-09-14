@@ -56,6 +56,7 @@ import {
 import { createInlineBrowserControl } from "./inlineBrowserControl.js";
 import { BrowserControl } from "browser-typeagent/agent/types";
 import { ExtensionStorageManager } from "./extensionStorage.js";
+import { initializeSearchMenuUI } from "./electronSearchMenuUI.js";
 
 debugShell("App name", app.getName());
 debugShell("App version", app.getVersion());
@@ -133,6 +134,7 @@ function createWindow(shellSettings: ShellSettingManager) {
     const shellWindow = new ShellWindow(shellSettings);
 
     initializeSpeech(shellWindow.chatView);
+    initializeSearchMenuUI(shellWindow);
 
     ipcMain.on("views-resized-by-user", (_, newPos: number) => {
         shellWindow.updateContentSize(newPos);

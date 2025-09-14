@@ -11,6 +11,7 @@ body {
   height: 100%;
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   font-size: 14px;
+  overflow: hidden;
 }
 
 .dark-mode {
@@ -22,7 +23,6 @@ body {
 
   .chat-container {
     background-color: #222;
-
     .scroll_enabled {
       background-color: #222;
     }
@@ -195,6 +195,8 @@ body {
   display: flex;
   flex-direction: column;
   height: 100%;
+  bottom: 0px;
+  position: absolute;
   background-color: @chat-bg;
 }
 
@@ -274,11 +276,6 @@ body {
 .chat-message-container-agent {
   .chat-message-container;
   margin-left: 10px;
-}
-
-// Make sure that the popup search menu is on top of other messages
-.chat-message-container-agent:has(.autocomplete-container) {
-  z-index: 100;
 }
 
 .chat-message-container-user {
@@ -586,80 +583,7 @@ table.table-message td {
   }
 }
 
-@import "@fontsource/lato";
-
-.autocomplete-container {
-  box-sizing: border-box;
-  font-family: "Lato", sans-serif;
-  border-radius: 10px;
-  position: absolute;
-  bottom: 100%;
-  z-index: 100;
-  overflow: hidden;
-  outline: 2px solid cornflowerblue;
-  background-color: white;
-}
-
-.autocomplete-container .search-input {
-  width: 100%;
-  height: 32px;
-  padding: 15px 10px;
-  outline: none;
-  border: none;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-  font-family: inherit;
-  font-size: 20px;
-}
-
-.search-legend {
-  padding: 10px;
-  font-size: 12px;
-  min-width: 300px;
-  border-bottom: dotted 1px #ccc;
-}
-.no-bullets {
-  list-style-type: none; /* Remove bullets */
-  margin: 0; /* Remove margins */
-}
-
-.autocomplete-container .completions {
-  padding: 0;
-  margin: 0;
-}
-
-.autocomplete-container .completions li {
-  list-style-type: none;
-  padding: 4px 8px;
-  cursor: pointer;
-}
-
-.autocomplete-container .completions li .search-prefix {
-  font-weight: bold;
-}
-
-.autocomplete-container .completions .completion-selected {
-  background: #3498db;
-  color: white;
-}
-
-.autocomplete-container .completions li .search-symbol {
-  margin-right: 5px;
-}
-
-.autocomplete-scrollbar {
-  background-color: #6495ed25;
-  width: 5px;
-  top: 0;
-  bottom: 0;
-  right: 0;
-  position: absolute;
-}
-
-.autocomplete-scrollbar-indicator {
-  background-color: #0062a466;
-  width: 100%;
-  position: absolute;
-}
+@import "./searchMenuCommon.less";
 
 span.ansi-black-fg {
   color: black;

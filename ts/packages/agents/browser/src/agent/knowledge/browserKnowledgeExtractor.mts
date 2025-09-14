@@ -86,7 +86,9 @@ export class BrowserKnowledgeExtractor {
             }
 
             // Simple delegation - mode automatically determines AI usage and knowledge strategy
-            return await this.contentExtractor.extract(content, mode);
+            return await this.contentExtractor.extract(content, mode, {
+                processingMode: "realtime", // Browser agent uses real-time for user feedback
+            });
         } catch (error) {
             if (
                 error instanceof AIModelRequiredError ||
@@ -112,10 +114,17 @@ export class BrowserKnowledgeExtractor {
     ) {
         try {
             // Get base extraction results from website-memory
+            const options: any = {
+                processingMode: "realtime", // Browser batch uses real-time for progress
+            };
+            if (progressCallback) {
+                options.progressCallback = progressCallback;
+            }
+
             const extractionResults = await this.batchProcessor.processBatch(
                 contents,
                 mode,
-                progressCallback,
+                options,
             );
 
             // Add enhanced action detection for appropriate modes
@@ -140,6 +149,56 @@ export class BrowserKnowledgeExtractor {
             }
             throw error;
         }
+    }
+
+    async extractBatchWithEvents(
+        contents: ExtractionInput[],
+        mode: ExtractionMode = "content",
+        progressListener: (progress: any) => Promise<void>,
+        maxConcurrent?: number,
+    ): Promise<any[]> {
+        return new Promise((resolve, reject) => {
+            const progressQueue: Promise<void>[] = [];
+            let isProcessing = false;
+
+            const handleProgress = async (progress: any) => {
+                const progressPromise = progressListener(progress);
+                progressQueue.push(progressPromise);
+
+                if (!isProcessing) {
+                    isProcessing = true;
+                    while (progressQueue.length > 0) {
+                        const promise = progressQueue.shift()!;
+                        await promise;
+                    }
+                    isProcessing = false;
+                }
+            };
+
+            this.batchProcessor.on("progress", handleProgress);
+
+            this.batchProcessor.on("complete", async (results: any[]) => {
+                await Promise.all(progressQueue);
+                this.batchProcessor.removeAllListeners();
+
+                try {
+                    if (mode === "full") {
+                        await this.enhanceWithActionDetection(
+                            results,
+                            contents,
+                            mode,
+                        );
+                    }
+                    resolve(results);
+                } catch (error) {
+                    reject(error);
+                }
+            });
+
+            this.batchProcessor
+                .processBatchWithEvents(contents, mode)
+                .catch(reject);
+        });
     }
 
     /**

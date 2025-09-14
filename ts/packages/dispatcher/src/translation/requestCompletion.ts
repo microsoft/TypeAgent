@@ -203,6 +203,7 @@ async function collectActionCompletions(
                 name: `property ${propertyName}`,
                 ...paramCompletion,
                 needQuotes: false, // Request completions are partial, no quotes needed
+                sorted: true, // REVIEW: assume property completions are already in desired order by the agent.
             });
         }
     }

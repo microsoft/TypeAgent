@@ -85,7 +85,7 @@ export type TranslateTestEntry = TranslateTestStep | TranslateTestStep[];
 export type TranslateTestFile = TranslateTestEntry[];
 
 const repeat = 5;
-const concurrency = 5;
+const concurrency = 1;
 const embeddingCacheDir = path.join(os.tmpdir(), ".typeagent", "cache");
 export async function defineTranslateTest(
     name: string,
