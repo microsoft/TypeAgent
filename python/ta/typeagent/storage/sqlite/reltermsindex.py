@@ -291,7 +291,7 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
                 """
                 INSERT OR REPLACE INTO RelatedTermsFuzzy
                 (term, term_embedding)
-                VALUES (?,?)
+                VALUES (?, ?)
                 """,
                 insertion_data,
             )
