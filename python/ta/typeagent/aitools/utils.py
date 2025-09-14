@@ -72,11 +72,12 @@ def reindent(text: str) -> str:
 def load_dotenv() -> None:
     """Load environment variables from '<repo_root>/ta/.env'."""
     paths = []
-    # Look for <reporoot>/ts/.env first.
+    # Look for <repo_root>/ts/.env first.
     repo_root = os.popen("git rev-parse --show-toplevel").read().strip()
-    env_path = os.path.join(repo_root, "ts", ".env")
-    if os.path.exists(env_path):
-        paths.append(env_path)
+    if repo_root:
+        env_path = os.path.join(repo_root, "ts", ".env")
+        if os.path.exists(env_path):
+            paths.append(env_path)
 
     # Also look in current directory and going up.
     cur_dir = os.path.abspath(os.getcwd())
