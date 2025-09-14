@@ -193,6 +193,7 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
     async def add_terms(self, texts: list[str]) -> None:
         """Add terms."""
         cursor = self.db.cursor()
+        # TODO: Batch additions to database
         for text in texts:
             if text in self._added_terms:
                 continue
@@ -205,7 +206,7 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
             # Generate embedding for term and store in database
             embedding = await self._vector_base.get_embedding(text)  # Cached
             serialized_embedding = serialize_embedding(embedding)
-            # Insert term as related to itself, only storing term_embedding once
+            # Insert term and embedding
             cursor.execute(
                 """
                 INSERT OR REPLACE INTO RelatedTermsFuzzy
