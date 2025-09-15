@@ -53,6 +53,7 @@ import {
     addUserDataStrings,
     UserData,
     addFullTracks,
+    updatePlaylists,
 } from "./userData.js";
 
 import {
@@ -840,14 +841,22 @@ export async function handleCall(
             return createNotFoundActionResult("tracks", queryString);
         }
         case "listPlaylists": {
-            const playlists = await getPlaylists(clientContext.service);
-            if (playlists) {
-                let html = "<div>Playlists...</div>";
-                for (const playlist of playlists.items) {
-                    console.log(chalk.magentaBright(`${playlist.name}`));
-                    html += `<div>${playlist.name}</div>`;
+            if (clientContext.userData !== undefined) {
+                await updatePlaylists(
+                    clientContext.service,
+                    clientContext.userData.data,
+                );
+                const playlists = clientContext.userData.data.playlists;
+                if (playlists) {
+                    let html = "<div>Playlists...</div>";
+                    for (const playlist of playlists) {
+                        html += `<div>${playlist.name} (<span>${playlist.tracks.total} tracks</span>)</div>`;
+                    }
+                    const actionResult =
+                        createActionResultFromHtmlDisplay(html);
+                    actionResult.historyText = "Listed your playlists";
+                    return actionResult;
                 }
-                return createActionResultFromTextDisplay(html);
             }
             return createErrorActionResult("No playlists found");
         }
