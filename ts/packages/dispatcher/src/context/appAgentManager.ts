@@ -94,7 +94,6 @@ export const alwaysEnabledAgents = {
 export class AppAgentManager implements ActionConfigProvider {
     private readonly agents = new Map<string, AppAgentRecord>();
     private readonly actionConfigs = new Map<string, ActionConfig>();
-    private readonly emojis: Record<string, string> = {};
     private readonly transientAgents: Record<string, boolean | undefined> = {};
     private readonly actionSemanticMap?: ActionSchemaSemanticMap;
     private readonly actionSchemaFileCache: ActionSchemaFileCache;
@@ -223,10 +222,6 @@ export class AppAgentManager implements ActionConfigProvider {
             : undefined;
     }
 
-    public getEmojis(): Readonly<Record<string, string>> {
-        return this.emojis;
-    }
-
     public async semanticSearchActionSchema(
         request: string,
         maxMatches: number = 1,
@@ -278,7 +273,6 @@ export class AppAgentManager implements ActionConfigProvider {
         for (const [schemaName, config] of entries) {
             debug(`Adding action config: ${schemaName}`);
             this.actionConfigs.set(schemaName, config);
-            this.emojis[schemaName] = config.emojiChar;
             if (config.transient) {
                 this.transientAgents[schemaName] = false;
             }
@@ -299,8 +293,6 @@ export class AppAgentManager implements ActionConfigProvider {
                 schemaErrors.set(schemaName, e);
             }
         }
-
-        this.emojis[appAgentName] = manifest.emojiChar;
 
         const port = manifest.localView
             ? this.portBase + this.nextPortIndex++
@@ -349,12 +341,10 @@ export class AppAgentManager implements ActionConfigProvider {
     }
 
     private cleanupAgent(appAgentName: string) {
-        delete this.emojis[appAgentName];
         for (const [schemaName, config] of this.actionConfigs) {
             if (getAppAgentName(schemaName) !== appAgentName) {
                 continue;
             }
-            delete this.emojis[schemaName];
             this.actionConfigs.delete(schemaName);
             this.actionSchemaFileCache.unloadActionSchemaFile(schemaName);
             this.actionSemanticMap?.removeActionSchemaFile(schemaName);

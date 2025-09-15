@@ -278,7 +278,7 @@ function showAgentStatus(
     for (const [name, { schemas, actions, commands }] of entries) {
         const isAppAgentName = getAppAgentName(name) === name;
         const displayName = isAppAgentName ? name : `  ${name}`;
-        const emoji = isAppAgentName ? agents.getEmojis()[name] : "";
+        const emoji = isAppAgentName ? agents.getAppAgentEmoji(name) : "";
         table.push(getRow(emoji, displayName, schemas, actions, commands));
     }
 
@@ -634,16 +634,15 @@ class ConfigPortsCommandHandler implements CommandHandler {
     public async run(context: ActionContext<CommandHandler>) {
         const ports: string[][] = [["", "Agent", "Port"]];
         const cmdContext = context.sessionContext.agentContext as any;
-        const emojis: Record<string, string> = cmdContext.agents.getEmojis();
 
         cmdContext.agents.getAppAgentNames().forEach((name: string) => {
             const port = cmdContext.agents.getLocalHostPort(name);
 
             if (port !== undefined) {
                 ports.push([
-                    emojis[name],
+                    cmdContext.agents.getAppAgentEmoji(name),
                     name,
-                    cmdContext.agents.getLocalHostPort(name)!.toString(),
+                    port.toString(),
                 ]);
             }
         });
