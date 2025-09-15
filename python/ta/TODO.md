@@ -2,6 +2,7 @@
 
 # TODOs for new repo setup
 
+- Merge newer changes from TypeAgent repo
 - Vendor TypeChat (Python version)
 - Update load_dotenv() to look for .env in current directory and going up (*plus* ts/.env)
 
