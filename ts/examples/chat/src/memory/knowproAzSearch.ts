@@ -43,6 +43,7 @@ export async function createKnowproAzureCommands(
     commands.azSemanticIndexIngest = ingestKnowledge;
     commands.azTermIndexEnsure = ensureTermIndex;
     commands.azTermIndexIngest = ingestTermEmbeddings;
+    commands.azScope = azScope;
 
     function azSearchDef(): CommandMetadata {
         return {
@@ -89,6 +90,44 @@ export async function createKnowproAzureCommands(
             queryTerms,
             whenFilter,
         );
+        printQuery(azQuery);
+        context.printer.writeLine(`${results.length} matches`);
+        context.printer.writeJsonList(results, true, true);
+        printQuery(azQuery);
+    }
+
+    function azScopeDef(): CommandMetadata {
+        return {
+            description:
+                "Search Azure semantic-ref-index to find semantic refs in scope",
+            options: {
+                andTerms: argBool("'And' all terms. Default is 'or", false),
+                startDate: arg("Starting at this ISO date"),
+                endDate: arg("Ending at this date ISO date"),
+                ordinalRange: arg("Ordinal range <start>:<end>"),
+            },
+        };
+    }
+    commands.azScope.metadata = azScopeDef();
+    async function azScope(args: string[]) {
+        const commandDef = azScopeDef();
+        let [termArgs, namedArgs] = parseFreeAndNamedArguments(
+            args,
+            commandDef,
+        );
+        const semanticRefIndex = getSemanticRefIndex();
+        let queryTerms: kp.SearchTermGroup = createSearchGroup(
+            termArgs,
+            namedArgs,
+            commandDef,
+            namedArgs.andTerms && namedArgs.andTerms === true ? "and" : "or",
+        );
+        let whenFilter = whenFilterFromNamedArgs(namedArgs);
+        whenFilter ??= {};
+        whenFilter.scopeDefiningTerms = queryTerms;
+        const [azQuery, results] =
+            await semanticRefIndex.getScopeRanges(whenFilter);
+
         printQuery(azQuery);
         context.printer.writeLine(`${results.length} matches`);
         context.printer.writeJsonList(results, true, true);
