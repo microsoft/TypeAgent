@@ -10,6 +10,8 @@ const debug = registerDebug("typeagent:shell:searchMenuView");
 const ipcRenderer: IpcRenderer = (window as any).electron
     .ipcRenderer as IpcRenderer;
 
+export function updateSearchMenuSize() {}
+
 let searchMenuUI: LocalSearchMenuUI | undefined;
 ipcRenderer.on("search-menu-update", (_event, data) => {
     debug(`search-menu-update: ${JSON.stringify(data)}`);
@@ -17,16 +19,20 @@ ipcRenderer.on("search-menu-update", (_event, data) => {
         searchMenuUI = new LocalSearchMenuUI((item) => {
             ipcRenderer.send("search-menu-completion", item);
         }, data.visibleItemsCount);
+
+        // REVIEW: Assume that search menu is the only thing on the page.
+        const elm = document.body.children[0] as HTMLElement;
+        const mutationObserver = new MutationObserver(() => {
+            // 2px outline all around.
+            ipcRenderer.send("search-menu-size", {
+                width: elm.offsetWidth + 4,
+                height: elm.offsetHeight + 4,
+            });
+        });
+        mutationObserver.observe(elm, { childList: true });
     }
 
     searchMenuUI.update(data);
-
-    const elm = document.body.children[0] as HTMLElement;
-    // 2px outline all around.
-    ipcRenderer.send("search-menu-size", {
-        width: elm.offsetWidth + 4,
-        height: elm.offsetHeight + 4,
-    });
 });
 
 ipcRenderer.on("search-menu-close", () => {
