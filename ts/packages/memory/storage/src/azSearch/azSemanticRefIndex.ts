@@ -67,7 +67,9 @@ export class AzSemanticRefIndex extends AzSearchIndex<SemanticRefDoc> {
             typeof query === "string"
                 ? query
                 : this.queryCompiler.compileSearchTermGroup(query);
-        let filter = when ? this.queryCompiler.compileWhen(when) : undefined;
+        let filter = when
+            ? this.queryCompiler.compileWhenFilter(when)
+            : undefined;
         //orderby: "search.score() desc"
         const searchOptions: azSearch.SearchOptions<SemanticRefDoc> = {
             queryType: "full",
@@ -76,6 +78,27 @@ export class AzSemanticRefIndex extends AzSearchIndex<SemanticRefDoc> {
             searchOptions.filter = filter;
         }
         let results = await this.getSearchResults(searchQuery, searchOptions);
+        return [{ searchQuery, filter }, results];
+    }
+
+    public async getScopeRanges(
+        when: kp.WhenFilter,
+    ): Promise<
+        [
+            query: AzSemanticRefQuery,
+            matches: azSearch.SearchResult<SemanticRefDoc>[],
+        ]
+    > {
+        const searchQuery = "";
+        const filter = this.queryCompiler.compileWhenFilter(when);
+        if (!filter) {
+            throw new Error("Not supported");
+        }
+        let searchOptions: azSearch.SearchOptions<SemanticRefDoc> = {
+            queryType: "full",
+            filter,
+        };
+        let results = await this.getSearchResults("", searchOptions);
         return [{ searchQuery, filter }, results];
     }
 
