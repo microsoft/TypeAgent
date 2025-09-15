@@ -61,14 +61,15 @@ export interface AppAgentCommandInterface {
     // Get the command descriptors
     getCommands(context: SessionContext): Promise<CommandDescriptors>;
 
+    // Provide completion for a partial command
     getCommandCompletion?(
         commands: string[], // path to the command descriptors
         params: ParsedCommandParams<ParameterDefinitions> | undefined,
-        names: string[], // array of <argName> or --<flagName> or --<jsonFlagName>.
+        names: string[], // array of <argName> or --<flagName> or --<jsonFlagName> for completion
         context: SessionContext<unknown>,
     ): Promise<CompletionGroup[]>;
 
-    // Execute a resolved command
+    // Execute a resolved command.  Exception from the execution are treated as errors and displayed to the user.
     executeCommand(
         commands: string[], // path to the command descriptors
         params: ParsedCommandParams<ParameterDefinitions> | undefined,
