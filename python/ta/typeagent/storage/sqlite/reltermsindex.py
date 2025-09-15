@@ -132,11 +132,9 @@ class SqliteRelatedTermsAliases(interfaces.ITermToRelatedTerms):
 class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
     """SQLite-backed implementation of fuzzy term relationships with persistent embeddings."""
 
-    # TODO: Require settings to be passed in so embedding_model doesn't need to be.
-    def __init__(self, db: sqlite3.Connection, embedding_model: AsyncEmbeddingModel):
+    def __init__(self, db: sqlite3.Connection, settings: TextEmbeddingIndexSettings):
         self.db = db
-        # Create a VectorBase for caching and fuzzy matching
-        self._embedding_settings = TextEmbeddingIndexSettings(embedding_model)
+        self._embedding_settings = settings
         self._vector_base = VectorBase(self._embedding_settings)
         # Maintain our own list of terms to map ordinals back to keys
         self._terms_list: list[str] = []  # TODO: Use the database instead?
@@ -300,12 +298,11 @@ class SqliteRelatedTermsFuzzy(interfaces.ITermToRelatedTermsFuzzy):
 class SqliteRelatedTermsIndex(interfaces.ITermToRelatedTermsIndex):
     """SQLite-backed implementation of ITermToRelatedTermsIndex combining aliases and fuzzy index."""
 
-    def __init__(self, db: sqlite3.Connection, embedding_model: AsyncEmbeddingModel):
+    def __init__(self, db: sqlite3.Connection, settings: TextEmbeddingIndexSettings):
         self.db = db
         # Initialize alias and fuzzy related terms indexes
         self._aliases = SqliteRelatedTermsAliases(db)
-        # Pass embedding_model to fuzzy index for persistent embeddings
-        self._fuzzy_index = SqliteRelatedTermsFuzzy(db, embedding_model)
+        self._fuzzy_index = SqliteRelatedTermsFuzzy(db, settings)
 
     @property
     def aliases(self) -> interfaces.ITermToRelatedTerms:

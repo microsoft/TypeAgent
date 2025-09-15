@@ -36,6 +36,12 @@ from fixtures import needs_auth, embedding_model, temp_db_path
 
 
 @pytest.fixture
+def embedding_settings(embedding_model: AsyncEmbeddingModel) -> TextEmbeddingIndexSettings:
+    """Create TextEmbeddingIndexSettings for testing."""
+    return TextEmbeddingIndexSettings(embedding_model)
+
+
+@pytest.fixture
 def sqlite_db(temp_db_path: str) -> Generator[sqlite3.Connection, None, None]:
     """Create and initialize a SQLite database connection."""
     db = sqlite3.connect(temp_db_path)
@@ -253,11 +259,11 @@ class TestSqliteRelatedTermsFuzzy:
     async def test_fuzzy_operations(
         self,
         sqlite_db: sqlite3.Connection,
-        embedding_model: AsyncEmbeddingModel,
+        embedding_settings: TextEmbeddingIndexSettings,
         needs_auth: None,
     ):
         """Test fuzzy operations with real embeddings."""
-        index = SqliteRelatedTermsFuzzy(sqlite_db, embedding_model)
+        index = SqliteRelatedTermsFuzzy(sqlite_db, embedding_settings)
 
         # Initially empty
         assert await index.size() == 0
@@ -289,11 +295,11 @@ class TestSqliteRelatedTermsFuzzy:
     async def test_fuzzy_deserialize(
         self,
         sqlite_db: sqlite3.Connection,
-        embedding_model: AsyncEmbeddingModel,
+        embedding_settings: TextEmbeddingIndexSettings,
         needs_auth: None,
     ):
         """Test deserialization of fuzzy index data - the critical fix we made."""
-        index = SqliteRelatedTermsFuzzy(sqlite_db, embedding_model)
+        index = SqliteRelatedTermsFuzzy(sqlite_db, embedding_settings)
 
         # Create test data similar to what would be in JSON
         text_items = ["chess", "artificial intelligence", "machine learning"]
@@ -301,7 +307,7 @@ class TestSqliteRelatedTermsFuzzy:
         # Create embeddings data (simulate what VectorBase would serialize)
         from typeagent.aitools.vectorbase import VectorBase
 
-        settings = TextEmbeddingIndexSettings(embedding_model)
+        settings = TextEmbeddingIndexSettings(embedding_settings.embedding_model)
         temp_vectorbase = VectorBase(settings)
 
         # Add embeddings to the vector base using add_key
@@ -336,11 +342,11 @@ class TestSqliteRelatedTermsFuzzy:
     async def test_fuzzy_lookup_edge_cases(
         self,
         sqlite_db: sqlite3.Connection,
-        embedding_model: AsyncEmbeddingModel,
+        embedding_settings: TextEmbeddingIndexSettings,
         needs_auth: None,
     ):
         """Test edge cases in fuzzy lookup."""
-        index = SqliteRelatedTermsFuzzy(sqlite_db, embedding_model)
+        index = SqliteRelatedTermsFuzzy(sqlite_db, embedding_settings)
 
         # Empty index
         results = await index.lookup_term("anything")
@@ -368,11 +374,11 @@ class TestSqliteRelatedTermsIndex:
     async def test_combined_index_basic(
         self,
         sqlite_db: sqlite3.Connection,
-        embedding_model: AsyncEmbeddingModel,
+        embedding_settings: TextEmbeddingIndexSettings,
         needs_auth: None,
     ):
         """Test the combined related terms index basic functionality."""
-        index = SqliteRelatedTermsIndex(sqlite_db, embedding_model)
+        index = SqliteRelatedTermsIndex(sqlite_db, embedding_settings)
 
         # Test that both sub-indexes are accessible
         assert index.aliases is not None
@@ -402,7 +408,7 @@ class TestRegressionPrevention:
     async def test_fuzzy_index_first_run_scenario(
         self,
         sqlite_db: sqlite3.Connection,
-        embedding_model: AsyncEmbeddingModel,
+        embedding_settings: TextEmbeddingIndexSettings,
         needs_auth: None,
     ):
         """
@@ -412,7 +418,7 @@ class TestRegressionPrevention:
         This test prevents the regression where SQLite deserialize was a no-op.
         """
         # Create a fresh fuzzy index
-        index = SqliteRelatedTermsFuzzy(sqlite_db, embedding_model)
+        index = SqliteRelatedTermsFuzzy(sqlite_db, embedding_settings)
 
         # Simulate JSON data that would be loaded on first run
         # This represents the scenario where we have podcast data with pre-computed embeddings
@@ -426,7 +432,7 @@ class TestRegressionPrevention:
         # Create embeddings as they would exist in the JSON
         from typeagent.aitools.vectorbase import VectorBase
 
-        settings = TextEmbeddingIndexSettings(embedding_model)
+        settings = TextEmbeddingIndexSettings(embedding_settings.embedding_model)
         temp_vectorbase = VectorBase(settings)
 
         for text in text_items:
@@ -557,11 +563,11 @@ class TestSqliteIndexesEdgeCases:
     async def test_fuzzy_index_edge_cases(
         self,
         sqlite_db: sqlite3.Connection,
-        embedding_model: AsyncEmbeddingModel,
+        embedding_settings: TextEmbeddingIndexSettings,
         needs_auth: None,
     ):
         """Test edge cases in fuzzy index."""
-        index = SqliteRelatedTermsFuzzy(sqlite_db, embedding_model)
+        index = SqliteRelatedTermsFuzzy(sqlite_db, embedding_settings)
 
         # Test with empty embeddings
         await index.add_terms([])  # Empty list
@@ -590,13 +596,13 @@ class TestSqliteIndexesEdgeCases:
     async def test_message_text_index_basic(
         self,
         sqlite_db: sqlite3.Connection,
-        embedding_model: AsyncEmbeddingModel,
+        embedding_settings: TextEmbeddingIndexSettings,
         needs_auth: None,
     ):
         """Test basic operations of message text index."""
         # Create settings
-        embedding_settings = TextEmbeddingIndexSettings(embedding_model)
-        settings = MessageTextIndexSettings(embedding_settings)
+        embedding_settings_local = TextEmbeddingIndexSettings(embedding_settings.embedding_model)
+        settings = MessageTextIndexSettings(embedding_settings_local)
 
         index = SqliteMessageTextIndex(sqlite_db, settings)
 
@@ -639,11 +645,11 @@ class TestSqliteIndexesEdgeCases:
     async def test_serialization_edge_cases(
         self,
         sqlite_db: sqlite3.Connection,
-        embedding_model: AsyncEmbeddingModel,
+        embedding_settings: TextEmbeddingIndexSettings,
         needs_auth: None,
     ):
         """Test serialization edge cases."""
-        fuzzy_index = SqliteRelatedTermsFuzzy(sqlite_db, embedding_model)
+        fuzzy_index = SqliteRelatedTermsFuzzy(sqlite_db, embedding_settings)
 
         # Test serialization of empty index
         # Note: fuzzy index doesn't implement serialize (returns empty for SQLite)
