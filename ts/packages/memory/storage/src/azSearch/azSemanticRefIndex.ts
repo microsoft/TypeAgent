@@ -89,16 +89,22 @@ export class AzSemanticRefIndex extends AzSearchIndex<SemanticRefDoc> {
             matches: azSearch.SearchResult<SemanticRefDoc>[],
         ]
     > {
-        const searchQuery = "";
+        let searchQuery = when.scopeDefiningTerms
+            ? this.queryCompiler.compileSearchTermGroup(when.scopeDefiningTerms)
+            : "";
         const filter = this.queryCompiler.compileWhenFilter(when);
         if (!filter) {
             throw new Error("Not supported");
         }
-        let searchOptions: azSearch.SearchOptions<SemanticRefDoc> = {
+        const selectFields: azSearch.SelectArray<
+            azSearch.SelectFields<SemanticRefDoc>
+        > = ["start/messageOrdinal", "end/messageOrdinal"];
+        const searchOptions: azSearch.SearchOptions<SemanticRefDoc> = {
             queryType: "full",
             filter,
+            select: selectFields,
         };
-        let results = await this.getSearchResults("", searchOptions);
+        let results = await this.getSearchResults(searchQuery, searchOptions);
         return [{ searchQuery, filter }, results];
     }
 
