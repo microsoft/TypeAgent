@@ -61,6 +61,7 @@ export interface ClientAPI {
     saveSettings: (settings: ShellUserSettings) => void;
     openImageFile: () => void;
     openFolder: (path: string) => void;
+    openUrlInBrowserTab: (url: string) => void;
 
     searchMenuUpdate(
         id: number,

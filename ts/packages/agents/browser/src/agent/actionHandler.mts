@@ -250,7 +250,16 @@ function generateDetailedKnowledgeCards(knowledgeResult: any): string {
                         const confidence = e.confidence
                             ? ` ${Math.round(e.confidence * 100)}%`
                             : "";
-                        return `<span style="background: #e3f2fd; color: #1976d2; padding: 2px 6px; border-radius: 12px; font-size: 12px;">${name}${type}${confidence}</span>`;
+                        const entityUrl = `typeagent-browser://views/entityGraphView.html?entity=${encodeURIComponent(name)}`;
+                        return `<a 
+                            href="${entityUrl}"
+                            style="background: #e3f2fd; color: #1976d2; padding: 2px 6px; 
+                                   border-radius: 12px; font-size: 12px; 
+                                   text-decoration: none; display: inline-block;
+                                   transition: background 0.2s, transform 0.1s;"
+                            title="Click to view entity graph">
+                            ${name}${type}${confidence}
+                        </a>`;
                     })
                     .join("")}
                 ${entities.length > 10 ? `<span style="color: #6c757d; font-style: italic; font-size: 12px;">+${entities.length - 10} more</span>` : ""}
@@ -268,7 +277,16 @@ function generateDetailedKnowledgeCards(knowledgeResult: any): string {
                     .slice(0, 8)
                     .map((topic: any) => {
                         const name = topic.name || topic;
-                        return `<span style="background: #fff3cd; color: #856404; padding: 2px 8px; border-radius: 12px; font-size: 12px; border: 1px solid #ffeaa7;">${name}</span>`;
+                        const topicUrl = `typeagent-browser://views/entityGraphView.html?topic=${encodeURIComponent(name)}`;
+                        return `<a 
+                            href="${topicUrl}"
+                            style="background: #fff3cd; color: #856404; padding: 2px 8px; 
+                                   border-radius: 12px; font-size: 12px; 
+                                   border: 1px solid #ffeaa7; text-decoration: none;
+                                   display: inline-block; transition: background 0.2s;"
+                            title="Click to view topic graph">
+                            ${name}
+                        </a>`;
                     })
                     .join("")}
                 ${topics.length > 8 ? `<span style="color: #6c757d; font-style: italic; font-size: 12px;">+${topics.length - 8} more</span>` : ""}
@@ -335,10 +353,18 @@ function generateLiveKnowledgePreview(
                     ? `<div style="color: #6c757d; font-size: 12px; font-style: italic;">None discovered yet</div>`
                     : entities
                           .slice(0, 15)
-                          .map(
-                              (entity) =>
-                                  `<span style="display: inline-block; background: #e3f2fd; color: #1976d2; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; margin: 2px;">${entity.name || entity}</span>`,
-                          )
+                          .map((entity) => {
+                              const name = entity.name || entity;
+                              const entityUrl = `typeagent-browser://views/entityGraphView.html?entity=${encodeURIComponent(name)}`;
+                              return `<a href="${entityUrl}" 
+                                           style="display: inline-block; background: #e3f2fd; color: #1976d2; 
+                                                  padding: 4px 8px; border-radius: 12px; font-size: 11px; 
+                                                  font-weight: 500; margin: 2px; text-decoration: none;
+                                                  transition: background 0.2s, transform 0.1s;"
+                                           title="Click to view entity graph">
+                                           ${name}
+                                           </a>`;
+                          })
                           .join("")
             }
             ${
@@ -362,10 +388,18 @@ function generateLiveKnowledgePreview(
                     ? `<div style="color: #6c757d; font-size: 12px; font-style: italic;">None discovered yet</div>`
                     : topics
                           .slice(0, 12)
-                          .map(
-                              (topic) =>
-                                  `<span style="display: inline-block; background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; margin: 2px;">${topic.name || topic}</span>`,
-                          )
+                          .map((topic) => {
+                              const name = topic.name || topic;
+                              const topicUrl = `typeagent-browser://views/entityGraphView.html?topic=${encodeURIComponent(name)}`;
+                              return `<a href="${topicUrl}" 
+                                           style="display: inline-block; background: #fff3cd; color: #856404; 
+                                                  border: 1px solid #ffeaa7; padding: 4px 8px; border-radius: 12px; 
+                                                  font-size: 11px; font-weight: 500; margin: 2px; text-decoration: none;
+                                                  transition: background 0.2s;"
+                                           title="Click to view topic graph">
+                                           ${name}
+                                           </a>`;
+                          })
                           .join("")
             }
             ${
