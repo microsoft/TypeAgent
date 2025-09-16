@@ -45,7 +45,7 @@ export const defaultUserSettings: ShellUserSettings = {
     agentGreeting: true,
     multiModalContent: true,
     ui: {
-        verticalLayout: false,
+        verticalLayout: true,
         verticalContentAlwaysVisible: true,
         horizontalContentAlwaysVisible: false,
         dev: false,
