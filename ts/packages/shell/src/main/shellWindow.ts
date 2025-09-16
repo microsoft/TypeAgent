@@ -1241,3 +1241,12 @@ function setupDevicePermissions(mainWindow: BrowserWindow) {
         },
     );
 }
+
+export function getShellWindowForChatViewIpcEvent(
+    event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent,
+): ShellWindow | undefined {
+    const shellWindow = ShellWindow.getInstance();
+    return event.sender === shellWindow?.chatView.webContents
+        ? shellWindow
+        : undefined;
+}
