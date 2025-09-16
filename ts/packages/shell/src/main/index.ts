@@ -38,7 +38,6 @@ import {
 } from "./localWhisperCommandHandler.js";
 import { createDispatcherRpcServer } from "agent-dispatcher/rpc/dispatcher/server";
 import { createGenericChannel } from "agent-rpc/channel";
-import net from "node:net";
 import { createClientIORpcClient } from "agent-dispatcher/rpc/clientio/client";
 import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
@@ -58,6 +57,7 @@ import { createInlineBrowserControl } from "./inlineBrowserControl.js";
 import { BrowserControl } from "browser-typeagent/agent/types";
 import { ExtensionStorageManager } from "./extensionStorage.js";
 import { initializeSearchMenuUI } from "./electronSearchMenuUI.js";
+import { initializePen } from "./commands/pen.js";
 
 debugShell("App name", app.getName());
 debugShell("App version", app.getVersion());
@@ -89,6 +89,8 @@ process.env.FORCE_COLOR = "true";
 const parsedArgs = parseShellCommandLine();
 export const isProd = parsedArgs.prod ?? app.isPackaged;
 debugShell("Is prod", isProd);
+export const isTest = parsedArgs.test ?? false;
+debugShell("Is test", isTest);
 
 // Use single instance lock in prod to make the existing instance focus
 // Allow multiple instance for dev build, with lock for data directory "instanceDir".
@@ -535,7 +537,7 @@ async function initialize() {
     const envFile = parsedArgs.env
         ? path.resolve(appPath, parsedArgs.env)
         : undefined;
-    if (parsedArgs.test) {
+    if (isTest) {
         if (!envFile) {
             throw new Error("Test mode requires --env argument");
         }
@@ -794,42 +796,13 @@ async function initialize() {
             await initializeInstance(instanceDir, shellSettings);
     });
 
-    // On windows, we will spin up a local end point that listens
-    // for pen events which will trigger speech reco
-    // Don't spin this up during testing
-    if (process.platform == "win32" && !parsedArgs.test) {
-        const pipePath = path.join("\\\\.\\pipe\\TypeAgent", "speech");
-        const server = net.createServer((stream) => {
-            stream.on("data", (c) => {
-                const shellWindow = ShellWindow.getInstance();
-                if (shellWindow === undefined) {
-                    // Ignore if there is no shell window
-                    return;
-                }
-                if (c.toString() == "triggerRecognitionOnce") {
-                    console.log("Pen click note button click received!");
-                    triggerRecognitionOnce(shellWindow.chatView);
-                }
-            });
-            stream.on("error", (e) => {
-                console.log(e);
-            });
-        });
-
-        try {
-            const p = Promise.withResolvers<void>();
-            server.on("error", (e) => {
-                p.reject(e);
-            });
-            server.listen(pipePath, () => {
-                debugShell("Listening for pen events on", pipePath);
-                p.resolve();
-            });
-            await p.promise;
-        } catch (e) {
-            debugShellError(`Error creating pipe at ${pipePath}: ${e}`);
+    await initializePen(() => {
+        const shellWindow = ShellWindow.getInstance();
+        if (shellWindow) {
+            triggerRecognitionOnce(shellWindow.chatView);
         }
-    }
+    });
+
     await initializeInstance(instanceDir, shellSettings);
 
     if (shellSettings.user.autoUpdate.intervalMs !== -1) {
