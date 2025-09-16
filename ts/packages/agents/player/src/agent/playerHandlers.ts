@@ -375,6 +375,7 @@ async function getPlayerActionCompletion(
         case "playGenre":
             break;
         case "getPlaylist":
+        case "deletePlaylist":
             if (propertyName === "parameters.name") {
                 if (userData.data.playlists === undefined) {
                     await getPlaylistsFromUserData(

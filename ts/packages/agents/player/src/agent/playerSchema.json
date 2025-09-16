@@ -42,6 +42,9 @@
     },
     "getPlaylist": {
       "name": "checked_wildcard"
+    },
+    "deletePlaylist": {
+      "name": "checked_wildcard"
     }
   },
   "paramCompletionEmojis": {
@@ -62,6 +65,9 @@
       "artist": "🎼"
     },
     "getPlaylist": {
+      "name": "📃"
+    },
+    "deletePlaylist": {
       "name": "📃"
     }
   }
