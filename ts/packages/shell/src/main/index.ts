@@ -10,6 +10,7 @@ import {
     WebContentsView,
     shell,
     Notification,
+    protocol,
 } from "electron";
 import path from "node:path";
 import fs from "node:fs";
@@ -60,6 +61,21 @@ import { initializeSearchMenuUI } from "./electronSearchMenuUI.js";
 
 debugShell("App name", app.getName());
 debugShell("App version", app.getVersion());
+
+// Register custom protocol scheme as privileged
+protocol.registerSchemesAsPrivileged([
+    {
+        scheme: "typeagent-browser",
+        privileges: {
+            standard: true,
+            secure: true,
+            bypassCSP: true,
+            allowServiceWorkers: true,
+            supportFetchAPI: true,
+            corsEnabled: true,
+        },
+    },
+]);
 
 if (process.platform === "darwin") {
     if (fs.existsSync("/opt/homebrew/bin/az")) {
@@ -482,6 +498,30 @@ async function initializeInstance(
         shell.openPath(path);
     });
 
+    ipcMain.on("open-url-in-browser-tab", async (_event, url: string) => {
+        const shellWindow = ShellWindow.getInstance();
+        if (!shellWindow) return;
+
+        // Handle custom protocol URLs
+        if (url.startsWith("typeagent-browser://")) {
+            const parsedUrl = new URL(url);
+            const pathname = parsedUrl.pathname;
+            const queryString = parsedUrl.search;
+
+            const browserExtensionUrls = (global as any).browserExtensionUrls;
+            if (browserExtensionUrls && browserExtensionUrls[pathname]) {
+                const resolvedUrl =
+                    browserExtensionUrls[pathname] + queryString;
+                shellWindow.createBrowserTab(new URL(resolvedUrl), {
+                    background: false,
+                });
+            }
+        } else if (url.startsWith("http://") || url.startsWith("https://")) {
+            // Handle HTTP/HTTPS URLs - open them in a new browser tab
+            shellWindow.createBrowserTab(new URL(url), { background: false });
+        }
+    });
+
     return shellWindow.waitForContentLoaded();
 }
 
@@ -528,7 +568,36 @@ async function initialize() {
         "/annotationsLibrary.html": `chrome-extension://${extension.id}/views/annotationsLibrary.html`,
         "/knowledgeLibrary.html": `chrome-extension://${extension.id}/views/knowledgeLibrary.html`,
         "/macrosLibrary.html": `chrome-extension://${extension.id}/views/macrosLibrary.html`,
+        "/entityGraphView.html": `chrome-extension://${extension.id}/views/entityGraphView.html`,
     };
+
+    protocol.handle("typeagent-browser", (request) => {
+        const url = new URL(request.url);
+        const pathname = url.pathname;
+        const queryString = url.search;
+
+        const browserExtensionUrls = (global as any).browserExtensionUrls;
+        if (browserExtensionUrls && browserExtensionUrls[pathname]) {
+            const resolvedUrl = browserExtensionUrls[pathname] + queryString;
+            debugShell(`Protocol handler: ${request.url} -> ${resolvedUrl}`);
+
+            const shellWindow = ShellWindow.getInstance();
+            if (shellWindow) {
+                shellWindow.createBrowserTab(new URL(resolvedUrl), {
+                    background: false,
+                });
+            }
+
+            // Return a redirect response
+            return new Response("", {
+                status: 302,
+                headers: { Location: resolvedUrl },
+            });
+        } else {
+            debugShell(`Protocol handler: Unknown library page: ${pathname}`);
+            return new Response("Not Found", { status: 404 });
+        }
+    });
 
     const shellSettings = new ShellSettingManager(instanceDir);
     const extensionStorage = new ExtensionStorageManager(instanceDir);

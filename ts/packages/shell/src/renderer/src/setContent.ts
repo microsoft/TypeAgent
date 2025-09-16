@@ -47,9 +47,11 @@ function processContent(
             return content;
         case "html":
             return DOMPurify.sanitize(content, {
-                ADD_ATTR: ["target", "onclick", "onerror"],
+                ADD_ATTR: ["target", "onclick", "onerror", "href"],
                 ADD_DATA_URI_TAGS: ["img"],
-                ADD_URI_SAFE_ATTR: ["src"],
+                ADD_URI_SAFE_ATTR: ["src", "href"],
+                ALLOWED_URI_REGEXP:
+                    /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|typeagent-browser):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
             });
         case "markdown":
             const md = new MarkdownIt();
@@ -228,6 +230,26 @@ export function setContent(
     } else {
         // vanilla, sanitized HTML only
         contentElm.innerHTML += contentHtml;
+
+        // Add click handlers for all links to open in browser tabs
+        const allLinks = contentElm.querySelectorAll("a[href]");
+        allLinks.forEach((link) => {
+            const href = link.getAttribute("href");
+            if (
+                href &&
+                (href.startsWith("typeagent-browser://") ||
+                    href.startsWith("http://") ||
+                    href.startsWith("https://"))
+            ) {
+                link.addEventListener("click", (e) => {
+                    e.preventDefault(); // Prevent default navigation
+                    if ((window as any).api?.openUrlInBrowserTab) {
+                        // Use IPC to open the URL in a new browser tab
+                        (window as any).api.openUrlInBrowserTab(href);
+                    }
+                });
+            }
+        });
     }
 
     if (!speak) {
