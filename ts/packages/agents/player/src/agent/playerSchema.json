@@ -39,6 +39,9 @@
     },
     "getFavorites": {
       "count": "number"
+    },
+    "getPlaylist": {
+      "name": "checked_wildcard"
     }
   },
   "paramCompletionEmojis": {
@@ -57,6 +60,9 @@
     },
     "playArtist": {
       "artist": "🎼"
+    },
+    "getPlaylist": {
+      "name": "📃"
     }
   }
 }

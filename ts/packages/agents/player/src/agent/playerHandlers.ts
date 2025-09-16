@@ -29,7 +29,11 @@ import { PlayerActions } from "./playerSchema.js";
 import registerDebug from "debug";
 import { resolveMusicDeviceEntity } from "../devices.js";
 import { getUserDevices } from "../endpoints.js";
-import { addUserDataStrings, getUserDataCompletions } from "../userData.js";
+import {
+    addUserDataStrings,
+    getPlaylistsFromUserData,
+    getUserDataCompletions,
+} from "../userData.js";
 
 const debugSpotify = registerDebug("typeagent:spotify");
 
@@ -370,6 +374,22 @@ async function getPlayerActionCompletion(
             break;
         case "playGenre":
             break;
+        case "getPlaylist":
+            if (propertyName === "parameters.name") {
+                if (userData.data.playlists === undefined) {
+                    await getPlaylistsFromUserData(
+                        clientContext.service,
+                        userData.data,
+                    );
+                }
+                if (userData.data.playlists) {
+                    const names = userData.data.playlists
+                        .map((pl) => pl.name)
+                        .sort();
+                    result.push(...names);
+                }
+            }
+            return result;
     }
 
     result.push(...getUserDataCompletions(userData.data, track, artist, album));
