@@ -34,7 +34,6 @@ import {
     getFavoriteTracks,
     createPlaylist,
     deletePlaylist,
-    getPlaylists,
     getPlaylistTracks,
     pause,
     next,
@@ -53,7 +52,7 @@ import {
     addUserDataStrings,
     UserData,
     addFullTracks,
-    updatePlaylists,
+    getPlaylistsFromUserData,
 } from "./userData.js";
 
 import {
@@ -842,11 +841,10 @@ export async function handleCall(
         }
         case "listPlaylists": {
             if (clientContext.userData !== undefined) {
-                await updatePlaylists(
+                const playlists = await getPlaylistsFromUserData(
                     clientContext.service,
                     clientContext.userData.data,
                 );
-                const playlists = clientContext.userData.data.playlists;
                 if (playlists) {
                     let html = "<div>Playlists...</div>";
                     for (const playlist of playlists) {
@@ -863,9 +861,15 @@ export async function handleCall(
         case "getPlaylist": {
             const getPlaylistAction = action as GetPlaylistAction;
             const playlistName = getPlaylistAction.parameters.name;
-            const playlists = await getPlaylists(clientContext.service);
-            const playlist = playlists?.items.find((playlist) => {
-                return playlist.name
+            if (!clientContext.userData) {
+                return createErrorActionResult("No user data found");
+            }
+            const playlists = await getPlaylistsFromUserData(
+                clientContext.service,
+                clientContext.userData!.data,
+            );
+            const playlist = playlists?.find((pl) => {
+                return pl.name
                     .toLowerCase()
                     .includes(playlistName.toLowerCase());
             });
@@ -1065,9 +1069,15 @@ export async function handleCall(
         case "deletePlaylist": {
             const deletePlaylistAction = action as DeletePlaylistAction;
             const playlistName = deletePlaylistAction.parameters.name;
-            const playlists = await getPlaylists(clientContext.service);
-            const playlist = playlists?.items.find((playlist) => {
-                return playlist.name
+            if (clientContext.userData === undefined) {
+                return createErrorActionResult("No user data found");
+            }
+            const playlists = await getPlaylistsFromUserData(
+                clientContext.service,
+                clientContext.userData!.data,
+            );
+            const playlist = playlists?.find((pl) => {
+                return pl.name
                     .toLowerCase()
                     .includes(playlistName.toLowerCase());
             });

@@ -64,6 +64,15 @@ export async function updatePlaylists(
     }
 }
 
+// update playlists and return from user data
+export async function getPlaylistsFromUserData(
+    service: SpotifyService,
+    userData: SpotifyUserData,
+): Promise<SpotifyApi.PlaylistObjectSimplified[] | undefined> {
+    await updatePlaylists(service, userData);
+    return userData.playlists;
+}
+
 async function loadUserData(
     instanceStorage: Storage,
 ): Promise<SpotifyUserData> {
