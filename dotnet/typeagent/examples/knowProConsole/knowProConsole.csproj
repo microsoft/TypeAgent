@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>TypeAgent.KnowProConsole</AssemblyName>
+    <RootNamespace>TypeAgent.KnowProConsole</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\common\common.csproj" />
+    <ProjectReference Include="..\examplesLib\examplesLib.csproj" />
+  </ItemGroup>
+
+</Project>
