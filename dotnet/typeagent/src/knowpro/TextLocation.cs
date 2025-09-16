@@ -11,8 +11,8 @@ public struct TextLocation
         this.ChunkOrdinal = chunkOrdinal;
     }
 
-    public uint MessageOrdinal { get; private set; }
-    public uint ChunkOrdinal { get; private set; }
+    public uint MessageOrdinal { get; set; }
+    public uint ChunkOrdinal { get; set; }
 
     public readonly bool IsLessThan(TextLocation other)
     {
