@@ -1,8 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-
-namespace TypeAgent.KnowProConsole;
+namespace KnowProConsole;
 
 public class KnowProConsole : ConsoleApp
 {

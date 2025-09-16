@@ -5,8 +5,8 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AssemblyName>TypeAgent.KnowProConsole</AssemblyName>
-    <RootNamespace>TypeAgent.KnowProConsole</RootNamespace>
+    <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+    <RootNamespace>KnowProConsole</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>

@@ -1,12 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace TypeAgent.KnowProConsole;
+namespace KnowProConsole;
 
 public class PodcastCommands
 {
-    [Command]
-    public void Ping(string[] msg)
+    [Command("ping")]
+    public void Ping(string msg)
     {
         Console.WriteLine(msg);
     }
