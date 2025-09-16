@@ -542,12 +542,16 @@ export async function executeCommand(
             true,
         );
 
-        return await appAgent.executeCommand(
-            commands,
-            params,
-            actionContext,
-            attachments,
-        );
+        try {
+            return await appAgent.executeCommand(
+                commands,
+                params,
+                actionContext,
+                attachments,
+            );
+        } catch (e: any) {
+            displayError(e.message, actionContext);
+        }
     } finally {
         actionContext.profiler?.stop();
         actionContext.profiler = undefined;

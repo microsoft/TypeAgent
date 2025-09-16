@@ -46,7 +46,7 @@ export class ChatView {
     private isScrolling = false;
     constructor(
         private idGenerator: IdGenerator,
-        public agents: Map<string, string>,
+        private readonly agents: Map<string, string>,
         public tts?: TTS,
     ) {
         this.topDiv = document.createElement("div");

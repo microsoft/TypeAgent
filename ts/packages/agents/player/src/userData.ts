@@ -5,6 +5,7 @@ import {
     getFavoriteAlbums,
     getFavoriteTracks,
     getFollowedArtists,
+    getPlaylists,
     getRecentlyPlayed,
     getTopUserArtists,
     getTopUserTracks,
@@ -26,6 +27,7 @@ export interface MusicItemInfo {
 
 export interface SpotifyUserData {
     lastUpdated: number;
+    playlists?: SpotifyApi.PlaylistObjectSimplified[];
     tracks: Map<string, MusicItemInfo>;
     artists: Map<string, MusicItemInfo>;
     albums: Map<string, MusicItemInfo>;
@@ -41,6 +43,34 @@ interface SpotifyUserDataJSON {
 
 function getUserDataFilePath() {
     return "userdata.json";
+}
+
+export async function updatePlaylists(
+    service: SpotifyService,
+    userData: SpotifyUserData,
+) {
+    try {
+        debugData("Updating playlists");
+        const rawPlaylists = await getPlaylists(service);
+        const playlists: SpotifyApi.PlaylistObjectSimplified[] = [];
+        if (rawPlaylists !== undefined) {
+            for (const pl of rawPlaylists.items) {
+                playlists.push(pl);
+            }
+        }
+        userData.playlists = playlists;
+    } catch (error) {
+        debugData(`Error updating playlists: ${error}`);
+    }
+}
+
+// update playlists and return from user data
+export async function getPlaylistsFromUserData(
+    service: SpotifyService,
+    userData: SpotifyUserData,
+): Promise<SpotifyApi.PlaylistObjectSimplified[] | undefined> {
+    await updatePlaylists(service, userData);
+    return userData.playlists;
 }
 
 async function loadUserData(
@@ -427,6 +457,7 @@ export async function initializeUserData(
     debugData("Loading saved user data");
     const data = await loadUserData(instanceStorage);
     const result: UserData = { data, instanceStorage };
+    await updatePlaylists(service, result.data);
     debugData(
         `Tracks: ${data.tracks.size}, Artists: ${data.artists.size}, Albums: ${data.albums.size}`,
     );

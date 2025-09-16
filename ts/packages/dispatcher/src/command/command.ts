@@ -427,10 +427,10 @@ function getDispatcherStatusDetails(context: CommandHandlerContext) {
 export function getDispatcherStatus(
     context: CommandHandlerContext,
 ): DispatcherStatus {
-    const agentsWithActions = new Set<string>();
+    const names = new Set<string>();
     const agents = context.agents.getActionConfigs().map((config) => {
         const appAgentName = getAppAgentName(config.schemaName);
-        agentsWithActions.add(appAgentName);
+        names.add(config.schemaName);
         return {
             emoji: config.emojiChar,
             name: config.schemaName,
@@ -446,7 +446,7 @@ export function getDispatcherStatus(
 
     // Make sure we include app agents that do not have actions.
     for (const agentName of context.agents.getAppAgentNames()) {
-        if (!agentsWithActions.has(agentName)) {
+        if (!names.has(agentName)) {
             agents.push({
                 emoji: context.agents.getAppAgentEmoji(agentName),
                 name: agentName,
