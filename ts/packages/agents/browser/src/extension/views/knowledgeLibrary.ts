@@ -152,6 +152,7 @@ class WebsiteLibraryPanelFullPage {
             "importWebActivityBtn",
         );
         const importFromFileBtn = document.getElementById("importFromFileBtn");
+        const buildKnowledgeGraphBtn = document.getElementById("buildKnowledgeGraphBtn");
 
         if (importWebActivityBtn) {
             importWebActivityBtn.addEventListener("click", () => {
@@ -162,6 +163,12 @@ class WebsiteLibraryPanelFullPage {
         if (importFromFileBtn) {
             importFromFileBtn.addEventListener("click", () => {
                 this.showFolderImportModal();
+            });
+        }
+
+        if (buildKnowledgeGraphBtn) {
+            buildKnowledgeGraphBtn.addEventListener("click", () => {
+                this.showKnowledgeGraphModal();
             });
         }
 
@@ -786,6 +793,233 @@ class WebsiteLibraryPanelFullPage {
 
     public showFolderImportModal() {
         this.importUI.showFolderImportModal();
+    }
+
+    public async showKnowledgeGraphModal() {
+        const modal = document.getElementById("knowledgeGraphModal");
+        if (modal) {
+            // Show the modal
+            const bootstrapModal = new (window as any).bootstrap.Modal(modal);
+            bootstrapModal.show();
+
+            // Load graph status
+            await this.loadGraphStatus();
+
+            // Setup modal event listeners
+            this.setupKnowledgeGraphModalEventListeners();
+        }
+    }
+
+    private async loadGraphStatus() {
+        try {
+            // Get graph status from backend
+            const response = await extensionService.getKnowledgeGraphStatus();
+            
+            // Handle null or undefined response
+            if (!response) {
+                this.updateGraphStatusDisplay({
+                    hasGraph: false,
+                    entityCount: 0,
+                    relationshipCount: 0,
+                    communityCount: 0,
+                    isBuilding: false,
+                    error: "No graph status available"
+                });
+                return;
+            }
+            
+            this.updateGraphStatusDisplay(response);
+        } catch (error) {
+            console.error("Failed to load graph status:", error);
+            this.updateGraphStatusDisplay({
+                hasGraph: false,
+                entityCount: 0,
+                relationshipCount: 0,
+                communityCount: 0,
+                isBuilding: false,
+                error: "Failed to check graph status"
+            });
+        }
+    }
+
+    private updateGraphStatusDisplay(status: any) {
+        const graphStateIcon = document.getElementById("graphStateIcon");
+        const graphStateText = document.getElementById("graphStateText");
+        const graphStateDescription = document.getElementById("graphStateDescription");
+        const graphMetrics = document.getElementById("graphMetrics");
+        const buildProgress = document.getElementById("buildProgress");
+        const viewEntityGraphBtn = document.getElementById("viewEntityGraphBtn");
+        const rebuildGraphBtn = document.getElementById("rebuildGraphBtn");
+        const buildGraphBtn = document.getElementById("buildGraphBtn");
+
+        if (!graphStateIcon || !graphStateText || !graphStateDescription) return;
+
+        // Ensure status object has required properties with defaults
+        const safeStatus = {
+            hasGraph: status?.hasGraph || false,
+            entityCount: status?.entityCount || 0,
+            relationshipCount: status?.relationshipCount || 0,
+            communityCount: status?.communityCount || 0,
+            isBuilding: status?.isBuilding || false,
+            error: status?.error || null
+        };
+
+        // Hide all sections initially
+        if (graphMetrics) graphMetrics.style.display = "none";
+        if (buildProgress) buildProgress.style.display = "none";
+        if (viewEntityGraphBtn) viewEntityGraphBtn.style.display = "none";
+        if (rebuildGraphBtn) rebuildGraphBtn.style.display = "none";
+        if (buildGraphBtn) buildGraphBtn.style.display = "none";
+
+        if (safeStatus.isBuilding) {
+            // Show building state
+            graphStateIcon.innerHTML = '<i class="bi bi-circle-fill text-warning"></i>';
+            graphStateText.textContent = "Building Knowledge Graph";
+            graphStateDescription.textContent = "Analyzing entities and relationships from your website data...";
+            if (buildProgress) buildProgress.style.display = "block";
+        } else if (safeStatus.hasGraph && safeStatus.entityCount > 0) {
+            // Show active graph state
+            graphStateIcon.innerHTML = '<i class="bi bi-circle-fill text-success"></i>';
+            graphStateText.textContent = "Knowledge Graph Ready";
+            graphStateDescription.textContent = `Your graph contains ${safeStatus.entityCount} entities, ${safeStatus.relationshipCount} relationships, and ${safeStatus.communityCount} communities.`;
+            
+            // Show metrics
+            if (graphMetrics) {
+                graphMetrics.style.display = "flex";
+                const entityCount = document.getElementById("entityCount");
+                const relationshipCount = document.getElementById("relationshipCount");
+                const communityCount = document.getElementById("communityCount");
+                
+                if (entityCount) entityCount.textContent = safeStatus.entityCount.toString();
+                if (relationshipCount) relationshipCount.textContent = safeStatus.relationshipCount.toString();
+                if (communityCount) communityCount.textContent = safeStatus.communityCount.toString();
+            }
+            
+            // Show action buttons
+            if (viewEntityGraphBtn) viewEntityGraphBtn.style.display = "inline-block";
+            if (rebuildGraphBtn) rebuildGraphBtn.style.display = "inline-block";
+        } else if (safeStatus.error) {
+            // Show error state
+            graphStateIcon.innerHTML = '<i class="bi bi-circle-fill text-danger"></i>';
+            graphStateText.textContent = "Graph Status Error";
+            graphStateDescription.textContent = safeStatus.error;
+            if (buildGraphBtn) buildGraphBtn.style.display = "inline-block";
+        } else {
+            // Show empty state
+            graphStateIcon.innerHTML = '<i class="bi bi-circle-fill text-secondary"></i>';
+            graphStateText.textContent = "No Knowledge Graph";
+            graphStateDescription.textContent = "Build a knowledge graph to visualize relationships between entities, topics, and pages in your library.";
+            if (buildGraphBtn) buildGraphBtn.style.display = "inline-block";
+        }
+    }
+
+    private setupKnowledgeGraphModalEventListeners() {
+        const viewEntityGraphBtn = document.getElementById("viewEntityGraphBtn");
+        const rebuildGraphBtn = document.getElementById("rebuildGraphBtn");
+        const buildGraphBtn = document.getElementById("buildGraphBtn");
+
+        // Remove existing listeners to avoid duplicates
+        viewEntityGraphBtn?.removeEventListener("click", this.handleViewEntityGraph);
+        rebuildGraphBtn?.removeEventListener("click", this.handleRebuildGraph);
+        buildGraphBtn?.removeEventListener("click", this.handleBuildGraph);
+
+        // Add new listeners
+        if (viewEntityGraphBtn) {
+            viewEntityGraphBtn.addEventListener("click", this.handleViewEntityGraph.bind(this));
+        }
+        if (rebuildGraphBtn) {
+            rebuildGraphBtn.addEventListener("click", this.handleRebuildGraph.bind(this));
+        }
+        if (buildGraphBtn) {
+            buildGraphBtn.addEventListener("click", this.handleBuildGraph.bind(this));
+        }
+    }
+
+    private handleViewEntityGraph() {
+        // Close the modal and open entity graph view
+        const modal = document.getElementById("knowledgeGraphModal");
+        if (modal) {
+            const bootstrapModal = (window as any).bootstrap.Modal.getInstance(modal);
+            if (bootstrapModal) {
+                bootstrapModal.hide();
+            }
+        }
+        
+        // Open entity graph view
+        window.open("entityGraphView.html", "_blank");
+    }
+
+    private async handleBuildGraph() {
+        try {
+            // Show building state
+            this.updateGraphStatusDisplay({
+                hasGraph: false,
+                entityCount: 0,
+                relationshipCount: 0,
+                communityCount: 0,
+                isBuilding: true
+            });
+
+            // Start graph building in minimal mode for testing
+            await extensionService.buildKnowledgeGraph({
+                minimalMode: true,
+                urlLimit: 100
+            });
+            
+            // Reload status after building
+            await this.loadGraphStatus();
+            
+            notificationManager.showSuccess("Knowledge graph built successfully!");
+        } catch (error) {
+            console.error("Failed to build graph:", error);
+            const errorMessage = error instanceof Error ? error.message : "Unknown error";
+            notificationManager.showError(`Failed to build knowledge graph: ${errorMessage}`);
+            
+            // Reset to error state
+            this.updateGraphStatusDisplay({
+                hasGraph: false,
+                entityCount: 0,
+                relationshipCount: 0,
+                communityCount: 0,
+                isBuilding: false,
+                error: errorMessage
+            });
+        }
+    }
+
+    private async handleRebuildGraph() {
+        try {
+            // Show building state
+            this.updateGraphStatusDisplay({
+                hasGraph: false,
+                entityCount: 0,
+                relationshipCount: 0,
+                communityCount: 0,
+                isBuilding: true
+            });
+
+            // Rebuild graph
+            await extensionService.rebuildKnowledgeGraph();
+            
+            // Reload status after rebuilding
+            await this.loadGraphStatus();
+            
+            notificationManager.showSuccess("Knowledge graph rebuilt successfully!");
+        } catch (error) {
+            console.error("Failed to rebuild graph:", error);
+            const errorMessage = error instanceof Error ? error.message : "Unknown error";
+            notificationManager.showError(`Failed to rebuild knowledge graph: ${errorMessage}`);
+            
+            // Reset to error state
+            this.updateGraphStatusDisplay({
+                hasGraph: false,
+                entityCount: 0,
+                relationshipCount: 0,
+                communityCount: 0,
+                isBuilding: false,
+                error: errorMessage
+            });
+        }
     }
 
     public performSearchWithQuery(query: string) {

@@ -6,9 +6,7 @@ import { EntityGraphVisualizer } from "./entityGraphVisualizer.js";
 import { EntitySidebar } from "./entitySidebar.js";
 import {
     EntityGraphServices,
-    EntityCacheServices,
     DefaultEntityGraphServices,
-    DefaultEntityCacheServices,
     ChromeExtensionService,
     createExtensionService,
 } from "./knowledgeUtilities";
@@ -16,12 +14,18 @@ import {
 /**
  * Main class for the Entity Graph View page
  */
+interface ViewMode {
+    type: 'global' | 'entity-specific';
+    centerEntity?: string;
+    centerTopic?: string;
+}
+
 class EntityGraphView {
     private visualizer: EntityGraphVisualizer;
     private sidebar: EntitySidebar;
     private currentEntity: string | null = null;
+    private currentViewMode: ViewMode = { type: 'global' };
     private entityGraphService: EntityGraphServices;
-    private entityCacheService: EntityCacheServices;
 
     constructor() {
         try {
@@ -32,7 +36,6 @@ class EntityGraphView {
             this.entityGraphService = new DefaultEntityGraphServices(
                 extensionService,
             );
-            this.entityCacheService = new DefaultEntityCacheServices();
             console.log(
                 "Services initialized with Chrome extension connection",
             );
@@ -107,19 +110,19 @@ class EntityGraphView {
             this.setupSearchHandlers();
             this.setupInteractiveHandlers();
 
-            // Load entity from URL - entity parameter is required
-            console.log(
-                `Current entity after URL parsing: ${this.currentEntity}`,
-            );
-            if (this.currentEntity) {
-                console.log(
-                    `Loading specific entity from URL: ${this.currentEntity}`,
-                );
+            // Load based on view mode
+            console.log(`Current view mode: ${this.currentViewMode.type}`);
+            
+            if (this.currentViewMode.type === 'entity-specific' && this.currentEntity) {
+                console.log(`Loading specific entity: ${this.currentEntity}`);
+                this.updateSidebarVisibility(true);
                 await this.navigateToEntity(this.currentEntity);
+            } else if (this.currentViewMode.type === 'global') {
+                console.log("Loading global knowledge graph");
+                this.updateSidebarVisibility(false);
+                await this.loadGlobalView();
             } else {
-                console.log(
-                    "No entity parameter provided in URL - showing error",
-                );
+                console.log("Invalid state - showing error");
                 this.showEntityParameterError();
             }
         } catch (error) {
@@ -222,6 +225,15 @@ class EntityGraphView {
         if (refreshButton) {
             refreshButton.addEventListener("click", () => this.refreshGraph());
         }
+
+        // Back to global button
+        const backToGlobalBtn = document.getElementById("backToGlobalBtn");
+        if (backToGlobalBtn) {
+            backToGlobalBtn.addEventListener("click", () => {
+                console.log("Back to global button clicked");
+                this.navigateToGlobalView();
+            });
+        }
     }
 
     /**
@@ -284,39 +296,52 @@ class EntityGraphView {
         const urlParams = new URLSearchParams(window.location.search);
         const entityParam = urlParams.get("entity");
         const topicParam = urlParams.get("topic");
+        const modeParam = urlParams.get("mode");
 
         console.log("Handling URL parameters:", {
             fullUrl: window.location.href,
             search: window.location.search,
             entityParam: entityParam,
             topicParam: topicParam,
+            modeParam: modeParam,
         });
 
-        if (entityParam) {
-            this.currentEntity = entityParam;
-            console.log(`Entity from URL: ${entityParam}`);
-            // Update breadcrumb to show entity name
-            const entityBreadcrumb = document.getElementById(
-                "entityNameBreadcrumb",
-            );
-            if (entityBreadcrumb) {
-                entityBreadcrumb.textContent = ` > ${entityParam}`;
-            }
-        } else if (topicParam) {
-            this.currentEntity = topicParam;
-            console.log(`Topic from URL: ${topicParam}`);
-            // Update breadcrumb to show topic name
-            const entityBreadcrumb = document.getElementById(
-                "entityNameBreadcrumb",
-            );
-            if (entityBreadcrumb) {
-                entityBreadcrumb.textContent = ` > ${topicParam}`;
+        this.currentViewMode = this.determineViewMode();
+
+        if (this.currentViewMode.type === 'entity-specific') {
+            this.currentEntity = this.currentViewMode.centerEntity || this.currentViewMode.centerTopic || null;
+            
+            if (this.currentEntity) {
+                console.log(`${entityParam ? 'Entity' : 'Topic'} from URL: ${this.currentEntity}`);
+                const entityBreadcrumb = document.getElementById("entityNameBreadcrumb");
+                if (entityBreadcrumb) {
+                    entityBreadcrumb.textContent = ` > ${this.currentEntity}`;
+                }
             }
         } else {
-            console.log(
-                "No entity or topic parameter found in URL, will use default fallback",
-            );
+            console.log("Global mode detected - will show full knowledge graph");
+            const entityBreadcrumb = document.getElementById("entityNameBreadcrumb");
+            if (entityBreadcrumb) {
+                entityBreadcrumb.textContent = " > Global View";
+            }
         }
+    }
+
+    private determineViewMode(): ViewMode {
+        const urlParams = new URLSearchParams(window.location.search);
+        const entityParam = urlParams.get("entity");
+        const topicParam = urlParams.get("topic");
+        const modeParam = urlParams.get("mode");
+        
+        if (modeParam === 'global' || (!entityParam && !topicParam)) {
+            return { type: 'global' };
+        }
+        
+        return { 
+            type: 'entity-specific',
+            centerEntity: entityParam || undefined,
+            centerTopic: topicParam || undefined
+        };
     }
 
     /**
@@ -325,24 +350,55 @@ class EntityGraphView {
     async navigateToEntity(entityName: string): Promise<void> {
         try {
             this.currentEntity = entityName;
+            this.currentViewMode = { type: 'entity-specific', centerEntity: entityName };
 
-            // Update breadcrumb to show entity name
-            const entityBreadcrumb = document.getElementById(
-                "entityNameBreadcrumb",
-            );
+            const entityBreadcrumb = document.getElementById("entityNameBreadcrumb");
             if (entityBreadcrumb) {
                 entityBreadcrumb.textContent = ` > ${entityName}`;
             }
 
-            // Update URL
+            const backToGlobalBtn = document.getElementById("backToGlobalBtn");
+            if (backToGlobalBtn) {
+                backToGlobalBtn.style.display = "flex";
+            }
+
             const url = new URL(window.location.href);
             url.searchParams.set("entity", entityName);
+            url.searchParams.delete("mode");
             window.history.pushState({}, "", url.toString());
 
-            // Load real entity data
+            this.updateSidebarVisibility(true);
             await this.loadRealEntityData(entityName);
         } catch (error) {
             console.error("Failed to navigate to entity:", error);
+        }
+    }
+
+    async navigateToGlobalView(): Promise<void> {
+        try {
+            this.currentEntity = null;
+            this.currentViewMode = { type: 'global' };
+
+            const entityBreadcrumb = document.getElementById("entityNameBreadcrumb");
+            if (entityBreadcrumb) {
+                entityBreadcrumb.textContent = " > Global View";
+            }
+
+            const backToGlobalBtn = document.getElementById("backToGlobalBtn");
+            if (backToGlobalBtn) {
+                backToGlobalBtn.style.display = "none";
+            }
+
+            const url = new URL(window.location.href);
+            url.searchParams.delete("entity");
+            url.searchParams.delete("topic");
+            url.searchParams.set("mode", "global");
+            window.history.pushState({}, "", url.toString());
+
+            this.updateSidebarVisibility(false);
+            await this.loadGlobalView();
+        } catch (error) {
+            console.error("Failed to navigate to global view:", error);
         }
     }
 
@@ -452,6 +508,130 @@ class EntityGraphView {
         if (this.currentEntity) {
             await this.loadRealEntityData(this.currentEntity);
         }
+    }
+
+    private updateSidebarVisibility(visible: boolean): void {
+        const sidebar = document.getElementById("entitySidebar");
+        const graphContainer = document.getElementById("cytoscape-container");
+        
+        if (sidebar && graphContainer) {
+            if (visible) {
+                sidebar.style.display = 'block';
+                graphContainer.style.width = 'calc(100% - 400px)';
+            } else {
+                sidebar.style.display = 'none';
+                graphContainer.style.width = '100%';
+            }
+            
+            if (this.visualizer) {
+                setTimeout(() => this.visualizer.resize(), 100);
+            }
+        }
+    }
+
+    private async loadGlobalView(): Promise<void> {
+        try {
+            this.showGraphLoading();
+            console.log("Loading global knowledge graph");
+
+            const globalData = await this.loadGlobalGraphData();
+            
+            if (globalData.statistics.totalEntities === 0) {
+                this.hideGraphLoading();
+                this.showGraphEmpty();
+                return;
+            }
+
+            await this.visualizer.loadGlobalGraph(globalData);
+            this.hideGraphLoading();
+            
+            console.log(`Loaded global graph: ${globalData.statistics.totalEntities} entities, ${globalData.statistics.totalRelationships} relationships, ${globalData.statistics.totalCommunities} communities`);
+        } catch (error) {
+            console.error("Failed to load global view:", error);
+            this.hideGraphLoading();
+            this.showGraphError("Failed to load global knowledge graph");
+        }
+    }
+
+    private async loadGlobalGraphData(): Promise<any> {
+        const extensionService = createExtensionService();
+        
+        try {
+            const [status, relationships, communities, entitiesWithMetrics] = await Promise.all([
+                (extensionService as any).sendMessage({ type: "getKnowledgeGraphStatus" }),
+                (extensionService as any).sendMessage({ type: "getAllRelationships" }),
+                (extensionService as any).sendMessage({ type: "getAllCommunities" }),
+                (extensionService as any).sendMessage({ type: "getAllEntitiesWithMetrics" })
+            ]);
+
+            const processedCommunities = Array.isArray(communities) ? communities.map((c: any) => ({
+                ...c,
+                entities: typeof c.entities === 'string' ? JSON.parse(c.entities || "[]") : (c.entities || []),
+                topics: typeof c.topics === 'string' ? JSON.parse(c.topics || "[]") : (c.topics || [])
+            })) : [];
+
+            const entitiesWithColors = this.assignCommunityColors(entitiesWithMetrics || [], processedCommunities);
+
+            return {
+                communities: processedCommunities,
+                entities: entitiesWithColors,
+                relationships: Array.isArray(relationships) ? relationships : [],
+                topics: [],
+                statistics: {
+                    totalEntities: status?.entityCount || 0,
+                    totalRelationships: status?.relationshipCount || 0,
+                    totalCommunities: status?.communityCount || 0
+                }
+            };
+        } catch (error) {
+            console.error("Failed to load global graph data:", error);
+            return {
+                communities: [],
+                entities: [],
+                relationships: [],
+                topics: [],
+                statistics: {
+                    totalEntities: 0,
+                    totalRelationships: 0,
+                    totalCommunities: 0
+                }
+            };
+        }
+    }
+
+    private assignCommunityColors(entities: any[], communities: any[]): any[] {
+        const communityColors = [
+            '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', 
+            '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf',
+            '#aec7e8', '#ffbb78', '#98df8a', '#ff9896', '#c5b0d5',
+            '#c49c94', '#f7b6d3', '#c7c7c7', '#dbdb8d', '#9edae5'
+        ];
+
+        const communityColorMap = new Map<string, string>();
+        communities.forEach((community, index) => {
+            const colorIndex = index % communityColors.length;
+            communityColorMap.set(community.id || `community_${index}`, communityColors[colorIndex]);
+        });
+
+        return entities.map(entity => ({
+            ...entity,
+            color: communityColorMap.get(entity.communityId) || '#999999',
+            borderColor: this.getBorderColor(communityColorMap.get(entity.communityId) || '#999999')
+        }));
+    }
+
+    private getBorderColor(color: string): string {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return '#333333';
+        
+        ctx.fillStyle = color;
+        ctx.fillRect(0, 0, 1, 1);
+        const imageData = ctx.getImageData(0, 0, 1, 1);
+        const [r, g, b] = imageData.data;
+        
+        const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+        return brightness > 128 ? '#333333' : '#ffffff';
     }
 
     // UI Helper Methods
@@ -886,20 +1066,6 @@ class EntityGraphView {
         }
     }
 
-    /**
-     * Get cache statistics
-     */
-    getCacheStats(): any {
-        return this.entityCacheService.getCacheStats();
-    }
-
-    /**
-     * Clear all cached data
-     */
-    async clearCache(): Promise<void> {
-        await this.entityCacheService.clearAll();
-        this.showMessage("Cache cleared successfully", "success");
-    }
 
     /**
      * Show message to user

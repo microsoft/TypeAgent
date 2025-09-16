@@ -458,6 +458,25 @@ export async function handleKnowledgeAction(
         case "getAnalyticsData":
             return await getAnalyticsData(parameters, context);
 
+        case "getKnowledgeGraphStatus":
+            return await getKnowledgeGraphStatus(parameters, context);
+
+        case "buildKnowledgeGraph":
+            return await buildKnowledgeGraph(parameters, context);
+
+        case "rebuildKnowledgeGraph":
+            return await rebuildKnowledgeGraph(parameters, context);
+
+        case "getAllRelationships":
+            return await getAllRelationships(parameters, context);
+
+        case "getAllCommunities":
+            return await getAllCommunities(parameters, context);
+
+        case "getAllEntitiesWithMetrics":
+            return await getAllEntitiesWithMetrics(parameters, context);
+
+
         default:
             throw new Error(`Unknown knowledge action: ${actionName}`);
     }
@@ -3088,4 +3107,393 @@ export async function getAnalyticsData(
             },
         };
     }
+}
+
+export async function getKnowledgeGraphStatus(
+    parameters: {},
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    hasGraph: boolean;
+    entityCount: number;
+    relationshipCount: number;
+    communityCount: number;
+    isBuilding: boolean;
+    error?: string;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            debug("website collection not found")
+            return {
+                hasGraph: false,
+                entityCount: 0,
+                relationshipCount: 0,
+                communityCount: 0,
+                isBuilding: false,
+                error: "Website collection not available",
+            };
+        }
+
+        // Check if relationships and communities tables exist
+        if (!websiteCollection.relationships || !websiteCollection.communities) {
+            // Tables not initialized, no graph exists
+            return {
+                hasGraph: false,
+                entityCount: 0,
+                relationshipCount: 0,
+                communityCount: 0,
+                isBuilding: false,
+            };
+        }
+
+        // Get entity count from knowledge entities table
+        let entityCount = 0;
+        try {
+            if (websiteCollection.knowledgeEntities) {
+                entityCount = (websiteCollection.knowledgeEntities as any).getTotalEntityCount();
+            }
+        } catch (error) {
+            console.warn("Failed to get entity count:", error);
+        }
+
+        // Get relationship count  
+        let relationshipCount = 0;
+        try {
+            const relationships = websiteCollection.relationships.getAllRelationships();
+            relationshipCount = relationships.length;
+        } catch (error) {
+            console.warn("Failed to get relationship count:", error);
+        }
+
+        // Get community count
+        let communityCount = 0;
+        try {
+            const communities = websiteCollection.communities.getAllCommunities();
+            communityCount = communities.length;
+        } catch (error) {
+            console.warn("Failed to get community count:", error);
+        }
+
+        // Determine if graph exists based on actual data
+        const hasGraph = relationshipCount > 0 || entityCount > 0;
+
+        return {
+            hasGraph: hasGraph,
+            entityCount,
+            relationshipCount,
+            communityCount,
+            isBuilding: false,
+        };
+    } catch (error) {
+        console.error("Error getting knowledge graph status:", error);
+        return {
+            hasGraph: false,
+            entityCount: 0,
+            relationshipCount: 0,
+            communityCount: 0,
+            isBuilding: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+export async function buildKnowledgeGraph(
+    parameters: {
+        minimalMode?: boolean;
+        urlLimit?: number;
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    success: boolean;
+    message?: string;
+    error?: string;
+    stats?: {
+        urlsProcessed: number;
+        entitiesFound: number;
+        relationshipsCreated: number;
+        communitiesDetected: number;
+        timeElapsed: number;
+    };
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                success: false,
+                error: "Website collection not available",
+            };
+        }
+
+        // Use minimal mode for testing (default: 100 URLs)
+        const minimalMode = parameters.minimalMode !== false; // Default to true for testing
+        const urlLimit = parameters.urlLimit || 100;
+
+        console.log(`[Knowledge Graph] Starting build in ${minimalMode ? 'MINIMAL' : 'FULL'} mode`);
+        if (minimalMode) {
+            console.log(`[Knowledge Graph] Processing limited to ${urlLimit} URLs for faster testing`);
+        }
+
+        const startTime = Date.now();
+
+        // Start building the knowledge graph with options
+        const buildOptions = minimalMode ? { urlLimit } : undefined;
+        await websiteCollection.buildGraph(buildOptions);
+
+        const timeElapsed = Date.now() - startTime;
+
+        // Get stats after building
+        let stats = {
+            urlsProcessed: urlLimit,
+            entitiesFound: 0,
+            relationshipsCreated: 0,
+            communitiesDetected: 0,
+            timeElapsed
+        };
+
+        try {
+            if (websiteCollection.knowledgeEntities) {
+                stats.entitiesFound = (websiteCollection.knowledgeEntities as any).getTotalEntityCount();
+            }
+            if (websiteCollection.relationships) {
+                const relationships = websiteCollection.relationships.getAllRelationships();
+                stats.relationshipsCreated = relationships.length;
+            }
+            if (websiteCollection.communities) {
+                const communities = websiteCollection.communities.getAllCommunities();
+                stats.communitiesDetected = communities.length;
+            }
+        } catch (error) {
+            console.warn("[Knowledge Graph] Failed to get stats:", error);
+        }
+
+        console.log(`[Knowledge Graph] Build completed in ${timeElapsed}ms`);
+        console.log(`[Knowledge Graph] Stats:`, stats);
+
+        return {
+            success: true,
+            message: `Knowledge graph built successfully in ${minimalMode ? 'minimal' : 'full'} mode`,
+            stats
+        };
+    } catch (error) {
+        console.error("[Knowledge Graph] Error building:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+export async function rebuildKnowledgeGraph(
+    parameters: {},
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    success: boolean;
+    message?: string;
+    error?: string;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                success: false,
+                error: "Website collection not available",
+            };
+        }
+
+        // Clear existing graph data and rebuild
+        // Note: This assumes we have a method to clear graph data
+        // If not available, we might need to implement it
+        try {
+            // Clear existing graph tables if they exist
+            if (websiteCollection.relationships) {
+                await websiteCollection.relationships.clear();
+            }
+            if (websiteCollection.communities) {
+                await websiteCollection.communities.clear();
+            }
+        } catch (clearError) {
+            // Continue even if clearing fails, as the rebuild might overwrite
+            console.warn("Failed to clear existing graph data:", clearError);
+        }
+
+        // Rebuild the knowledge graph
+        await websiteCollection.buildGraph();
+
+        return {
+            success: true,
+            message: "Knowledge graph rebuilt successfully",
+        };
+    } catch (error) {
+        console.error("Error rebuilding knowledge graph:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+export async function getAllRelationships(
+    parameters: {},
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    relationships: any[];
+    error?: string;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                relationships: [],
+                error: "Website collection not available",
+            };
+        }
+
+        const relationships = websiteCollection.relationships?.getAllRelationships() || [];
+        
+        return {
+            relationships: relationships,
+        };
+    } catch (error) {
+        console.error("Error getting all relationships:", error);
+        return {
+            relationships: [],
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+export async function getAllCommunities(
+    parameters: {},
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    communities: any[];
+    error?: string;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                communities: [],
+                error: "Website collection not available",
+            };
+        }
+
+        const communities = websiteCollection.communities?.getAllCommunities() || [];
+        
+        return {
+            communities: communities,
+        };
+    } catch (error) {
+        console.error("Error getting all communities:", error);
+        return {
+            communities: [],
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+export async function getAllEntitiesWithMetrics(
+    parameters: {},
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    entities: any[];
+    error?: string;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                entities: [],
+                error: "Website collection not available",
+            };
+        }
+
+        // Try to get cached data first for faster loading
+        const cachedOverview = (websiteCollection as any).getCachedGraphOverview?.();
+        if (cachedOverview && cachedOverview.entities) {
+            console.log(`[Knowledge Graph] Using cached entity data: ${cachedOverview.entities.length} entities`);
+            return {
+                entities: cachedOverview.entities,
+            };
+        }
+
+        // Fallback to live computation if no cache
+        console.log("[Knowledge Graph] No cache found, computing entities with metrics");
+        const entities = (websiteCollection.knowledgeEntities as any)?.getTopEntities(5000) || [];
+        const relationships = websiteCollection.relationships?.getAllRelationships() || [];
+        const communities = websiteCollection.communities?.getAllCommunities() || [];
+        
+        const entityMetrics = calculateEntityMetrics(entities, relationships, communities);
+        
+        return {
+            entities: entityMetrics,
+        };
+    } catch (error) {
+        console.error("Error getting all entities with metrics:", error);
+        return {
+            entities: [],
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+
+function calculateEntityMetrics(entities: any[], relationships: any[], communities: any[]): any[] {
+    const entityMap = new Map<string, any>();
+    const degreeMap = new Map<string, number>();
+    const communityMap = new Map<string, string>();
+    
+    entities.forEach(entity => {
+        entityMap.set(entity.entityName, {
+            id: entity.entityName,
+            name: entity.entityName,
+            type: entity.entityType || 'entity',
+            confidence: entity.confidence || 0.5,
+            count: entity.count || 1
+        });
+        degreeMap.set(entity.entityName, 0);
+    });
+    
+    communities.forEach((community, index) => {
+        let communityEntities: string[] = [];
+        try {
+            communityEntities = typeof community.entities === 'string' 
+                ? JSON.parse(community.entities) 
+                : (Array.isArray(community.entities) ? community.entities : []);
+        } catch (e) {
+            communityEntities = [];
+        }
+        
+        communityEntities.forEach(entityName => {
+            communityMap.set(entityName, community.id || `community_${index}`);
+        });
+    });
+    
+    relationships.forEach(rel => {
+        const from = rel.fromEntity;
+        const to = rel.toEntity;
+        
+        if (degreeMap.has(from)) {
+            degreeMap.set(from, degreeMap.get(from)! + 1);
+        }
+        if (degreeMap.has(to)) {
+            degreeMap.set(to, degreeMap.get(to)! + 1);
+        }
+    });
+    
+    const maxDegree = Math.max(...Array.from(degreeMap.values())) || 1;
+    
+    return Array.from(entityMap.values()).map(entity => ({
+        ...entity,
+        degree: degreeMap.get(entity.name) || 0,
+        importance: (degreeMap.get(entity.name) || 0) / maxDegree,
+        communityId: communityMap.get(entity.name) || 'default',
+        size: Math.max(8, Math.min(40, 8 + Math.sqrt((degreeMap.get(entity.name) || 0) * 3)))
+    }));
 }

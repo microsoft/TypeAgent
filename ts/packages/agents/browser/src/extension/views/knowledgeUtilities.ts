@@ -27,6 +27,8 @@ import type {
     KnowledgeProgressCallback,
     KnowledgeExtractionProgress,
 } from "../interfaces/knowledgeExtraction.types";
+import { WebsiteCollection } from "website-memory";
+import type { Relationship, Community } from "website-memory";
 
 // ===================================================================
 // INTERFACES AND TYPES
@@ -1229,11 +1231,6 @@ export interface EntityGraphServices {
     refreshEntityData(entityName: string): Promise<any>;
 }
 
-export interface EntityCacheServices {
-    getEntity(entityName: string): Promise<any>;
-    getCacheStats(): Promise<any>;
-    clearAll(): Promise<void>;
-}
 
 // Default implementations using the existing ChromeExtensionService
 export class DefaultAnalyticsServices implements AnalyticsServices {
@@ -1504,6 +1501,16 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
 
     async getEntityGraph(centerEntity: string, depth: number): Promise<any> {
         try {
+            console.log(`Getting graph for ${centerEntity} (depth: ${depth})`);
+            
+            // First try to get the website collection from the extension service
+            const websiteCollection = await this.getWebsiteCollection();
+            
+            if (websiteCollection) {
+                // Use indexed graph approach
+                return this.getEntityGraphFromIndex(centerEntity, depth, websiteCollection);
+            }
+
             if (!this.extensionService) {
                 console.warn(
                     "ChromeExtensionService not available, using empty result",
@@ -1866,6 +1873,157 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
         });
 
         return refreshedData.entities.length > 0 ? refreshedData : null;
+    }
+
+    /**
+     * Get website collection from extension service
+     */
+    private async getWebsiteCollection(): Promise<WebsiteCollection | null> {
+        try {
+            if (!this.extensionService) return null;
+            
+            // Try to get the website collection through the extension service
+            const result = await this.extensionService.getAnalyticsData({
+                includeWebsiteCollection: true
+            } as any);
+            
+            return result?.websiteCollection || null;
+        } catch (error) {
+            console.warn("Could not get website collection:", error);
+            return null;
+        }
+    }
+
+    /**
+     * Get entity information from website collection
+     */
+    private async getEntityInfo(entityName: string, websiteCollection: WebsiteCollection): Promise<any> {
+        // Get entity data from knowledge entities table
+        const entities = await (websiteCollection.knowledgeEntities as any).getTopEntities(1000);
+        const entityData = entities.find((e: any) => e.entityName.toLowerCase() === entityName.toLowerCase());
+        
+        if (!entityData) {
+            return {
+                id: entityName.replace(/\s+/g, '_'),
+                name: entityName,
+                type: "concept",
+                confidence: 0.5,
+                category: "related",
+                description: `Entity: ${entityName}`,
+                mentionCount: 1,
+                visitCount: 0,
+                domains: []
+            };
+        }
+
+        return {
+            id: entityName.replace(/\s+/g, '_'),
+            name: entityData.entityName,
+            type: entityData.entityType,
+            confidence: entityData.confidence,
+            category: "related",
+            description: `Entity: ${entityData.entityName}`,
+            mentionCount: entityData.count,
+            visitCount: 0,
+            domains: [entityData.domain],
+            extractionDate: entityData.extractionDate
+        };
+    }
+
+    /**
+     * Get entity graph using indexed approach
+     */
+    private async getEntityGraphFromIndex(centerEntity: string, depth: number, websiteCollection: WebsiteCollection): Promise<any> {
+        try {
+
+            // Check if knowledge graph exists
+            const hasGraph = await websiteCollection.hasGraph();
+            if (!hasGraph) {
+                console.log("No knowledge graph available, building one...");
+                await websiteCollection.buildGraph();
+            }
+
+            const graphData: any = {
+                centerEntity,
+                entities: [],
+                relationships: [],
+                communities: [],
+                metadata: {
+                    searchDepth: depth,
+                    generatedAt: new Date().toISOString(),
+                    source: "indexed_graph"
+                }
+            };
+
+            // Build graph from indexed data
+            const processedEntities = new Set<string>([centerEntity]);
+            const queue = [{ entity: centerEntity, currentDepth: 0 }];
+
+            while (queue.length > 0) {
+                const { entity, currentDepth } = queue.shift()!;
+
+                if (currentDepth >= depth) continue;
+
+                const neighbors = await websiteCollection.relationships.getNeighbors(entity);
+
+                for (const rel of neighbors) {
+                    const relatedEntity = rel.fromEntity === entity ? rel.toEntity : rel.fromEntity;
+
+                    if (!processedEntities.has(relatedEntity)) {
+                        processedEntities.add(relatedEntity);
+                        queue.push({ entity: relatedEntity, currentDepth: currentDepth + 1 });
+
+                        const entityInfo = await this.getEntityInfo(relatedEntity, websiteCollection);
+                        graphData.entities.push(entityInfo);
+                    }
+
+                    graphData.relationships.push({
+                        from: rel.fromEntity,
+                        to: rel.toEntity,
+                        type: rel.relationshipType,
+                        confidence: rel.confidence,
+                        sources: JSON.parse(rel.sources),
+                        count: rel.count
+                    });
+                }
+            }
+
+            // Add community information
+            graphData.communities = await websiteCollection.communities.getForEntities(
+                Array.from(processedEntities)
+            );
+
+            // Add center entity if not already included
+            if (!graphData.entities.some((e: any) => e.name === centerEntity)) {
+                const centerInfo = await this.getEntityInfo(centerEntity, websiteCollection);
+                centerInfo.category = "center";
+                graphData.entities.unshift(centerInfo);
+            }
+
+            console.log(`Indexed graph generated: ${graphData.entities.length} entities, ${graphData.relationships.length} relationships`);
+            return graphData;
+        } catch (error) {
+            console.error("Indexed entity graph retrieval failed:", error);
+            return this.getEntityGraphFallback(centerEntity, depth);
+        }
+    }
+
+    /**
+     * Fallback to original getEntityGraph method when indexed approach fails
+     */
+    private async getEntityGraphFallback(centerEntity: string, depth: number): Promise<any> {
+        console.log("Using fallback entity graph method");
+        return {
+            centerEntity,
+            entities: [],
+            relationships: [],
+            metadata: {
+                searchDepth: depth,
+                generatedAt: new Date().toISOString(),
+                source: "fallback",
+                error: "Indexed graph not available"
+            }
+        };
     }
 
     /**
@@ -2522,25 +2680,3 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
     }
 }
 
-export class DefaultEntityCacheServices implements EntityCacheServices {
-    async getEntity(entityName: string): Promise<any> {
-        // This would get from real entity cache
-        console.log("Getting cached entity:", entityName);
-        return null;
-    }
-
-    async getCacheStats(): Promise<any> {
-        // This would return real cache stats
-        return {
-            entityCount: 0,
-            relationshipCount: 0,
-            cacheSize: 0,
-            hitRate: 0,
-        };
-    }
-
-    async clearAll(): Promise<void> {
-        // This would clear real cache
-        console.log("Clearing entity cache");
-    }
-}

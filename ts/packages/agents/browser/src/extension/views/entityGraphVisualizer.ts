@@ -312,6 +312,51 @@ export class EntityGraphVisualizer {
                 },
             },
 
+            // Entity nodes (zoomed-out view with community colors)
+            {
+                selector: 'node[type="entity"]',
+                style: {
+                    "background-color": "data(color)",
+                    shape: "ellipse",
+                    width: "data(size)",
+                    height: "data(size)",
+                    label: "data(name)",
+                    "text-valign": "bottom",
+                    "text-margin-y": 3,
+                    "font-size": "8px",
+                    "font-weight": "normal",
+                    color: "#333",
+                    "text-background-color": "rgba(255, 255, 255, 0.8)",
+                    "text-background-opacity": 0.7,
+                    "text-background-padding": "2px",
+                    "border-width": 1,
+                    "border-color": "data(borderColor)",
+                    "z-index": 10,
+                },
+            },
+            // Hub nodes (high importance)
+            {
+                selector: 'node[importance > 0.7]',
+                style: {
+                    "border-width": 3,
+                    "border-color": "#333",
+                    "font-weight": "bold",
+                    "font-size": "10px",
+                    "z-index": 20,
+                },
+            },
+            // Very important nodes
+            {
+                selector: 'node[importance > 0.9]',
+                style: {
+                    "border-width": 4,
+                    "border-color": "#000",
+                    "font-weight": "bold",
+                    "font-size": "12px",
+                    "z-index": 30,
+                },
+            },
+
             // Dimmed elements
             {
                 selector: ".dimmed",
@@ -385,6 +430,96 @@ export class EntityGraphVisualizer {
         this.cy.fit();
     }
 
+    async loadGlobalGraph(globalData: any): Promise<void> {
+        if (!this.cy) return;
+
+        this.cy.elements().remove();
+
+        const elements = this.convertGlobalDataToElements(globalData);
+        
+        this.cy.add(elements);
+
+        this.applyForceDirectedLayout();
+        
+        this.setupZoomInteractions();
+        
+        this.cy.fit();
+    }
+
+    private applyForceDirectedLayout(): void {
+        if (!this.cy) return;
+
+        const layout = this.cy.layout({
+            name: 'cose',
+            idealEdgeLength: 80,
+            nodeOverlap: 20,
+            refresh: 20,
+            fit: true,
+            padding: 30,
+            randomize: false,
+            componentSpacing: 100,
+            nodeRepulsion: (node: any) => 400000 * (node.data('importance') + 0.1),
+            edgeElasticity: (edge: any) => 100 * (edge.data('strength') || 0.5),
+            nestingFactor: 5,
+            gravity: 80,
+            numIter: 1000,
+            initialTemp: 200,
+            coolingFactor: 0.95,
+            minTemp: 1.0
+        });
+
+        layout.run();
+    }
+
+    private setupZoomInteractions(): void {
+        if (!this.cy) return;
+
+        this.cy.on('zoom', () => {
+            const zoom = this.cy.zoom();
+            this.updateLevelOfDetail(zoom);
+        });
+    }
+
+    private updateLevelOfDetail(zoom: number): void {
+        if (!this.cy) return;
+
+        this.cy.batch(() => {
+            this.cy.nodes().forEach((node: any) => {
+                const importance = node.data('importance') || 0;
+                const degree = node.data('degree') || 0;
+                
+                if (zoom < 0.5) {
+                    if (importance < 0.3 && degree < 5) {
+                        node.style('display', 'none');
+                    } else {
+                        node.style('display', 'element');
+                        node.style('label', '');
+                    }
+                } else if (zoom < 1.0) {
+                    node.style('display', 'element');
+                    if (importance > 0.5 || degree > 10) {
+                        node.style('label', node.data('name'));
+                    } else {
+                        node.style('label', '');
+                    }
+                } else {
+                    node.style('display', 'element');
+                    node.style('label', node.data('name'));
+                }
+            });
+
+            this.cy.edges().forEach((edge: any) => {
+                const strength = edge.data('strength') || 0;
+                
+                if (zoom < 0.7 && strength < 0.3) {
+                    edge.style('display', 'none');
+                } else {
+                    edge.style('display', 'element');
+                }
+            });
+        });
+    }
+
     /**
      * Convert graph data to Cytoscape elements
      */
@@ -437,6 +572,69 @@ export class EntityGraphVisualizer {
         console.log(
             `Converted to Cytoscape format: ${elements.filter((e) => e.group === "nodes").length} nodes, ${elements.filter((e) => e.group === "edges").length} edges`,
         );
+        return elements;
+    }
+
+    private convertGlobalDataToElements(globalData: any): any[] {
+        const elements: any[] = [];
+        const nodeIds = new Set<string>();
+
+        if (globalData.entities && globalData.entities.length > 0) {
+            globalData.entities.forEach((entity: any) => {
+                if (!nodeIds.has(entity.id)) {
+                    elements.push({
+                        group: "nodes",
+                        data: {
+                            id: entity.id,
+                            name: entity.name,
+                            type: entity.type || "entity",
+                            size: entity.size || 12,
+                            importance: entity.importance || 0,
+                            degree: entity.degree || 0,
+                            communityId: entity.communityId,
+                            color: entity.color || '#999999',
+                            borderColor: entity.borderColor || '#333333'
+                        }
+                    });
+                    nodeIds.add(entity.id);
+                }
+            });
+        }
+
+        if (globalData.relationships && globalData.relationships.length > 0) {
+            const maxRelationships = Math.min(1000, globalData.relationships.length);
+            let validRelationships = 0;
+            let invalidRelationships = 0;
+            
+            globalData.relationships.slice(0, maxRelationships).forEach((rel: any) => {
+                const sourceId = rel.fromEntity;
+                const targetId = rel.toEntity;
+                
+                if (nodeIds.has(sourceId) && nodeIds.has(targetId)) {
+                    elements.push({
+                        group: "edges",
+                        data: {
+                            id: `${sourceId}-${targetId}`,
+                            source: sourceId,
+                            target: targetId,
+                            type: rel.relationshipType || "related",
+                            strength: rel.confidence || 0.5,
+                            weight: rel.count || 1
+                        }
+                    });
+                    validRelationships++;
+                } else {
+                    invalidRelationships++;
+                    if (invalidRelationships <= 5) {
+                        console.log(`[Graph Debug] Missing entity for relationship: ${sourceId} -> ${targetId}, has source: ${nodeIds.has(sourceId)}, has target: ${nodeIds.has(targetId)}`);
+                    }
+                }
+            });
+            
+            console.log(`[Graph Debug] Relationships: ${validRelationships} valid, ${invalidRelationships} invalid out of ${globalData.relationships.length} total`);
+        }
+
+        console.log(`Zoomed-out graph: ${elements.filter(e => e.group === "nodes").length} nodes, ${elements.filter(e => e.group === "edges").length} edges`);
         return elements;
     }
 

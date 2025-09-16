@@ -155,6 +155,14 @@ export class KnowledgeEntityTable extends ms.sqlite.SqliteDataFrame {
         `);
         return stmt.all(entityType) as KnowledgeEntity[];
     }
+
+    public getTotalEntityCount(): number {
+        const stmt = this.db.prepare(`
+            SELECT COUNT(*) as count FROM knowledgeEntities
+        `);
+        const result = stmt.get() as { count: number };
+        return result.count;
+    }
 }
 
 // Knowledge topics table
@@ -213,6 +221,14 @@ export class KnowledgeTopicTable extends ms.sqlite.SqliteDataFrame {
             LIMIT ?
         `);
         return stmt.all(`%${topic}%`, topic, limit) as KnowledgeTopic[];
+    }
+
+    public getTotalTopicCount(): number {
+        const stmt = this.db.prepare(`
+            SELECT COUNT(*) as count FROM knowledgeTopics
+        `);
+        const result = stmt.get() as { count: number };
+        return result.count;
     }
 }
 
@@ -278,3 +294,112 @@ export class ActionKnowledgeCorrelationTable extends ms.sqlite.SqliteDataFrame {
         }>;
     }
 }
+
+// Entity relationships table
+export interface Relationship {
+    fromEntity: string;
+    toEntity: string;
+    relationshipType: string;
+    confidence: number;
+    sources: string; // JSON array of URLs that support this relationship
+    count: number;
+    updated: string;
+}
+
+export class RelationshipTable extends ms.sqlite.SqliteDataFrame {
+    constructor(public db: sqlite.Database) {
+        super(db, "relationships", [
+            ["fromEntity", { type: "string" }],
+            ["toEntity", { type: "string" }],
+            ["relationshipType", { type: "string" }],
+            ["confidence", { type: "number" }],
+            ["sources", { type: "string" }], // JSON array
+            ["count", { type: "number" }],
+            ["updated", { type: "string" }],
+        ]);
+    }
+    
+    public getNeighbors(entityName: string, minConfidence = 0.3): Relationship[] {
+        const stmt = this.db.prepare(`
+            SELECT * FROM relationships 
+            WHERE (fromEntity = ? OR toEntity = ?) AND confidence >= ?
+            ORDER BY confidence DESC
+        `);
+        return stmt.all(entityName, entityName, minConfidence) as Relationship[];
+    }
+
+    public getRelationshipsForEntities(entities: string[]): Relationship[] {
+        const placeholders = entities.map(() => "?").join(",");
+        const stmt = this.db.prepare(`
+            SELECT * FROM relationships 
+            WHERE fromEntity IN (${placeholders}) OR toEntity IN (${placeholders})
+            ORDER BY confidence DESC
+        `);
+        return stmt.all(...entities, ...entities) as Relationship[];
+    }
+
+    public getAllRelationships(): Relationship[] {
+        const stmt = this.db.prepare(`
+            SELECT * FROM relationships 
+            ORDER BY confidence DESC
+        `);
+        return stmt.all() as Relationship[];
+    }
+
+    public clear(): void {
+        const stmt = this.db.prepare(`DELETE FROM relationships`);
+        stmt.run();
+    }
+}
+
+// Graph communities table
+export interface Community {
+    id: string;
+    entities: string; // JSON array of entity names
+    topics: string; // JSON array of related topics
+    size: number;
+    density: number;
+    updated: string;
+}
+
+export class CommunityTable extends ms.sqlite.SqliteDataFrame {
+    constructor(public db: sqlite.Database) {
+        super(db, "communities", [
+            ["id", { type: "string" }],
+            ["entities", { type: "string" }], // JSON array
+            ["topics", { type: "string" }], // JSON array
+            ["size", { type: "number" }],
+            ["density", { type: "number" }],
+            ["updated", { type: "string" }],
+        ]);
+    }
+    
+    public getForEntities(entityNames: string[]): Community[] {
+        if (entityNames.length === 0) return [];
+        
+        // Find communities containing any of the given entities
+        const conditions = entityNames.map(() => "entities LIKE ?").join(" OR ");
+        const params = entityNames.map(name => `%"${name}"%`);
+        
+        const stmt = this.db.prepare(`
+            SELECT * FROM communities 
+            WHERE ${conditions}
+            ORDER BY size DESC
+        `);
+        return stmt.all(...params) as Community[];
+    }
+
+    public getAllCommunities(): Community[] {
+        const stmt = this.db.prepare(`
+            SELECT * FROM communities 
+            ORDER BY size DESC
+        `);
+        return stmt.all() as Community[];
+    }
+
+    public clear(): void {
+        const stmt = this.db.prepare(`DELETE FROM communities`);
+        stmt.run();
+    }
+}
+

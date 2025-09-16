@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 import fs from "node:fs";
-import { ChatModel, TextEmbeddingModel } from "aiclient";
 import path from "node:path";
+import { ChatModel, TextEmbeddingModel } from "aiclient";
 import { WebsiteCollection } from "./websiteCollection.js";
 import { importWebsites, getDefaultBrowserPaths } from "./importWebsites.js";
 import { IndexingResults } from "knowpro";
@@ -201,7 +201,11 @@ if (
                     debug(
                         "No existing collection found or empty, creating new one",
                     );
-                    websites = new WebsiteCollection();
+                    // Create with correct database path to preserve any existing data
+                    const dbFile = path.join(index.path, "index_dataFrames.sqlite");
+                    const dbPath = fs.existsSync(dbFile) ? dbFile : "";
+                    debug(`Checking for existing database at: ${dbFile}, exists: ${fs.existsSync(dbFile)}`);
+                    websites = new WebsiteCollection(undefined, undefined, undefined, undefined, dbPath);
                 } else {
                     debug(
                         `Loaded existing collection with ${websites.messages.length} websites`,
@@ -211,7 +215,11 @@ if (
                 debug(
                     `Failed to load existing collection: ${loadError}. Creating new collection.`,
                 );
-                websites = new WebsiteCollection();
+                // Create with correct database path to preserve any existing data
+                const dbFile = path.join(index.path, "index_dataFrames.sqlite");
+                const dbPath = fs.existsSync(dbFile) ? dbFile : "";
+                debug(`Checking for existing database at: ${dbFile}, exists: ${fs.existsSync(dbFile)}`);
+                websites = new WebsiteCollection(undefined, undefined, undefined, undefined, dbPath);
             }
 
             const browserType = index.browserType || "chrome";
@@ -264,6 +272,7 @@ if (
         websiteCollection: WebsiteCollection,
         newWebsites: any[],
     ) {
+        // Add websites to collection
         for (const website of newWebsites) {
             try {
                 const docPart = (
@@ -276,6 +285,22 @@ if (
                 );
                 websiteCollection.addWebsites([website]);
             }
+        }
+
+        // Update knowledge graph
+        try {
+            const hasGraph = await websiteCollection.hasGraph();
+            
+            if (!hasGraph) {
+                debug("Building initial knowledge graph...");
+                await websiteCollection.buildGraph();
+            } else {
+                debug(`Updating knowledge graph with ${newWebsites.length} new websites...`);
+                await websiteCollection.updateGraph(newWebsites);
+            }
+        } catch (error) {
+            debug(`Error updating knowledge graph: ${error}`);
+            // Don't fail the entire indexing process if graph update fails
         }
     }
 

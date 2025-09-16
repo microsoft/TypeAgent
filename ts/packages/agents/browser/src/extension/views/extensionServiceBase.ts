@@ -389,6 +389,25 @@ export abstract class ExtensionServiceBase {
         });
     }
 
+    async getKnowledgeGraphStatus(): Promise<any> {
+        return this.sendMessage({
+            type: "getKnowledgeGraphStatus",
+        });
+    }
+
+    async buildKnowledgeGraph(options?: { minimalMode?: boolean; urlLimit?: number }): Promise<any> {
+        return this.sendMessage({
+            type: "buildKnowledgeGraph",
+            parameters: options || {}
+        });
+    }
+
+    async rebuildKnowledgeGraph(): Promise<any> {
+        return this.sendMessage({
+            type: "rebuildKnowledgeGraph",
+        });
+    }
+
     async notifyAutoIndexSettingChanged(enabled: boolean): Promise<void> {
         await this.sendMessage({
             type: "notifyAutoIndexSettingChanged",
