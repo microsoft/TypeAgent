@@ -6,8 +6,6 @@ import {
     app,
     globalShortcut,
     dialog,
-    session,
-    WebContentsView,
     shell,
     Notification,
     protocol,
@@ -29,20 +27,17 @@ import {
 } from "./shellSettings.js";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createShellAgentProvider } from "./agent.js";
-import { BrowserAgentIpc } from "./browserIpc.js";
-import { WebSocketMessageV2 } from "common-utils";
-import { AzureSpeech } from "./azureSpeech.js";
-import {
-    closeLocalWhisper,
-    isLocalWhisperEnabled,
-} from "./localWhisperCommandHandler.js";
+import { closeLocalWhisper } from "./localWhisperCommandHandler.js";
 import { createDispatcherRpcServer } from "agent-dispatcher/rpc/dispatcher/server";
 import { createGenericChannel } from "agent-rpc/channel";
 import { createClientIORpcClient } from "agent-dispatcher/rpc/clientio/client";
 import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
 import { getConsolePrompt } from "agent-dispatcher/helpers/console";
-import { ShellWindow } from "./shellWindow.js";
+import {
+    getShellWindowForChatViewIpcEvent,
+    ShellWindow,
+} from "./shellWindow.js";
 
 import { debugShell, debugShellError } from "./debug.js";
 import { loadKeys, loadKeysFromEnvFile } from "./keys.js";
@@ -55,9 +50,15 @@ import {
 } from "./commands/update.js";
 import { createInlineBrowserControl } from "./inlineBrowserControl.js";
 import { BrowserControl } from "browser-typeagent/agent/types";
-import { ExtensionStorageManager } from "./extensionStorage.js";
 import { initializeSearchMenuUI } from "./electronSearchMenuUI.js";
 import { initializePen } from "./commands/pen.js";
+import { initializeSpeech, triggerRecognitionOnce } from "./speech.js";
+
+import {
+    initializePDFViewerIpcHandlers,
+    initializeExternalStorageIpcHandlers,
+    initializeBrowserExtension,
+} from "./webViewIpcHandlers.js";
 
 debugShell("App name", app.getName());
 debugShell("App version", app.getVersion());
@@ -149,104 +150,7 @@ function createWindow(shellSettings: ShellSettingManager) {
     debugShell("Creating window", performance.now() - time);
 
     // Create the browser window.
-    const shellWindow = new ShellWindow(shellSettings);
-
-    initializeSpeech(shellWindow.chatView);
-    initializeSearchMenuUI(shellWindow);
-
-    ipcMain.on("views-resized-by-user", (_, newPos: number) => {
-        shellWindow.updateContentSize(newPos);
-    });
-
-    ipcMain.handle("init-browser-ipc", async () => {
-        await BrowserAgentIpc.getinstance().ensureWebsocketConnected();
-
-        BrowserAgentIpc.getinstance().onMessageReceived = (
-            message: WebSocketMessageV2,
-        ) => {
-            shellWindow.sendMessageToInlineWebContent(message);
-        };
-    });
-
-    return shellWindow;
-}
-
-let speechToken:
-    | { token: string; expire: number; region: string; endpoint: string }
-    | undefined;
-
-async function getSpeechToken(silent: boolean) {
-    const instance = AzureSpeech.getInstance();
-    if (instance === undefined) {
-        if (!silent) {
-            dialog.showErrorBox(
-                "Azure Speech Service: Missing configuration",
-                "Environment variable SPEECH_SDK_KEY or SPEECH_SDK_REGION is missing.  Switch to local whisper or provide the configuration and restart.",
-            );
-        }
-        return undefined;
-    }
-
-    if (speechToken !== undefined && speechToken.expire > Date.now()) {
-        return speechToken;
-    }
-    try {
-        debugShell("Getting speech token");
-        const tokenResponse = await instance.getTokenAsync();
-        speechToken = {
-            token: tokenResponse.token,
-            expire: Date.now() + 9 * 60 * 1000, // 9 minutes (token expires in 10 minutes)
-            region: tokenResponse.region,
-            endpoint: tokenResponse.endpoint,
-        };
-        return speechToken;
-    } catch (e: any) {
-        debugShellError("Error getting speech token", e);
-        if (!silent) {
-            dialog.showErrorBox(
-                "Azure Speech Service: Error getting token",
-                e.message,
-            );
-        }
-        return undefined;
-    }
-}
-
-async function triggerRecognitionOnce(chatView: WebContentsView) {
-    const speechToken = await getSpeechToken(false);
-    const useLocalWhisper = isLocalWhisperEnabled();
-    chatView.webContents.send("listen-event", speechToken, useLocalWhisper);
-}
-
-function initializeSpeech(chatView: WebContentsView) {
-    const key = process.env["SPEECH_SDK_KEY"] ?? "identity";
-    const region = process.env["SPEECH_SDK_REGION"];
-    const endpoint = process.env["SPEECH_SDK_ENDPOINT"] as string;
-    if (region) {
-        AzureSpeech.initialize({
-            azureSpeechSubscriptionKey: key,
-            azureSpeechRegion: region,
-            azureSpeechEndpoint: endpoint,
-        });
-    } else {
-        debugShellError("Speech: no key or region");
-    }
-
-    ipcMain.handle("get-speech-token", async (_, silent: boolean) => {
-        return getSpeechToken(silent);
-    });
-    const ret = globalShortcut.register("Alt+M", () => {
-        triggerRecognitionOnce(chatView);
-    });
-
-    if (ret) {
-        // Double check whether a shortcut is registered.
-        debugShell(
-            `Global shortcut Alt+M: ${globalShortcut.isRegistered("Alt+M")}`,
-        );
-    } else {
-        debugShellError("Global shortcut registration failed");
-    }
+    return new ShellWindow(shellSettings);
 }
 
 async function initializeDispatcher(
@@ -473,57 +377,6 @@ async function initializeInstance(
         }
     });
 
-    ipcMain.on("save-settings", (_event, settings: ShellUserSettings) => {
-        shellWindow.setUserSettings(settings);
-    });
-
-    ipcMain.on("open-image-file", async () => {
-        const result = await dialog.showOpenDialog(mainWindow, {
-            filters: [
-                {
-                    name: "Image files",
-                    extensions: ["png", "jpg", "jpeg", "gif"],
-                },
-            ],
-        });
-
-        if (result && !result.canceled) {
-            let paths = result.filePaths;
-            if (paths && paths.length > 0) {
-                const content = readFileSync(paths[0], "base64");
-                chatView.webContents.send("file-selected", paths[0], content);
-            }
-        }
-    });
-
-    ipcMain.on("open-folder", async (_event, path: string) => {
-        shell.openPath(path);
-    });
-
-    ipcMain.on("open-url-in-browser-tab", async (_event, url: string) => {
-        const shellWindow = ShellWindow.getInstance();
-        if (!shellWindow) return;
-
-        // Handle custom protocol URLs
-        if (url.startsWith("typeagent-browser://")) {
-            const parsedUrl = new URL(url);
-            const pathname = parsedUrl.pathname;
-            const queryString = parsedUrl.search;
-
-            const browserExtensionUrls = (global as any).browserExtensionUrls;
-            if (browserExtensionUrls && browserExtensionUrls[pathname]) {
-                const resolvedUrl =
-                    browserExtensionUrls[pathname] + queryString;
-                shellWindow.createBrowserTab(new URL(resolvedUrl), {
-                    background: false,
-                });
-            }
-        } else if (url.startsWith("http://") || url.startsWith("https://")) {
-            // Handle HTTP/HTTPS URLs - open them in a new browser tab
-            shellWindow.createBrowserTab(new URL(url), { background: false });
-        }
-    });
-
     return shellWindow.waitForContentLoaded();
 }
 
@@ -549,29 +402,6 @@ async function initialize() {
             envFile,
         );
     }
-    const browserExtensionPath = path.join(
-        // HACK HACK for packaged build: The browser extension cannot be loaded from ASAR, so it is not packed.
-        // Assume we can just replace app.asar with app.asar.unpacked in all cases.
-        path.basename(appPath) === "app.asar"
-            ? path.join(path.dirname(appPath), "app.asar.unpacked")
-            : appPath,
-        "node_modules/browser-typeagent/dist/electron",
-    );
-    const extension = await session.defaultSession.extensions.loadExtension(
-        browserExtensionPath,
-        {
-            allowFileAccess: true,
-        },
-    );
-
-    // Store extension info for later URL construction
-    (global as any).browserExtensionId = extension.id;
-    (global as any).browserExtensionUrls = {
-        "/annotationsLibrary.html": `chrome-extension://${extension.id}/views/annotationsLibrary.html`,
-        "/knowledgeLibrary.html": `chrome-extension://${extension.id}/views/knowledgeLibrary.html`,
-        "/macrosLibrary.html": `chrome-extension://${extension.id}/views/macrosLibrary.html`,
-        "/entityGraphView.html": `chrome-extension://${extension.id}/views/entityGraphView.html`,
-    };
 
     protocol.handle("typeagent-browser", (request) => {
         const url = new URL(request.url);
@@ -602,11 +432,13 @@ async function initialize() {
     });
 
     const shellSettings = new ShellSettingManager(instanceDir);
-    const extensionStorage = new ExtensionStorageManager(instanceDir);
     const settings = shellSettings.user;
     const dataDir = getShellDataDir(instanceDir);
     const chatHistory: string = path.join(dataDir, "chat_history.html");
-    ipcMain.handle("get-chat-history", async () => {
+    ipcMain.handle("get-chat-history", async (event) => {
+        // Make sure the event is from the chat view of the current shell window
+        const shellWindow = getShellWindowForChatViewIpcEvent(event);
+        if (!shellWindow) return;
         if (settings.chatHistory) {
             // Load chat history if enabled
             if (existsSync(chatHistory)) {
@@ -618,7 +450,11 @@ async function initialize() {
 
     // Store the chat history whenever the DOM changes
     // this let's us rehydrate the chat when reopening the shell
-    ipcMain.on("save-chat-history", async (_, html) => {
+    ipcMain.on("save-chat-history", async (event, html) => {
+        // Make sure the event is from the chat view of the current shell window
+        const shellWindow = getShellWindowForChatViewIpcEvent(event);
+        if (!shellWindow) return;
+
         // store the modified DOM contents
 
         debugShell(
@@ -636,171 +472,87 @@ async function initialize() {
         }
     });
 
-    ipcMain.handle("get-localWhisper-status", async () => {
-        return isLocalWhisperEnabled();
+    ipcMain.on("save-settings", (event, settings: ShellUserSettings) => {
+        const shellWindow = getShellWindowForChatViewIpcEvent(event);
+        shellWindow?.setUserSettings(settings);
     });
 
-    ipcMain.on("send-to-browser-ipc", async (_, data: WebSocketMessageV2) => {
-        await BrowserAgentIpc.getinstance().send(data);
+    ipcMain.on("views-resized-by-user", (event, newPos: number) => {
+        const shellWindow = getShellWindowForChatViewIpcEvent(event);
+        shellWindow?.updateContentSize(newPos);
     });
 
-    // Extension service adapter IPC handlers - Must handle async response waiting
-    ipcMain.handle("browser-extension-message", async (_, message) => {
-        try {
-            // Route message through browser IPC to TypeAgent backend
-            const browserIpc = BrowserAgentIpc.getinstance();
+    ipcMain.on("open-image-file", async (event) => {
+        const shellWindow = getShellWindowForChatViewIpcEvent(event);
+        if (!shellWindow) return;
+        const result = await dialog.showOpenDialog(shellWindow.mainWindow, {
+            filters: [
+                {
+                    name: "Image files",
+                    extensions: ["png", "jpg", "jpeg", "gif"],
+                },
+            ],
+        });
 
-            // Check if this is a long-running import operation
-            // Note: ExtensionServiceBase sends with 'type', but it might also come as 'method'
-            const methodName = message.method || message.type;
-            const isImportOperation =
-                methodName === "importWebsiteDataWithProgress" ||
-                methodName === "importHtmlFolder";
-
-            // For import operations, use a longer timeout and handle differently
-            const timeout = isImportOperation ? 600000 : 30000; // 10 minutes for imports, 30 seconds for others
-
-            // Create a promise to wait for the WebSocket response
-            return new Promise((resolve, reject) => {
-                const messageId = Date.now().toString();
-
-                // Set up one-time response listener
-                const originalHandler = browserIpc.onMessageReceived;
-                browserIpc.onMessageReceived = (response) => {
-                    if (response.id === messageId) {
-                        // Restore original handler
-                        browserIpc.onMessageReceived = originalHandler;
-
-                        // Extract the actual data from the ActionResult if it's an extension message
-                        let result = response.result || response;
-                        if (result && result.data !== undefined) {
-                            // This is likely an ActionResult with data field containing the actual extension response
-                            result = result.data;
-                        }
-
-                        resolve(result);
-                    } else if (originalHandler) {
-                        // Forward other messages to original handler
-                        originalHandler(response);
-                    }
-                };
-
-                // Send the message directly using the method/params from the message
-                browserIpc
-                    .send({
-                        method: message.method || message.type,
-                        params: message.params || message.parameters || message,
-                        id: messageId,
-                    })
-                    .catch(reject);
-
-                // Set timeout to prevent hanging
-                setTimeout(() => {
-                    browserIpc.onMessageReceived = originalHandler;
-                    const method = message.method || message.type || "unknown";
-                    const messageInfo = JSON.stringify({
-                        method,
-                        messageId,
-                        hasParams: !!(message.params || message.parameters),
-                    });
-                    reject(
-                        new Error(
-                            `Inline-browser message timeout - ${messageInfo}`,
-                        ),
-                    );
-                }, timeout);
-            });
-        } catch (error) {
-            return { error: (error as Error).message };
-        }
-    });
-
-    // Direct WebSocket connection check via browserIPC
-    ipcMain.handle("check-websocket-connection", async () => {
-        try {
-            const browserIpc = BrowserAgentIpc.getinstance();
-            const connected = browserIpc.isConnected();
-            return { connected };
-        } catch (error) {
-            return { connected: false };
-        }
-    });
-
-    // Extension storage IPC handlers
-    ipcMain.handle("extension-storage-get", async (_, keys: string[]) => {
-        try {
-            return extensionStorage.get(keys);
-        } catch (error) {
-            debugShellError("Error getting extension storage:", error);
-            return {};
-        }
-    });
-
-    ipcMain.handle(
-        "extension-storage-set",
-        async (_, items: Record<string, any>) => {
-            try {
-                extensionStorage.set(items);
-                return { success: true };
-            } catch (error) {
-                debugShellError("Error setting extension storage:", error);
-                return { success: false, error: (error as Error).message };
-            }
-        },
-    );
-
-    ipcMain.handle("extension-storage-remove", async (_, keys: string[]) => {
-        try {
-            extensionStorage.remove(keys);
-            return { success: true };
-        } catch (error) {
-            debugShellError("Error removing extension storage:", error);
-            return { success: false, error: (error as Error).message };
-        }
-    });
-
-    // PDF viewer IPC handlers
-    ipcMain.handle("check-typeagent-connection", async () => {
-        const shellWindow = ShellWindow.getInstance();
-        if (shellWindow) {
-            const connected = await shellWindow.checkTypeAgentConnection();
-            return { connected };
-        }
-        return { connected: false };
-    });
-
-    ipcMain.handle("open-pdf-viewer", async (_, pdfUrl: string) => {
-        const shellWindow = ShellWindow.getInstance();
-        if (shellWindow) {
-            try {
-                await shellWindow.openPDFViewer(pdfUrl);
-                return { success: true };
-            } catch (error) {
-                debugShellError("Error opening PDF viewer:", error);
-                return {
-                    success: false,
-                    error:
-                        error instanceof Error
-                            ? error.message
-                            : "Unknown error",
-                };
+        if (result && !result.canceled) {
+            let paths = result.filePaths;
+            if (paths && paths.length > 0) {
+                const content = readFileSync(paths[0], "base64");
+                shellWindow.chatView.webContents.send(
+                    "file-selected",
+                    paths[0],
+                    content,
+                );
             }
         }
-        return { success: false, error: "Shell window not available" };
     });
+
+    ipcMain.on("open-folder", async (event, path: string) => {
+        // Make sure the event is from the chat view of the current shell window
+        const shellWindow = getShellWindowForChatViewIpcEvent(event);
+        if (!shellWindow) return;
+        shell.openPath(path);
+    });
+
+    ipcMain.on("open-url-in-browser-tab", async (event, url: string) => {
+        // Make sure the event is from the chat view of the current shell window
+        const shellWindow = getShellWindowForChatViewIpcEvent(event);
+        if (!shellWindow) return;
+
+        // Handle custom protocol URLs
+        if (url.startsWith("typeagent-browser://")) {
+            const parsedUrl = new URL(url);
+            const pathname = parsedUrl.pathname;
+            const queryString = parsedUrl.search;
+
+            const browserExtensionUrls = (global as any).browserExtensionUrls;
+            if (browserExtensionUrls && browserExtensionUrls[pathname]) {
+                const resolvedUrl =
+                    browserExtensionUrls[pathname] + queryString;
+                shellWindow.createBrowserTab(new URL(resolvedUrl), {
+                    background: false,
+                });
+            }
+        } else if (url.startsWith("http://") || url.startsWith("https://")) {
+            // Handle HTTP/HTTPS URLs - open them in a new browser tab
+            shellWindow.createBrowserTab(new URL(url), { background: false });
+        }
+    });
+
+    await initializePen(triggerRecognitionOnce);
+    initializeSearchMenuUI();
+    initializeSpeech();
+
+    // Web view IPC handlers
+    await initializeBrowserExtension(appPath);
+    initializeExternalStorageIpcHandlers(instanceDir);
+    initializePDFViewerIpcHandlers();
 
     app.on("activate", async function () {
         // On macOS it's common to re-create a window in the app when the
         // dock icon is clicked and there are no other windows open.
         if (ShellWindow.getInstance() === undefined)
             await initializeInstance(instanceDir, shellSettings);
-    });
-
-    await initializePen(() => {
-        const shellWindow = ShellWindow.getInstance();
-        if (shellWindow) {
-            triggerRecognitionOnce(shellWindow.chatView);
-        }
     });
 
     await initializeInstance(instanceDir, shellSettings);
