@@ -14,10 +14,6 @@ body {
   overflow: hidden;
 }
 
-.read-only .chat-input {
-  display: none;
-}
-
 .dark-mode {
   background-color: #333;
 
@@ -246,6 +242,14 @@ body {
 .track-album-cover {
   height: 64px;
   align-self: flex-end;
+}
+
+.read-only .chat-input {
+  display: none;
+}
+
+.write-only .chat-input {
+  max-height: 45px;
 }
 
 .chat-input {
