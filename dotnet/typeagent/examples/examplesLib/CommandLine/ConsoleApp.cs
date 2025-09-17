@@ -55,7 +55,7 @@ public abstract class ConsoleApp
             Console.Write(ConsolePrompt);
 
             string? input = await ReadLineAsync(cancelToken).ConfigureAwait(false);
-            input = input.Trim();
+            input = input?.Trim();
             if (string.IsNullOrEmpty(input))
             {
                 continue;
@@ -72,7 +72,7 @@ public abstract class ConsoleApp
     public async Task RunBatchAsync(string batchFilePath, CancellationToken cancelToken = default)
     {
         using var reader = new StreamReader(batchFilePath);
-        string line = null;
+        string? line = null;
 
         while (!cancelToken.IsCancellationRequested &&
               (line = reader.ReadLine()) is not null)
@@ -103,9 +103,9 @@ public abstract class ConsoleApp
     /// <param name="input"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    public virtual async Task<int> ProcessInputAsync(string input, CancellationToken cancellationToken)
+    public virtual Task<int> ProcessInputAsync(string input, CancellationToken cancellationToken)
     {
-        return 0;
+        return Task.FromResult<int>(0);
     }
 
     /// <summary>
