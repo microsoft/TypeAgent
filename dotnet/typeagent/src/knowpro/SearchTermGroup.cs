@@ -12,7 +12,7 @@ public class SearchTermGroup : ISearchTerm
     }
 
     public SearchTermBooleanOp BooleanOp { get; private set; }
-    public ISearchTerm[] Terms { get; set; }
+    public IList<SearchTerm> Terms { get; set; }
 
 }
 

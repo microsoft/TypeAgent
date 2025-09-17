@@ -17,5 +17,5 @@ public class SearchTerm : ISearchTerm
     /// <summary>
     ///  Additional terms related to term.
     /// </summary>
-    public Term[]? RelatedTerms { get; set; }
+    public IList<Term>? RelatedTerms { get; set; }
 }
