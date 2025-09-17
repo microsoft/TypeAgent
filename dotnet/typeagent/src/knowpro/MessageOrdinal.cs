@@ -5,15 +5,14 @@ namespace TypeAgent.KnowPro;
 
 public struct MessageOrdinal
 {
-    int _value;
-
     public MessageOrdinal(int value)
     {
         ArgumentVerify.ThrowIfLessThan(value, 0, nameof(value));
+        Value = value;
     }
 
-    public readonly int Value => _value;
+    public int Value { get; set; }
 
     public static implicit operator MessageOrdinal(int value) { return new MessageOrdinal(value); }
-    public static implicit operator int(MessageOrdinal value) { return value._value; }
+    public static implicit operator int(MessageOrdinal value) { return value.Value; }
 }

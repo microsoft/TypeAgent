@@ -5,15 +5,14 @@ namespace TypeAgent.KnowPro;
 
 public struct SemanticRefOrdinal
 {
-    int _value;
-
     public SemanticRefOrdinal(int value)
     {
         ArgumentVerify.ThrowIfLessThan(value, 0, nameof(value));
+        Value = value;
     }
 
-    public readonly int Value => _value;
+    public int Value { get; set; }
 
     public static implicit operator SemanticRefOrdinal(int value) { return new SemanticRefOrdinal(value); }
-    public static implicit operator int(SemanticRefOrdinal value) { return value._value; }
+    public static implicit operator int(SemanticRefOrdinal value) { return value.Value; }
 }

@@ -4,7 +4,7 @@
 Starting on .NET versions of the following TypeAgent libraries:
 * KnowPro
 
-This sample code is in very eary stage experimental developement. 
+This sample code is in very eary stage experimental developement with **frequent changes**. 
 
 
 ## Trademarks
