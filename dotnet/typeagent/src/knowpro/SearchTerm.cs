@@ -3,14 +3,14 @@
 
 namespace TypeAgent.KnowPro;
 
-public class Term
+public class SearchTerm
 {
     /// <summary>
-    /// The text of the term
+    /// Term being searched for
     /// </summary>
-    public string Text { get; set; }
+    public Term Term { get; set; }
     /// <summary>
-    /// Optional weighting for the term
+    ///  Additional terms related to term.
     /// </summary>
-    public float? Weight { get; set; }
+    public Term[]? RelatedTerms { get; set; }
 }
