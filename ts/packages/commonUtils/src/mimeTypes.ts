@@ -16,6 +16,8 @@ export function getFileExtensionForMimeType(mime: string): string {
 
 export function getMimeTypeFromFileExtension(fileExtension: string): string {
     switch (fileExtension.toLowerCase()) {
+        case ".less":
+            return "text/plain";
         case ".css":
             return "text/css";
         case ".htm":
@@ -33,6 +35,8 @@ export function getMimeTypeFromFileExtension(fileExtension: string): string {
             return "image/png";
         case ".gif":
             return "image/gif";
+        case ".ts":
+            return "application/x-typescript";
     }
 
     throw "Unsupported file extension.";

@@ -104,7 +104,7 @@ export class ShellWindow {
     private readonly browserViewManager: BrowserViewManager;
 
     // Chat as a tab support
-    private chatViewServer: ChatServer | undefined;
+    public chatViewServer: ChatServer | undefined;
 
     public get inlineBrowser(): WebContentsView {
         // Always use multi-tab browser

@@ -638,6 +638,9 @@ async function initialize() {
                 performance.now(),
             );
         }
+
+        // sync the chat history with any chat history tab
+        ShellWindow.getInstance()?.chatViewServer?.broadcast(html);
     });
 
     ipcMain.handle("get-localWhisper-status", async () => {

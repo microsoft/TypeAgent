@@ -1,0 +1,114 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Active TypeAgent</title>
+    <link href="./assets/styles.less" type="text/css" rel="stylesheet" />
+    <link
+      href="./assets/settingsStyles.less"
+      type="text/css"
+      rel="stylesheet"
+    />
+    <link href="./assets/cameraStyles.less" type="text/css" rel="stylesheet" />
+    <link href="./assets/carousel.less" type="text/css" rel="stylesheet" />
+    <link href="./assets/loading.less" type="text/css" rel="stylesheet" />
+    <link
+      rel="stylesheet"
+      href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css"
+      integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh"
+      crossorigin="anonymous"
+    />
+  </head>
+  <body >
+    <div id="wrapper" class="wrapper"></div>
+    <script type="text/javascript">
+      function createWebSocket(autoReconnect = true) {
+          let url = window.location;
+          let protocol = url.protocol.toLowerCase() === "https:" ? "wss" : "ws";
+          let port = url.port ? `:${url.port}` : "";
+
+          const endpoint = `${protocol}://${url.hostname}${port}`;
+
+          return new Promise((resolve) => {
+              console.log(`opening web socket to ${endpoint}`);
+              const webSocket = new WebSocket(endpoint);
+
+              webSocket.onopen = (event) => {
+                  console.log("websocket open", event);
+                  resolve(webSocket);
+              };
+
+              webSocket.onmessage = (event) => {
+                  console.log("websocket message:", JSON.stringify(event));
+
+//                   const msgObj = JSON.parse(event.data);
+//                   console.log(msgObj);
+//                   switch (msgObj.message) {
+//                       //case "updated-content":
+//                       default: 
+                           const wrapper = document.getElementById('wrapper');
+                           if (wrapper) {
+                               wrapper.innerHTML += event.data;
+                           }
+//                           break;
+
+// //                      default:
+// //                          console.warn(`websocket message not handled: ${msgObj.message}`);
+// //                          break;
+//                   }
+              };
+
+              webSocket.onclose = (event) => {
+                  console.log("websocket connection closed", event);
+
+                  if (autoReconnect) {
+                      createWebSocket().then((ws) => {
+                          globalThis.ws = ws;
+                      });
+                  }
+              };
+
+              webSocket.onerror = (event) => {
+                  console.log("websocket error", event);
+                  resolve(undefined);
+              };
+          });
+      }
+
+      function keepWebSocketAlive(webSocket, source) {
+          const keepAliveIntervalId = setInterval(() => {
+              if (webSocket && webSocket.readyState === WebSocket.OPEN) {
+                  webSocket.send(
+                      JSON.stringify({
+                          source: source,
+                          target: "none",
+                          messageType: "keepAlive",
+                          body: {},
+                      })
+                  );
+              } else {
+                  console.log("Clearing keepalive retry interval");
+                  clearInterval(keepAliveIntervalId);
+              }
+          }, 20000);
+      }      
+    
+      createWebSocket(true).then((ws) => {
+          if (ws) {
+              globalThis.ws = ws;
+              keepWebSocketAlive(ws, "chatView");
+          } else {
+              const wrapper = document.getElementById("wrapper");
+              if (wrapper) {
+                  wrapper.innerHTML = "Failed to connect to TypeAgent shell.";
+              }
+          }
+      });
+    
+    </script>
+  </body>
+</html>

@@ -1219,7 +1219,7 @@ async function resolveWebPage(
             if (shellPort !== undefined) {
                 debug(`Resolved local site on PORT ${shellPort}`);
 
-                return [`http://localhost:${shellPort}/chatView`];
+                return [`http://localhost:${shellPort}/readOnlyChatView.html`];
             }            
         default: {
             // if the site is a valid URL, return it directly
