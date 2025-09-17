@@ -1935,77 +1935,68 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
      */
     private async getEntityGraphFromIndex(centerEntity: string, depth: number, websiteCollection: WebsiteCollection): Promise<any> {
         try {
+            // Check if hybrid storage exists, create if needed
+            if (!(websiteCollection as any).hybridStorage) {
+                console.log("No hybrid graph storage available, creating one...");
+                const { HybridGraphStorage } = await import("../../agent/knowledge/hybridGraphStorage.mjs");
+                (websiteCollection as any).hybridStorage = new HybridGraphStorage(websiteCollection);
+            }
 
-            // Check if knowledge graph exists
-            const hasGraph = await websiteCollection.hasGraph();
-            if (!hasGraph) {
+            const hybridStorage = (websiteCollection as any).hybridStorage;
+
+            // Check if graph has been built
+            if (!hybridStorage.hasGraph()) {
                 console.log("No knowledge graph available, building one...");
-                await websiteCollection.buildGraph();
+                await hybridStorage.buildGraph({
+                    urlLimit: 1000,
+                    enableCommunityDetection: true,
+                    communityAlgorithm: 'louvain' as const,
+                    calculateMetrics: true
+                });
             }
 
-            const graphData: any = {
-                centerEntity,
-                entities: [],
-                relationships: [],
-                communities: [],
-                metadata: {
-                    searchDepth: depth,
-                    generatedAt: new Date().toISOString(),
-                    source: "indexed_graph"
-                }
+            // Get entity graph from hybrid storage
+            const graphData = await hybridStorage.getEntityGraph(centerEntity, {
+                maxDepth: depth,
+                maxNodes: centerEntity ? 500 : 100, // More nodes for entity-specific view
+                aggregateEdges: true,
+                includeMetrics: true
+            });
+
+            console.log(`Hybrid graph generated: ${graphData.nodes.length} nodes, ${graphData.edges.length} edges`);
+            
+            // Convert to expected format
+            return {
+                centerEntity: graphData.centerEntity,
+                entities: graphData.nodes.map((node: any) => ({
+                    name: node.data.label,
+                    type: node.data.type,
+                    centralityScore: node.data.centralityScore,
+                    communityId: node.data.communityId,
+                    size: node.data.size
+                })),
+                relationships: graphData.edges.map((edge: any) => ({
+                    from: this.extractNodeName(edge.data.source),
+                    to: this.extractNodeName(edge.data.target),
+                    relationshipType: edge.data.relationshipType,
+                    weight: edge.data.weight,
+                    confidence: edge.data.confidence
+                })),
+                communities: graphData.communities || [],
+                metadata: graphData.metadata
             };
-
-            // Build graph from indexed data
-            const processedEntities = new Set<string>([centerEntity]);
-            const queue = [{ entity: centerEntity, currentDepth: 0 }];
-
-            while (queue.length > 0) {
-                const { entity, currentDepth } = queue.shift()!;
-
-                if (currentDepth >= depth) continue;
-
-                const neighbors = await websiteCollection.relationships.getNeighbors(entity);
-
-                for (const rel of neighbors) {
-                    const relatedEntity = rel.fromEntity === entity ? rel.toEntity : rel.fromEntity;
-
-                    if (!processedEntities.has(relatedEntity)) {
-                        processedEntities.add(relatedEntity);
-                        queue.push({ entity: relatedEntity, currentDepth: currentDepth + 1 });
-
-                        const entityInfo = await this.getEntityInfo(relatedEntity, websiteCollection);
-                        graphData.entities.push(entityInfo);
-                    }
-
-                    graphData.relationships.push({
-                        from: rel.fromEntity,
-                        to: rel.toEntity,
-                        type: rel.relationshipType,
-                        confidence: rel.confidence,
-                        sources: JSON.parse(rel.sources),
-                        count: rel.count
-                    });
-                }
-            }
-
-            // Add community information
-            graphData.communities = await websiteCollection.communities.getForEntities(
-                Array.from(processedEntities)
-            );
-
-            // Add center entity if not already included
-            if (!graphData.entities.some((e: any) => e.name === centerEntity)) {
-                const centerInfo = await this.getEntityInfo(centerEntity, websiteCollection);
-                centerInfo.category = "center";
-                graphData.entities.unshift(centerInfo);
-            }
-
-            console.log(`Indexed graph generated: ${graphData.entities.length} entities, ${graphData.relationships.length} relationships`);
-            return graphData;
         } catch (error) {
-            console.error("Indexed entity graph retrieval failed:", error);
+            console.error("Hybrid entity graph retrieval failed:", error);
             return this.getEntityGraphFallback(centerEntity, depth);
         }
+    }
+
+    /**
+     * Extract node name from Cytoscape node ID
+     */
+    private extractNodeName(nodeId: string): string {
+        // Remove 'node-' prefix if present
+        return nodeId.startsWith('node-') ? nodeId.substring(5) : nodeId;
     }
 
     /**

@@ -557,12 +557,10 @@ class EntityGraphView {
         const extensionService = createExtensionService();
         
         try {
-            const [status, relationships, communities, entitiesWithMetrics] = await Promise.all([
-                (extensionService as any).sendMessage({ type: "getKnowledgeGraphStatus" }),
-                (extensionService as any).sendMessage({ type: "getAllRelationships" }),
-                (extensionService as any).sendMessage({ type: "getAllCommunities" }),
-                (extensionService as any).sendMessage({ type: "getAllEntitiesWithMetrics" })
-            ]);
+            const status = await (extensionService as any).sendMessage({ type: "getKnowledgeGraphStatus" });
+            const relationships = await (extensionService as any).sendMessage({ type: "getAllRelationships" });
+            const communities = await (extensionService as any).sendMessage({ type: "getAllCommunities" });
+            const entitiesWithMetrics = await (extensionService as any).sendMessage({ type: "getAllEntitiesWithMetrics" });
 
             const processedCommunities = Array.isArray(communities) ? communities.map((c: any) => ({
                 ...c,

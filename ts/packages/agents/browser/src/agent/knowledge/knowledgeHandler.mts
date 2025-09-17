@@ -6,6 +6,7 @@ import { WebSocket } from "ws";
 import { BrowserActionContext } from "../browserActions.mjs";
 import { searchWebMemories } from "../searchWebMemories.mjs";
 import * as website from "website-memory";
+import { HybridGraphStorage } from "./hybridGraphStorage.mjs";
 import {
     knowledgeProgressEvents,
     KnowledgeExtractionProgressEvent,
@@ -3226,55 +3227,41 @@ export async function buildKnowledgeGraph(
             };
         }
 
-        // Use minimal mode for testing (default: 100 URLs)
-        const minimalMode = parameters.minimalMode !== false; // Default to true for testing
-        const urlLimit = parameters.urlLimit || 100;
-
-        console.log(`[Knowledge Graph] Starting build in ${minimalMode ? 'MINIMAL' : 'FULL'} mode`);
-        if (minimalMode) {
-            console.log(`[Knowledge Graph] Processing limited to ${urlLimit} URLs for faster testing`);
-        }
-
+        console.log("[Knowledge Graph] Starting hybrid graph build with parameters:", parameters);
         const startTime = Date.now();
 
-        // Start building the knowledge graph with options
-        const buildOptions = minimalMode ? { urlLimit } : undefined;
-        await websiteCollection.buildGraph(buildOptions);
+        // Create or get hybrid graph storage
+        if (!(websiteCollection as any).hybridStorage) {
+            (websiteCollection as any).hybridStorage = new HybridGraphStorage(websiteCollection);
+        }
+
+        // Build the graph with hybrid storage
+        await (websiteCollection as any).hybridStorage.buildGraph({
+            urlLimit: parameters.urlLimit || 1000,
+            enableCommunityDetection: true,
+            communityAlgorithm: 'louvain',
+            calculateMetrics: true
+        });
 
         const timeElapsed = Date.now() - startTime;
 
-        // Get stats after building
-        let stats = {
-            urlsProcessed: urlLimit,
-            entitiesFound: 0,
-            relationshipsCreated: 0,
-            communitiesDetected: 0,
-            timeElapsed
+        // Get stats from hybrid storage
+        const graphStats = (websiteCollection as any).hybridStorage.getGraphStats();
+        
+        const stats = {
+            urlsProcessed: parameters.urlLimit || graphStats.nodeCount,
+            entitiesFound: graphStats.nodeCount,
+            relationshipsCreated: graphStats.edgeCount,
+            communitiesDetected: graphStats.communityCount,
+            timeElapsed: timeElapsed,
         };
 
-        try {
-            if (websiteCollection.knowledgeEntities) {
-                stats.entitiesFound = (websiteCollection.knowledgeEntities as any).getTotalEntityCount();
-            }
-            if (websiteCollection.relationships) {
-                const relationships = websiteCollection.relationships.getAllRelationships();
-                stats.relationshipsCreated = relationships.length;
-            }
-            if (websiteCollection.communities) {
-                const communities = websiteCollection.communities.getAllCommunities();
-                stats.communitiesDetected = communities.length;
-            }
-        } catch (error) {
-            console.warn("[Knowledge Graph] Failed to get stats:", error);
-        }
-
-        console.log(`[Knowledge Graph] Build completed in ${timeElapsed}ms`);
-        console.log(`[Knowledge Graph] Stats:`, stats);
+        console.log("[Knowledge Graph] Build completed:", stats);
 
         return {
             success: true,
-            message: `Knowledge graph built successfully in ${minimalMode ? 'minimal' : 'full'} mode`,
-            stats
+            message: `Hybrid knowledge graph built successfully in ${timeElapsed}ms`,
+            stats,
         };
     } catch (error) {
         console.error("[Knowledge Graph] Error building:", error);
