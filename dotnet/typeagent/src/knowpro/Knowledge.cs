@@ -7,6 +7,11 @@ public interface IKnowledge
 {
 }
 
+public interface IKnowledgeSource
+{
+    KnowledgeResponse? GetKnowledge();
+}
+
 public readonly struct KnowledgeType
 {
     public static readonly KnowledgeType Entity = new KnowledgeType("entity");
