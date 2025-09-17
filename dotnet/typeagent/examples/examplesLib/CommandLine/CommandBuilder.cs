@@ -62,7 +62,7 @@ public class CommandBuilder
                 continue;
             }
 
-            string commandName = attribute.HasName ? attribute.Name : method.Name;
+            string commandName = attribute.HasName ? attribute.Name! : method.Name;
 
             Command cmd = new Command(commandName, GetDescription(method));
             cmd.Action = HandlerDescriptor.FromMethodInfo(method, instance).GetCommandHandler();
@@ -104,9 +104,10 @@ public class CommandBuilder
 
     Argument CreateArgument(ParameterInfo parameter)
     {
+        ArgumentVerify.ThrowIfNullOrEmpty(parameter.Name, "parameter.Name");
         Argument arg = CreateArgument(
             parameter.ParameterType,
-            parameter.Name,
+            parameter.Name!,
             GetDescription(parameter)
         );
 
@@ -133,9 +134,8 @@ public class CommandBuilder
     {
         var argumentType = typeof(Argument<>).MakeGenericType(valueType);
 
-        var ctor = argumentType.GetConstructor(new[] { typeof(string) });
-
-        var arg = (Argument)ctor.Invoke(new object[] { name});
+        var ctor = argumentType.GetConstructor([typeof(string)]) ?? throw new InvalidOperationException("Constructor not found");
+        var arg = (Argument)ctor.Invoke([name]);
         if (description is not null)
         {
             arg.Description = description;
@@ -143,13 +143,13 @@ public class CommandBuilder
         return arg;
     }
 
-    Option CreateOption(Type valueType, string name, string description = null)
+    Option CreateOption(Type valueType, string name, string? description = null)
     {
         var optionType = typeof(Option<>).MakeGenericType(valueType);
 
-        var ctor = optionType.GetConstructor(new[] { typeof(string), typeof(string) });
+        var ctor = optionType.GetConstructor([typeof(string), typeof(string)]) ?? throw new InvalidOperationException("Constructor not found");
 
-        var option = (Option)ctor.Invoke(new object[] { name, description });
+        var option = (Option)ctor.Invoke([name, description]);
 
         return option;
     }

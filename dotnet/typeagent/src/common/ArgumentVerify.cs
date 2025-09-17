@@ -64,6 +64,16 @@ public static class ArgumentVerify
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void ThrowIfLessThan(int value, int min, string paramName)
+    {
+        if (value < min)
+        {
+            throw new ArgumentOutOfRangeException($"The value must be < {min}", paramName);
+        }
+    }
+
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void ThrowIfLessThanEqual(int value, int max, string paramName)
     {
         if (value <= max)

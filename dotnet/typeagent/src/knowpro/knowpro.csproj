@@ -8,4 +8,8 @@
     <RootNamespace>TypeAgent.KnowPro</RootNamespace>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\common\common.csproj" />
+  </ItemGroup>
+
 </Project>

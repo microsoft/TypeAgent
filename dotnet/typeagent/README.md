@@ -1,14 +1,10 @@
-# TypeAgent Dotnet code
+# TypeAgent.NET
 
-## Overview
 
-**TypeAgent** is **sample code** that explores an architecture for building a *personal agent* with *natural language interfaces* leveraging current advances in LLM technology.
+Starting on .NET versions of the following TypeAgent libraries:
+* KnowPro
 
-This directory contain dotnet C# code that support our **TypeAgent** implementation.
-
-* [AutoShell](./autoShell/)(Windows Only) - Support [Desktop](../ts/packages/agents/desktop/) to control Window functionalities.
-* [email](./email/)(Windows Only) - Sample code for importing emails from Outlook
-
+This sample code is in very eary stage experimental developement. 
 
 
 ## Trademarks
