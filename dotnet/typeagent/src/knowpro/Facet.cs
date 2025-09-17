@@ -3,16 +3,6 @@
 
 namespace TypeAgent.KnowPro;
 
-public class ConcreteEntity : IKnowledge
-{
-    [JsonPropertyName("name")]
-    public string Name { get; set; }
-    [JsonPropertyName("type")]
-    public string[] Type { get; set; }
-    [JsonPropertyName("facets")]
-    public Facet[] Facets { get; set; }
-}
-
 public class Facet
 {
     public string Name { get; set; }
