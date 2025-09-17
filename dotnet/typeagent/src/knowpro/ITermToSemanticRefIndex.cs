@@ -5,7 +5,7 @@ namespace TypeAgent.KnowPro;
 
 public interface ITermToSemanticRefIndex
 {
-    Task<int> GetSizeAsync();
+    Task<int> GetCountAsync();
     Task<string[]> GetTermsAsync();
     Task<string> AddTermAsync(string term, ScoredSemanticRefOrdinal scoredOrdinal);
     Task RemoveTermAsync(string term, SemanticRefOrdinal ordinal);

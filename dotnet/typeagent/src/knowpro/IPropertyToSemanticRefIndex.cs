@@ -5,7 +5,7 @@ namespace TypeAgent.KnowPro;
 
 public interface IPropertyToSemanticRefIndex
 {
-    Task<int> GetSizeAsync();
+    Task<int> GetCountAsync();
     Task<string[]> GetValuesAsync();
     Task<string> AddPropertyAync(string propertyName, string value, ScoredSemanticRefOrdinal scoredOrdinal);
     Task ClearAsync();

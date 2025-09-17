@@ -1,7 +1,7 @@
 # TypeAgent.NET
 
 
-Starting on .NET versions of the following TypeAgent libraries:
+Explores .NET versions of the following TypeAgent libraries:
 * KnowPro
 
 This sample code is in very early stage experimental developement with **frequent changes**. 

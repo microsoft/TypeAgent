@@ -6,7 +6,7 @@ namespace TypeAgent.KnowPro;
 public interface ITermsToRelatedTerms
 {
     Task<IReadOnlyList<Term>?> LookupTermAsync(string text);
-    Task<int> GetSizeAsync();
+    Task<int> GetCountAsync();
     Task<bool> IsEmptyAsync();
     Task ClearAsync();
     Task AddRelatedTermAsync(string text, Term relatedTerm);
