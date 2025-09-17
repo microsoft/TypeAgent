@@ -3,7 +3,12 @@
 
 namespace TypeAgent.KnowPro;
 
-public class SearchTerm
+public interface ISearchTerm
+{
+
+}
+
+public class SearchTerm : ISearchTerm
 {
     /// <summary>
     /// Term being searched for

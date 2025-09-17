@@ -3,7 +3,7 @@
 
 namespace TypeAgent.KnowPro;
 
-public class PropertySearchTerm
+public class PropertySearchTerm : ISearchTerm
 {
     /*
  * PropertySearch terms let you match named property, values
