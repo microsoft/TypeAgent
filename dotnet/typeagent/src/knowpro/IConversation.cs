@@ -11,4 +11,5 @@ public interface IConversation<TMessage>
     IMessageCollection<TMessage> Messages { get; }
     ISemanticRefCollection SemanticRefs { get; }
     ITermToSemanticRefIndex SemanticRefIndex { get; }
+    IConversationSecondaryIndexes SecondaryIndexes { get; }
 }
