@@ -43,6 +43,13 @@ jobs:
 
     steps:  
 
+      - name: Login to Azure
+        uses: azure/login@v2.2.0
+        with:
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_5B0D2D6BA40F4710B45721D2112356DD }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_39BB903136F14B6EAD8F53A8AB78E3AA }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_F36C1F2C4B2C49CA8DD5C52FAB98FA30 }}
+
       # The following two steps (permissions checks) ensure that only users with write access can run this workflow on a PR (except the merge queue bot)
       # For PRs from forks we check the permissions of the user that triggered the workflow (github.triggering_actor)
       # This means that if a user without write access opens a PR from a fork, they cannot run this workflow
@@ -111,13 +118,6 @@ jobs:
         working-directory: ts
         run: |
           npm run build
-
-      - name: Login to Azure
-        uses: azure/login@v2.2.0
-        with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_5B0D2D6BA40F4710B45721D2112356DD }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_39BB903136F14B6EAD8F53A8AB78E3AA }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_F36C1F2C4B2C49CA8DD5C52FAB98FA30 }}
 
       - name: Get Keys
         run: |
