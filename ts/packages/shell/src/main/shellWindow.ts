@@ -1242,6 +1242,16 @@ function setupDevicePermissions(mainWindow: BrowserWindow) {
     );
 }
 
+export function getShellWindowForMainWindowIpcEvent(
+    event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent,
+): ShellWindow | undefined {
+    const shellWindow = ShellWindow.getInstance();
+    return event.sender === shellWindow?.mainWindow.webContents
+        ? shellWindow
+        : undefined;
+}
+
+// Returns the shell window for IPC events from the current chat view.
 export function getShellWindowForChatViewIpcEvent(
     event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent,
 ): ShellWindow | undefined {
