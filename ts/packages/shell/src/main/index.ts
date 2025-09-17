@@ -36,6 +36,7 @@ import { getStatusSummary } from "agent-dispatcher/helpers/status";
 import { getConsolePrompt } from "agent-dispatcher/helpers/console";
 import {
     getShellWindowForChatViewIpcEvent,
+    getShellWindowForMainWindowIpcEvent,
     ShellWindow,
 } from "./shellWindow.js";
 
@@ -482,7 +483,7 @@ async function initialize() {
     });
 
     ipcMain.on("views-resized-by-user", (event, newPos: number) => {
-        const shellWindow = getShellWindowForChatViewIpcEvent(event);
+        const shellWindow = getShellWindowForMainWindowIpcEvent(event);
         shellWindow?.updateContentSize(newPos);
     });
 
