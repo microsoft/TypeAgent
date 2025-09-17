@@ -1,4 +1,0 @@
-Get-ChildItem -Recurse -Filter *.cs | ForEach-Object {
-    $content = Get-Content $_.FullName
-    Set-Content -Path $_.FullName -Value $content -Encoding utf8
-}
