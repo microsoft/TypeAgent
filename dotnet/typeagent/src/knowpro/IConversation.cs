@@ -10,4 +10,5 @@ public interface IConversation<TMessage>
     IReadOnlyList<string> Tags { get; }
     IMessageCollection<TMessage> Messages { get; }
     ISemanticRefCollection SemanticRefs { get; }
+    ITermToSemanticRefIndex SemanticRefIndex { get; }
 }
