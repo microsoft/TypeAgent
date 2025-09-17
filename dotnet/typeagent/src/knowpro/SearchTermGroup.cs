@@ -3,7 +3,7 @@
 
 namespace TypeAgent.KnowPro;
 
-public class SearchTermGroup: ISearchTerm
+public class SearchTermGroup : ISearchTerm
 {
     public SearchTermGroup(SearchTermBooleanOp booleanOp)
     {
