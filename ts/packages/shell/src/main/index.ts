@@ -361,10 +361,6 @@ async function initializeInstance(
             return;
         }
 
-        // create the chat view server
-        //shellWindow.startChatServer(dispatcher.;        
-
-
         updateTitle(dispatcher);
         setPendingUpdateCallback((version, background) => {
             updateTitle(dispatcher);

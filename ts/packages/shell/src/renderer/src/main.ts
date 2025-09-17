@@ -513,7 +513,7 @@ function watchForDOMChanges(element: HTMLDivElement) {
         setTimeout(() => {
             hasTimeout = false;
             const idleTime = Date.now() - lastModifiedTime;
-            if (idleTime >= 3000) {
+            if (idleTime >= 500) {
                 // been idle for 3 seconds, save the chat history
                 getClientAPI().saveChatHistory(element.innerHTML);
             } else {

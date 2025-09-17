@@ -18,7 +18,16 @@ export class ChatServer {
 
     private server: Server<any, any>;
     private socketServer: WebSocketServer;
-    private port: number
+    private port: number;
+
+    onConnection(callback: (ws: WebSocket, req: IncomingMessage) => void) {        
+
+        this.socketServer.on("connection", (ws: WebSocket, req: IncomingMessage) => {
+            console.log(`New client ${ws} ${req}`);
+
+            callback(ws, req);
+        });
+    }
 
     constructor(port: number) {
         this.port = port;
@@ -40,40 +49,22 @@ export class ChatServer {
             this.server.close();
         });
 
-        this.server.on("connection", (ws: WebSocket, req: IncomingMessage) => {
-            console.log(`New client ${ws} ${req}`);
+        // this.server.on("connection", (ws: WebSocket, req: IncomingMessage) => {
+        //     console.log(`New client ${ws} ${req}`);
 
-            // if (req.url) {
-            //     const params = new URLSearchParams(req.url.split("?")[1]);
-            //     const clientId = params.get("clientId");
-            //     if (clientId) {
-            //         for (var client of this.server.clients) {
-            //             if ((client as any).clientId) {
-            //                 this.server.clients.delete(client);
-            //             }
-            //         }
-
-            //         (ws as any).clientId = clientId;
-            //     }
-            // }
-
-            //console.log(`Connection count: ${this.server.clients.size}`);
-
-            // TODO: send agent greeting!?
-
-            // messages from web clients arrive here
-            //connectCallback(ws);
-        });        
+        //     // send the contents of the chat log upon the initial connection
+        //     this.socketServer.clients.forEach((client) => {
+        //         if (client.readyState === WebSocket.OPEN) {
+        //             client.send();
+        //         }
+        //     });
+        // });        
     }
 
     async start() {
         this.server.listen(this.port, () => {
             console.log(`ChatServer is listening on port ${this.port}`);
         });
-
-        // this.socketServer.listen(this.port * 2, () => {
-        //     console.log(`WebSocket server is listening on port ${this.port * 2}`);
-        // });
     }
 
     stop() {
@@ -124,19 +115,9 @@ export class ChatServer {
 
             console.log(`Unable to serve '${request.url}', 404. ${error}`);
         }                
-
-
-        // if (request.url === "/readOnlyChatView.html") {
-        //     response.writeHead(200, { "Content-Type": "text/html" });
-        //     response.end(readFileSync("src/renderer/readOnlychatView.html").toString());
-        // } else {
-        //     response.writeHead(400, { "Content-Type": "text/plain" });
-        //     response.end("Bad Request!\n");
-        // }
     }
 
     broadcast(message: string) {
-        // TODO: send it to all connected clients
         this.socketServer.clients.forEach((client) => {
             if (client.readyState === WebSocket.OPEN) {
                 client.send(message);

@@ -24,7 +24,7 @@
     />
   </head>
   <body >
-    <div id="wrapper" class="wrapper"></div>
+    <div id="wrapper" class="wrapper read-only"></div>
     <script type="text/javascript">
       function createWebSocket(autoReconnect = true) {
           let url = window.location;
@@ -45,21 +45,17 @@
               webSocket.onmessage = (event) => {
                   console.log("websocket message:", JSON.stringify(event));
 
-//                   const msgObj = JSON.parse(event.data);
-//                   console.log(msgObj);
-//                   switch (msgObj.message) {
-//                       //case "updated-content":
-//                       default: 
-                           const wrapper = document.getElementById('wrapper');
-                           if (wrapper) {
-                               wrapper.innerHTML += event.data;
-                           }
-//                           break;
-
-// //                      default:
-// //                          console.warn(`websocket message not handled: ${msgObj.message}`);
-// //                          break;
-//                   }
+                  // messages are for updates to the chat message scroll window
+                  const scrollWrappers = document.getElementsByClassName('chat scroll_enabled');
+                //const wrapper = document.getElementById('wrapper');
+                if (scrollWrappers.length > 0) {
+                    scrollWrappers[0].innerHTML = event.data;
+                } else {
+                    const wrapper = document.getElementById('wrapper');
+                    if (wrapper) {
+                        wrapper.innerHTML = event.data;
+                    }
+                }
               };
 
               webSocket.onclose = (event) => {
