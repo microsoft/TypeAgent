@@ -125,15 +125,13 @@ export class WebsiteCollection
         if (this.dbPath !== ":memory:" && this.dbPath) {
             try {
                 const fileExists = fs.existsSync(this.dbPath);
-                shouldOverwrite = !fileExists; // Only overwrite if file doesn't exist
-                console.log(`[Knowledge Graph] Database file ${this.dbPath} exists: ${fileExists}, will overwrite: ${shouldOverwrite}`);
+                shouldOverwrite = !fileExists;
             } catch (error) {
                 console.warn(`[Knowledge Graph] Could not check database file existence: ${error}`);
                 shouldOverwrite = false; // Conservative approach - don't overwrite
             }
         }
         
-        console.log(`[Knowledge Graph] Initializing database: ${this.dbPath}, overwrite: ${shouldOverwrite}`);
         this.db = ms.sqlite.createDatabase(this.dbPath, shouldOverwrite);
         this.visitFrequency = new VisitFrequencyTable(this.db);
         this.websiteCategories = new WebsiteCategoryTable(this.db);

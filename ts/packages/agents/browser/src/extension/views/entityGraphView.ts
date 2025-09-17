@@ -531,36 +531,60 @@ class EntityGraphView {
 
     private async loadGlobalView(): Promise<void> {
         try {
+            console.time('[Perf] Total global view load');
             this.showGraphLoading();
             console.log("Loading global knowledge graph");
 
+            console.time('[Perf] Fetch global data');
             const globalData = await this.loadGlobalGraphData();
-            
+            console.timeEnd('[Perf] Fetch global data');
+            console.log(`[Perf] Data stats: ${globalData.statistics.totalEntities} entities, ${globalData.statistics.totalRelationships} relationships, ${globalData.statistics.totalCommunities} communities`);
+
             if (globalData.statistics.totalEntities === 0) {
                 this.hideGraphLoading();
                 this.showGraphEmpty();
+                console.timeEnd('[Perf] Total global view load');
                 return;
             }
 
+            console.time('[Perf] Visualizer loadGlobalGraph');
             await this.visualizer.loadGlobalGraph(globalData);
+            console.timeEnd('[Perf] Visualizer loadGlobalGraph');
+
             this.hideGraphLoading();
-            
+
             console.log(`Loaded global graph: ${globalData.statistics.totalEntities} entities, ${globalData.statistics.totalRelationships} relationships, ${globalData.statistics.totalCommunities} communities`);
+            console.timeEnd('[Perf] Total global view load');
         } catch (error) {
             console.error("Failed to load global view:", error);
             this.hideGraphLoading();
             this.showGraphError("Failed to load global knowledge graph");
+            console.timeEnd('[Perf] Total global view load');
         }
     }
 
     private async loadGlobalGraphData(): Promise<any> {
         const extensionService = createExtensionService();
-        
+
         try {
+            console.time('[Perf] Get status');
             const status = await (extensionService as any).sendMessage({ type: "getKnowledgeGraphStatus" });
+            console.timeEnd('[Perf] Get status');
+
+            console.time('[Perf] Get relationships');
             const relationships = await (extensionService as any).sendMessage({ type: "getAllRelationships" });
+            console.timeEnd('[Perf] Get relationships');
+            console.log(`[Perf] Fetched ${Array.isArray(relationships) ? relationships.length : 0} relationships`);
+
+            console.time('[Perf] Get communities');
             const communities = await (extensionService as any).sendMessage({ type: "getAllCommunities" });
+            console.timeEnd('[Perf] Get communities');
+            console.log(`[Perf] Fetched ${Array.isArray(communities) ? communities.length : 0} communities`);
+
+            console.time('[Perf] Get entities with metrics');
             const entitiesWithMetrics = await (extensionService as any).sendMessage({ type: "getAllEntitiesWithMetrics" });
+            console.timeEnd('[Perf] Get entities with metrics');
+            console.log(`[Perf] Fetched ${Array.isArray(entitiesWithMetrics) ? entitiesWithMetrics.length : 0} entities`);
 
             const processedCommunities = Array.isArray(communities) ? communities.map((c: any) => ({
                 ...c,
@@ -730,14 +754,18 @@ class EntityGraphView {
     // Real data methods
     private async loadRealEntityData(entityName: string): Promise<void> {
         try {
+            console.time('[Perf] Total entity view load');
             this.showGraphLoading();
             console.log(`Getting entity graph for: ${entityName} depth: 2`);
 
+            console.time('[Perf] Entity graph data fetch');
             // Load entity graph using enhanced search
             const graphData = await this.entityGraphService.getEntityGraph(
                 entityName,
                 2,
             );
+            console.timeEnd('[Perf] Entity graph data fetch');
+            console.log(`[Perf] Entity data: ${graphData.entities?.length || 0} entities, ${graphData.relationships?.length || 0} relationships`);
 
             console.log(
                 `Found ${graphData.entities?.length || 0} websites for center entity`,
@@ -746,6 +774,7 @@ class EntityGraphView {
             if (graphData.entities && graphData.entities.length > 0) {
                 console.log("Expanding graph with related entities...");
 
+                console.time('[Perf] Entity data processing');
                 // Process and validate the relationships data
                 const validRelationships =
                     graphData.relationships?.filter((r: any) => {
@@ -918,13 +947,16 @@ class EntityGraphView {
                 console.log(
                     `Entity types: websites=${graphData.entities.length}, related=${graphData.relatedEntities?.length || 0}, topics=${graphData.topTopics?.length || 0}`,
                 );
+                console.timeEnd('[Perf] Entity data processing');
 
+                console.time('[Perf] Entity graph visualization');
                 // Load the graph into the visualizer
                 await this.visualizer.loadEntityGraph({
                     centerEntity: graphData.centerEntity,
                     entities: allEntities,
                     relationships: validatedRelationships,
                 });
+                console.timeEnd('[Perf] Entity graph visualization');
 
                 // Find the center entity from allEntities (should be first)
                 const centerEntityFromGraph =
@@ -969,15 +1001,20 @@ class EntityGraphView {
                     ),
                     visitCount: this.calculateTotalVisits(graphData.entities),
                 };
+
+                console.time('[Perf] Entity sidebar load');
                 await this.sidebar.loadEntity(centerEntityData);
+                console.timeEnd('[Perf] Entity sidebar load');
 
                 this.hideGraphLoading();
                 console.log(
                     `Loaded real entity graph for ${entityName}: ${graphData.entities.length} entities, ${validRelationships.length} relationships`,
                 );
+                console.timeEnd('[Perf] Total entity view load');
             } else {
                 this.hideGraphLoading();
                 this.showGraphError(`No data found for entity: ${entityName}`);
+                console.timeEnd('[Perf] Total entity view load');
             }
         } catch (error) {
             console.error(" Failed to load real entity data:", error);
@@ -985,6 +1022,7 @@ class EntityGraphView {
             this.showGraphError(
                 "Failed to load entity data. Please try again.",
             );
+            console.timeEnd('[Perf] Total entity view load');
         }
     }
 

@@ -31,6 +31,71 @@ import { WebsiteCollection } from "website-memory";
 import type { Relationship, Community } from "website-memory";
 
 // ===================================================================
+// GRAPH CACHING INTERFACES AND TYPES
+// ===================================================================
+
+interface GraphCacheManager {
+    globalGraph: GlobalGraphData | null;
+    entityGraphs: Map<string, EntityGraphData>;
+    communityGraphs: Map<string, CommunityGraphData>;
+    cacheTimestamps: Map<string, number>;
+    cacheHitRate: number;
+    memoryUsage: number;
+}
+
+interface GlobalGraphData {
+    entities: Map<string, EntityNode>;
+    relationships: Map<string, RelationshipEdge>;
+    communities: Map<string, Community>;
+    metadata: {
+        totalNodes: number;
+        lastUpdated: number;
+        source: 'full' | 'partial' | 'hybrid';
+    };
+}
+
+interface EntityGraphData {
+    centerEntity: string;
+    localGraph: {
+        entities: EntityNode[];
+        relationships: RelationshipEdge[];
+        neighbors: Set<string>;
+    };
+    depth: number;
+    lastAccessed: number;
+}
+
+interface CommunityGraphData {
+    communityId: string;
+    members: EntityNode[];
+    internalRelationships: RelationshipEdge[];
+    externalConnections: Map<string, RelationshipEdge[]>;
+    lastUpdated: number;
+}
+
+interface EntityNode {
+    id: string;
+    name: string;
+    type: string;
+    confidence: number;
+    properties: Record<string, any>;
+}
+
+interface RelationshipEdge {
+    id: string;
+    from: string;
+    to: string;
+    type: string;
+    strength: number;
+    properties: Record<string, any>;
+}
+
+interface CacheStrategy {
+    bestOption: 'global_extraction' | 'neighbor_merge' | 'partial_build' | 'search_fallback';
+    confidence: number;
+}
+
+// ===================================================================
 // INTERFACES AND TYPES
 // ===================================================================
 
@@ -1388,9 +1453,346 @@ export class DefaultDiscoveryServices implements DiscoveryServices {
 // Default implementations for entity services (connected to real EntityProcessingService)
 export class DefaultEntityGraphServices implements EntityGraphServices {
     private extensionService: ExtensionServiceBase | null = null;
+    private cacheManager: GraphCacheManager;
+    private intelligentExtractor: IntelligentGraphExtractor;
 
     constructor(extensionService?: ExtensionServiceBase) {
         this.extensionService = extensionService || null;
+        this.cacheManager = this.initializeCacheManager();
+        this.intelligentExtractor = new IntelligentGraphExtractor(this.cacheManager);
+    }
+
+    private initializeCacheManager(): GraphCacheManager {
+        return {
+            globalGraph: null,
+            entityGraphs: new Map(),
+            communityGraphs: new Map(),
+            cacheTimestamps: new Map(),
+            cacheHitRate: 0,
+            memoryUsage: 0
+        };
+    }
+
+    async getEntityGraph(centerEntity: string, depth: number): Promise<any> {
+        try {
+            console.time('[Perf] getEntityGraph total');
+            console.log(`Getting graph for ${centerEntity} (depth: ${depth})`);
+
+            // Cache-first approach - analyze what data we have available
+            console.time('[Perf] cache analysis');
+            const cacheStrategy = this.analyzeCacheAvailability(centerEntity, depth);
+            console.timeEnd('[Perf] cache analysis');
+
+            // Use intelligent extraction strategy based on cache availability
+            const options = {
+                useCache: true,
+                fallbackToSearch: true,
+                maxNodes: depth > 1 ? 500 : 200
+            };
+
+            console.time('[Perf] intelligent extraction');
+            const result = await this.intelligentExtractor.getEntityNeighborhood(
+                centerEntity,
+                depth,
+                options
+            );
+            console.timeEnd('[Perf] intelligent extraction');
+
+            if (!this.extensionService) {
+                console.warn(
+                    "ChromeExtensionService not available, using cached result",
+                );
+                console.timeEnd('[Perf] getEntityGraph total');
+                return result || { centerEntity, entities: [], relationships: [] };
+            }
+
+            // If intelligent extraction didn't find neighborhood data (only center entity), fall back to search
+            if (!result || result.entities.length <= 1 && result.relationships.length === 0) {
+                console.time('[Perf] performEntitySearchWithFallback');
+                const primarySearch = await this.performEntitySearchWithFallback(
+                    centerEntity,
+                    { maxResults: 15 },
+                );
+                console.timeEnd('[Perf] performEntitySearchWithFallback');
+
+                // Convert search results to the expected format and cache them
+                const searchResult = await this.convertSearchToGraphFormat(primarySearch, centerEntity, depth);
+                console.timeEnd('[Perf] getEntityGraph total');
+                return searchResult;
+            }
+
+            console.timeEnd('[Perf] getEntityGraph total');
+            return result;
+        } catch (error) {
+            console.error("Entity graph retrieval failed:", error);
+            console.timeEnd('[Perf] getEntityGraph total');
+            return {
+                centerEntity,
+                entities: [],
+                relationships: [],
+                error:
+                    error instanceof Error
+                        ? error.message
+                        : "Graph generation failed",
+            };
+        }
+    }
+
+    /**
+     * Convert search results to graph format and cache them
+     */
+    private async convertSearchToGraphFormat(primarySearch: any, centerEntity: string, depth: number): Promise<any> {
+        if (!primarySearch || !primarySearch.websites || primarySearch.websites.length === 0) {
+            return { centerEntity, entities: [], relationships: [] };
+        }
+
+        // Convert search results to entity format
+        const entities = primarySearch.websites
+            .map((website: any, index: number) => {
+                const richEntity = this.extractRichEntityData(centerEntity, website, index);
+                return {
+                    ...richEntity,
+                    id: `search_${index}`,
+                    category: "primary",
+                };
+            })
+            .filter((entity: any) => entity.name && entity.name.trim())
+            .slice(0, 15);
+
+        // Ensure center entity is included in the entities list
+        const centerEntityNode = {
+            id: 'center',
+            name: centerEntity,
+            type: 'concept',
+            confidence: 1.0,
+            category: 'center',
+            description: `Center entity: ${centerEntity}`,
+            properties: { isCenterEntity: true }
+        };
+
+        // Add center entity if not already present
+        const hasCenter = entities.some((e: any) => e.name.toLowerCase() === centerEntity.toLowerCase());
+        if (!hasCenter) {
+            entities.unshift(centerEntityNode);
+        }
+
+        // Create relationships
+        const relationships = this.generateBasicRelationships(entities.filter((e: any) => e.id !== 'center'), centerEntity);
+
+        // Cache the result for future use
+        this.intelligentExtractor.cacheEntityGraph(centerEntity, {
+            entities: entities.map((e: any) => ({ ...e, name: e.name, type: e.type || 'concept', confidence: e.confidence || 0.5, properties: e })),
+            relationships: relationships.map((r: any) => ({ ...r, id: r.id, from: r.from, to: r.to, type: r.type, strength: r.strength || 0.5, properties: r }))
+        }, depth);
+
+        return {
+            centerEntity,
+            entities,
+            relationships,
+            metadata: {
+                source: 'search_conversion',
+                searchDepth: depth,
+                totalSources: primarySearch.websites.length,
+                generatedAt: new Date().toISOString(),
+                ...primarySearch.metadata,
+            },
+            topTopics: primarySearch.topTopics || [],
+            summary: primarySearch.summary || null,
+            answerSources: primarySearch.answerSources || [],
+            relatedEntities: primarySearch.relatedEntities || [],
+        };
+    }
+
+    /**
+     * Analyze cache availability to determine best extraction strategy
+     */
+    private analyzeCacheAvailability(centerEntity: string, depth: number): CacheStrategy {
+        const analysis = {
+            hasGlobalGraph: this.cacheManager.globalGraph !== null,
+            hasEntityCache: this.cacheManager.entityGraphs.has(centerEntity),
+            neighborCoverage: this.calculateNeighborCoverage(centerEntity, depth),
+            cacheAge: this.getCacheAge(),
+            memoryPressure: this.getMemoryPressure()
+        };
+
+        console.log('Cache analysis:', analysis);
+
+        // Decision matrix
+        if (analysis.hasGlobalGraph && analysis.cacheAge < 300000) { // 5 min
+            return { bestOption: 'global_extraction', confidence: 0.9 };
+        }
+
+        if (analysis.neighborCoverage > 0.7) {
+            return { bestOption: 'neighbor_merge', confidence: 0.8 };
+        }
+
+        if (analysis.memoryPressure < 0.8) {
+            return { bestOption: 'partial_build', confidence: 0.6 };
+        }
+
+        return { bestOption: 'search_fallback', confidence: 0.4 };
+    }
+
+    private calculateNeighborCoverage(centerEntity: string, depth: number): number {
+        const entityGraph = this.cacheManager.entityGraphs.get(centerEntity);
+        if (!entityGraph) return 0;
+
+        const expectedNeighbors = Math.min(50, depth * 20); // Estimated neighbors needed
+        const cachedNeighbors = entityGraph.localGraph.neighbors.size;
+
+        return Math.min(1.0, cachedNeighbors / expectedNeighbors);
+    }
+
+    private getCacheAge(): number {
+        const globalTimestamp = this.cacheManager.cacheTimestamps.get('global');
+        if (!globalTimestamp) return Infinity;
+        return Date.now() - globalTimestamp;
+    }
+
+    private getMemoryPressure(): number {
+        // Simple heuristic based on cache size
+        const entityCacheSize = this.cacheManager.entityGraphs.size;
+        const maxCacheSize = 100; // Arbitrary limit
+        return entityCacheSize / maxCacheSize;
+    }
+
+    async refreshEntityData(entityName: string): Promise<any> {
+        // For now, just trigger a fresh search
+        const refreshedData = await this.searchByEntity(entityName, {
+            maxResults: 5,
+        });
+
+        return refreshedData.entities.length > 0 ? refreshedData : null;
+    }
+
+    /**
+     * Smart entity search with fallback strategy
+     */
+    private async performEntitySearchWithFallback(
+        entityName: string,
+        options?: { maxResults?: number }
+    ): Promise<any> {
+        if (!this.extensionService) {
+            throw new Error("ChromeExtensionService not available");
+        }
+
+        const maxResults = options?.maxResults || 10;
+
+        try {
+            console.time('[Perf] searchByEntities');
+            const entityResults = await this.extensionService.searchByEntities(
+                [entityName],
+                "",
+                maxResults,
+            );
+            console.timeEnd('[Perf] searchByEntities');
+
+            if (entityResults && entityResults.websites && entityResults.websites.length > 0) {
+                console.log(
+                    "✅ Entity search found %d results for: %s",
+                    entityResults.websites.length,
+                    entityName
+                );
+                return {
+                    websites: entityResults.websites,
+                    relatedEntities: entityResults.relatedEntities || [],
+                    topTopics: entityResults.topTopics || [],
+                    summary: entityResults.summary || null,
+                    metadata: entityResults.metadata || {},
+                    answerSources: entityResults.answerSources || [],
+                };
+            }
+        } catch (error) {
+            console.warn("Entity search failed for %s:", entityName, error);
+        }
+
+        return {
+            websites: [],
+            relatedEntities: [],
+            topTopics: [],
+            metadata: {},
+            answerSources: [],
+        };
+    }
+
+    /**
+     * Extract rich entity data from website knowledge
+     */
+    private extractRichEntityData(
+        entityName: string,
+        website: any,
+        index: number,
+    ): any {
+        const url = website.url || "";
+        const title = website.title || website.description || `Entity ${index + 1}`;
+        const domain = url ? this.extractDomain(url) : "unknown";
+
+        return {
+            id: `entity_${index}`,
+            name: title.slice(0, 50).trim() || `Entity ${index + 1}`,
+            type: "website",
+            confidence: this.calculateConfidence(website),
+            url: url,
+            description: website.description || "",
+            domain: domain,
+            visitCount: website.visitCount || 0,
+            lastVisited: website.lastVisited || website.lastVisit,
+            source: website.sourceType || "website",
+        };
+    }
+
+    /**
+     * Generate basic relationships between entities
+     */
+    private generateBasicRelationships(
+        entities: any[],
+        centerEntity: string,
+    ): any[] {
+        if (!centerEntity || !entities || entities.length === 0) {
+            return [];
+        }
+
+        return entities
+            .filter((entity) => entity.name && entity.name.trim())
+            .map((entity) => ({
+                id: `rel_${entity.id || entity.name.replace(/\s+/g, "_")}`,
+                from: entity.name.trim(),
+                to: centerEntity.trim(),
+                type: "mentioned_in",
+                strength: entity.confidence * 0.8,
+                source: entity.url || "search",
+                direction: "unidirectional",
+            }));
+    }
+
+    private extractDomain(url: string): string {
+        try {
+            if (!url || typeof url !== "string") return "unknown";
+
+            // Handle URLs that might not have protocol
+            let normalizedUrl = url;
+            if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                normalizedUrl = "https://" + url;
+            }
+
+            return new URL(normalizedUrl).hostname.replace("www.", "");
+        } catch {
+            // If URL parsing fails, try to extract domain manually
+            const match = url.match(/([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+            return match ? match[1].replace("www.", "") : "unknown";
+        }
+    }
+
+    private calculateConfidence(website: any): number {
+        let confidence = 0.5;
+
+        // Boost confidence for well-structured data
+        if (website.title) confidence += 0.2;
+        if (website.description) confidence += 0.1;
+        if (website.visitCount && website.visitCount > 1) confidence += 0.1;
+        if (website.lastVisit) confidence += 0.1;
+
+        return Math.min(0.95, confidence);
     }
 
     async searchByEntity(entityName: string, options: any = {}): Promise<any> {
@@ -1406,18 +1808,14 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                 };
             }
 
-            // Use fast entity-based search instead of slow text search
+            // Use fast entity-based search
             const searchResult = await this.performEntitySearchWithFallback(
                 entityName,
                 options,
             );
 
-            if (
-                searchResult &&
-                searchResult.websites &&
-                searchResult.websites.length > 0
-            ) {
-                // Convert website search results to entity format with rich data
+            if (searchResult && searchResult.websites && searchResult.websites.length > 0) {
+                // Convert website search results to entity format
                 const entities = searchResult.websites
                     .map((website: any, index: number) => {
                         return this.extractRichEntityData(
@@ -1429,39 +1827,10 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                     .filter((entity: any) => entity.name && entity.name.trim())
                     .slice(0, options.maxResults || 10);
 
-                // If we have related entities from the search result, include them
-                let additionalEntities: any[] = [];
-                if (
-                    searchResult.relatedEntities &&
-                    searchResult.relatedEntities.length > 0
-                ) {
-                    additionalEntities = searchResult.relatedEntities
-                        .map((entity: any, index: number) => {
-                            const entityName = (
-                                typeof entity === "string"
-                                    ? entity
-                                    : entity.name || entity
-                            ).trim();
-                            return {
-                                id: `related_${index}`,
-                                name: entityName || `Related ${index + 1}`,
-                                type: "concept",
-                                confidence: 0.7,
-                                source: "search_related",
-                            };
-                        })
-                        .filter(
-                            (entity: any) => entity.name && entity.name.trim(),
-                        );
-                }
-
                 return {
-                    entities: [...entities, ...additionalEntities.slice(0, 5)],
+                    entities: entities,
                     centerEntity: entityName,
-                    relationships: this.generateBasicRelationships(
-                        entities,
-                        entityName,
-                    ),
+                    relationships: this.generateBasicRelationships(entities, entityName),
                     totalFound: searchResult.websites.length,
                     searchTime: searchResult.summary?.searchTime || 0,
                     topTopics: searchResult.topTopics || [],
@@ -1499,394 +1868,18 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
         }
     }
 
-    async getEntityGraph(centerEntity: string, depth: number): Promise<any> {
-        try {
-            console.log(`Getting graph for ${centerEntity} (depth: ${depth})`);
-            
-            // First try to get the website collection from the extension service
-            const websiteCollection = await this.getWebsiteCollection();
-            
-            if (websiteCollection) {
-                // Use indexed graph approach
-                return this.getEntityGraphFromIndex(centerEntity, depth, websiteCollection);
-            }
-
-            if (!this.extensionService) {
-                console.warn(
-                    "ChromeExtensionService not available, using empty result",
-                );
-                return { centerEntity, entities: [], relationships: [] };
-            }
-
-            // Use fast entity-based search instead of slow text search
-            const primarySearch = await this.performEntitySearchWithFallback(
-                centerEntity,
-                { maxResults: 15 },
-            );
-
-            if (
-                !primarySearch ||
-                !primarySearch.websites ||
-                primarySearch.websites.length === 0
-            ) {
-                return { centerEntity, entities: [], relationships: [] };
-            }
-
-            // Create entities from primary search results with rich data
-            const primaryEntities = primarySearch.websites
-                .map((website: any, index: number) => {
-                    const richEntity = this.extractRichEntityData(
-                        centerEntity,
-                        website,
-                        index,
-                    );
-                    // Override ID and category for primary entities
-                    return {
-                        ...richEntity,
-                        id: `primary_${index}`,
-                        category: "primary",
-                    };
-                })
-                .filter((entity: any) => entity.name && entity.name.trim())
-                .slice(0, 15);
-
-            // Find the center entity from the search results by case-insensitive name match
-            let centerEntityNode = null;
-            const centerEntityLower = centerEntity.toLowerCase();
-
-            // First, try to find a direct entity match from related entities
-            if (
-                primarySearch.relatedEntities &&
-                primarySearch.relatedEntities.length > 0
-            ) {
-                for (const relatedEntity of primarySearch.relatedEntities) {
-                    const entityName =
-                        typeof relatedEntity === "string"
-                            ? relatedEntity
-                            : relatedEntity.name;
-
-                    if (
-                        entityName &&
-                        entityName.toLowerCase() === centerEntityLower
-                    ) {
-                        // Found the center entity in related entities - get its rich data
-                        centerEntityNode = {
-                            id: "center",
-                            name: centerEntity,
-                            type: Array.isArray(relatedEntity.type)
-                                ? relatedEntity.type.join(", ")
-                                : relatedEntity.type || "concept",
-                            confidence:
-                                typeof relatedEntity === "object"
-                                    ? relatedEntity.confidence || 0.9
-                                    : 0.9,
-                            category: "center",
-                            description: `Center entity: ${centerEntity}`,
-                            facets:
-                                typeof relatedEntity === "object" &&
-                                relatedEntity.facets
-                                    ? relatedEntity.facets
-                                    : [],
-                            // Add occurrence count from search results or default
-                            mentionCount:
-                                typeof relatedEntity === "object" &&
-                                relatedEntity.occurrenceCount
-                                    ? relatedEntity.occurrenceCount
-                                    : 1,
-                            visitCount: 0,
-                            dominantDomains: [],
-                            topicAffinity:
-                                primarySearch.topTopics?.slice(0, 5) || [],
-                            aliases: [],
-                            relationships: [],
-                            contextSnippets: [],
-                            firstSeen: relatedEntity.firstSeen,
-                            lastSeen: relatedEntity.lastSeen,
-                        };
-                        break;
-                    }
-                }
-            }
-
-            // If not found in related entities, look for matching entity in website knowledge
-            if (!centerEntityNode) {
-                for (const website of primarySearch.websites) {
-                    const knowledge = website.getKnowledge
-                        ? website.getKnowledge()
-                        : null;
-                    if (knowledge && knowledge.entities) {
-                        const matchingEntity = knowledge.entities.find(
-                            (e: any) =>
-                                e.name &&
-                                e.name.toLowerCase() === centerEntityLower,
-                        );
-
-                        if (matchingEntity) {
-                            // Found the center entity in website knowledge
-                            centerEntityNode = {
-                                id: "center",
-                                name: matchingEntity.name,
-                                type: Array.isArray(matchingEntity.type)
-                                    ? matchingEntity.type.join(", ")
-                                    : matchingEntity.type || "concept",
-                                confidence: matchingEntity.confidence || 0.9,
-                                category: "center",
-                                description:
-                                    matchingEntity.description ||
-                                    `Center entity: ${centerEntity}`,
-                                facets: matchingEntity.facets || [],
-                                // Add enhanced properties from website context
-                                mentionCount: this.countEntityMentions(
-                                    knowledge,
-                                    centerEntity,
-                                ),
-                                visitCount: website.visitCount || 0,
-                                dominantDomains: [
-                                    this.extractDomain(website.url || ""),
-                                ].filter((d) => d !== "unknown"),
-                                topicAffinity:
-                                    knowledge.topics?.slice(0, 5) || [],
-                                aliases: matchingEntity.aliases || [],
-                                relationships: this.extractRelationships(
-                                    knowledge,
-                                    centerEntity,
-                                ),
-                                contextSnippets: this.extractContextSnippets(
-                                    knowledge.textChunks || [knowledge.content],
-                                    centerEntity,
-                                    3,
-                                ),
-                                firstSeen: matchingEntity.firstSeen,
-                                lastSeen: matchingEntity.lastSeen,
-                                url: website.url,
-                                domain: this.extractDomain(website.url || ""),
-                            };
-                            break;
-                        }
-                    }
-                }
-            }
-
-            // If still not found, create a fallback center entity
-            if (!centerEntityNode) {
-                centerEntityNode = {
-                    id: "center",
-                    name: centerEntity,
-                    type: "concept",
-                    confidence: 0.8,
-                    category: "center",
-                    description: `Center entity: ${centerEntity}`,
-                    facets: [],
-                    mentionCount: 1,
-                    visitCount: 0,
-                    dominantDomains: [],
-                    topicAffinity: primarySearch.topTopics?.slice(0, 5) || [],
-                    aliases: [],
-                    relationships: [],
-                    contextSnippets: [],
-                    firstSeen: new Date().toISOString(),
-                    lastSeen: new Date().toISOString(),
-                };
-            }
-
-            // If depth > 1, perform related searches
-            let relatedEntities: any[] = [];
-            if (
-                depth > 1 &&
-                primarySearch.relatedEntities &&
-                primarySearch.relatedEntities.length > 0
-            ) {
-                // Take top related entities and search for them
-                const topRelated = primarySearch.relatedEntities.slice(0, 3);
-
-                for (const related of topRelated) {
-                    try {
-                        const relatedName =
-                            typeof related === "string"
-                                ? related
-                                : related.name;
-                        const relatedSearch =
-                            await this.performEntitySearchWithFallback(
-                                relatedName,
-                                { maxResults: 3 },
-                            );
-                        if (relatedSearch?.websites?.length > 0) {
-                            const relatedEntityData = relatedSearch.websites
-                                .slice(0, 3)
-                                .map((website: any, index: number) => {
-                                    const richEntity =
-                                        this.extractRichEntityData(
-                                            relatedName,
-                                            website,
-                                            index,
-                                        );
-                                    // Override properties for related entities
-                                    return {
-                                        ...richEntity,
-                                        id: `related_${relatedName.replace(/\s+/g, "_")}_${index}`,
-                                        category: "related",
-                                        parentEntity: relatedName,
-                                        confidence: Math.min(
-                                            richEntity.confidence,
-                                            0.8,
-                                        ), // Cap confidence for related entities
-                                    };
-                                })
-                                .filter(
-                                    (entity: any) =>
-                                        entity.name && entity.name.trim(),
-                                );
-                            relatedEntities.push(...relatedEntityData);
-                        }
-                    } catch (error) {
-                        console.warn(
-                            `Failed to search for related entity ${related}:`,
-                            error,
-                        );
-                    }
-                }
-            }
-
-            // Combine and deduplicate entities by name (case-insensitive)
-            const entityMap = new Map<string, any>();
-
-            // Add center entity first
-            if (centerEntityNode) {
-                entityMap.set(
-                    centerEntityNode.name.toLowerCase(),
-                    centerEntityNode,
-                );
-            }
-
-            // Add primary and related entities, deduplicating and aggregating occurrence counts
-            const entitiesToProcess = [...primaryEntities, ...relatedEntities];
-
-            for (const entity of entitiesToProcess) {
-                if (!entity?.name) continue;
-
-                const entityNameLower = entity.name.toLowerCase();
-
-                if (entityMap.has(entityNameLower)) {
-                    // Entity already exists - aggregate occurrence counts and update properties
-                    const existing = entityMap.get(entityNameLower)!;
-                    const existingOccurrence =
-                        existing.occurrenceCount || existing.mentionCount || 1;
-                    const newOccurrence =
-                        entity.occurrenceCount || entity.mentionCount || 1;
-
-                    // Update the existing entity with aggregated data
-                    existing.occurrenceCount =
-                        existingOccurrence + newOccurrence;
-                    existing.mentionCount = existing.occurrenceCount; // Keep backward compatibility
-
-                    // Update confidence to weighted average
-                    const existingConfidence = existing.confidence || 0.5;
-                    const newConfidence = entity.confidence || 0.5;
-                    existing.confidence =
-                        (existingConfidence * existingOccurrence +
-                            newConfidence * newOccurrence) /
-                        (existingOccurrence + newOccurrence);
-
-                    // Merge other properties if they don't exist in the existing entity
-                    if (!existing.facets && entity.facets) {
-                        existing.facets = entity.facets;
-                    }
-                    if (!existing.description && entity.description) {
-                        existing.description = entity.description;
-                    }
-                    if (!existing.url && entity.url) {
-                        existing.url = entity.url;
-                    }
-
-                    // Merge arrays
-                    if (entity.dominantDomains) {
-                        existing.dominantDomains = [
-                            ...new Set([
-                                ...(existing.dominantDomains || []),
-                                ...entity.dominantDomains,
-                            ]),
-                        ];
-                    }
-                    if (entity.topicAffinity) {
-                        existing.topicAffinity = [
-                            ...new Set([
-                                ...(existing.topicAffinity || []),
-                                ...entity.topicAffinity,
-                            ]),
-                        ];
-                    }
-                } else {
-                    // New entity - ensure it has occurrence count
-                    const processedEntity = {
-                        ...entity,
-                        occurrenceCount:
-                            entity.occurrenceCount || entity.mentionCount || 1,
-                        mentionCount:
-                            entity.occurrenceCount || entity.mentionCount || 1, // Backward compatibility
-                    };
-                    entityMap.set(entityNameLower, processedEntity);
-                }
-            }
-
-            const allEntities = Array.from(entityMap.values());
-
-            // Generate relationships
-            const relationships = this.generateAdvancedRelationships(
-                allEntities,
-                centerEntity,
-            );
-
-            return {
-                centerEntity,
-                entities: allEntities,
-                relationships: relationships,
-                metadata: {
-                    searchDepth: depth,
-                    totalSources: primarySearch.websites.length,
-                    hasRelatedExpansion: relatedEntities.length > 0,
-                    generatedAt: new Date().toISOString(),
-                    ...primarySearch.metadata,
-                },
-                topTopics: primarySearch.topTopics || [],
-                summary: primarySearch.summary || null,
-                answerSources: primarySearch.answerSources || [],
-                relatedEntities: primarySearch.relatedEntities || [],
-            };
-        } catch (error) {
-            console.error("Entity graph retrieval failed:", error);
-            return {
-                centerEntity,
-                entities: [],
-                relationships: [],
-                error:
-                    error instanceof Error
-                        ? error.message
-                        : "Graph generation failed",
-            };
-        }
-    }
-
-    async refreshEntityData(entityName: string): Promise<any> {
-        // For now, just trigger a fresh search
-        const refreshedData = await this.searchByEntity(entityName, {
-            maxResults: 5,
-        });
-
-        return refreshedData.entities.length > 0 ? refreshedData : null;
-    }
-
     /**
      * Get website collection from extension service
      */
     private async getWebsiteCollection(): Promise<WebsiteCollection | null> {
         try {
             if (!this.extensionService) return null;
-            
+
             // Try to get the website collection through the extension service
             const result = await this.extensionService.getAnalyticsData({
                 includeWebsiteCollection: true
             } as any);
-            
+
             return result?.websiteCollection || null;
         } catch (error) {
             console.warn("Could not get website collection:", error);
@@ -1894,780 +1887,293 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
         }
     }
 
-    /**
-     * Get entity information from website collection
-     */
-    private async getEntityInfo(entityName: string, websiteCollection: WebsiteCollection): Promise<any> {
-        // Get entity data from knowledge entities table
-        const entities = await (websiteCollection.knowledgeEntities as any).getTopEntities(1000);
-        const entityData = entities.find((e: any) => e.entityName.toLowerCase() === entityName.toLowerCase());
-        
-        if (!entityData) {
-            return {
-                id: entityName.replace(/\s+/g, '_'),
-                name: entityName,
-                type: "concept",
-                confidence: 0.5,
-                category: "related",
-                description: `Entity: ${entityName}`,
-                mentionCount: 1,
-                visitCount: 0,
-                domains: []
-            };
+}
+
+/**
+ * Intelligent Graph Extractor - implements cache-first entity neighborhood extraction
+ */
+class IntelligentGraphExtractor {
+    constructor(private cacheManager: GraphCacheManager) {}
+
+    async getEntityNeighborhood(
+        centerEntity: string,
+        depth: number,
+        options: {
+            useCache: boolean;
+            fallbackToSearch: boolean;
+            maxNodes: number;
         }
+    ): Promise<any> {
+        console.time('[Perf] neighborhood extraction');
 
-        return {
-            id: entityName.replace(/\s+/g, '_'),
-            name: entityData.entityName,
-            type: entityData.entityType,
-            confidence: entityData.confidence,
-            category: "related",
-            description: `Entity: ${entityData.entityName}`,
-            mentionCount: entityData.count,
-            visitCount: 0,
-            domains: [entityData.domain],
-            extractionDate: entityData.extractionDate
-        };
-    }
-
-    /**
-     * Get entity graph using indexed approach
-     */
-    private async getEntityGraphFromIndex(centerEntity: string, depth: number, websiteCollection: WebsiteCollection): Promise<any> {
         try {
-            // Check if hybrid storage exists, create if needed
-            if (!(websiteCollection as any).hybridStorage) {
-                console.log("No hybrid graph storage available, creating one...");
-                const { HybridGraphStorage } = await import("../../agent/knowledge/hybridGraphStorage.mjs");
-                (websiteCollection as any).hybridStorage = new HybridGraphStorage(websiteCollection);
+            // Strategy 1: Extract from global cache (fastest)
+            if (this.cacheManager.globalGraph) {
+                console.time('[Perf] extract from global');
+                const result = await this.extractFromGlobalGraph(centerEntity, depth, options.maxNodes);
+                console.timeEnd('[Perf] extract from global');
+                // Only consider successful if we have more than just the center entity or relationships
+                if (result.entities.length > 1 || result.relationships.length > 0) {
+                    console.timeEnd('[Perf] neighborhood extraction');
+                    return result;
+                }
             }
 
-            const hybridStorage = (websiteCollection as any).hybridStorage;
+            // Strategy 2: Combine cached entity graphs (fast)
+            const cachedNeighbors = this.findCachedNeighbors(centerEntity, depth);
+            if (cachedNeighbors.coverage > 0.7) {
+                console.time('[Perf] merge neighbor caches');
+                const result = await this.mergeNeighborGraphs(centerEntity, cachedNeighbors);
+                console.timeEnd('[Perf] merge neighbor caches');
+                // Only consider successful if we have more than just the center entity or relationships
+                if (result.entities.length > 1 || result.relationships.length > 0) {
+                    console.timeEnd('[Perf] neighborhood extraction');
+                    return result;
+                }
+            }
 
-            // Check if graph has been built
-            if (!hybridStorage.hasGraph()) {
-                console.log("No knowledge graph available, building one...");
-                await hybridStorage.buildGraph({
-                    urlLimit: 1000,
-                    enableCommunityDetection: true,
-                    communityAlgorithm: 'louvain' as const,
-                    calculateMetrics: true
+            // Strategy 3: Partial graph building (medium)
+            if (options.useCache) {
+                console.time('[Perf] partial graph build');
+                const result = await this.buildPartialGraph(centerEntity, depth, options.maxNodes);
+                console.timeEnd('[Perf] partial graph build');
+                // Only consider successful if we have more than just the center entity or relationships
+                if (result.entities.length > 1 || result.relationships.length > 0) {
+                    console.timeEnd('[Perf] neighborhood extraction');
+                    return result;
+                }
+            }
+
+            // Strategy 4: Search fallback (fast but limited)
+            if (options.fallbackToSearch) {
+                console.time('[Perf] search fallback');
+                const result = await this.searchBasedGraph(centerEntity, depth);
+                console.timeEnd('[Perf] search fallback');
+                console.timeEnd('[Perf] neighborhood extraction');
+                return result;
+            }
+
+            throw new Error('No viable graph extraction strategy available');
+
+        } catch (error) {
+            console.error('Intelligent extraction failed:', error);
+            console.timeEnd('[Perf] neighborhood extraction');
+
+            // Emergency fallback
+            return {
+                centerEntity,
+                entities: [],
+                relationships: [],
+                metadata: {
+                    source: 'emergency_fallback',
+                    error: error instanceof Error ? error.message : 'Unknown error'
+                }
+            };
+        }
+    }
+
+    private async extractFromGlobalGraph(centerEntity: string, depth: number, maxNodes: number): Promise<any> {
+        const globalGraph = this.cacheManager.globalGraph!;
+
+        // Find center entity in global graph
+        const centerNode = globalGraph.entities.get(centerEntity.toLowerCase());
+        if (!centerNode) {
+            return { centerEntity, entities: [], relationships: [] };
+        }
+
+        // Extract neighborhood using breadth-first search
+        const visited = new Set<string>();
+        const entities: EntityNode[] = [];
+        const relationships: RelationshipEdge[] = [];
+        const queue = [{ entity: centerEntity.toLowerCase(), currentDepth: 0 }];
+
+        while (queue.length > 0 && entities.length < maxNodes) {
+            const { entity, currentDepth } = queue.shift()!;
+
+            if (visited.has(entity) || currentDepth > depth) continue;
+            visited.add(entity);
+
+            const entityNode = globalGraph.entities.get(entity);
+            if (entityNode) {
+                entities.push(entityNode);
+
+                // Find relationships from this entity
+                globalGraph.relationships.forEach((rel, relId) => {
+                    if (rel.from.toLowerCase() === entity || rel.to.toLowerCase() === entity) {
+                        relationships.push(rel);
+
+                        // Add connected entities to queue for next depth level
+                        if (currentDepth < depth) {
+                            const connected = rel.from.toLowerCase() === entity ? rel.to : rel.from;
+                            if (!visited.has(connected.toLowerCase())) {
+                                queue.push({ entity: connected.toLowerCase(), currentDepth: currentDepth + 1 });
+                            }
+                        }
+                    }
                 });
             }
-
-            // Get entity graph from hybrid storage
-            const graphData = await hybridStorage.getEntityGraph(centerEntity, {
-                maxDepth: depth,
-                maxNodes: centerEntity ? 500 : 100, // More nodes for entity-specific view
-                aggregateEdges: true,
-                includeMetrics: true
-            });
-
-            console.log(`Hybrid graph generated: ${graphData.nodes.length} nodes, ${graphData.edges.length} edges`);
-            
-            // Convert to expected format
-            return {
-                centerEntity: graphData.centerEntity,
-                entities: graphData.nodes.map((node: any) => ({
-                    name: node.data.label,
-                    type: node.data.type,
-                    centralityScore: node.data.centralityScore,
-                    communityId: node.data.communityId,
-                    size: node.data.size
-                })),
-                relationships: graphData.edges.map((edge: any) => ({
-                    from: this.extractNodeName(edge.data.source),
-                    to: this.extractNodeName(edge.data.target),
-                    relationshipType: edge.data.relationshipType,
-                    weight: edge.data.weight,
-                    confidence: edge.data.confidence
-                })),
-                communities: graphData.communities || [],
-                metadata: graphData.metadata
-            };
-        } catch (error) {
-            console.error("Hybrid entity graph retrieval failed:", error);
-            return this.getEntityGraphFallback(centerEntity, depth);
         }
-    }
 
-    /**
-     * Extract node name from Cytoscape node ID
-     */
-    private extractNodeName(nodeId: string): string {
-        // Remove 'node-' prefix if present
-        return nodeId.startsWith('node-') ? nodeId.substring(5) : nodeId;
-    }
+        // Cache the result for future use
+        this.cacheEntityGraph(centerEntity, { entities, relationships }, depth);
 
-    /**
-     * Fallback to original getEntityGraph method when indexed approach fails
-     */
-    private async getEntityGraphFallback(centerEntity: string, depth: number): Promise<any> {
-        console.log("Using fallback entity graph method");
         return {
             centerEntity,
-            entities: [],
+            entities: entities.map(e => ({ ...e, id: e.id || e.name })),
+            relationships: relationships.map(r => ({ ...r, id: r.id || `${r.from}-${r.to}` })),
+            metadata: {
+                source: 'global_cache',
+                totalAvailable: globalGraph.entities.size,
+                extracted: entities.length,
+                searchDepth: depth
+            }
+        };
+    }
+
+    private findCachedNeighbors(centerEntity: string, depth: number): { coverage: number; neighbors: string[] } {
+        const entityGraph = this.cacheManager.entityGraphs.get(centerEntity);
+        if (!entityGraph) {
+            return { coverage: 0, neighbors: [] };
+        }
+
+        const neighbors = Array.from(entityGraph.localGraph.neighbors);
+        const expectedNeighbors = Math.min(50, depth * 20);
+        const coverage = Math.min(1.0, neighbors.length / expectedNeighbors);
+
+        return { coverage, neighbors };
+    }
+
+    private async mergeNeighborGraphs(centerEntity: string, cachedNeighbors: { neighbors: string[] }): Promise<any> {
+        const mergedEntities = new Map<string, EntityNode>();
+        const mergedRelationships = new Map<string, RelationshipEdge>();
+
+        // Start with center entity cache
+        const centerCache = this.cacheManager.entityGraphs.get(centerEntity);
+        if (centerCache) {
+            centerCache.localGraph.entities.forEach(e => {
+                mergedEntities.set(e.name.toLowerCase(), e);
+            });
+            centerCache.localGraph.relationships.forEach(r => {
+                mergedRelationships.set(r.id, r);
+            });
+        }
+
+        // Merge neighbor caches
+        for (const neighbor of cachedNeighbors.neighbors.slice(0, 10)) {
+            const neighborCache = this.cacheManager.entityGraphs.get(neighbor);
+            if (neighborCache) {
+                neighborCache.localGraph.entities.forEach(e => {
+                    if (!mergedEntities.has(e.name.toLowerCase())) {
+                        mergedEntities.set(e.name.toLowerCase(), e);
+                    }
+                });
+                neighborCache.localGraph.relationships.forEach(r => {
+                    if (!mergedRelationships.has(r.id)) {
+                        mergedRelationships.set(r.id, r);
+                    }
+                });
+            }
+        }
+
+        return {
+            centerEntity,
+            entities: Array.from(mergedEntities.values()),
+            relationships: Array.from(mergedRelationships.values()),
+            metadata: {
+                source: 'neighbor_merge',
+                mergedCaches: cachedNeighbors.neighbors.length,
+                totalEntities: mergedEntities.size
+            }
+        };
+    }
+
+    private async buildPartialGraph(centerEntity: string, depth: number, maxNodes: number): Promise<any> {
+        // This is a placeholder for building a minimal graph subset
+        // In a real implementation, this would query a subset of data
+        console.log(`Building partial graph for ${centerEntity} with max ${maxNodes} nodes`);
+
+        // Create a minimal center entity
+        const centerEntityNode = {
+            id: 'center',
+            name: centerEntity,
+            type: 'concept',
+            confidence: 1.0,
+            category: 'center',
+            description: `Center entity: ${centerEntity}`,
+            properties: { isCenterEntity: true }
+        };
+
+        return {
+            centerEntity,
+            entities: [centerEntityNode],
             relationships: [],
             metadata: {
-                searchDepth: depth,
-                generatedAt: new Date().toISOString(),
-                source: "fallback",
-                error: "Indexed graph not available"
+                source: 'partial_build',
+                note: 'Partial graph building not yet implemented - minimal entity created'
             }
         };
     }
 
-    /**
-     * Smart entity search with fallback strategy
-     * Uses entity search first, then topic search as fallback
-     */
-    private async performEntitySearchWithFallback(
-        entityName: string,
-        options?: { maxResults?: number },
-    ): Promise<any> {
-        if (!this.extensionService) {
-            throw new Error("ChromeExtensionService not available");
-        }
+    private async searchBasedGraph(centerEntity: string, depth: number): Promise<any> {
+        // Use the existing search-based approach as fallback
+        console.log(`Using search-based fallback for ${centerEntity}`);
 
-        const startTime = performance.now();
-        const maxResults = options?.maxResults || 10;
-        let searchResult: any = null;
-        let searchMethod = "unknown";
-
-        try {
-            // Strategy 1: Direct entity search (fastest)
-            const entityResults = await this.extensionService.searchByEntities(
-                [entityName],
-                "",
-                maxResults,
-            );
-
-            if (
-                entityResults &&
-                entityResults.websites &&
-                entityResults.websites.length > 0
-            ) {
-                searchResult = {
-                    websites: entityResults.websites,
-                    relatedEntities: entityResults.relatedEntities || [],
-                    topTopics: entityResults.topTopics || [],
-                    summary: entityResults.summary || null,
-                    metadata: entityResults.metadata || {},
-                    answerSources: entityResults.answerSources || [],
-                };
-                searchMethod = "entity";
-                console.log(
-                    "✅ Entity search found %d results for: %s",
-                    entityResults.websites.length,
-                    entityName,
-                    `Related entities: ${entityResults.relatedEntities?.length || 0}`,
-                    `Top topics: ${entityResults.topTopics?.length || 0}`,
-                );
-            }
-        } catch (error) {
-            console.warn("Entity search failed for %s:", entityName, error);
-        }
-
-        // Strategy 2: Topic search if entity search fails
-        if (!searchResult || searchResult.websites.length < 1) {
-            try {
-                console.log(`Trying topic search for: ${entityName}`);
-                const topicResults = await this.extensionService.searchByTopics(
-                    [entityName],
-                    "",
-                    maxResults,
-                );
-
-                if (
-                    topicResults &&
-                    topicResults.websites &&
-                    topicResults.websites.length > 0
-                ) {
-                    // Merge with existing results or use as primary
-                    const existingWebsites = searchResult?.websites || [];
-                    const existingRelatedEntities =
-                        searchResult?.relatedEntities || [];
-                    const existingTopTopics = searchResult?.topTopics || [];
-
-                    searchResult = {
-                        websites: [
-                            ...existingWebsites,
-                            ...topicResults.websites,
-                        ].slice(0, maxResults),
-                        relatedEntities: [
-                            ...existingRelatedEntities,
-                            ...(topicResults.relatedEntities || []),
-                        ],
-                        topTopics: [
-                            ...existingTopTopics,
-                            ...(topicResults.topTopics || []),
-                        ],
-                        summary:
-                            topicResults.summary ||
-                            searchResult?.summary ||
-                            null,
-                        metadata: {
-                            ...searchResult?.metadata,
-                            ...topicResults.metadata,
-                        },
-                        answerSources: [
-                            ...(searchResult?.answerSources || []),
-                            ...(topicResults.answerSources || []),
-                        ],
-                    };
-                    searchMethod =
-                        searchResult.websites.length > existingWebsites.length
-                            ? "topic"
-                            : searchMethod;
-                    console.log(
-                        "✅ Topic search found %d additional results for: %s",
-                        topicResults.websites.length,
-                        entityName,
-                        "Added related entities: %d",
-                        topicResults.relatedEntities?.length || 0,
-                        "Added topics: %d",
-                        topicResults.topTopics?.length || 0,
-                    );
-                }
-            } catch (error) {
-                console.warn("Topic search failed for %s:", entityName, error);
-            }
-        }
-
-        // If no results from entity or topic search, return empty result
-        if (!searchResult || searchResult.websites.length === 0) {
-            console.log(
-                `No results found for entity: ${entityName} using entity or topic search`,
-            );
-            searchResult = {
-                websites: [],
-                relatedEntities: [],
-                topTopics: [],
-                metadata: {},
-                answerSources: [],
-            };
-            searchMethod = "no_results";
-        }
-
-        // Add metadata about which search method was used
-        const endTime = performance.now();
-        const searchTime = Math.round(endTime - startTime);
-
-        if (searchResult) {
-            searchResult.searchMethod = searchMethod;
-            searchResult.searchTerm = entityName;
-            searchResult.searchTimeMs = searchTime;
-        }
-
-        return searchResult;
-    }
-
-    /**
-     * Extract rich entity data from website knowledge
-     */
-    private extractRichEntityData(
-        entityName: string,
-        website: any,
-        index: number,
-    ): any {
-        const url = website.url || "";
-        const title =
-            website.title ||
-            website.description ||
-            (url ? this.extractDomain(url) : `Entity ${index + 1}`);
-        const domain = url ? this.extractDomain(url) : "unknown";
-
-        // Basic entity structure
-        const baseEntity = {
-            id: `entity_${index}`,
-            name: title.slice(0, 50).trim() || `Entity ${index + 1}`,
-            type: "website",
-            confidence: this.calculateConfidence(website),
-            url: url,
-            description: website.description || "",
-            domain: domain,
-            visitCount: website.visitCount || 0,
-            lastVisited: website.lastVisited || website.lastVisit,
-            source: website.sourceType || "website",
+        // Create a minimal center entity as fallback
+        const centerEntityNode = {
+            id: 'center',
+            name: centerEntity,
+            type: 'concept',
+            confidence: 1.0,
+            category: 'center',
+            description: `Center entity: ${centerEntity}`,
+            properties: { isCenterEntity: true }
         };
 
-        // Extract rich data from website knowledge if available
-        const knowledge = website.getKnowledge ? website.getKnowledge() : null;
-        if (knowledge) {
-            return this.enhanceEntityWithKnowledge(
-                baseEntity,
-                knowledge,
-                entityName,
-            );
-        }
-
-        return baseEntity;
-    }
-
-    /**
-     * Enhance entity with rich knowledge data
-     */
-    private enhanceEntityWithKnowledge(
-        baseEntity: any,
-        knowledge: any,
-        searchEntityName: string,
-    ): any {
-        const enhancedEntity = { ...baseEntity };
-
-        // Add mention count
-        enhancedEntity.mentionCount = this.countEntityMentions(
-            knowledge,
-            searchEntityName,
-        );
-
-        // Add aliases from extracted entities
-        const matchingEntity = knowledge.entities?.find(
-            (e: any) =>
-                e.name.toLowerCase().includes(searchEntityName.toLowerCase()) ||
-                searchEntityName.toLowerCase().includes(e.name.toLowerCase()),
-        );
-
-        if (matchingEntity) {
-            enhancedEntity.aliases = matchingEntity.aliases || [];
-            enhancedEntity.entityType =
-                matchingEntity.type || enhancedEntity.type;
-            enhancedEntity.confidence = Math.max(
-                enhancedEntity.confidence,
-                matchingEntity.confidence || 0,
-            );
-            // Include facets if available
-            if (matchingEntity.facets) {
-                enhancedEntity.facets = matchingEntity.facets;
+        return {
+            centerEntity,
+            entities: [centerEntityNode],
+            relationships: [],
+            metadata: {
+                source: 'search_fallback',
+                note: 'Search-based approach - actual search performed by parent'
             }
-        }
-
-        // Add topic affinity
-        enhancedEntity.topicAffinity =
-            knowledge.topics
-                ?.map((t: any) =>
-                    typeof t === "string" ? t : t.name || t.topic || t,
-                )
-                .slice(0, 5) || [];
-
-        // Add context snippets from text chunks
-        if (knowledge.textChunks || knowledge.content) {
-            const textContent = knowledge.textChunks || [knowledge.content];
-            enhancedEntity.contextSnippets = this.extractContextSnippets(
-                textContent,
-                searchEntityName,
-                3,
-            );
-        }
-
-        // Add relationships from knowledge
-        enhancedEntity.relationships = this.extractRelationships(
-            knowledge,
-            searchEntityName,
-        );
-
-        // Add temporal data
-        enhancedEntity.firstSeen =
-            knowledge.extractionDate ||
-            knowledge.visitDate ||
-            baseEntity.lastVisited ||
-            new Date().toISOString();
-        enhancedEntity.lastSeen =
-            knowledge.lastUpdated ||
-            knowledge.visitDate ||
-            baseEntity.lastVisited ||
-            new Date().toISOString();
-
-        // Add dominant domains
-        enhancedEntity.dominantDomains = [baseEntity.domain];
-
-        return enhancedEntity;
+        };
     }
 
-    /**
-     * Count entity mentions in knowledge content
-     */
-    private countEntityMentions(knowledge: any, entityName: string): number {
-        if (!knowledge || !entityName) return 0;
+    public cacheEntityGraph(centerEntity: string, graphData: { entities: EntityNode[]; relationships: RelationshipEdge[] }, depth: number): void {
+        const neighbors = new Set<string>();
 
-        let count = 0;
-        const searchTerm = entityName.toLowerCase();
-
-        // Count in text content
-        if (knowledge.content) {
-            const matches = knowledge.content.toLowerCase().split(searchTerm);
-            count += Math.max(0, matches.length - 1);
-        }
-
-        // Count in text chunks
-        if (knowledge.textChunks && Array.isArray(knowledge.textChunks)) {
-            knowledge.textChunks.forEach((chunk: string) => {
-                if (typeof chunk === "string") {
-                    const matches = chunk.toLowerCase().split(searchTerm);
-                    count += Math.max(0, matches.length - 1);
-                }
-            });
-        }
-
-        // Count in extracted entities
-        if (knowledge.entities && Array.isArray(knowledge.entities)) {
-            knowledge.entities.forEach((entity: any) => {
-                if (
-                    entity.name &&
-                    entity.name.toLowerCase().includes(searchTerm)
-                ) {
-                    count += entity.mentionCount || 1;
-                }
-            });
-        }
-
-        return Math.max(1, count); // Ensure at least 1 mention
-    }
-
-    /**
-     * Extract context snippets containing the entity
-     */
-    private extractContextSnippets(
-        textChunks: string[],
-        entityName: string,
-        maxSnippets: number,
-    ): string[] {
-        if (!textChunks || !entityName) return [];
-
-        const snippets: string[] = [];
-        const searchTerm = entityName.toLowerCase();
-        const snippetLength = 150;
-
-        for (const chunk of textChunks) {
-            if (!chunk || typeof chunk !== "string") continue;
-
-            const lowerChunk = chunk.toLowerCase();
-            const index = lowerChunk.indexOf(searchTerm);
-
-            if (index !== -1 && snippets.length < maxSnippets) {
-                // Extract context around the entity mention
-                const start = Math.max(0, index - 50);
-                const end = Math.min(
-                    chunk.length,
-                    index + searchTerm.length + 100,
-                );
-                let snippet = chunk.slice(start, end).trim();
-
-                // Clean up snippet
-                if (start > 0) snippet = "..." + snippet;
-                if (end < chunk.length) snippet = snippet + "...";
-
-                // Avoid duplicate snippets
-                if (!snippets.some((s) => s.includes(snippet.slice(10, -10)))) {
-                    snippets.push(snippet);
-                }
+        // Extract neighbor entity names from relationships
+        graphData.relationships.forEach(rel => {
+            if (rel.from.toLowerCase() !== centerEntity.toLowerCase()) {
+                neighbors.add(rel.from);
             }
-        }
-
-        return snippets;
-    }
-
-    /**
-     * Extract entity relationships from knowledge
-     */
-    private extractRelationships(knowledge: any, entityName: string): any[] {
-        if (!knowledge) return [];
-
-        const relationships: any[] = [];
-        const searchTerm = entityName.toLowerCase();
-
-        // Extract from entities that appear together
-        if (knowledge.entities && Array.isArray(knowledge.entities)) {
-            knowledge.entities.forEach((entity: any) => {
-                if (
-                    entity.name &&
-                    !entity.name.toLowerCase().includes(searchTerm) &&
-                    entity.confidence > 0.5
-                ) {
-                    relationships.push({
-                        relatedEntity: entity.name,
-                        relationshipType: "co_occurs_with",
-                        confidence: entity.confidence,
-                        strength: entity.confidence * 0.8,
-                        evidenceSources: [knowledge.url || "content"],
-                        firstObserved:
-                            knowledge.extractionDate ||
-                            new Date().toISOString(),
-                        lastObserved:
-                            knowledge.lastUpdated || new Date().toISOString(),
-                    });
-                }
-            });
-        }
-
-        // Extract from topics (entity-topic relationships)
-        if (knowledge.topics && Array.isArray(knowledge.topics)) {
-            knowledge.topics.slice(0, 3).forEach((topic: any) => {
-                const topicName =
-                    typeof topic === "string"
-                        ? topic
-                        : topic.name || topic.topic;
-                if (topicName) {
-                    relationships.push({
-                        relatedEntity: topicName,
-                        relationshipType: "related_to_topic",
-                        confidence:
-                            typeof topic === "object"
-                                ? topic.relevance || 0.7
-                                : 0.7,
-                        strength: 0.6,
-                        evidenceSources: [knowledge.url || "content"],
-                        firstObserved:
-                            knowledge.extractionDate ||
-                            new Date().toISOString(),
-                        lastObserved:
-                            knowledge.lastUpdated || new Date().toISOString(),
-                    });
-                }
-            });
-        }
-
-        return relationships.slice(0, 5); // Limit to top 5 relationships
-    }
-
-    /**
-     * Deduplicate relationships by entity name and type
-     */
-    private deduplicateRelationships(relationships: any[]): any[] {
-        const seen = new Map<string, any>();
-
-        relationships.forEach((rel) => {
-            const key = `${rel.relatedEntity}:${rel.relationshipType}`;
-            const existing = seen.get(key);
-
-            if (!existing || rel.confidence > existing.confidence) {
-                seen.set(key, rel);
+            if (rel.to.toLowerCase() !== centerEntity.toLowerCase()) {
+                neighbors.add(rel.to);
             }
         });
 
-        return Array.from(seen.values()).sort(
-            (a, b) => b.confidence - a.confidence,
-        );
-    }
+        const entityGraphData: EntityGraphData = {
+            centerEntity,
+            localGraph: {
+                entities: graphData.entities,
+                relationships: graphData.relationships,
+                neighbors
+            },
+            depth,
+            lastAccessed: Date.now()
+        };
 
-    private extractDomain(url: string): string {
-        try {
-            if (!url || typeof url !== "string") return "unknown";
-
-            // Handle URLs that might not have protocol
-            let normalizedUrl = url;
-            if (!url.startsWith("http://") && !url.startsWith("https://")) {
-                normalizedUrl = "https://" + url;
-            }
-
-            return new URL(normalizedUrl).hostname.replace("www.", "");
-        } catch {
-            // If URL parsing fails, try to extract domain manually
-            const match = url.match(/([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
-            return match ? match[1].replace("www.", "") : "unknown";
-        }
-    }
-
-    private calculateConfidence(website: any): number {
-        let confidence = 0.5;
-
-        // Boost confidence for well-structured data
-        if (website.title) confidence += 0.2;
-        if (website.description) confidence += 0.1;
-        if (website.visitCount && website.visitCount > 1) confidence += 0.1;
-        if (website.lastVisit) confidence += 0.1;
-
-        return Math.min(0.95, confidence);
-    }
-
-    private generateBasicRelationships(
-        entities: any[],
-        centerEntity: string,
-    ): any[] {
-        if (!centerEntity || !entities || entities.length === 0) {
-            return [];
-        }
-
-        return entities
-            .filter((entity) => entity.name && entity.name.trim())
-            .map((entity) => ({
-                id: `rel_${entity.id || entity.name.replace(/\s+/g, "_")}`,
-                from: entity.name.trim(),
-                to: centerEntity.trim(),
-                type: "mentioned_in",
-                strength: entity.confidence * 0.8,
-                source: entity.url || "search",
-                direction: "unidirectional",
-            }));
-    }
-
-    private generateAdvancedRelationships(
-        entities: any[],
-        centerEntity: string,
-    ): any[] {
-        const relationships: any[] = [];
-
-        if (!centerEntity || !entities || entities.length === 0) {
-            return relationships;
-        }
-
-        const validCenterEntity = centerEntity.trim();
-
-        // Center entity relationships
-        entities
-            .filter((e) => e.category === "primary" && e.name && e.name.trim())
-            .forEach((entity) => {
-                const entityName = entity.name.trim();
-                relationships.push({
-                    id: `rel_center_${entity.id || entityName.replace(/\s+/g, "_")}`,
-                    from: validCenterEntity,
-                    to: entityName,
-                    type: "contains",
-                    strength: entity.confidence,
-                    source: entity.url,
-                    direction: "unidirectional",
-                    category: "primary",
-                });
-            });
-
-        // Related entity relationships
-        entities
-            .filter((e) => e.category === "related" && e.name && e.name.trim())
-            .forEach((entity) => {
-                const entityName = entity.name.trim();
-                const parentEntity = (
-                    entity.parentEntity || validCenterEntity
-                ).trim();
-
-                relationships.push({
-                    id: `rel_related_${entity.id || entityName.replace(/\s+/g, "_")}`,
-                    from: parentEntity,
-                    to: entityName,
-                    type: "related_to",
-                    strength: entity.confidence * 0.7,
-                    source: entity.url,
-                    direction: "bidirectional",
-                    category: "related",
-                });
-            });
-
-        // Domain-based relationships (entities from same domain)
-        const domainGroups = new Map<string, any[]>();
-        entities
-            .filter(
-                (e) =>
-                    e.domain &&
-                    e.domain !== "unknown" &&
-                    e.name &&
-                    e.name.trim(),
-            )
-            .forEach((entity) => {
-                if (!domainGroups.has(entity.domain)) {
-                    domainGroups.set(entity.domain, []);
-                }
-                domainGroups.get(entity.domain)!.push(entity);
-            });
-
-        // Create relationships between entities from the same domain
-        domainGroups.forEach((domainEntities, domain) => {
-            if (domainEntities.length > 1) {
-                for (let i = 0; i < domainEntities.length - 1; i++) {
-                    for (let j = i + 1; j < domainEntities.length; j++) {
-                        const entity1 = domainEntities[i];
-                        const entity2 = domainEntities[j];
-
-                        if (
-                            entity1.name &&
-                            entity2.name &&
-                            entity1.name.trim() &&
-                            entity2.name.trim() &&
-                            entity1.name.trim() !== entity2.name.trim()
-                        ) {
-                            relationships.push({
-                                id: `rel_domain_${i}_${j}_${domain.replace(/[^a-zA-Z0-9]/g, "_")}`,
-                                from: entity1.name.trim(),
-                                to: entity2.name.trim(),
-                                type: "same_domain",
-                                strength: 0.6,
-                                source: domain,
-                                direction: "bidirectional",
-                                category: "domain",
-                            });
-                        }
-                    }
-                }
-            }
-        });
-
-        // Document co-occurrence relationships - entities that appear together in the same document
-        const documentCoOccurrences =
-            this.generateDocumentCoOccurrenceRelationships(entities);
-        relationships.push(...documentCoOccurrences);
-
-        return relationships;
-    }
-
-    /**
-     * Generate relationships between entities that co-occur in the same document
-     */
-    private generateDocumentCoOccurrenceRelationships(entities: any[]): any[] {
-        const relationships: any[] = [];
-        const documentEntityMap = new Map<string, any[]>();
-
-        // Group entities by their source document URL
-        entities.forEach((entity) => {
-            if (entity.url && entity.category === "primary") {
-                const url = entity.url;
-                if (!documentEntityMap.has(url)) {
-                    documentEntityMap.set(url, []);
-                }
-                documentEntityMap.get(url)!.push(entity);
-            }
-        });
-
-        // For each document with multiple entities, create co-occurrence relationships
-        documentEntityMap.forEach((documentEntities, documentUrl) => {
-            if (documentEntities.length > 1) {
-                // Create relationships between all pairs of entities in the same document
-                for (let i = 0; i < documentEntities.length; i++) {
-                    for (let j = i + 1; j < documentEntities.length; j++) {
-                        const entity1 = documentEntities[i];
-                        const entity2 = documentEntities[j];
-
-                        if (
-                            entity1.name &&
-                            entity2.name &&
-                            entity1.name.trim() !== entity2.name.trim()
-                        ) {
-                            // Calculate co-occurrence strength based on confidence of both entities
-                            const strength = Math.min(
-                                (entity1.confidence || 0.5) *
-                                    (entity2.confidence || 0.5) *
-                                    1.2,
-                                0.9,
-                            );
-
-                            relationships.push({
-                                id: `co_occurrence_${entity1.id}_${entity2.id}`,
-                                from: entity1.name.trim(),
-                                to: entity2.name.trim(),
-                                type: "co_occurrence",
-                                strength: strength,
-                                source: documentUrl,
-                                direction: "bidirectional",
-                                category: "co_occurrence",
-                                evidence: `Both entities appear in: ${this.extractDomain(documentUrl)}`,
-                            });
-                        }
-                    }
-                }
-            }
-        });
-
-        console.log(
-            `Generated ${relationships.length} document co-occurrence relationships from ${documentEntityMap.size} documents`,
-        );
-
-        return relationships;
+        this.cacheManager.entityGraphs.set(centerEntity, entityGraphData);
+        this.cacheManager.cacheTimestamps.set(centerEntity, Date.now());
     }
 }
 
+// ===================================================================
+// LEGACY METHODS (to be refactored)
+// ===================================================================
+
+/**
+ * Export the intelligent graph extractor for external usage
+ */
+export { IntelligentGraphExtractor };
