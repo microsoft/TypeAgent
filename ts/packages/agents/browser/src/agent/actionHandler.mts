@@ -111,6 +111,7 @@ import {
 import {
     BrowserActionContext,
     getActionBrowserControl,
+    getSessionBrowserControl,
     getBrowserControl,
     saveSettings,
 } from "./browserActions.mjs";
@@ -149,9 +150,9 @@ interface ProgressState {
 interface ActiveKnowledgeExtraction {
     extractionId: string;
     url?: string;
-    actionIO?: ActionIO;
-    dynamicDisplayId?: string; // NEW: For dynamic display tracking
-    progressState?: ProgressState; // NEW: Enhanced progress tracking
+    actionIO?: ActionIO | null; // Can be null for notification-based extraction
+    dynamicDisplayId?: string | null;
+    progressState?: ProgressState;
     aggregatedKnowledge: {
         entities: any[];
         topics: any[];
@@ -161,6 +162,260 @@ interface ActiveKnowledgeExtraction {
 }
 
 const activeKnowledgeExtractions = new Map<string, ActiveKnowledgeExtraction>();
+
+// Track retry counts for dynamic display requests
+const dynamicDisplayRetryCounters = new Map<string, number>();
+const MAX_RETRY_CYCLES = 2;
+
+// Action Context Cache for navigation-triggered extractions
+interface ActionContextCacheEntry {
+    url: string;
+    normalizedUrl: string;
+    actionContext: ActionContext<BrowserActionContext>;
+    tabId?: string | undefined;
+    dynamicDisplayId?: string | undefined;
+    lastAccessed: number;
+    createdAt: number;
+}
+
+class ActionContextCache {
+    private cache = new Map<string, ActionContextCacheEntry>();
+    private maxSize = 50;
+    private maxAge = 30 * 60 * 1000;
+
+    set(
+        url: string,
+        context: ActionContext<BrowserActionContext>,
+        tabId?: string,
+        dynamicDisplayId?: string,
+    ): void {
+        const normalizedUrl = this.normalizeUrl(url);
+        const entry: ActionContextCacheEntry = {
+            url,
+            normalizedUrl,
+            actionContext: context,
+            tabId,
+            dynamicDisplayId,
+            lastAccessed: Date.now(),
+            createdAt: Date.now(),
+        };
+
+        this.cache.set(normalizedUrl, entry);
+        this.evictOldEntries();
+    }
+
+    get(url: string): ActionContext<BrowserActionContext> | null {
+        const normalizedUrl = this.normalizeUrl(url);
+        const entry = this.cache.get(normalizedUrl);
+
+        if (entry) {
+            // Check if entry is still valid (age and context validity)
+            if (Date.now() - entry.createdAt > this.maxAge) {
+                this.cache.delete(normalizedUrl);
+                return null;
+            }
+
+            // Check if the ActionContext is still valid (not closed)
+            if (!isActionContextValid(entry.actionContext)) {
+                this.cache.delete(normalizedUrl);
+                return null;
+            }
+
+            entry.lastAccessed = Date.now();
+            return entry.actionContext;
+        }
+
+        return null;
+    }
+
+    getDynamicDisplayId(url: string): string | null {
+        const normalizedUrl = this.normalizeUrl(url);
+        const entry = this.cache.get(normalizedUrl);
+
+        if (entry) {
+            // Check if entry is still valid (age and context validity)
+            if (Date.now() - entry.createdAt > this.maxAge) {
+                this.cache.delete(normalizedUrl);
+                return null;
+            }
+
+            // Check if the ActionContext is still valid (not closed)
+            if (!isActionContextValid(entry.actionContext)) {
+                this.cache.delete(normalizedUrl);
+                return null;
+            }
+
+            entry.lastAccessed = Date.now();
+            return entry.dynamicDisplayId || null;
+        }
+
+        return null;
+    }
+
+    private normalizeUrl(url: string): string {
+        try {
+            const parsed = new URL(url);
+            // Keep query params (they often define unique content)
+            // Remove fragments (they're just page anchors)
+            return `${parsed.protocol}//${parsed.host}${parsed.pathname}${parsed.search}`;
+        } catch {
+            return url;
+        }
+    }
+
+    private evictOldEntries(): void {
+        if (this.cache.size <= this.maxSize) return;
+
+        // Sort by last accessed and remove oldest
+        const entries = Array.from(this.cache.entries()).sort(
+            (a, b) => a[1].lastAccessed - b[1].lastAccessed,
+        );
+
+        const toRemove = entries.slice(0, this.cache.size - this.maxSize);
+        toRemove.forEach(([key]) => this.cache.delete(key));
+    }
+}
+
+const actionContextCache = new ActionContextCache();
+
+const extractionTimestamps = new Map<string, number>();
+
+// Track currently running extractions to prevent duplicates
+interface RunningExtraction {
+    extractionId: string;
+    url: string;
+    normalizedUrl: string;
+    startTime: number;
+    promise: Promise<any>;
+}
+
+class RunningExtractionsCache {
+    private runningExtractions = new Map<string, RunningExtraction>();
+
+    isRunning(url: string): boolean {
+        const normalizedUrl = normalizeUrlForIndex(url);
+        return this.runningExtractions.has(normalizedUrl);
+    }
+
+    getRunning(url: string): RunningExtraction | undefined {
+        const normalizedUrl = normalizeUrlForIndex(url);
+        return this.runningExtractions.get(normalizedUrl);
+    }
+
+    async startExtraction(
+        url: string,
+        extractionId: string,
+        extractionPromise: Promise<any>,
+    ): Promise<any> {
+        const normalizedUrl = normalizeUrlForIndex(url);
+
+        // If already running, wait for the existing one
+        if (this.runningExtractions.has(normalizedUrl)) {
+            const existing = this.runningExtractions.get(normalizedUrl)!;
+            debug(
+                `Extraction already running for ${url}, waiting for existing extraction ${existing.extractionId}`,
+            );
+            return existing.promise;
+        }
+
+        // Start new extraction
+        const runningExtraction: RunningExtraction = {
+            extractionId,
+            url,
+            normalizedUrl,
+            startTime: Date.now(),
+            promise: extractionPromise,
+        };
+
+        this.runningExtractions.set(normalizedUrl, runningExtraction);
+
+        // Clean up when done
+        extractionPromise.finally(() => {
+            this.runningExtractions.delete(normalizedUrl);
+        });
+
+        return extractionPromise;
+    }
+
+    cleanup(): void {
+        // Remove extractions that have been running too long (> 10 minutes)
+        const cutoff = Date.now() - 10 * 60 * 1000;
+        for (const [key, extraction] of this.runningExtractions.entries()) {
+            if (extraction.startTime < cutoff) {
+                debug(
+                    `Cleaning up stale extraction ${extraction.extractionId} for ${extraction.url}`,
+                );
+                this.runningExtractions.delete(key);
+            }
+        }
+    }
+}
+
+const runningExtractionsCache = new RunningExtractionsCache();
+
+// Set up periodic cleanup for running extractions cache and retry counters
+setInterval(
+    () => {
+        runningExtractionsCache.cleanup();
+
+        // Clean up old retry counters - simple approach: clear all periodically
+        // since retry counters should be short-lived (only during startup phase)
+        if (dynamicDisplayRetryCounters.size > 100) {
+            debug(
+                `Cleaning up ${dynamicDisplayRetryCounters.size} retry counters`,
+            );
+            dynamicDisplayRetryCounters.clear();
+        }
+    },
+    5 * 60 * 1000,
+); // Clean up every 5 minutes
+
+// Helper function to check if ActionContext is still valid
+function isActionContextValid(
+    context: ActionContext<BrowserActionContext>,
+): boolean {
+    try {
+        // Try to access a property that would throw if context is closed
+        context.sessionContext;
+        return true;
+    } catch (error) {
+        if (
+            error instanceof Error &&
+            error.message.includes("Context is closed")
+        ) {
+            return false;
+        }
+        // Re-throw other types of errors
+        throw error;
+    }
+}
+
+function updateExtractionTimestamp(url: string): void {
+    const normalized = normalizeUrlForIndex(url);
+    extractionTimestamps.set(normalized, Date.now());
+}
+
+function shouldReExtract(
+    url: string,
+    maxAge: number = 24 * 60 * 60 * 1000,
+): boolean {
+    const normalized = normalizeUrlForIndex(url);
+    const lastExtraction = extractionTimestamps.get(normalized);
+    if (!lastExtraction) return true;
+
+    return Date.now() - lastExtraction > maxAge;
+}
+
+function normalizeUrlForIndex(url: string): string {
+    try {
+        const parsed = new URL(url);
+        // Keep protocol, host, pathname, and query params
+        // Remove fragments as they don't affect content
+        return `${parsed.protocol}//${parsed.host}${parsed.pathname}${parsed.search}`;
+    } catch {
+        return url;
+    }
+}
 
 // Helper function to update progress state in a consistent way
 function updateExtractionProgressState(
@@ -250,7 +505,16 @@ function generateDetailedKnowledgeCards(knowledgeResult: any): string {
                         const confidence = e.confidence
                             ? ` ${Math.round(e.confidence * 100)}%`
                             : "";
-                        return `<span style="background: #e3f2fd; color: #1976d2; padding: 2px 6px; border-radius: 12px; font-size: 12px;">${name}${type}${confidence}</span>`;
+                        const entityUrl = `typeagent-browser://views/entityGraphView.html?entity=${encodeURIComponent(name)}`;
+                        return `<a 
+                            href="${entityUrl}"
+                            style="background: #e3f2fd; color: #1976d2; padding: 2px 6px; 
+                                   border-radius: 12px; font-size: 12px; 
+                                   text-decoration: none; display: inline-block;
+                                   transition: background 0.2s, transform 0.1s;"
+                            title="Click to view entity graph">
+                            ${name}${type}${confidence}
+                        </a>`;
                     })
                     .join("")}
                 ${entities.length > 10 ? `<span style="color: #6c757d; font-style: italic; font-size: 12px;">+${entities.length - 10} more</span>` : ""}
@@ -268,7 +532,16 @@ function generateDetailedKnowledgeCards(knowledgeResult: any): string {
                     .slice(0, 8)
                     .map((topic: any) => {
                         const name = topic.name || topic;
-                        return `<span style="background: #fff3cd; color: #856404; padding: 2px 8px; border-radius: 12px; font-size: 12px; border: 1px solid #ffeaa7;">${name}</span>`;
+                        const topicUrl = `typeagent-browser://views/entityGraphView.html?topic=${encodeURIComponent(name)}`;
+                        return `<a 
+                            href="${topicUrl}"
+                            style="background: #fff3cd; color: #856404; padding: 2px 8px; 
+                                   border-radius: 12px; font-size: 12px; 
+                                   border: 1px solid #ffeaa7; text-decoration: none;
+                                   display: inline-block; transition: background 0.2s;"
+                            title="Click to view topic graph">
+                            ${name}
+                        </a>`;
                     })
                     .join("")}
                 ${topics.length > 8 ? `<span style="color: #6c757d; font-style: italic; font-size: 12px;">+${topics.length - 8} more</span>` : ""}
@@ -335,10 +608,18 @@ function generateLiveKnowledgePreview(
                     ? `<div style="color: #6c757d; font-size: 12px; font-style: italic;">None discovered yet</div>`
                     : entities
                           .slice(0, 15)
-                          .map(
-                              (entity) =>
-                                  `<span style="display: inline-block; background: #e3f2fd; color: #1976d2; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; margin: 2px;">${entity.name || entity}</span>`,
-                          )
+                          .map((entity) => {
+                              const name = entity.name || entity;
+                              const entityUrl = `typeagent-browser://views/entityGraphView.html?entity=${encodeURIComponent(name)}`;
+                              return `<a href="${entityUrl}" 
+                                           style="display: inline-block; background: #e3f2fd; color: #1976d2; 
+                                                  padding: 4px 8px; border-radius: 12px; font-size: 11px; 
+                                                  font-weight: 500; margin: 2px; text-decoration: none;
+                                                  transition: background 0.2s, transform 0.1s;"
+                                           title="Click to view entity graph">
+                                           ${name}
+                                           </a>`;
+                          })
                           .join("")
             }
             ${
@@ -362,10 +643,18 @@ function generateLiveKnowledgePreview(
                     ? `<div style="color: #6c757d; font-size: 12px; font-style: italic;">None discovered yet</div>`
                     : topics
                           .slice(0, 12)
-                          .map(
-                              (topic) =>
-                                  `<span style="display: inline-block; background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; margin: 2px;">${topic.name || topic}</span>`,
-                          )
+                          .map((topic) => {
+                              const name = topic.name || topic;
+                              const topicUrl = `typeagent-browser://views/entityGraphView.html?topic=${encodeURIComponent(name)}`;
+                              return `<a href="${topicUrl}" 
+                                           style="display: inline-block; background: #fff3cd; color: #856404; 
+                                                  border: 1px solid #ffeaa7; padding: 4px 8px; border-radius: 12px; 
+                                                  font-size: 11px; font-weight: 500; margin: 2px; text-decoration: none;
+                                                  transition: background 0.2s;"
+                                           title="Click to view topic graph">
+                                           ${name}
+                                           </a>`;
+                          })
                           .join("")
             }
             ${
@@ -463,14 +752,56 @@ async function getDynamicDisplayImpl(
         const activeExtraction = activeKnowledgeExtractions.get(extractionId);
 
         if (!activeExtraction || !activeExtraction.progressState) {
-            return {
-                content: {
-                    type: "html",
-                    content: `<div style="color: #6c757d; font-style: italic;">Knowledge extraction not found or not started</div>`,
-                },
-                nextRefreshMs: -1,
-            };
+            // Track retry attempts for this dynamic display ID
+            const currentRetries =
+                dynamicDisplayRetryCounters.get(dynamicDisplayId) || 0;
+            dynamicDisplayRetryCounters.set(
+                dynamicDisplayId,
+                currentRetries + 1,
+            );
+
+            // Only show "not found" after MAX_RETRY_CYCLES attempts
+            if (currentRetries >= MAX_RETRY_CYCLES) {
+                // Clean up the retry counter since we're giving up
+                dynamicDisplayRetryCounters.delete(dynamicDisplayId);
+
+                return {
+                    content: {
+                        type: "html",
+                        content: `<div style="color: #6c757d; font-style: italic;">Knowledge extraction not found or not started (${dynamicDisplayId})</div>`,
+                    },
+                    nextRefreshMs: -1,
+                };
+            } else {
+                // Show waiting message and continue retrying
+                return {
+                    content: {
+                        type: "html",
+                        content: `
+                        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 16px;">
+                            <div style="display: flex; align-items: center; margin-bottom: 12px;">
+                                <div style="width: 20px; height: 20px; border: 2px solid #f3f3f3; border-top: 2px solid #3498db; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 8px;"></div>
+                                <span style="font-weight: 600; color: #495057;">Waiting for Knowledge Extraction</span>
+                            </div>
+                            <div style="font-size: 13px; color: #6c757d;">
+                                Initializing extraction process... (${currentRetries + 1}/${MAX_RETRY_CYCLES + 1}) (${dynamicDisplayId})
+                            </div>
+                        </div>
+                        <style>
+                            @keyframes spin {
+                                0% { transform: rotate(0deg); }
+                                100% { transform: rotate(360deg); }
+                            }
+                        </style>
+                        `,
+                    },
+                    nextRefreshMs: 1500, // Continue refreshing
+                };
+            }
         }
+
+        // Clear retry counter once extraction is found
+        dynamicDisplayRetryCounters.delete(dynamicDisplayId);
 
         const { progressState, aggregatedKnowledge } = activeExtraction;
 
@@ -484,6 +815,18 @@ async function getDynamicDisplayImpl(
         const isComplete =
             progressState.phase === "complete" ||
             progressState.phase === "error";
+
+        if (isComplete && activeExtraction.url) {
+            await saveKnowledgeToIndex(
+                activeExtraction.url,
+                aggregatedKnowledge,
+                context,
+            );
+        } else {
+            debug(
+                "Extraction completed but the URL was empty. results not saved",
+            );
+        }
 
         return {
             content: { type: "html", content: dynamicHtml },
@@ -689,7 +1032,7 @@ async function handleKnowledgeExtractionProgress(
 ) {
     const { extractionId, progress } = params;
 
-    console.log(`Knowledge Extraction 2 Progress [${extractionId}]:`, progress);
+    debug(`Knowledge Extraction 2 Progress [${extractionId}]:`, progress);
 
     // Get active extraction tracking (it should already exist)
     let activeExtraction = activeKnowledgeExtractions.get(extractionId);
@@ -1263,14 +1606,41 @@ async function resolveWebPage(
     throw new Error(`Unable to find a URL for: '${site}'`);
 }
 
+// Convert stored knowledge format (with actions) back to display format (with relationships)
+function convertStoredKnowledgeToDisplayFormat(storedKnowledge: any): any {
+    const displayKnowledge = { ...storedKnowledge };
+
+    // Convert actions array to relationships array
+    if (storedKnowledge.actions && Array.isArray(storedKnowledge.actions)) {
+        displayKnowledge.relationships = storedKnowledge.actions.map(
+            (action: any) => ({
+                from: action.subjectEntityName || "unknown",
+                relationship: Array.isArray(action.verbs)
+                    ? action.verbs.join(" ")
+                    : action.verbs || "related to",
+                to: action.objectEntityName || "unknown",
+                confidence: action.confidence || 0.8,
+            }),
+        );
+    } else {
+        displayKnowledge.relationships = [];
+    }
+
+    return displayKnowledge;
+}
+
 // Helper functions for enhanced navigation with index integration
 async function checkKnowledgeInIndex(
     url: string,
-    context: ActionContext<BrowserActionContext>,
+    context:
+        | ActionContext<BrowserActionContext>
+        | SessionContext<BrowserActionContext>,
 ): Promise<any | null> {
     try {
-        const websiteCollection =
-            context.sessionContext.agentContext.websiteCollection;
+        // Get the session context - either directly or from action context
+        const sessionContext =
+            "sessionContext" in context ? context.sessionContext : context;
+        const websiteCollection = sessionContext.agentContext.websiteCollection;
 
         if (!websiteCollection) {
             return null;
@@ -1283,12 +1653,15 @@ async function checkKnowledgeInIndex(
 
         if (foundWebsite) {
             const knowledge = foundWebsite.getKnowledge();
-            return knowledge || null;
+            if (knowledge) {
+                return convertStoredKnowledgeToDisplayFormat(knowledge);
+            }
+            return null;
         }
 
         return null;
     } catch (error) {
-        console.log("No existing knowledge found in index for:", url);
+        debug("No existing knowledge found in index for:", url);
         return null;
     }
 }
@@ -1296,12 +1669,21 @@ async function checkKnowledgeInIndex(
 async function saveKnowledgeToIndex(
     url: string,
     knowledge: any,
-    context: ActionContext<BrowserActionContext>,
+    context:
+        | ActionContext<BrowserActionContext>
+        | SessionContext<BrowserActionContext>,
 ): Promise<void> {
     try {
         if (!knowledge || !url) {
+            debug(
+                `Indexing knowledge failed. The URL is ${url} and the knowledge was (${JSON.stringify(knowledge)})`,
+            );
             return;
         }
+
+        debug(
+            `Indexing knowledge started. The URL is ${url} and the knowledge was (${JSON.stringify(knowledge)})`,
+        );
 
         // Use the existing indexWebPageContent function with extracted knowledge
         const parameters = {
@@ -1312,14 +1694,18 @@ async function saveKnowledgeToIndex(
             extractedKnowledge: knowledge,
         };
 
+        // Get the session context - either directly or from action context
+        const sessionContext =
+            "sessionContext" in context ? context.sessionContext : context;
+
         const result = await handleKnowledgeAction(
             "indexWebPageContent",
             parameters,
-            context.sessionContext,
+            sessionContext,
         );
 
         if (result.indexed) {
-            console.log(
+            debug(
                 `Successfully indexed knowledge for ${url} (${result.entityCount} entities)`,
             );
         } else {
@@ -1483,8 +1869,9 @@ async function performKnowledgeExtraction(
                 console.error("Knowledge extraction failed:", error);
             });
 
-        // Return immediately with the dynamic display information
+        // Return immediately with the dynamic display information and extractionId
         return {
+            extractionId,
             dynamicDisplayId,
             dynamicDisplayNextRefreshMs: 1500,
             knowledge: null, // No immediate knowledge, will be populated via progress events
@@ -1493,6 +1880,201 @@ async function performKnowledgeExtraction(
         console.error("Failed to extract knowledge:", error);
         return null;
     }
+}
+
+async function waitForExtractionCompletion(
+    extractionId: string,
+    timeoutMs: number = 120000, // 2 minute default timeout
+    context?: ActionContext<BrowserActionContext>,
+): Promise<{ success: boolean; knowledge?: any; error?: string }> {
+    return new Promise((resolve) => {
+        const startTime = Date.now();
+
+        const checkCompletion = () => {
+            const activeExtraction =
+                activeKnowledgeExtractions.get(extractionId);
+
+            if (!activeExtraction) {
+                // Extraction not found or was cleaned up - assume completed
+                resolve({
+                    success: false,
+                    error: "Extraction not found or was cleaned up",
+                });
+                return;
+            }
+
+            const { progressState, aggregatedKnowledge } = activeExtraction;
+
+            if (context && progressState) {
+                const progressHtml = generateDynamicKnowledgeHtml(
+                    progressState,
+                    aggregatedKnowledge || {
+                        entities: [],
+                        topics: [],
+                        relationships: [],
+                    },
+                );
+
+                context.actionIO.setDisplay({
+                    type: "html",
+                    content: progressHtml,
+                });
+            }
+
+            if (progressState && progressState.phase === "complete") {
+                resolve({
+                    success: true,
+                    knowledge: activeExtraction.aggregatedKnowledge,
+                });
+                return;
+            }
+
+            if (progressState && progressState.phase === "error") {
+                const errorMessage =
+                    progressState.errors && progressState.errors.length > 0
+                        ? progressState.errors.join(", ")
+                        : "Unknown extraction error";
+                resolve({ success: false, error: errorMessage });
+                return;
+            }
+
+            // Check for timeout
+            if (Date.now() - startTime > timeoutMs) {
+                resolve({
+                    success: false,
+                    error: `Extraction timed out after ${timeoutMs}ms`,
+                });
+                return;
+            }
+
+            setTimeout(checkCompletion, 500); // Check every 500ms
+        };
+
+        checkCompletion();
+    });
+}
+
+async function performKnowledgeExtractionWithNotifications(
+    url: string,
+    sessionContext: SessionContext<BrowserActionContext>,
+    extractionMode: string,
+    parameters: any,
+): Promise<void> {
+    try {
+        const extractionId = parameters.extractionId;
+
+        // Create a minimal tracking entry
+        const activeExtraction: ActiveKnowledgeExtraction = {
+            extractionId,
+            url,
+            actionIO: null, // No actionIO for notification-based extraction
+            dynamicDisplayId: null,
+            progressState: {
+                phase: "initializing",
+                percentage: 0,
+                startTime: Date.now(),
+                lastUpdate: Date.now(),
+                errors: [],
+            },
+            aggregatedKnowledge: {
+                entities: [],
+                topics: [],
+                relationships: [],
+            },
+            lastUpdateTime: Date.now(),
+        };
+
+        activeKnowledgeExtractions.set(extractionId, activeExtraction);
+
+        // Subscribe to progress events
+        const progressHandler = async (
+            progress: KnowledgeExtractionProgressEvent,
+        ) => {
+            await handleKnowledgeExtractionProgressFromEvent(
+                progress,
+                activeExtraction,
+            );
+
+            // Calculate percentage from progress
+            const percentage =
+                progress.totalItems > 0
+                    ? Math.round(
+                          (progress.processedItems / progress.totalItems) * 100,
+                      )
+                    : 0;
+
+            // Send progress notifications at key milestones
+            if (percentage === 25 || percentage === 50 || percentage === 75) {
+                sessionContext.notify(
+                    AppAgentEvent.Info,
+                    `Knowledge extraction ${percentage}% complete for ${url}`,
+                );
+            }
+        };
+
+        knowledgeProgressEvents.onProgressById(extractionId, progressHandler);
+
+        // Start extraction
+        const extractionResult = await handleKnowledgeAction(
+            "extractKnowledgeFromPageStreaming",
+            parameters,
+            sessionContext,
+        );
+
+        // Send completion notification with summary
+        if (extractionResult?.knowledge) {
+            const knowledge = extractionResult.knowledge;
+            const summary = generateKnowledgeSummary(knowledge);
+
+            // Always save to index first (critical for performance)
+            try {
+                await saveKnowledgeToIndex(url, knowledge, sessionContext);
+                updateExtractionTimestamp(url);
+
+                sessionContext.notify(
+                    AppAgentEvent.Info,
+                    `Knowledge extracted and indexed for ${url}: ${summary}`,
+                );
+            } catch (indexError) {
+                // Still notify about extraction, but warn about index failure
+                console.error(
+                    `Failed to index knowledge for ${url}:`,
+                    indexError,
+                );
+                sessionContext.notify(
+                    AppAgentEvent.Warning,
+                    `Knowledge extracted for ${url}: ${summary} (indexing failed)`,
+                );
+            }
+        }
+    } catch (error: any) {
+        console.error("Knowledge extraction with notifications failed:", error);
+        sessionContext.notify(
+            AppAgentEvent.Error,
+            `Knowledge extraction failed for ${url}: ${error.message}`,
+        );
+    } finally {
+        // Cleanup
+        knowledgeProgressEvents.removeProgressListener(parameters.extractionId);
+        setTimeout(() => {
+            activeKnowledgeExtractions.delete(parameters.extractionId);
+        }, 30000);
+    }
+}
+
+function generateKnowledgeSummary(knowledge: any): string {
+    const entityCount = knowledge.entities?.length || 0;
+    const topicCount = knowledge.topics?.length || 0;
+    const relationshipCount = knowledge.relationships?.length || 0;
+
+    const parts = [];
+    if (entityCount > 0) parts.push(`${entityCount} entities`);
+    if (topicCount > 0) parts.push(`${topicCount} topics`);
+    if (relationshipCount > 0) parts.push(`${relationshipCount} relationships`);
+
+    return parts.length > 0
+        ? parts.join(", ")
+        : "No significant knowledge found";
 }
 
 function createKnowledgeActionResult(
@@ -1511,20 +2093,12 @@ function createKnowledgeActionResult(
 
         if (entitiesCount > 0 || topicsCount > 0 || actionsCount > 0) {
             message += ` with knowledge extraction (${entitiesCount} entities, ${topicsCount} topics, ${actionsCount} actions).`;
-
-            // Display a success message with the knowledge summary
-            /* displaySuccess(
-                `Knowledge extracted and indexed: ${entitiesCount} entities, ${topicsCount} topics, ${actionsCount} actions`,
-                context,
-            );
-            */
         } else {
             message +=
                 " with knowledge extraction (no structured content found).";
         }
     } else {
         message += " (existing knowledge loaded from index).";
-        // displaySuccess("Loaded existing knowledge from index", context);
     }
 
     const result = createActionResult(message);
@@ -1603,7 +2177,6 @@ async function openWebPage(
 ) {
     const browserControl = getActionBrowserControl(context);
 
-    // Phase 1: URL Resolution
     displayStatus(`Opening web page for ${action.parameters.site}.`, context);
     const url = (
         await resolveWebPage(
@@ -1620,89 +2193,73 @@ async function openWebPage(
         );
     }
 
-    // Phase 2: Open Page
     await browserControl.openWebPage(url, {
         newTab: action.parameters.tab === "new",
     });
 
-    // Phase 3: Settings-Aware Knowledge Extraction
-    try {
-        if (await shouldRunKnowledgeExtraction(url, context)) {
-            const browserSettings = await browserControl.getBrowserSettings();
+    // Check for existing knowledge and display it
+    const existingKnowledge = await checkKnowledgeInIndex(url, context);
+    if (existingKnowledge) {
+        const entitiesCount = existingKnowledge.entities?.length || 0;
+        const topicsCount = existingKnowledge.topics?.length || 0;
+        const relationshipsCount = existingKnowledge.relationships?.length || 0;
 
-            // Check if knowledge already exists in index
-            const existingKnowledge = await checkKnowledgeInIndex(url, context);
-            if (existingKnowledge) {
-                // Display existing knowledge details
-                const entitiesCount = existingKnowledge.entities?.length || 0;
-                const topicsCount = existingKnowledge.topics?.length || 0;
-                const relationshipsCount =
-                    existingKnowledge.relationships?.length || 0;
+        // Display existing knowledge with detailed cards
+        const knowledgeHtml = generateDetailedKnowledgeCards(existingKnowledge);
+        context.actionIO.appendDisplay(
+            {
+                type: "html",
+                content: `
+                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #d1ecf1; border-left: 4px solid #17a2b8; border-radius: 4px;">
+                    <div style="font-weight: 600; color: #0c5460;">📖 Existing Knowledge Found</div>
+                    <div style="font-size: 13px; color: #0c5460; margin-top: 4px;">
+                        Found ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships from previous extraction
+                    </div>
+                    ${knowledgeHtml}
+                </div>
+                `,
+            },
+            "block",
+        );
+        return createKnowledgeActionResult(url, existingKnowledge, context);
+    }
 
-                context.actionIO.appendDisplay(
-                    {
-                        type: "html",
-                        content: `
-                    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #d1ecf1; border-left: 4px solid #17a2b8; border-radius: 4px;">
-                        <div style="font-weight: 600; color: #0c5460;">📖 Existing Knowledge Found</div>
-                        <div style="font-size: 13px; color: #0c5460; margin-top: 4px;">
-                            Loading ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships from index
-                        </div>
-                    </div>    
-                    ${generateDetailedKnowledgeCards(existingKnowledge)}
-                    `,
-                    },
-                    "block",
-                );
+    // Start knowledge extraction directly (dedupe cache will prevent duplicates from navigation handler)
+    if (await shouldRunKnowledgeExtraction(url, context)) {
+        const browserSettings = await browserControl.getBrowserSettings();
+        // Wait for page to load based on indexingDelay
 
+        if (browserSettings.indexingDelay > 0) {
+            await new Promise((resolve) =>
+                setTimeout(resolve, browserSettings.indexingDelay),
+            );
+        }
+
+        try {
+            const extractionInfo = await performKnowledgeExtraction(
+                url,
+                context,
+                browserSettings.extractionMode,
+            );
+            // Return immediately with dynamic display information for real-time progress
+            if (extractionInfo && extractionInfo.dynamicDisplayId) {
                 return createKnowledgeActionResult(
                     url,
-                    existingKnowledge,
+                    extractionInfo.knowledge,
                     context,
+                    extractionInfo.dynamicDisplayId,
+                    extractionInfo.dynamicDisplayNextRefreshMs,
                 );
             }
 
-            // Wait for page to load based on indexingDelay
-            if (browserSettings.indexingDelay > 0) {
-                await new Promise((resolve) =>
-                    setTimeout(resolve, browserSettings.indexingDelay),
-                );
-            }
-
-            // Note: Initial status is now shown in the dynamic display
-
-            try {
-                // Extract new knowledge and save to index with progress tracking
-                // Note: Progress display is now handled by the event-based system in performKnowledgeExtraction
-                const extractionInfo = await performKnowledgeExtraction(
-                    url,
-                    context,
-                    browserSettings.extractionMode,
-                );
-
-                // Return immediately with dynamic display information for real-time progress
-                if (extractionInfo && extractionInfo.dynamicDisplayId) {
-                    return createKnowledgeActionResult(
-                        url,
-                        extractionInfo.knowledge,
-                        context,
-                        extractionInfo.dynamicDisplayId,
-                        extractionInfo.dynamicDisplayNextRefreshMs,
-                    );
-                }
-
-                // Fallback in case extraction didn't return expected format
-                return createKnowledgeActionResult(url, null, context);
-            } catch (extractionError) {
-                console.error("Knowledge extraction failed:", extractionError);
-                return createKnowledgeActionResult(url, null, context);
-            }
+            // Fallback in case extraction didn't return expected format
+            return createKnowledgeActionResult(url, null, context);
+        } catch (error) {
+            console.error(
+                "Knowledge extraction failed, falling back to basic navigation:",
+                error,
+            );
         }
-    } catch (error) {
-        console.error(
-            "Knowledge extraction failed, falling back to basic navigation:",
-            error,
-        );
     }
 
     // Fallback to basic result if autoIndex disabled or error occurred
@@ -2309,37 +2866,186 @@ async function handlePageNavigation(
     const { url, title } = params;
 
     try {
+        // Normalize URL for consistent checking (keep query params)
+        const normalizedUrl = normalizeUrlForIndex(url);
+
+        // Check if extraction is already running for this URL
+        if (runningExtractionsCache.isRunning(url)) {
+            const running = runningExtractionsCache.getRunning(url);
+            debug(
+                `Extraction already running for ${url} (ID: ${running?.extractionId}), skipping duplicate`,
+            );
+
+            // Optionally notify about ongoing extraction
+            const cachedContext = actionContextCache.get(url);
+            if (cachedContext) {
+                displayStatus(
+                    `Knowledge extraction in progress for ${url}`,
+                    cachedContext,
+                );
+            } else {
+                context.notify(
+                    AppAgentEvent.Info,
+                    `Knowledge extraction in progress for ${url}`,
+                );
+            }
+            return;
+        }
+
+        // Check if we already have recent knowledge for this URL
+        if (!shouldReExtract(normalizedUrl)) {
+            debug(`Skipping extraction for ${url} - recently extracted`);
+
+            // Try to load and display existing knowledge from index
+            const existingKnowledge = await checkKnowledgeInIndex(url, context);
+            const cachedContext = actionContextCache.get(url);
+
+            if (existingKnowledge) {
+                const entitiesCount = existingKnowledge.entities?.length || 0;
+                const topicsCount = existingKnowledge.topics?.length || 0;
+                const relationshipsCount =
+                    existingKnowledge.relationships?.length || 0;
+
+                if (cachedContext) {
+                    // Display existing knowledge details using action context
+                    cachedContext.actionIO.appendDisplay(
+                        {
+                            type: "html",
+                            content: `
+                        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #d1ecf1; border-left: 4px solid #17a2b8; border-radius: 4px;">
+                            <div style="font-weight: 600; color: #0c5460;">📖 Existing Knowledge Found</div>
+                            <div style="font-size: 13px; color: #0c5460; margin-top: 4px;">
+                                Loading ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships from index
+                            </div>
+                        </div>    
+                        ${generateDetailedKnowledgeCards(existingKnowledge)}
+                        `,
+                        },
+                        "block",
+                    );
+                } else {
+                    // Use notification when no ActionContext available
+                    context.notify(
+                        AppAgentEvent.Info,
+                        `Using cached knowledge for ${url}: ${entitiesCount} entities, ${topicsCount} topics, ${relationshipsCount} relationships`,
+                    );
+                }
+            } else if (cachedContext) {
+                displayStatus(
+                    `Using cached knowledge for ${url}`,
+                    cachedContext,
+                );
+            } else {
+                context.notify(
+                    AppAgentEvent.Info,
+                    `Using cached knowledge for ${url}`,
+                );
+            }
+            return;
+        }
+
+        // Check if we should run extraction
+        const cachedContext = actionContextCache.get(url);
+
+        // Determine if extraction should run
+        let shouldExtract = false;
+        let extractionMode = "content";
+
+        shouldExtract = await shouldRunKnowledgeExtraction(url, context);
+
+        const browserControl = getSessionBrowserControl(context);
+        const settings = await browserControl.getBrowserSettings();
+
+        extractionMode = settings?.extractionMode || "content";
+
+        if (!shouldExtract) {
+            return;
+        }
+
+        // Check for existing knowledge in index before starting new extraction
+        const existingKnowledge = await checkKnowledgeInIndex(url, context);
+        if (existingKnowledge) {
+            const entitiesCount = existingKnowledge.entities?.length || 0;
+            const topicsCount = existingKnowledge.topics?.length || 0;
+            const relationshipsCount =
+                existingKnowledge.relationships?.length || 0;
+
+            if (cachedContext) {
+                // Display existing knowledge first using ActionContext, then extraction will update it
+                cachedContext.actionIO.appendDisplay(
+                    {
+                        type: "html",
+                        content: `
+                    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
+                        <div style="font-weight: 600; color: #856404;">🔄 Updating Existing Knowledge</div>
+                        <div style="font-size: 13px; color: #856404; margin-top: 4px;">
+                            Found ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships. Extracting updated knowledge...
+                        </div>
+                    </div>    
+                    ${generateDetailedKnowledgeCards(existingKnowledge)}
+                    `,
+                    },
+                    "block",
+                );
+            } else {
+                // Use notification when no ActionContext available
+                context.notify(
+                    AppAgentEvent.Info,
+                    `Updating existing knowledge for ${url}: ${entitiesCount} entities, ${topicsCount} topics, ${relationshipsCount} relationships`,
+                );
+            }
+        }
+
+        // Get page contents
         const htmlFragments =
             await context.agentContext.browserConnector?.getHtmlFragments();
 
-        if (htmlFragments) {
-            // Kick off streaming knowledge extraction in the background
-            setTimeout(async () => {
-                try {
-                    await handleKnowledgeAction(
-                        "extractKnowledgeFromPageStreaming",
-                        {
-                            url: url,
-                            title: title,
-                            htmlContent: htmlFragments,
-                            source: "navigation",
-                            mode: "content",
-                        },
-                        context,
-                    );
-                } catch (error) {
-                    debug(
-                        `Background streaming extraction failed for ${url}:`,
-                        error,
-                    );
-                }
-            }, 10);
+        if (!htmlFragments) {
+            return;
         }
+
+        // Create extraction parameters
+        let extractionId = `navigation-${Date.now()}`;
+
+        const cachedDynamicDisplayId =
+            actionContextCache.getDynamicDisplayId(url);
+        if (cachedDynamicDisplayId) {
+            extractionId = cachedDynamicDisplayId.replace(
+                "knowledge-extraction-",
+                "",
+            );
+        }
+
+        const parameters = {
+            url,
+            title,
+            htmlFragments,
+            extractionId,
+            mode: extractionMode,
+        };
+
+        // Start extraction using the running extractions cache
+        const extractionPromise = cachedContext
+            ? performKnowledgeExtraction(url, cachedContext, extractionMode)
+            : performKnowledgeExtractionWithNotifications(
+                  url,
+                  context,
+                  extractionMode,
+                  parameters,
+              );
+
+        await runningExtractionsCache.startExtraction(
+            url,
+            extractionId,
+            extractionPromise,
+        );
     } catch (error) {
-        debug(`Navigation handler failed for ${url}:`, error);
+        console.error(`Navigation handler failed for ${url}:`, error);
+
+        // Send error notification
         context.notify(
             AppAgentEvent.Error,
-            `Failed to extract knowledge for page: ${title}`,
+            `Failed to extract knowledge for ${title}: ${(error as any).message}`,
         );
     }
 }
@@ -2555,7 +3261,7 @@ export async function createViewServiceHost(
                 });
 
                 childProcess.on("exit", (code) => {
-                    console.log("Browser views server exited with code:", code);
+                    debug("Browser views server exited with code:", code);
                 });
             } catch (e: any) {
                 console.error(e);
@@ -2698,6 +3404,434 @@ class CloseWebPageHandler implements CommandHandlerNoParams {
     }
 }
 
+class ExtractKnowledgeHandler implements CommandHandlerNoParams {
+    public readonly description = "Extract knowledge from the current web page";
+
+    public async run(
+        context: ActionContext<BrowserActionContext>,
+    ): Promise<void> {
+        try {
+            const browserControl = getActionBrowserControl(context);
+            const currentUrl = await browserControl.getPageUrl();
+
+            if (!currentUrl) {
+                displayError(
+                    "No active page found. Please open a web page first.",
+                    context,
+                );
+                return;
+            }
+
+            let url: URL;
+            try {
+                url = new URL(currentUrl);
+                if (url.protocol !== "http:" && url.protocol !== "https:") {
+                    displayError(
+                        `Cannot extract knowledge from ${url.protocol} pages`,
+                        context,
+                    );
+                    return;
+                }
+            } catch (error) {
+                displayError(`Invalid URL: ${currentUrl}`, context);
+                return;
+            }
+
+            const dynamicDisplayId = `knowledge-extraction-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+            // Cache the action context with dynamic display ID
+            actionContextCache.set(
+                currentUrl,
+                context,
+                undefined,
+                dynamicDisplayId,
+            );
+
+            // Display initial status message
+            displayStatus(
+                `Extracting knowledge from ${currentUrl}...`,
+                context,
+            );
+
+            // Check for existing knowledge and display it first
+            const existingKnowledge = await checkKnowledgeInIndex(
+                currentUrl,
+                context,
+            );
+            if (existingKnowledge) {
+                const entitiesCount = existingKnowledge.entities?.length || 0;
+                const topicsCount = existingKnowledge.topics?.length || 0;
+                const relationshipsCount =
+                    existingKnowledge.relationships?.length || 0;
+
+                // Display existing knowledge with detailed cards
+                const knowledgeHtml =
+                    generateDetailedKnowledgeCards(existingKnowledge);
+                context.actionIO.appendDisplay(
+                    {
+                        type: "html",
+                        content: `
+                        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #d1ecf1; border-left: 4px solid #17a2b8; border-radius: 4px;">
+                            <div style="font-weight: 600; color: #0c5460;">📖 Existing Knowledge Found</div>
+                            <div style="font-size: 13px; color: #0c5460; margin-top: 4px;">
+                                Found ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships from previous extraction
+                            </div>
+                        </div>
+                        ${knowledgeHtml}
+                        `,
+                    },
+                    "block",
+                );
+
+                return;
+            }
+
+            // Start knowledge extraction with proper async handling to keep context alive
+            // Wait for the page to stabilize before starting extraction
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+
+            try {
+                let completionResult;
+                // Check if extraction is already running (dedupe)
+                if (runningExtractionsCache.isRunning(currentUrl)) {
+                    debug(
+                        `Extraction already running for ${currentUrl}, waiting for completion`,
+                    );
+
+                    const runningExtraction =
+                        runningExtractionsCache.getRunning(currentUrl);
+                    completionResult = await waitForExtractionCompletion(
+                        runningExtraction!.extractionId,
+                        120000,
+                        context,
+                    );
+                } else {
+                    const extractionResult = await performKnowledgeExtraction(
+                        currentUrl,
+                        context,
+                        "content",
+                    );
+
+                    if (extractionResult && extractionResult.extractionId) {
+                        // Wait for the actual extraction to complete
+                        completionResult = await waitForExtractionCompletion(
+                            extractionResult.extractionId,
+                            120000,
+                            context,
+                        );
+                    }
+                }
+                if (completionResult) {
+                    if (completionResult.success) {
+                        try {
+                            await saveKnowledgeToIndex(
+                                currentUrl,
+                                completionResult.knowledge,
+                                context,
+                            );
+                        } catch (saveError) {
+                            console.error(
+                                "Failed to save knowledge to index:",
+                                saveError,
+                            );
+                        }
+
+                        // Extraction completed successfully
+                        const latestKnowledge = completionResult.knowledge;
+
+                        if (latestKnowledge) {
+                            const entitiesCount =
+                                latestKnowledge.entities?.length || 0;
+                            const topicsCount =
+                                latestKnowledge.topics?.length || 0;
+                            const relationshipsCount =
+                                latestKnowledge.relationships?.length || 0;
+
+                            // Generate detailed knowledge cards for the extracted knowledge
+                            const knowledgeHtml =
+                                generateDetailedKnowledgeCards(latestKnowledge);
+
+                            const headerText = existingKnowledge
+                                ? "✅ Knowledge Re-extraction Complete"
+                                : "✅ Knowledge Extraction Complete";
+                            const subText = existingKnowledge
+                                ? "Knowledge has been refreshed with the latest content from the page"
+                                : "Successfully extracted and indexed knowledge from the page";
+
+                            context.actionIO.setDisplay({
+                                type: "html",
+                                content: `
+                                    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #d4edda; border-left: 4px solid #28a745; border-radius: 4px;">
+                                        <div style="font-weight: 600; color: #155724;">${headerText}</div>
+                                        <div style="font-size: 13px; color: #155724; margin-top: 4px;">
+                                            ${subText}
+                                        </div>
+                                        <div style="font-size: 13px; color: #155724; margin-top: 8px;">
+                                            Found ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships
+                                        </div>
+                                    </div>
+                                    ${knowledgeHtml}
+                                    `,
+                            });
+                        } else {
+                            // Fallback if no knowledge was found after extraction
+                            context.actionIO.appendDisplay(
+                                {
+                                    type: "html",
+                                    content: `
+                                    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #fff3cd; border-left: 4px solid #856404; border-radius: 4px;">
+                                        <div style="font-weight: 600; color: #856404;">⚠️ Extraction Complete - No Knowledge Found</div>
+                                        <div style="font-size: 13px; color: #856404; margin-top: 4px;">
+                                            The page was processed but no significant knowledge was extracted
+                                        </div>
+                                    </div>
+                                    `,
+                                },
+                                "block",
+                            );
+                        }
+                    } else {
+                        // Extraction failed or timed out
+                        context.actionIO.appendDisplay(
+                            {
+                                type: "html",
+                                content: `
+                                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #f8d7da; border-left: 4px solid #dc3545; border-radius: 4px;">
+                                    <div style="font-weight: 600; color: #721c24;">⚠️ Knowledge Extraction Failed</div>
+                                    <div style="font-size: 13px; color: #721c24; margin-top: 4px;">
+                                        ${completionResult.error || "Unknown error occurred during extraction"}
+                                    </div>
+                                </div>
+                                `,
+                            },
+                            "block",
+                        );
+                    }
+                } else {
+                    // performKnowledgeExtraction itself failed
+                    context.actionIO.appendDisplay(
+                        {
+                            type: "html",
+                            content: `
+                            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #f8d7da; border-left: 4px solid #dc3545; border-radius: 4px;">
+                                <div style="font-weight: 600; color: #721c24;">⚠️ Knowledge Extraction Failed</div>
+                                <div style="font-size: 13px; color: #721c24; margin-top: 4px;">
+                                    Failed to initialize knowledge extraction
+                                </div>
+                            </div>
+                            `,
+                        },
+                        "block",
+                    );
+                }
+            } catch (extractionError) {
+                console.error(
+                    "Knowledge extraction failed in extractKnowledge:",
+                    extractionError,
+                );
+                context.actionIO.appendDisplay(
+                    {
+                        type: "html",
+                        content: `
+                        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #f8d7da; border-left: 4px solid #dc3545; border-radius: 4px;">
+                            <div style="font-weight: 600; color: #721c24;">⚠️ Knowledge Extraction Failed</div>
+                            <div style="font-size: 13px; color: #721c24; margin-top: 4px;">
+                                ${extractionError instanceof Error ? extractionError.message : "Unknown error occurred"}
+                            </div>
+                        </div>
+                        `,
+                    },
+                    "block",
+                );
+            }
+        } catch (error) {
+            console.error("Manual knowledge extraction command failed:", error);
+            displayError(
+                `Failed to extract knowledge: ${error instanceof Error ? error.message : "Unknown error"}`,
+                context,
+            );
+        }
+    }
+}
+
+// Command handlers for auto-indexing management
+class AutoIndexStatusHandler implements CommandHandlerNoParams {
+    public readonly description = "Check auto-indexing status";
+
+    public async run(
+        context: ActionContext<BrowserActionContext>,
+    ): Promise<void> {
+        let browserControl;
+        let settings;
+
+        try {
+            browserControl = getActionBrowserControl(context);
+            settings = await browserControl.getBrowserSettings();
+        } catch (error) {
+            displayError(
+                "Browser control is not available. Please ensure a browser session is active.",
+                context,
+            );
+            return;
+        }
+
+        const statusIcon = settings.autoIndexing ? "✅" : "❌";
+        const statusText = settings.autoIndexing ? "Enabled" : "Disabled";
+        const delayText = `${settings.indexingDelay}ms`;
+        const modeText = settings.extractionMode;
+
+        context.actionIO.setDisplay({
+            type: "html",
+            content: `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 12px; background: #f8f9fa; border-radius: 4px;">
+                <div style="font-weight: 600; margin-bottom: 8px;">📊 Auto-Indexing Status</div>
+                <div style="margin: 4px 0;"><strong>Status:</strong> ${statusIcon} ${statusText}</div>
+                <div style="margin: 4px 0;"><strong>Delay:</strong> ${delayText}</div>
+                <div style="margin: 4px 0;"><strong>Mode:</strong> ${modeText}</div>
+                <div style="margin-top: 8px; font-size: 12px; color: #6c757d;">
+                    Use <code>@browser autoIndex on/off</code> to toggle auto-indexing
+                </div>
+            </div>
+            `,
+        });
+    }
+}
+
+class AutoIndexOnHandler implements CommandHandlerNoParams {
+    public readonly description = "Enable auto-indexing";
+
+    public async run(
+        context: ActionContext<BrowserActionContext>,
+    ): Promise<void> {
+        let browserControl;
+        let currentSettings;
+
+        try {
+            browserControl = getActionBrowserControl(context);
+            currentSettings = await browserControl.getBrowserSettings();
+        } catch (error) {
+            displayError(
+                "Browser control is not available. Please ensure a browser session is active.",
+                context,
+            );
+            return;
+        }
+
+        if (currentSettings.autoIndexing) {
+            displayStatus("Auto-indexing is already enabled", context);
+            return;
+        }
+
+        displayError(
+            "Auto-indexing settings cannot be modified from this interface. Settings are read-only.",
+            context,
+        );
+    }
+}
+
+class AutoIndexOffHandler implements CommandHandlerNoParams {
+    public readonly description = "Disable auto-indexing";
+
+    public async run(
+        context: ActionContext<BrowserActionContext>,
+    ): Promise<void> {
+        let browserControl;
+        let currentSettings;
+
+        try {
+            browserControl = getActionBrowserControl(context);
+            currentSettings = await browserControl.getBrowserSettings();
+        } catch (error) {
+            displayError(
+                "Browser control is not available. Please ensure a browser session is active.",
+                context,
+            );
+            return;
+        }
+
+        if (!currentSettings.autoIndexing) {
+            displayStatus("Auto-indexing is already disabled", context);
+            return;
+        }
+
+        displayError(
+            "Auto-indexing settings cannot be modified from this interface. Settings are read-only.",
+            context,
+        );
+    }
+}
+
+class AutoIndexDelayHandler implements CommandHandler {
+    public readonly description = "Set auto-indexing delay in milliseconds";
+    public readonly parameters = {
+        args: {
+            delay: {
+                description: "Delay in milliseconds (0-30000)",
+                type: "number" as const,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<BrowserActionContext>,
+        params: any,
+    ): Promise<void> {
+        let browserControl;
+
+        try {
+            browserControl = getActionBrowserControl(context);
+            await browserControl.getBrowserSettings();
+        } catch (error) {
+            displayError(
+                "Browser control is not available. Please ensure a browser session is active.",
+                context,
+            );
+            return;
+        }
+
+        displayError(
+            "Auto-indexing settings cannot be modified from this interface. Settings are read-only.",
+            context,
+        );
+    }
+}
+
+class AutoIndexModeHandler implements CommandHandler {
+    public readonly description = "Set extraction mode for auto-indexing";
+    public readonly parameters = {
+        args: {
+            mode: {
+                description:
+                    "Extraction mode (smart, full, minimal, content, basic)",
+                type: "string" as const,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<BrowserActionContext>,
+        params: any,
+    ): Promise<void> {
+        let browserControl;
+
+        try {
+            browserControl = getActionBrowserControl(context);
+            await browserControl.getBrowserSettings();
+        } catch (error) {
+            displayError(
+                "Browser control is not available. Please ensure a browser session is active.",
+                context,
+            );
+            return;
+        }
+
+        displayError(
+            "Auto-indexing settings cannot be modified from this interface. Settings are read-only.",
+            context,
+        );
+    }
+}
+
 async function handleWebsiteAction(
     actionName: string,
     parameters: any,
@@ -2815,9 +3949,7 @@ async function handleMacroStoreAction(
                     totalMacros = macros.length;
                 }
 
-                console.log(
-                    `Retrieved statistics: ${totalMacros} total macros`,
-                );
+                debug(`Retrieved statistics: ${totalMacros} total macros`);
 
                 return {
                     success: true,
@@ -3129,6 +4261,18 @@ export const handlers: CommandHandlerTable = {
                         saveSettings(context.sessionContext);
                     },
                 },
+            },
+        },
+        extractKnowledge: new ExtractKnowledgeHandler(),
+        autoIndex: {
+            description: "Control automatic knowledge indexing",
+            defaultSubCommand: "status",
+            commands: {
+                status: new AutoIndexStatusHandler(),
+                on: new AutoIndexOnHandler(),
+                off: new AutoIndexOffHandler(),
+                delay: new AutoIndexDelayHandler(),
+                mode: new AutoIndexModeHandler(),
             },
         },
         search: new SearchProviderCommandHandlerTable(),

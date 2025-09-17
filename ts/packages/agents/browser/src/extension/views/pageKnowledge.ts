@@ -888,6 +888,37 @@ class KnowledgePanel {
         }
     }
 
+    private escapeHtml(text: string): string {
+        const div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    private resolveCustomProtocolUrl(url: string): string {
+        if (url.startsWith("typeagent-browser://")) {
+            const customUrl = new URL(url);
+            const customPath = customUrl.pathname;
+            const queryString = customUrl.search;
+
+            const libraryMapping: Record<string, string> = {
+                "/annotationsLibrary.html": "views/annotationsLibrary.html",
+                "/knowledgeLibrary.html": "views/knowledgeLibrary.html",
+                "/macrosLibrary.html": "views/macrosLibrary.html",
+                "/entityGraphView.html": "views/entityGraphView.html",
+            };
+
+            const extensionPath = libraryMapping[customPath];
+            if (extensionPath) {
+                // Append query parameters to preserve entity/topic selection
+                return chrome.runtime.getURL(extensionPath) + queryString;
+            } else {
+                throw new Error(`Unknown library page: ${customPath}`);
+            }
+        }
+
+        return url;
+    }
+
     private renderEntities(entities: Entity[]) {
         const container = document.getElementById("entitiesContainer")!;
         const countBadge = document.getElementById("entitiesCount")!;
@@ -905,12 +936,20 @@ class KnowledgePanel {
         }
 
         container.innerHTML = entities
-            .map(
-                (entity) => `
+            .map((entity) => {
+                const customUrl = `typeagent-browser://views/entityGraphView.html?entity=${encodeURIComponent(entity.name)}`;
+                const entityUrl = this.resolveCustomProtocolUrl(customUrl);
+                return `
             <div class="d-flex justify-content-between align-items-center mb-2">
                 <div>
-                    <span class="fw-semibold">${entity.name}</span>
-                    <span class="entity-badge badge bg-secondary">${entity.type}</span>
+                    <a href="${entityUrl}" 
+                       target="_blank"
+                       class="fw-semibold text-decoration-none" 
+                       style="color: #0d6efd; transition: color 0.2s;"
+                       title="Click to view entity graph">
+                        ${this.escapeHtml(entity.name)}
+                    </a>
+                    <span class="entity-badge badge bg-secondary ms-2">${entity.type}</span>
                 </div>
                 <div>
                     <div class="progress" style="width: 50px; height: 4px;">
@@ -919,8 +958,8 @@ class KnowledgePanel {
                 </div>
             </div>
             ${entity.description ? `<small class="text-muted">${entity.description}</small><hr class="my-2">` : ""}
-        `,
-            )
+        `;
+            })
             .join("");
     }
 
@@ -969,11 +1008,19 @@ class KnowledgePanel {
         }
 
         container.innerHTML = topics
-            .map(
-                (topic) => `
-            <span class="badge bg-primary me-1 mb-1">${topic}</span>
-        `,
-            )
+            .map((topic) => {
+                const customUrl = `typeagent-browser://views/entityGraphView.html?topic=${encodeURIComponent(topic)}`;
+                const topicUrl = this.resolveCustomProtocolUrl(customUrl);
+                return `
+            <a href="${topicUrl}" 
+               target="_blank"
+               class="badge bg-primary me-1 mb-1 text-decoration-none" 
+               style="transition: background-color 0.2s;"
+               title="Click to view topic graph">
+                ${this.escapeHtml(topic)}
+            </a>
+        `;
+            })
             .join("");
     }
 

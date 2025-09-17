@@ -4,7 +4,7 @@
 import {
     getToggleCommandHandlers,
     getToggleHandlerTable,
-} from "../../../command/handlerUtils.js";
+} from "../../../helpers/command.js";
 import {
     CommandHandlerContext,
     changeContextConfig,
@@ -35,8 +35,6 @@ import {
 import { alwaysEnabledAgents } from "../../appAgentManager.js";
 import { getCacheFactory } from "../../../utils/cacheFactory.js";
 import { resolveCommand } from "../../../command/command.js";
-import child_process from "node:child_process";
-import { fileURLToPath } from "node:url";
 import { toggleActivityContext } from "../../../execute/activityContext.js";
 
 const enum AgentToggle {
@@ -52,11 +50,6 @@ const AgentToggleDescription = [
     "agent commands",
     "agents",
 ] as const;
-
-const penLauncherPath = new URL(
-    "../../../../../../../dotnet/penLauncher/bin/Debug/net9.0/penLauncher.exe",
-    import.meta.url,
-);
 
 function getAgentToggleOptions(
     toggle: AgentToggle,
@@ -278,7 +271,7 @@ function showAgentStatus(
     for (const [name, { schemas, actions, commands }] of entries) {
         const isAppAgentName = getAppAgentName(name) === name;
         const displayName = isAppAgentName ? name : `  ${name}`;
-        const emoji = isAppAgentName ? agents.getEmojis()[name] : "";
+        const emoji = isAppAgentName ? agents.getAppAgentEmoji(name) : "";
         table.push(getRow(emoji, displayName, schemas, actions, commands));
     }
 
@@ -634,16 +627,15 @@ class ConfigPortsCommandHandler implements CommandHandler {
     public async run(context: ActionContext<CommandHandler>) {
         const ports: string[][] = [["", "Agent", "Port"]];
         const cmdContext = context.sessionContext.agentContext as any;
-        const emojis: Record<string, string> = cmdContext.agents.getEmojis();
 
         cmdContext.agents.getAppAgentNames().forEach((name: string) => {
             const port = cmdContext.agents.getLocalHostPort(name);
 
             if (port !== undefined) {
                 ports.push([
-                    emojis[name],
+                    cmdContext.agents.getAppAgentEmoji(name),
                     name,
-                    cmdContext.agents.getLocalHostPort(name)!.toString(),
+                    port.toString(),
                 ]);
             }
         });
@@ -1289,35 +1281,8 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
                     ),
                 },
             },
-            pen: {
-                description: "Toggles click note pen handler.",
-                defaultSubCommand: "on",
-                commands: getToggleCommandHandlers(
-                    "Surface Pen Click Handler",
-                    async (isContext, enable) => {
-                        if (enable) {
-                            spawnPenLauncherProcess("--register");
-                        } else {
-                            spawnPenLauncherProcess("--unregister");
-                        }
-                    },
-                ),
-            },
+
             ports: new ConfigPortsCommandHandler(),
         },
     };
-}
-
-async function spawnPenLauncherProcess(args: string) {
-    return new Promise<child_process.ChildProcess>((resolve, reject) => {
-        const child = child_process.spawn(fileURLToPath(penLauncherPath), [
-            args,
-        ]);
-        child.on("error", (err) => {
-            reject(err);
-        });
-        child.on("spawn", () => {
-            resolve(child);
-        });
-    });
 }

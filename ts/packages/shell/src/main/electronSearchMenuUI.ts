@@ -2,8 +2,11 @@
 // Licensed under the MIT License.
 
 import { loadLocalWebContents } from "./utils.js";
-import { ipcMain, WebContents, WebContentsView } from "electron";
-import { ShellWindow } from "./shellWindow.js";
+import { BrowserWindow, ipcMain, WebContents, WebContentsView } from "electron";
+import {
+    getShellWindowForChatViewIpcEvent,
+    ShellWindow,
+} from "./shellWindow.js";
 import type { SearchMenuUIUpdateData } from "../preload/electronTypes.js";
 import path from "node:path";
 import registerDebug from "debug";
@@ -43,11 +46,12 @@ async function createSearchMenuUIView(_zoomFactor: number) {
     return p.promise;
 }
 
-export function initializeSearchMenuUI(shellWindow: ShellWindow) {
+export function initializeSearchMenuUI() {
     ipcMain.on(
         "search-menu-update",
         async (event, id, data: SearchMenuUIUpdateData) => {
-            if (event.sender !== shellWindow.chatView.webContents) {
+            const shellWindow = getShellWindowForChatViewIpcEvent(event);
+            if (shellWindow === undefined) {
                 debugError("Invalid sender for search-menu-update");
                 return;
             }
@@ -63,10 +67,7 @@ export function initializeSearchMenuUI(shellWindow: ShellWindow) {
             debug(`search-menu-update: ${id} ${JSON.stringify(data)}`);
             searchMenuIds.set(searchMenuView.webContents, id);
             if (data.position) {
-                shellWindow.updateOverlayWebContentsView(
-                    searchMenuView,
-                    data.position,
-                );
+                shellWindow.updateOverlay(searchMenuView, data.position);
                 data.position = undefined;
             }
             if (data.prefix !== undefined || data.items !== undefined) {
@@ -77,10 +78,15 @@ export function initializeSearchMenuUI(shellWindow: ShellWindow) {
 
     function setupProxy(
         name: string,
-        after?: (id: number, searchMenuView: WebContentsView) => void,
+        after?: (
+            shellWindow: ShellWindow,
+            id: number,
+            searchMenuView: WebContentsView,
+        ) => void,
     ) {
         ipcMain.on(name, async (event, id, ...args) => {
-            if (event.sender !== shellWindow.chatView.webContents) {
+            const shellWindow = getShellWindowForChatViewIpcEvent(event);
+            if (shellWindow === undefined) {
                 debugError(`Invalid sender for ${name}`);
                 return;
             }
@@ -94,25 +100,38 @@ export function initializeSearchMenuUI(shellWindow: ShellWindow) {
             debug(`${name}: ${id} ${JSON.stringify(args)}`);
             const searchMenuView = await searchMenuViewP;
             searchMenuView.webContents.send(name, ...args);
-            after?.(id, searchMenuView);
+            after?.(shellWindow, id, searchMenuView);
         });
     }
 
     setupProxy("search-menu-adjust-selection");
     setupProxy("search-menu-select-completion");
-    setupProxy(
-        "search-menu-close",
-        (id: number, searchMenuView: WebContentsView) => {
-            searchMenuUIs.delete(id);
-            // Update with no position to remove
-            shellWindow.updateOverlayWebContentsView(searchMenuView);
-        },
-    );
+    setupProxy("search-menu-close", (shellWindow, id, searchMenuView) => {
+        searchMenuUIs.delete(id);
+        // Update with no position to remove
+        shellWindow.updateOverlay(searchMenuView);
+    });
+
+    function getShellWindowFromSearchMenuIpcEvent(
+        event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent,
+    ): ShellWindow | undefined {
+        const mainWindow = BrowserWindow.fromWebContents(event.sender);
+        if (mainWindow === undefined) {
+            return undefined;
+        }
+        const shellWindow = ShellWindow.getInstance();
+        return shellWindow?.mainWindow === mainWindow ? shellWindow : undefined;
+    }
 
     ipcMain.on("search-menu-completion", async (event, item) => {
+        const shellWindow = getShellWindowFromSearchMenuIpcEvent(event);
+        if (shellWindow === undefined) {
+            debugError("Invalid sender for search-menu-completion");
+            return;
+        }
         const id = searchMenuIds.get(event.sender);
         if (id === undefined) {
-            return;
+            return undefined;
         }
         shellWindow.chatView.webContents.send(
             "search-menu-completion",
@@ -122,6 +141,11 @@ export function initializeSearchMenuUI(shellWindow: ShellWindow) {
     });
 
     ipcMain.on("search-menu-size", async (event, size) => {
+        const shellWindow = getShellWindowFromSearchMenuIpcEvent(event);
+        if (shellWindow === undefined) {
+            debugError("Invalid sender for search-menu-completion");
+            return;
+        }
         const id = searchMenuIds.get(event.sender);
         if (id === undefined) {
             return;
@@ -132,6 +156,6 @@ export function initializeSearchMenuUI(shellWindow: ShellWindow) {
         }
         const view = await searchMenuViewP;
         debug(`search-menu-size: ${id} ${JSON.stringify(size)}`);
-        shellWindow.updateOverlayWebContentsView(view, size);
+        shellWindow.updateOverlay(view, size);
     });
 }

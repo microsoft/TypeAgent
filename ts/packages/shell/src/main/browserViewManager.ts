@@ -6,6 +6,7 @@ import path from "node:path";
 import registerDebug from "debug";
 import { ShellWindow } from "./shellWindow.js";
 import { loadLocalWebContents } from "./utils.js";
+import { BrowserAgentIpc } from "./browserIpc.js";
 
 const debug = registerDebug("typeagent:shell:browserViewManager");
 
@@ -115,6 +116,10 @@ export class BrowserViewManager {
             },
         );
 
+        webContentsView.webContents.on("focus", () => {
+            this.shellWindow.setOverlayVisibility(false);
+        });
+
         // Load the URL or show new tab page
         if (options.url === "about:blank") {
             // Load the new tab HTML file
@@ -188,8 +193,14 @@ export class BrowserViewManager {
         });
 
         // Handle navigation events
-        webContents.on("did-finish-load", () => {
-            this.updateTabUrl(tabId, webContents.getURL());
+        webContents.on("did-finish-load", async () => {
+            const url = webContents.getURL();
+            const title = webContents.getTitle();
+
+            // Send navigation message to browser agent
+            await this.sendNavigationToBrowserAgent(url, title, tabId);
+
+            this.updateTabUrl(tabId, url);
             this.notifyNavigationUpdate();
             this.notifyTabUpdate();
             this.notifyPageLoadComplete(tabId);
@@ -205,7 +216,12 @@ export class BrowserViewManager {
             this.notifyNavigationUpdate();
         });
 
-        webContents.on("did-navigate-in-page", (_, url) => {
+        webContents.on("did-navigate-in-page", async (_, url) => {
+            const title = webContents.getTitle();
+
+            // Send navigation message for in-page navigations too
+            await this.sendNavigationToBrowserAgent(url, title, tabId);
+
             this.updateTabUrl(tabId, url);
             this.notifyTabUpdate();
             this.notifyNavigationUpdate();
@@ -512,6 +528,43 @@ export class BrowserViewManager {
     private notifyPageLoadComplete(tabId: string): void {
         if (this.onPageLoadCompleteCallback) {
             this.onPageLoadCompleteCallback(tabId);
+        }
+    }
+
+    /**
+     * Send navigation event to browser agent via WebSocket
+     */
+    private async sendNavigationToBrowserAgent(
+        url: string,
+        title: string,
+        tabId: string,
+    ): Promise<void> {
+        try {
+            // Skip about:blank and other non-http URLs
+            if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                return;
+            }
+
+            // Get WebSocket connection to browser agent
+            const browserIpc = BrowserAgentIpc.getinstance();
+            if (!browserIpc.isConnected()) {
+                await browserIpc.ensureWebsocketConnected();
+            }
+
+            const message = {
+                method: "handlePageNavigation",
+                params: {
+                    url,
+                    title,
+                    tabId,
+                    timestamp: Date.now(),
+                },
+            };
+
+            await browserIpc.send(message);
+            debug(`Sent navigation message for ${url}`);
+        } catch (error) {
+            debug(`Failed to send navigation to browser agent:`, error);
         }
     }
 }

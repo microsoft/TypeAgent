@@ -22,7 +22,10 @@ import {
     setupBuiltInCache,
 } from "./session.js";
 import { IndexingServiceRegistry } from "./indexingServiceRegistry.js";
-import { TypeAgentTranslator } from "../translation/agentTranslators.js";
+import {
+    getAppAgentName,
+    TypeAgentTranslator,
+} from "../translation/agentTranslators.js";
 import { ActionConfigProvider } from "../translation/actionConfigProvider.js";
 import { getCacheFactory } from "../utils/cacheFactory.js";
 import { createServiceHost } from "./system/handlers/serviceHost/serviceHostCommandHandler.js";
@@ -564,7 +567,9 @@ function processSetAppAgentStateResult(
             hasFailed = true;
             const prefix =
                 stateName === "commands"
-                    ? systemContext.agents.getEmojis()[schemaName]
+                    ? systemContext.agents.getAppAgentEmoji(
+                          getAppAgentName(schemaName),
+                      )
                     : getSchemaNamePrefix(schemaName, systemContext);
             debugError(e);
             cbError(

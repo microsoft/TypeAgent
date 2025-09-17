@@ -29,6 +29,11 @@ export type AzSearchCompilerSettings = {
 export class AzSearchQueryCompiler {
     constructor(public settings: AzSearchCompilerSettings) {}
 
+    /**
+     * Compile into Lucene syntax
+     * @param group
+     * @returns
+     */
     public compileSearchTermGroup(group: kp.SearchTermGroup): string {
         if (group.terms.length === 0) {
             return "";
@@ -51,7 +56,7 @@ export class AzSearchQueryCompiler {
         );
     }
 
-    public compileWhen(filter: kp.WhenFilter): string | undefined {
+    public compileWhenFilter(filter: kp.WhenFilter): string | undefined {
         let filterExpressions: string[] = [];
         if (filter.knowledgeType) {
             filterExpressions.push(
@@ -70,6 +75,11 @@ export class AzSearchQueryCompiler {
                 this.compileTextRange(tr),
             );
             filterExpressions.push(filterMultiBoolExpr("or", rangeExpressions));
+        }
+        if (
+            filter.scopeDefiningTerms &&
+            filter.scopeDefiningTerms.terms.length > 0
+        ) {
         }
         return filterExpressions.length > 0
             ? filterMultiBoolExpr("and", filterExpressions)

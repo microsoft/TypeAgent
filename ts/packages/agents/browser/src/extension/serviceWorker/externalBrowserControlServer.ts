@@ -87,17 +87,20 @@ export function createExternalBrowserServer(channel: RpcChannel) {
         if (url.startsWith("typeagent-browser://")) {
             const customUrl = new URL(url);
             const customPath = customUrl.pathname;
+            const queryString = customUrl.search;
 
             // Map custom protocol to actual extension URL
             const libraryMapping: Record<string, string> = {
                 "/annotationsLibrary.html": "views/annotationsLibrary.html",
                 "/knowledgeLibrary.html": "views/knowledgeLibrary.html",
                 "/macrosLibrary.html": "views/macrosLibrary.html",
+                "/entityGraphView.html": "views/entityGraphView.html",
             };
 
             const extensionPath = libraryMapping[customPath];
             if (extensionPath) {
-                return chrome.runtime.getURL(extensionPath);
+                // Append query parameters to preserve entity/topic selection
+                return chrome.runtime.getURL(extensionPath) + queryString;
             } else {
                 throw new Error(`Unknown library page: ${customPath}`);
             }

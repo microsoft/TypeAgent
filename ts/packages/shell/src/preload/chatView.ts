@@ -87,6 +87,9 @@ const api: ClientAPI = {
     openFolder: (path: string) => {
         ipcRenderer.send("open-folder", path);
     },
+    openUrlInBrowserTab: (url: string) => {
+        ipcRenderer.send("open-url-in-browser-tab", url);
+    },
 
     searchMenuUpdate: (id: number, data) => {
         ipcRenderer.send("search-menu-update", id, data);
