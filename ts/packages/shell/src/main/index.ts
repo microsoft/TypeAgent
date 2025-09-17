@@ -58,6 +58,7 @@ import { createInlineBrowserControl } from "./inlineBrowserControl.js";
 import { BrowserControl } from "browser-typeagent/agent/types";
 import { ExtensionStorageManager } from "./extensionStorage.js";
 import { initializeSearchMenuUI } from "./electronSearchMenuUI.js";
+//import { ChatServer } from "./chatServer.js";
 
 debugShell("App name", app.getName());
 debugShell("App version", app.getVersion());
@@ -454,6 +455,11 @@ async function initializeInstance(
             app.quit();
             return;
         }
+
+        // create the chat view server
+        //shellWindow.startChatServer(dispatcher.;        
+
+
         updateTitle(dispatcher);
         setPendingUpdateCallback((version, background) => {
             updateTitle(dispatcher);

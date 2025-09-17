@@ -26,6 +26,8 @@ import {
 } from "./browserViewManager.js";
 
 import registerDebug from "debug";
+import { ChatServer } from "./chatServer.js";
+
 const debugShellWindow = registerDebug("typeagent:shell:window");
 const debugShellWindowError = registerDebug("typeagent:shell:window:error");
 
@@ -100,6 +102,9 @@ export class ShellWindow {
 
     // Multi-tab browser support
     private readonly browserViewManager: BrowserViewManager;
+
+    // Chat as a tab support
+    private chatViewServer: ChatServer | undefined;
 
     public get inlineBrowser(): WebContentsView {
         // Always use multi-tab browser
@@ -353,6 +358,21 @@ export class ShellWindow {
         });
     }
 
+    /**
+     * Starts the chat server
+     * @param port - The port upon which to start the chat server
+     */
+    public startChatServer(port: number) {
+        if (this.chatViewServer !== undefined) {
+            debugShellWindow("Chat server already started");
+        }
+
+        if (port > 0) {
+            this.chatViewServer = new ChatServer(port);
+            this.chatViewServer.start();
+        }
+    }
+
     private installHandler(name: string, handler: (event: any) => void) {
         this.handlers.set(name, handler);
         ipcMain.on(name, handler);
@@ -376,6 +396,11 @@ export class ShellWindow {
         globalShortcut.unregister("Alt+Right");
         globalShortcut.unregister("CommandOrControl+L");
         globalShortcut.unregister("CommandOrControl+E");
+
+        // shutdown chat server
+        if (this.chatViewServer) {
+            this.chatViewServer.stop();
+        }
     }
 
     public sendMessageToInlineWebContent(message: WebSocketMessageV2) {

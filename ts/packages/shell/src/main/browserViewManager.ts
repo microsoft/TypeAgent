@@ -110,8 +110,7 @@ export class BrowserViewManager {
                 );
 
                 webContentsView.webContents
-                    .executeJavaScript(`document.body.innerHTML = "There was an error loading '${options.url}'.<br />
-                Error Details: <br />${errorCode} - ${errorDesc}"`);
+                    .executeJavaScript(`document.body.innerHTML = "There was an error loading '${options.url}'.<br />Error Details: <br />${errorCode} - ${errorDesc}"`);
             },
         );
 
