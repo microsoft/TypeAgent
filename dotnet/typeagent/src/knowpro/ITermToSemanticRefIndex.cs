@@ -14,10 +14,10 @@ public interface ITermToSemanticRefIndex
     Task<ScoredSemanticRefOrdinal[]> LookupTermAsync(string term);
 }
 
-public static class ITermToSemanticRefIndexEx
+public static class TermToSemanticRefIndexEx
 {
     public static Task<string> AddTermAsync(this ITermToSemanticRefIndex index, string term, SemanticRefOrdinal ordinal)
     {
-        return index.AddTermAsync(term, new ScoredSemanticRefOrdinal { Score = 1, SemanticRefOrdinal = ordinal });
+        return index.AddTermAsync(term, ScoredSemanticRefOrdinal.New(ordinal));
     }
 }
