@@ -26,12 +26,6 @@ public readonly struct KnowledgeType
     }
 }
 
-public class ConcreteEntity : IKnowledge
-{
-    public string Name { get; set; }
-    public string[] Type { get; set; }
-}
-
 public class Action : IKnowledge
 {
     public string[] Verbs { get; set; }
