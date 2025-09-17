@@ -8,6 +8,10 @@ public interface ITermToSemanticRefIndex
     Task<int> GetSizeAsync();
     Task<string[]> GetTermsAsync();
     Task<string> AddTermAsync(string term, ScoredSemanticRefOrdinal scoredOrdinal);
+    Task RemoveTermAsync(string term, SemanticRefOrdinal ordinal);
+    Task ClearAsync();
+
+    Task<ScoredSemanticRefOrdinal[]> LookupTermAsync(string term);
 }
 
 public static class ITermToSemanticRefIndexEx
