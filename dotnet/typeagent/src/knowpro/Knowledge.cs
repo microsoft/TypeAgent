@@ -53,3 +53,12 @@ public class Topic : IKnowledge
     public string Text { get; set; }
 }
 
+public class Tag : IKnowledge
+{
+    public string Text { get; set; }
+}
+
+public class StructuredTag : ConcreteEntity
+{
+
+}
