@@ -7,7 +7,7 @@ import path from "node:path";
 import {
     getToggleCommandHandlers,
     getToggleHandlerTable,
-} from "../../../command/handlerUtils.js";
+} from "../../../helpers/command.js";
 import {
     CommandHandlerContext,
     changeContextConfig,
