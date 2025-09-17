@@ -925,6 +925,41 @@ function extractContentMetrics(extractionInputs: ExtractionInput[]) {
     };
 }
 
+// Convert aggregated results to actions array, handling both contentActions and relationships
+function getActionsFromAggregatedResults(aggregatedResults: any): any[] {
+    // If we have contentActions, use them directly
+    if (
+        aggregatedResults.contentActions &&
+        Array.isArray(aggregatedResults.contentActions) &&
+        aggregatedResults.contentActions.length > 0
+    ) {
+        return aggregatedResults.contentActions;
+    }
+
+    // If we have relationships but no contentActions, convert relationships to actions
+    if (
+        aggregatedResults.relationships &&
+        Array.isArray(aggregatedResults.relationships) &&
+        aggregatedResults.relationships.length > 0
+    ) {
+        return aggregatedResults.relationships.map((relationship: any) => ({
+            verbs: relationship.relationship
+                ? relationship.relationship
+                      .split(/[,\s]+/)
+                      .filter((v: string) => v.trim().length > 0)
+                : ["related to"],
+            verbTense: "present" as "past" | "present" | "future",
+            subjectEntityName: relationship.from || "none",
+            objectEntityName: relationship.to || "none",
+            indirectObjectEntityName: "none",
+            params: [],
+            confidence: relationship.confidence || 0.8,
+        }));
+    }
+
+    return [];
+}
+
 export async function indexWebPageContent(
     parameters: {
         url: string;
@@ -998,8 +1033,8 @@ export async function indexWebPageContent(
                         ? entity.type
                         : [entity.type], // Ensure type is array
                 })),
-                topics: aggregatedResults.keyTopics,
-                actions: aggregatedResults.contentActions || [], // Use actual content actions
+                topics: aggregatedResults.keyTopics || aggregatedResults.topics,
+                actions: getActionsFromAggregatedResults(aggregatedResults),
                 inverseActions: [], // Required property
             };
         }
