@@ -48,12 +48,20 @@ jobs:
       - name: Setup NuGet
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
         uses: NuGet/setup-nuget@v2.0.0
-      - name: Restore Packages
+      - name: Restore Packages (AutoShell)
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
         working-directory: dotnet
         run: nuget restore autoShell/AutoShell.sln
-      - name: Build Solution
+      - name: Build Solution (AutoShell)
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
         working-directory: dotnet
         run: |
           msbuild.exe autoShell/AutoShell.sln /p:platform="Any CPU" /p:configuration="${{ matrix.configuration }}"
+      - name: Restore Packages (TypeAgent)
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
+        working-directory: dotnet
+        run: nuget restore typeagent/TypeAgent.sln
+      - name: Build Solution (TypeAgent)
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
+        working-directory: dotnet
+        run: msbuild.exe typeagent/TypeAgent.sln /p:platform="Any CPU" /p:configuration="${{ matrix.configuration }}"
