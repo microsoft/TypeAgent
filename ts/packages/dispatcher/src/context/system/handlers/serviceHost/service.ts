@@ -154,8 +154,7 @@ try {
         process.exit(1);
     });
 } catch (e: any) {
-    console.error(
-        `WebSocket server could not be started at ${hostEndpoint}: Error ${e.message}`,
-    );
-    process.send?.("Failure");
+    const message = `WebSocket server could not be started at ${hostEndpoint}: Error ${e.message}`;
+    console.error(message);
+    process.send?.(message);
 }

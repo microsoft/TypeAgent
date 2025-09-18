@@ -2,12 +2,12 @@
 // Licensed under the MIT License.
 
 import { ipcMain, session } from "electron";
-import { getShellWindowForIpcEvent, ShellWindow } from "./shellWindow.js";
 import { debugShellError } from "./debug.js";
 import { ExtensionStorageManager } from "./extensionStorage.js";
 import { BrowserAgentIpc } from "./browserIpc.js";
 import { WebSocketMessageV2 } from "common-utils";
 import path from "path";
+import { getShellWindow, getShellWindowForIpcEvent } from "./instance.js";
 
 export function initializeExternalStorageIpcHandlers(instanceDir: string) {
     const extensionStorage = new ExtensionStorageManager(instanceDir);
@@ -108,7 +108,7 @@ export async function initializeBrowserExtension(appPath: string) {
         BrowserAgentIpc.getinstance().onMessageReceived = (
             message: WebSocketMessageV2,
         ) => {
-            const shellWindow = ShellWindow.getInstance();
+            const shellWindow = getShellWindow();
             shellWindow?.sendMessageToInlineWebContent(message);
         };
     });

@@ -7,18 +7,10 @@ import {
     globalShortcut,
     dialog,
     shell,
-    Notification,
     protocol,
 } from "electron";
 import path from "node:path";
 import fs from "node:fs";
-import { ClientIO, createDispatcher, Dispatcher } from "agent-dispatcher";
-import {
-    getDefaultAppAgentProviders,
-    getDefaultAppAgentInstaller,
-    getDefaultConstructionProvider,
-    getIndexingServiceRegistry,
-} from "default-agent-provider";
 import {
     ensureShellDataDir,
     getShellDataDir,
@@ -26,30 +18,28 @@ import {
     ShellUserSettings,
 } from "./shellSettings.js";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { createShellAgentProvider } from "./agent.js";
 import { closeLocalWhisper } from "./localWhisperCommandHandler.js";
-import { createDispatcherRpcServer } from "agent-dispatcher/rpc/dispatcher/server";
-import { createGenericChannel } from "agent-rpc/channel";
-import { createClientIORpcClient } from "agent-dispatcher/rpc/clientio/client";
-import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
-import { getStatusSummary } from "agent-dispatcher/helpers/status";
-import { getConsolePrompt } from "agent-dispatcher/helpers/console";
+import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import {
+    initializeInstance,
+    closeInstance,
+    getShellWindow,
     getShellWindowForChatViewIpcEvent,
     getShellWindowForMainWindowIpcEvent,
-    ShellWindow,
-} from "./shellWindow.js";
+} from "./instance.js";
 
-import { debugShell, debugShellError } from "./debug.js";
+import {
+    debugShell,
+    debugShellCleanup,
+    debugShellError,
+    debugShellInit,
+} from "./debug.js";
 import { loadKeys, loadKeysFromEnvFile } from "./keys.js";
 import { parseShellCommandLine } from "./args.js";
 import {
-    hasPendingUpdate,
-    setPendingUpdateCallback,
     setUpdateConfigPath,
     startBackgroundUpdateCheck,
 } from "./commands/update.js";
-import { createInlineBrowserControl } from "./inlineBrowserControl.js";
 import { initializeSearchMenuUI } from "./electronSearchMenuUI.js";
 import { initializePen } from "./commands/pen.js";
 import { initializeSpeech, triggerRecognitionOnce } from "./speech.js";
@@ -116,7 +106,6 @@ const instanceDir =
         : getInstanceDir());
 
 debugShell("Instance Dir", instanceDir);
-
 if (parsedArgs.clean) {
     // Delete all files in the instance dir.
     if (fs.existsSync(instanceDir)) {
@@ -144,266 +133,13 @@ if (parsedArgs.update) {
 }
 
 const time = performance.now();
-debugShell("Starting...");
-
-function createWindow(shellSettings: ShellSettingManager) {
-    debugShell("Creating window", performance.now() - time);
-
-    // Create the browser window.
-    return new ShellWindow(shellSettings);
-}
-
-async function initializeDispatcher(
-    instanceDir: string,
-    shellWindow: ShellWindow,
-    updateSummary: (dispatcher: Dispatcher) => string,
-) {
-    try {
-        const clientIOChannel = createGenericChannel((message: any) => {
-            shellWindow.chatView.webContents.send("clientio-rpc-call", message);
-        });
-        const onClientIORpcReply = (event, message) => {
-            if (getShellWindowForChatViewIpcEvent(event) !== shellWindow) {
-                return;
-            }
-            clientIOChannel.message(message);
-        };
-        ipcMain.on("clientio-rpc-reply", onClientIORpcReply);
-
-        const newClientIO = createClientIORpcClient(clientIOChannel.channel);
-        const clientIO: ClientIO = {
-            ...newClientIO,
-            // Main process intercepted clientIO calls
-            popupQuestion: async (
-                message: string,
-                choices: string[],
-                defaultId: number | undefined,
-                source: string,
-            ) => {
-                const result = await dialog.showMessageBox(
-                    shellWindow.mainWindow,
-                    {
-                        type: "question",
-                        buttons: choices,
-                        defaultId,
-                        message,
-                        icon: source,
-                    },
-                );
-                return result.response;
-            },
-            openLocalView: (port: number) => {
-                debugShell(`Opening local view on port ${port}`);
-                shellWindow.createBrowserTab(
-                    new URL(`http://localhost:${port}/`),
-                    { background: false },
-                );
-                return Promise.resolve();
-            },
-            closeLocalView: (port: number) => {
-                const targetUrl = `http://localhost:${port}/`;
-                debugShell(
-                    `Closing local view on port ${port}, target url: ${targetUrl}`,
-                );
-
-                // Find and close the tab with the matching URL
-                const allTabs = shellWindow.getAllBrowserTabs();
-                const matchingTab = allTabs.find(
-                    (tab) => tab.url === targetUrl,
-                );
-
-                if (matchingTab) {
-                    shellWindow.closeBrowserTab(matchingTab.id);
-                    debugShell(`Closed tab with URL: ${targetUrl}`);
-                } else {
-                    debugShell(`No tab found with URL: ${targetUrl}`);
-                }
-            },
-            exit: () => {
-                app.quit();
-            },
-        };
-
-        const browserControl = createInlineBrowserControl(shellWindow);
-
-        // Set up dispatcher
-        const newDispatcher = await createDispatcher("shell", {
-            appAgentProviders: [
-                createShellAgentProvider(shellWindow),
-                ...getDefaultAppAgentProviders(instanceDir),
-            ],
-            agentInitOptions: {
-                browser: browserControl.control,
-            },
-            agentInstaller: getDefaultAppAgentInstaller(instanceDir),
-            persistSession: true,
-            persistDir: instanceDir,
-            enableServiceHost: true,
-            metrics: true,
-            dblogging: true,
-            clientId: getClientId(),
-            clientIO,
-            indexingServiceRegistry:
-                await getIndexingServiceRegistry(instanceDir),
-            constructionProvider: getDefaultConstructionProvider(),
-            allowSharedLocalView: ["browser"],
-            portBase: isProd ? 9001 : 9050,
-        });
-
-        async function processShellRequest(
-            text: string,
-            id: string,
-            images: string[],
-        ) {
-            if (typeof text !== "string" || typeof id !== "string") {
-                throw new Error("Invalid request");
-            }
-
-            // Update before processing the command in case there was change outside of command processing
-            const summary = updateSummary(dispatcher);
-
-            if (debugShell.enabled) {
-                debugShell(getConsolePrompt(summary), text);
-            }
-
-            const commandResult = await newDispatcher.processCommand(
-                text,
-                id,
-                images,
-            );
-            shellWindow.chatView.webContents.send(
-                "send-demo-event",
-                "CommandProcessed",
-            );
-
-            // Give the chat view the focus back after the command for the next command.
-            shellWindow.chatView.webContents.focus();
-
-            // Update the summary after processing the command in case state changed.
-            updateSummary(dispatcher);
-            return commandResult;
-        }
-
-        const dispatcher = {
-            ...newDispatcher,
-            processCommand: processShellRequest,
-            close: async () => {
-                ipcMain.removeListener(
-                    "dispatcher-rpc-call",
-                    onDispatcherRpcCall,
-                );
-                dispatcherChannel.disconnect();
-                await newDispatcher.close();
-                clientIOChannel.disconnect();
-                ipcMain.removeListener(
-                    "clientio-rpc-reply",
-                    onClientIORpcReply,
-                );
-                browserControl.close();
-            },
-        };
-
-        // Set up the RPC
-        const dispatcherChannel = createGenericChannel((message: any) => {
-            shellWindow.chatView.webContents.send(
-                "dispatcher-rpc-reply",
-                message,
-            );
-        });
-        const onDispatcherRpcCall = (event, message) => {
-            if (getShellWindowForChatViewIpcEvent(event) !== shellWindow) {
-                return;
-            }
-            dispatcherChannel.message(message);
-        };
-        ipcMain.on("dispatcher-rpc-call", onDispatcherRpcCall);
-        createDispatcherRpcServer(dispatcher, dispatcherChannel.channel);
-
-        setupQuit(dispatcher);
-
-        shellWindow.dispatcherInitialized();
-
-        // Dispatcher is ready to be called from the client, but we need to wait for the dom to be ready to start
-        // using it to process command, so that the client can receive messages.
-        debugShell("Dispatcher initialized", performance.now() - time);
-
-        return dispatcher;
-    } catch (e: any) {
-        dialog.showErrorBox("Exception initializing dispatcher", e.stack);
-        return undefined;
-    }
-}
-
-async function initializeInstance(
-    instanceDir: string,
-    shellSettings: ShellSettingManager,
-) {
-    const shellWindow = createWindow(shellSettings);
-    const { mainWindow, chatView } = shellWindow;
-    let title: string = "";
-    function updateTitle(dispatcher: Dispatcher) {
-        const status = dispatcher.getStatus();
-
-        const newSettingSummary = getStatusSummary(status);
-        const zoomFactor = chatView.webContents.zoomFactor;
-        const pendingUpdate = hasPendingUpdate() ? " [Pending Update]" : "";
-        const zoomFactorTitle =
-            zoomFactor === 1 ? "" : ` Zoom: ${Math.round(zoomFactor * 100)}%`;
-        const newTitle = `${app.getName()} v${app.getVersion()} - ${newSettingSummary}${pendingUpdate}${zoomFactorTitle}`;
-        if (newTitle !== title) {
-            title = newTitle;
-            chatView.webContents.send(
-                "setting-summary-changed",
-                status.agents.map((agent) => [agent.name, agent.emoji]),
-            );
-
-            mainWindow.setTitle(newTitle);
-        }
-
-        return newSettingSummary;
-    }
-
-    // Note: Make sure dom ready before using dispatcher.
-    const dispatcherP = initializeDispatcher(
-        instanceDir,
-        shellWindow,
-        updateTitle,
-    );
-
-    ipcMain.on("dom ready", async () => {
-        debugShell("Showing window", performance.now() - time);
-
-        // The dispatcher can be use now that dom is ready and the client is ready to receive messages
-        const dispatcher = await dispatcherP;
-        if (dispatcher === undefined) {
-            app.quit();
-            return;
-        }
-        updateTitle(dispatcher);
-        setPendingUpdateCallback((version, background) => {
-            updateTitle(dispatcher);
-            if (background) {
-                new Notification({
-                    title: `New version ${version.version} available`,
-                    body: `Restart to install the update.`,
-                }).show();
-            }
-        });
-
-        // send the agent greeting if it's turned on
-        if (shellSettings.user.agentGreeting) {
-            dispatcher.processCommand("@greeting", "agent-0", []);
-        }
-    });
-
-    return shellWindow.waitForContentLoaded();
-}
+debugShellInit("Starting...");
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 async function initialize() {
-    debugShell("Ready", performance.now() - time);
+    debugShellInit("Ready", performance.now() - time);
 
     const appPath = app.getAppPath();
     const envFile = parsedArgs.env
@@ -432,7 +168,7 @@ async function initialize() {
             const resolvedUrl = browserExtensionUrls[pathname] + queryString;
             debugShell(`Protocol handler: ${request.url} -> ${resolvedUrl}`);
 
-            const shellWindow = ShellWindow.getInstance();
+            const shellWindow = getShellWindow();
             if (shellWindow) {
                 shellWindow.createBrowserTab(new URL(resolvedUrl), {
                     background: false,
@@ -567,14 +303,16 @@ async function initialize() {
     initializeExternalStorageIpcHandlers(instanceDir);
     initializePDFViewerIpcHandlers();
 
+    initializeQuit();
+
     app.on("activate", async function () {
         // On macOS it's common to re-create a window in the app when the
         // dock icon is clicked and there are no other windows open.
-        if (ShellWindow.getInstance() === undefined)
+        if (getShellWindow() === undefined)
             await initializeInstance(instanceDir, shellSettings);
     });
 
-    await initializeInstance(instanceDir, shellSettings);
+    await initializeInstance(instanceDir, shellSettings, time);
 
     if (shellSettings.user.autoUpdate.intervalMs !== -1) {
         startBackgroundUpdateCheck(
@@ -592,7 +330,19 @@ app.whenReady()
         app.quit();
     });
 
-function setupQuit(dispatcher: Dispatcher) {
+let reloadingInstance = false;
+export async function reloadInstance() {
+    reloadingInstance = true;
+    try {
+        await closeInstance();
+        const shellSettings = new ShellSettingManager(instanceDir);
+        await initializeInstance(instanceDir, shellSettings);
+    } finally {
+        reloadingInstance = false;
+    }
+}
+
+function initializeQuit() {
     let quitting = false;
     let canQuit = false;
     async function quit() {
@@ -603,14 +353,11 @@ function setupQuit(dispatcher: Dispatcher) {
 
         closeLocalWhisper();
 
-        debugShell("Closing dispatcher");
-        try {
-            await dispatcher.close();
-        } catch (e) {
-            debugShellError("Error closing dispatcher", e);
-        }
+        debugShellCleanup("Closing instance");
 
-        debugShell("Quitting");
+        await closeInstance(true);
+
+        debugShellCleanup("Quitting");
         canQuit = true;
         app.quit();
     }
@@ -635,7 +382,7 @@ function setupQuit(dispatcher: Dispatcher) {
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
 app.on("window-all-closed", () => {
-    if (process.platform !== "darwin") {
+    if (reloadingInstance === false && process.platform !== "darwin") {
         app.quit();
     }
 });
@@ -643,7 +390,7 @@ app.on("window-all-closed", () => {
 app.on("second-instance", () => {
     // Someone tried to run a second instance, we should focus our window.
     debugShell("Second instance");
-    ShellWindow.getInstance()?.showAndFocus();
+    getShellWindow()?.showAndFocus();
 });
 
 // Similar to what electron-toolkit does with optimizer.watchWindowShortcuts, but apply to all web contents, not just browser windows.

@@ -25,7 +25,7 @@ import { getLocalWhisperCommandHandlers } from "./localWhisperCommandHandler.js"
 import { ShellWindow } from "./shellWindow.js";
 import { getObjectProperty, getObjectPropertyNames } from "common-utils";
 import { installAndRestart, updateHandlerTable } from "./commands/update.js";
-import { isProd } from "./index.js";
+import { isProd, reloadInstance } from "./index.js";
 import { ShellWindowState } from "./shellSettings.js";
 
 export type ShellContext = {
@@ -320,6 +320,13 @@ const handlers: CommandHandlerTable = {
         },
         setWindowState: new ShellSetWindowSizeCommandHandler(),
         setWindowZoomLevel: new ShellSetZoomLevelCommandHandler(),
+        reload: {
+            description: "Reload the shell",
+            run: async () => {
+                reloadInstance();
+                // displaySuccess("Reloading shell...", context);
+            },
+        },
     },
 };
 
