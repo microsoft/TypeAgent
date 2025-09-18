@@ -5,13 +5,13 @@ namespace TypeAgent.KnowPro;
 
 public struct TextLocation
 {
-    public TextLocation(MessageOrdinal messageOrdinal, int chunkOrdinal)
+    public TextLocation(int messageOrdinal, int chunkOrdinal)
     {
         this.MessageOrdinal = messageOrdinal;
         this.ChunkOrdinal = chunkOrdinal;
     }
 
-    public MessageOrdinal MessageOrdinal { get; set; }
+    public int MessageOrdinal { get; set; }
     public int ChunkOrdinal { get; set; }
 
     public readonly bool IsLessThan(TextLocation other)

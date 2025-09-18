@@ -6,7 +6,7 @@ namespace TypeAgent.KnowPro;
 public class SemanticRef
 {
     [JsonPropertyName("semanticRefOrdinal")]
-    public SemanticRefOrdinal SemanticRefOrdinal { get; set; }
+    public int SemanticRefOrdinal { get; set; }
 
    // [JsonPropertyName("range")]
     public TextRange Range { get; set; }
